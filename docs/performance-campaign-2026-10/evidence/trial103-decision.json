@@ -1,0 +1,361 @@
+{
+  "decision": "PARK_UNCHANGED_NO_ELAPSED_WIN",
+  "accepted_state_unchanged": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+  "identity": {
+    "base": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+    "control": "c58d55daace6d26fe26d64c4e15c3ca9738732e43b5393b38385de7248858408",
+    "candidate": "22eef5a07d9ac51ae2de37f66ff023a1b3fbda42667b6fe483820061761a3534",
+    "scope_sha256": "86badc2cfffb2ba6ed45e5b0fb014de4ea03e0ccdceaca0ddc8c5845bc5793ac",
+    "qualification_review_sha256": "0d3bc855f70b2e27aafd698206a5cd3cda604597d8705f654d0857c2c2baeb8b",
+    "machine_review_sha256": "a5968ca002e211f114a9bfd607716c4b85bbb53c98ae830d79e210919627b6a0"
+  },
+  "evidence": {
+    "terminal.json": "8cc1d359afafefa586f87d9fa427ce8c6a840de97670f68214df8a231af2dd94",
+    "retrieval-terminal.json": "b9ccd21da68600e0d0d7787b674d74d174df40c18d959a71ba88aa7eda56ee5f",
+    "independent-raw-review.json": "b57d3606dfbd3ad1d32a5a891321c4e6601000955c431b6b1424cbb741fae2d2",
+    "fixture-recommendation.json": "82cdddaa4c998fbfa6b1d6ea5c7028eac6db7fade99e0073460b4829b4bd411f"
+  },
+  "full25": {
+    "all": {
+      "elapsed_ms": {
+        "median_reduction_percent": -0.11347979883326031,
+        "reductions_percent": [
+          -0.11518253536277889,
+          -0.3484236054108525,
+          -0.11177706230374174,
+          0.11621903848579862
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.3484236054108525,
+        "max": 0.11621903848579862
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.15917176883697426,
+        "reductions_percent": [
+          -0.17618106492591767,
+          -0.41456191743114434,
+          -0.14216247274803084,
+          0.23800522228568655
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.41456191743114434,
+        "max": 0.23800522228568655
+      },
+      "draw_ms": {
+        "median_reduction_percent": -0.1074270830923374,
+        "reductions_percent": [
+          0.02150176711147589,
+          -0.19295770198854978,
+          -0.03269621737218564,
+          -0.18215794881248915
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.19295770198854978,
+        "max": 0.02150176711147589
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.038597146907215496,
+        "reductions_percent": [
+          0.031218144359501654,
+          0.023480448848056668,
+          0.04597614945492934,
+          0.05054149422037968
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.023480448848056668,
+        "max": 0.05054149422037968
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -0.14429863078350147,
+        "reductions_percent": [
+          0.1112382199044637,
+          -0.5036889928938804,
+          -0.10788147013587324,
+          -0.1807157914311297
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.5036889928938804,
+        "max": 0.1112382199044637
+      }
+    },
+    "trained": {
+      "elapsed_ms": {
+        "median_reduction_percent": -0.072141631326339,
+        "reductions_percent": [
+          -0.06868448831895968,
+          -0.25804142588579104,
+          -0.07559877433371831,
+          0.20927738745596391
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.25804142588579104,
+        "max": 0.20927738745596391
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.11916188477358869,
+        "reductions_percent": [
+          -0.11588138111180424,
+          -0.3739542181936395,
+          -0.12244238843537314,
+          0.330977789966147
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.3739542181936395,
+        "max": 0.330977789966147
+      },
+      "draw_ms": {
+        "median_reduction_percent": 0.061966588629458474,
+        "reductions_percent": [
+          0.06183845454972303,
+          0.07482291503988492,
+          0.06209472270919392,
+          -0.1446051999139275
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.1446051999139275,
+        "max": 0.07482291503988492
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.03659787698888084,
+        "reductions_percent": [
+          0.030887223349473913,
+          0.025948165004563428,
+          0.04377211784013513,
+          0.042308530628287766
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.025948165004563428,
+        "max": 0.04377211784013513
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -0.11818158939278511,
+        "reductions_percent": [
+          0.2006059299174856,
+          -0.42533511537665714,
+          -0.0787237181903544,
+          -0.15763946059521583
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.42533511537665714,
+        "max": 0.2006059299174856
+      }
+    },
+    "held_out": {
+      "elapsed_ms": {
+        "median_reduction_percent": -0.28004987966910866,
+        "reductions_percent": [
+          -0.30277104696943,
+          -0.7107366505539003,
+          -0.2573287123687873,
+          -0.25693023388959624
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -0.7107366505539003,
+        "max": -0.25693023388959624
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.3678052105872909,
+        "reductions_percent": [
+          -0.49031767799638803,
+          -0.6244109128198616,
+          -0.24529274317819372,
+          -0.24523848361694967
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -0.6244109128198616,
+        "max": -0.24523848361694967
+      },
+      "draw_ms": {
+        "median_reduction_percent": -0.27448656942784533,
+        "reductions_percent": [
+          -0.08174155800604321,
+          -0.8777933343785627,
+          -0.2718579640894836,
+          -0.27711517476620706
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -0.8777933343785627,
+        "max": -0.08174155800604321
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.04258720362598778,
+        "reductions_percent": [
+          0.032259817051227824,
+          0.015710764401877242,
+          0.052914590200747735,
+          0.07645638858857495
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.015710764401877242,
+        "max": 0.07645638858857495
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -0.2343795480677091,
+        "reductions_percent": [
+          -0.19753876313839402,
+          -0.7749582045964987,
+          -0.20850046981080173,
+          -0.2602586263246165
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -0.7749582045964987,
+        "max": -0.19753876313839402
+      }
+    }
+  },
+  "hot4": {
+    "elapsed_ms": {
+      "median_reduction_percent": -0.0459015050310152,
+      "reductions_percent": [
+        0.0843349251092973,
+        0.0798836385292434,
+        -1.2313572062043088,
+        0.005708090321243642,
+        -0.09751110038327404,
+        -0.5407530658512849,
+        -0.43283975146362064,
+        -0.29080070028508764,
+        -0.28465162813566813,
+        0.3375134098890009,
+        0.08978036498565878,
+        0.08544906345447911
+      ],
+      "positive": 6,
+      "n": 12,
+      "min": -1.2313572062043088,
+      "max": 0.3375134098890009
+    },
+    "advance_ms": {
+      "median_reduction_percent": -0.07840653058343028,
+      "reductions_percent": [
+        -0.10610382639681948,
+        0.18016686161984596,
+        -1.5487629575266615,
+        -0.05070923477004108,
+        0.09725924906904826,
+        -0.45176403985665026,
+        -0.3704631881364717,
+        -0.4189158358459455,
+        -0.2485455793961977,
+        0.37651131138951577,
+        0.23287779116499818,
+        0.15479499573342048
+      ],
+      "positive": 5,
+      "n": 12,
+      "min": -1.5487629575266615,
+      "max": 0.37651131138951577
+    },
+    "draw_ms": {
+      "median_reduction_percent": -0.2569921370503381,
+      "reductions_percent": [
+        0.62345056541524,
+        -0.19523845468798484,
+        -0.32749695056777384,
+        0.16274781989455978,
+        -0.6624331245417503,
+        -0.8037119600769582,
+        -0.6037133865848476,
+        0.07114306122838476,
+        -0.39074229068185584,
+        0.2257122981823123,
+        -0.3187458194126913,
+        -0.12015894036176977
+      ],
+      "positive": 4,
+      "n": 12,
+      "min": -0.8037119600769582,
+      "max": 0.62345056541524
+    },
+    "instructions retired": {
+      "median_reduction_percent": 0.035810971418431814,
+      "reductions_percent": [
+        0.04775824110233584,
+        0.0073115636798570804,
+        0.018405682256728007,
+        0.027780573019364763,
+        0.03391138237911484,
+        0.03722246233214266,
+        0.04237789483942933,
+        0.05079760806974143,
+        0.03439948050472097,
+        0.048260538638489336,
+        0.016380535536297813,
+        0.04022501443844417
+      ],
+      "positive": 12,
+      "n": 12,
+      "min": 0.0073115636798570804,
+      "max": 0.05079760806974143
+    },
+    "cycles elapsed": {
+      "median_reduction_percent": -0.16721513285079537,
+      "reductions_percent": [
+        0.18662715633278593,
+        -0.2282769497952586,
+        -0.6159444209172582,
+        -0.1646046249112576,
+        0.07255215616233102,
+        -0.005410471949951479,
+        -0.22305834121132406,
+        -0.18573239668839836,
+        -0.16982564079033313,
+        0.2766279230700497,
+        0.17827003375325834,
+        -0.24339935702331061
+      ],
+      "positive": 4,
+      "n": 12,
+      "min": -0.6159444209172582,
+      "max": 0.2766279230700497
+    }
+  },
+  "controls": {
+    "median_reduction_percent": 0.21021649333297643,
+    "reductions_percent": [
+      0.32892640806586604,
+      0.7051163486931245,
+      -0.14402088274827474,
+      0.02837804735248417,
+      0.09330908090658951,
+      0.32712390575936334,
+      0.3981842920399159,
+      -0.24585101287462052
+    ],
+    "positive": 6,
+    "n": 8,
+    "min": -0.24585101287462052,
+    "max": 0.7051163486931245
+  },
+  "assessment": [
+    "Full25 elapsed is0.113480% slower, worse3/4; advance0.159172% slower3/4 and draw0.107427% slower3/4. Instructions fall0.038597% all4. Heldout elapsed is0.280050% slower all4 despite0.042587% fewer instructions all4. Only9/25 fixture elapsed medians improve, versus20/25 instruction medians.",
+    "Hot elapsed is0.045902% slower with6/12 positive pairs; advance0.078407% slower with5/12 positive. Hot instructions fall0.035811% all12. This consistent small instruction saving does not establish elapsed improvement or justify extrapolation to PGO.",
+    "Car is slower12/16 full/hot elapsed pairs. Full mean penalty1.17056ms per10000frames comprises0.65955ms advance and0.51494ms draw; hot penalty1.01008ms is mostly0.87972ms draw. Spotify has mixed full elapsed and slower7/12 hot elapsed pairs; hot mean advance penalty0.54749ms offsets0.13283ms draw savings. These phase changes are whole-candidate observations, not isolated state-borrow costs.",
+    "DataViz improves full elapsed3/4 with mean0.50792ms saved but worsens hot elapsed10/12 with0.70236ms added. Zombie full elapsed worsens3/4 with0.48235ms added; hot median is near-neutral +0.01213% (6/12), yet mean penalty1.95874ms reflects retained tail observations. Do not select only a favorable phase or discard hot outliers.",
+    "Heldout gamepad_test worsens elapsed and advance all4, adding mean0.43734ms total/0.39921ms advance. audio_script and script_dependency_test_using_library_v2 also worsen elapsed all4. Some state-related fixtures improve: background_measure advance4/4 (0.06440ms saved), viewmodel_based_condition elapsed/advance3/4 (0.09123/0.08719ms saved). Neither offsets the heldout aggregate regression.",
+    "Same-binary aggregate elapsed control reductions span-0.245851% to+0.705116%, median+0.210216%,6/8 positive. The candidate full/hot near-neutral aggregate lies within observed control variability; no control subtraction or confidence claim is made. All paired rows, warmup backing, outliers and opening/closing controls remain preserved."
+  ],
+  "next_actions": [
+    "No unchanged repeat, PGO, integration or union with101/102.",
+    "Preserve valid nonescaping-definition lifetime simplification and exact source/binary/raw reviews for distinct future work, but assign no accepted elapsed speedup.",
+    "Continue measured-cost repairs in Clipping no-save branch and PathComposer shared authoritative list; no performance prediction follows from this result."
+  ],
+  "parity_achieved": false,
+  "runtime_changes_integrated": false,
+  "created": "2026-10-07T06:23:49.689552+00:00"
+}

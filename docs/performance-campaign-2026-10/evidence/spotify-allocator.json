@@ -1,0 +1,223 @@
+{
+  "scope": "Allocator-library physical leaf samples in independently reviewed admitted advance rows; not allocation counts, bytes, or removable time.",
+  "script_sha256": "74ccc4b9f534da7de549a1ce2fa7625210fb38210f1cd78e1e8c6a8b5922195f",
+  "independent_raw_review_sha256": "4b80a88d6e4f007975151fdc1f6d8e77f9c17634e5107a1dc6d207d79f938ca3",
+  "input_sha256": {
+    "analysis/block-00/included-rows.json": "7364a5b3744f8c5a27b79f06332425a7c22b6622cc0f42c83ff3babc70f43d6e",
+    "analysis/block-01/included-rows.json": "df8cb6a46ce38c92f1199948c3370f3c2a2ea1d4c16dcdad119b0e77cffe6c8d"
+  },
+  "binary_uuid": "D89261CB-EDCF-3146-8695-01FAF80D5FF1",
+  "advance_weight_ns": 4414000000,
+  "allocator_weight_ns": 501000000,
+  "allocator_share": 0.11350249207068419,
+  "allocator_leaf_weight_ns": {
+    "_xzm_free": 188000000,
+    "<deduplicated_symbol>": 89000000,
+    "_malloc_zone_malloc": 83000000,
+    "_free": 68000000,
+    "_xzm_xzone_malloc": 59000000,
+    "_xzm_xzone_malloc_tiny": 10000000,
+    "_malloc_zone_calloc": 2000000,
+    "DYLD-STUB$$_platform_bzero": 1000000,
+    "xzm_realloc": 1000000
+  },
+  "unattributed_weight_ns": 0,
+  "owned_return_pc_weight_ns": 501000000,
+  "owned_return_pcs": [
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x10014efbc",
+      "weight_ns": 72000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x10014eb40",
+      "weight_ns": 58000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x10014f034",
+      "weight_ns": 54000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x10014ebc4",
+      "weight_ns": 49000000
+    },
+    {
+      "raw_symbol": "_RNvXsie_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source9generated13core_registryNtNtNtBa_6shapes14clipping_shape13ClippingShapeNtB6_16CoreCapabilities16component_update",
+      "pc": "0x1001f4db8",
+      "weight_ns": 44000000
+    },
+    {
+      "raw_symbol": "_RNvXsie_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source9generated13core_registryNtNtNtBa_6shapes14clipping_shape13ClippingShapeNtB6_16CoreCapabilities16component_update",
+      "pc": "0x1001f4970",
+      "weight_ns": 43000000
+    },
+    {
+      "raw_symbol": "_RNvXsie_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source9generated13core_registryNtNtNtBa_6shapes14clipping_shape13ClippingShapeNtB6_16CoreCapabilities16component_update",
+      "pc": "0x1001f4d4c",
+      "weight_ns": 38000000
+    },
+    {
+      "raw_symbol": "_RNvXsie_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source9generated13core_registryNtNtNtBa_6shapes14clipping_shape13ClippingShapeNtB6_16CoreCapabilities16component_update",
+      "pc": "0x1001f4e58",
+      "weight_ns": 38000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard18update_pass_handle",
+      "pc": "0x100149a5c",
+      "weight_ns": 19000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x1001502e0",
+      "weight_ns": 13000000
+    },
+    {
+      "raw_symbol": "_RNvNtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint17effects_container37invalidate_effects_handle_with_active",
+      "pc": "0x10004e2b4",
+      "weight_ns": 7000000
+    },
+    {
+      "raw_symbol": "_RNvMs6_NtCs3XW7gbOxCtj_5alloc2rcINtB5_2RcNtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source4math15contour_measure14ContourMeasureE9drop_slowBN_",
+      "pc": "0x100052634",
+      "weight_ns": 6000000
+    },
+    {
+      "raw_symbol": "_RNvMs5_NtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint9trim_pathNtB5_8TrimPath13update_effect",
+      "pc": "0x10005353c",
+      "weight_ns": 5000000
+    },
+    {
+      "raw_symbol": "_RNvMs1_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source4math15contour_measureNtB5_18ContourMeasureIter4next",
+      "pc": "0x1000544a4",
+      "weight_ns": 4000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100150814",
+      "weight_ns": 4000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard18update_pass_handle",
+      "pc": "0x10014975c",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvMs5_NtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint9trim_pathNtB5_8TrimPath13update_effect",
+      "pc": "0x1000532a0",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x1001517d8",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100150b48",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvNtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint17effects_container37invalidate_effects_handle_with_active",
+      "pc": "0x10004e228",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100151850",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RINvXNvMNtCs3XW7gbOxCtj_5alloc5sliceSp9to_vec_inNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source4core10CoreHandleNtB3_10ConvertVec6to_vecNtNtB8_5alloc6GlobalEBS_",
+      "pc": "0x10003d69c",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvMs5_NtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint9trim_pathNtB5_8TrimPath13update_effect",
+      "pc": "0x10005352c",
+      "weight_ns": 3000000
+    },
+    {
+      "raw_symbol": "_RNvMs6_NtCs3XW7gbOxCtj_5alloc2rcINtB5_2RcNtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source4math15contour_measure14ContourMeasureE9drop_slowBN_",
+      "pc": "0x100052624",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100150908",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x10014e9c8",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100150660",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs1_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source4math15contour_measureNtB5_18ContourMeasureIter4next",
+      "pc": "0x100054108",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100150688",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs5_NtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint9trim_pathNtB5_8TrimPath13update_effect",
+      "pc": "0x100053318",
+      "weight_ns": 2000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100150b80",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvMs3_NtCs3XW7gbOxCtj_5alloc7raw_vecINtB5_6RawVecfE8grow_oneCs7xDe7llVst9_11nuxie_audio",
+      "pc": "0x1000304d4",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvNtNtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source6shapes5paint17effects_container37invalidate_effects_handle_with_active",
+      "pc": "0x10004e294",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvMs1_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source4math15contour_measureNtB5_18ContourMeasureIter4next",
+      "pc": "0x1000543c4",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x100152cb0",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvMs3_NtCs3XW7gbOxCtj_5alloc7raw_vecINtB5_6RawVecjE8grow_oneCs1jsRkU02f9Q_12unicode_bidi",
+      "pc": "0x1002fd9ec",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvMs8_NtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source8artboardNtB5_8Artboard24update_components_handle",
+      "pc": "0x10014fb4c",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvXs2_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source5bones9root_boneNtB5_8RootBoneNtNtB9_19transform_component15TransformUpdate18update_constraints",
+      "pc": "0x1001cc418",
+      "weight_ns": 1000000
+    },
+    {
+      "raw_symbol": "_RNvXs2_NtNtNtNtCsjPJz4Ol4Mh9_13nuxie_runtime15mechanical_port6source5bones9root_boneNtB5_8RootBoneNtNtB9_19transform_component15TransformUpdate18update_constraints",
+      "pc": "0x1001cc480",
+      "weight_ns": 1000000
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "integrated_source": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+  "previous_source": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+  "working_runtime_exact_tested_source": true,
+  "runtime_files": 1396,
+  "changed_files": {
+    "crates/nuxie-runtime/src/mechanical_port/source/core.rs": {
+      "before": "419be0a3297e722ed588db507654a68daf3330e49883dd25b40ff14b806dd535",
+      "after": "8c2d524b55d7777afd3bd778da946fe6ef9dad74da234bc272cb27f081efbf84"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/core_completion_in_place_tests.rs": {
+      "before": null,
+      "after": "647f27dd6a6b6624ecb491869a65681b3b585ef18b62c11a0d0583bfb012450b"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/generated/core_registry.rs": {
+      "before": "1738ac192dca1851b728b2e598ef0f2ac450d06175f76f52a3590b254b2a9bde",
+      "after": "ae2dc2c376521619524f6c5768ee6b6bb7fb13d52a25cc873e26e41da3fcfbce"
+    }
+  },
+  "real_HEAD_and_index_unchanged": true,
+  "unrelated_current_work_preserved": true,
+  "patch_sha256": "796e9cff56bee9e8c80ccdc27f6422ab16df8391032348378f1aca4bdb480a1f",
+  "plan_sha256": "9d0686f53c376660c90f889de870021cace5d6b4da976c2d9f34a8e8f2a7fbe8",
+  "acceptance_decision_sha256": "f2456c1bdbac38542fed2e4ebc1f3dd21d5c5886895d3b8d687a928d22902c0e",
+  "script_sha256": "d21c810dac30c989b2533d8eac6a5a996de308938008649be8a33d93ab871eec",
+  "at": "2026-10-07T04:24:42.524896+00:00"
+}

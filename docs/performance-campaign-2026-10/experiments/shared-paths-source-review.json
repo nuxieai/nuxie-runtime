@@ -1,0 +1,41 @@
+{
+  "clear": true,
+  "reviewer": "feedback_loop; independent bounded changed storage/access/test/lifetime review; prior102 source chronology review reused",
+  "source_freeze_sha256": "44f07737431ddc2807946c16d266f6215709e4fb074b628c759b421bdfc3e24a",
+  "delta_patch_sha256": "4da54e5a8c8a12bfa0d3dfedec523948c08e479be0ea78d2eebfbb3589dd6876",
+  "full_accepted_patch_sha256": "e9656bb8079e925c12ba5895a62684c78736f7cfbebed5397e754c0361c98bdb",
+  "source_manifest_sha256": "dc3b0a5a802fd1c44816050652ec3bddc01e3b6bf53b513c6cc78f2016eea23b",
+  "source_files_rehashed": 11339,
+  "parent_files_rehashed": 11339,
+  "archive_files_verified": 11339,
+  "changed_files": {
+    "crates/nuxie-runtime/src/mechanical_port/source/shapes/path_composer.rs": "4154ff34a884a2fe3044382f39688a478749b7ac537706010d45e837e33ab3fd",
+    "crates/nuxie-runtime/src/mechanical_port/source/shapes/path_composer_order_tests.rs": "8020498b9ad6ece38c06f8da7cb2eda66d3046800fd1c1a7e2162512513df67b",
+    "crates/nuxie-runtime/src/mechanical_port/source/shapes/shape.rs": "157c1d657c377c21c73e0cb34699a29f279710f843bf3321feac49bde08c5506"
+  },
+  "parent102_source_freeze_sha256": "3e7dda98718fd79ec26012098d4752676435dfb52fe0aba10b356c0b6d6d4941",
+  "source_findings": [
+    "Full Shape and PathComposer reverse-normalize to exact102 owners after only the declared storage/helper and four acquisition/iteration substitutions. All other canonical files are byte-identical to102; no101/98/87/93 union.",
+    "Shape retains a single authoritative Rc<Vec> at the original field destruction position. Duplicate assertion precedes make_mut; public add_path skin projection and subsequent flags/bounds updates keep their order. Public paths returns an independent Vec of the same handles.",
+    "Exactly four snapshots are selected after the original open as_shape projection, under the original short checked Shape loan; each list releases at its original lexical boundary. Path/points projections and winding/flags/current matrices remain fresh. No cached payload reference or loan crosses callbacks.",
+    "CoreHandle identity Rc/Weak counts are private and clones retain allocation storage rather than arena payload ownership. make_mut copies only handles without invoking open projections. Removed/reused generations stay stale; whole-Shape replacement and Core redirection cannot change identities already in a snapshot. Core release/retirement implementation is unchanged.",
+    "Pinned C++ Shape vector/addPath and PathComposer source-order operations read; Rust released immutable membership remains an existing adapter. Callback append coverage preserves that Rust contract, not a claim that mutating C++ range-loop storage is defined."
+  ],
+  "test_review": [
+    "Original six tests remain exact prefix. New public API test mutates returned Vec, appends with retained private snapshot, and catches duplicate panic before checking unchanged membership.",
+    "Callback append is armed for selected LOCAL path projection after the input comparison; current LOCAL uses old membership, later WORLD and next input/local pass see appended geometry.",
+    "Removal/reuse test removes unborrowed second path during first path query, checks immediate payload drop and same-index new identity, then expected stale-member unwind and released guards.",
+    "Arena-drop test captures the sole strong arena in the one-shot action; Query takes/releases its RefCell before invocation. Unborrowed second payload drops despite external snapshot, then explicit panic releases the borrowed first payload and composer guard. No source test execution or baseline-red claim."
+  ],
+  "costs": [
+    "Every Shape now allocates Rc<Vec> storage even when empty; actual layout/frame/memory costs unmeasured.",
+    "Snapshot read avoids cloning all handle identities but adds Rc traffic and indirection, including empty snapshots. Public paths callers remain Vec copies.",
+    "Append with a live snapshot can allocate both copied storage and subsequent growth. Fresh102 flag/Shape projection taxes remain; no elapsed gain inferred."
+  ],
+  "limits": [
+    "Changed-owner correspondence and lifetime gate only; no compiler, tests, build, remote or timing execution. Actual debug/ordinary qualification remains separate.",
+    "No new allocator framework or exhaustive custom-owner certification. Existing Core lifecycle and102 unchanged algorithms were not re-audited."
+  ],
+  "script_sha256": "78240b5610c65af9e717612a5d6714c0506538e3cc943ad0b3b8d1472cae1234",
+  "created": "2026-10-07T06:28:55.496927+00:00"
+}

@@ -1,0 +1,362 @@
+{
+  "decision": "RETAIN_TARGETED_LEAD_NO_INTEGRATION",
+  "accepted_state_unchanged": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+  "identity": {
+    "base": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+    "control": "c58d55daace6d26fe26d64c4e15c3ca9738732e43b5393b38385de7248858408",
+    "candidate": "821322bf28fde3e0c2fd70ad5c4bf51e294725495925fce44d4f2ee23ee1a2bb",
+    "scope_sha256": "43db2f445e079612d2e38c3125ecdbb8537449e414012c627d27e4e668a883e4",
+    "qualification_review_sha256": "68b196764a2862596ec8061db93d98d40ebc4951c1531045426415db3ace7e42",
+    "machine_review_sha256": "e9125f6b8950d08c4eeed0cba1a7dedfdf5df7c3d2e74acb5a1bc676dd0d67b6"
+  },
+  "evidence": {
+    "terminal.json": "ee055a31b6c1ff25e8483ebebe28a1c5b051c4d6f391526a357a2a96f28be0b4",
+    "retrieval-terminal.json": "d8a0e8df833676f1a8af26473666ade20d1065f22d1553d7e72086ca5c774a98",
+    "independent-raw-review.json": "8ac43a30477090482806862074eb0a38d211f750bb44d465dcee11de4ac14d86",
+    "fixture-recommendation.json": "55d3eed02490b20252c81164eecdcaf0f40bef8502d066140f9f006e0511552a"
+  },
+  "full25": {
+    "all": {
+      "elapsed_ms": {
+        "median_reduction_percent": 0.19057057296047453,
+        "reductions_percent": [
+          0.5396258362649786,
+          -0.15848469034402957,
+          0.5701675475649703,
+          -0.4938052875105514
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.4938052875105514,
+        "max": 0.5701675475649703
+      },
+      "advance_ms": {
+        "median_reduction_percent": 0.24057129905402652,
+        "reductions_percent": [
+          0.6348565877053791,
+          -0.1290225573159498,
+          0.6101651554240028,
+          -0.49577255539183795
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.49577255539183795,
+        "max": 0.6348565877053791
+      },
+      "draw_ms": {
+        "median_reduction_percent": 0.03760412363407739,
+        "reductions_percent": [
+          0.3123336380376762,
+          -0.23712539076952144,
+          0.49745339749511785,
+          -0.5106651226293613
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.5106651226293613,
+        "max": 0.49745339749511785
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.4474733173748302,
+        "reductions_percent": [
+          0.45320091664019513,
+          0.45277681657032165,
+          0.42492339474208274,
+          0.44216981817933876
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.42492339474208274,
+        "max": 0.45320091664019513
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": 0.1712266345030966,
+        "reductions_percent": [
+          0.7789240687742449,
+          -0.09429058550709524,
+          0.2999927009861514,
+          0.04246056802004183
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.09429058550709524,
+        "max": 0.7789240687742449
+      }
+    },
+    "trained": {
+      "elapsed_ms": {
+        "median_reduction_percent": 0.268073916744771,
+        "reductions_percent": [
+          0.5652137226054288,
+          -0.02906588911588681,
+          0.7182619705729532,
+          -0.65291659896487
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.65291659896487,
+        "max": 0.7182619705729532
+      },
+      "advance_ms": {
+        "median_reduction_percent": 0.3961545073077666,
+        "reductions_percent": [
+          0.7571405466272441,
+          0.04619993584165094,
+          0.7461090787738822,
+          -0.5616946105164056
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.5616946105164056,
+        "max": 0.7571405466272441
+      },
+      "draw_ms": {
+        "median_reduction_percent": -0.12057411571578247,
+        "reductions_percent": [
+          0.008545667939297008,
+          -0.24969389937086195,
+          0.6326941267663755,
+          -0.933530049010578
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.933530049010578,
+        "max": 0.6326941267663755
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.5613358709713134,
+        "reductions_percent": [
+          0.5677748658245219,
+          0.5694913841289506,
+          0.5438706209505706,
+          0.554896876118105
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.5438706209505706,
+        "max": 0.5694913841289506
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": 0.18473313104408473,
+        "reductions_percent": [
+          0.8851264352888966,
+          0.0646410073370074,
+          0.30482525475116207,
+          0.05001015648706808
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.05001015648706808,
+        "max": 0.8851264352888966
+      }
+    },
+    "held_out": {
+      "elapsed_ms": {
+        "median_reduction_percent": 0.056588053417910844,
+        "reductions_percent": [
+          0.4377243900986372,
+          -0.6738965270694619,
+          -0.02526096630877106,
+          0.13843707314459275
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.6738965270694619,
+        "max": 0.4377243900986372
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.1264968513760456,
+        "reductions_percent": [
+          0.0034635566149909813,
+          -1.0307761302521978,
+          -0.09732189205879926,
+          -0.15567181069329195
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -1.0307761302521978,
+        "max": 0.0034635566149909813
+      },
+      "draw_ms": {
+        "median_reduction_percent": 0.34997147326242817,
+        "reductions_percent": [
+          1.07400730504712,
+          -0.2054207238602057,
+          0.15434382190908646,
+          0.5455991246157699
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.2054207238602057,
+        "max": 1.07400730504712
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.08630985053602602,
+        "reductions_percent": [
+          0.09259323316124224,
+          0.08533425937229389,
+          0.0505483180138544,
+          0.08728544169975816
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.0505483180138544,
+        "max": 0.09259323316124224
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": 0.14991138168604645,
+        "reductions_percent": [
+          0.41414743508181306,
+          -0.6439063651304089,
+          0.2832711062043969,
+          0.01655165716769602
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.6439063651304089,
+        "max": 0.41414743508181306
+      }
+    }
+  },
+  "hot4": {
+    "elapsed_ms": {
+      "median_reduction_percent": 0.21663327040831182,
+      "reductions_percent": [
+        0.16908737441467814,
+        0.5263609247395884,
+        0.16407858934597286,
+        0.8375889536943681,
+        0.6410082919506843,
+        -0.40975421940323553,
+        0.2641791664019455,
+        0.5856425140601029,
+        0.06386024658179279,
+        0.6280537378755224,
+        0.10901748796939836,
+        -0.5995511421285293
+      ],
+      "positive": 10,
+      "n": 12,
+      "min": -0.5995511421285293,
+      "max": 0.8375889536943681
+    },
+    "advance_ms": {
+      "median_reduction_percent": 0.6262769622638498,
+      "reductions_percent": [
+        0.3683014760771375,
+        0.7689682200003323,
+        0.6146553243158381,
+        1.184826341717804,
+        0.741519511398292,
+        -0.3038195775529662,
+        0.6378986002118614,
+        0.7806762507054255,
+        0.5266679559715826,
+        0.8463521551357989,
+        0.15571931434470443,
+        -0.7949030011169311
+      ],
+      "positive": 10,
+      "n": 12,
+      "min": -0.7949030011169311,
+      "max": 1.184826341717804
+    },
+    "draw_ms": {
+      "median_reduction_percent": -0.16990520905382223,
+      "reductions_percent": [
+        -0.4255500515854216,
+        -0.17308043082562286,
+        -1.1418604180219338,
+        -0.1667299872820216,
+        0.35142385597144443,
+        -0.7267659639661472,
+        -0.8083505132225222,
+        0.028924514127814938,
+        -1.2818795128709093,
+        1.7438601840336077e-05,
+        -0.029863583405886907,
+        -0.04873612651350445
+      ],
+      "positive": 3,
+      "n": 12,
+      "min": -1.2818795128709093,
+      "max": 0.35142385597144443
+    },
+    "instructions retired": {
+      "median_reduction_percent": 0.5680079767310997,
+      "reductions_percent": [
+        0.5957782390063393,
+        0.5938576011175867,
+        0.5216569057258202,
+        0.5946936947695103,
+        0.575113838720831,
+        0.5740264857976629,
+        0.5653749275841724,
+        0.570641025878027,
+        0.54604006781106,
+        0.561820152760717,
+        0.561884735803253,
+        0.5484256167904489
+      ],
+      "positive": 12,
+      "n": 12,
+      "min": 0.5216569057258202,
+      "max": 0.5957782390063393
+    },
+    "cycles elapsed": {
+      "median_reduction_percent": 0.4309877405850038,
+      "reductions_percent": [
+        0.35530750680036194,
+        0.47623293141896283,
+        -0.014259841099040216,
+        0.4767993527712733,
+        0.8394667692773972,
+        -0.018597062303093992,
+        0.5311739767935197,
+        0.4943051174800095,
+        0.42632352722118405,
+        0.4356519539488235,
+        0.3851508878649157,
+        -0.008215734653083118
+      ],
+      "positive": 9,
+      "n": 12,
+      "min": -0.018597062303093992,
+      "max": 0.8394667692773972
+    }
+  },
+  "controls": {
+    "median_reduction_percent": -0.1523904531989806,
+    "reductions_percent": [
+      0.3054909401297934,
+      0.31806877962544666,
+      -0.23196308835269352,
+      -0.3849741223051817,
+      -0.6836340701354748,
+      -0.778363292841,
+      0.05404297693950566,
+      -0.07281781804526766
+    ],
+    "positive": 3,
+    "n": 8,
+    "min": -0.778363292841,
+    "max": 0.31806877962544666
+  },
+  "assessment": [
+    "The targeted Spotify result is consistent: elapsed and advance improve in all16 full/hot pairs, with instructions lower in all16. Full25 median elapsed reduction1.8103% saves mean6.8236ms/10000frames; hot median2.2662% saves8.5155ms. Advance accounts for6.7380/8.2375ms of those mean savings. This is ordinary8213 versus ordinaryc58d, not the accepted PGO comparison or a fraction of historical C++ excess.",
+    "Broad acceptance is not supported: full elapsed median+0.19057% wins2/4, heldout+0.05659% wins2/4 and heldout mean elapsed is0.1665ms worse. Full summed mean saves3.3039ms. Instructions fall0.44747% all4, and hot elapsed improves0.21663%10/12 with instructions lower all12, supporting a targeted lead rather than a broad elapsed conclusion.",
+    "Car is the main repeat-consistent tradeoff: instructions rise about0.10% in all16 pairs; elapsed is slower11/16 and draw slower13/16. Hot mean elapsed is2.1158ms worse and draw2.1669ms worse. DataViz instructions are worse15/16 by about0.02%, but elapsed is mixed/mostly positive and absolute hot mean+0.0805ms, so no larger elapsed claim is warranted.",
+    "Heldout component_list_1 and script_dependency_test_using_library_v2 are slower4/4, by mean0.3210/0.1004ms total and0.3739/0.0721ms advance. Other heldout outcomes are mixed. These remain regressions to track rather than being dismissed because their absolute times are small.",
+    "All outliers are retained. Zombie full elapsed has two gains/two losses and mean+2.5416ms despite a positive median; its+19.3077ms final full round and+24.6934ms final hot round are included. Car hot+10.6252ms is also retained. No trimming or control subtraction.",
+    "Opening/closing same-binary aggregate elapsed reductions range from-0.7784% to+0.3181%, with median-0.1524%; broad candidate changes overlap this variation. Spotify ordinary elapsed drifts across phases, so compare only within paired rounds and do not infer same-binary controls correct any candidate result."
+  ],
+  "next_actions": [
+    "No unchanged ordinary repeat, automatic PGO, or composition. Finish standalone102 result.",
+    "Inspect distinct no-save ClipStart cost repair: skip native qualification/reacquisition only where no renderer.save callback intervenes; preserve released/fresh receiver after save and existing resource loan. Source/branch reachability review pending, no new candidate or measured attribution yet.",
+    "Retain whole-owner correctness corrections and all source/binaries/raw/recovery; never revert fresh callback reads to obtain a speedup.",
+    "A fresh matchedPGO101 experiment remains a possible separate decision, not authorized or running by this record."
+  ],
+  "parity_achieved": false,
+  "runtime_changes_integrated": false,
+  "created": "2026-10-07T06:04:16.861289+00:00"
+}

@@ -1,0 +1,344 @@
+{
+  "at": "2026-10-07T02:27:33.734956+00:00",
+  "accepted_source_unchanged": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+  "accepted_pgo_unchanged": "e8f8693aa44ce94bbb53d7456ac84069d097e788fc4ffcb01885b6302cadf78b",
+  "raw_review_sha256": "f7068cd47715d77be1c73b030f88eb6331e633bef4ff8076909a340b0705766e",
+  "fixture_review_sha256": "656dc7ddc60dd5b1e183c52e3c9e5eb0c85cf9839bfe4a3e0a855816dd297cdb",
+  "decision": "Park unchanged93 typed Core storage plus qualified87 Shape owner. No acceptance, integration, unchanged repeat or PGO. Preserve qualified source-order correctness and all artifacts; continue distinct operation-level completion transport and converter dispatch hypotheses on accepted source.",
+  "evidence": {
+    "full": {
+      "elapsed_ms": {
+        "median_reduction_percent": -5.528942648320701,
+        "reductions_percent": [
+          -5.798439664650901,
+          -5.098844286061732,
+          -5.2594456319905,
+          -5.802149115081234
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -5.802149115081234,
+        "max": -5.098844286061732
+      },
+      "advance_ms": {
+        "median_reduction_percent": -2.8556069907149095,
+        "reductions_percent": [
+          -3.0957266465284627,
+          -2.1270051275015467,
+          -2.6154873349013563,
+          -3.27445799605377
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -3.27445799605377,
+        "max": -2.1270051275015467
+      },
+      "draw_ms": {
+        "median_reduction_percent": -12.371696571382675,
+        "reductions_percent": [
+          -12.597444407208958,
+          -12.577278904720712,
+          -11.878730700225692,
+          -12.166114238044635
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -12.597444407208958,
+        "max": -11.878730700225692
+      },
+      "instructions retired": {
+        "median_reduction_percent": -7.7905934781143715,
+        "reductions_percent": [
+          -7.787882875701602,
+          -7.799005354458677,
+          -7.793304080527141,
+          -7.7855923347316836
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -7.799005354458677,
+        "max": -7.7855923347316836
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -5.403871924105863,
+        "reductions_percent": [
+          -5.689494479889867,
+          -5.154713084334617,
+          -5.0130390454188545,
+          -5.653030763877109
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -5.689494479889867,
+        "max": -5.0130390454188545
+      }
+    },
+    "heldout": {
+      "elapsed_ms": {
+        "median_reduction_percent": -4.902597484354542,
+        "reductions_percent": [
+          -5.2066791418904135,
+          -4.836537704539912,
+          -4.638973132547397,
+          -4.968657264169174
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -5.2066791418904135,
+        "max": -4.638973132547397
+      },
+      "advance_ms": {
+        "median_reduction_percent": -4.814755521222147,
+        "reductions_percent": [
+          -5.064454820884023,
+          -4.881333285284195,
+          -4.369372450238385,
+          -4.748177757160099
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -5.064454820884023,
+        "max": -4.369372450238385
+      },
+      "draw_ms": {
+        "median_reduction_percent": -5.475761556903313,
+        "reductions_percent": [
+          -5.7263601927147745,
+          -5.105868964945204,
+          -5.287243734044367,
+          -5.66427937976226
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -5.7263601927147745,
+        "max": -5.105868964945204
+      },
+      "instructions retired": {
+        "median_reduction_percent": -4.498409280902626,
+        "reductions_percent": [
+          -4.507697406483224,
+          -4.509576220510181,
+          -4.489121155322029,
+          -4.460698502873828
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -4.509576220510181,
+        "max": -4.460698502873828
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -4.350800585211278,
+        "reductions_percent": [
+          -4.258976934660796,
+          -4.497769140065078,
+          -3.893546405156356,
+          -4.442624235761761
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -4.497769140065078,
+        "max": -3.893546405156356
+      }
+    },
+    "hot": {
+      "elapsed_ms": {
+        "median_reduction_percent": -5.454571947980957,
+        "reductions_percent": [
+          -4.882074185236807,
+          -5.380470990010955,
+          -5.78716865335025,
+          -5.120170986803174,
+          -5.6829079508933456,
+          -5.189397070027413,
+          -5.536889206828044,
+          -5.866543055420559,
+          -5.917608210788616,
+          -4.49411730871172,
+          -5.244614306526452,
+          -5.52867290595096
+        ],
+        "positive": 0,
+        "n": 12,
+        "min": -5.917608210788616,
+        "max": -4.49411730871172
+      },
+      "advance_ms": {
+        "median_reduction_percent": -2.1012518428418003,
+        "reductions_percent": [
+          -1.4224312483512858,
+          -2.0713818955452323,
+          -2.3055421716642766,
+          -1.840725555865519,
+          -2.3231518307863075,
+          -1.9201471041566442,
+          -2.1985169954538586,
+          -2.7187428710309325,
+          -2.708092962582387,
+          -1.2030369718281309,
+          -2.0062214509442677,
+          -2.1311217901383683
+        ],
+        "positive": 0,
+        "n": 12,
+        "min": -2.7187428710309325,
+        "max": -1.2030369718281309
+      },
+      "draw_ms": {
+        "median_reduction_percent": -14.924833463919706,
+        "reductions_percent": [
+          -14.911581174202148,
+          -14.912434730547485,
+          -15.989502854547123,
+          -14.629380775177836,
+          -15.524010936256637,
+          -14.616262214629216,
+          -15.155089242786657,
+          -14.937232197291927,
+          -15.161614166849224,
+          -14.145408764637546,
+          -14.658169986678594,
+          -15.37359604742048
+        ],
+        "positive": 0,
+        "n": 12,
+        "min": -15.989502854547123,
+        "max": -14.145408764637546
+      },
+      "instructions retired": {
+        "median_reduction_percent": -8.828209045596026,
+        "reductions_percent": [
+          -8.796981664465164,
+          -8.838800433014061,
+          -8.842133552905839,
+          -8.842601922210847,
+          -8.823467897125337,
+          -8.839221569462396,
+          -8.845972071667084,
+          -8.820967991151463,
+          -8.799880180890906,
+          -8.80037048872837,
+          -8.832579313106837,
+          -8.823838778085214
+        ],
+        "positive": 0,
+        "n": 12,
+        "min": -8.845972071667084,
+        "max": -8.796981664465164
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -5.3391274728246785,
+        "reductions_percent": [
+          -4.534055660741965,
+          -5.6578522988345314,
+          -5.413741085574575,
+          -5.446052730752626,
+          -5.343095057150826,
+          -5.335159888498531,
+          -5.361568567699271,
+          -5.190273610872853,
+          -5.368053049461796,
+          -4.936617730699755,
+          -5.202078102911223,
+          -5.250514505457815
+        ],
+        "positive": 0,
+        "n": 12,
+        "min": -5.6578522988345314,
+        "max": -4.534055660741965
+      }
+    },
+    "full_fixture_positive_medians": 0,
+    "full_instruction_positive_medians": 0,
+    "absolute_per10000": {
+      "all": {
+        "elapsed_ms": {
+          "baseline_mean": 2909.679146,
+          "candidate_mean": 3069.3965305,
+          "candidate_minus_baseline_mean": 159.71738450000012
+        },
+        "advance_ms": {
+          "baseline_mean": 2061.0892365,
+          "candidate_mean": 2118.3292125,
+          "candidate_minus_baseline_mean": 57.239976000000034
+        },
+        "draw_ms": {
+          "baseline_mean": 835.27718325,
+          "candidate_mean": 938.05133425,
+          "candidate_minus_baseline_mean": 102.774151
+        },
+        "instructions retired": {
+          "baseline_mean": 44774744955.5,
+          "candidate_mean": 48263345208.5,
+          "candidate_minus_baseline_mean": 3488600253.0
+        }
+      },
+      "heldout": {
+        "elapsed_ms": {
+          "baseline_mean": 580.0063855,
+          "candidate_mean": 608.49939475,
+          "candidate_minus_baseline_mean": 28.49300925000001
+        },
+        "advance_ms": {
+          "baseline_mean": 332.17525075,
+          "candidate_mean": 348.00530375,
+          "candidate_minus_baseline_mean": 15.830053000000001
+        },
+        "draw_ms": {
+          "baseline_mean": 236.81126774999998,
+          "candidate_mean": 249.70683925,
+          "candidate_minus_baseline_mean": 12.895571499999997
+        },
+        "instructions retired": {
+          "baseline_mean": 10774123693.25,
+          "candidate_mean": 11258072928.5,
+          "candidate_minus_baseline_mean": 483949235.25
+        }
+      },
+      "trained": {
+        "elapsed_ms": {
+          "baseline_mean": 2329.6727605,
+          "candidate_mean": 2460.89713575,
+          "candidate_minus_baseline_mean": 131.2243752500001
+        },
+        "advance_ms": {
+          "baseline_mean": 1728.91398575,
+          "candidate_mean": 1770.3239087499999,
+          "candidate_minus_baseline_mean": 41.409923000000035
+        },
+        "draw_ms": {
+          "baseline_mean": 598.4659155,
+          "candidate_mean": 688.344495,
+          "candidate_minus_baseline_mean": 89.87857950000001
+        },
+        "instructions retired": {
+          "baseline_mean": 34000621262.25,
+          "candidate_mean": 37005272280.0,
+          "candidate_minus_baseline_mean": 3004651017.75
+        }
+      }
+    },
+    "controls": {
+      "median_reduction_percent": -0.0548509989192536,
+      "reductions_percent": [
+        0.1128225649932868,
+        0.10793380250432305,
+        0.011037488431109299,
+        -0.2356850284958245,
+        -0.10930146846672706,
+        -0.44033890848016455,
+        -0.02060196486952659,
+        -0.08910003296898061
+      ],
+      "positive": 3,
+      "n": 8,
+      "min": -0.44033890848016455,
+      "max": 0.1128225649932868
+    }
+  },
+  "limits": [
+    "All controls/outliers retained; no control subtraction. Four full-suite paired rounds and12hot rounds.",
+    "All25 fixture elapsed medians regress;23/25 elapsed regressall4,all100instructionpairs worsen. Selected native static savings do not establish whole-program elapsed benefit.",
+    "Comparison is whole accepted069e to93union including87 source-order correction; no isolated typed-storage vs87 attribution or proof that stack/code-size/cache is the cause.",
+    "NullRenderer CPU only. Accepted37.7968498% improvement and2.3711840xCpp gap remain unchanged."
+  ]
+}

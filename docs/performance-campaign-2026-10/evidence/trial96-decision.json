@@ -1,0 +1,414 @@
+{
+  "decision": "PARK_UNCHANGED_KEEP_CORRECTED_SOURCE_FOR_COST_REPAIR",
+  "performance_acceptance": false,
+  "candidate_sha256": "06d4e68ff166df0079e23e889af102ff8e8eb0fdf474aa6454f8616e97b7b12e",
+  "candidate_base": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+  "now_accepted_source": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+  "now_accepted_limit": "96 was measured against frozenaf074069e before94 integration; no cccc comparison claim.",
+  "raw_review_sha256": "cd3be64312476094a9698c174e87ae3e77fc13884e04655f4182bc901b3c625c",
+  "fixture_values_sha256": "f96a35c47a7c0bf5500df5fd17e0ac2fe22b952a5c61cea9336222b3bdc054d5",
+  "assessment": "Park unchanged96; retain whole corrected Text source and tests as a basis for a distinct cost repair. Full elapsed/draw/instructions and heldout elapsed/draw/instructions worsenall4; hot elapsed/draw/instructions worsenall12. Only3/25 elapsed medians improve. Native TypeId removal did not pay for required source-fresh reads, retained dispatcher frame and transport in this complete candidate. This is not isolated attribution to projection or a reason to remove required correctness work. No acceptance/integration/repeat or immediate PGO.",
+  "full25": {
+    "all": {
+      "elapsed_ms": {
+        "median_reduction_percent": -1.1726083311076607,
+        "reductions_percent": [
+          -1.5420987011209197,
+          -0.9682970105206135,
+          -1.376919651694708,
+          -0.7663399959281669
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.5420987011209197,
+        "max": -0.7663399959281669
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.2087621046970689,
+        "reductions_percent": [
+          -0.38163855367669974,
+          -0.03723889325581986,
+          -0.38028531613831795,
+          0.054647327015644453
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.38163855367669974,
+        "max": 0.054647327015644453
+      },
+      "draw_ms": {
+        "median_reduction_percent": -3.5653752245831893,
+        "reductions_percent": [
+          -4.417860479266977,
+          -3.278666829070298,
+          -3.8520836200960806,
+          -2.8009270330017877
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -4.417860479266977,
+        "max": -2.8009270330017877
+      },
+      "instructions retired": {
+        "median_reduction_percent": -1.0707437275921605,
+        "reductions_percent": [
+          -1.08134564643656,
+          -1.0659886265326657,
+          -1.0754988286516554,
+          -1.0559139541394646
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.08134564643656,
+        "max": -1.0559139541394646
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -1.199711792427105,
+        "reductions_percent": [
+          -1.3988686302571107,
+          -1.1827086152365718,
+          -1.2167149696176383,
+          -0.5174138780527304
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.3988686302571107,
+        "max": -0.5174138780527304
+      }
+    },
+    "trained": {
+      "elapsed_ms": {
+        "median_reduction_percent": -1.052738536207165,
+        "reductions_percent": [
+          -1.2932073751111606,
+          -0.8322733808756588,
+          -1.2732036915386713,
+          -0.5127033702928108
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.2932073751111606,
+        "max": -0.5127033702928108
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.15922062596185338,
+        "reductions_percent": [
+          -0.27873860571627773,
+          -0.039702646207429027,
+          -0.4156746858507754,
+          0.14134604980718946
+        ],
+        "positive": 1,
+        "n": 4,
+        "min": -0.4156746858507754,
+        "max": 0.14134604980718946
+      },
+      "draw_ms": {
+        "median_reduction_percent": -3.4321328540952156,
+        "reductions_percent": [
+          -4.21852213700824,
+          -3.11134743077488,
+          -3.752918277415551,
+          -2.400360279734426
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -4.21852213700824,
+        "max": -2.400360279734426
+      },
+      "instructions retired": {
+        "median_reduction_percent": -0.9582955154249784,
+        "reductions_percent": [
+          -0.9660913806413207,
+          -0.9500124724343362,
+          -0.9554425688763413,
+          -0.9611484619736155
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -0.9660913806413207,
+        "max": -0.9500124724343362
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -1.1640750915744014,
+        "reductions_percent": [
+          -1.2518889093353636,
+          -1.1226694015981087,
+          -1.205480781550694,
+          -0.19261958566942905
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.2518889093353636,
+        "max": -0.19261958566942905
+      }
+    },
+    "held_out": {
+      "elapsed_ms": {
+        "median_reduction_percent": -1.7881846514145705,
+        "reductions_percent": [
+          -2.5417558854851974,
+          -1.5148242373062226,
+          -1.792055116402702,
+          -1.784314186426439
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -2.5417558854851974,
+        "max": -1.5148242373062226
+      },
+      "advance_ms": {
+        "median_reduction_percent": -0.2962984699263149,
+        "reductions_percent": [
+          -0.9157786497081988,
+          -0.024418574079865252,
+          -0.19648176821827068,
+          -0.39611517163435916
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -0.9157786497081988,
+        "max": -0.024418574079865252
+      },
+      "draw_ms": {
+        "median_reduction_percent": -3.958513286461496,
+        "reductions_percent": [
+          -4.923994563501433,
+          -3.7032076468768826,
+          -4.100967034601388,
+          -3.8160595383216034
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -4.923994563501433,
+        "max": -3.7032076468768826
+      },
+      "instructions retired": {
+        "median_reduction_percent": -1.4386119753762472,
+        "reductions_percent": [
+          -1.4450645815412777,
+          -1.4321593692112167,
+          -1.4544475999670459,
+          -1.3548305817795203
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.4544475999670459,
+        "max": -1.3548305817795203
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": -1.5164305043981474,
+        "reductions_percent": [
+          -1.9040201588894412,
+          -1.3910037125723251,
+          -1.2552745527630638,
+          -1.6418572962239697
+        ],
+        "positive": 0,
+        "n": 4,
+        "min": -1.9040201588894412,
+        "max": -1.2552745527630638
+      }
+    }
+  },
+  "hot4": {
+    "elapsed_ms": {
+      "median_reduction_percent": -0.7236649196743938,
+      "reductions_percent": [
+        -1.1937059275460404,
+        -0.4934802887606171,
+        -0.8551448966076958,
+        -0.5651111290438271,
+        -1.5557748310551345,
+        -0.5921849427410919,
+        -1.1175482042848461,
+        -1.3145135809535136,
+        -0.2107042349963839,
+        -0.4913344550320886,
+        -0.9933365827525353,
+        -0.5849214739232167
+      ],
+      "positive": 0,
+      "n": 12,
+      "min": -1.5557748310551345,
+      "max": -0.2107042349963839
+    },
+    "advance_ms": {
+      "median_reduction_percent": 0.22421586082725375,
+      "reductions_percent": [
+        -0.5859831111513225,
+        0.37345777888421194,
+        0.16513795337689263,
+        0.2832937682776149,
+        -0.8215322350286769,
+        0.3804804566702624,
+        -0.5890902709431156,
+        -0.38677536899227594,
+        0.7640624207152946,
+        0.28828134007269357,
+        -0.1460697679076528,
+        0.47329934789728245
+      ],
+      "positive": 7,
+      "n": 12,
+      "min": -0.8215322350286769,
+      "max": 0.7640624207152946
+    },
+    "draw_ms": {
+      "median_reduction_percent": -3.2324141800095796,
+      "reductions_percent": [
+        -2.9453280023223893,
+        -2.995587031234037,
+        -3.8131981650687763,
+        -3.0454401899906003,
+        -3.6885593872678646,
+        -3.4232203434919173,
+        -2.614641577910559,
+        -3.9963446529545754,
+        -3.0256309650346314,
+        -2.7525735863670686,
+        -3.419388170028559,
+        -3.651724955304614
+      ],
+      "positive": 0,
+      "n": 12,
+      "min": -3.9963446529545754,
+      "max": -2.614641577910559
+    },
+    "instructions retired": {
+      "median_reduction_percent": -0.968831347352217,
+      "reductions_percent": [
+        -0.9671210101727112,
+        -0.9778127752549715,
+        -0.9945950811184323,
+        -0.9772179569267792,
+        -0.9775952283951117,
+        -0.9625989926265177,
+        -0.9699470325183812,
+        -0.9640758438978825,
+        -0.960510621606514,
+        -0.9690616964514343,
+        -0.9686009982529997,
+        -0.9674438311728872
+      ],
+      "positive": 0,
+      "n": 12,
+      "min": -0.9945950811184323,
+      "max": -0.960510621606514
+    },
+    "cycles elapsed": {
+      "median_reduction_percent": -0.7486248678390428,
+      "reductions_percent": [
+        -0.7445959685637105,
+        -0.9326177267275693,
+        -1.272658620421785,
+        -0.6069019297475053,
+        -0.9476743512549346,
+        -0.7526537671143751,
+        -0.49396888662460725,
+        -1.038572001293936,
+        -0.2161229510356799,
+        -0.70823621043552,
+        -0.904073165294883,
+        -0.4475818562274414
+      ],
+      "positive": 0,
+      "n": 12,
+      "min": -1.272658620421785,
+      "max": -0.2161229510356799
+    }
+  },
+  "controls": {
+    "median_reduction_percent": 0.3114564814707621,
+    "reductions_percent": [
+      -0.16980609120045287,
+      0.6943465919486691,
+      -0.1500816312428377,
+      0.35975903351459504,
+      0.39479804583152367,
+      0.4335646323839093,
+      -0.4534653237583397,
+      0.26315392942692917
+    ],
+    "positive": 5,
+    "n": 8,
+    "min": -0.4534653237583397,
+    "max": 0.6943465919486691
+  },
+  "mean_delta_ms": {
+    "elapsed_ms": 33.730947249999964,
+    "advance_ms": 3.8312455000000343,
+    "draw_ms": 29.90376000000001
+  },
+  "full_elapsed_all_four_regressions": [
+    "text_vertical_trim_test",
+    "car_widgets_v01",
+    "script_dependency_test_using_library_v2",
+    "script_dependency_test_using_library",
+    "data_bind_test_cmdq",
+    "data_viz_demo",
+    "image_scripting_property_value",
+    "background_measure",
+    "audio_script",
+    "library",
+    "layout_grid_stack",
+    "local_bounds",
+    "multi_listeners",
+    "script_create_text_runs",
+    "component_list_1"
+  ],
+  "largest_mean_penalties": [
+    {
+      "fixture": "car_widgets_v01",
+      "elapsed_ms": 10.30543775000001,
+      "elapsed_reduction_percent": -2.449047891403777,
+      "draw_reduction_percent": -3.554395451553971
+    },
+    {
+      "fixture": "data_viz_demo",
+      "elapsed_ms": 9.539322999999975,
+      "elapsed_reduction_percent": -3.668551254540431,
+      "draw_reduction_percent": -5.285613503521769
+    },
+    {
+      "fixture": "spotify_kids_demo",
+      "elapsed_ms": 2.344145499999996,
+      "elapsed_reduction_percent": -0.6393139328996544,
+      "draw_reduction_percent": 1.1950114450138882
+    },
+    {
+      "fixture": "script_create_text_runs",
+      "elapsed_ms": 2.042406500000002,
+      "elapsed_reduction_percent": -3.4903030427064885,
+      "draw_reduction_percent": -7.003280270952505
+    },
+    {
+      "fixture": "component_list_1",
+      "elapsed_ms": 1.9583337499999978,
+      "elapsed_reduction_percent": -2.7403270613329367,
+      "draw_reduction_percent": -7.881045772420913
+    },
+    {
+      "fixture": "data_bind_test_cmdq",
+      "elapsed_ms": 1.6538127499999984,
+      "elapsed_reduction_percent": -6.3124095102223166,
+      "draw_reduction_percent": -9.359647643610035
+    },
+    {
+      "fixture": "multi_listeners",
+      "elapsed_ms": 1.2086560000000004,
+      "elapsed_reduction_percent": -4.707538174060366,
+      "draw_reduction_percent": -15.559571028380903
+    },
+    {
+      "fixture": "audio_script",
+      "elapsed_ms": 0.928468999999998,
+      "elapsed_reduction_percent": -4.0695988016545055,
+      "draw_reduction_percent": -5.520048787081178
+    }
+  ],
+  "no_repeat_or_pgo": true,
+  "all_rows_retained": true,
+  "controls_not_subtracted": true,
+  "at": "2026-10-07T04:26:11.841551+00:00"
+}

@@ -1,0 +1,66 @@
+{
+  "source": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+  "tree": "fe7cb46631b1269930d440043c663ef7191ab408",
+  "ordinary": "c58d55daace6d26fe26d64c4e15c3ca9738732e43b5393b38385de7248858408",
+  "pgo": "8d1d24b33d04b372a746c73034b509c1efd6e93da9590ed7a02163c545a430f9",
+  "previous_source": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+  "direct_previous_pgo_elapsed_reduction_percent": 0.9491316958137708,
+  "parity": false,
+  "integrated_at": "2026-10-07T04:24:42.524896+00:00",
+  "source_recovery": "target/perf-campaign/recovery/completion-in-place",
+  "integration_receipt": "target/perf-campaign/pending-cccc-integration/receipt.json",
+  "limits": [
+    "Trial97 measures exact94 whole-candidate PGO against accepted af074; no isolated static-site attribution.",
+    "Retain97 fixture/phase regressions and control spread from immutable root decision; no subtraction or cross-trial compounding.",
+    "Frozen25 progressive NullRenderer CPU workload; no production/GPU parity claim.",
+    "Trials99/100 are direct whole-build comparisons, not source-only attribution. Original raw build receipts unavailable; retained bound summaries and executable identities preserved.",
+    "Current cpp ratios remain above1 for every fixture/phase; parity not achieved. No subtraction of identical-control drift, cross-trial compounding, or benchmark rerun."
+  ],
+  "direct_previous_pgo_advance_reduction_percent": 1.24199781726545,
+  "direct_previous_pgo_heldout_elapsed_reduction_percent": 0.5324789567583532,
+  "integration_status": "Exact tested runtime integrated; direct99 original and100 pinnedCpp refresh complete",
+  "previous_pgo_comparison": {
+    "trial": 97,
+    "control_source": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+    "control_sha256": "e8f8693aa44ce94bbb53d7456ac84069d097e788fc4ffcb01885b6302cadf78b",
+    "candidate_sha256": "8d1d24b33d04b372a746c73034b509c1efd6e93da9590ed7a02163c545a430f9",
+    "decision_path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/remote-batch97-user-exclusive-admin/root-decision.json",
+    "decision_sha256": "f2456c1bdbac38542fed2e4ebc1f3dd21d5c5886895d3b8d687a928d22902c0e"
+  },
+  "historical_direct_measurements": {
+    "source": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+    "scope": "Historical af074 trials72/73 only; no fresh cumulative/C++ measurement for cccc yet; not multiplied by97 gain",
+    "values": {
+      "direct_original_elapsed_reduction_percent": 37.796849815867596,
+      "direct_original_instruction_reduction_percent": 36.11110580094397,
+      "direct_original_heldout_elapsed_reduction_percent": 30.58760455742584,
+      "cpp_total_ratio": 2.3711840290698847,
+      "cpp_advance_ratio": 2.7319387489184903,
+      "cpp_draw_ratio": 1.7615602092353893,
+      "cpp_heldout_total_ratio": 3.18406175064732,
+      "cpp_instruction_ratio": 2.6068439560717658
+    },
+    "previous_accepted_state_copy": "previous-accepted-state.json",
+    "previous_accepted_state_sha256": "813b7f58f32986d55d1cf38bdc268db9466db1ee3885c2616a017a12cdf25093"
+  },
+  "pending_direct_measurements": [],
+  "direct_original_elapsed_reduction_percent": 38.83127682058152,
+  "direct_original_instruction_reduction_percent": 36.13581889362648,
+  "direct_original_heldout_elapsed_reduction_percent": 31.374165088039057,
+  "cpp_total_ratio": 2.3628202698620875,
+  "cpp_advance_ratio": 2.72609509562373,
+  "cpp_draw_ratio": 1.7521645614705155,
+  "cpp_heldout_total_ratio": 3.209307065922123,
+  "cpp_instruction_ratio": 2.606029519643604,
+  "direct_refresh_at": "2026-10-07T04:43:45.862941+00:00",
+  "direct_refresh_evidence": {
+    "trials": [
+      99,
+      100
+    ],
+    "decision_path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/remote-batch99-100-user-exclusive-admin/root-decision.json",
+    "decision_sha256": "4105a00e1919fa565796d05d3b1042ec4a47356e6c08d99f4085474b79757201",
+    "raw_review_sha256": "9c4e75ea1963c653dacae7f20a98bdcfe5880aa8f58979070e56ae2376a2b2f5",
+    "fixture_review_sha256": "1181640db76ab150c13569d45c7fb47ab7d954e23c9b03edc17e2d148f922d17"
+  }
+}

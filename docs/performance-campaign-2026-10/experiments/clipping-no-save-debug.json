@@ -1,0 +1,85 @@
+{
+  "all_children_exit0": true,
+  "candidate_patch_sha256": "c692b474a69e099ef1f080bf4de138d91f8b7b9cac46e0a9273c8a1954087ecb",
+  "features": "tools,testing",
+  "fixture_files": 38,
+  "ordinary_or_remote_started": false,
+  "phases": [
+    {
+      "command_sha256": "c39237e2732de237a9fb9a6b03db897442462a5ac44f6ece8fbe64ebd90b8b1c",
+      "exit": 0,
+      "log_sha256": "9360537efe9fbbd4de13a0323b91355d509f18d09168da508b46125d2bed4892",
+      "phase": "focused",
+      "results": [
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 13,
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "command_sha256": "384a7f5094f1c1e4ed19009149363f37272487e167d7b39a232ca2d14c02e83b",
+      "exit": 0,
+      "log_sha256": "716cc864d625f1d7c815872ce9e742cfb3f2880feda7353c75773e5c773f30e3",
+      "phase": "library",
+      "results": [
+        {
+          "failed": 0,
+          "ignored": 2,
+          "passed": 355,
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "command_sha256": "030e40886cc39cee5d64371f0c5036fb66a6c43470d236770007f804e22be7d0",
+      "exit": 0,
+      "log_sha256": "252a0a07f67e2b4c8e0f6730690ab7f377800059c016b99f6384505ef916dbc0",
+      "phase": "integration",
+      "results": [
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 18,
+          "status": "ok"
+        },
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 1,
+          "status": "ok"
+        },
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4,
+          "status": "ok"
+        },
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 7,
+          "status": "ok"
+        },
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 3,
+          "status": "ok"
+        },
+        {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 1,
+          "status": "ok"
+        }
+      ]
+    }
+  ],
+  "pipeline_command_sha256": "35aaec2241d83bfe2c53589a27c3a5e6d03867caff4d1b48abe64db1ae5d2272",
+  "source_freeze_sha256": "7d2bad49a437e79db9b7f4b9c2cff3d39d4f5dc4061168eab62b783a5db3ad28",
+  "source_manifest_rechecked": 11339,
+  "source_review_sha256": "4ee64daf2b77b5573bbf9ec56da1f921b7ca1530ff546adaecb3995f5a3205d8"
+}

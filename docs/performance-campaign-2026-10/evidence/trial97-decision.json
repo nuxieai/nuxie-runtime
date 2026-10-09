@@ -1,0 +1,411 @@
+{
+  "decision": "QUALIFIED_FOR_ACCEPTANCE_PENDING_INTEGRATION",
+  "accepted_state_changed": false,
+  "candidate_source_commit": "cccc555f95d9242daf377885a9880ebadde2f5f6",
+  "candidate_ordinary_sha256": "c58d55daace6d26fe26d64c4e15c3ca9738732e43b5393b38385de7248858408",
+  "candidate_pgo_sha256": "8d1d24b33d04b372a746c73034b509c1efd6e93da9590ed7a02163c545a430f9",
+  "independent_raw_review_sha256": "0fc589bd6af7c8b05a6d37b81de4c70024070c79913aa1894110fee1c7b3dca5",
+  "fixture_values_sha256": "e93ce2b6d482459bfccfd7a45d806abb8d033cfd6b03d05d416f4733411415b2",
+  "assessment": "Qualifies for acceptance after preserving and verifying the three-file integration. Full elapsed and advance improve4/4, hot elapsed11/12 and advance12/12; heldout elapsed3/4 and advance4/4. Full instructions improve4/4 but only0.05%; elapsed gain is whole-candidate PGO evidence, not attributed wholly to static completion sites. No full fixture has all4 elapsed regressions; all negative full elapsed medians are under1%. Retain phase regressions and controls without subtraction. No unchanged repeat or retraining.",
+  "full25": {
+    "all": {
+      "elapsed_ms": {
+        "median_reduction_percent": 0.9491316958137708,
+        "reductions_percent": [
+          0.6684859765333173,
+          1.1912073093628517,
+          0.9664816859780267,
+          0.9317817056495148
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.6684859765333173,
+        "max": 1.1912073093628517
+      },
+      "advance_ms": {
+        "median_reduction_percent": 1.24199781726545,
+        "reductions_percent": [
+          0.7525039304183356,
+          1.5620627807893195,
+          1.134928772874455,
+          1.349066861656445
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.7525039304183356,
+        "max": 1.5620627807893195
+      },
+      "draw_ms": {
+        "median_reduction_percent": 0.33645465008839137,
+        "reductions_percent": [
+          0.459205567219545,
+          0.21370373295723777,
+          0.5321789544331379,
+          -0.16978830726999128
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.16978830726999128,
+        "max": 0.5321789544331379
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.05000097451358099,
+        "reductions_percent": [
+          0.0514088105444066,
+          0.10787659007132078,
+          0.04859313848275537,
+          0.04150947569205865
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.04150947569205865,
+        "max": 0.10787659007132078
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": 1.0188016374146736,
+        "reductions_percent": [
+          0.7818758789789548,
+          1.4770309287536643,
+          1.1051942481139165,
+          0.9324090267154306
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.7818758789789548,
+        "max": 1.4770309287536643
+      }
+    },
+    "trained": {
+      "elapsed_ms": {
+        "median_reduction_percent": 1.0246939265785349,
+        "reductions_percent": [
+          0.6864327721270991,
+          1.525207875501422,
+          1.1030405627091344,
+          0.9463472904479353
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.6864327721270991,
+        "max": 1.525207875501422
+      },
+      "advance_ms": {
+        "median_reduction_percent": 1.3192442396103676,
+        "reductions_percent": [
+          0.7802517916556506,
+          1.8637774271841323,
+          1.2160265516889202,
+          1.422461927531815
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.7802517916556506,
+        "max": 1.8637774271841323
+      },
+      "draw_ms": {
+        "median_reduction_percent": 0.4543218856086384,
+        "reductions_percent": [
+          0.4097037473604348,
+          0.498940023856842,
+          0.7690721124215094,
+          -0.5199408507005732
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.5199408507005732,
+        "max": 0.7690721124215094
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.07362148882187891,
+        "reductions_percent": [
+          0.06505010798232291,
+          0.14144833010150126,
+          0.08219286966143491,
+          0.05708222689467801
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.05708222689467801,
+        "max": 0.14144833010150126
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": 1.1206607424666337,
+        "reductions_percent": [
+          0.8017416504947694,
+          2.038636686453288,
+          1.260169241495901,
+          0.9811522434373665
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.8017416504947694,
+        "max": 2.038636686453288
+      }
+    },
+    "held_out": {
+      "elapsed_ms": {
+        "median_reduction_percent": 0.5324789567583532,
+        "reductions_percent": [
+          0.6022511026364641,
+          -0.05505448590008566,
+          0.46270681088024235,
+          0.8785995855495998
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.05505448590008566,
+        "max": 0.8785995855495998
+      },
+      "advance_ms": {
+        "median_reduction_percent": 0.6965124572035852,
+        "reductions_percent": [
+          0.6260124777796028,
+          0.17459995342350432,
+          0.7670124366275677,
+          1.018904210856686
+        ],
+        "positive": 4,
+        "n": 4,
+        "min": 0.17459995342350432,
+        "max": 1.018904210856686
+      },
+      "draw_ms": {
+        "median_reduction_percent": 0.26358525237824004,
+        "reductions_percent": [
+          0.5808282075893567,
+          -0.49701308190730487,
+          -0.05365770283287663,
+          0.6823927552185194
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.49701308190730487,
+        "max": 0.6823927552185194
+      },
+      "instructions retired": {
+        "median_reduction_percent": 0.004442538589755074,
+        "reductions_percent": [
+          0.012421278081475862,
+          0.011889334904124915,
+          -0.04747283654178425,
+          -0.0030042577246147673
+        ],
+        "positive": 2,
+        "n": 4,
+        "min": -0.04747283654178425,
+        "max": 0.012421278081475862
+      },
+      "cycles elapsed": {
+        "median_reduction_percent": 0.6690406832110474,
+        "reductions_percent": [
+          0.719543985630644,
+          -0.3088683631692346,
+          0.6185373807914507,
+          0.7805190887887337
+        ],
+        "positive": 3,
+        "n": 4,
+        "min": -0.3088683631692346,
+        "max": 0.7805190887887337
+      }
+    }
+  },
+  "hot4": {
+    "elapsed_ms": {
+      "median_reduction_percent": 0.9023825000660846,
+      "reductions_percent": [
+        0.2952291104104998,
+        1.4636350746941695,
+        -0.09652078265389719,
+        0.9979859483208897,
+        0.16868602004175282,
+        1.3318635215819108,
+        1.2209534733471528,
+        0.660962926726727,
+        0.8101358563587069,
+        1.016282434059823,
+        0.575039375967501,
+        0.9946291437734622
+      ],
+      "positive": 11,
+      "n": 12,
+      "min": -0.09652078265389719,
+      "max": 1.4636350746941695
+    },
+    "advance_ms": {
+      "median_reduction_percent": 0.9379954295725412,
+      "reductions_percent": [
+        0.45825718785594827,
+        1.5288765982934605,
+        0.3485725885303048,
+        0.8850192996119555,
+        0.32963714168045,
+        1.7489407380972821,
+        1.523144141446675,
+        0.8957921474465946,
+        0.9801987116984878,
+        1.5383396933951854,
+        0.4280392975343994,
+        1.0983708889816701
+      ],
+      "positive": 12,
+      "n": 12,
+      "min": 0.32963714168045,
+      "max": 1.7489407380972821
+    },
+    "draw_ms": {
+      "median_reduction_percent": 0.18009836808200452,
+      "reductions_percent": [
+        -0.19130301347713985,
+        1.2667503581944572,
+        -1.4591969750119116,
+        1.3612808164109258,
+        -0.30346779081338315,
+        0.0627542444669893,
+        0.30711497242474906,
+        -0.05146271191360796,
+        0.29744249169701975,
+        -0.592077223317844,
+        1.0460064555492088,
+        0.6920009341838229
+      ],
+      "positive": 7,
+      "n": 12,
+      "min": -1.4591969750119116,
+      "max": 1.3612808164109258
+    },
+    "instructions retired": {
+      "median_reduction_percent": 0.06693996359977139,
+      "reductions_percent": [
+        0.09946689312342327,
+        0.07804128704133051,
+        0.0507747833094041,
+        0.05822002024340467,
+        0.08818825083870552,
+        0.07700991954688874,
+        0.05776423441151701,
+        0.061827861524654804,
+        0.0631642716344305,
+        0.07071565556511228,
+        0.08568357196520049,
+        0.03219412861361626
+      ],
+      "positive": 12,
+      "n": 12,
+      "min": 0.03219412861361626,
+      "max": 0.09946689312342327
+    },
+    "cycles elapsed": {
+      "median_reduction_percent": 0.8119233390543379,
+      "reductions_percent": [
+        0.4598902309167152,
+        1.3922118771000136,
+        0.7450547545259756,
+        0.48588629481823853,
+        0.2960601952616715,
+        0.9429698431936862,
+        1.2924036784055293,
+        0.8025028444226812,
+        0.9673287507488193,
+        0.8213438336859946,
+        0.7755237788428682,
+        0.9914303911425337
+      ],
+      "positive": 12,
+      "n": 12,
+      "min": 0.2960601952616715,
+      "max": 1.3922118771000136
+    }
+  },
+  "controls": {
+    "median_reduction_percent": -0.032050049304294115,
+    "reductions_percent": [
+      -0.19641703199557714,
+      0.28261822313124796,
+      0.09865752435485042,
+      -0.25569788357271417,
+      -0.18972728096711133,
+      0.09518251822454582,
+      0.6887751638852246,
+      -0.15928261683313405
+    ],
+    "positive": 4,
+    "n": 8,
+    "min": -0.25569788357271417,
+    "max": 0.6887751638852246
+  },
+  "mean_delta_ms": {
+    "elapsed_ms": -20.561625249999928,
+    "advance_ms": -19.034692999999972,
+    "draw_ms": -1.5259167499999946
+  },
+  "regressions_retained": {
+    "full_elapsed_negative_medians": {
+      "text_vertical_trim_test": {
+        "median_reduction_percent": -0.1829685551499094,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.047010499999998956
+      },
+      "script_dependency_test_using_library": {
+        "median_reduction_percent": -0.7048332395607426,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.03894799999999998
+      },
+      "viewmodel_based_condition": {
+        "median_reduction_percent": -0.9111767823455574,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.07536425000000069
+      },
+      "image_scripting_property_value": {
+        "median_reduction_percent": -0.8724664945487515,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.12869825000000024
+      },
+      "background_measure": {
+        "median_reduction_percent": -0.0465999199986189,
+        "positive_pairs": 2,
+        "mean_delta_ms": 0.03728125000000038
+      },
+      "audio_script": {
+        "median_reduction_percent": -0.4103205366223994,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.06764625000000013
+      },
+      "spotify_kids_demo": {
+        "median_reduction_percent": -0.15857143823123643,
+        "positive_pairs": 2,
+        "mean_delta_ms": 0.2083442499999819
+      },
+      "layout_grid_stack": {
+        "median_reduction_percent": -0.3098352811009786,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.008458249999999445
+      },
+      "gamepad_test": {
+        "median_reduction_percent": -0.0716590793202021,
+        "positive_pairs": 2,
+        "mean_delta_ms": 0.11585400000000234
+      },
+      "multi_listeners": {
+        "median_reduction_percent": -0.06816379763344149,
+        "positive_pairs": 2,
+        "mean_delta_ms": 0.07155225000000254
+      },
+      "collapsing_elements": {
+        "median_reduction_percent": -0.4580759320088612,
+        "positive_pairs": 1,
+        "mean_delta_ms": 0.14061450000000164
+      }
+    },
+    "phase_notes": [
+      "Car hot draw0.3483%slower8/12 (+0.233ms/10k), full draw0.2449%faster3/4.",
+      "Background draw0.7276%slower4/4 (+0.0205ms).",
+      "Audio advance1.9719%slower3/4 (+0.1315ms); total0.4103%slower3/4 (+0.0676ms).",
+      "Multi-listener draw2.9406%slower3/4 (+0.1323ms); total0.0682%slower2/4 (+0.0716ms).",
+      "VMcondition total0.9112%slower3/4 (+0.0754ms). All original rows retained."
+    ]
+  },
+  "next": "Complete already-qualified96 measurement against frozenaf074 control, then integrate only94 three-file delta with exact frozen-source verification; update accepted state and directly remeasure original/C++ against newPGO. No derived cumulative or C++ ratio from multiplying separate trials.",
+  "scope": "NullRenderer progressive10k;4full/12hot/8identicalcontrols, no per-small-fixture CI or production/GPU parity claim",
+  "at": "2026-10-07T04:15:10.594848+00:00"
+}

@@ -1,0 +1,96 @@
+{
+  "integrated_source": "af074640e6d8d9efa6ac1c1ab499a44bc806abfa",
+  "previous_source": "3b131a298ec3aa0d99b8ae6915c94feee87fe1c2",
+  "working_runtime_exact_tested_source": true,
+  "runtime_files": 1395,
+  "changed_files": {
+    "crates/nuxie-runtime/src/mechanical_port/source/animation/state_instance.rs": {
+      "before": "9e428ed091d62a5336f8d03ce4214f40ec522505cb4b336f7139f4b4bb12e541",
+      "after": "989a31ce06a148be9f73792f2b11a37c6f2a97b85d2ec79641fd10875b8cb871"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/animation/state_machine_instance.rs": {
+      "before": "830bc384d7f1ff0480a8a98b605309e58129cd63d6a07e146e5007382f96865b",
+      "after": "87181681a602ace5accd92428365601dd06bf6e8b6bd0742707001a1eb7393dc"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/animation/state_machine_owner_order_tests.rs": {
+      "before": null,
+      "after": "eb3c2e2276c1cb7b681948bb557a47316d03ca7eb895382d582da2a3baab090e"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/core.rs": {
+      "before": "3f30433e7fdd08975207edbfe6210a4f00f5cbfa24c87a9f0e20c7eb6fee03f0",
+      "after": "419be0a3297e722ed588db507654a68daf3330e49883dd25b40ff14b806dd535"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/data_bind/data_bind_container.rs": {
+      "before": "ac32858fc1e6f12668cb9a160f26285c5abb8510e240c91a082b941350d7fbf5",
+      "after": "a1b7fb1cd628ae61d88eccf091e0a921741eb9b6903271d3762515b254976aaa"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/generated/core_registry.rs": {
+      "before": "a2a32f8f5b8624db9c3abf4c76d7dcfe4f786826435f4a870cf5389070e4e9bf",
+      "after": "1738ac192dca1851b728b2e598ef0f2ac450d06175f76f52a3590b254b2a9bde"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/layout/layout_participant.rs": {
+      "before": "fe76f0d8323f9a2aea90d95a73917e7b1e57b651045b3ddc2654869e0dcd40ab",
+      "after": "459624ab4b8414807cdfdd1f8fe905046ad06b1dc54e7a177327dd021494b6e5"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/layout/layout_participant_contract_tests.rs": {
+      "before": null,
+      "after": "10e8991637999ac1d83cc4e4daff771c78e3979b1b66a20fedff2860c82b13ef"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/shapes/legacy_node_alias_tests.rs": {
+      "before": null,
+      "after": "d25b3984bb792f08b54149c91c59601ca6bfb814b0e171e796a264a8c44a2d34"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/shapes/path.rs": {
+      "before": "75346e3320f55109d7c6a01f5be0e2d848d32805f272c9f90b43013165a471b3",
+      "after": "0580a78e7806be3eabd224ab7ae6e54a2d2375d46b26337852b840b80c0e2b6f"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/viewmodel/viewmodel_instance.rs": {
+      "before": "8515e9c0715f6c46fe432092f12f0ba32c68534bd14c24e6d21cf81d3d058703",
+      "after": "ded1148ac68a03c5d3eb69aec0ca0b1677a1d7de4420d7a7d7c5eaea14d9cafc"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/viewmodel/viewmodel_instance_value.rs": {
+      "before": "7537fc5539a9191796ef9ef6df2441eb2f455ca22a1a9c503b3e46cf6e7d9074",
+      "after": "34af4dd3be49b70ee9590995830129b737dae940063fe27f0fe416c047f144c9"
+    },
+    "crates/nuxie-runtime/src/mechanical_port/source/viewmodel/viewmodel_instance_viewmodel.rs": {
+      "before": "7000084f2950948ae8a90a9446aecdd375bfa6cbe870a3a47e8129f4877bf913",
+      "after": "3b6a85e5784cd7be1fad3a5d9510527a7ff486f2d8d3a48bb7cc64528f6b844f"
+    },
+    "crates/nuxie-runtime/tests/source_owner_data_bind_may_advance.rs": {
+      "before": null,
+      "after": "c550179601d5351b8f9e3b033693c693575803f9fb4ca989bf18de7ebe0e3feb"
+    },
+    "crates/nuxie-runtime/tests/source_owner_keyframe_ignored_next.rs": {
+      "before": null,
+      "after": "bd802f537b51da8bfd982dd11d627be7d0b1c57a1ca4d63286f99668f80ebf2c"
+    },
+    "crates/nuxie-runtime/tests/source_owner_viewmodel_clone_chronology.rs": {
+      "before": null,
+      "after": "f3db6cd6af75833a2c72d379c586479740c96a9cf6cf97e20c750e702b427468"
+    },
+    "crates/nuxie-runtime/tests/source_registry_computed_derived_getters.rs": {
+      "before": null,
+      "after": "e49667c858f3c5c9cc882ad206a59ed2189ca51951a14096b7ddf09747cf3806"
+    },
+    "crates/nuxie-runtime/tests/source_registry_computed_properties.rs": {
+      "before": null,
+      "after": "9990fbd44d0b0c278d4ad1e5082df94099ac40e7495a41dcc86fddeb444ef425"
+    },
+    "crates/nuxie-runtime/tests/source_registry_layout_callbacks.rs": {
+      "before": null,
+      "after": "c821fed52de76b0b0002841c248f0c75fce0173e4b63d5d32ccc34689c71cf57"
+    },
+    "crates/nuxie-runtime/tests/source_registry_listener_import.rs": {
+      "before": null,
+      "after": "8cc3dd5dcd910ebf729c02fb117292a8b5ae4588f1695448143e71a6753628b9"
+    },
+    "crates/nuxie-runtime/tests/source_registry_metadata_contracts.rs": {
+      "before": null,
+      "after": "1dc7f42365c60d10385da46463b9f60305ac895d842aae3f001c96ecf88a2b32"
+    }
+  },
+  "real_HEAD_unchanged": true,
+  "patch_sha256": "3404d7571594d19c63a26ef5593e9f4d48d1bf78775140320667c18a68bdec18",
+  "acceptance_decision_sha256": "e967fd87d826afdd4ede9b6fc6ebc29e4a99b7e2948213685c2f36accbe724c1",
+  "at": "2026-10-06T20:14:17.615850+00:00"
+}

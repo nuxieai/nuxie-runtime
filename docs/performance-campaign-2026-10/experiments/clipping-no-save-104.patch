@@ -1,0 +1,1315 @@
+--- a/crates/nuxie-runtime/src/mechanical_port/source/generated/core_registry.rs
++++ b/crates/nuxie-runtime/src/mechanical_port/source/generated/core_registry.rs
+@@ -3446,7 +3446,7 @@
+         for key in 0..=u16::MAX {
+             let Some(object) = CoreRegistry::make_core_box(i32::from(key)) else { continue; };
+             let transform = object.as_transform_component().is_some();
+-            assert_eq!(object.component_update_handler().is_some(), transform, "update registration {key}");
++            assert_eq!(object.component_update_handler().is_some(), transform || object.as_clipping_shape().is_some(), "update registration {key}");
+             assert_eq!(object.component_constraints_handler().is_some(), transform, "constraint registration {key}");
+             transforms += usize::from(transform);
+         }
+@@ -66057,6 +66057,9 @@
+         );
+         true
+     }
++    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
++        Some(crate::mechanical_port::source::shapes::clipping_shape::ClippingShape::update_occurrence)
++    }
+     fn component_update(
+         &mut self,
+         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+--- a/crates/nuxie-runtime/src/mechanical_port/source/shapes/clipping_shape.rs
++++ b/crates/nuxie-runtime/src/mechanical_port/source/shapes/clipping_shape.rs
+@@ -7,16 +7,99 @@
+     core_context::CoreContext,
+     drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
+     generated::shapes::clipping_shape_base::ClippingShapeBase,
++    math::mat2d::Mat2D,
+     shapes::{
+         paint::{
+             effects_container::EffectsContainer, fill::Fill, shape_paint::ShapePaintPathKind,
+             shape_paint_path::ShapePaintPath,
+         },
+         path_flags::PathFlags,
++        shape::Shape,
+     },
+     status_code::StatusCode,
+ };
+ use nuxie_render_api::Renderer;
++
++// Only the actual native source gets released, fresh membership reads. A
++// custom projection keeps its existing one-query snapshot and checked scopes.
++enum ClipPaints<'a> {
++    Native {
++        owner: &'a CoreHandle,
++        count: usize,
++        index: usize,
++        first: Option<CoreHandle>,
++    },
++    Projected {
++        paints: std::vec::IntoIter<CoreHandle>,
++        world: Mat2D,
++    },
++}
++
++impl<'a> ClipPaints<'a> {
++    fn new(owner: &'a CoreHandle) -> Option<Self> {
++        owner
++            .with(|object| {
++                let native = (object as &dyn std::any::Any).is::<Shape>();
++                let shape = object.as_shape()?;
++                let paints = shape.paint_container.shape_paints();
++                Some(if native {
++                    Self::Native {
++                        owner,
++                        count: paints.len(),
++                        index: 0,
++                        first: paints.first().cloned(),
++                    }
++                } else {
++                    Self::Projected {
++                        paints: paints.to_vec().into_iter(),
++                        world: *shape.base.world_transform(),
++                    }
++                })
++            })
++            .flatten()
++    }
++
++    fn next(&mut self) -> Option<CoreHandle> {
++        match self {
++            Self::Native {
++                owner,
++                count,
++                index,
++                first,
++            } => {
++                if *index >= *count {
++                    return None;
++                }
++                let current = *index;
++                *index += 1;
++                if current == 0 {
++                    first.take()
++                } else {
++                    owner
++                        .with(|object| {
++                            object
++                                .as_shape()?
++                                .paint_container
++                                .shape_paints()
++                                .get(current)
++                                .cloned()
++                        })
++                        .flatten()
++                }
++            }
++            Self::Projected { paints, .. } => paints.next(),
++        }
++    }
++
++    fn world(&self) -> Option<Mat2D> {
++        match self {
++            Self::Native { owner, .. } => owner
++                .with(|object| object.as_shape().map(|shape| *shape.base.world_transform()))
++                .flatten(),
++            Self::Projected { world, .. } => Some(*world),
++        }
++    }
++}
+ 
+ pub trait ClippingShapeOperation {
+     fn draw(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool);
+@@ -37,25 +120,47 @@
+ 
+ impl ClippingShapeOperation for ClippingShapeStart {
+     fn draw(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool) {
+-        if let Some(shape) = self.clipping_shape.as_ref() {
+-            shape.with_downcast_mut::<ClippingShape, _>(|shape| {
+-                if !shape.base.is_visible() {
+-                    return;
+-                }
++        let Some(owner) = self.clipping_shape.as_ref() else {
++            return;
++        };
++        if !needs_save_operation {
++            // No save callback separates visibility from the source path read.
++            // Keep the existing checked resource loan and custom projection.
++            owner.with_downcast_mut::<ClippingShape, _>(|clip| {
++                if clip.base.is_visible() {
++                    clip.draw_clip_path(renderer);
++                }
++            });
++            return;
++        }
++        let native_visible = owner
++            .with_mut(|object| {
++                let native = (object as &dyn std::any::Any).is::<ClippingShape>();
++                let Some(clip) = object.as_any_mut().downcast_mut::<ClippingShape>() else {
++                    return false;
++                };
++                if !clip.base.is_visible() {
++                    return false;
++                }
++                if native {
++                    return true;
++                }
++                // Custom projection keeps its original one-query checked receiver.
+                 if needs_save_operation {
+                     renderer.save();
+                 }
+-                if shape.clip_path {
+-                    let factory = shape
+-                        .base
+-                        .with_artboard(|artboard| artboard.factory())
+-                        .flatten();
+-                    if let Some(factory) = factory {
+-                        renderer.clip_path(shape.path.render_path(&factory));
+-                    }
+-                }
+-            });
+-        }
++                clip.draw_clip_path(renderer);
++                false
++            })
++            .unwrap_or(false);
++        if !native_visible {
++            return;
++        }
++        // save is open renderer code. The source reads path only afterward.
++        if needs_save_operation {
++            renderer.save();
++        }
++        owner.with_downcast_mut::<ClippingShape, _>(|clip| clip.draw_clip_path(renderer));
+     }
+ 
+     fn empty_clip_count(&mut self) -> i32 {
+@@ -133,7 +238,9 @@
+ }
+ 
+ impl ProxyDrawing for ClippingShapeProxyDrawing {
+-    fn hittable_component(&self) -> Option<CoreHandle> { None }
++    fn hittable_component(&self) -> Option<CoreHandle> {
++        None
++    }
+     fn draw_proxy(
+         &mut self,
+         renderer: &mut crate::mechanical_port::source::renderer::Renderer<'_>,
+@@ -220,6 +327,20 @@
+ }
+ 
+ impl ClippingShape {
++    // The inline RenderPath remains borrowed for upload/clip. The receiver is
++    // deliberately reacquired after save, rather than holding it through save.
++    fn draw_clip_path(&mut self, renderer: &mut dyn Renderer) {
++        if self.clip_path {
++            let factory = self
++                .base
++                .with_artboard(|artboard| artboard.factory())
++                .flatten();
++            if let Some(factory) = factory {
++                renderer.clip_path(self.path.render_path(&factory));
++            }
++        }
++    }
++
+     pub fn source(&self) -> Option<CoreHandle> {
+         self.source.clone()
+     }
+@@ -312,22 +433,18 @@
+         self.clip_end.set_clipping_shape(this);
+     }
+ 
+-    fn add_fill_paths(&mut self, shape: &CoreHandle) -> bool {
+-        let Some((paints, world)) = shape
+-            .with(|shape| {
+-                let shape = shape.as_shape()?;
+-                Some((
+-                    shape.paint_container.shape_paints().to_vec(),
+-                    *shape.base.world_transform(),
+-                ))
+-            })
+-            .flatten()
+-        else {
++    fn add_fill_paths(
++        shape: &CoreHandle,
++        mut append: impl FnMut(&ShapePaintPath, Option<&Mat2D>),
++    ) -> bool {
++        // Capture the native source bound/first member without retaining its
++        // payload. Only later entries and callback-dependent world are fresh.
++        let Some(mut paints) = ClipPaints::new(shape) else {
+             return false;
+         };
+         let mut added_effected = false;
+         let mut needs_raw_path = false;
+-        for paint in paints {
++        while let Some(paint) = paints.next() {
+             // Stroke effect outputs are centerlines, not filled clip geometry.
+             let Some(effected) = paint.with_downcast_mut::<Fill, _>(|fill| {
+                 let paint = &mut fill.base.base;
+@@ -346,58 +463,99 @@
+             };
+             let effected = effected.borrow();
+             if !effected.empty() {
+-                self.path.add_shape_paint_path(
+-                    &effected,
+-                    if effected.is_local() {
+-                        Some(&world)
+-                    } else {
+-                        None
+-                    },
+-                );
++                // effectPath is virtual and may have changed the source world.
++                // Read the current transform at the same point as upstream.
++                let world = paints.world();
++                if let Some(world) = world {
++                    append(&effected, effected.is_local().then_some(&world));
++                }
+             }
+             // An existing empty effect still contributes an empty clip; never
+             // replace it with the unaffected shape unless another fill needs it.
+             added_effected = true;
+         }
++        drop(paints);
+         if added_effected && !needs_raw_path {
+             return true;
+         }
+         shape
+-            .with(|shape| {
+-                let Some(shape) = shape.as_shape() else {
++            .with(|object| {
++                let Some(shape) = object.as_shape() else {
+                     return added_effected;
+                 };
+-                shape.with_path_mut(ShapePaintPathKind::World, |path| {
+-                    self.path.add_shape_paint_path(path, None);
+-                });
++                shape.with_path_mut(ShapePaintPathKind::World, |path| append(path, None));
+                 true
+             })
+             .unwrap_or(added_effected)
+     }
+ 
+-    pub fn update(&mut self, value: ComponentDirt) {
+-        if has_dirt(
++    fn prepare_update(&mut self, value: ComponentDirt) -> Option<usize> {
++        if !has_dirt(
+             value,
+             ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
+         ) {
+-            let fill_rule = match self.base.fill_rule() {
+-                0 => nuxie_render_api::FillRule::NonZero,
+-                1 => nuxie_render_api::FillRule::EvenOdd,
+-                2 => nuxie_render_api::FillRule::Clockwise,
+-                value => panic!("unsupported renderer fill rule {value}"),
++            return None;
++        }
++        let fill_rule = match self.base.fill_rule() {
++            0 => nuxie_render_api::FillRule::NonZero,
++            1 => nuxie_render_api::FillRule::EvenOdd,
++            2 => nuxie_render_api::FillRule::Clockwise,
++            value => panic!("unsupported renderer fill rule {value}"),
++        };
++        self.path.rewind_as(false, fill_rule);
++        self.clip_path = false;
++        Some(self.shapes.len())
++    }
++
++    pub fn update(&mut self, value: ComponentDirt) {
++        let Some(count) = self.prepare_update(value) else {
++            return;
++        };
++        for index in 0..count {
++            let shape = self.shapes[index].clone();
++            let nonempty = shape
++                .with(|shape| shape.as_shape().is_some_and(|shape| !shape.is_empty()))
++                .unwrap_or(false);
++            if nonempty
++                && Self::add_fill_paths(&shape, |path, world| {
++                    self.path.add_shape_paint_path(path, world);
++                })
++            {
++                self.clip_path = true;
++            }
++        }
++    }
++
++    /// Native registered update releases its receiver before any effect query.
++    /// Each transaction reacquires the original Core identity and generation.
++    pub(crate) fn update_occurrence(owner: &CoreHandle, value: ComponentDirt) -> bool {
++        let Some(count) = owner
++            .with_downcast_mut::<Self, _>(|clip| clip.prepare_update(value))
++            .flatten()
++        else {
++            return true;
++        };
++        for index in 0..count {
++            let Some(shape) = owner
++                .with_downcast::<Self, _>(|clip| clip.shapes.get(index).cloned())
++                .flatten()
++            else {
++                break;
+             };
+-            self.path.rewind_as(false, fill_rule);
+-            self.clip_path = false;
+-            for index in 0..self.shapes.len() {
+-                let shape = self.shapes[index].clone();
+-                let nonempty = shape
+-                    .with(|shape| shape.as_shape().is_some_and(|shape| !shape.is_empty()))
+-                    .unwrap_or(false);
+-                if nonempty && self.add_fill_paths(&shape) {
+-                    self.clip_path = true;
+-                }
++            let nonempty = shape
++                .with(|shape| shape.as_shape().is_some_and(|shape| !shape.is_empty()))
++                .unwrap_or(false);
++            if nonempty
++                && Self::add_fill_paths(&shape, |path, world| {
++                    owner.with_downcast_mut::<Self, _>(|clip| {
++                        clip.path.add_shape_paint_path(path, world);
++                    });
++                })
++            {
++                owner.with_downcast_mut::<Self, _>(|clip| clip.clip_path = true);
+             }
+         }
++        true
+     }
+ 
+     pub fn is_visible_changed(&mut self) {
+@@ -446,3 +604,7 @@
+         Some(RuntimeDrawableOccurrence::runtime_proxy(drawable))
+     }
+ }
++
++#[cfg(test)]
++#[path = "clipping_shape_tests.rs"]
++mod tests;
+--- /dev/null
++++ b/crates/nuxie-runtime/src/mechanical_port/source/shapes/clipping_shape_tests.rs
+@@ -0,0 +1,911 @@
++use super::*;
++use crate::mechanical_port::source::{
++    core::{CoreArena, CoreObject, CoreType},
++    generated::core_registry::component_update_handle,
++    math::vec2d::Vec2D,
++    shapes::{
++        paint::{
++            stroke::Stroke,
++            stroke_effect::{EffectPath, StrokeEffect},
++            trim_path::TrimPath,
++        },
++        points_path::PointsPath,
++        shape::Shape,
++    },
++};
++use std::{
++    cell::Cell,
++    panic::{AssertUnwindSafe, catch_unwind},
++};
++
++struct CallbackPath {
++    callback: Box<dyn FnMut()>,
++    path: Option<Rc<RefCell<ShapePaintPath>>>,
++}
++impl EffectPath for CallbackPath {
++    fn path(&mut self) -> Option<Rc<RefCell<ShapePaintPath>>> {
++        (self.callback)();
++        self.path.clone()
++    }
++}
++fn geometry(local: bool, x: f32) -> Rc<RefCell<ShapePaintPath>> {
++    let mut p = ShapePaintPath::new(local);
++    p.mutable_raw_path().move_to(x, 0.0);
++    p.mutable_raw_path().line_to(x + 2.0, 1.0);
++    Rc::new(RefCell::new(p))
++}
++fn source(arena: &CoreArena) -> CoreHandle {
++    let path = arena.insert(PointsPath::default());
++    let mut shape = Shape::default();
++    shape.add_path(path);
++    arena.insert(shape)
++}
++fn fill_with_effect(
++    arena: &CoreArena,
++    source: &CoreHandle,
++    callback: impl FnMut() + 'static,
++    path: Option<Rc<RefCell<ShapePaintPath>>>,
++) -> CoreHandle {
++    let fill = arena.insert(Fill::default());
++    let provider = fill
++        .with_downcast::<Fill, _>(|f| *f.base.base.path_provider())
++        .unwrap();
++    let mut effect = TrimPath::default();
++    effect.stroke_effect_state().add_path_provider(
++        &provider,
++        Box::new(CallbackPath {
++            callback: Box::new(callback),
++            path,
++        }),
++    );
++    let effect = arena.insert(effect);
++    fill.with_downcast_mut::<Fill, _>(|f| f.base.base.effects_container.effects.push(effect));
++    source.with_mut(|s| {
++        s.as_shape_mut()
++            .unwrap()
++            .paint_container
++            .add_paint(fill.clone())
++    });
++    fill
++}
++fn clip(arena: &CoreArena, source: &CoreHandle) -> CoreHandle {
++    let mut clip = ClippingShape::default();
++    clip.shapes.push(source.clone());
++    arena.insert(clip)
++}
++fn points(clip: &CoreHandle) -> Vec<Vec2D> {
++    clip.with_downcast::<ClippingShape, _>(|c| c.path.raw_path().points().to_vec())
++        .unwrap()
++}
++
++#[test]
++fn each_effect_reads_world_after_its_callback() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    for tx in [10.0, 30.0] {
++        let target = shape.clone();
++        fill_with_effect(
++            &arena,
++            &shape,
++            move || {
++                target
++                    .with_mut(|s| {
++                        s.as_shape_mut()
++                            .unwrap()
++                            .base
++                            .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, tx, 0.0))
++                    })
++                    .unwrap();
++            },
++            Some(geometry(true, 1.0)),
++        );
++    }
++    let clip = clip(&arena, &shape);
++    assert!(component_update_handle(&clip, ComponentDirt::PATH));
++    assert_eq!(
++        points(&clip),
++        vec![
++            Vec2D::new(11.0, 0.0),
++            Vec2D::new(13.0, 1.0),
++            Vec2D::new(31.0, 0.0),
++            Vec2D::new(33.0, 1.0)
++        ]
++    );
++}
++
++#[test]
++fn occurrence_releases_clip_for_effect_and_preserves_world_effect_coordinates() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    let clip = clip(&arena, &shape);
++    let target = clip.clone();
++    let calls = Rc::new(Cell::new(0));
++    let observed = calls.clone();
++    fill_with_effect(
++        &arena,
++        &shape,
++        move || {
++            target
++                .with_downcast_mut::<ClippingShape, _>(|c| {
++                    assert!(!c.clip_path);
++                    assert!(c.path.empty());
++                    observed.set(observed.get() + 1);
++                })
++                .unwrap();
++        },
++        Some(geometry(false, 4.0)),
++    );
++    shape.with_mut(|s| {
++        s.as_shape_mut()
++            .unwrap()
++            .base
++            .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, 70.0, 0.0))
++    });
++    component_update_handle(&clip, ComponentDirt::WORLD_TRANSFORM);
++    assert_eq!(calls.get(), 1);
++    assert_eq!(
++        points(&clip),
++        vec![Vec2D::new(4.0, 0.0), Vec2D::new(6.0, 1.0)]
++    );
++}
++
++#[test]
++fn empty_effect_is_not_replaced_with_raw_but_a_second_plain_fill_needs_raw() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    shape.with(|s| {
++        s.as_shape()
++            .unwrap()
++            .with_path_mut(ShapePaintPathKind::World, |p| {
++                p.mutable_raw_path().move_to(2.0, 3.0);
++                p.mutable_raw_path().line_to(4.0, 5.0);
++            })
++    });
++    fill_with_effect(
++        &arena,
++        &shape,
++        || {},
++        Some(Rc::new(RefCell::new(ShapePaintPath::new(true)))),
++    );
++    let clip = clip(&arena, &shape);
++    component_update_handle(&clip, ComponentDirt::PATH);
++    assert!(points(&clip).is_empty());
++    assert!(
++        clip.with_downcast::<ClippingShape, _>(|c| c.clip_path)
++            .unwrap()
++    );
++    let stroke = arena.insert(Stroke::default());
++    shape.with_mut(|s| s.as_shape_mut().unwrap().paint_container.add_paint(stroke));
++    component_update_handle(&clip, ComponentDirt::PATH);
++    assert!(
++        points(&clip).is_empty(),
++        "stroke centerlines never become filled clip geometry"
++    );
++    let plain = arena.insert(Fill::default());
++    shape.with_mut(|s| s.as_shape_mut().unwrap().paint_container.add_paint(plain));
++    component_update_handle(&clip, ComponentDirt::PATH);
++    assert_eq!(
++        points(&clip),
++        vec![Vec2D::new(2.0, 3.0), Vec2D::new(4.0, 5.0)]
++    );
++}
++
++#[test]
++fn retired_clip_is_not_replaced_by_the_new_generation_during_effect_return() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    let clip = clip(&arena, &shape);
++    let target = clip.clone();
++    let current_arena = arena.clone();
++    let replacement = Rc::new(RefCell::new(None));
++    let out = replacement.clone();
++    fill_with_effect(
++        &arena,
++        &shape,
++        move || {
++            assert!(current_arena.remove(&target).is_some());
++            *out.borrow_mut() = Some(current_arena.insert(ClippingShape::default()));
++        },
++        Some(geometry(false, 4.0)),
++    );
++    component_update_handle(&clip, ComponentDirt::PATH);
++    assert!(!clip.is_alive());
++    let replacement = replacement.borrow();
++    let replacement = replacement.as_ref().unwrap();
++    assert!(
++        replacement
++            .with_downcast::<ClippingShape, _>(|c| c.path.empty() && !c.clip_path)
++            .unwrap()
++    );
++}
++
++#[test]
++fn effect_panic_releases_clip_source_fill_and_effect_guards() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    let fill = fill_with_effect(
++        &arena,
++        &shape,
++        || panic!("effect failed"),
++        Some(geometry(true, 1.0)),
++    );
++    let clip = clip(&arena, &shape);
++    assert!(
++        catch_unwind(AssertUnwindSafe(|| component_update_handle(
++            &clip,
++            ComponentDirt::PATH
++        )))
++        .is_err()
++    );
++    clip.with_downcast_mut::<ClippingShape, _>(|c| assert!(!c.clip_path))
++        .unwrap();
++    shape.with_mut(|_| ()).unwrap();
++    fill.with_downcast_mut::<Fill, _>(|f| {
++        f.base.base.effects_container.effects[0]
++            .with_mut(|_| ())
++            .unwrap();
++    })
++    .unwrap();
++}
++
++struct SaveCallback {
++    save: Box<dyn FnMut()>,
++    clips: usize,
++}
++impl nuxie_render_api::Renderer for SaveCallback {
++    fn save(&mut self) {
++        (self.save)();
++    }
++    fn restore(&mut self) {}
++    fn transform(&mut self, _: nuxie_render_api::Mat2D) {}
++    fn draw_path(
++        &mut self,
++        _: &dyn nuxie_render_api::RenderPath,
++        _: &dyn nuxie_render_api::RenderPaint,
++    ) {
++    }
++    fn clip_path(&mut self, _: &dyn nuxie_render_api::RenderPath) {
++        self.clips += 1;
++    }
++    fn draw_image(
++        &mut self,
++        _: Option<&dyn nuxie_render_api::RenderImage>,
++        _: nuxie_render_api::ImageSampler,
++        _: nuxie_render_api::BlendMode,
++        _: f32,
++    ) {
++    }
++    fn draw_image_mesh(
++        &mut self,
++        _: Option<&dyn nuxie_render_api::RenderImage>,
++        _: nuxie_render_api::ImageSampler,
++        _: Option<&dyn nuxie_render_api::RenderBuffer>,
++        _: Option<&dyn nuxie_render_api::RenderBuffer>,
++        _: Option<&dyn nuxie_render_api::RenderBuffer>,
++        _: u32,
++        _: u32,
++        _: nuxie_render_api::BlendMode,
++        _: f32,
++    ) {
++    }
++    fn modulate_opacity(&mut self, _: f32) {}
++}
++
++#[test]
++fn renderer_save_can_rebuild_clip_before_the_fresh_path_read() {
++    let arena = CoreArena::default();
++    let clip = arena.insert(ClippingShape::default());
++    clip.with_downcast_mut::<ClippingShape, _>(|c| c.clip_path = true);
++    let target = clip.clone();
++    let calls = Rc::new(Cell::new(0));
++    let observed = calls.clone();
++    let mut renderer = SaveCallback {
++        save: Box::new(move || {
++            target
++                .with_downcast_mut::<ClippingShape, _>(|c| c.update(ComponentDirt::PATH))
++                .unwrap();
++            observed.set(observed.get() + 1);
++        }),
++        clips: 0,
++    };
++    let mut start = ClippingShapeStart {
++        clipping_shape: Some(clip.clone()),
++    };
++    start.draw(&mut renderer, true);
++    assert_eq!(calls.get(), 1);
++    assert_eq!(renderer.clips, 0);
++    assert_eq!(start.empty_clip_count(), 1);
++    assert!(
++        clip.with_downcast::<ClippingShape, _>(|c| !c.clip_path)
++            .unwrap()
++    );
++}
++
++struct ProjectedShape {
++    shape: Shape,
++    calls: Rc<RefCell<Vec<&'static str>>>,
++}
++impl crate::mechanical_port::source::generated::core_registry::CoreCapabilities for ProjectedShape {
++    fn as_shape(&self) -> Option<&Shape> {
++        self.calls.borrow_mut().push("shape");
++        Some(&self.shape)
++    }
++    fn as_shape_mut(&mut self) -> Option<&mut Shape> {
++        Some(&mut self.shape)
++    }
++}
++impl crate::mechanical_port::source::generated::core_registry::CoreRegistryObject
++    for ProjectedShape
++{
++    fn as_registry_any(&self) -> &dyn std::any::Any {
++        self
++    }
++    fn as_registry_any_mut(&mut self) -> &mut dyn std::any::Any {
++        self
++    }
++    fn is_type_of(&self, key: u16) -> bool {
++        key == Shape::TYPE_KEY
++    }
++    fn set_uint_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: u32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_string_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: String,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_color_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: i32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_bool_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: bool,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_double_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: f32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_callback_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: crate::mechanical_port::source::core::field_types::core_callback_type::CallbackData<'_>,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_int_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: i32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn get_uint(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> u32 {
++        0
++    }
++    fn get_string(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> String {
++        String::new()
++    }
++    fn get_color(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> i32 {
++        0
++    }
++    fn get_bool(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> bool {
++        false
++    }
++    fn get_double(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> f32 {
++        0.0
++    }
++    fn get_int(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> i32 {
++        0
++    }
++}
++
++impl CoreObject for ProjectedShape {
++    fn core(&self) -> &crate::mechanical_port::source::core::Core {
++        self.shape.core()
++    }
++    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
++        self.shape.core_mut()
++    }
++    fn core_type(&self) -> u16 {
++        Shape::TYPE_KEY
++    }
++    fn is_type_of(&self, key: u16) -> bool {
++        key == Shape::TYPE_KEY
++    }
++    fn type_predicate(&self) -> fn(u16) -> bool {
++        |key| key == Shape::TYPE_KEY
++    }
++    fn deserialize(
++        &mut self,
++        _: u16,
++        _: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
++    ) -> bool {
++        false
++    }
++}
++
++#[test]
++fn projected_shape_key_keeps_its_original_single_query_snapshot() {
++    let arena = CoreArena::default();
++    let calls = Rc::new(RefCell::new(Vec::new()));
++    let projected = arena.insert(ProjectedShape {
++        shape: Shape::default(),
++        calls: calls.clone(),
++    });
++    let target = projected.clone();
++    let observed = calls.clone();
++    fill_with_effect(
++        &arena,
++        &projected,
++        move || {
++            observed.borrow_mut().push("effect");
++            target
++                .with_downcast_mut::<ProjectedShape, _>(|s| {
++                    s.shape
++                        .base
++                        .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, 50.0, 0.0))
++                })
++                .unwrap();
++        },
++        Some(geometry(true, 1.0)),
++    );
++    calls.borrow_mut().clear();
++    let mut result = ShapePaintPath::new(false);
++    assert!(
++        ClippingShape::add_fill_paths(&projected, |p, world| result.add_shape_paint_path(p, world))
++    );
++    assert_eq!(&*calls.borrow(), &["shape", "effect"]);
++    assert_eq!(
++        result.raw_path().points(),
++        &[Vec2D::new(1.0, 0.0), Vec2D::new(3.0, 1.0)],
++        "custom projection remains the existing explicit snapshot boundary"
++    );
++}
++
++#[test]
++fn retired_native_source_cannot_redirect_late_world_to_a_new_generation() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    let target = shape.clone();
++    let current_arena = arena.clone();
++    let replacement = Rc::new(RefCell::new(None));
++    let out = replacement.clone();
++    fill_with_effect(
++        &arena,
++        &shape,
++        move || {
++            assert!(current_arena.remove(&target).is_some());
++            let mut next = Shape::default();
++            next.base
++                .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, 100.0, 0.0));
++            *out.borrow_mut() = Some(current_arena.insert(next));
++        },
++        Some(geometry(true, 1.0)),
++    );
++    let clip = clip(&arena, &shape);
++    component_update_handle(&clip, ComponentDirt::PATH);
++    assert!(!shape.is_alive());
++    assert!(points(&clip).is_empty());
++    assert!(replacement.borrow().as_ref().unwrap().is_alive());
++}
++
++#[test]
++fn embedded_core_redirect_does_not_retarget_native_source_world_reads() {
++    let arena = CoreArena::default();
++    let shape = source(&arena);
++    let other = source(&arena);
++    other.with_mut(|s| {
++        s.as_shape_mut()
++            .unwrap()
++            .base
++            .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, 100.0, 0.0))
++    });
++    let target = shape.clone();
++    let redirect = other.clone();
++    fill_with_effect(
++        &arena,
++        &shape,
++        move || {
++            target
++                .with_mut(|s| {
++                    s.core_mut().set_handle(redirect.clone());
++                    s.as_shape_mut()
++                        .unwrap()
++                        .base
++                        .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, 20.0, 0.0));
++                })
++                .unwrap();
++        },
++        Some(geometry(true, 1.0)),
++    );
++    let clip = clip(&arena, &shape);
++    component_update_handle(&clip, ComponentDirt::PATH);
++    assert_eq!(
++        points(&clip),
++        vec![Vec2D::new(21.0, 0.0), Vec2D::new(23.0, 1.0)]
++    );
++    shape.with_mut(|s| s.core_mut().set_handle(shape.clone()));
++}
++
++
++// No-save ClipStart keeps the same checked inline RenderPath boundary as the
++// source owner. Only a save callback needs the released native receiver route.
++struct ClipCallback {
++    callback: Box<dyn FnMut()>,
++    clips: usize,
++}
++impl nuxie_render_api::Renderer for ClipCallback {
++    fn save(&mut self) {
++        panic!("no-save clipping must not save");
++    }
++    fn restore(&mut self) {
++        panic!("clip start must not restore");
++    }
++    fn transform(&mut self, _: nuxie_render_api::Mat2D) {}
++    fn draw_path(
++        &mut self,
++        _: &dyn nuxie_render_api::RenderPath,
++        _: &dyn nuxie_render_api::RenderPaint,
++    ) {
++    }
++    fn clip_path(&mut self, _: &dyn nuxie_render_api::RenderPath) {
++        self.clips += 1;
++        (self.callback)();
++    }
++    fn draw_image(
++        &mut self,
++        _: Option<&dyn nuxie_render_api::RenderImage>,
++        _: nuxie_render_api::ImageSampler,
++        _: nuxie_render_api::BlendMode,
++        _: f32,
++    ) {
++    }
++    fn draw_image_mesh(
++        &mut self,
++        _: Option<&dyn nuxie_render_api::RenderImage>,
++        _: nuxie_render_api::ImageSampler,
++        _: Option<&dyn nuxie_render_api::RenderBuffer>,
++        _: Option<&dyn nuxie_render_api::RenderBuffer>,
++        _: Option<&dyn nuxie_render_api::RenderBuffer>,
++        _: u32,
++        _: u32,
++        _: nuxie_render_api::BlendMode,
++        _: f32,
++    ) {
++    }
++    fn modulate_opacity(&mut self, _: f32) {}
++}
++
++struct ClipContext {
++    arena: CoreArena,
++    root: CoreHandle,
++}
++impl CoreContext for ClipContext {
++    fn core_arena(&self) -> &CoreArena {
++        &self.arena
++    }
++    fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
++        (id == 0).then(|| self.root.clone())
++    }
++}
++fn hydrate_clip(arena: &CoreArena, clip: &CoreHandle) -> CoreHandle {
++    use crate::mechanical_port::source::{artboard::Artboard, factory::RuntimeFactoryHandle};
++    let mut factory = nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory);
++    let root = arena.insert(Artboard::with_factory(
++        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
++    ));
++    let mut context = ClipContext {
++        arena: arena.weak_handle(),
++        root: root.clone(),
++    };
++    clip.with_downcast_mut::<ClippingShape, _>(|clip| {
++        assert_eq!(clip.base.on_added_dirty(&mut context), StatusCode::Ok);
++        clip.path.mutable_raw_path().move_to(1.0, 2.0);
++        clip.path.mutable_raw_path().line_to(3.0, 4.0);
++        clip.clip_path = true;
++    })
++    .unwrap();
++    root
++}
++
++#[test]
++fn no_save_native_clip_preserves_visibility_and_checked_resource_borrow() {
++    let arena = CoreArena::default();
++    let clip = arena.insert(ClippingShape::default());
++    let _root = hydrate_clip(&arena, &clip);
++    let callback_clip = clip.clone();
++    let mut renderer = ClipCallback {
++        callback: Box::new(move || {
++            // The RenderPath is inline in ClippingShape. Its renderer call
++            // intentionally keeps the old checked receiver boundary.
++            assert!(catch_unwind(AssertUnwindSafe(|| callback_clip.with_mut(|_| ()))).is_err());
++        }),
++        clips: 0,
++    };
++    let mut start = ClippingShapeStart {
++        clipping_shape: Some(clip.clone()),
++    };
++    start.draw(&mut renderer, false);
++    assert_eq!(renderer.clips, 1);
++    assert!(
++        crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_bool_handle(
++            &clip,
++            i32::from(ClippingShapeBase::IS_VISIBLE_PROPERTY_KEY),
++            false,
++        )
++    );
++    start.draw(&mut renderer, false);
++    assert_eq!(renderer.clips, 1);
++    assert!(
++        crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_bool_handle(
++            &clip,
++            i32::from(ClippingShapeBase::IS_VISIBLE_PROPERTY_KEY),
++            true,
++        )
++    );
++    clip.with_downcast_mut::<ClippingShape, _>(|clip| clip.clip_path = false)
++        .unwrap();
++    start.draw(&mut renderer, false);
++    assert_eq!(renderer.clips, 1);
++    clip.with_mut(|_| ()).unwrap();
++}
++
++struct ProjectedClip {
++    clip: ClippingShape,
++    projections: Rc<Cell<usize>>,
++}
++impl crate::mechanical_port::source::generated::core_registry::CoreCapabilities for ProjectedClip {}
++impl crate::mechanical_port::source::generated::core_registry::CoreRegistryObject
++    for ProjectedClip
++{
++    fn as_registry_any(&self) -> &dyn std::any::Any {
++        &self.clip
++    }
++    fn as_registry_any_mut(&mut self) -> &mut dyn std::any::Any {
++        self.projections.set(self.projections.get() + 1);
++        &mut self.clip
++    }
++    fn is_type_of(&self, key: u16) -> bool {
++        key == ClippingShape::TYPE_KEY
++    }
++    fn set_uint_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: u32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_string_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: String,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_color_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: i32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_bool_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: bool,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_double_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: f32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_callback_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: crate::mechanical_port::source::core::field_types::core_callback_type::CallbackData<'_>,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn set_int_with_completion(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++        _: i32,
++        _: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
++    ) {
++    }
++    fn get_uint(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> u32 {
++        0
++    }
++    fn get_string(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> String {
++        String::new()
++    }
++    fn get_color(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> i32 {
++        0
++    }
++    fn get_bool(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> bool {
++        false
++    }
++    fn get_double(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> f32 {
++        0.0
++    }
++    fn get_int(
++        &mut self,
++        _: crate::mechanical_port::source::generated::core_registry::CoreField,
++    ) -> i32 {
++        0
++    }
++}
++
++impl CoreObject for ProjectedClip {
++    fn core(&self) -> &crate::mechanical_port::source::core::Core {
++        self.clip.core()
++    }
++    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
++        self.clip.core_mut()
++    }
++    fn core_type(&self) -> u16 {
++        ClippingShape::TYPE_KEY
++    }
++    fn is_type_of(&self, key: u16) -> bool {
++        key == ClippingShape::TYPE_KEY
++    }
++    fn type_predicate(&self) -> fn(u16) -> bool {
++        |key| key == ClippingShape::TYPE_KEY
++    }
++    fn deserialize(
++        &mut self,
++        _: u16,
++        _: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
++    ) -> bool {
++        false
++    }
++}
++
++#[test]
++fn no_save_custom_clip_keeps_one_projection_and_the_checked_receiver() {
++    let arena = CoreArena::default();
++    let projections = Rc::new(Cell::new(0));
++    let clip = arena.insert(ProjectedClip {
++        clip: ClippingShape::default(),
++        projections: projections.clone(),
++    });
++    let _root = hydrate_clip(&arena, &clip);
++    projections.set(0);
++    let callback_clip = clip.clone();
++    let observed = projections.clone();
++    let mut renderer = ClipCallback {
++        callback: Box::new(move || {
++            assert_eq!(observed.get(), 1);
++            assert!(catch_unwind(AssertUnwindSafe(|| callback_clip.with_mut(|_| ()))).is_err());
++        }),
++        clips: 0,
++    };
++    let mut start = ClippingShapeStart {
++        clipping_shape: Some(clip.clone()),
++    };
++    start.draw(&mut renderer, false);
++    assert_eq!(renderer.clips, 1);
++    assert_eq!(projections.get(), 1);
++    clip.with_mut(|_| ()).unwrap();
++}
++
++#[test]
++fn no_save_clip_releases_pending_retirement_after_resource_callback_and_unwind() {
++    for panic_at_clip in [false, true] {
++        let arena = CoreArena::default();
++        let clip = arena.insert(ClippingShape::default());
++        let root = hydrate_clip(&arena, &clip);
++        let arena_owner = Rc::new(RefCell::new(Some(arena)));
++        let drop_owner = arena_owner.clone();
++        let callback_clip = clip.clone();
++        let mut renderer = ClipCallback {
++            callback: Box::new(move || {
++                drop(drop_owner.borrow_mut().take());
++                assert!(
++                    callback_clip.is_alive(),
++                    "active inline resource keeps payload until callback exits"
++                );
++                if panic_at_clip {
++                    panic!("clip callback unwind");
++                }
++            }),
++            clips: 0,
++        };
++        let mut start = ClippingShapeStart {
++            clipping_shape: Some(clip.clone()),
++        };
++        let result = catch_unwind(AssertUnwindSafe(|| start.draw(&mut renderer, false)));
++        assert_eq!(result.is_err(), panic_at_clip);
++        assert_eq!(renderer.clips, 1);
++        assert!(!clip.is_alive());
++        assert!(!root.is_alive());
++        assert!(clip.with_mut(|_| ()).is_none());
++        start.draw(&mut renderer, false);
++        assert_eq!(renderer.clips, 1, "retired identity cannot draw again");
++    }
++}
++
++#[test]
++fn no_save_clip_does_not_follow_reused_slot_or_embedded_core_redirection() {
++    let arena = CoreArena::default();
++    let clip = arena.insert(ClippingShape::default());
++    let _root = hydrate_clip(&arena, &clip);
++    let other = arena.insert(ClippingShape::default());
++    clip.with_downcast_mut::<ClippingShape, _>(|clip| clip.core_mut().set_handle(other.clone()))
++        .unwrap();
++    let mut renderer = ClipCallback {
++        callback: Box::new(|| ()),
++        clips: 0,
++    };
++    let mut start = ClippingShapeStart {
++        clipping_shape: Some(clip.clone()),
++    };
++    start.draw(&mut renderer, false);
++    assert_eq!(
++        renderer.clips, 1,
++        "draw belongs to original occurrence, not embedded Core handle"
++    );
++    drop(arena.remove(&clip).unwrap());
++    let replacement = arena.insert(ClippingShape::default());
++    assert_eq!(replacement.identity_key().1, clip.identity_key().1);
++    assert_ne!(replacement.identity_key().2, clip.identity_key().2);
++    let _replacement_root = hydrate_clip(&arena, &replacement);
++    start.draw(&mut renderer, false);
++    assert_eq!(
++        renderer.clips, 1,
++        "stale operation cannot draw the reused slot"
++    );
++}
+--- a/crates/nuxie-runtime/src/mechanical_port/source/shapes/shape.rs
++++ b/crates/nuxie-runtime/src/mechanical_port/source/shapes/shape.rs
+@@ -535,7 +535,9 @@
+         StatusCode::Ok
+     }
+     pub fn is_empty(&self) -> bool {
+-        self.paths().iter().all(|path| {
++        // This receiver already keeps the membership and its occurrences alive.
++        // Upstream iterates m_Paths without allocating a second owner list.
++        self.paths.iter().all(|path| {
+             path.with(|path| {
+                 path.as_path()
+                     .is_none_or(|path| path.is_hidden() || path.base.is_collapsed())

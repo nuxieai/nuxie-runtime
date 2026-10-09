@@ -1,0 +1,78 @@
+{
+  "accepted-state.json": {
+    "source": "target/perf-campaign/accepted-state.json",
+    "sha256": "5b882021fe287e3b93f5b0f2df863d194c584e6b5c3111972896fa01c9071ea9"
+  },
+  "integration.json": {
+    "source": "target/perf-campaign/pending-cccc-integration/receipt.json",
+    "sha256": "79cde3e431a966dee4b175a1804c17f05155712fe7aa5e9c156204935a827e8e"
+  },
+  "trial97-decision.json": {
+    "source": "target/perf-campaign/remote-batch97-user-exclusive-admin/root-decision.json",
+    "sha256": "f2456c1bdbac38542fed2e4ebc1f3dd21d5c5886895d3b8d687a928d22902c0e"
+  },
+  "trials99-100-decision.json": {
+    "source": "target/perf-campaign/remote-batch99-100-user-exclusive-admin/root-decision.json",
+    "sha256": "4105a00e1919fa565796d05d3b1042ec4a47356e6c08d99f4085474b79757201"
+  },
+  "trial101-decision.json": {
+    "source": "target/perf-campaign/remote-batch101-user-exclusive-admin/root-decision.json",
+    "sha256": "97b0a8a630ff17e7cb411e9cbcc3199bb4166bde4b5633faf4a52fa70d03bddc"
+  },
+  "trial102-decision.json": {
+    "source": "target/perf-campaign/remote-batch102-user-exclusive-admin/root-decision.json",
+    "sha256": "ff6bacc9563e2b2184ef5954488bbde3056d22d73a35f17acfe195aa462e59e6"
+  },
+  "trial103-decision.json": {
+    "source": "target/perf-campaign/remote-batch103-user-exclusive-admin/root-decision.json",
+    "sha256": "1f721787c0eb02bdcb5ab8d55e9f106ee17cf8a61c6466f9e7de2879ac95a743"
+  },
+  "spotify-allocator.json": {
+    "source": "target/perf-campaign/profile-cccc-spotify-v1-admin/allocator-caller-frontier-reproduced.json",
+    "sha256": "80db27d1bbd702c17201abc7c7a06a74ee86b634fbadfae7e9a5d7fe8cc0ab1e"
+  },
+  "../experiments/clipping-no-save-104.patch": {
+    "source": "/private/tmp/nuxie-clipping-no-save-2y2p5f54/clipping-shape.patch",
+    "sha256": "c692b474a69e099ef1f080bf4de138d91f8b7b9cac46e0a9273c8a1954087ecb"
+  },
+  "../experiments/shared-paths.patch": {
+    "source": "/private/tmp/nuxie-paths-shared-snapshot-13d6ecvl/shared-paths-full.patch",
+    "sha256": "e9656bb8079e925c12ba5895a62684c78736f7cfbebed5397e754c0361c98bdb"
+  },
+  "../experiments/clipping-no-save-source-review.json": {
+    "source": "/private/tmp/nuxie-clipping-no-save-2y2p5f54/independent-source-review.json",
+    "sha256": "4ee64daf2b77b5573bbf9ec56da1f921b7ca1530ff546adaecb3995f5a3205d8"
+  },
+  "../experiments/clipping-no-save-debug.json": {
+    "source": "/private/tmp/nuxie-clipping-no-save-2y2p5f54/debug-result.json",
+    "sha256": "ef27eacefa063dc84568ebb8abe93d616231723968f860056dfd7ce2e8382a95"
+  },
+  "../experiments/shared-paths-source-review.json": {
+    "source": "/private/tmp/nuxie-paths-shared-snapshot-13d6ecvl/independent-source-review.json",
+    "sha256": "6e8f8299f335e0cad23aee38b684467b05cfc7a84ccbbea2c2f0016ffef31a46"
+  },
+  "historical-source-validation.json": {
+    "source": "target/perf-campaign/final-source-validation-summary.json",
+    "sha256": "e5964f0647f38cfd19f282791ee1afca3a51141648079c7225782dbcb52624da"
+  },
+  "trial93-decision.json": {
+    "source": "target/perf-campaign/remote-batch93-user-exclusive-admin/root-decision.json",
+    "sha256": "e4d1bc08f5ab1a75f22f6bcc62e19d150f69571bfebd50142a1a33086cfcd53a"
+  },
+  "trial96-decision.json": {
+    "source": "target/perf-campaign/remote-batch96-user-exclusive-admin/root-decision.json",
+    "sha256": "abbae309f37f2506df3a00e1ac019b33f092615badc3ffcaf4bc84ee22045265"
+  },
+  "accepted-early-history.md": {
+    "source": "target/perf-campaign/recovery/checkpoint-history-20261006-1102.md",
+    "sha256": "a346e02b2a0481cbb3b4a35deeb5700628b78051e0d236c59578da63280a3e0c"
+  },
+  "accepted-3b-history.md": {
+    "source": "target/perf-campaign/recovery/checkpoint-history-20261006-163717.md",
+    "sha256": "19e4dad254e966214e7ade06b9baae20c88abdd7c8ac1c633efcdef6d4ad2943"
+  },
+  "af074-integration.json": {
+    "source": "target/perf-campaign/pending-af074-integration/receipt.json",
+    "sha256": "139b3c10331474a4d798c3fd1a40bc8c10353094084607f8a22e7bf495fc631b"
+  }
+}

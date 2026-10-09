@@ -1,0 +1,806 @@
+--- a/crates/nuxie-runtime/src/mechanical_port/source/shapes/path_composer.rs
++++ b/crates/nuxie-runtime/src/mechanical_port/source/shapes/path_composer.rs
+@@ -194,16 +194,11 @@
+                 transform[3].abs(),
+             )
+         }
+-        let (paths, world, local_flags) = self
+-            .shape()
++        let shape_handle = self.shape();
++        let (paths, world) = shape_handle
+             .with(|object| {
+                 let shape = object.as_shape().expect("PathComposer Shape");
+-                (
+-                    shape.paths(),
+-                    *shape.world_transform(),
+-                    shape.paint_container.path_flags()
+-                        & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE),
+-                )
++                (shape.paths_snapshot(), *shape.world_transform())
+             })
+             .expect("live PathComposer Shape");
+         let inverse = world.invert_or_identity();
+@@ -212,7 +207,7 @@
+         let inverse_translation = source_max(inverse[4].abs(), inverse[5].abs());
+         self.scratch_inputs.clear();
+         self.scratch_inputs.reserve(paths.len());
+-        for handle in &paths {
++        for handle in paths.iter() {
+             let input = handle
+                 .with(|object| {
+                     let path = object.as_path().expect("Shape path");
+@@ -237,6 +232,18 @@
+                 .expect("live Shape path");
+             self.scratch_inputs.push(input);
+         }
++        // pathTransform is virtual in the source. A path query may add a
++        // local path flag, so consume current flags after all input queries.
++        let local_flags = shape_handle
++            .with(|object| {
++                object
++                    .as_shape()
++                    .expect("PathComposer Shape")
++                    .paint_container
++                    .path_flags()
++                    & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE)
++            })
++            .expect("live PathComposer Shape");
+         let mut changed = !self.has_local_inputs
+             || self.local_inputs.len() != paths.len()
+             || !(local_flags & !self.built_local_flags).is_empty();
+@@ -289,31 +296,43 @@
+             return None;
+         }
+         let shape_handle = self.shape();
+-        let inputs = shape_handle
+-            .with(|shape| {
+-                let shape = shape.as_shape().expect("PathComposer Shape");
+-                if shape.can_defer_path_update() {
+-                    return None;
+-                }
+-                Some((
+-                    shape.is_flagged(PathFlags::LOCAL),
+-                    shape.is_flagged(PathFlags::LOCAL_CLOCKWISE),
+-                    shape.is_flagged(PathFlags::WORLD),
+-                    *shape.world_transform(),
+-                    shape.paths(),
+-                ))
++        let defer = shape_handle
++            .with(|object| {
++                object
++                    .as_shape()
++                    .expect("PathComposer Shape")
++                    .can_defer_path_update()
+             })
+             .expect("live PathComposer Shape");
+-        let Some((local, clockwise, world, transform, paths)) = inputs else {
++        if defer {
+             self.deferred_path_dirt = true;
+             return None;
++        }
++        self.deferred_path_dirt = false;
++        let is_flagged = |flags| {
++            shape_handle
++                .with(|object| {
++                    object
++                        .as_shape()
++                        .expect("PathComposer Shape")
++                        .is_flagged(flags)
++                })
++                .expect("live PathComposer Shape")
+         };
+-        self.deferred_path_dirt = false;
+-        let rebuild_local = (local || clockwise) && self.local_inputs_changed();
+-        if local && rebuild_local {
++        let rebuild_local = is_flagged(PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE)
++            && self.local_inputs_changed();
++        if is_flagged(PathFlags::LOCAL) && rebuild_local {
+             self.local_path.rewind();
++            // Take this block's current transform and retained path list only
++            // after its source flag gate. Release Shape before open queries.
++            let (transform, paths) = shape_handle
++                .with(|object| {
++                    let shape = object.as_shape().expect("PathComposer Shape");
++                    (*shape.world_transform(), shape.paths_snapshot())
++                })
++                .expect("live PathComposer Shape");
+             let inverse = transform.invert_or_identity();
+-            for handle in &paths {
++            for handle in paths.iter() {
+                 handle.with(|object| {
+                     let path = object.as_path().expect("Shape path");
+                     if !path.is_hidden() && !path.is_collapsed() {
+@@ -327,10 +346,16 @@
+                 });
+             }
+         }
+-        if clockwise && rebuild_local {
++        if is_flagged(PathFlags::LOCAL_CLOCKWISE) && rebuild_local {
+             self.local_clockwise_path.rewind();
++            let (transform, paths) = shape_handle
++                .with(|object| {
++                    let shape = object.as_shape().expect("PathComposer Shape");
++                    (*shape.world_transform(), shape.paths_snapshot())
++                })
++                .expect("live PathComposer Shape");
+             let inverse = transform.invert_or_identity();
+-            for handle in &paths {
++            for handle in paths.iter() {
+                 handle.with_mut(|object| {
+                     let path = object.as_path().expect("Shape path");
+                     if path.is_hidden() || path.is_collapsed() {
+@@ -355,9 +380,12 @@
+                 });
+             }
+         }
+-        if world {
++        if is_flagged(PathFlags::WORLD) {
+             self.world_path.rewind();
+-            for handle in &paths {
++            let paths = shape_handle
++                .with(|object| object.as_shape().expect("PathComposer Shape").paths_snapshot())
++                .expect("live PathComposer Shape");
++            for handle in paths.iter() {
+                 handle.with(|object| {
+                     let path = object.as_path().expect("Shape path");
+                     if !path.is_hidden() && !path.is_collapsed() {
+@@ -426,3 +454,7 @@
+         });
+     }
+ }
++
++#[cfg(test)]
++#[path = "path_composer_order_tests.rs"]
++mod order_tests;
+--- /dev/null
++++ b/crates/nuxie-runtime/src/mechanical_port/source/shapes/path_composer_order_tests.rs
+@@ -0,0 +1,601 @@
++use super::*;
++use crate::mechanical_port::source::{
++    component::Component,
++    core::{
++        Core, CoreArena, CoreObject, PropertySetterCompletion, binary_reader::BinaryReader,
++        field_types::core_callback_type::CallbackData,
++    },
++    generated::core_registry::{CoreCapabilities, CoreField, CoreRegistryObject},
++    math::vec2d::Vec2D,
++    shapes::{path::Path, points_path::PointsPath, shape::Shape, straight_vertex::StraightVertex},
++};
++use std::{
++    any::Any,
++    cell::Cell,
++    panic::{AssertUnwindSafe, catch_unwind},
++};
++
++macro_rules! forward_owner {
++    ($ty:ty, $key:expr) => {
++        impl CoreObject for $ty {
++            fn core(&self) -> &Core {
++                self.inner.core()
++            }
++            fn core_mut(&mut self) -> &mut Core {
++                self.inner.core_mut()
++            }
++            fn core_type(&self) -> u16 {
++                $key
++            }
++            fn is_type_of(&self, key: u16) -> bool {
++                key == $key || CoreObject::is_type_of(&self.inner, key)
++            }
++            fn type_predicate(&self) -> fn(u16) -> bool {
++                self.inner.type_predicate()
++            }
++            fn deserialize(&mut self, key: u16, r: &mut BinaryReader<'_>) -> bool {
++                self.inner.deserialize(key, r)
++            }
++            fn clone_boxed(&self) -> Option<Box<dyn CoreObject>> {
++                self.inner.clone_boxed()
++            }
++        }
++        impl CoreRegistryObject for $ty {
++            fn as_registry_any(&self) -> &dyn Any {
++                self
++            }
++            fn as_registry_any_mut(&mut self) -> &mut dyn Any {
++                self
++            }
++            fn is_type_of(&self, key: u16) -> bool {
++                CoreObject::is_type_of(self, key)
++            }
++            fn set_uint_with_completion(
++                &mut self,
++                f: CoreField,
++                v: u32,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_uint_with_completion(f, v, c)
++            }
++            fn set_string_with_completion(
++                &mut self,
++                f: CoreField,
++                v: String,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_string_with_completion(f, v, c)
++            }
++            fn set_color_with_completion(
++                &mut self,
++                f: CoreField,
++                v: i32,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_color_with_completion(f, v, c)
++            }
++            fn set_bool_with_completion(
++                &mut self,
++                f: CoreField,
++                v: bool,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_bool_with_completion(f, v, c)
++            }
++            fn set_double_with_completion(
++                &mut self,
++                f: CoreField,
++                v: f32,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_double_with_completion(f, v, c)
++            }
++            fn set_callback_with_completion(
++                &mut self,
++                f: CoreField,
++                v: CallbackData<'_>,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_callback_with_completion(f, v, c)
++            }
++            fn set_int_with_completion(
++                &mut self,
++                f: CoreField,
++                v: i32,
++                c: &mut PropertySetterCompletion,
++            ) {
++                self.inner.set_int_with_completion(f, v, c)
++            }
++            fn get_uint(&mut self, f: CoreField) -> u32 {
++                self.inner.get_uint(f)
++            }
++            fn get_string(&mut self, f: CoreField) -> String {
++                self.inner.get_string(f)
++            }
++            fn get_color(&mut self, f: CoreField) -> i32 {
++                self.inner.get_color(f)
++            }
++            fn get_bool(&mut self, f: CoreField) -> bool {
++                self.inner.get_bool(f)
++            }
++            fn get_double(&mut self, f: CoreField) -> f32 {
++                self.inner.get_double(f)
++            }
++            fn get_int(&mut self, f: CoreField) -> i32 {
++                self.inner.get_int(f)
++            }
++        }
++    };
++}
++
++#[derive(Default)]
++struct Query {
++    calls: Cell<usize>,
++    action: RefCell<Option<(usize, Box<dyn FnOnce()>)>>,
++}
++impl Query {
++    fn arm(&self, after: usize, f: impl FnOnce() + 'static) {
++        *self.action.borrow_mut() = Some((self.calls.get() + after, Box::new(f)));
++    }
++    fn run(&self) {
++        let next = self.calls.get() + 1;
++        self.calls.set(next);
++        let action = {
++            let mut action = self.action.borrow_mut();
++            if action.as_ref().is_some_and(|(when, _)| *when == next) {
++                action.take()
++            } else {
++                None
++            }
++        };
++        if let Some((_, action)) = action {
++            action();
++        }
++    }
++}
++
++struct QueryPath {
++    inner: PointsPath,
++    query: Rc<Query>,
++}
++forward_owner!(QueryPath, 65520);
++impl CoreCapabilities for QueryPath {
++    fn as_component(&self) -> Option<&Component> {
++        self.inner.as_component()
++    }
++    fn as_component_mut(&mut self) -> Option<&mut Component> {
++        self.inner.as_component_mut()
++    }
++    fn as_path(&self) -> Option<&Path> {
++        self.inner.as_path()
++    }
++    fn as_path_mut(&mut self) -> Option<&mut Path> {
++        self.inner.as_path_mut()
++    }
++    fn as_points_path(&self) -> Option<&PointsPath> {
++        self.query.run();
++        Some(&self.inner)
++    }
++    fn as_points_path_mut(&mut self) -> Option<&mut PointsPath> {
++        Some(&mut self.inner)
++    }
++}
++
++fn fixture(
++    flags: PathFlags,
++) -> (
++    CoreArena,
++    CoreHandle,
++    CoreHandle,
++    RuntimePathComposerHandle,
++    Rc<Query>,
++) {
++    let arena = CoreArena::default();
++    let shape = arena.insert(Shape::default());
++    shape
++        .with_downcast_mut::<Shape, _>(|shape| {
++            shape.add_flags(flags | PathFlags::NEVER_DEFER_UPDATE)
++        })
++        .unwrap();
++    let query = Rc::new(Query::default());
++    let mut inner = PointsPath::default();
++    for (x, y) in [(0.0, 0.0), (4.0, 0.0), (0.0, 3.0)] {
++        let mut vertex = StraightVertex::default();
++        vertex.set_x(x);
++        vertex.set_y(y);
++        inner.add_runtime_straight_vertex(Rc::new(RefCell::new(vertex)));
++    }
++    inner.as_path_mut().unwrap().update_after_transform_super(
++        ComponentDirt::PATH,
++        true,
++        Some(false),
++    );
++    assert!(!inner.raw_path().empty());
++    let path = arena.insert(QueryPath {
++        inner,
++        query: query.clone(),
++    });
++    let composer = shape
++        .with_downcast_mut::<Shape, _>(|owner| {
++            owner.add_path(path.clone());
++            owner.path_composer_mut().clone()
++        })
++        .unwrap();
++    composer.bind_shape(shape.clone());
++    (arena, shape, path, composer, query)
++}
++
++#[test]
++fn local_flags_added_by_path_transform_are_part_of_the_current_input_snapshot() {
++    let (_arena, shape, _path, composer, query) = fixture(PathFlags::LOCAL);
++    composer.with_mut(|owner| assert!(owner.local_inputs_changed()));
++    let target = shape.clone();
++    query.arm(1, move || {
++        target
++            .with_downcast_mut::<Shape, _>(|shape| shape.add_flags(PathFlags::LOCAL_CLOCKWISE))
++            .unwrap();
++    });
++    composer.with_mut(|owner| {
++        assert!(
++            owner.local_inputs_changed(),
++            "the source reads local flags after pathTransform"
++        );
++        assert_eq!(
++            owner.built_local_flags.0,
++            (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE).0
++        );
++        assert!(
++            !owner.local_inputs_changed(),
++            "the newly required kind belongs to this snapshot, not the next frame"
++        );
++    });
++}
++
++#[test]
++fn update_reads_local_transform_and_world_flag_after_input_callbacks() {
++    let (_arena, shape, _path, composer, query) = fixture(PathFlags::LOCAL);
++    let target = shape.clone();
++    query.arm(1, move || {
++        target
++            .with_downcast_mut::<Shape, _>(|shape| {
++                shape.set_world_transform(Mat2D::from_translate(10.0, 0.0));
++                shape.add_flags(PathFlags::WORLD);
++            })
++            .unwrap();
++    });
++    composer.with_mut(|owner| {
++        assert!(owner.update(ComponentDirt::PATH).is_some());
++        assert_eq!(
++            owner.local_path().raw_path().points()[0],
++            Vec2D::new(-10.0, 0.0)
++        );
++        assert_eq!(
++            owner.world_path().raw_path().points()[0],
++            Vec2D::new(0.0, 0.0)
++        );
++    });
++}
++
++#[test]
++fn a_local_build_callback_can_enable_the_later_clockwise_block() {
++    let (_arena, shape, _path, composer, query) = fixture(PathFlags::LOCAL);
++    let target = shape.clone();
++    // First projection is localInputsChanged; second is the selected local build.
++    query.arm(2, move || {
++        target
++            .with_downcast_mut::<Shape, _>(|shape| {
++                shape.add_flags(PathFlags::LOCAL_CLOCKWISE);
++                shape.set_world_transform(Mat2D::from_translate(20.0, 0.0));
++            })
++            .unwrap();
++    });
++    composer.with_mut(|owner| {
++        owner.update(ComponentDirt::PATH).unwrap();
++        assert_eq!(
++            owner.local_path().raw_path().points()[0],
++            Vec2D::new(0.0, 0.0)
++        );
++        let clockwise = owner.local_clockwise_path().raw_path();
++        assert!(!clockwise.empty());
++        assert!(
++            clockwise
++                .points()
++                .iter()
++                .all(|p| p.x <= -16.0 && p.x >= -20.0)
++        );
++    });
++}
++
++#[test]
++fn unchanged_local_inputs_retain_geometry_while_a_new_world_flag_is_consumed() {
++    let (_arena, shape, _path, composer, query) = fixture(PathFlags::LOCAL);
++    composer.with_mut(|owner| {
++        owner.update(ComponentDirt::PATH).unwrap();
++    });
++    let before = composer.with_mut(|owner| {
++        owner.local_path().mutable_raw_path().line_to(101.0, 103.0);
++        owner.local_path().raw_path().points().to_vec()
++    });
++    let calls = query.calls.get();
++    composer.with_mut(|owner| {
++        owner.update(ComponentDirt::PATH).unwrap();
++    });
++    assert_eq!(
++        query.calls.get() - calls,
++        1,
++        "unchanged local inputs issue only the input query, no rebuild query"
++    );
++    composer
++        .with_mut(|owner| assert_eq!(owner.local_path().raw_path().points(), before.as_slice()));
++    let target = shape.clone();
++    query.arm(1, move || {
++        target
++            .with_downcast_mut::<Shape, _>(|shape| shape.add_flags(PathFlags::WORLD))
++            .unwrap();
++    });
++    composer.with_mut(|owner| {
++        owner.update(ComponentDirt::PATH).unwrap();
++        assert_eq!(owner.local_path().raw_path().points(), before.as_slice());
++        assert!(!owner.world_path().empty());
++    });
++}
++
++#[test]
++fn query_panic_releases_shape_path_and_composer_loans_for_retry() {
++    let (_arena, shape, path, composer, query) = fixture(PathFlags::LOCAL);
++    let target = shape.clone();
++    query.arm(1, move || {
++        target
++            .with_downcast_mut::<Shape, _>(|shape| shape.add_flags(PathFlags::WORLD))
++            .unwrap();
++        panic!("pathTransform failed");
++    });
++    assert!(
++        catch_unwind(AssertUnwindSafe(
++            || composer.with_mut(|owner| owner.update(ComponentDirt::PATH))
++        ))
++        .is_err()
++    );
++    shape
++        .with_downcast_mut::<Shape, _>(|shape| assert!(shape.is_flagged(PathFlags::WORLD)))
++        .unwrap();
++    path.with_mut(|object| assert!(object.as_path_mut().is_some()))
++        .unwrap();
++    composer.with_mut(|owner| {
++        owner.update(ComponentDirt::PATH).unwrap();
++        assert!(!owner.local_path().empty());
++        assert!(!owner.world_path().empty());
++    });
++}
++
++#[test]
++fn world_only_and_irrelevant_dirt_preserve_the_source_short_circuit() {
++    let (_arena, _shape, _path, composer, query) = fixture(PathFlags::WORLD);
++    let calls = query.calls.get();
++    composer.with_mut(|owner| {
++        assert!(owner.update(ComponentDirt::NONE).is_none());
++        assert_eq!(query.calls.get(), calls);
++        owner.update(ComponentDirt::PATH).unwrap();
++        assert!(
++            !owner.has_local_inputs,
++            "world-only builds do not evaluate localInputsChanged"
++        );
++        assert!(!owner.world_path().empty());
++    });
++    assert_eq!(query.calls.get() - calls, 1);
++}
++
++fn snapshot_triangle(x: f32) -> PointsPath {
++    let mut path = PointsPath::default();
++    for (dx, y) in [(0.0, 0.0), (4.0, 0.0), (0.0, 3.0)] {
++        let mut vertex = StraightVertex::default();
++        vertex.set_x(x + dx);
++        vertex.set_y(y);
++        path.add_runtime_straight_vertex(Rc::new(RefCell::new(vertex)));
++    }
++    path.as_path_mut().unwrap().update_after_transform_super(
++        ComponentDirt::PATH,
++        true,
++        Some(false),
++    );
++    path
++}
++
++#[test]
++fn public_paths_remain_independent_and_duplicate_append_leaves_membership_intact() {
++    let (arena, shape, first, _composer, _query) = fixture(PathFlags::LOCAL);
++    let second = arena.insert(snapshot_triangle(100.0));
++    let snapshot = shape
++        .with_downcast::<Shape, _>(Shape::paths_snapshot)
++        .unwrap();
++    let mut public = shape.with_downcast::<Shape, _>(Shape::paths).unwrap();
++    public.clear();
++    public.push(second.clone());
++    assert_eq!(
++        shape.with_downcast::<Shape, _>(Shape::paths).unwrap(),
++        vec![first.clone()]
++    );
++    shape
++        .with_downcast_mut::<Shape, _>(|owner| owner.add_path(second.clone()))
++        .unwrap();
++    assert_eq!(snapshot.as_slice(), &[first.clone()]);
++    assert_eq!(public, vec![second.clone()]);
++    assert_eq!(
++        shape.with_downcast::<Shape, _>(Shape::paths).unwrap(),
++        vec![first.clone(), second.clone()]
++    );
++    assert!(
++        catch_unwind(AssertUnwindSafe(|| {
++            shape.with_downcast_mut::<Shape, _>(|owner| owner.add_path(first.clone()));
++        }))
++        .is_err()
++    );
++    assert_eq!(snapshot.as_slice(), &[first.clone()]);
++    assert_eq!(
++        shape.with_downcast::<Shape, _>(Shape::paths).unwrap(),
++        vec![first, second]
++    );
++}
++
++#[test]
++fn callback_append_preserves_current_local_membership_and_reaches_fresh_world_block() {
++    let (arena, shape, _first, composer, query) = fixture(PathFlags::LOCAL);
++    let second = arena.insert(snapshot_triangle(100.0));
++    let target = shape.clone();
++    // This is Rust's established released-snapshot behavior. Mutating a C++
++    // vector while its range iterator is live is not the comparison contract.
++    query.arm(2, move || {
++        target
++            .with_downcast_mut::<Shape, _>(|owner| {
++                owner.add_path(second);
++                owner.add_flags(PathFlags::WORLD);
++            })
++            .unwrap();
++    });
++    composer.with_mut(|owner| {
++        owner.update(ComponentDirt::PATH).unwrap();
++        assert_eq!(owner.local_inputs.len(), 1);
++        assert!(
++            owner
++                .local_path()
++                .raw_path()
++                .points()
++                .iter()
++                .all(|p| p.x <= 4.0)
++        );
++        assert!(
++            owner
++                .world_path()
++                .raw_path()
++                .points()
++                .iter()
++                .any(|p| p.x >= 100.0)
++        );
++        owner.update(ComponentDirt::PATH).unwrap();
++        assert_eq!(owner.local_inputs.len(), 2);
++        assert!(
++            owner
++                .local_path()
++                .raw_path()
++                .points()
++                .iter()
++                .any(|p| p.x >= 100.0)
++        );
++    });
++}
++
++struct RetiringSnapshotPath {
++    inner: PointsPath,
++    drops: Rc<Cell<usize>>,
++}
++forward_owner!(RetiringSnapshotPath, 65519);
++impl CoreCapabilities for RetiringSnapshotPath {
++    fn as_component(&self) -> Option<&Component> {
++        self.inner.as_component()
++    }
++    fn as_component_mut(&mut self) -> Option<&mut Component> {
++        self.inner.as_component_mut()
++    }
++    fn as_path(&self) -> Option<&Path> {
++        self.inner.as_path()
++    }
++    fn as_path_mut(&mut self) -> Option<&mut Path> {
++        self.inner.as_path_mut()
++    }
++    fn as_points_path(&self) -> Option<&PointsPath> {
++        Some(&self.inner)
++    }
++}
++impl Drop for RetiringSnapshotPath {
++    fn drop(&mut self) {
++        self.drops.set(self.drops.get() + 1);
++    }
++}
++
++#[test]
++fn retained_member_stays_stale_after_callback_removal_reuse_and_unwind() {
++    let (arena, shape, first, composer, query) = fixture(PathFlags::LOCAL);
++    let drops = Rc::new(Cell::new(0));
++    let second = arena.insert(RetiringSnapshotPath {
++        inner: snapshot_triangle(100.0),
++        drops: drops.clone(),
++    });
++    shape
++        .with_downcast_mut::<Shape, _>(|owner| owner.add_path(second.clone()))
++        .unwrap();
++    let replacement = Rc::new(RefCell::new(None));
++    let result = replacement.clone();
++    let removed = second.clone();
++    let weak_arena = arena.weak_handle();
++    let seen_drops = drops.clone();
++    query.arm(1, move || {
++        drop(weak_arena.remove(&removed).unwrap());
++        assert_eq!(
++            seen_drops.get(),
++            1,
++            "snapshot must not keep the payload alive"
++        );
++        *result.borrow_mut() = Some(weak_arena.insert(snapshot_triangle(200.0)));
++    });
++    assert!(
++        catch_unwind(AssertUnwindSafe(|| {
++            composer.with_mut(|owner| owner.local_inputs_changed());
++        }))
++        .is_err(),
++        "the retained second identity is stale, not the reused occurrence"
++    );
++    let replacement = replacement.borrow().clone().unwrap();
++    assert_eq!(second.identity_key().1, replacement.identity_key().1);
++    assert_ne!(second, replacement);
++    assert!(!second.is_alive());
++    assert!(replacement.is_alive());
++    assert_eq!(drops.get(), 1);
++    shape
++        .with_downcast_mut::<Shape, _>(|owner| {
++            assert_eq!(owner.paths(), vec![first.clone(), second.clone()]);
++        })
++        .unwrap();
++    first
++        .with_mut(|owner| assert!(owner.as_path_mut().is_some()))
++        .unwrap();
++    composer.with_mut(|owner| assert!(!owner.has_local_inputs));
++}
++
++#[test]
++fn last_arena_drop_during_query_retires_payloads_despite_live_snapshots_and_panic() {
++    let (arena, shape, first, composer, query) = fixture(PathFlags::LOCAL);
++    let drops = Rc::new(Cell::new(0));
++    let second = arena.insert(RetiringSnapshotPath {
++        inner: snapshot_triangle(100.0),
++        drops: drops.clone(),
++    });
++    shape
++        .with_downcast_mut::<Shape, _>(|owner| owner.add_path(second.clone()))
++        .unwrap();
++    let snapshot = shape
++        .with_downcast::<Shape, _>(Shape::paths_snapshot)
++        .unwrap();
++    let seen_drops = drops.clone();
++    query.arm(1, move || {
++        drop(arena);
++        assert_eq!(
++            seen_drops.get(),
++            1,
++            "retained membership cannot defer arena retirement"
++        );
++        panic!("query after arena retirement");
++    });
++    assert!(
++        catch_unwind(AssertUnwindSafe(|| {
++            composer.with_mut(|owner| owner.local_inputs_changed());
++        }))
++        .is_err()
++    );
++    assert!(!shape.is_alive());
++    assert!(!first.is_alive());
++    assert!(!second.is_alive());
++    assert!(snapshot.iter().all(|member| !member.is_alive()));
++    drop(snapshot);
++    assert_eq!(drops.get(), 1);
++    composer.with_mut(|owner| assert!(!owner.has_local_inputs));
++}
+--- a/crates/nuxie-runtime/src/mechanical_port/source/shapes/shape.rs
++++ b/crates/nuxie-runtime/src/mechanical_port/source/shapes/shape.rs
+@@ -29,12 +29,13 @@
+     },
+     status_code::StatusCode,
+ };
++use std::rc::Rc;
+ 
+ pub struct Shape {
+     pub base: ShapeBase,
+     pub paint_container: ShapePaintContainer,
+     path_composer: RuntimePathComposerHandle,
+-    paths: Vec<CoreHandle>,
++    paths: Rc<Vec<CoreHandle>>,
+     world_bounds: Aabb,
+     local_bounds: std::cell::Cell<Aabb>,
+     local_bounds_clean: std::cell::Cell<bool>,
+@@ -97,7 +98,7 @@
+             base: ShapeBase::default(),
+             paint_container: ShapePaintContainer::default(),
+             path_composer: RuntimePathComposerHandle::new(),
+-            paths: Vec::new(),
++            paths: Rc::new(Vec::new()),
+             world_bounds: Aabb::default(),
+             local_bounds: std::cell::Cell::new(Aabb::default()),
+             local_bounds_clean: std::cell::Cell::new(false),
+@@ -122,14 +123,19 @@
+     /// The caller supplies its current skin state before entering this Shape.
+     pub(crate) fn add_path_with_skin(&mut self, path: CoreHandle, has_skin: bool) {
+         assert!(!self.paths.contains(&path));
+-        self.paths.push(path);
++        Rc::make_mut(&mut self.paths).push(path);
+         if has_skin {
+             self.add_flags(PathFlags::NEVER_DEFER_UPDATE);
+         }
+         self.invalidate_intrinsic_bounds();
+     }
+     pub fn paths(&self) -> Vec<CoreHandle> {
+-        self.paths.clone()
++        self.paths.as_ref().clone()
++    }
++    /// Retain membership while the composer releases Shape for open path queries.
++    /// Registration copies the list only if one of these snapshots is still live.
++    pub(super) fn paths_snapshot(&self) -> Rc<Vec<CoreHandle>> {
++        Rc::clone(&self.paths)
+     }
+     pub fn add_flags(&mut self, flags: PathFlags) {
+         self.paint_container.add_path_flags(flags);

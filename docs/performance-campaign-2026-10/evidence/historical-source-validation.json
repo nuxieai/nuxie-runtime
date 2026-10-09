@@ -1,0 +1,377 @@
+{
+  "status": "Validation complete with explicitly retained default-arithmetic failure; no uniform all-green claim across feature sets.",
+  "source_commit": "47fb7fe85481c641fc92b3da866a331be9628855",
+  "source_identity": {
+    "runtime_source_manifest": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.source-after.json",
+      "sha256": "d0796f73d5c988ef699992edf0b695f1c74af7e7ec85f64c0c98c0c48c2f1efe"
+    },
+    "changes_during_default_suite": [],
+    "changes_during_strict_silver": [],
+    "changes_at_final_summary": []
+  },
+  "provenance": {
+    "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.provenance.json",
+    "sha256": "f3ec17ea9584b3bcf4ccb19ae0cabc7b4902bb8fbf2bca73234c4a43e4a291a5"
+  },
+  "default_runtime_suite": {
+    "features": [
+      "default",
+      "js-host-seed",
+      "tools"
+    ],
+    "profile": "debug; dev/test debuginfo=0",
+    "exit": 101,
+    "targets_executed": 174,
+    "integration_targets": 173,
+    "counts": {
+      "passed": 1643,
+      "failed": 1,
+      "ignored": 11,
+      "measured": 0,
+      "filtered_out": 0
+    },
+    "failure": {
+      "test": "upstream_wave_b_expected_red::wave_b_data_binding_test_025_direct_port_expected_red",
+      "difference": "data_converter_to_number Silver: frame 41, op 2120 addRawPath: expected 1850 fields, got 1443",
+      "classification": "Documented default-production-arithmetic versus strict unit/Silver build-mode mismatch; exact same source passes with strict-fp."
+    },
+    "ignored": [
+      "test frame_probe_test::settled_artboards_without_a_state_machine ... ignored, upstream hidden [.frame_probe] report-only sweep",
+      "test frame_probe_test::settled_scenes_with_their_state_machine ... ignored, upstream hidden [.frame_probe] report-only sweep",
+      "test bench_virtualized_grid_scroll ... ignored, upstream hidden [.bench]; run only for explicitly requested performance work",
+      "test write_ktx2_bc7_header_records_logical_mip_0_dimensions ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test write_ktx2_bc7_level_count_matches_mip_count ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test write_ktx2_bc7_level_data_offsets_are_16_byte_aligned ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test write_ktx2_bc7_linear_selects_bc7_unorm_block ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test write_ktx2_bc7_rejects_empty_mip_list ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test write_ktx2_bc7_srgb_selects_bc7_srgb_block ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test write_ktx2_bc7_writes_ktx2_identifier ... ignored, expected-red: Rust has no write_ktx2 tool-helper owner",
+      "test wave_b5_bad_png_file_does_not_cause_an_overflow ... ignored, resource-deferred: pinned Apple malformed PNG decode may allocate over 5 GB; not a product-admission test"
+    ],
+    "details": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.json",
+      "sha256": "a2621c11f012a7a6294dfa683fe7bbe891b59686291179591fcd9fe93ecb6375"
+    }
+  },
+  "strict_converter_target": {
+    "features": [
+      "default",
+      "js-host-seed",
+      "tools",
+      "strict-fp"
+    ],
+    "target": "upstream_wave_b_expected_red",
+    "exit": 0,
+    "passed": 250,
+    "failed": 0,
+    "ignored": 0,
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "nuxie-runtime",
+      "--test",
+      "upstream_wave_b_expected_red",
+      "--features",
+      "tools,strict-fp",
+      "--locked",
+      "--offline"
+    ],
+    "details": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.runtime-strict-converter.json",
+      "sha256": "0b08da420ba7341f323befc79e20432de0c59ff2430f8d9fffe3e39bb87ab888"
+    },
+    "scope": "Only this previously failing target was rerun; full suite was not rerun under strict-fp."
+  },
+  "probe_independent_host_contracts": {
+    "counts": {
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "measured": 0,
+      "filtered_out": 1
+    },
+    "exit": 0,
+    "skipped_test": "built_probe_reports_current_source_fingerprint"
+  },
+  "excluded_live_probe_binaries": [
+    "cpp_probe_audio_native",
+    "cpp_probe_data_bind_enum_native",
+    "cpp_probe_data_bind_native",
+    "cpp_probe_data_bind_string_color_native",
+    "cpp_probe_draw_native",
+    "cpp_probe_import_animation",
+    "cpp_probe_native",
+    "cpp_probe_text_native",
+    "cpp_probe_transitions_native",
+    "profiler_cpp_probe"
+  ],
+  "excluded_required_feature_targets": {
+    "upstream_painted_bounds": [
+      "testing"
+    ]
+  },
+  "probe_coverage_limit": "No live fingerprinted C++ probe was built/run. Passing unit/host tests must not be described as live C++ oracle coverage.",
+  "pgo_orchestration_tests": {
+    "passed": 7,
+    "exit": 0
+  },
+  "diff_check": {
+    "exit": 0
+  },
+  "strict_silver": {
+    "feature": "nuxie-runtime/strict-fp",
+    "exit": 0,
+    "selected_runtime_entries": 231,
+    "executed": 214,
+    "byte_exact": 98,
+    "epsilon_exact": 109,
+    "recorded_divergences": 7,
+    "unsupported_not_executed": 17,
+    "divergence_details": [
+      {
+        "id": "bidirectional_binding_source",
+        "lane": "runtime",
+        "note": "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save."
+      },
+      {
+        "id": "car_widgets_v01",
+        "lane": "runtime",
+        "note": "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 10306 (addRawPath): expected 60 fields, got 56."
+      },
+      {
+        "id": "collapse_data_binds-test_1",
+        "lane": "runtime",
+        "note": "Approved Yoga-to-Taffy layout-solver adaptation divergence; the translated layout owner matches pinned source at the solver boundary; first difference: frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672."
+      },
+      {
+        "id": "data_binding_artboards_test",
+        "lane": "runtime",
+        "note": "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 7, op 580 (frame): expected frame, got makeRenderPaint."
+      },
+      {
+        "id": "hunter_x_demo",
+        "lane": "runtime",
+        "note": "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 5055 (addRawPath): expected 20 fields, got 22."
+      },
+      {
+        "id": "layout_aspect_ratio",
+        "lane": "runtime",
+        "note": "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)."
+      },
+      {
+        "id": "rewards_demo",
+        "lane": "runtime",
+        "note": "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 1461 (addRawPath): expected 44 fields, got 46."
+      }
+    ],
+    "unsupported_details": [
+      {
+        "id": "artboard_opacity_and_transform_test",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface pointer-expression-encoding; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "bindable_artboard_nesty",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface external-bindable-artboard-with-bound-view-model-injection; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "data_bind_blob_test",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "image_binding_with_listener",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface live-decoded-image-view-model-payload-injection; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "image_computed_transform_bind",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "layout_grid_stack_grid_with_layout_participants",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface retained-text-render-style-registration-for-layout-participant-text; the pinned C++ gridStackSilver action stream requires that unported runtime surface."
+      },
+      {
+        "id": "multi_listeners-rebind",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface runtime-owned-nested-view-model-reference-replacement-by-handle; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "rebind_with_nested_viewmodel",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface runtime-owned-nested-view-model-reference-replacement-by-handle; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "replace_vm_instance",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface runtime-owned-shared-view-model-graph-reparenting; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "replace_vm_instance-double-nest",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface runtime-owned-nested-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "replace_vm_instance-list",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface runtime-owned-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "solo_index_test",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "stateful_artboard_swap",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface live-bindable-artboard-value-and-bound-view-model-swap; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "stateful_component_image_test",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "stateful_list_props_lifecycle",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface stateful-component-list-bridge-detach-and-rebind-lifecycle; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "stateful_source_switch",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface live-bindable-artboard-source-swap-with-stateful-child-borrowing; the pinned C++ action stream requires that unported runtime surface."
+      },
+      {
+        "id": "transition_self_comparator_test",
+        "lane": "runtime",
+        "note": "Unsupported feature: missing runtime surface runtime-owned-composite-list-and-view-model-comparator-mutation; the pinned C++ action stream requires that unported runtime surface."
+      }
+    ],
+    "scripted_entries_not_newly_executed": 48,
+    "unknown_provenance_not_executed": 3,
+    "build_command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "-p",
+      "silver-corpus",
+      "-p",
+      "golden-compare",
+      "--bins",
+      "--features",
+      "nuxie-runtime/strict-fp",
+      "-vv"
+    ],
+    "validation_command": [
+      "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/test-build/debug/silver-corpus",
+      "validate",
+      "--manifest",
+      "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/silver-corpus.toml",
+      "--rive-runtime-dir",
+      "/Users/levi/dev/worktrees/rive-runtime-october03",
+      "--lane",
+      "runtime"
+    ],
+    "details": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.silver.json",
+      "sha256": "d73f792755be0beede9428a06179ead434bce92367ab8f32bf1f5b1978c4056b"
+    },
+    "arithmetic_mode_diagnosis": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.silver-mode-diagnosis.json",
+      "sha256": "79110d09a0c8abeb12f27b7b92c1c001b12ab89e50d68f69603504705d985d8a"
+    },
+    "coverage_note": "The CLI aggregate cpp-rust-exact=214 includes seven scripted exact declarations. Actual newly executed exact runtime cases total207; seven further runtime cases match known divergence signatures."
+  },
+  "golden_cpp_vs_final_control": {
+    "exit": 0,
+    "command": [
+      "target/perf-campaign/test-build/debug/golden-compare",
+      "--corpus",
+      "corpus.toml",
+      "--side-channel",
+      "--verify-unsupported-cpp",
+      "--verify-divergent-rust",
+      "--verify-scripted-diagnostics",
+      "--cpp-runner",
+      "target/perf-campaign/cpp-runner",
+      "--rust-runner",
+      "target/perf-campaign/final-control-runner",
+      "--rive-runtime-dir",
+      "/Users/levi/dev/worktrees/rive-runtime-october03"
+    ],
+    "binaries": {
+      "target/perf-campaign/test-build/debug/golden-compare": "9c8914af9dfaf3a1e5d9143e55366bcdfbba97c6274cc79acdc25d6bd2e8e403",
+      "target/perf-campaign/cpp-runner": "c07e5a237c4848c934badf95d783b09ff124a889cdebc3ede7b4de80155ead54",
+      "target/perf-campaign/final-control-runner": "521e93a1411401a1eb8952c4f7902413bd4eef31e03d3963bfa5c7a38892559e"
+    },
+    "entries": 364,
+    "exact_entries": 362,
+    "exact_segments": 1176,
+    "side_channel_segments": 1168,
+    "known_divergences": [
+      {
+        "id": "collapse_data_binds",
+        "signature": "line 72: rust `transform matrix=[1,0,0,1,410.136719,445.800781]` vs c++ `transform matrix=[1,0,0,1,411.315918,445.800781]`"
+      },
+      {
+        "id": "editor_scripted_vector_v7",
+        "signature": "line 4: rust `makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}` vs c++ `source file=\"fixtures/editor/editor_scripted_vector_v7.riv\" artboard=\"Scripted Screen\" scene=\"Scripted Screen\"`"
+      }
+    ],
+    "side_channel_disabled_existing_register_rows": [
+      "[exact] data_binding_artboards_test: side-channel disabled (register row W3)",
+      "[exact] replace_view_model: side-channel disabled (register row W3)",
+      "[exact] stateful_source_switch: side-channel disabled (register row W3)"
+    ],
+    "ordinary_mode_attempt": "Rejected: omitted --verify-scripted-diagnostics,24 entries failed. That attempt is not an accepted correctness result.",
+    "rejected_log": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-control-golden-rejected-mode.log",
+      "sha256": "89a1541a7e7306d9b2d1f8fb49b844eecbf8a576ac008dc2d74b88c1907f4a95"
+    },
+    "details": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-control-golden.json",
+      "sha256": "360fb13317811652fa74665448ec08d41289fbc44b9a04f6b19615f9be469ad8"
+    }
+  },
+  "final_control_recordings_vs_frozen_rust_baseline": {
+    "fixtures": 25,
+    "exact": 25,
+    "frames_per_fixture": 100,
+    "samples": "progressive i/60, i=0..99; formatted to9decimal places",
+    "scripts": true,
+    "side_channel": true,
+    "checks": [
+      "exit0",
+      "stdout byte equality",
+      "stderr byte equality"
+    ],
+    "source_control_runner": "521e93a1411401a1eb8952c4f7902413bd4eef31e03d3963bfa5c7a38892559e",
+    "details": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-control-recordings.json",
+      "sha256": "acff67a903fc4be187cea7b14e664c027240468604f012f1e553e1b43de768d8"
+    },
+    "driver": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/record.py",
+      "sha256": "63f9392e4b70356f83404b1e4857a614c4b33094aca2fa6356ae65438b2c5ea4"
+    },
+    "coverage_note": "This is output-preservation comparison against frozen Rust baseline; separate golden comparison supplies the C++ oracle."
+  },
+  "remote_sixth_aggregate": {
+    "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/remote-sixth/aggregate-analysis.json",
+    "sha256": "b824ae5cf6a4950af866609423de3dc9d98edcedfdf60d54ab833ca3b379e1b5"
+  },
+  "fixture_setup": {
+    "scope": "Only absent ignored fixture files restored from repository-declared local C++ Git revisions, each SHA checked. No tracked/source/index files changed.",
+    "details": {
+      "path": "/Users/levi/.codex/worktrees/c0a4/nuxie-runtime/target/perf-campaign/final-source-tests.fixture-setup.json",
+      "sha256": "aa4c52458a3cdf7414ce79e122b06420a222e1e730829a477f46cc2e1b348074"
+    }
+  }
+}

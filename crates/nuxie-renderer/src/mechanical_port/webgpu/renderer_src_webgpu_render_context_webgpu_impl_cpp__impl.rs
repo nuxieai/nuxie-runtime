@@ -258,7 +258,10 @@ fn getWGPUVertexFormat(format: gpu::VertexElementFormat) -> super::webgpu_cpp_de
         gpu::VertexElementFormat::uint32 => super::webgpu_cpp_decl::VertexFormat::Uint32,
     }
 }
-fn appendImageDrawInstanceAttribs(attributes: &mut Vec<WGPUVertexAttribute>, source: &[gpu::VertexAttribute]) {
+fn appendImageDrawInstanceAttribs(
+    attributes: &mut Vec<WGPUVertexAttribute>,
+    source: &[gpu::VertexAttribute],
+) {
     for attr in source {
         let mut attribute = WGPUVertexAttribute::default();
         attribute.format = getWGPUVertexFormat(attr.format).into();
@@ -1297,6 +1300,8 @@ pub(crate) fn newContext(
     features.clipSpaceBottomUp = true;
     features.framebufferBottomUp = false;
     features.msaaColorPreserveNeedsDraw = true;
+    // WebGPU emulates dynamic state using multiple pipelines per draw pipeline.
+    features.supportsPipelineDynamicState = true;
     features.supportsTextureCompressionBC = unsafe {
         context
             .m_device
@@ -1498,8 +1503,8 @@ pub(crate) fn makeDrawPipeline(
     msaa: bool,
 ) -> super::webgpu_cpp_decl::RenderPipeline {
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-        BlendEquation, DrawType, ImageRectInstance, ImageMeshInstance, ImageRectVertex, InterlockMode, PatchVertex,
-        ShaderFeatures, ShaderMiscFlags, TriangleVertex,
+        BlendEquation, DrawType, ImageMeshInstance, ImageRectInstance, ImageRectVertex,
+        InterlockMode, PatchVertex, ShaderFeatures, ShaderMiscFlags, TriangleVertex,
     };
 
     assert!(!msaa || interlockMode == InterlockMode::depthStencil);
@@ -1724,11 +1729,7 @@ pub(crate) fn makeDrawPipeline(
     descriptor.primitive.topology = topology.into();
     descriptor.primitive.frontFace = RIVE_FRONT_FACE.into();
     descriptor.primitive.cullMode = wgpuCullMode(pipelineState.cullFace);
-    descriptor.multisample.count = if msaa {
-        MSAASampleCount
-    } else {
-        1
-    };
+    descriptor.multisample.count = if msaa { MSAASampleCount } else { 1 };
     descriptor.multisample.mask = u32::MAX;
     descriptor.fragment = &fragmentState;
 
@@ -1968,13 +1969,40 @@ pub(crate) fn newDrawPipeline(
     shaderFeatures: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderFeatures,
     interlockMode: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockMode,
     shaderMiscFlags: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderMiscFlags,
-    pipelineState: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState,
+    drawContents: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::DrawContents,
+    blendMode: nuxie_render_api::BlendMode,
+    flushFixedFunctionColorOutput: bool,
+    framebufferFormat: TextureFormat,
     msaa: bool,
     targetIsGLFBO0: bool,
 ) -> super::render_context_webgpu_decl::DrawPipeline {
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
         DrawType, InterlockMode, ShaderFeatures, ShaderMiscFlags,
     };
+
+    let passTypes = if crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(drawType) {
+        assert_eq!(interlockMode, InterlockMode::depthStencil);
+        vec![DrawType::stencilMidpointFanBorrowedCoverage, DrawType::stencilMidpointFans, DrawType::stencilMidpointFanReset]
+    } else {
+        vec![drawType]
+    };
+    let mut passes: Vec<_> = passTypes
+        .into_iter()
+        .map(
+            |passDrawType| super::render_context_webgpu_decl::DrawPipelinePass {
+                pipelineState: makeDrawPipelineState(
+                    context,
+                    passDrawType,
+                    interlockMode,
+                    shaderMiscFlags,
+                    drawContents,
+                    flushFixedFunctionColorOutput,
+                    blendMode,
+                ),
+                renderPipeline: super::webgpu_cpp_decl::RenderPipeline::default(),
+            },
+        )
+        .collect();
 
     let fixedColor = shaderMiscFlags.has(ShaderMiscFlags::fixedFunctionColorOutput);
     let (vertexModule, fragmentModule, vertexSource, fragmentSource) = match interlockMode {
@@ -2166,7 +2194,9 @@ pub(crate) fn newDrawPipeline(
                                 "../../generated/draw_depthstencil_atlas_blit.webgpu_fixedcolor_frag.wgsl"
                             )
                         } else {
-                            include_str!("../../generated/draw_depthstencil_atlas_blit.webgpu_frag.wgsl")
+                            include_str!(
+                                "../../generated/draw_depthstencil_atlas_blit.webgpu_frag.wgsl"
+                            )
                         },
                         "draw_depthstencil_atlas_blit.webgpu.vert",
                         "draw_depthstencil_atlas_blit.webgpu.frag",
@@ -2174,7 +2204,9 @@ pub(crate) fn newDrawPipeline(
                 }
                 DrawType::imageMesh => (
                     if clipRect {
-                        include_str!("../../generated/draw_depthstencil_image_mesh.webgpu_vert.wgsl")
+                        include_str!(
+                            "../../generated/draw_depthstencil_image_mesh.webgpu_vert.wgsl"
+                        )
                     } else {
                         include_str!(
                             "../../generated/draw_depthstencil_image_mesh.webgpu_noclipdistance_vert.wgsl"
@@ -2185,7 +2217,9 @@ pub(crate) fn newDrawPipeline(
                             "../../generated/draw_depthstencil_image_mesh.webgpu_fixedcolor_frag.wgsl"
                         )
                     } else {
-                        include_str!("../../generated/draw_depthstencil_image_mesh.webgpu_frag.wgsl")
+                        include_str!(
+                            "../../generated/draw_depthstencil_image_mesh.webgpu_frag.wgsl"
+                        )
                     },
                     "draw_depthstencil_image_mesh.webgpu.vert",
                     "draw_depthstencil_image_mesh.webgpu.frag",
@@ -2210,15 +2244,8 @@ pub(crate) fn newDrawPipeline(
         }
     };
 
-    let mut renderPipelines =
-        std::array::from_fn(|_| super::webgpu_cpp_decl::RenderPipeline::default());
-    for framebufferFormat in [TextureFormat::RGBA8Unorm, TextureFormat::BGRA8Unorm] {
-        let index = if framebufferFormat == TextureFormat::BGRA8Unorm {
-            1
-        } else {
-            0
-        };
-        renderPipelines[index] = makeDrawPipeline(
+    for pass in &mut passes {
+        pass.renderPipeline = makeDrawPipeline(
             context,
             drawType,
             shaderFeatures,
@@ -2229,24 +2256,77 @@ pub(crate) fn newDrawPipeline(
             fragmentModule.clone(),
             vertexSource,
             fragmentSource,
-            pipelineState,
+            &pass.pipelineState,
             msaa,
         );
     }
-    super::render_context_webgpu_decl::DrawPipeline {
-        m_renderPipelines: std::mem::ManuallyDrop::new(renderPipelines),
+    super::render_context_webgpu_decl::DrawPipeline { m_passes: passes }
+}
+
+impl super::render_context_webgpu_decl::DrawPipeline {
+    pub(crate) fn passCount(&self) -> u32 {
+        self.m_passes.len() as u32
+    }
+
+    pub(crate) fn pipelineState(
+        &self,
+        passIdx: u32,
+    ) -> &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState
+    {
+        &self.m_passes[passIdx as usize].pipelineState
+    }
+
+    pub(crate) fn bind(&self, encoder: &super::webgpu_cpp_decl::RenderPassEncoder, passIdx: u32) {
+        let pass = &self.m_passes[passIdx as usize];
+        unsafe {
+            encoder.SetPipeline(pass.renderPipeline.Get());
+            if pass.pipelineState.stencilTestEnabled {
+                encoder.SetStencilReference(u32::from(pass.pipelineState.stencilReference));
+            }
+        }
     }
 }
 
-pub(crate) fn drawPipelineForFormat(
-    pipeline: &super::render_context_webgpu_decl::DrawPipeline,
-    framebufferFormat: TextureFormat,
-) -> super::webgpu_cpp_decl::RenderPipeline {
-    assert!(matches!(
-        framebufferFormat,
-        TextureFormat::BGRA8Unorm | TextureFormat::RGBA8Unorm
-    ));
-    pipeline.m_renderPipelines[usize::from(framebufferFormat == TextureFormat::BGRA8Unorm)].clone()
+fn makeDrawPipelineState(
+    context: &RenderContextWebGPUImpl,
+    drawType: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::DrawType,
+    interlockMode: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockMode,
+    shaderMiscFlags: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderMiscFlags,
+    drawContents: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::DrawContents,
+    flushFixedFunctionColorOutput: bool,
+    blendMode: nuxie_render_api::BlendMode,
+) -> crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState {
+    use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
+        DrawType, InterlockMode, ShaderMiscFlags,
+    };
+    let mut pipelineState =
+        crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(
+            drawType,
+            interlockMode,
+            shaderMiscFlags,
+            drawContents,
+            flushFixedFunctionColorOutput,
+            blendMode,
+            context.platformFeatures(),
+        );
+    if interlockMode == InterlockMode::atomics && !flushFixedFunctionColorOutput {
+        if drawType == DrawType::renderPassResolve {
+            assert!(shaderMiscFlags.has(ShaderMiscFlags::coalescedResolveAndTransfer));
+            pipelineState.colorWriteEnabled = true;
+        } else {
+            assert!(!pipelineState.colorWriteEnabled);
+        }
+    }
+    #[cfg(feature = "native-wagyu-experimental")]
+    if matches!(
+        interlockMode,
+        InterlockMode::rasterOrdering | InterlockMode::clockwise
+    ) && !flushFixedFunctionColorOutput
+    {
+        assert!(!pipelineState.colorWriteEnabled);
+        pipelineState.colorWriteEnabled = true;
+    }
+    pipelineState
 }
 
 fn wgpuColorPremul(color: nuxie_render_api::ColorInt) -> super::webgpu_decl::WGPUColor {
@@ -2461,7 +2541,9 @@ impl PLSDrawRenderPass {
 }
 
 impl DrawRenderPassApi for PLSDrawRenderPass {
-    fn msaa(&self) -> bool { self.base.m_msaa }
+    fn msaa(&self) -> bool {
+        self.base.m_msaa
+    }
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -2604,7 +2686,9 @@ impl Drop for AtomicDrawRenderPass {
 }
 
 impl DrawRenderPassApi for AtomicDrawRenderPass {
-    fn msaa(&self) -> bool { self.base.m_msaa }
+    fn msaa(&self) -> bool {
+        self.base.m_msaa
+    }
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -2658,11 +2742,15 @@ impl DepthStencilDrawRenderPass {
         let msaa = base.m_msaa;
         let mut pass = Self {
             base: std::mem::ManuallyDrop::new(base),
-            m_msaaColorTextureView: std::mem::ManuallyDrop::new(if msaa { msaaColorTextureView(target) } else { TextureView::default() }),
+            m_msaaColorTextureView: std::mem::ManuallyDrop::new(if msaa {
+                msaaColorTextureView(target)
+            } else {
+                TextureView::default()
+            }),
             m_targetTextureView: std::mem::ManuallyDrop::new(target.targetTextureView()),
-            m_depthStencilTextureView: std::mem::ManuallyDrop::new(
-                depthStencilTextureView(target, msaa),
-            ),
+            m_depthStencilTextureView: std::mem::ManuallyDrop::new(depthStencilTextureView(
+                target, msaa,
+            )),
         };
         let desc = unsafe { &*descriptor };
         let beginsWithInitialize = desc.drawList.is_some_and(|list| unsafe {
@@ -2751,7 +2839,9 @@ impl Drop for DepthStencilDrawRenderPass {
 }
 
 impl DrawRenderPassApi for DepthStencilDrawRenderPass {
-    fn msaa(&self) -> bool { self.base.m_msaa }
+    fn msaa(&self) -> bool {
+        self.base.m_msaa
+    }
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -2820,9 +2910,9 @@ unsafe fn makeDrawRenderPass(
         InterlockMode::atomics => Box::new(unsafe {
             AtomicDrawRenderPass::new(implementation, descriptor, commandEncoder)
         }),
-        InterlockMode::depthStencil => {
-            Box::new(unsafe { DepthStencilDrawRenderPass::new(implementation, descriptor, commandEncoder) })
-        }
+        InterlockMode::depthStencil => Box::new(unsafe {
+            DepthStencilDrawRenderPass::new(implementation, descriptor, commandEncoder)
+        }),
         _ => {
             Box::new(unsafe { PLSDrawRenderPass::new(implementation, descriptor, commandEncoder) })
         }
@@ -3541,9 +3631,15 @@ pub(crate) fn depthStencilTextureView(target: &mut RenderTargetWebGPU, msaa: boo
     let width = target.width();
     let height = target.height();
     let (texture, view) = if msaa {
-        (&mut target.m_msaaDepthStencilTexture, &mut target.m_msaaDepthStencilTextureView)
+        (
+            &mut target.m_msaaDepthStencilTexture,
+            &mut target.m_msaaDepthStencilTextureView,
+        )
     } else {
-        (&mut target.m_depthStencilTexture, &mut target.m_depthStencilTextureView)
+        (
+            &mut target.m_depthStencilTexture,
+            &mut target.m_depthStencilTextureView,
+        )
     };
     if view.Get().is_null() {
         assert!(texture.Get().is_null());
@@ -3982,30 +4078,6 @@ unsafe fn executeDrawList(
                 shaderMiscFlags |= ShaderMiscFlags::coalescedResolveAndTransfer;
             }
         }
-        let mut pipelineState =
-            crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(
-                drawType,
-                desc.interlockMode,
-                batch.shaderMiscFlags,
-                batch.drawContents,
-                desc.fixedFunctionColorOutput,
-                batch.firstBlendMode,
-                context.platformFeatures(),
-            );
-        if desc.interlockMode == InterlockMode::atomics && !desc.fixedFunctionColorOutput {
-            assert!(!pipelineState.colorWriteEnabled);
-            if drawType == DrawType::renderPassResolve {
-                assert!(shaderMiscFlags.has(ShaderMiscFlags::coalescedResolveAndTransfer));
-                pipelineState.colorWriteEnabled = true;
-            }
-        } else if matches!(
-            desc.interlockMode,
-            InterlockMode::rasterOrdering | InterlockMode::clockwise
-        ) && !desc.fixedFunctionColorOutput
-        {
-            assert!(!pipelineState.colorWriteEnabled);
-            pipelineState.colorWriteEnabled = true;
-        }
         let mut pipelineKey =
             crate::mechanical_port::source::renderer::src::gpu_cpp::getPipelineUniqueKey(
                 drawType,
@@ -4019,6 +4091,13 @@ unsafe fn executeDrawList(
             );
         pipelineKey = pipelineKey << 1 | u64::from(renderPass.msaa());
         pipelineKey = pipelineKey << 1 | u64::from(targetIsGLFBO0);
+        let framebufferFormat = renderTarget.framebufferFormat();
+        assert!(matches!(
+            framebufferFormat,
+            TextureFormat::BGRA8Unorm | TextureFormat::RGBA8Unorm
+        ));
+        pipelineKey = pipelineKey << 1 | u64::from(framebufferFormat == TextureFormat::BGRA8Unorm);
+        pipelineKey = pipelineKey << 1 | u64::from(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(drawType));
         if !context.m_drawPipelines.contains_key(&pipelineKey) {
             let pipeline = newDrawPipeline(
                 context,
@@ -4026,23 +4105,20 @@ unsafe fn executeDrawList(
                 shaderFeatures,
                 desc.interlockMode,
                 shaderMiscFlags,
-                &pipelineState,
+                batch.drawContents,
+                batch.firstBlendMode,
+                desc.fixedFunctionColorOutput,
+                framebufferFormat,
                 renderPass.msaa(),
                 targetIsGLFBO0,
             );
             context.m_drawPipelines.insert(pipelineKey, pipeline);
         }
-        let pipeline = drawPipelineForFormat(
-            context
-                .m_drawPipelines
-                .get(&pipelineKey)
-                .expect("draw pipeline"),
-            renderTarget.framebufferFormat(),
-        );
-        unsafe { drawEncoder.SetPipeline(pipeline.Get()) };
-        if pipelineState.stencilTestEnabled {
-            unsafe { drawEncoder.SetStencilReference(u32::from(pipelineState.stencilReference)) };
-        }
+        let drawPipeline = context
+            .m_drawPipelines
+            .get(&pipelineKey)
+            .expect("draw pipeline");
+        drawPipeline.bind(&drawEncoder, 0);
 
         match drawType {
             DrawType::midpointFanPatches
@@ -4074,8 +4150,6 @@ unsafe fn executeDrawList(
             | DrawType::stencilOuterCubicCover
             | DrawType::stencilOuterCubics
             | DrawType::stencilMidpointFanBorrowedCoverage
-            | DrawType::stencilDynamicMidpointFans
-            | DrawType::stencilDynamicOuterCubics
             | DrawType::stencilMidpointFans
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
@@ -4092,6 +4166,27 @@ unsafe fn executeDrawList(
                 );
                 for draw in crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::new(batch, 0) {
                     drawEncoder.DrawIndexed(draw.indexCount, 1, 0, draw.baseVertex, 0);
+                }
+            },
+            DrawType::stencilDynamicMidpointFans | DrawType::stencilDynamicOuterCubics => unsafe {
+                drawEncoder.SetIndexBuffer(
+                    context.m_pathPatchIndexBuffer.Get(),
+                    super::webgpu_cpp_decl::IndexFormat::Uint16.into(),
+                    u64::from(batch.baseIndex) * std::mem::size_of::<u16>() as u64,
+                    super::webgpu_decl::WGPU_WHOLE_SIZE,
+                );
+                for i in 0..drawPipeline.passCount() {
+                    if i != 0 {
+                        drawPipeline.bind(&drawEncoder, i);
+                    }
+                    let vertexFlags = if !drawPipeline.pipelineState(i).colorWriteEnabled {
+                        crate::mechanical_port::source::renderer::src::shaders::constants_glsl::VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
+                    } else {
+                        0
+                    };
+                    for draw in crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::new(batch, vertexFlags) {
+                        drawEncoder.DrawIndexed(draw.indexCount, 1, 0, draw.baseVertex, 0);
+                    }
                 }
             },
             DrawType::clipReset | DrawType::interiorTriangulation | DrawType::featherAtlasBlit => unsafe {
@@ -4478,10 +4573,11 @@ pub(crate) unsafe fn flush(
 pub(crate) unsafe fn ensureCanvasBacking(
     context: &mut RenderContextWebGPUImpl,
     canvas: *mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
-)
-{
+) {
     let canvas = unsafe { &mut *canvas };
-    if canvas.isBacked() { return; }
+    if canvas.isBacked() {
+        return;
+    }
     let (width, height) = (canvas.width(), canvas.height());
 
     let texture = makeTexture(
@@ -4698,7 +4794,7 @@ pub(crate) fn MakeContext(
 
 pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5013;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 201484] = [(); PINNED_SOURCE.len()];
+const _: [(); 206657] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4717,7 +4813,11 @@ mod tests {
             (ShaderFeatures::ENABLE_DITHER, 7),
             (ShaderFeatures::ENABLE_MODULATED_IMAGE, 8),
         ] {
-            let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, feature, ShaderMiscFlags::none);
+            let values = shaderPermutationFlags(
+                gpu::DrawType::midpointFanPatches,
+                feature,
+                ShaderMiscFlags::none,
+            );
             assert_eq!(values[expectedIndex], 1.0);
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
@@ -4728,17 +4828,30 @@ mod tests {
             (ShaderMiscFlags::storeColorClear, 12),
             (ShaderMiscFlags::loadColorFromDstTexture, 13),
         ] {
-            let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, ShaderFeatures::NONE, flag);
+            let values = shaderPermutationFlags(
+                gpu::DrawType::midpointFanPatches,
+                ShaderFeatures::NONE,
+                flag,
+            );
             assert_eq!(values[expectedIndex], 1.0);
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
-        let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, ShaderFeatures::NONE, ShaderMiscFlags::none);
+        let values = shaderPermutationFlags(
+            gpu::DrawType::midpointFanPatches,
+            ShaderFeatures::NONE,
+            ShaderMiscFlags::none,
+        );
         assert_eq!(values, [0.0; 17]);
-        let values = shaderPermutationFlags(gpu::DrawType::depthAAOuterHairline, ShaderFeatures::NONE, ShaderMiscFlags::none);
+        let values = shaderPermutationFlags(
+            gpu::DrawType::depthAAOuterHairline,
+            ShaderFeatures::NONE,
+            ShaderMiscFlags::none,
+        );
         assert_eq!(values[16], 1.0);
         assert_eq!(values.iter().sum::<f64>(), 1.0);
         for draw_type in [gpu::DrawType::depthStrokes, gpu::DrawType::depthAAStrokes] {
-            let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none);
+            let values =
+                shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none);
             assert_eq!(values[15], 1.0);
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
@@ -4814,8 +4927,17 @@ mod tests {
             &values,
         );
         assert_eq!(SPECIALIZATION_COUNT, 17);
-        assert_eq!(SPECIALIZATION_IDS, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"]);
-        assert_eq!(entries.iter().map(|entry| entry.value).collect::<Vec<_>>(), [1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(
+            SPECIALIZATION_IDS,
+            [
+                "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
+                "15", "16"
+            ]
+        );
+        assert_eq!(
+            entries.iter().map(|entry| entry.value).collect::<Vec<_>>(),
+            [1.0, 2.0, 3.0, 4.0, 5.0]
+        );
         assert!(buildConstantEntries(None, &values).is_empty());
     }
 

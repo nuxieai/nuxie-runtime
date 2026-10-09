@@ -158,13 +158,13 @@ impl Drop for FeatherAtlasPipeline {
 }
 
 pub(crate) struct DrawPipeline {
-    pub(crate) m_renderPipelines: ManuallyDrop<[RenderPipeline; 2]>,
+    pub(crate) m_passes: Vec<DrawPipelinePass>,
 }
 
-impl Drop for DrawPipeline {
-    fn drop(&mut self) {
-        unsafe { dropArrayReverse(&mut self.m_renderPipelines) };
-    }
+pub(crate) struct DrawPipelinePass {
+    pub(crate) pipelineState:
+        crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState,
+    pub(crate) renderPipeline: RenderPipeline,
 }
 
 #[repr(C)]
@@ -180,8 +180,7 @@ pub(crate) struct RenderContextWebGPUImpl {
     pub(crate) m_loadStoreEXTVertexShader: ManuallyDrop<ShaderModule>,
     pub(crate) m_loadStoreEXTUniforms:
         ManuallyDrop<Option<Box<dyn super::render_context_webgpu_impl::BufferRingWebGPUApi>>>,
-    pub(crate) m_blitTextureAsDrawPipeline:
-        ManuallyDrop<Option<Box<BlitTextureAsDrawPipeline>>>,
+    pub(crate) m_blitTextureAsDrawPipeline: ManuallyDrop<Option<Box<BlitTextureAsDrawPipeline>>>,
     pub(crate) m_colorRampPipeline: ManuallyDrop<Option<Box<ColorRampPipeline>>>,
     pub(crate) m_gradientTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_gradientTextureView: ManuallyDrop<TextureView>,
@@ -320,8 +319,7 @@ impl RenderContextWebGPUImpl {
     pub(crate) unsafe fn ensureCanvasBacking(
         &mut self,
         canvas: *mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
-    )
-    {
+    ) {
         unsafe { super::render_context_webgpu_impl::ensureCanvasBacking(self, canvas) }
     }
 

@@ -7,18 +7,30 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97`
+- LAST_SYNCED_SHA: `9f47f07639009b16097985fe7b794c3fe09287dc`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
+- Current target: `6f3510dcc545bc8b2a78f1004a06929d17cd022b` (refreshed 2026-10-09 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  No upstream commits remain after this checkpoint at the fetched target.
-  All 212 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (234 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 213 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (235 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `9f47f076`, integrated atop downstream `236a383cde`:
+  independent source and subsequent Rust-integration reviews, including
+  correction rereviews, are clean. Both browser products compile for
+  wasm32-unknown-unknown; WebGPU test targets and WebGPU-plus-Wagyu compile.
+  All 14 focused shared/GL dynamic-state tests pass. Native WebGPU test
+  execution cannot link without the external Dawn library; no browser pixels
+  or new hardware coverage is claimed. Compilation corrected the exact retained
+  C++ snapshot length to 206,657 after byte comparison, and the test-only null
+  backend's missing WebGPU trait cfg. The initial Wagyu check omitted its
+  product root; the corrected feature combination passes. Source/pipeline tests
+  pass 12, manifest tests pass 27, and inventory/structural correspondence are
+  current. No shader source changed or new performance result is claimed.
 - Validation at `dce52972`, integrated atop downstream `268b8015c0`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean, including the required CoreType trait-import correction. All 33 native
@@ -540,6 +552,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `9f47f07639009b16097985fe7b794c3fe09287dc` | Translate WebGPU pseudo-dynamic fill state as three retained pipeline passes, framebuffer/dynamic cache-key separation, per-pass stencil reference and color-write-disable vertex flags; enable the upstream dynamic-state capability. Shared dynamic stencil masks include the union of all three pass masks. Preserve the wasm32-unknown-unknown browser boundary; upstream private .rive_head implementation is not present or claimed imported. | — |
 | `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` | Dirty cursor drawables with Paint only when a blink phase changes effective caret visibility, preserving the blink clock and scrolled input position. Translate the upstream artboard didChange regression covering mid-phase, hide/show, even phases and selection-hidden carets. Public .rive_head metadata does not expose or establish any additional private implementation. | — |
 | `c73593c3a868f87b5dcd328432255db33e3e2266` | Translate clockwise-fill inkbleed outer-hairline subpasses, per-pass versus combined draw contents, signed pass sorting, expanded bounds, revised stroke index/AA-band order, GPU state/key routing and 17 specialization constants across supported backends. Regenerate current shader artifacts from pinned public source; preserve historical captures. Metal keeps upstream's unsupported depth/stencil rejection; D3D is unshipped. WebGPU's wgpucwib testing alias maps to the existing clockwise-inkbleed lane. The upstream-only retrofitcubictristrips GM has no existing Rust owner; no new Rust port of that handwritten GM or private implementation is claimed. | — |
 | `c4d2c6cbdeefd249a04eb7ade06cb7cf07a732f7` | Translate tools-only retirement of replaced source artboards while direct or copied instances remain alive, and cleanup on later replacement; translate thread-local advancing change-window inheritance and root-host bind tracking so newly made rows see pending fires without replaying earlier frames. Port both replacement and all three list-trigger regressions against the pinned public fixtures. Preserve safe Rust ownership and luaur; private editor invalidation/remount logic represented only by .rive_head is not claimed imported. | — |

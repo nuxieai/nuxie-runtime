@@ -63,12 +63,30 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.11 release candidate
+## Immutable v0.4.12 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.11 candidate carries the upstream-parity fixes, platform layout fit,
+The v0.4.12 candidate adds checked replacement of several values at once. The
+runtime checks a batch of value writes against the installed rules and groups
+as one replacement and applies every write or none, reporting the first
+refusing rule; single checked writes are unchanged. The value-rule script
+module exposes that batch beside `set` as `setAll(writes)` and adds
+`listValues(root, path, property)`, which reads one property from every item of
+a list in order. `nux_capi.h` documents both, including the 4096-write and
+8 MiB bounds. The candidate also carries four upstream mirrors: elastic scroll
+momentum now releases when it reaches or crosses an edge; shader admission,
+live shader asset lifecycle and integer gradient packing, with regenerated
+Vulkan SPIR-V; WebGPU pseudo dynamic pipeline state, a browser backend change
+outside this archive; and the deferred guest draw cleanup, accounted for
+without runtime behavior while guest execution stays parked. It still stops
+before the video properties layer. ABI v4 is retained with no symbol, struct or
+layout change; the export lists and layout oracle match v0.4.11. SDKs reach the
+new script functions by adopting this release, without source changes. Existing
+release size ceilings remain unchanged pending measurement.
+
+The inherited v0.4.11 release carries the upstream-parity fixes, platform layout fit,
 globals, answered markers, value rules, form state, native text-field reads,
 and retained list-row access and insertion. It stops before the video
 properties layer. ABI v4 is retained; hosts must use matching headers for the
@@ -133,9 +151,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.11 <full-source-sha>
-git push origin android-runtime-v0.4.11
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.11
+git tag android-runtime-v0.4.12 <full-source-sha>
+git push origin android-runtime-v0.4.12
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.12
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

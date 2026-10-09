@@ -553,3 +553,113 @@ fn quiet_scene_growth_impl(with_marker: bool) -> Vec<u8> {
     });
     b
 }
+
+/// Root (model 2) holds `items`: three Item (model 0) records x, y and z, each
+/// with a string `text` and a boolean `on` (x starts on). The reference
+/// properties `x`, `y` and `z` point at the same records as the list. `valid`
+/// and `items_errors` (ErrorEntry, model 1) receive a rule group's output, and
+/// `holes` lists x and then a null item.
+#[allow(dead_code, reason = "shared fixture module used by several test files")]
+pub fn item_list_fixture() -> Vec<u8> {
+    let mut b = b"RIVE".to_vec();
+    for v in [7, 0, 3593, 0] {
+        push_var_uint(&mut b, v);
+    }
+    object(&mut b, "Backboard", |_| {});
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Item")
+    });
+    object(&mut b, "ViewModelPropertyString", |b| {
+        string(b, "ViewModelPropertyString", "name", "text")
+    });
+    object(&mut b, "ViewModelPropertyBoolean", |b| {
+        string(b, "ViewModelPropertyBoolean", "name", "on")
+    });
+    for (text, on) in [("x", 1), ("y", 0), ("z", 0)] {
+        object(&mut b, "ViewModelInstance", |b| {
+            uint(b, "ViewModelInstance", "viewModelId", 0)
+        });
+        object(&mut b, "ViewModelInstanceString", |b| {
+            uint(b, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            string(b, "ViewModelInstanceString", "propertyValue", text);
+        });
+        object(&mut b, "ViewModelInstanceBoolean", |b| {
+            uint(b, "ViewModelInstanceBoolean", "viewModelPropertyId", 1);
+            uint(b, "ViewModelInstanceBoolean", "propertyValue", on);
+        });
+    }
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "ErrorEntry")
+    });
+    for name in ["code", "message"] {
+        object(&mut b, "ViewModelPropertyString", |b| {
+            string(b, "ViewModelPropertyString", "name", name)
+        });
+    }
+    object(&mut b, "ViewModelInstance", |b| {
+        uint(b, "ViewModelInstance", "viewModelId", 1)
+    });
+    for index in [0, 1] {
+        object(&mut b, "ViewModelInstanceString", |b| {
+            uint(b, "ViewModelInstanceString", "viewModelPropertyId", index)
+        });
+    }
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Root")
+    });
+    object(&mut b, "ViewModelPropertyList", |b| {
+        string(b, "ViewModelPropertyList", "name", "items")
+    }); // 0
+    for name in ["x", "y", "z"] {
+        object(&mut b, "ViewModelPropertyViewModel", |b| {
+            string(b, "ViewModelPropertyViewModel", "name", name);
+            uint(b, "ViewModelPropertyViewModel", "viewModelReferenceId", 0);
+        });
+    } // 1..3
+    object(&mut b, "ViewModelPropertyBoolean", |b| {
+        string(b, "ViewModelPropertyBoolean", "name", "valid")
+    }); // 4
+    for name in ["items_errors", "holes"] {
+        object(&mut b, "ViewModelPropertyList", |b| {
+            string(b, "ViewModelPropertyList", "name", name)
+        });
+    } // 5, 6
+    object(&mut b, "ViewModelInstance", |b| {
+        uint(b, "ViewModelInstance", "viewModelId", 2)
+    });
+    let list = |b: &mut Vec<u8>, property: u64, instances: &[u64]| {
+        object(b, "ViewModelInstanceList", |b| {
+            uint(b, "ViewModelInstanceList", "viewModelPropertyId", property)
+        });
+        for &instance in instances {
+            object(b, "ViewModelInstanceListItem", |b| {
+                uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
+                uint(
+                    b,
+                    "ViewModelInstanceListItem",
+                    "viewModelInstanceId",
+                    instance,
+                );
+            });
+        }
+    };
+    list(&mut b, 0, &[0, 1, 2]);
+    for instance in 0..3 {
+        object(&mut b, "ViewModelInstanceViewModel", |b| {
+            uint(
+                b,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                instance + 1,
+            );
+            uint(b, "ViewModelInstanceViewModel", "propertyValue", instance);
+        });
+    }
+    object(&mut b, "ViewModelInstanceBoolean", |b| {
+        uint(b, "ViewModelInstanceBoolean", "viewModelPropertyId", 4)
+    });
+    list(&mut b, 5, &[]);
+    // Instance 9 does not exist, so the second item stays null.
+    list(&mut b, 6, &[0, 9]);
+    b
+}

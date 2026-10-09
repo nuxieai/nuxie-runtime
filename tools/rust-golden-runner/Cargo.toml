@@ -19,5 +19,9 @@ nuxie-schema = { path = "../../crates/nuxie-schema" }
 nuxie-scripting = { path = "../../crates/nuxie-scripting", optional = true }
 sha2 = "0.10"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# proc_pid_rusage retired-instruction counts (RIVE_GOLDEN_INSTRUCTIONS).
+libc = "0.2"
+
 [dev-dependencies]
 nuxie-binary = { path = "../../crates/nuxie-binary", features = ["test-support"] }

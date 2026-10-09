@@ -836,6 +836,9 @@ fn run() -> Result<String> {
     }
     reset_coverage_profile_for_frame_loop_if_requested();
     reset_frame_loop_allocation_counter_if_requested();
+    let mut instructions = InstructionCounts::from_env();
+    let counting = instructions.enabled;
+    let frame_loop_start = if counting { process_instructions() } else { 0 };
     let started = Instant::now();
     let mut advance = Duration::ZERO;
     let mut input = Duration::ZERO;
@@ -846,7 +849,9 @@ fn run() -> Result<String> {
             while next_event < events.len() && events[next_event].seconds <= sample + TIME_EPSILON {
                 let event = &events[next_event];
                 let keep = timed_result(options.benchmark, &mut advance, || {
-                    scene.advance_to(event.seconds, &mut current)
+                    InstructionCounts::counted(counting, &mut instructions.advance, || {
+                        scene.advance_to(event.seconds, &mut current)
+                    })
                 })?;
                 if options.side_channel {
                     record_advance_side_channel(
@@ -857,24 +862,33 @@ fn run() -> Result<String> {
                     )?;
                 }
                 timed_result(options.benchmark, &mut input, || {
-                    scene.apply(event, &mut *factory, options.side_channel)
+                    InstructionCounts::counted(counting, &mut instructions.input, || {
+                        scene.apply(event, &mut *factory, options.side_channel)
+                    })
                 })?;
                 next_event += 1;
             }
             let keep = timed_result(options.benchmark, &mut advance, || {
-                scene.advance_to(sample, &mut current)
+                InstructionCounts::counted(counting, &mut instructions.advance, || {
+                    scene.advance_to(sample, &mut current)
+                })
             })?;
             if options.side_channel {
                 record_advance_side_channel(&mut *factory, scene.machine.as_ref(), sample, keep)?;
             }
             factory.add_sample(sample);
             timed(options.benchmark, &mut draw, || {
-                scene.artboard.draw(&mut *renderer)
+                InstructionCounts::counted(counting, &mut instructions.draw, || {
+                    scene.artboard.draw(&mut *renderer)
+                })
             });
             factory.add_frame();
         }
     }
     let elapsed = started.elapsed();
+    if counting {
+        instructions.report(process_instructions().saturating_sub(frame_loop_start));
+    }
     let allocations = stop_frame_loop_allocation_counter();
     finish_frame_loop_coverage_if_requested()?;
     if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
@@ -1006,6 +1020,68 @@ fn timed(enabled: bool, elapsed: &mut Duration, action: impl FnOnce()) {
     let start = Instant::now();
     action();
     *elapsed += start.elapsed();
+}
+
+/// Retired instructions for this process so far. Unlike wall time, host load
+/// barely moves it, so Rust/C++ work comparisons stay meaningful on a busy
+/// machine. Returns 0 where the counter is unavailable.
+fn process_instructions() -> u64 {
+    #[cfg(target_os = "macos")]
+    {
+        let mut info = std::mem::MaybeUninit::<libc::rusage_info_v4>::zeroed();
+        // SAFETY: RUSAGE_INFO_V4 makes proc_pid_rusage fill a rusage_info_v4.
+        let status = unsafe {
+            libc::proc_pid_rusage(
+                libc::getpid(),
+                libc::RUSAGE_INFO_V4,
+                info.as_mut_ptr().cast(),
+            )
+        };
+        if status == 0 {
+            // SAFETY: zero-initialized and filled by the successful call.
+            return unsafe { info.assume_init() }.ri_instructions;
+        }
+    }
+    0
+}
+
+/// Per-phase retired instructions, opt-in with RIVE_GOLDEN_INSTRUCTIONS=1 and
+/// reported on stderr so the benchmark report format is unchanged. Each read
+/// is a syscall inside the phase, so do not combine with timing runs.
+#[derive(Default)]
+struct InstructionCounts {
+    enabled: bool,
+    advance: u64,
+    input: u64,
+    draw: u64,
+}
+
+impl InstructionCounts {
+    fn from_env() -> Self {
+        Self {
+            enabled: env::var_os("RIVE_GOLDEN_INSTRUCTIONS").is_some(),
+            ..Self::default()
+        }
+    }
+
+    fn counted<T>(enabled: bool, phase: &mut u64, action: impl FnOnce() -> T) -> T {
+        if !enabled {
+            return action();
+        }
+        let start = process_instructions();
+        let result = action();
+        *phase += process_instructions().saturating_sub(start);
+        result
+    }
+
+    fn report(&self, frame_loop: u64) {
+        if self.enabled {
+            eprintln!(
+                "frame_loop_instructions={frame_loop}\nadvance_instructions={}\ninput_instructions={}\ndraw_instructions={}",
+                self.advance, self.input, self.draw
+            );
+        }
+    }
 }
 
 /// Output DTO only: all geometry is read from the already-solved native tree.

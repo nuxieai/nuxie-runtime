@@ -91,7 +91,10 @@ pub use nuxie_renderer::{RenderMode, RendererError};
 ))]
 pub use nuxie_renderer::{WebGl2Factory, WebGl2Frame};
 
+pub use nuxie_runtime::RuntimeCheckedValueBatchEntry;
+pub use nuxie_runtime::RuntimeCheckedValueBatchResult;
 pub use nuxie_runtime::RuntimeCheckedValueInput;
+pub use nuxie_runtime::RuntimeCheckedValueRefusal;
 pub use nuxie_runtime::RuntimeRuleGroup;
 pub use nuxie_runtime::RuntimeRuleGroupMember;
 pub use nuxie_runtime::RuntimeValueMarker;
@@ -103,6 +106,7 @@ pub use nuxie_runtime::RuntimeValueRuleKind;
 pub use nuxie_runtime::RuntimeValueRuleMode;
 pub use nuxie_runtime::RuntimeValueRuleReport;
 pub use nuxie_runtime::runtime_checked_value_write;
+pub use nuxie_runtime::runtime_checked_value_write_batch;
 pub use nuxie_runtime::{
     ArtboardInstance, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
     AudioSound, AudioSource, LinearAnimationInstance, RuntimeAudioAssetOwners, RuntimeBlobAsset,
@@ -127,6 +131,10 @@ mod native_file;
 pub use import_limits::FileImportLimits;
 pub use native_file::import_native;
 
+#[cfg(feature = "scripting")]
+mod checked_value_script;
+#[cfg(feature = "scripting")]
+pub use checked_value_script::{script_checked_value_batch_entries, script_list_property_values};
 #[cfg(feature = "scripting")]
 mod script_import;
 #[cfg(feature = "scripting")]

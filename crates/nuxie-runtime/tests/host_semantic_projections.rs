@@ -231,14 +231,35 @@ fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
                 .is_some_and(|part| part.local_id as usize == local_id)
         })
         .expect("native input belongs to the host geometry catalogue");
-    let point = field.bounds.center();
-    let has_field = |artboard: &mut ArtboardInstance| {
+    // 0dd067f1 makes the scroll viewport the field. This fixture's text
+    // extends below its 50pt viewport, so press at the viewport's center; the
+    // catalogued text center lies outside the field.
+    let viewport = native
+        .with_artboard(|artboard| {
+            artboard.objects().iter().flatten().find_map(|object| {
+                object
+                    .with(|object| object.as_scroll_constraint()?.viewport_handle())
+                    .flatten()
+            })
+        })
+        .expect("fixture scroll viewport");
+    let point = viewport
+        .with(|viewport| {
+            let viewport = viewport.as_layout_component().expect("layout viewport");
+            let center = *viewport.world_transform() * viewport.local_bounds().center();
+            Vec2D::new(center.x, center.y)
+        })
+        .expect("live viewport");
+    assert!(field.bounds.contains(point));
+    let hits_field = |artboard: &mut ArtboardInstance, point: Vec2D| {
         artboard
             .hit_test_segments_with_bounds(point)
             .iter()
             .any(|hit| hit.path == field.path)
     };
+    let has_field = |artboard: &mut ArtboardInstance| hits_field(artboard, point);
     assert!(has_field(&mut artboard));
+    assert!(!hits_field(&mut artboard, field.bounds.center()));
     assert!(
         !artboard
             .hit_test_segments_with_bounds(Vec2D::new(-1.0e6, -1.0e6))
@@ -276,8 +297,9 @@ fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
     artboard.advance(0.0).unwrap();
     assert!(has_field(&mut artboard));
 
-    // Overflowing text retains geometry but must obey the same ancestor clips
-    // as rendering. Turning off those clips exposes the same native target.
+    // Overflowing text retains geometry, but the field is its viewport: a
+    // press on overflow below it misses whether or not the ancestor layouts
+    // clip, while the viewport itself stays a target under those clips.
     assert!(CoreRegistry::set_string_handle(
         &input,
         817,
@@ -291,16 +313,12 @@ fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
         .unwrap()
         .bounds;
     let overflow_point = Vec2D::new(overflow.center().x, overflow.max_y - 2.0);
-    let hit_overflow = |artboard: &mut ArtboardInstance| {
-        artboard
-            .hit_test_segments_with_bounds(overflow_point)
-            .iter()
-            .any(|hit| hit.path == field.path)
-    };
+    let hit_overflow = |artboard: &mut ArtboardInstance| hits_field(artboard, overflow_point);
     assert!(
-        hit_overflow(&mut artboard),
-        "the upstream fixture starts with clipping disabled"
+        !hit_overflow(&mut artboard),
+        "unclipped overflow below the viewport is not the field"
     );
+    assert!(has_field(&mut artboard));
     let mut parent = input
         .with(|object| object.component_parent_handle())
         .flatten();
@@ -324,19 +342,25 @@ fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
         !hit_overflow(&mut artboard),
         "overflow outside the viewport is clipped"
     );
+    assert!(
+        has_field(&mut artboard),
+        "the clipped viewport stays a target"
+    );
     for owner in &clipped {
         assert!(CoreRegistry::set_bool_handle(owner, clip_key, false));
     }
     artboard.advance(0.0).unwrap();
     assert!(
-        hit_overflow(&mut artboard),
-        "disabling clipping exposes the same native target"
+        !hit_overflow(&mut artboard),
+        "disabling clipping does not widen the field past its viewport"
     );
+    assert!(has_field(&mut artboard));
     for owner in clipped {
         assert!(CoreRegistry::set_bool_handle(&owner, clip_key, true));
     }
     artboard.advance(0.0).unwrap();
     assert!(!hit_overflow(&mut artboard));
+    assert!(has_field(&mut artboard));
 }
 
 fn occurrence_identity(handle: &nuxie_runtime::CoreHandle) -> u64 {

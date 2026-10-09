@@ -1509,16 +1509,17 @@ The public-boundary tests are in `host_viewmodel/checked_batch_tests.rs`, includ
 a three-item, at-most-one refusal that leaves every value unchanged.
 Tracking: [UNIV-4125](https://universe.basis.dev/issue/UNIV-4125).
 
-Scripts reach the batch through three facade functions behind the `scripting`
-feature, so every host shares their checks and error texts.
+Scripts use three facade functions behind the `scripting` feature, so every
+host shares their checks and error texts; only the first reaches the batch.
 `script_checked_value_write_batch` runs a whole script batch: it reads a Luau
 list of `{root, path, value}` tables (keys exactly 1..n, at most 4096, scalar
 or absent values) before any write, requires the step's rule operation, runs
 the batch and returns the applied flag and the first refusing rule's code.
 While it reads, it adds each root, path and text to a running total and
 raises once the total passes the batch's byte bound
-(`RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES`, 8 MiB), so a string shared by many
-writes is not copied past the bound.
+(`RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES`, 8 MiB). Copying stops at the first
+string that passes the bound, so a string shared by many writes is copied at
+most once past it.
 `script_list_property_values` reads one property from every item of a list in
 order through the null-preserving item accessors, so a null item raises
 instead of being skipped; its root, path and property share the same 8 MiB

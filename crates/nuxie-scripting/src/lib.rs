@@ -31,3 +31,8 @@ pub mod vm;
 
 #[cfg(feature = "luau")]
 pub use vm::{BytecodeValidationError, validate_executable_luau_bytecode};
+
+/// The Luau handle types a host extension names when it reads script
+/// arguments or builds return values (`vm::ScriptVm::lua` returns this `Lua`).
+#[cfg(feature = "luau")]
+pub use luaur_rt::{Lua, Value};

@@ -557,8 +557,9 @@ fn quiet_scene_growth_impl(with_marker: bool) -> Vec<u8> {
 /// Root (model 2) holds `items`: three Item (model 0) records x, y and z, each
 /// with a string `text` and a boolean `on` (x starts on). The reference
 /// properties `x`, `y` and `z` point at the same records as the list. `valid`
-/// and `items_errors` (ErrorEntry, model 1) receive a rule group's output, and
-/// `holes` lists x and then a null item.
+/// (false at first) and `items_errors` (ErrorEntry, model 1) receive a rule
+/// group's output, `holes` lists x and then a null item, and `shuffled` lists
+/// the same records in the order z, x, y.
 #[allow(dead_code, reason = "shared fixture module used by several test files")]
 pub fn item_list_fixture() -> Vec<u8> {
     let mut b = b"RIVE".to_vec();
@@ -619,11 +620,11 @@ pub fn item_list_fixture() -> Vec<u8> {
     object(&mut b, "ViewModelPropertyBoolean", |b| {
         string(b, "ViewModelPropertyBoolean", "name", "valid")
     }); // 4
-    for name in ["items_errors", "holes"] {
+    for name in ["items_errors", "holes", "shuffled"] {
         object(&mut b, "ViewModelPropertyList", |b| {
             string(b, "ViewModelPropertyList", "name", name)
         });
-    } // 5, 6
+    } // 5, 6, 7
     object(&mut b, "ViewModelInstance", |b| {
         uint(b, "ViewModelInstance", "viewModelId", 2)
     });
@@ -661,5 +662,6 @@ pub fn item_list_fixture() -> Vec<u8> {
     list(&mut b, 5, &[]);
     // Instance 9 does not exist, so the second item stays null.
     list(&mut b, 6, &[0, 9]);
+    list(&mut b, 7, &[2, 0, 1]);
     b
 }

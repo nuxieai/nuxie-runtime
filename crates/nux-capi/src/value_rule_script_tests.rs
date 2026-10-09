@@ -492,6 +492,60 @@ fn script_set_all_rejects_malformed_writes_before_any_write() {
 }
 
 #[test]
+fn script_set_all_raises_batch_errors_after_a_valid_first_write() {
+    let step = Step::new(true);
+    for (call, expected) in [
+        (
+            "bridge.setAll({
+                {root = '', path = 'x/on', value = false},
+                {root = '', path = 'nope/on', value = true},
+            })",
+            "checked value batch: NotFound",
+        ),
+        (
+            "bridge.setAll({
+                {root = '', path = 'x/on', value = false},
+                {root = '', path = 'x/on', value = true},
+            })",
+            "checked value batch: InvalidArgument",
+        ),
+        // 4096 writes pass the list bound and reach the batch, which refuses
+        // the repeated property.
+        (
+            "bridge.setAll((function()
+                local writes = {}
+                for index = 1, 4096 do
+                    writes[index] = {root = '', path = 'y/on', value = true}
+                end
+                return writes
+            end)())",
+            "checked value batch: InvalidArgument",
+        ),
+    ] {
+        let error = step.call(call).unwrap_err();
+        assert!(error.contains(expected), "{call}: {error}");
+        assert!(!error.contains("exceed"), "{call}: {error}");
+        assert_eq!(step.flags(), [true, false, false], "{call}");
+        assert_eq!(step.write_count(), 0, "{call}");
+        assert!(step.operation().reports().is_empty(), "{call}");
+    }
+}
+
+#[test]
+fn script_set_all_raises_while_the_rule_operation_is_borrowed() {
+    let step = Step::new(true);
+    let busy = step.operation();
+    let error = step
+        .call("bridge.setAll({{root = '', path = 'y/on', value = true}})")
+        .unwrap_err();
+    assert!(error.contains("value rule operation is active"), "{error}");
+    assert!(busy.reports().is_empty());
+    drop(busy);
+    assert_eq!(step.flags(), [true, false, false]);
+    assert_eq!(step.write_count(), 0);
+}
+
+#[test]
 fn script_set_all_requires_the_step_operation() {
     let step = Step::new(false);
     let error = step

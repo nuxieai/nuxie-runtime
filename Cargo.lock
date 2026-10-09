@@ -1835,6 +1835,7 @@ name = "rust-golden-runner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "nuxie-binary",
  "nuxie-render-api",
  "nuxie-runtime",

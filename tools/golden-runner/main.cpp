@@ -61,6 +61,11 @@
 #include <string>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <libproc.h>
+#include <unistd.h>
+#endif
+
 #if defined(RIVE_GOLDEN_COVERAGE_TRACE)
 namespace
 {
@@ -1776,6 +1781,57 @@ double durationMillis(std::chrono::steady_clock::duration duration)
     return std::chrono::duration<double, std::milli>(duration).count();
 }
 
+// Retired instructions for this process so far. Unlike wall time, host load
+// barely moves it, so Rust/C++ work comparisons stay meaningful on a busy
+// machine. Returns 0 where the counter is unavailable.
+uint64_t processInstructions()
+{
+#if defined(__APPLE__)
+    rusage_info_v4 info{};
+    if (proc_pid_rusage(getpid(),
+                        RUSAGE_INFO_V4,
+                        reinterpret_cast<rusage_info_t*>(&info)) == 0)
+    {
+        return info.ri_instructions;
+    }
+#endif
+    return 0;
+}
+
+// Per-phase retired instructions, opt-in with RIVE_GOLDEN_INSTRUCTIONS=1 and
+// reported on stderr so the benchmark report format is unchanged. Each read is
+// a syscall inside the phase, so do not combine with timing runs.
+struct InstructionCounts
+{
+    bool enabled = std::getenv("RIVE_GOLDEN_INSTRUCTIONS") != nullptr;
+    uint64_t advance = 0;
+    uint64_t input = 0;
+    uint64_t draw = 0;
+
+    template <typename Action> void counted(uint64_t& phase, Action&& action)
+    {
+        if (!enabled)
+        {
+            action();
+            return;
+        }
+        const uint64_t start = processInstructions();
+        action();
+        phase += processInstructions() - start;
+    }
+
+    void report(uint64_t frameLoop) const
+    {
+        if (enabled)
+        {
+            std::cerr << "frame_loop_instructions=" << frameLoop << "\n"
+                      << "advance_instructions=" << advance << "\n"
+                      << "input_instructions=" << input << "\n"
+                      << "draw_instructions=" << draw << "\n";
+        }
+    }
+};
+
 struct BenchmarkTimings
 {
     std::chrono::steady_clock::duration elapsed{};
@@ -1951,18 +2007,21 @@ int runFile(const Options& options)
     }
     resetCoverageProfileForFrameLoopIfRequested();
     resetFrameLoopAllocationCounterIfRequested();
+    InstructionCounts instructions;
+    const uint64_t frameLoopInstructionsStart =
+        instructions.enabled ? processInstructions() : 0;
     const auto benchmarkStart = std::chrono::steady_clock::now();
     std::chrono::steady_clock::duration advanceElapsed{};
     std::chrono::steady_clock::duration inputElapsed{};
     std::chrono::steady_clock::duration drawElapsed{};
-    auto timedStage = [&](auto& elapsed, auto&& action) {
+    auto timedStage = [&](auto& elapsed, uint64_t& phase, auto&& action) {
         if (!options.benchmark)
         {
-            action();
+            instructions.counted(phase, action);
             return;
         }
         const auto stageStart = std::chrono::steady_clock::now();
-        action();
+        instructions.counted(phase, action);
         elapsed += std::chrono::steady_clock::now() - stageStart;
     };
     size_t nextInput = 0;
@@ -1993,7 +2052,7 @@ int runFile(const Options& options)
                 const float eventSeconds =
                     useInput ? inputEvents[nextInput].seconds
                              : viewModelEvents[nextViewModel].seconds;
-                timedStage(advanceElapsed, [&] {
+                timedStage(advanceElapsed, instructions.advance, [&] {
                     const bool keepGoing =
                         advanceTo(scene, eventSeconds, currentSeconds);
                     if (options.sideChannel && !options.benchmark)
@@ -2004,7 +2063,7 @@ int runFile(const Options& options)
                                                  keepGoing);
                     }
                 });
-                timedStage(inputElapsed, [&] {
+                timedStage(inputElapsed, instructions.input, [&] {
                     if (!useInput)
                     {
                         applyViewModelEvent(recordingFactory,
@@ -2065,7 +2124,7 @@ int runFile(const Options& options)
                 }
             }
 
-            timedStage(advanceElapsed, [&] {
+            timedStage(advanceElapsed, instructions.advance, [&] {
                 const bool keepGoing =
                     advanceTo(scene, sampleSeconds, currentSeconds);
                 if (options.sideChannel && !options.benchmark)
@@ -2080,7 +2139,9 @@ int runFile(const Options& options)
             {
                 recordingFactory.addSample(sampleSeconds);
             }
-            timedStage(drawElapsed, [&] { scene->draw(renderer.get()); });
+            timedStage(drawElapsed, instructions.draw, [&] {
+                scene->draw(renderer.get());
+            });
             if (!options.benchmark)
             {
                 recordingFactory.addFrame();
@@ -2089,6 +2150,11 @@ int runFile(const Options& options)
     }
     const auto benchmarkElapsed =
         std::chrono::steady_clock::now() - benchmarkStart;
+    if (instructions.enabled)
+    {
+        instructions.report(processInstructions() -
+                            frameLoopInstructionsStart);
+    }
     const uint64_t frameLoopAllocations = stopFrameLoopAllocationCounter();
     finishFrameLoopCoverageIfRequested();
     if (std::getenv("RIVE_GOLDEN_ALLOCATION_COUNTER") != nullptr)

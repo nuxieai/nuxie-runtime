@@ -88,7 +88,7 @@ fn setup() -> (
 }
 
 #[test]
-fn checked_batch_refuses_whole_several_choice_replacement_with_native_message() {
+fn checked_batch_refuses_whole_replacement_with_native_message() {
     let (policy, root, options, roots, _factory) = setup();
     let transaction =
         RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096).unwrap();

@@ -551,6 +551,32 @@ fn script_set_all_raises_while_the_rule_operation_is_borrowed() {
 }
 
 #[test]
+fn script_calls_outside_a_step_say_whether_they_read_or_write() {
+    let step = Step::new(true);
+    let active = ACTIVE.with(|slot| slot.replace(None));
+    let read = step.list_values("'', 'items', 'text'").unwrap_err();
+    let batch = step
+        .call("bridge.setAll({{root = '', path = 'y/on', value = true}})")
+        .unwrap_err();
+    let single = step.call("bridge.set('', 'y/on', true)").unwrap_err();
+    ACTIVE.with(|slot| *slot.borrow_mut() = active);
+    assert!(
+        read.contains("checked reads require an active step"),
+        "{read}"
+    );
+    assert!(
+        batch.contains("checked writes require an active step"),
+        "{batch}"
+    );
+    assert!(
+        single.contains("checked writes require an active step"),
+        "{single}"
+    );
+    assert_eq!(step.flags(), [true, false, false]);
+    assert_eq!(step.write_count(), 0);
+}
+
+#[test]
 fn script_set_all_requires_the_step_operation() {
     let step = Step::new(false);
     let error = step

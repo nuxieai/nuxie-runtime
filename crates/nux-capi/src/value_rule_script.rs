@@ -79,22 +79,13 @@ impl nuxie::ScriptHostExtension for Extension {
         let file = Rc::clone(&self.file);
         let set_all = lua
             .create_function(move |_, writes| {
-                let entries = nuxie::script_checked_value_batch_entries(writes)?;
                 with_step(&file, |context, policy| {
-                    let mut operation = context
-                        .operation
-                        .as_ref()
-                        .ok_or("checked batches require a value rule operation")?
-                        .try_borrow_mut()
-                        .map_err(|_| "value rule operation is active")?;
-                    nuxie::runtime_checked_value_write_batch(
+                    nuxie::script_checked_value_write_batch(
                         policy,
-                        &mut operation,
+                        context.operation.as_deref(),
                         &context.roots,
-                        entries,
+                        writes,
                     )
-                    .map(|result| (result.applied, result.refusal.map(|refusal| refusal.code)))
-                    .map_err(|error| format!("checked value batch: {error:?}"))
                 })
                 .map_err(Into::into)
             })

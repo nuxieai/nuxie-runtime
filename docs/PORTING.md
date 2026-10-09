@@ -1485,19 +1485,25 @@ advance, or draw behavior.
 ### Atomic checked host replacements
 
 `runtime_checked_value_write_batch` is an additive host API for one authored
-answer replacement inside an existing policy operation, graph transaction and
-change capture. It resolves distinct input properties (including paired markers),
-checks the complete candidate values against the installed native rules, and
-applies all candidates or none. Ordinary file setters and listener behavior do
-not enter this path.
+answer replacement inside an existing policy operation, graph transaction
+(`RuntimeOwnedViewModelGraphTransaction`, whose checkpoint can roll back every
+batch write) and change capture. It resolves distinct input properties (including
+paired markers), checks the complete candidate values against the installed
+native rules, and applies all candidates or none. Ordinary file setters and
+listener behavior do not enter this path.
 
 A refusal returns the first rule in input order and installed table order, with
-its native code and message. Reports and group refusal metadata remain on the
-active operation; earlier independent writes survive. Accepted replacements keep
-marking failures as native reports and errors. Their journal rows are admitted
-as one prechecked set; subsequent dependency writes still use normal policy
-replay. Hosts settle bindings, markers and groups and commit before publishing,
-using the same outer transaction contract as checked scalar writes.
+its native code and message. Each report names the entry that breaks its rule
+when written alone over the values before the batch (else the first entry that
+changes its value), so a deselect that only accompanies the breaking selections
+is not named. A refusal blocks only the paired markers of entries its rules
+refuse. Reports and group refusal metadata remain on the active operation;
+earlier independent writes survive. Accepted replacements keep marking failures
+as native reports and errors. Their journal rows are admitted as one prechecked
+set straight after the replayed journal, then written through the properties
+resolved during validation, so an accepted batch cannot stop part way;
+subsequent dependency writes still use normal policy replay. Hosts settle
+bindings, markers and groups and commit before publishing.
 
 The public-boundary tests are in `host_viewmodel/checked_batch_tests.rs`, including
 the milestone 16 three-option, maximum-one refusal and unchanged selection.

@@ -3,7 +3,10 @@
     reason = "literal public-boundary fixture assertions"
 )]
 use super::*;
-use crate::{File, RuntimeFactoryHandle, RuntimeOwnedViewModelGraphTransaction};
+use crate::{
+    File, RuntimeFactoryHandle, RuntimeOwnedViewModelGraphTransaction,
+    RuntimeOwnedViewModelTransaction,
+};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 #[path = "../../tests/support/value_policy_fixture.rs"]
 mod fixture;
@@ -155,6 +158,15 @@ fn checked_batch_refuses_whole_several_choice_replacement_with_native_message() 
     );
     assert_eq!(operation.reports().len(), 1);
     assert!(operation.reports()[0].refused);
+    // The report names the selection that breaks the maximum, not the deselect.
+    assert_eq!(
+        operation.reports()[0].owner_instance_identity,
+        options[1].instance_identity()
+    );
+    assert_eq!(
+        operation.reports()[0].attempted,
+        RuntimeViewModelChangeValue::Boolean(true)
+    );
     let changes = RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
         &operation.retained_roots(),
         capture,
@@ -574,5 +586,163 @@ fn checked_batch_invalid_or_over_budget_candidates_leave_values_and_journal_usab
     );
     assert_eq!(root.resolve_change_capture(capture).unwrap().len(), 1);
     assert_eq!(root.borrow().number_value_by_property_name("n"), Some(8.0));
+    transaction.commit();
+}
+
+#[test]
+fn checked_batch_refusal_blocks_only_the_markers_of_refused_entries() {
+    let (mut policy, root, _, roots, _factory) = setup();
+    numeric_rules(&mut policy, RuntimeValueRuleMode::Refuse);
+    let transaction =
+        RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(std::slice::from_ref(&root)).unwrap();
+    let result = runtime_checked_value_write_batch(
+        &policy,
+        &mut operation,
+        &roots,
+        vec![
+            entry("form", "n", RuntimeCheckedValueInput::Number(5.0)),
+            entry(
+                "form",
+                "text",
+                RuntimeCheckedValueInput::Text(b"abc".to_vec()),
+            ),
+        ],
+    )
+    .unwrap();
+    assert_eq!(result.refusal.unwrap().code, "length");
+    // Only the text breaks a rule, so only the text is reported.
+    assert_eq!(
+        operation
+            .reports()
+            .iter()
+            .map(|r| (r.property_index, r.rule_index, r.refused))
+            .collect::<Vec<_>>(),
+        vec![(6, 1, true)]
+    );
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+    // The text's refusal does not block the number's marker.
+    assert_eq!(
+        runtime_checked_value_write_batch(
+            &policy,
+            &mut operation,
+            &roots,
+            vec![entry(
+                "form",
+                "n_set",
+                RuntimeCheckedValueInput::Boolean(true)
+            )]
+        )
+        .unwrap(),
+        RuntimeCheckedValueBatchResult {
+            applied: true,
+            refusal: None
+        }
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+    transaction.commit();
+}
+
+fn foreign_root() -> (
+    RuntimeOwnedViewModelHandle,
+    PersistentFactory<RecordingFactory>,
+) {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::group_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 0, 0).unwrap(),
+    );
+    (root, factory)
+}
+
+#[test]
+fn checked_batch_refuses_out_of_scope_or_oversized_batches_before_any_write() {
+    let (policy, root, _, roots, _factory) = setup();
+    let (foreign, _foreign_factory) = foreign_root();
+    let mut with_foreign = roots.clone();
+    with_foreign.insert("foreign".into(), foreign);
+    let five = || vec![entry("form", "n", RuntimeCheckedValueInput::Number(5.0))];
+    let unchanged = || assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+
+    // No graph transaction: a capture and operation alone are not enough.
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(std::slice::from_ref(&root)).unwrap();
+    assert_eq!(
+        runtime_checked_value_write_batch(&policy, &mut operation, &roots, five()).unwrap_err(),
+        RuntimeValuePolicyError::BorrowConflict
+    );
+    // A per-owner host transaction cannot restore batch writes it never captured.
+    let host = RuntimeOwnedViewModelTransaction::begin().unwrap();
+    assert_eq!(
+        runtime_checked_value_write_batch(&policy, &mut operation, &roots, five()).unwrap_err(),
+        RuntimeValuePolicyError::BorrowConflict
+    );
+    drop(host);
+    unchanged();
+    assert_eq!(capture.write_count().unwrap(), 0);
+    drop(capture);
+
+    // A graph transaction with no change capture.
+    let transaction =
+        RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096).unwrap();
+    assert_eq!(
+        runtime_checked_value_write_batch(&policy, &mut operation, &roots, five()).unwrap_err(),
+        RuntimeValuePolicyError::BorrowConflict
+    );
+    unchanged();
+
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    for (roots, entries, expected) in [
+        (
+            &roots,
+            (0..4097)
+                .map(|_| entry("form", "n", RuntimeCheckedValueInput::Number(5.0)))
+                .collect::<Vec<_>>(),
+            RuntimeValuePolicyError::LimitExceeded,
+        ),
+        (
+            &roots,
+            vec![entry(
+                "form",
+                "text",
+                RuntimeCheckedValueInput::Text(vec![b'a'; 8 * 1024 * 1024]),
+            )],
+            RuntimeValuePolicyError::LimitExceeded,
+        ),
+        (
+            &with_foreign,
+            vec![entry("foreign", "n", RuntimeCheckedValueInput::Number(5.0))],
+            RuntimeValuePolicyError::InvalidArgument,
+        ),
+    ] {
+        assert_eq!(
+            runtime_checked_value_write_batch(&policy, &mut operation, roots, entries).unwrap_err(),
+            expected
+        );
+        unchanged();
+        assert_eq!(capture.write_count().unwrap(), 0);
+        assert!(operation.reports().is_empty());
+    }
+    // The same operation still accepts an in-scope batch.
+    assert!(
+        runtime_checked_value_write_batch(&policy, &mut operation, &roots, five())
+            .unwrap()
+            .applied
+    );
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(5.0));
     transaction.commit();
 }

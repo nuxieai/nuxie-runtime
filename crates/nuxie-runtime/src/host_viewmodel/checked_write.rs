@@ -123,7 +123,7 @@ pub(super) fn checked_candidate(
     Ok((candidate, marker))
 }
 
-pub(super) fn write_native(
+fn write_native(
     policy: &RuntimeValuePolicy,
     root: &RuntimeOwnedViewModelHandle,
     path: &str,

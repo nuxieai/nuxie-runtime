@@ -10,6 +10,9 @@ use crate::mechanical_port::source::viewmodel::{
 
 type Key = (u64, usize);
 
+#[path = "value_policy_batch.rs"]
+mod batch;
+
 #[path = "value_policy_groups.rs"]
 pub(super) mod groups;
 pub use groups::{RuntimeRuleGroup, RuntimeRuleGroupMember};
@@ -398,25 +401,7 @@ impl RuntimeValuePolicyOperation {
                             .or_default()
                             .insert(rule_index);
                     }
-                    if self.reports.len() == 4_096 {
-                        return Err(RuntimeValuePolicyError::LimitExceeded);
-                    }
-                    let payload_bytes = match &change.value {
-                        RuntimeViewModelChangeValue::String(value) => value.len(),
-                        RuntimeViewModelChangeValue::List(items) => {
-                            items.len().saturating_mul(std::mem::size_of::<u64>())
-                        }
-                        _ => 0,
-                    };
-                    self.report_bytes = self
-                        .report_bytes
-                        .checked_add(payload_bytes)
-                        .and_then(|bytes| {
-                            bytes.checked_add(std::mem::size_of::<RuntimeValueRuleReport>())
-                        })
-                        .filter(|bytes| *bytes <= 8 * 1024 * 1024)
-                        .ok_or(RuntimeValuePolicyError::LimitExceeded)?;
-                    self.reports.push(RuntimeValueRuleReport {
+                    self.push_report(RuntimeValueRuleReport {
                         owner_instance_identity: key.0,
                         property_index: key.1,
                         rule_index,
@@ -424,7 +409,7 @@ impl RuntimeValuePolicyOperation {
                         rule_property_index: target.1,
                         refused: refusal,
                         attempted: change.value.clone(),
-                    });
+                    })?;
                 }
             }
             if let (Some(marker_key), Some(previous_marker)) =
@@ -496,6 +481,30 @@ impl RuntimeValuePolicyOperation {
             .ok_or(RuntimeValuePolicyError::InvalidArgument)?;
         self.checked_suppressed.clone_from(&self.suppressed);
         Ok(changed)
+    }
+
+    fn push_report(
+        &mut self,
+        report: RuntimeValueRuleReport,
+    ) -> Result<(), RuntimeValuePolicyError> {
+        if self.reports.len() == 4_096 {
+            return Err(RuntimeValuePolicyError::LimitExceeded);
+        }
+        let payload_bytes = match &report.attempted {
+            RuntimeViewModelChangeValue::String(value) => value.len(),
+            RuntimeViewModelChangeValue::List(items) => {
+                items.len().saturating_mul(std::mem::size_of::<u64>())
+            }
+            _ => 0,
+        };
+        self.report_bytes = self
+            .report_bytes
+            .checked_add(payload_bytes)
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<RuntimeValueRuleReport>()))
+            .filter(|bytes| *bytes <= 8 * 1024 * 1024)
+            .ok_or(RuntimeValuePolicyError::LimitExceeded)?;
+        self.reports.push(report);
+        Ok(())
     }
 
     fn affected_rules(

@@ -1,6 +1,8 @@
 //! Live SRIV replays for every Wave B1 case already represented by the pinned corpus.
 
-use silver_corpus::{Execution, compare_sriv, parse_sriv, read_manifest, resolve_expected};
+use silver_corpus::{
+    Difference, Execution, Status, compare_sriv, parse_sriv, read_manifest, resolve_expected,
+};
 use std::path::{Path, PathBuf};
 
 fn workspace_root() -> PathBuf {
@@ -18,6 +20,29 @@ fn runtime_root() -> PathBuf {
 }
 
 fn replay(id: &str) {
+    let (_, result) = replay_classified(id);
+    result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
+}
+
+/// A stored `--no_ffp_contract` silver that the contracted production lane
+/// reproduces only up to its recorded first difference. The strict-fp lane
+/// mirrors the producer's arithmetic and must replay it exactly.
+fn replay_ffp_contract_divergence(id: &str, expected: &str) {
+    let (status, result) = replay_classified(id);
+    assert_eq!(
+        status,
+        Status::Diverges,
+        "{id} should be classified diverges"
+    );
+    if cfg!(feature = "strict-fp") {
+        result.unwrap_or_else(|difference| panic!("{id} under strict-fp: {difference}"));
+    } else {
+        let difference = result.expect_err("contracted divergence should remain present");
+        assert_eq!(difference.to_string(), expected);
+    }
+}
+
+fn replay_classified(id: &str) -> (Status, Result<(), Difference>) {
     let runtime = runtime_root();
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))
         .expect("read silver corpus manifest");
@@ -35,7 +60,7 @@ fn replay(id: &str) {
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
     let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    compare_sriv(&expected, &actual).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    (case.status, compare_sriv(&expected, &actual))
 }
 
 #[test]
@@ -105,7 +130,10 @@ fn wave_b1_data_converter_interpolator_reset() {
 
 #[test]
 fn wave_b1_data_converter_to_number() {
-    replay("data_converter_to_number");
+    replay_ffp_contract_divergence(
+        "data_converter_to_number",
+        "frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443",
+    );
 }
 
 #[test]

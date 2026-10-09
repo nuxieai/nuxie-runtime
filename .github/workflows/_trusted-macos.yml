@@ -159,6 +159,13 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make silver-corpus-validate
 
+      # Independent verdict: Silver cases recorded as diverging only because the
+      # default lane contracts must still replay exactly under strict-fp.
+      - name: Run strict-fp silver replays
+        if: matrix.lane == 'silver' && !cancelled()
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make silver-corpus-strict-fp
+
       - name: Upload lane differential fingerprints
         if: always()
         uses: actions/upload-artifact@v4

@@ -7,18 +7,27 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9f47f07639009b16097985fe7b794c3fe09287dc`
+- LAST_SYNCED_SHA: `71713c9f086723a44df580db4678a3ae5d68c6c2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6f3510dcc545bc8b2a78f1004a06929d17cd022b` (refreshed 2026-10-09 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 213 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (235 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 214 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (236 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `71713c9f`, integrated atop downstream `cb39d02fc5`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All 27 native scroll-input and four velocity tests pass with the
+  upstream wall-clock semantics, including both new edge-release cases.
+  Runtime compilation passes for wasm32-unknown-unknown. Source/pipeline tests
+  pass 12 and manifest tests pass 27. The in-range velocity assertion changes
+  from zero to nonpositive exactly as upstream does; no locally invented
+  tolerance or event timing was introduced. No new hardware, browser pixels
+  or broad Golden/Silver run is claimed.
 - Validation at `9f47f076`, integrated atop downstream `236a383cde`:
   independent source and subsequent Rust-integration reviews, including
   correction rereviews, are clean. Both browser products compile for
@@ -552,6 +561,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `71713c9f086723a44df580db4678a3ae5d68c6c2` | Track elastic platform momentum through dragView while it can stretch and consume the delta; release at tracked coast speed when crossing or landing exactly on an edge. Preserve primed-clock sampling and absorption of the remaining tail. Translate both edge regressions and the upstream velocity expectation update. Private .rive_head contents are absent and not claimed. | — |
 | `9f47f07639009b16097985fe7b794c3fe09287dc` | Translate WebGPU pseudo-dynamic fill state as three retained pipeline passes, framebuffer/dynamic cache-key separation, per-pass stencil reference and color-write-disable vertex flags; enable the upstream dynamic-state capability. Shared dynamic stencil masks include the union of all three pass masks. Preserve the wasm32-unknown-unknown browser boundary; upstream private .rive_head implementation is not present or claimed imported. | — |
 | `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` | Dirty cursor drawables with Paint only when a blink phase changes effective caret visibility, preserving the blink clock and scrolled input position. Translate the upstream artboard didChange regression covering mid-phase, hide/show, even phases and selection-hidden carets. Public .rive_head metadata does not expose or establish any additional private implementation. | — |
 | `c73593c3a868f87b5dcd328432255db33e3e2266` | Translate clockwise-fill inkbleed outer-hairline subpasses, per-pass versus combined draw contents, signed pass sorting, expanded bounds, revised stroke index/AA-band order, GPU state/key routing and 17 specialization constants across supported backends. Regenerate current shader artifacts from pinned public source; preserve historical captures. Metal keeps upstream's unsupported depth/stencil rejection; D3D is unshipped. WebGPU's wgpucwib testing alias maps to the existing clockwise-inkbleed lane. The upstream-only retrofitcubictristrips GM has no existing Rust owner; no new Rust port of that handwritten GM or private implementation is claimed. | — |

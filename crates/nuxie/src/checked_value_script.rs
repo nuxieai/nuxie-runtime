@@ -1,12 +1,15 @@
-//! Script readers shared by hosts that offer checked batch writes and list
+//! Script functions shared by hosts that offer checked batch writes and list
 //! reads to Luau. A batch is a list of addressed scalar writes; a list read
 //! returns one property from every item. Hosts keep their own step context
-//! and run the batch with `runtime_checked_value_write_batch`.
+//! (roots, policy and rule operation) and call these with it, so every host
+//! runs the same checks and raises the same texts.
 use nuxie_runtime::{
     RuntimeCheckedValueBatchEntry, RuntimeCheckedValueInput, RuntimeOwnedViewModelHandle,
-    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeViewModelChangeValue,
+    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeValuePolicyOperation,
+    RuntimeViewModelChangeValue, runtime_checked_value_write_batch,
 };
 use nuxie_scripting::{Lua, Value};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 /// The most writes one script batch carries, the runtime batch's own bound.
@@ -15,12 +18,38 @@ const MAX_SCRIPT_BATCH_WRITES: usize = 4096;
 const KEYS: &str = "checked writes must have the keys 1..n";
 const ROOT_AND_PATH: &str = "checked write needs a string root and path";
 
+/// Run one script batch inside a host step. `writes` is a Luau list of
+/// `{root = <string>, path = <string>, value = <scalar>}` tables with the keys
+/// 1..n (at most 4096), where an absent value clears the property and its
+/// paired marker. The step's rule operation is required. The writes are
+/// checked against the installed rules as one replacement and applied all or
+/// none: the result is `(true, None)` when applied, or `(false, Some(code))`
+/// with the first refusing rule's code. A malformed list, a missing or
+/// borrowed operation and every batch error (an unknown root or path, a
+/// mismatched type, a repeated property, a limit) raise, and nothing is
+/// written.
+pub fn script_checked_value_write_batch(
+    policy: &RuntimeValuePolicy,
+    operation: Option<&RefCell<RuntimeValuePolicyOperation>>,
+    roots: &BTreeMap<String, RuntimeOwnedViewModelHandle>,
+    writes: Value,
+) -> Result<(bool, Option<String>), String> {
+    let entries = script_checked_value_batch_entries(writes)?;
+    let mut operation = operation
+        .ok_or("checked batches require a value rule operation")?
+        .try_borrow_mut()
+        .map_err(|_| "value rule operation is active")?;
+    let result = runtime_checked_value_write_batch(policy, &mut operation, roots, entries)
+        .map_err(|error| format!("checked value batch: {error:?}"))?;
+    Ok((result.applied, result.refusal.map(|refusal| refusal.code)))
+}
+
 /// Read a Luau list of `{root = <string>, path = <string>, value = <scalar>}`
 /// tables into batch entries, in list order. The keys must be exactly 1..n,
 /// with n at most 4096. A boolean, number or string value is a candidate; an
 /// absent value clears the property and its paired marker. Any other shape
-/// fails here, before the host runs the batch, so nothing is written.
-pub fn script_checked_value_batch_entries(
+/// fails here, before the batch runs, so nothing is written.
+fn script_checked_value_batch_entries(
     writes: Value,
 ) -> Result<Vec<RuntimeCheckedValueBatchEntry>, String> {
     let list = writes

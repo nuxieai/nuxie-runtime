@@ -217,7 +217,7 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "RuntimeCheckedValueRefusal",
     "runtime_checked_value_write",
     "runtime_checked_value_write_batch",
-    "script_checked_value_batch_entries",
+    "script_checked_value_write_batch",
     "script_list_property_values",
     "ScriptVm",
     "ScriptHostExtensionInstance",

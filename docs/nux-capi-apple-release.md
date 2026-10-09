@@ -86,6 +86,24 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.14 candidate adds checked replacement of several values at once. The
+runtime checks a batch of value writes against the installed rules and groups
+as one replacement and applies every write or none, reporting the first
+refusing rule; single checked writes are unchanged. The value-rule script
+module exposes that batch beside `set` as `setAll(writes)` and adds
+`listValues(root, path, property)`, which reads one property from every item of
+a list in order. `nux_capi.h` documents both, including the 4096-write and
+8 MiB bounds. The candidate also carries four upstream mirrors: elastic scroll
+momentum now releases when it reaches or crosses an edge; shader admission,
+live shader asset lifecycle and integer gradient packing, with regenerated
+Metal shaders; WebGPU pseudo dynamic pipeline state, a browser backend change
+outside these archives; and the deferred guest draw cleanup, accounted for
+without runtime behavior while guest execution stays parked. It still stops
+before the video properties layer. ABI v4 is retained with no symbol, struct or
+layout change; the export lists and layout oracle match v0.10.13. SDKs reach
+the new script functions by adopting this release, without source changes.
+Existing release size ceilings remain unchanged pending measurement.
+
 The v0.10.13 candidate carries the upstream-parity fixes, platform layout fit,
 globals, answered markers, value rules, form state, native text-field reads,
 and retained list-row access and insertion. It stops before the video

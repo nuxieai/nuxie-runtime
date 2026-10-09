@@ -544,10 +544,60 @@ fn script_set_all_raises_batch_errors_after_a_valid_first_write() {
             end)())",
             "checked value batch: InvalidArgument",
         ),
+        // Writes that carry exactly 8 MiB of root, path and text bytes pass
+        // the byte bound and reach the batch, which finds no such path.
+        (
+            "bridge.setAll((function()
+                local write = {root = '', path = string.rep('a', 1024 * 1024), value = true}
+                return {write, write, write, write, write, write, write, write}
+            end)())",
+            "checked value batch: NotFound",
+        ),
     ] {
         let error = step.call(call).unwrap_err();
         assert!(error.contains(expected), "{call}: {error}");
         assert!(!error.contains("exceed"), "{call}: {error}");
+        assert_eq!(step.flags(), [true, false, false], "{call}");
+        assert_eq!(step.write_count(), 0, "{call}");
+        assert!(step.operation().reports().is_empty(), "{call}");
+    }
+}
+
+#[test]
+fn script_set_all_stops_reading_writes_past_the_byte_bound() {
+    let step = Step::new(true);
+    // Each write table is shared, so one 1 MiB string is read again for every
+    // write that holds it. Past 8 MiB of root, path and text bytes in all, the
+    // reader raises before it reads the next write.
+    let shared = |write: &str, rest: &str| {
+        format!(
+            "bridge.setAll((function()
+                local long = string.rep('a', 1024 * 1024)
+                local write = {write}
+                return {{write, write, write, write, write, write, write, write, {rest}}}
+            end)())"
+        )
+    };
+    for call in [
+        shared("{root = long, path = 'y/on', value = true}", "write"),
+        shared("{root = '', path = long, value = true}", "write"),
+        shared("{root = '', path = 'x/text', value = long}", "write"),
+        // One byte past the bound.
+        shared(
+            "{root = '', path = long, value = true}",
+            "{root = '', path = 'y', value = true}",
+        ),
+        // A malformed write after the bound is never read.
+        shared(
+            "{root = '', path = long, value = true}",
+            "write, {root = '', path = 'y/on', value = {}}",
+        ),
+    ] {
+        let error = step.call(&call).unwrap_err();
+        assert!(
+            error.contains("checked writes exceed 8388608 bytes"),
+            "{call}: {error}"
+        );
         assert_eq!(step.flags(), [true, false, false], "{call}");
         assert_eq!(step.write_count(), 0, "{call}");
         assert!(step.operation().reports().is_empty(), "{call}");

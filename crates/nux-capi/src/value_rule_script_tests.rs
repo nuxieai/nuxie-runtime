@@ -323,6 +323,10 @@ impl Step {
             .unwrap();
     }
 
+    fn valid(&self) -> Option<bool> {
+        self.root.borrow().boolean_value_by_property_name("valid")
+    }
+
     fn errors(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
         self.root
             .list_items_by_property_name_path("items_errors")
@@ -356,6 +360,15 @@ fn script_list_values_reads_one_property_per_item_in_list_order() {
             "boolean:false".to_owned()
         ])
     );
+    // The list's own order, not the order of the records or references.
+    assert_eq!(
+        step.list_values("'', 'shuffled', 'text'").unwrap(),
+        Some(vec![
+            "string:z".to_owned(),
+            "string:x".to_owned(),
+            "string:y".to_owned()
+        ])
+    );
     // A path that names a scalar has no list.
     assert_eq!(step.list_values("'', 'x/text', 'text'").unwrap(), None);
     let null = step.list_values("'', 'holes', 'text'").unwrap_err();
@@ -367,6 +380,7 @@ fn script_list_values_reads_one_property_per_item_in_list_order() {
 fn script_set_all_refuses_the_whole_batch_with_the_first_rule_code() {
     let step = Step::new(true);
     assert_eq!(step.flags(), [true, false, false]);
+    assert_eq!(step.valid(), Some(false));
     assert_eq!(
         step.call(
             "bridge.setAll({
@@ -393,6 +407,9 @@ fn script_set_all_refuses_the_whole_batch_with_the_first_rule_code() {
         step.errors(),
         vec![(b"most".to_vec(), b"Too many".to_vec())]
     );
+    // The kept values hold the rule, so the group turns valid; the refusal
+    // shows only in the error list.
+    assert_eq!(step.valid(), Some(true));
 }
 
 #[test]
@@ -414,6 +431,7 @@ fn script_set_all_applies_an_accepted_batch_through_item_references() {
     assert_eq!(step.flags(), [false, true, false]);
     assert!(step.operation().reports().is_empty());
     assert!(step.errors().is_empty());
+    assert_eq!(step.valid(), Some(true));
 }
 
 #[test]

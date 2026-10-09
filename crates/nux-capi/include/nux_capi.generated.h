@@ -2298,7 +2298,9 @@ NuxStatus nux_file_import_metal(struct NuxRenderer *renderer,
  * clears. The step checks the list against the installed rules as one
  * replacement and applies every write or none, returning true and no code,
  * or false and the first refusing rule's code. `setAll` requires installed
- * value rules or groups and raises without them.
+ * value rules or groups and raises without them. Each write must name a
+ * different property, counting the paired marker that a value write also
+ * sets; a property named twice, even through another root or path, raises.
  * `listValues(root, path, property)` returns `property` from every item of
  * the list at `path`, in list order; it returns nil when `path` names a
  * property that is not a list and raises on a null item.

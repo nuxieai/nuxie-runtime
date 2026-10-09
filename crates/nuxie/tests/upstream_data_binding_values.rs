@@ -574,8 +574,10 @@ fn pad_string() {
     }
 }
 
+// The monotonic trigger counter is never reset by advanceAndApply, regardless
+// of the advanceViewModels flag (upstream 7aa93402).
 #[test]
-fn advance_and_apply_can_skip_view_model_reset() {
+fn advance_and_apply_does_not_reset_the_view_model_trigger_counter() {
     let (_artboard, machine, view_model) = fixture("data_binding_test.riv", "artboard-2");
     machine.advance_and_apply_view_models(0.0, true);
     let trigger = view_model
@@ -594,10 +596,11 @@ fn advance_and_apply_can_skip_view_model_reset() {
             .flatten()
             .expect("trigger value")
     };
+    assert_eq!(trigger_value(), 1);
     machine.advance_and_apply_view_models(0.0, false);
     assert_eq!(trigger_value(), 1);
     machine.advance_and_apply_view_models(0.0, true);
-    assert_eq!(trigger_value(), 0);
+    assert_eq!(trigger_value(), 1);
 }
 
 #[test]

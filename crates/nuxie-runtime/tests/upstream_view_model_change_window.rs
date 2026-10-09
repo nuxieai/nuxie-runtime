@@ -1,4 +1,7 @@
 //! Literal cases from runtime/view_model_change_window_test.cpp through c4d2c6cb.
+// StateMachineInstance::layer_state is a testing/tools observation seam.
+#![cfg(any(feature = "testing", feature = "tools"))]
+
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     animation::{

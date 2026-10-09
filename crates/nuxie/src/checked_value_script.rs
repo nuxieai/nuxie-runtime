@@ -166,7 +166,9 @@ pub fn script_checked_value_input(value: &Value) -> Result<RuntimeCheckedValueIn
 /// in list order, as a Luau list of booleans, numbers and strings. Items keep
 /// their positions: a null item raises rather than being skipped. A path that
 /// names any other kind of property gives nil. A missing root, path or item
-/// property, or an item property that is not a scalar, raises.
+/// property, or an item property that is not a scalar, raises, and so do a
+/// root, path and property past 8 MiB in all (a batch's byte bound), before
+/// anything is read.
 pub fn script_list_property_values(
     lua: &Lua,
     policy: &RuntimeValuePolicy,
@@ -175,6 +177,14 @@ pub fn script_list_property_values(
     path: &str,
     property: &str,
 ) -> Result<Value, String> {
+    if root_name
+        .len()
+        .saturating_add(path.len())
+        .saturating_add(property.len())
+        > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES
+    {
+        return Err("checked path exceeds the operation limit".into());
+    }
     let read_error = |error: RuntimeValuePolicyError| format!("checked value read: {error:?}");
     let root = roots
         .get(root_name)

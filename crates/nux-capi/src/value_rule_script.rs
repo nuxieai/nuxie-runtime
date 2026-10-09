@@ -79,14 +79,6 @@ impl nuxie::ScriptHostExtension for Extension {
         let list_values = lua
             .create_function(
                 move |lua, (root, path, property): (String, String, String)| {
-                    if root
-                        .len()
-                        .saturating_add(path.len())
-                        .saturating_add(property.len())
-                        > MAX_PLAYER_STEP_RESULT_BYTES
-                    {
-                        return Err("checked path exceeds the operation limit".into());
-                    }
                     with_step(&file, "read", |context, policy| {
                         nuxie::script_list_property_values(
                             lua,

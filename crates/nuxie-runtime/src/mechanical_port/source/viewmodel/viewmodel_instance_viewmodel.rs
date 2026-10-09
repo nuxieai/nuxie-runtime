@@ -214,11 +214,8 @@ impl ViewModelInstanceViewModel {
     }
 
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
-        let Some((reference, owner)) = source.with_downcast::<Self, _>(|source| {
-            (
-                source.reference_view_model_instance.clone(),
-                source.base.view_model_instance(),
-            )
+        let Some(reference) = source.with_downcast::<Self, _>(|source| {
+            source.reference_view_model_instance.clone()
         }) else {
             return false;
         };
@@ -226,12 +223,21 @@ impl ViewModelInstanceViewModel {
             let Some(cloned_instance) = ViewModelInstance::clone_instance(&instance) else {
                 return false;
             };
+            if cloned.with_downcast_mut::<Self, _>(|cloned| {
+                cloned.set_reference_view_model_instance(Some(cloned_instance));
+            }).is_none() {
+                return false;
+            }
+            // The source reads its parent owner after recursive cloning and
+            // after installing the new referenced instance on the clone.
+            let Some(owner) = source.with_downcast::<Self, _>(|source| {
+                source.base.view_model_instance()
+            }) else {
+                return false;
+            };
             return cloned
                 .with_downcast_mut::<Self, _>(|cloned| {
-                    cloned.set_reference_view_model_instance(Some(cloned_instance));
-                    if let Some(owner) = owner {
-                        cloned.base.set_view_model_instance(owner);
-                    }
+                    cloned.base.set_view_model_instance_option(owner);
                 })
                 .is_some();
         }

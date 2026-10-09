@@ -133,6 +133,7 @@ pub struct ClippingShapeProxyDrawing {
 }
 
 impl ProxyDrawing for ClippingShapeProxyDrawing {
+    fn hittable_component(&self) -> Option<CoreHandle> { None }
     fn draw_proxy(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer<'_>,

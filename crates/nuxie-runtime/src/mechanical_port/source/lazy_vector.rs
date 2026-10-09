@@ -57,6 +57,11 @@ impl<T: Clone> LazyVector<T> {
     pub fn push_back(&mut self, value: T) {
         self.writable().push(value);
     }
+    /// Remove exactly one position, retaining the remaining order. A live
+    /// snapshot keeps its prior backing, just as for the other mutations.
+    pub fn remove(&mut self, index: usize) -> T {
+        self.writable().remove(index)
+    }
     pub fn clear(&mut self) {
         if self.values.is_some() {
             self.writable().clear();
@@ -212,5 +217,18 @@ mod tests {
         assert_eq!(values.values.as_ref().unwrap().capacity(), capacity);
         assert_eq!(snapshot.collect::<Vec<_>>(), (0..7).collect::<Vec<_>>());
         assert!(values.clone().values.is_some());
+    }
+    #[test]
+    fn remove_keeps_duplicate_positions_and_outstanding_snapshot_order() {
+        let mut values = LazyVector::default();
+        for value in [7, 3, 7, 5] {
+            values.push_back(value);
+        }
+        let snapshot = values.snapshot();
+        assert_eq!(values.remove(0), 7);
+        assert_eq!(values.view(), &[3, 7, 5]);
+        assert_eq!(snapshot.iter().copied().collect::<Vec<_>>(), [7, 3, 7, 5]);
+        assert_eq!(values.remove(1), 7);
+        assert_eq!(values.view(), &[3, 5]);
     }
 }

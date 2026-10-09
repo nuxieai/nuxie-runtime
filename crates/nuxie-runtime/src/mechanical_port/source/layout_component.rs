@@ -304,7 +304,7 @@ pub struct LayoutComponent {
     animation: Option<Box<LayoutAnimation>>,
     inherited_direction: LayoutDirection,
     layout_flags: u16,
-    render_paths: Option<Box<LayoutRenderPaths>>,
+    render_paths: Option<std::rc::Rc<std::cell::RefCell<LayoutRenderPaths>>>,
     proxy: Option<Rc<RefCell<DrawableProxy>>>,
     width_override: f32,
     width_unit_value_override: i8,
@@ -485,8 +485,13 @@ impl LayoutComponent {
             self.layout_flags &= !(flag as u16);
         }
     }
-    pub(crate) fn mutable_render_paths(&mut self) -> &mut LayoutRenderPaths {
-        self.render_paths.get_or_insert_with(Default::default)
+    pub(crate) fn mutable_render_paths(&mut self) -> std::cell::RefMut<'_, LayoutRenderPaths> {
+        self.render_paths.get_or_insert_with(Default::default).borrow_mut()
+    }
+    /// Retain the existing path owner while a renderer callback releases the
+    /// component receiver. The lazy allocation and each path identity stay fixed.
+    pub(crate) fn render_paths_handle(&self) -> Option<std::rc::Rc<std::cell::RefCell<LayoutRenderPaths>>> {
+        self.render_paths.clone()
     }
     pub fn needs_drawable_proxy(&self) -> bool {
         self.base.clip()
@@ -1721,12 +1726,12 @@ impl LayoutComponent {
                     }
                     ShapePaintPathKind::World => self.world_path(),
                 };
-                let Some(path) = path else {
+                let Some(mut path) = path else {
                     return;
                 };
                 paint.shape_paint_mut().draw_with_active_container(
                     renderer,
-                    path,
+                    &mut path,
                     world,
                     false,
                     None,
@@ -1778,7 +1783,8 @@ impl LayoutComponent {
             });
             let bounds = Aabb::new(0.0, 0.0, self.layout.width(), self.layout.height());
             let world = *self.base.base.base.base.world_transform();
-            let paths = self.mutable_render_paths();
+            let mut paths_owner = self.mutable_render_paths();
+            let paths = &mut *paths_owner;
             paths.background.rewind();
             Path::add_rounded_rect(&mut paths.background, bounds, radii);
             paths.background.prune_empty_segments();
@@ -1790,6 +1796,7 @@ impl LayoutComponent {
                 .world
                 .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
             paths.world.add_path(&paths.background, Some(&world));
+            drop(paths_owner);
             for paint in self.paints.shape_paints().iter().cloned() {
                 let should_draw = paint
                     .with_mut(|paint| {
@@ -3831,13 +3838,13 @@ impl LayoutComponent {
     pub fn fractional_height_changed(&mut self) {
         self.mark_layout_node_dirty(false);
     }
-    pub fn world_path(&mut self) -> Option<&mut ShapePaintPath> {
-        self.render_paths.as_mut().map(|paths| &mut paths.world)
+    pub fn world_path(&mut self) -> Option<std::cell::RefMut<'_, ShapePaintPath>> {
+        self.render_paths.as_ref().map(|paths| std::cell::RefMut::map(paths.borrow_mut(), |paths| &mut paths.world))
     }
-    pub fn local_path(&mut self) -> Option<&mut ShapePaintPath> {
-        self.render_paths.as_mut().map(|paths| &mut paths.local)
+    pub fn local_path(&mut self) -> Option<std::cell::RefMut<'_, ShapePaintPath>> {
+        self.render_paths.as_ref().map(|paths| std::cell::RefMut::map(paths.borrow_mut(), |paths| &mut paths.local))
     }
-    pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
+    pub fn local_clockwise_path(&mut self) -> Option<std::cell::RefMut<'_, ShapePaintPath>> {
         self.local_path()
     }
     pub fn path_builder(&mut self) -> &mut Component {

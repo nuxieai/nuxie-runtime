@@ -135,13 +135,17 @@ impl Mesh {
     }
     pub fn mark_drawable_dirty(&mut self) {
         if let Some(skin) = self.skin() {
-            skin.with_mut(|skin| {
-                if let Some(skin) = skin.as_component_mut() {
-                    skin.add_dirt(ComponentDirt::SKIN, true);
+            skin.with_mut(|object| {
+                if std::any::Any::type_id(&*object) == std::any::TypeId::of::<Skin>() {
+                    object.as_any_mut().downcast_mut::<Skin>().expect("Skin")
+                        .add_dirt_from_mesh(self);
+                } else if let Some(component) = object.as_component_mut() {
+                    // Retain the established custom projection contract.
+                    component.add_dirt(ComponentDirt::SKIN, false);
                 }
             });
         }
-        self.base.add_dirt(ComponentDirt::VERTICES, true);
+        self.base.add_dirt(ComponentDirt::VERTICES, false);
     }
     pub fn add_vertex(&mut self, vertex: CoreHandle) {
         self.vertices.push(vertex);
@@ -354,17 +358,19 @@ impl Mesh {
                     }
                 }
                 buffer.unmap();
+                self.vertex_render_buffer_dirty = false;
             }
-            self.vertex_render_buffer_dirty = false;
         }
         if self.skin().is_none() {
             if let Some(parent) = self.base.parent_handle() {
-                parent.with(|parent| {
-                    if let Some(parent) = parent.as_world_transform_component() {
-                        renderer
-                            .transform(nuxie_render_api::Mat2D(*parent.world_transform().values()));
-                    }
-                });
+                let transform = parent.with(|parent| {
+                    parent.as_world_transform_component().map(|parent| {
+                        nuxie_render_api::Mat2D(*parent.world_transform().values())
+                    })
+                }).flatten();
+                if let Some(transform) = transform {
+                    renderer.transform(transform);
+                }
             }
         }
         let vertex = self
@@ -424,5 +430,104 @@ impl MeshDrawable for Mesh {
             opacity,
             additiveness,
         );
+    }
+}
+
+#[cfg(test)]
+mod source_owner_tests {
+    use super::*;
+    use crate::source::{core::CoreArena, node::Node};
+    use nuxie_render_api::{Factory, NullFactory, NullRenderer};
+
+    #[derive(Clone)]
+    struct TestImage(Rc<()>);
+    impl RenderImage for TestImage {
+        fn as_any(&self) -> &dyn std::any::Any { self }
+        fn retain_image(&self) -> Rc<dyn RenderImage> { Rc::new(self.clone()) }
+        fn image_identity(&self) -> usize { Rc::as_ptr(&self.0) as usize }
+        fn width(&self) -> u32 { 1 }
+        fn height(&self) -> u32 { 1 }
+    }
+
+    #[test]
+    fn empty_mesh_keeps_pending_vertex_upload_until_a_buffer_exists() {
+        let arena = CoreArena::default();
+        let mut mesh = Mesh::default();
+        mesh.skinnable.set_skin(arena.insert(Skin::default()));
+        mesh.decode_triangle_index_bytes(&[]);
+        let image = TestImage(Rc::new(()));
+        let mut renderer = NullRenderer::new();
+        mesh.draw(&mut renderer, &image, ImageSampler::LINEAR_CLAMP, BlendMode::SrcOver, 1.0, 0.0);
+        assert!(mesh.vertex_render_buffer_dirty);
+        let buffer = NullFactory::new().make_render_buffer(RenderBufferType::Vertex, RenderBufferFlags::None, 0);
+        mesh.mesh.vertex_render_buffer = Some(Rc::new(RefCell::new(buffer)));
+        mesh.draw(&mut renderer, &image, ImageSampler::LINEAR_CLAMP, BlendMode::SrcOver, 1.0, 0.0);
+        assert!(!mesh.vertex_render_buffer_dirty);
+    }
+
+    #[test]
+    fn vertex_movement_marks_mesh_and_skin_without_recursing_into_dependents() {
+        let arena = CoreArena::default();
+        let mesh = arena.insert(Mesh::default());
+        let skin = arena.insert(Skin::default());
+        let dependent = arena.insert(Node::default());
+        for owner in [&mesh, &skin, &dependent] {
+            owner.with_mut(|object| object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE));
+        }
+        skin.with_mut(|object| object.as_component_mut().unwrap().add_dependent(dependent.clone()));
+        mesh.with_downcast_mut::<Mesh, _>(|mesh| {
+            mesh.skinnable.set_skin(skin.clone());
+            mesh.base.add_dependent(dependent.clone());
+            mesh.mark_drawable_dirty();
+        }).unwrap();
+        assert_eq!(mesh.with(|object| object.as_component().unwrap().dirt()), Some(ComponentDirt::VERTICES));
+        assert_eq!(skin.with(|object| object.as_component().unwrap().dirt()), Some(ComponentDirt::SKIN));
+        assert_eq!(dependent.with(|object| object.as_component().unwrap().dirt()), Some(ComponentDirt::NONE));
+    }
+    struct MeshContext<'a> { arena: &'a CoreArena, image: CoreHandle }
+    impl CoreContext for MeshContext<'_> {
+        fn core_arena(&self) -> &CoreArena { self.arena }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> { (id == 1).then(|| self.image.clone()) }
+    }
+
+    struct MutatesParent { parent: CoreHandle, transformed: bool, drew_mesh: bool }
+    impl Renderer for MutatesParent {
+        fn save(&mut self) {}
+        fn restore(&mut self) {}
+        fn transform(&mut self, matrix: nuxie_render_api::Mat2D) {
+            assert_eq!(matrix, nuxie_render_api::Mat2D::IDENTITY);
+            self.parent.with_downcast_mut::<Image, _>(|image| {
+                image.base.set_origin_x_value(0.25);
+            }).expect("Image parent must be available during renderer callback");
+            self.transformed = true;
+        }
+        fn draw_path(&mut self, _: &dyn nuxie_render_api::RenderPath, _: &dyn nuxie_render_api::RenderPaint) {}
+        fn clip_path(&mut self, _: &dyn nuxie_render_api::RenderPath) {}
+        fn draw_image(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler, _: BlendMode, _: f32) {}
+        fn draw_image_mesh(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, vertices: u32, indices: u32, _: BlendMode, _: f32) {
+            assert!(self.transformed);
+            assert_eq!((vertices, indices), (0, 0));
+            self.drew_mesh = true;
+        }
+        fn modulate_opacity(&mut self, _: f32) {}
+    }
+
+    #[test]
+    fn mesh_transform_releases_image_parent_before_renderer_callback() {
+        let arena = CoreArena::default();
+        let parent = arena.insert(Image::default());
+        let mesh = arena.insert(Mesh::default());
+        let mut context = MeshContext { arena: &arena, image: parent.clone() };
+        mesh.with_downcast_mut::<Mesh, _>(|mesh| {
+            mesh.base.set_parent_id_value(1);
+            assert_eq!(mesh.on_added_dirty(&mut context), StatusCode::Ok);
+            mesh.decode_triangle_index_bytes(&[]);
+        }).unwrap();
+        let mut renderer = MutatesParent { parent: parent.clone(), transformed: false, drew_mesh: false };
+        mesh.with_downcast_mut::<Mesh, _>(|mesh| {
+            mesh.draw(&mut renderer, &TestImage(Rc::new(())), ImageSampler::LINEAR_CLAMP, BlendMode::SrcOver, 1.0, 0.0);
+        }).unwrap();
+        assert!(renderer.drew_mesh);
+        assert_eq!(parent.with_downcast::<Image, _>(|image| image.base.origin_x()), Some(0.25));
     }
 }

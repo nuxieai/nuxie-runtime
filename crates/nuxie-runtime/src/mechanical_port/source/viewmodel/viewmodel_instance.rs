@@ -502,16 +502,12 @@ impl ViewModelInstance {
     }
 
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
-        let Some((copy_values, properties, view_model, binds)) =
-            source.with_downcast::<Self, _>(|source| {
-                (
-                    source.base.base.base.base.artboard_handle().is_none(),
-                    source.property_values.clone(),
-                    source.view_model.clone(),
-                    source.value_data_binds.view().to_vec(),
-                )
-            })
-        else {
+        let Some((copy_values, properties)) = source.with_downcast::<Self, _>(|source| {
+            (
+                source.base.base.base.base.artboard_handle().is_none(),
+                source.property_values.clone(),
+            )
+        }) else {
             return false;
         };
         // Artboard-owned values are cloned by the artboard's object traversal.
@@ -527,27 +523,49 @@ impl ViewModelInstance {
                     return false;
                 }
             }
-            let cloned_properties = cloned
-                .with_downcast::<Self, _>(|cloned| cloned.property_values.clone())
-                .unwrap();
+            // Source starts this distinct collection after property clone
+            // callbacks; those callbacks may add owned value bindings.
+            let Some(binds) = source.with_downcast::<Self, _>(|source| {
+                source.value_data_binds.view().to_vec()
+            }) else {
+                return false;
+            };
             for bind in binds {
                 let target = bind
                     .with(|bind| bind.as_data_bind().and_then(DataBind::target))
                     .flatten();
-                if let Some(index) = properties
-                    .iter()
-                    .position(|property| Some(property) == target.as_ref())
-                {
+                let Some(index) = source.with_downcast::<Self, _>(|source| {
+                    source.property_values.iter()
+                        .position(|property| Some(property) == target.as_ref())
+                }) else {
+                    return false;
+                };
+                if let Some(index) = index {
+                    // An earlier binding clone may change the source index or
+                    // the clone's current property. Read both at this use.
+                    let Some(property) = cloned.with_downcast::<Self, _>(|cloned| {
+                        cloned.property_values.get(index).cloned()
+                    }).flatten() else {
+                        return false;
+                    };
                     let Some(bind) = DataBind::clone_with_target_handle(
                         &bind,
-                        Some(cloned_properties[index].clone()),
+                        Some(property),
                     ) else {
                         return false;
                     };
-                    cloned.with_downcast_mut::<Self, _>(|cloned| cloned.add_value_data_bind(bind));
+                    if cloned.with_downcast_mut::<Self, _>(|cloned| {
+                        cloned.add_value_data_bind(bind)
+                    }).is_none() {
+                        return false;
+                    }
                 }
             }
         }
+        // ViewModelInstance::clone reads viewModel() after every open clone.
+        let Some(view_model) = source.with_downcast::<Self, _>(Self::get_view_model) else {
+            return false;
+        };
         cloned
             .with_downcast_mut::<Self, _>(|cloned| {
                 if let Some(view_model) = view_model {

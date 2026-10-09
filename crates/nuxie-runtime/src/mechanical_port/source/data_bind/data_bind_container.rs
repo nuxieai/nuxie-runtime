@@ -337,10 +337,23 @@ impl DataBindContainer {
     }
 
     pub fn may_advance_data_binds(&self) -> bool {
-        self.0.borrow().data_binds.iter().any(|bind| {
+        let count = self.0.borrow().data_binds.len();
+        for index in 0..count {
+            // Preserve the source range's end, but release the container before
+            // the converter query: it may dirty a bind in this same container.
+            let Some(bind) = self.0.borrow().data_binds.get(index).cloned() else {
+                break;
+            };
             let converter = bind.with(|bind| bind.as_data_bind().unwrap().converter()).flatten();
-            converter.is_some_and(|converter| converter.with(|converter| converter.as_data_converter_capability().unwrap().may_advance()).unwrap_or(false))
-        })
+            if converter.is_some_and(|converter| {
+                converter.with(|converter| {
+                    converter.as_data_converter_capability().unwrap().may_advance()
+                }).unwrap_or(false)
+            }) {
+                return true;
+            }
+        }
+        false
     }
 
     #[cfg(any(test, feature = "testing"))]
@@ -450,15 +463,16 @@ impl DataBindContainer {
     }
 
     pub fn update_data_binds(&self, apply_target_to_source: bool) {
-        let state_machine_owner = {
+        {
             let state = self.0.borrow();
             if state.is_processing { return; }
-            match &state.owner {
-                Some(DataBindContainerOwner::StateMachine(owner)) => Some(owner.clone()),
-                _ => None,
+            if let Some(DataBindContainerOwner::StateMachine(owner)) = &state.owner {
+                // This concrete notification only upgrades the settling Weak
+                // and clears a Cell. It cannot reenter or release another
+                // strong owner, so no six-Weak owner copy is needed here.
+                owner.data_binds_processing_started();
             }
-        };
-        if let Some(owner) = state_machine_owner { owner.data_binds_processing_started(); }
+        }
         let (persisting_count, dirty_to_source_count, dirty_count) = {
             let mut state = self.0.borrow_mut();
             if state.is_processing {
@@ -612,4 +626,68 @@ impl DataBindContainer {
     pub fn rebind(&self) {}
     pub fn relink_data_context(&self) {}
     pub fn rebuild_data_bind(&self, _data_bind: CoreHandle) {}
+}
+
+#[cfg(test)]
+mod processing_notification_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        advancing_component::QuietState,
+        animation::{
+            state_machine::StateMachine,
+            state_machine_instance::{StateMachineInstance, RuntimeStateMachineInstanceHandle},
+        },
+        artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
+        core::CoreArena,
+    };
+
+    fn machine() -> (CoreArena, RuntimeArtboardInstanceHandle, RuntimeStateMachineInstanceHandle, DataBindContainer) {
+        let arena = CoreArena::default();
+        let definition = arena.insert(StateMachine::default());
+        let artboard = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let machine = StateMachineInstance::new(definition, artboard.downgrade());
+        let container = machine.downgrade().data_bind_container().unwrap();
+        assert_eq!(machine.with_instance(StateMachineInstance::row_quiet_state), QuietState::Quiet);
+        (arena, artboard, machine, container)
+    }
+
+    #[test]
+    fn empty_pass_clears_pending_without_borrowing_the_machine() {
+        let (_arena, _artboard, machine, container) = machine();
+        machine.downgrade().data_bind_dirtied();
+        assert!(!container.has_data_bind_work());
+        machine.with_instance_mut(|instance| {
+            assert_eq!(instance.row_quiet_state(), QuietState::Busy);
+            container.update_data_binds(false);
+            assert_eq!(instance.row_quiet_state(), QuietState::Quiet);
+        });
+        assert!(!container.is_processing_data_binds());
+        assert!(container.0.try_borrow_mut().is_ok());
+    }
+
+    #[test]
+    fn recursive_pass_preserves_pending_until_the_next_outer_pass() {
+        let (_arena, _artboard, machine, container) = machine();
+        machine.downgrade().data_bind_dirtied();
+        container.0.borrow_mut().is_processing = true;
+        container.update_data_binds(true);
+        assert!(container.is_processing_data_binds());
+        assert_eq!(machine.with_instance(StateMachineInstance::row_quiet_state), QuietState::Busy);
+        container.0.borrow_mut().is_processing = false;
+        container.update_data_binds(true);
+        assert_eq!(machine.with_instance(StateMachineInstance::row_quiet_state), QuietState::Quiet);
+    }
+
+    #[test]
+    fn expired_owner_does_not_resurrect_and_releases_the_container_guard() {
+        let (_arena, _artboard, machine, container) = machine();
+        let owner = machine.downgrade();
+        drop(machine);
+        assert!(owner.upgrade().is_none());
+        container.update_data_binds(true);
+        assert!(owner.upgrade().is_none());
+        container.0.borrow_mut().owner = None;
+        container.update_data_binds(false);
+        assert!(!container.is_processing_data_binds());
+    }
 }

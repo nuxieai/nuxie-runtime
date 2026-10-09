@@ -4,8 +4,10 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     shapes::paint::{
         feather::Feather,
+        fill::Fill,
         group_effect::GroupEffect,
         shape_paint_path::ShapePaintPath,
+        stroke::Stroke,
         stroke_effect::{PathProvider, StrokeEffect},
         target_effect::TargetEffect,
     },
@@ -83,6 +85,42 @@ fn add_dirt_with_active(
     }
 }
 
+#[derive(Clone, Copy)]
+enum NativePaint {
+    Fill,
+    Stroke,
+}
+
+impl NativePaint {
+    fn add_path_dirt(self, handle: &CoreHandle) {
+        let dependents = handle
+            .with_mut(|object| {
+                // The preceding callback may retire this occurrence. Its
+                // checked loan resolves the same generation afresh, and this
+                // actual-Any projection never substitutes a custom capability.
+                let actual: &mut dyn std::any::Any = object;
+                let component: &mut Component = match self {
+                    Self::Fill => &mut actual.downcast_mut::<Fill>()?.base.base.base,
+                    Self::Stroke => &mut actual.downcast_mut::<Stroke>()?.base.base.base,
+                };
+                component.add_dirt_state(ComponentDirt::PATH)?;
+                // Both native owners inherit Component's empty onDirty.
+                // Notification has no open callback on its successful path;
+                // retain the current dependent list before releasing this loan.
+                component.notify_artboard();
+                Some(component.dependents_snapshot())
+            })
+            .flatten();
+        if let Some(dependents) = dependents {
+            // Descendants keep the original open projections, callbacks, and
+            // released traversal; only this native paint's preparation is fused.
+            for dependent in dependents {
+                add_dirt_with_active(&dependent, ComponentDirt::PATH, &mut None);
+            }
+        }
+    }
+}
+
 pub(crate) fn invalidate_effect_handle_with_active(
     effect: &CoreHandle,
     provider: Option<PathProvider>,
@@ -152,6 +190,42 @@ pub(crate) fn invalidate_effects_handle_with_active(
     invalidating: Option<CoreHandle>,
     active: &mut Option<ActiveStrokeEffect<'_>>,
 ) {
+    // Concrete empty paints have no effect or feather callbacks before their
+    // rendering tail. Read those pure fields in one loan, while retaining the
+    // virtual accessor path for custom owners (even ones projecting a Fill).
+    let empty_paint_action = container
+        .with(|object| {
+            let actual: &dyn std::any::Any = object;
+            let (paint, native) = if let Some(fill) = actual.downcast_ref::<Fill>() {
+                (&fill.base.base, NativePaint::Fill)
+            } else if let Some(stroke) = actual.downcast_ref::<Stroke>() {
+                (&stroke.base.base, NativePaint::Stroke)
+            } else {
+                return None;
+            };
+            if paint.effects_container.effects.is_empty() && paint.feather_handle().is_none() {
+                Some((paint.prepare_rendering_invalidation(), native))
+            } else {
+                None
+            }
+        })
+        .flatten();
+    if let Some((action, native)) = empty_paint_action {
+        // The renderer may edit dirt/dependents or retire the runtime owner.
+        // Release the receiver and temporary paint before those fresh reads.
+        action.before_dirt();
+        if active.is_none() {
+            native.add_path_dirt(container);
+        } else {
+            add_dirt_with_active(
+                &ComponentOccurrenceHandle::Authored(container.clone()),
+                ComponentDirt::PATH,
+                active,
+            );
+        }
+        return;
+    }
+
     if container.is_type_of(GroupEffect::TYPE_KEY) {
         let targets = container
             .with_downcast::<GroupEffect, _>(GroupEffect::target_effect_handles)
@@ -273,7 +347,7 @@ mod tests {
         }
     }
 
-    fn loaded_artboard(fixture: &str) -> RuntimeArtboardInstanceHandle {
+    pub(super) fn loaded_artboard(fixture: &str) -> RuntimeArtboardInstanceHandle {
         let path = std::path::PathBuf::from(
             std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned RIVE_RUNTIME_DIR"),
         )
@@ -331,7 +405,7 @@ mod tests {
         node
     }
 
-    fn install_invalidation_paint(
+    pub(super) fn install_invalidation_paint(
         paint: &CoreHandle,
         callback: impl FnMut() + 'static,
     ) -> Rc<Cell<usize>> {
@@ -352,13 +426,13 @@ mod tests {
         calls
     }
 
-    fn set_dirt(handle: &CoreHandle, dirt: ComponentDirt) {
+    pub(super) fn set_dirt(handle: &CoreHandle, dirt: ComponentDirt) {
         handle
             .with_mut(|object| object.as_component_mut().unwrap().set_dirt(dirt))
             .unwrap();
     }
 
-    fn dirt(handle: &CoreHandle) -> ComponentDirt {
+    pub(super) fn dirt(handle: &CoreHandle) -> ComponentDirt {
         handle
             .with(|object| object.as_component().unwrap().dirt())
             .unwrap()
@@ -584,3 +658,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "effects_container_empty_paint_tests.rs"]
+mod empty_paint_tests;

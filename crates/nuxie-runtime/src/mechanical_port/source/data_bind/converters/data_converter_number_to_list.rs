@@ -97,8 +97,10 @@ impl DataConverterNumberToList {
     pub fn file(&self) -> Option<RuntimeFileWeakHandle> {
         self.file.clone()
     }
+    /// Compatibility definition for custom owners forwarding the public clone helpers.
+    /// Registered occurrences use the source-ordered definition below.
     pub fn clone_definition(&self) -> Self {
-        let mut cloned = Self::new(self.base.view_model_id());
+        let mut cloned = self.clone_occurrence_definition();
         cloned
             .base
             .base
@@ -107,8 +109,22 @@ impl DataConverterNumberToList {
         cloned.file = self.file.clone();
         cloned
     }
+    pub(crate) fn clone_occurrence_definition(&self) -> Self {
+        Self::new(self.base.view_model_id())
+    }
+    /// Completes the inherited copy for custom owners forwarding these public helpers.
+    /// This route requires only the established DataConverter capability.
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
         super::data_converter::DataConverter::complete_clone(source, cloned)
+    }
+    pub(crate) fn complete_occurrence_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        if !super::data_converter::DataConverter::complete_clone(source, cloned) {
+            return false;
+        }
+        let Some(file) = source.with_downcast::<Self, _>(Self::file) else {
+            return false;
+        };
+        cloned.with_downcast_mut::<Self, _>(|cloned| cloned.set_file(file)).is_some()
     }
 }
 

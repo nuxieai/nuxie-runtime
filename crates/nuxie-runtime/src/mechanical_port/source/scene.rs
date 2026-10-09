@@ -1,3 +1,5 @@
+//! Runtime Scene owner translated against pinned Rive 160085c654874d35.
+
 use crate::mechanical_port::source::{
     animation::state_machine_input_instance::{
         SMIBool as SmiBool, SMIInput as SmiInput, SMINumber as SmiNumber, SMITrigger as SmiTrigger,
@@ -43,6 +45,11 @@ impl Scene {
         self.artboard_instance.clone()
     }
 
+    /// Internal access borrows the retained weak pointer without cloning it.
+    pub(crate) fn artboard_instance_ref(&self) -> &RuntimeArtboardInstanceWeakHandle {
+        &self.artboard_instance
+    }
+
     pub fn width(&self) -> f32 {
         self.artboard_instance
             .with_artboard(|artboard| artboard.width())
@@ -61,8 +68,9 @@ impl Scene {
 
     pub fn draw(&mut self, renderer: &mut Renderer) {
         self.artboard_instance
-            .with_artboard_mut(|artboard| artboard.draw(renderer))
-            .expect("Scene outlived its ArtboardInstance");
+            .upgrade()
+            .expect("Scene outlived its ArtboardInstance")
+            .draw(renderer);
     }
 
     pub fn report_keyed_callback(
@@ -76,6 +84,15 @@ impl Scene {
             .with_artboard(|artboard| artboard.resolve_handle(object_id))
             .flatten();
         if let Some(core_object) = core_object {
+            if crate::mechanical_port::source::event::Event::trigger_builtin_occurrence(
+                &core_object,
+                property_key,
+                self,
+                elapsed_seconds,
+                |_, _, _| {},
+            ) {
+                return;
+            }
             let data = CallbackData::new(Some(self), elapsed_seconds);
             CoreRegistry::set_callback_handle(&core_object, property_key as i32, data);
         }
@@ -101,7 +118,12 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
 
     fn bind_view_model_instance(&mut self, _view_model_instance: RuntimeViewModelInstanceHandle) {}
 
-    fn pointer_down(&mut self, _position: Vec2D, _pointer_id: i32, _button: PointerButton) -> HitResult {
+    fn pointer_down(
+        &mut self,
+        _position: Vec2D,
+        _pointer_id: i32,
+        _button: PointerButton,
+    ) -> HitResult {
         HitResult::None
     }
 
@@ -109,7 +131,12 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
         HitResult::None
     }
 
-    fn pointer_up(&mut self, _position: Vec2D, _pointer_id: i32, _button: PointerButton) -> HitResult {
+    fn pointer_up(
+        &mut self,
+        _position: Vec2D,
+        _pointer_id: i32,
+        _button: PointerButton,
+    ) -> HitResult {
         HitResult::None
     }
 

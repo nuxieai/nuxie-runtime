@@ -1,0 +1,112 @@
+{
+  "schema": "nuxie-runner-pgo-fixtures/v1",
+  "cpp_revision": "160085c654874d35ad654a750e782d7c78e050d9",
+  "training": [
+    "zombie_skins",
+    "spotify_kids_demo",
+    "car_widgets_v01",
+    "data_viz_demo"
+  ],
+  "fixtures": {
+    "text_vertical_trim_test": {
+      "file": "text_vertical_trim_test.riv",
+      "sha256": "0d87a0113b0de1f1fcc2c7c0a183eaf91b604ef42fc71f904231a822f2146903"
+    },
+    "jellyfish_test": {
+      "file": "jellyfish_test.riv",
+      "sha256": "b8c694dcd2bedc5b2729e1a8459fa69ef9e46afe8c0c1dd0bbf57497f86c3a71"
+    },
+    "car_widgets_v01": {
+      "file": "car_widgets_v01.riv",
+      "sha256": "15dff94e81d940b95b412e65f3122196ecae06e73a1f1c0ab98f4f4b6737ba47"
+    },
+    "zombie_skins": {
+      "file": "zombie_skins.riv",
+      "sha256": "866fc754186c40272e1a5acf50fa3595120af314a499d26971c48a472a41ee52"
+    },
+    "script_dependency_test_using_library_v2": {
+      "file": "script_dependency_test_using_library_v2.riv",
+      "sha256": "3509a104f788dc17752f29f3e83fd9f84475ca9e4112238e26de3aafc8d205e2"
+    },
+    "script_dependency_test_using_library": {
+      "file": "script_dependency_test_using_library.riv",
+      "sha256": "1755b599cba1c666026e2b310b4949fdf75a670e3213ad146626044716572966"
+    },
+    "data_bind_test_cmdq": {
+      "file": "data_bind_test_cmdq.riv",
+      "sha256": "054219ac8b15e384c8026c1ba9340385300fd00c649d8b787671d0d6fd7493b8"
+    },
+    "data_viz_demo": {
+      "file": "data_viz_demo.riv",
+      "sha256": "7e50bfe3a47824908d71c5959f7ab6ccc96f78c0c24cb056ed0f772dc3ddae0c"
+    },
+    "viewmodel_based_condition": {
+      "file": "viewmodel_based_condition.riv",
+      "sha256": "c4216fef61c11971839807eb9b14ee877f7b9d82dfcfe5e215c79662dee30e13"
+    },
+    "image_scripting_property_value": {
+      "file": "image_scripting_property_value.riv",
+      "sha256": "81184fa4535f677fbae2f5bc35b6044e96b25f3b354cf35a57e557ace1a6d6da"
+    },
+    "background_measure": {
+      "file": "background_measure.riv",
+      "sha256": "18bf0882ddd81873e89fd8972dfc89c862f0a0b43e4cb35df461be14c1ca0b27"
+    },
+    "audio_script": {
+      "file": "audio_script.riv",
+      "sha256": "9413ff6eb2d9cb0f080886425b87a167309416c1d96f10a4924c56857ecc40eb"
+    },
+    "spotify_kids_demo": {
+      "file": "spotify_kids_demo.riv",
+      "sha256": "984e4d34c7a1469f767d7949ddf082c3d54fc76beb27c5424f68ad1d34e4b5b8"
+    },
+    "library_with_text_and_image": {
+      "file": "library_with_text_and_image.riv",
+      "sha256": "1e08aa8712f576519e8ee50257e395a0e5ed78dd51ed76a7ee30f448194dcfd4"
+    },
+    "library": {
+      "file": "library.riv",
+      "sha256": "12a8faf492106d667330fccfdb4533cf32cea7696c4f3ef3b26a0fce8c021e40"
+    },
+    "layout_grid_stack": {
+      "file": "layout_grid_stack.riv",
+      "sha256": "9b4d1c56735f16928396e079d39e62815dce7586842ac9dfd5937a4dca231724"
+    },
+    "gamepad_test": {
+      "file": "gamepad_test.riv",
+      "sha256": "b8fe924f342d90fe601a668e3393988714346dfa643e3e1020cc9bbe2f77c330"
+    },
+    "local_bounds": {
+      "file": "local_bounds.riv",
+      "sha256": "d2d9b44a033ad77b421d06423e69b9ded78f0470287a0de2505d74245841ee53"
+    },
+    "hit_test_test": {
+      "file": "hit_test_test.riv",
+      "sha256": "dd20f5064a20093bc95d9bb8dcd55f451a3dc2802ee74f7a58f9c9275bb1b66f"
+    },
+    "multi_listeners": {
+      "file": "multi_listeners.riv",
+      "sha256": "d0279479bbbc64ac2f576ca847555f8fabc81ceca7ca4954364768b9f02b2d37"
+    },
+    "script_create_text_runs": {
+      "file": "script_create_text_runs.riv",
+      "sha256": "b0be057c70cd9fc0ede6dd5f36f391af47082ddcc9e02f271eed1587606d7877"
+    },
+    "virtualize_blendmode": {
+      "file": "virtualize_blendmode.riv",
+      "sha256": "4cc82b3d7bb3502c29f7428168a981ed58184624fdb67b2e57e43ecac5e96d67"
+    },
+    "component_list_1": {
+      "file": "component_list_1.riv",
+      "sha256": "c0d4d858a8ffa4ec923a8bdf8ae2873c144424911ae4b6e5fcbdf7c4f36d5e21"
+    },
+    "collapsing_elements": {
+      "file": "collapsing_elements.riv",
+      "sha256": "8361fec2f5d038451c495071704fdc2bc46f418132d6c30b6eeac653b9b1d485"
+    },
+    "clear_viewmodel_list": {
+      "file": "clear_viewmodel_list.riv",
+      "sha256": "895e63400ed2d554ec3a6f73d981c8c2b0e0801c5bfef5034b25526e12c74f36"
+    }
+  }
+}

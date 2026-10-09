@@ -31,6 +31,12 @@ impl RuntimeStateInstanceHandle {
         self.definition.clone()
     }
 
+    // The instance owns this immutable definition for its entire lifetime.
+    // Borrowing its identity does not acquire an authored payload loan.
+    pub(crate) fn definition_ref(&self) -> &CoreHandle {
+        &self.definition
+    }
+
     pub fn with_state<R>(&self, use_state: impl FnOnce(&dyn StateInstanceBehavior) -> R) -> R {
         use_state(self.behavior.borrow().as_ref())
     }

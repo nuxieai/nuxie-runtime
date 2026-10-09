@@ -296,21 +296,41 @@ impl ComponentOccurrenceHandle {
             }
             return true;
         }
-        let Some(dirt) = self
-            .with_component_mut(|component| component.add_dirt_state(value))
-            .flatten()
-        else {
-            return false;
-        };
-        self.on_dirty(dirt);
-        self.notify_artboard();
-        if recurse {
-            let dependents = self
-                .with_component(Component::dependents_snapshot)
-                .unwrap_or_default();
-            for dependent in dependents.iter() {
-                dependent.add_dirt(value, true);
+        let shape = match self {
+            Self::PathComposer(handle) => {
+                let Some(owner) = handle.upgrade() else {
+                    return false;
+                };
+                let mut helper = owner.borrow_mut();
+                if helper.component.add_dirt_state(value).is_none() {
+                    return false;
+                }
+                // PathComposer's onDirty first updates this helper's own gate.
+                // No callback separates that gate from the dirt-state write.
+                helper.dirty_shape()
             }
+            Self::TextVariationHelper(handle) => {
+                let Some(owner) = handle.upgrade() else {
+                    return false;
+                };
+                if owner.borrow_mut().component.add_dirt_state(value).is_none() {
+                    return false;
+                }
+                // TextVariationHelper inherits Component's empty onDirty.
+                None
+            }
+            Self::Authored(_) => unreachable!(),
+        };
+        // Drop both the helper loan and its temporary strong owner before the
+        // Shape callback can reenter or retire the occurrence.
+        if let Some(shape) = shape {
+            crate::mechanical_port::source::shapes::shape::Shape::path_changed_occurrence(&shape);
+        }
+        let dependents = self
+            .with_component(|component| component.notify_and_snapshot_dependents(recurse))
+            .unwrap_or_default();
+        for dependent in dependents.iter() {
+            dependent.add_dirt(value, true);
         }
         true
     }
@@ -953,9 +973,7 @@ impl Component {
     }
 
     pub fn with_artboard<R>(&self, use_artboard: impl FnOnce(&Artboard) -> R) -> Option<R> {
-        self.artboard
-            .as_ref()?
-            .with_downcast::<Artboard, _>(use_artboard)
+        self.artboard.as_ref()?.with_artboard(use_artboard)
     }
 
     pub fn with_artboard_mut<R>(&self, use_artboard: impl FnOnce(&mut Artboard) -> R) -> Option<R> {
@@ -1093,8 +1111,15 @@ impl Component {
     pub fn dirt(&self) -> ComponentDirt {
         match &self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt,
-            ComponentDirtStorage::Artboard(dirty) => dirty.component_dirt(),
+            ComponentDirtStorage::Artboard(dirty) => Self::artboard_dirt(dirty),
         }
+    }
+
+    // Ordinary Components own inline bits. Keep the runtime Artboard alias
+    // read separate so that their hot getter need not compute both addresses.
+    #[inline(never)]
+    fn artboard_dirt(dirty: &RuntimeArtboardDirtyHandle) -> ComponentDirt {
+        dirty.component_dirt()
     }
 
     pub fn set_dirt(&mut self, value: ComponentDirt) {
@@ -1455,3 +1480,7 @@ mod dirt_dispatch_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "component_helper_dirt_tests.rs"]
+mod helper_dirt_tests;

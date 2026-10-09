@@ -410,6 +410,18 @@ impl Drawable {
             .as_ref()
             .and_then(RuntimeDrawableWeakOccurrence::upgrade)
     }
+
+    /// Read the fresh range link; the next range iteration validates authored
+    /// identity before invoking any receiver operation. Other callers still
+    /// use prev_drawable when they need an immediately live occurrence.
+    pub(crate) fn prev_drawable_for_draw_range(&self) -> Option<RuntimeDrawableOccurrence> {
+        match self.prev.as_ref()? {
+            RuntimeDrawableWeakOccurrence::Authored(handle) => {
+                Some(RuntimeDrawableOccurrence::Authored(handle.clone()))
+            }
+            previous @ RuntimeDrawableWeakOccurrence::RuntimeProxy(_) => previous.upgrade(),
+        }
+    }
 }
 
 pub trait ProxyDrawing {
@@ -422,6 +434,9 @@ pub trait ProxyDrawing {
     fn draw_proxy(&mut self, renderer: &mut Renderer, needs_save_operation: bool);
     fn is_proxy_hidden(&self) -> bool;
     fn owner_handle(&self) -> CoreHandle;
+    fn hittable_component(&self) -> Option<CoreHandle> {
+        Some(self.owner_handle())
+    }
     fn empty_clip_count(&mut self) -> i32 {
         0
     }
@@ -593,9 +608,6 @@ impl RuntimeDrawableOccurrence {
         skip_on_unclipped: bool,
         is_primary_hit: bool,
     ) -> bool {
-        if self.layer_mask_marker().is_some() {
-            return false;
-        }
         match self {
             Self::Authored(handle) => handle
                 .with_mut(|object| {
@@ -604,19 +616,17 @@ impl RuntimeDrawableOccurrence {
                 .flatten()
                 .unwrap_or(false),
             Self::RuntimeProxy(proxy) => {
+                if proxy.borrow().is_hidden() {
+                    return false;
+                }
                 let owner = proxy.borrow().hittable_component();
-                owner
-                    .and_then(|owner| {
-                        owner.with_mut(|owner| {
-                            owner.component_hit_test_point(
-                                position,
-                                skip_on_unclipped,
-                                is_primary_hit,
-                            )
-                        })
-                    })
-                    .flatten()
-                    .unwrap_or(false)
+                if let Some(owner) = owner {
+                    owner.with_mut(|owner| owner.component_hit_test_point(position, skip_on_unclipped, is_primary_hit)).flatten().unwrap_or(false)
+                } else {
+                    // Clip and mask markers have no hittable target. As in
+                    // Drawable::hitTestPoint, fall through to their own Component.
+                    self.with_component(|component| component.hit_test_point(position, skip_on_unclipped, is_primary_hit)).unwrap_or(false)
+                }
             }
         }
     }
@@ -858,11 +868,7 @@ impl DrawableProxy {
         self.proxy_drawing.is_proxy_hidden()
     }
     pub fn hittable_component(&self) -> Option<CoreHandle> {
-        if self.proxy_drawing.layer_mask_marker().is_some() {
-            None
-        } else {
-            Some(self.proxy_drawing.owner_handle())
-        }
+        self.proxy_drawing.hittable_component()
     }
     pub fn is_target_opaque(&mut self) -> bool {
         self.hittable_component()
@@ -929,3 +935,23 @@ use std::{
     cell::{Ref, RefCell, RefMut},
     rc::{Rc, Weak},
 };
+
+#[cfg(test)]
+mod source_proxy_tests {
+    use super::*;
+    use crate::source::{core::CoreArena, layer_mask::{LayerMask, LayerMaskOp}, shapes::clipping_shape::ClippingShapeStart};
+
+    #[test]
+    fn clip_and_mask_markers_use_their_own_component_hit_fallback() {
+        let arena = CoreArena::default();
+        let clipping = arena.insert(ClippingShape::default());
+        let clip = clipping.with_downcast_mut::<ClippingShape, _>(|clip| clip.create_proxy_drawable(Box::new(ClippingShapeStart::default())).unwrap()).unwrap();
+        let mask = arena.insert(LayerMask::default());
+        let marker = mask.with_downcast_mut::<LayerMask, _>(|mask| mask.create_proxy_drawable(LayerMaskOp::MaskStart)).unwrap();
+        for occurrence in [clip, marker] {
+            assert!(occurrence.with_proxy(|proxy| proxy.hittable_component().is_none()).unwrap());
+            assert!(occurrence.hit_test_point(&Vec2D::new(1.0, 2.0), false, true));
+            assert!(!occurrence.is_target_opaque());
+        }
+    }
+}

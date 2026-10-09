@@ -16,6 +16,8 @@ pub use crate::mechanical_port::source::data_bind::data_bind::{
     BINDINGS, BINDINGS_TARGET, DEPENDENTS,
 };
 
+pub type ConverterUnbindHandler = fn(&CoreHandle);
+
 pub type ConverterBindContextHandler =
     fn(&CoreHandle, RuntimeDataContextHandle, Option<CoreHandle>);
 
@@ -61,6 +63,10 @@ macro_rules! data_converter_capability_lifecycle {
     ($($base:ident).+) => {
         fn bind_context_handler(&self) -> $crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler {
             $crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::bind_from_context_handle
+        }
+
+        fn unbind_handler(&self) -> $crate::mechanical_port::source::data_bind::converters::data_converter::ConverterUnbindHandler {
+            $crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::unbind_base_handle
         }
 
         fn unbind(&mut self) {
@@ -192,6 +198,21 @@ impl Default for DataConverter {
 }
 
 impl DataConverter {
+    /// Native definitions contain only unbound scalar construction. Restore the
+    /// inherited constructor default before the clone gets an arena identity;
+    /// the qualified base completion reads Name after owned binding callbacks.
+    pub(crate) fn clone_occurrence_parts(
+        source: &dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> crate::mechanical_port::source::core::CoreCloneParts {
+        let mut cloned = source.clone_boxed();
+        if let Some(cloned) = &mut cloned {
+            cloned.as_data_converter_mut()
+                .expect("a native converter definition retains its base")
+                .base.set_name_value(String::new());
+        }
+        (cloned, source.clone_completion_handler())
+    }
+
     /// Complete the inherited owned bindings only after the clone has an
     /// occurrence identity, so every cloned binding targets the actual clone.
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
@@ -202,25 +223,39 @@ impl DataConverter {
         };
         let source_binds = source_container.data_binds().to_vec();
         for source_bind in source_binds {
+            let Some(cloned_bind) = source_bind.clone_occurrence() else {
+                return false;
+            };
+            cloned_bind.with_mut(|bind| {
+                bind.as_data_bind_mut()
+                    .expect("a binding clone remains a binding")
+                    .set_target(Some(cloned.clone()));
+            });
             let Some(file) = source_bind
                 .with(|bind| bind.as_data_bind().map(|bind| bind.file()))
                 .flatten()
             else {
                 return false;
             };
-            let Some(cloned_bind) = source_bind.clone_occurrence() else {
-                return false;
-            };
             cloned_bind.with_mut(|bind| {
-                let bind = bind
-                    .as_data_bind_mut()
-                    .expect("a binding clone remains a binding");
-                bind.set_target(Some(cloned.clone()));
-                bind.set_file(file);
+                bind.as_data_bind_mut()
+                    .expect("a binding clone remains a binding")
+                    .set_file(file);
             });
             cloned_container.add_data_bind(cloned_bind);
         }
-        true
+        let Some(name) = source.with(|source| {
+            source.as_data_converter().map(|source| source.base.name().to_owned())
+        }).flatten() else {
+            return false;
+        };
+        cloned.with_mut(|cloned| {
+            let Some(cloned) = cloned.as_data_converter_mut() else {
+                return false;
+            };
+            cloned.base.set_name_value(name);
+            true
+        }).unwrap_or(false)
     }
 
     pub fn convert_handle(
@@ -308,39 +343,31 @@ impl DataConverter {
         }
     }
 
+    /// Select this converter's virtual operation before releasing its receiver.
+    /// Builtin overrides supply their own released occurrence implementation;
+    /// a custom capability defaults to its ordinary virtual unbind method.
     pub fn unbind_handle(owner: &CoreHandle) {
-        use super::{
-            data_converter_formula::DataConverterFormula, data_converter_group::DataConverterGroup,
-        };
-        // Arena teardown may have already retired this converter. Preserve
-        // the former scoped-dispatch no-op for that stale occurrence.
+        let handler = owner
+            .with(|owner| {
+                owner
+                    .as_data_converter_capability()
+                    .map(|converter| converter.unbind_handler())
+            })
+            .flatten();
+        if let Some(handler) = handler {
+            handler(owner);
+        }
+    }
+
+    /// Qualified DataConverter::unbind for owners that inherit the base method.
+    /// Retain the container independently while its children detach observers.
+    pub fn unbind_base_handle(owner: &CoreHandle) {
+        // Teardown may already have retired the occurrence. This also protects
+        // a selected handler whose custom selector releases the last owner.
         if !owner.is_alive() {
             return;
         }
-        if let Some(items) =
-            owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
-        {
-            for item in items {
-                if let Some(converter) = item
-                    .with(|item| item.as_data_converter_group_item().unwrap().converter())
-                    .flatten()
-                {
-                    Self::unbind_handle(&converter);
-                }
-            }
-            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
-        } else {
-            use crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter;
-            // Release the formula borrow before owned bindings detach their
-            // property observers, which can target this same converter.
-            owner.with_downcast_mut::<DataConverterFormula, _>(
-                DataConverterFormula::detach_source_dependency,
-            );
-            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
-            owner.with_downcast_mut::<ScriptedDataConverter, _>(
-                ScriptedDataConverter::clear_binding_context,
-            );
-        }
+        crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
     }
 
     fn handle(&self) -> Option<CoreHandle> {
@@ -411,11 +438,22 @@ impl DataConverter {
 
     pub fn mark_converter_dirty(&mut self) {
         if let Some(parent) = self.data_binds.parent_data_bind() {
-            let dirt = parent.with(|owner| owner.as_data_bind().map(|parent| {
-                DEPENDENTS | if parent.target_origin() { BINDINGS_TARGET } else { BINDINGS }
-            })).flatten();
+            let dirt = parent
+                .with(|owner| {
+                    owner.as_data_bind().map(|parent| {
+                        DEPENDENTS
+                            | if parent.target_origin() {
+                                BINDINGS_TARGET
+                            } else {
+                                BINDINGS
+                            }
+                    })
+                })
+                .flatten();
             if let Some(dirt) = dirt {
-                crate::source::data_bind::data_bind::DataBind::add_dirt_handle(&parent, dirt, false);
+                crate::source::data_bind::data_bind::DataBind::add_dirt_handle(
+                    &parent, dirt, false,
+                );
             }
         }
     }
@@ -447,15 +485,19 @@ impl DataConverter {
             let Some(cloned) = source.clone_occurrence() else {
                 continue;
             };
+            cloned.with_mut(|bind| {
+                if let Some(bind) = bind.as_data_bind_mut() {
+                    bind.set_target(target.clone());
+                }
+            });
             let source_file = source
                 .with(|source| source.as_data_bind().map(|bind| bind.file()))
                 .flatten();
             cloned.with_mut(|bind| {
-                if let Some(bind) = bind.as_data_bind_mut() {
-                    bind.set_target(target.clone());
-                    if let Some(file) = source_file {
-                        bind.set_file(file);
-                    }
+                if let Some(bind) = bind.as_data_bind_mut()
+                    && let Some(file) = source_file
+                {
+                    bind.set_file(file);
                 }
             });
             self.data_binds.add_data_bind(cloned);
@@ -464,7 +506,9 @@ impl DataConverter {
             .copy(&object.base, &mut DataConverterCopyCallbacks);
     }
 
-    pub fn may_advance(&self) -> bool { false }
+    pub fn may_advance(&self) -> bool {
+        false
+    }
 
     pub fn advance(&mut self, _elapsed_time: f32) -> bool {
         false
@@ -508,6 +552,10 @@ impl DataConverterCapability for DataConverter {
 
     fn bind_context_handler(&self) -> ConverterBindContextHandler {
         Self::bind_from_context_handle
+    }
+
+    fn unbind_handler(&self) -> ConverterUnbindHandler {
+        Self::unbind_base_handle
     }
 
     fn unbind(&mut self) {

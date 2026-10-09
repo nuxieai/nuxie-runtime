@@ -1,9 +1,14 @@
+use super::data_converter::{DataConverter, bind_converter_context};
 use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_context::RuntimeDataContextHandle,
     data_bind::data_values::{data_type::DataType, data_value::DataValue},
-    generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase,
+    generated::{
+        core_registry::DataConverterCapability,
+        data_bind::converters::data_converter_group_base::DataConverterGroupBase,
+    },
 };
+
 pub trait GroupConverter {
     fn convert(
         &mut self,
@@ -28,15 +33,28 @@ pub trait GroupConverter {
     fn reset(&mut self);
     fn advance(&mut self, elapsed: f32) -> bool;
 }
+
 #[derive(Default)]
 pub struct DataConverterGroup {
     pub base: DataConverterGroupBase,
     items: Vec<CoreHandle>,
 }
+
+impl Drop for DataConverterGroup {
+    fn drop(&mut self) {
+        // The source group owns its items. CoreHandle alone is a weak identity;
+        // explicitly retire each occurrence before the base converter drops.
+        for item in &self.items {
+            item.remove_occurrence();
+        }
+    }
+}
+
 impl DataConverterGroup {
     pub fn add_item(&mut self, item: CoreHandle) {
-        self.items.push(item)
+        self.items.push(item);
     }
+
     pub fn convert(
         &mut self,
         value: &dyn DataValue,
@@ -45,6 +63,7 @@ impl DataConverterGroup {
     ) {
         convert_chain(&self.items, 0, value, data_bind, false, output);
     }
+
     pub fn reverse_convert(
         &mut self,
         value: &dyn DataValue,
@@ -60,33 +79,36 @@ impl DataConverterGroup {
             output,
         );
     }
+
     pub fn output_type(&self, super_output: DataType) -> DataType {
-        for item in self.items.iter().rev() {
-            let converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .and_then(|item| item.converter())
-                })
-                .flatten();
-            if let Some(converter) = converter {
-                let output = converter
+        for index in (0..self.items.len()).rev() {
+            if self.item_output_type(index) != DataType::Input {
+                // outputType is virtual. The source calls it again, with a
+                // fresh item->converter() read after the first callback.
+                return self.item_output_type(index);
+            }
+        }
+        super_output
+    }
+
+    fn item_output_type(&self, index: usize) -> DataType {
+        item_converter(&self.items[index])
+            .and_then(|converter| {
+                converter
                     .with(|converter| {
                         converter
                             .as_data_converter_capability()
                             .map(|converter| converter.output_type())
                     })
                     .flatten()
-                    .unwrap_or(DataType::Input);
-                if output != DataType::Input {
-                    return output;
-                }
-            }
-        }
-        super_output
+            })
+            .unwrap_or(DataType::Input)
     }
+
     pub fn items(&self) -> &[CoreHandle] {
         &self.items
     }
+
     pub fn clone_definition(&self) -> Self {
         let mut cloned = Self::default();
         cloned
@@ -96,21 +118,16 @@ impl DataConverterGroup {
             .set_name_value(self.base.base.base.name().to_owned());
         cloned
     }
+
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
-        if !super::data_converter::DataConverter::complete_clone(source, cloned) {
+        if !DataConverter::complete_clone(source, cloned) {
             return false;
         }
         let Some(items) = source.with_downcast::<Self, _>(|source| source.items.clone()) else {
             return false;
         };
         for item in items {
-            let has_converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .is_some_and(|item| item.converter().is_some())
-                })
-                .unwrap_or(false);
-            if has_converter {
+            if item_converter(&item).is_some() {
                 let Some(item) = item.clone_occurrence() else {
                     return false;
                 };
@@ -119,6 +136,7 @@ impl DataConverterGroup {
         }
         true
     }
+
     pub fn bind_from_context(
         &mut self,
         context: RuntimeDataContextHandle,
@@ -128,44 +146,39 @@ impl DataConverterGroup {
             .base
             .bind_from_context(context.clone(), data_bind.clone());
         for item in &self.items {
-            let converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .and_then(|item| item.converter())
-                })
-                .flatten();
-            if let Some(converter) = converter {
-                super::data_converter::bind_converter_context(
-                    &converter,
-                    context.clone(),
-                    data_bind.clone(),
-                );
+            if let Some(converter) = item_converter(item) {
+                bind_converter_context(&converter, context.clone(), data_bind.clone());
             }
         }
     }
+
+    pub fn unbind_occurrence(owner: &CoreHandle) {
+        let Some(items) = owner.with(|owner| {
+            owner.as_data_converter_capability()
+                .and_then(|converter| converter.unbind_group_items())
+        }).flatten() else {
+            return;
+        };
+        for item in items {
+            if let Some(converter) = item_converter(&item) {
+                DataConverter::unbind_handle(&converter);
+            }
+        }
+        DataConverter::unbind_base_handle(owner);
+    }
+
     pub fn unbind(&mut self) {
         for item in &self.items {
-            let converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .and_then(|item| item.converter())
-                })
-                .flatten();
-            if let Some(converter) = converter {
-                super::data_converter::DataConverter::unbind_handle(&converter);
+            if let Some(converter) = item_converter(item) {
+                DataConverter::unbind_handle(&converter);
             }
         }
         self.base.base.unbind();
     }
+
     pub fn update(&mut self) {
         for item in &self.items {
-            let converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .and_then(|item| item.converter())
-                })
-                .flatten();
-            if let Some(converter) = converter {
+            if let Some(converter) = item_converter(item) {
                 converter.with_mut(|converter| {
                     if let Some(converter) = converter.as_data_converter_capability_mut() {
                         converter.update();
@@ -174,15 +187,10 @@ impl DataConverterGroup {
             }
         }
     }
+
     pub fn reset(&mut self) {
         for item in &self.items {
-            let converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .and_then(|item| item.converter())
-                })
-                .flatten();
-            if let Some(converter) = converter {
+            if let Some(converter) = item_converter(item) {
                 converter.with_mut(|converter| {
                     if let Some(converter) = converter.as_data_converter_capability_mut() {
                         converter.reset();
@@ -191,34 +199,52 @@ impl DataConverterGroup {
             }
         }
     }
+
     pub fn may_advance(&self) -> bool {
-        self.items.iter().any(|item| {
-            let converter = item.with(|item| item.as_data_converter_group_item().unwrap().converter()).flatten();
-            converter.is_some_and(|converter| converter.with(|converter| converter.as_data_converter_capability().unwrap().may_advance()).unwrap_or(false))
-        })
+        for item in &self.items {
+            if let Some(converter) = item_converter(item) {
+                if converter
+                    .with(|converter| {
+                        converter
+                            .as_data_converter_capability()
+                            .unwrap()
+                            .may_advance()
+                    })
+                    .unwrap_or(false)
+                {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
         let mut did_update = false;
         for item in &self.items {
-            let converter = item
-                .with(|item| {
-                    item.as_data_converter_group_item()
-                        .and_then(|item| item.converter())
-                })
-                .flatten();
-            if let Some(converter) = converter {
-                did_update |= converter
+            if let Some(converter) = item_converter(item) {
+                if converter
                     .with_mut(|converter| {
                         converter
                             .as_data_converter_capability_mut()
                             .is_some_and(|converter| converter.advance(elapsed))
                     })
-                    .unwrap_or(false);
+                    .unwrap_or(false)
+                {
+                    did_update = true;
+                }
             }
         }
         did_update
     }
+}
+
+fn item_converter(item: &CoreHandle) -> Option<CoreHandle> {
+    item.with(|item| {
+        item.as_data_converter_group_item()
+            .and_then(|item| item.converter())
+    })
+    .flatten()
 }
 
 fn convert_chain(
@@ -272,9 +298,7 @@ fn convert_chain(
     }
 }
 
-impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
-    for DataConverterGroup
-{
+impl DataConverterCapability for DataConverterGroup {
     fn convert(
         &mut self,
         input: &dyn DataValue,
@@ -297,45 +321,40 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         Self::output_type(self, self.base.base.output_type())
     }
 
-    fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
+    fn bind_context_handler(&self) -> super::data_converter::ConverterBindContextHandler {
         |owner, context, data_bind| {
-            super::data_converter::DataConverter::bind_from_context_handle(
-                owner,
-                context.clone(),
-                data_bind.clone(),
-            );
+            DataConverter::bind_from_context_handle(owner, context.clone(), data_bind.clone());
             let items = owner
                 .with_downcast::<Self, _>(|owner| owner.items.clone())
                 .expect("live DataConverterGroup");
             for item in items {
-                if let Some(converter) = item
-                    .with(|item| item.as_data_converter_group_item().unwrap().converter())
-                    .flatten()
-                {
-                    super::data_converter::bind_converter_context(
-                        &converter,
-                        context.clone(),
-                        data_bind.clone(),
-                    );
+                if let Some(converter) = item_converter(&item) {
+                    bind_converter_context(&converter, context.clone(), data_bind.clone());
                 }
             }
         }
     }
 
+    fn unbind_handler(&self) -> super::data_converter::ConverterUnbindHandler {
+        Self::unbind_occurrence
+    }
+    fn unbind_group_items(&self) -> Option<Vec<CoreHandle>> {
+        Some(self.items.clone())
+    }
+
     fn unbind(&mut self) {
         Self::unbind(self);
     }
-
     fn update(&mut self) {
         Self::update(self);
     }
-
     fn reset(&mut self) {
         Self::reset(self);
     }
-
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }
-    fn may_advance(&self) -> bool { Self::may_advance(self) }
+    fn may_advance(&self) -> bool {
+        Self::may_advance(self)
+    }
 }

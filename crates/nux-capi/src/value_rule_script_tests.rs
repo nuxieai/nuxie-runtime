@@ -15,7 +15,7 @@ fn same_type<T>(_: &T, value: T) -> T {
 }
 
 #[test]
-fn script_set_answers_synchronously_and_preserves_ordered_reports() {
+fn script_set_returns_synchronously_and_preserves_ordered_reports() {
     let bytes = fixture::fixture(None, &[], false);
     let mut file = std::ptr::null_mut();
     assert_eq!(

@@ -51,9 +51,9 @@ pub fn script_checked_value_write_batch(
 /// with n at most 4096. A boolean, number or string value is a candidate; an
 /// absent value clears the property and its paired marker. Any other shape
 /// fails here, before the batch runs, so nothing is written. The root, path
-/// and text bytes are counted as each string is read, and the read stops once
-/// they pass the batch's byte bound, so a string that many writes share is
-/// never copied past it.
+/// and text bytes are counted as each string is read, and copying stops at
+/// the first string that passes the batch's byte bound, so a string that many
+/// writes share is copied at most once past it.
 fn script_checked_value_batch_entries(
     writes: Value,
 ) -> Result<Vec<RuntimeCheckedValueBatchEntry>, String> {
@@ -131,9 +131,10 @@ fn script_text(value: &Value, bytes: &mut usize) -> Result<String, String> {
 }
 
 /// Add one string just read to the batch's running byte total, raising once
-/// the total passes the runtime batch's bound. luaur gives a string's length
-/// only with a copy of its bytes, so the check follows each copy: the reader
-/// holds at most the bound plus one string, however many writes share it.
+/// the total passes the runtime batch's bound. The check follows each copy, so
+/// the reader holds at most the bound plus one string, however many writes
+/// share it; the string that crosses the bound is itself copied once, as the
+/// single checked write already copies its arguments.
 fn count_batch_bytes(total: &mut usize, bytes: usize) -> Result<(), String> {
     *total = total.saturating_add(bytes);
     if *total > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES {

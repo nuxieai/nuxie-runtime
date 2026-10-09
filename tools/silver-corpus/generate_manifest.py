@@ -141,6 +141,9 @@ DYNAMIC_GRID_STACK = (
 
 SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
     "car_widgets_v01",
+    # Keyframe interpolation contracts in the production lane (1ae307dc03);
+    # the strict-fp lane reproduces the stored silver exactly.
+    "data_converter_to_number",
     "hunter_x_demo",
     "rewards_demo",
 }
@@ -292,7 +295,6 @@ EXACT = (
     "custom_property_trigger_bind",
     "computed_root_transform-nested_artboard",
     "custom_property_enum",
-    "data_converter_to_number",
     "data_bind_solo-values-to-solos",
     "databind_artboard",
     "event_trigger_event",
@@ -2371,6 +2373,7 @@ bidirectional_binding_source|frame 0, op 31 (makeRenderPaint): expected makeRend
 data_binding_artboards_test|frame 7, op 580 (frame): expected frame, got makeRenderPaint
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
 collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672
+data_converter_to_number|frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443
 focus_traversal|frame 0, op 95 (color): expected color, got save
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save

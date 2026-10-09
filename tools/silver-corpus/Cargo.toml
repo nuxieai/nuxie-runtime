@@ -5,6 +5,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Replays the strict unit/Silver arithmetic lane (upstream --no_ffp_contract).
+# Never enable it in a dependency: it would unify into every workspace build.
+strict-fp = ["nuxie-runtime/strict-fp"]
+
 [dependencies]
 anyhow = "1"
 nuxie-render-api = { path = "../../crates/nuxie-render-api" }

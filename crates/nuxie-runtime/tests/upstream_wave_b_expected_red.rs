@@ -150,6 +150,23 @@ impl BindingSilver {
         sriv::compare_sriv(&expected_sriv, &actual_sriv).expect("pinned converter silver");
         assert_eq!(actual.len(), expected.len(), "pinned SRIV byte length");
     }
+
+    /// The pinned silver is a `--no_ffp_contract` producer. The contracted
+    /// production lane keeps its recorded first difference; the strict-fp
+    /// lane mirrors the producer and must match it exactly.
+    fn matches_ffp_contract_divergence(&self, name: &str, expected: &str) {
+        if cfg!(feature = "strict-fp") {
+            return self.matches(name);
+        }
+        let silver =
+            std::fs::read(binding_path(&format!("silvers/{name}.sriv"))).expect("pinned silver");
+        let silver = sriv::parse_sriv(&silver).expect("valid pinned SRIV");
+        let actual = self.silver.borrow().bytes().to_vec();
+        let actual = sriv::parse_sriv(&actual).expect("valid native SRIV");
+        let difference = sriv::compare_sriv(&silver, &actual)
+            .expect_err("contracted divergence should remain present");
+        assert_eq!(difference.to_string(), expected);
+    }
 }
 
 #[test]
@@ -2081,7 +2098,10 @@ fn wave_b_data_binding_test_025_direct_port_expected_red() {
         fixture.advance(0.016);
         fixture.artboard.draw(&mut renderer);
     }
-    fixture.matches("data_converter_to_number");
+    fixture.matches_ffp_contract_divergence(
+        "data_converter_to_number",
+        "frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443",
+    );
 }
 
 #[test]

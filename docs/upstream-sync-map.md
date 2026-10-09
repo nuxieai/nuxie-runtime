@@ -569,6 +569,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   one documented strict-baseline converter mismatch. The converter continues
   to pass against matched contracted C++ output. There are no new failures;
   25/25 longer-frame agreement is not a whole-runtime or speed-parity claim.
+  Resolved 2026-10-09 at pin `6f3510dc`: the default lane mirrors production
+  contraction by design, so `data_converter_to_number` is now classified with
+  the other producer-build-mode (`--no_ffp_contract`) divergences rather than
+  left as a red exact entry. The validator pins its first difference (frame
+  41, op 2120, addRawPath 1850 vs 1443 fields), and the strict lane must
+  still replay the stored silver exactly: `make silver-corpus-strict-fp`, run
+  as its own step in the CI silver lane. No silver, tolerance, or arithmetic
+  changed.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not

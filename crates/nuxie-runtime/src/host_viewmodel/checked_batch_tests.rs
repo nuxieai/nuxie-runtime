@@ -255,7 +255,7 @@ fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_rest
                 capture,
             )
             .unwrap();
-            let picks = changes
+            let flags = changes
                 .iter()
                 .filter(|(_, c)| c.property_index == 2)
                 .map(|(o, c)| (o.instance_identity(), c.value.clone()))
@@ -273,7 +273,7 @@ fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_rest
             if reverse {
                 expected.reverse();
             }
-            assert_eq!(picks, expected);
+            assert_eq!(flags, expected);
             if commit {
                 transaction.commit();
                 operation.commit_groups(&policy);

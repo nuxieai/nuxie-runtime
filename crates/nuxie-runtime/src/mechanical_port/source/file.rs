@@ -513,7 +513,9 @@ impl File {
         let result = self.read_objects(reader, header, &mut import_stack, None, admission);
         if result.0 == ImportResult::Success {
             for asset in &self.file_assets {
-                asset.with_downcast_mut::<crate::source::assets::shader_asset::ShaderAsset, _>(|shader| shader.finish_import());
+                asset.with_downcast_mut::<crate::source::assets::shader_asset::ShaderAsset, _>(
+                    |shader| shader.finish_import(),
+                );
             }
         }
         result

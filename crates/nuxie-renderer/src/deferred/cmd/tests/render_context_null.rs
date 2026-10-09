@@ -158,6 +158,7 @@ impl RenderContextHelperBackendContract for RenderContextNull {
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
         feature = "ore-gl"
     ))]
     fn makeOreContext(&mut self)->Option<Box<crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext>>{

@@ -4380,16 +4380,24 @@ pub fn get_stencil_info(
             drawContentsMask: DrawContents::activeClip,
             areDrawContentsValid: valid,
         },
-        DrawType::stencilDynamicMidpointFans
-        | DrawType::stencilDynamicOuterCubics
-        | DrawType::stencilMidpointFans
-        | DrawType::stencilOuterCubics => StencilInfo {
+        DrawType::stencilMidpointFans | DrawType::stencilOuterCubics => StencilInfo {
             stencilType: StencilType::forwardClippedByBackward,
             drawContentsMask: DrawContents(DrawContents::activeClip.0 | DrawContents::clipUpdate.0),
             areDrawContentsValid: valid,
         },
         DrawType::stencilMidpointFanReset | DrawType::stencilOuterCubicReset => StencilInfo {
             stencilType: StencilType::backwardTriangleCleanup,
+            drawContentsMask: DrawContents(
+                DrawContents::clockwiseFill.0
+                    | DrawContents::activeClip.0
+                    | DrawContents::clipUpdate.0,
+            ),
+            areDrawContentsValid: valid,
+        },
+        // Dynamic types combine borrowed coverage, fill, and reset, so their
+        // draw-contents mask is the union of all three pass masks.
+        DrawType::stencilDynamicMidpointFans | DrawType::stencilDynamicOuterCubics => StencilInfo {
+            stencilType: StencilType::forwardClippedByBackward,
             drawContentsMask: DrawContents(
                 DrawContents::clockwiseFill.0
                     | DrawContents::activeClip.0
@@ -4893,6 +4901,36 @@ mod dynamic_color_write_tests {
         ] {
             assert!(with_dynamic_state.contains(&(draw_type as u8)));
             assert!(without_dynamic_state.contains(&(draw_type as u8)));
+        }
+    }
+
+    #[test]
+    fn dynamic_stencil_mask_is_union_of_all_three_passes() {
+        for draw_type in [
+            DrawType::stencilDynamicMidpointFans,
+            DrawType::stencilDynamicOuterCubics,
+        ] {
+            let info = get_stencil_info(InterlockMode::depthStencil, draw_type, DrawContents::none);
+            let union = [
+                DrawType::stencilMidpointFanBorrowedCoverage,
+                DrawType::stencilMidpointFans,
+                DrawType::stencilMidpointFanReset,
+            ]
+            .into_iter()
+            .fold(0, |mask, pass| {
+                mask | get_stencil_info(InterlockMode::depthStencil, pass, DrawContents::none)
+                    .drawContentsMask
+                    .0
+            });
+            assert_eq!(info.drawContentsMask.0, union);
+            assert_eq!(
+                union,
+                DrawContents::clockwiseFill.0
+                    | DrawContents::activeClip.0
+                    | DrawContents::clipUpdate.0
+            );
+            assert_eq!(info.stencilType, StencilType::forwardClippedByBackward);
+            assert!(info.areDrawContentsValid);
         }
     }
 

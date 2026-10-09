@@ -8,6 +8,11 @@ use crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewMode
 /// scripts bound their lists with this same value.
 pub const RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES: usize = 4096;
 
+/// The most root name, path and text bytes one checked batch accepts, summed
+/// over every entry. Hosts that read batches from scripts count the same bytes
+/// as they read each string and stop at this same value.
+pub const RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES: usize = 8 * 1024 * 1024;
+
 /// One scalar candidate (or explicit clear), addressed through the caller's roots.
 pub struct RuntimeCheckedValueBatchEntry {
     pub root_name: String,
@@ -76,7 +81,7 @@ pub fn runtime_checked_value_write_batch(
         if let RuntimeCheckedValueInput::Text(text) = &entry.value {
             bytes = bytes.saturating_add(text.len());
         }
-        if bytes > 8 * 1024 * 1024 {
+        if bytes > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES {
             return Err(RuntimeValuePolicyError::LimitExceeded);
         }
         let root = roots

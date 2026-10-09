@@ -9,6 +9,11 @@ use nuxie_runtime::{
 #[path = "../tests/support/value_markers.rs"]
 mod fixture;
 
+/// Name a Luau value type from a witness of the same type.
+fn same_type<T>(_: &T, value: T) -> T {
+    value
+}
+
 #[test]
 fn script_set_answers_synchronously_and_preserves_ordered_reports() {
     let bytes = fixture::fixture(None, &[], false);

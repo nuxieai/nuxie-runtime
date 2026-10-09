@@ -37,10 +37,6 @@ fn script_error(error: impl std::fmt::Display) -> nuxie::ScriptError {
     nuxie::ScriptError::new(error.to_string())
 }
 
-fn same_type<T>(_: &T, value: T) -> T {
-    value
-}
-
 impl nuxie::ScriptHostExtension for Extension {
     fn install(
         &self,
@@ -60,19 +56,8 @@ impl nuxie::ScriptHostExtension for Extension {
         module.set_readonly(false);
         let file = Rc::clone(&self.file);
         let setter = lua
-            .create_function(move |lua, (root, path, value): (String, String, _)| {
-                let value = same_type(&lua.pack(false)?, value);
-                let input = if value.is_nil() {
-                    nuxie::RuntimeCheckedValueInput::Clear
-                } else if let Some(value) = value.as_boolean() {
-                    nuxie::RuntimeCheckedValueInput::Boolean(value)
-                } else if let Some(value) = value.as_number() {
-                    nuxie::RuntimeCheckedValueInput::Number(value)
-                } else if let Some(value) = value.as_string() {
-                    nuxie::RuntimeCheckedValueInput::Text(value.as_bytes().to_vec())
-                } else {
-                    return Err("checked value must be a scalar or nil".into());
-                };
+            .create_function(move |_, (root, path, value): (String, String, _)| {
+                let input = nuxie::script_checked_value_input(&value)?;
                 checked(&file, &root, &path, input).map_err(Into::into)
             })
             .map_err(script_error)?;

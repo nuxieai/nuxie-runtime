@@ -95,7 +95,7 @@ fn script_checked_value_batch_entry(
         match key.as_string().map(|key| key.as_bytes()).as_deref() {
             Some(b"root") => root_name = Some(script_text(&field)?),
             Some(b"path") => path = Some(script_text(&field)?),
-            Some(b"value") => value = script_checked_value(&field)?,
+            Some(b"value") => value = script_checked_value_input(&field)?,
             _ => return Err("checked write fields are root, path and value".into()),
         }
     }
@@ -116,7 +116,11 @@ fn script_text(value: &Value) -> Result<String, String> {
         .ok_or_else(|| ROOT_AND_PATH.to_owned())
 }
 
-fn script_checked_value(value: &Value) -> Result<RuntimeCheckedValueInput, String> {
+/// Read one script value as a checked write candidate: a boolean, number or
+/// string is a candidate and nil clears the property and its paired marker.
+/// Any other value raises "checked value must be a scalar or nil". Hosts use
+/// it for their single checked write, and the batch uses it for each value.
+pub fn script_checked_value_input(value: &Value) -> Result<RuntimeCheckedValueInput, String> {
     if value.is_nil() {
         Ok(RuntimeCheckedValueInput::Clear)
     } else if let Some(value) = value.as_boolean() {

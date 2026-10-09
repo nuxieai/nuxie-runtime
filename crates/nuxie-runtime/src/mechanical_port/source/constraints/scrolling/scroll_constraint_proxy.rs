@@ -172,7 +172,21 @@ impl DraggableProxy for ViewportDraggableProxy {
                             return true;
                         }
                         c.begin_scroll_gesture();
-                        c.scroll_by(event.delta);
+                        if c.can_stretch(event.delta) && c.can_consume(event.delta) {
+                            // Track the coast like a finger: crossing an end stretches
+                            // the band, then releases at the coast's speed. A view
+                            // already at its end stays put. A primed clock has no
+                            // earlier sample to measure against.
+                            let primed = c.ensure_physics_primed();
+                            c.drag_view(event.delta, time_stamp, !primed);
+                            // Landing exactly on the end must release too: the next
+                            // delta could not move it past the end.
+                            if c.is_overscrolled() || !c.can_consume(event.delta) {
+                                c.start_physics();
+                            }
+                        } else {
+                            c.scroll_by(event.delta);
+                        }
                     }
                     ScrollPhase::End => {
                         c.start_physics();

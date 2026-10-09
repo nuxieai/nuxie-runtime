@@ -1,4 +1,4 @@
-//! Native `runtime/scroll_input_test.cpp`, updated through upstream de3e8609.
+//! Native `runtime/scroll_input_test.cpp`, updated through upstream 71713c9f.
 use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::{RuntimeStateMachineInstanceHandle, StateMachineInstance},
@@ -101,9 +101,6 @@ impl Scene {
     }
     fn running(&self) -> bool {
         physics(&self.scroll, |p| p.is_running())
-    }
-    fn enabled(&self) -> bool {
-        physics(&self.scroll, |p| p.enabled())
     }
     fn latch(&self) -> bool {
         self.smi.with_instance_mut(|s| s.has_scroll_latch())
@@ -241,7 +238,8 @@ fn platform_momentum_never_flings() {
     s.send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -50.0);
     assert!(!s.running());
-    assert_eq!(s.get(ScrollConstraint::velocity_y), 0.0);
+    // The coast is tracked like a finger, so it reports its speed.
+    assert!(s.get(ScrollConstraint::velocity_y) <= 0.0);
 }
 #[test]
 fn inertia_cancel_halts_fling() {
@@ -399,24 +397,99 @@ fn precise_gesture_stretches_elastic_edge() {
     assert!(s.get(ScrollConstraint::clamped_offset_y) < s.get(ScrollConstraint::offset_y));
 }
 #[test]
-fn settle_mid_gesture_does_not_pin_rendering() {
+fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
+    // Wall-clock velocity, as in the other velocity tests here: in
+    // deterministic mode the clock truncates sub-second stamps to zero.
     let s = Scene::vertical();
+    assert_eq!(s.get(ScrollConstraint::max_offset_y), -610.0);
+
+    // macOS sends begin, updates, then momentum without an end. The coast
+    // stretches the band at its end rather than landing clamped there.
     s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -900.0));
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
+    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    for _ in 0..13 {
+        s.send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
+    }
+    assert_eq!(s.get(ScrollConstraint::offset_y), -600.0);
+    assert!(!s.get(ScrollConstraint::is_overscrolled));
+    assert!(!s.running());
+    // Nothing flings from the coast, but it is tracked like a finger.
+    assert!(s.get(ScrollConstraint::velocity_y) < 0.0);
+
+    s.send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
+    assert_eq!(s.get(ScrollConstraint::offset_y), -640.0);
+    assert!(s.get(ScrollConstraint::is_overscrolled));
+    assert!(s.get(ScrollConstraint::clamped_offset_y) > s.get(ScrollConstraint::offset_y));
+    assert!(s.get(ScrollConstraint::clamped_offset_y) < s.get(ScrollConstraint::max_offset_y));
+    // The coast ends there and releases at its speed, as a drag would.
     assert!(s.running());
+    assert!(s.get(ScrollConstraint::is_scrolling));
+    s.send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
+    assert_eq!(s.get(ScrollConstraint::offset_y), -640.0);
+
+    // It carries on past the end before the brake, like a released fling.
+    s.advance(0.016);
+    assert!(s.get(ScrollConstraint::offset_y) < -640.0);
+
     for _ in 0..300 {
         if !s.running() {
             break;
         }
         s.advance(0.016);
-        s.send(trackpad(ScrollPhase::Momentum, 0.0, -1.0));
+        s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
     }
-    assert!(s.get(ScrollConstraint::is_scrolling));
-    assert!(!s.enabled());
-    s.send(trackpad(ScrollPhase::Update, 0.0, -60.0));
-    assert!(s.enabled());
-    assert!(s.get(ScrollConstraint::clamped_offset_y) < s.get(ScrollConstraint::max_offset_y));
+    approx(
+        s.get(ScrollConstraint::offset_y),
+        s.get(ScrollConstraint::max_offset_y),
+    );
+    assert!(!s.get(ScrollConstraint::is_overscrolled));
+
+    // The remaining tail cannot pull a view already at its end.
+    s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+    s.send(trackpad(ScrollPhase::Momentum, 0.0, -5.0));
+    assert_eq!(
+        s.get(ScrollConstraint::offset_y),
+        s.get(ScrollConstraint::max_offset_y),
+    );
+    assert!(!s.running());
+}
+#[test]
+fn momentum_landing_exactly_on_an_end_still_releases() {
+    let s = Scene::vertical();
+    s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
+    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    for _ in 0..13 {
+        s.send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
+    }
+    assert_eq!(s.get(ScrollConstraint::offset_y), -600.0);
+
+    // Landing exactly at the end leaves nothing overscrolled, so it must
+    // release now: the next delta could never move the view.
+    s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+    assert_eq!(
+        s.get(ScrollConstraint::offset_y),
+        s.get(ScrollConstraint::max_offset_y),
+    );
+    assert!(!s.get(ScrollConstraint::is_overscrolled));
+    assert!(s.running());
+
+    // The release carries it past the end from there.
+    s.advance(0.016);
+    assert!(s.get(ScrollConstraint::offset_y) < s.get(ScrollConstraint::max_offset_y));
+
+    for _ in 0..300 {
+        if !s.running() {
+            break;
+        }
+        s.advance(0.016);
+        s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+    }
+    approx(
+        s.get(ScrollConstraint::offset_y),
+        s.get(ScrollConstraint::max_offset_y),
+    );
 }
 #[test]
 fn interest_follows_drag_multiplier() {

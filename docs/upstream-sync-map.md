@@ -7,18 +7,25 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f40c9dfe8a0c4accf3e963f48429e893798854a5`
+- LAST_SYNCED_SHA: `6f3510dcc545bc8b2a78f1004a06929d17cd022b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6f3510dcc545bc8b2a78f1004a06929d17cd022b` (refreshed 2026-10-09 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 215 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (237 after `5892bb05`); this
+  No upstream commits remain after this checkpoint at the fetched target.
+  All 216 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (238 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `6f3510dc`, integrated atop downstream `92e8c5776f`:
+  independent source-equivalence accounting and subsequent Rust-integration
+  reviews are clean. Source/pipeline tests pass 12 and manifest tests pass 27.
+  The complete public behavior change belongs to parked guest execution; no
+  runtime code, dependencies, shader bytes or historical provenance changed.
+  Current source/oracle pins and manifest agree. The f40 validation below remains
+  applicable evidence for unchanged runtime owners, not new guest coverage.
 - Validation at `f40c9dfe`, integrated atop downstream `a49b777f7f`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including correction and fixture rereviews, are clean. Both browser products
@@ -587,6 +594,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6f3510dcc545bc8b2a78f1004a06929d17cd022b` | Public delta only adds WasmScriptingVM callDraw save accounting and restoration before renderer-handle release, preserving outer visit state. This guest-execution fix remains deferred; it does not change the Luau or browser-renderer Wasm lanes. The commit message describes private Dart/Flutter frameBoundary integration and a test absent from the public delta; those are not claimed imported. Advance active source/oracle pins and inventory without relabeling unchanged shader artifacts or historical evidence. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `f40c9dfe8a0c4accf3e963f48429e893798854a5` | Translate shader signature admission before indexing/reflection, signed-content group separation and signature verification helpers through live Rust import/scripting owners; retain approved host authentication and resource limits. Translate integer gradient coordinates, exact additive complement, uniform/instance packing, repeat gradient sampling and all supported-backend shader consumers; regenerate current shader artifacts. D3D and Unreal-specific HarfBuzz flags are unshipped. Guest unsigned-module execution, SIMD admission, WAMR cache/AOT and guest shader APIs remain deferred; import-shape tests do not imply execution support. Private signer/editor/export changes absent from the public delta are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `71713c9f086723a44df580db4678a3ae5d68c6c2` | Track elastic platform momentum through dragView while it can stretch and consume the delta; release at tracked coast speed when crossing or landing exactly on an edge. Preserve primed-clock sampling and absorption of the remaining tail. Translate both edge regressions and the upstream velocity expectation update. Private .rive_head contents are absent and not claimed. | — |
 | `9f47f07639009b16097985fe7b794c3fe09287dc` | Translate WebGPU pseudo-dynamic fill state as three retained pipeline passes, framebuffer/dynamic cache-key separation, per-pass stencil reference and color-write-disable vertex flags; enable the upstream dynamic-state capability. Shared dynamic stencil masks include the union of all three pass masks. Preserve the wasm32-unknown-unknown browser boundary; upstream private .rive_head implementation is not present or claimed imported. | — |

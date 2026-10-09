@@ -377,6 +377,46 @@ fn script_list_values_reads_one_property_per_item_in_list_order() {
 }
 
 #[test]
+fn script_list_values_and_set_all_take_empty_lists() {
+    let step = Step::new(true);
+    // An empty list reads as an empty table, not nil, so a caller can tell it
+    // from a path that names no list.
+    assert_eq!(
+        step.list_values("'', 'items_errors', 'code'").unwrap(),
+        Some(Vec::new())
+    );
+    assert_eq!(step.call("bridge.setAll({})").unwrap(), (true, None));
+    assert_eq!(step.flags(), [true, false, false]);
+    assert_eq!(step.write_count(), 0);
+    assert!(step.operation().reports().is_empty());
+}
+
+#[test]
+fn script_list_values_bounds_its_root_path_and_property_bytes() {
+    // Each long root gets its own step: the step's script VM has room for one
+    // 8 MiB string, not two.
+    // Exactly 8 MiB of root, path and property bytes reach the read, which
+    // finds no such root.
+    let at_bound = Step::new(true)
+        .list_values("string.rep('a', 8 * 1024 * 1024 - 9), 'items', 'text'")
+        .unwrap_err();
+    assert!(
+        at_bound.contains("checked value read: NotFound"),
+        "{at_bound}"
+    );
+    // One byte more raises before the read.
+    let step = Step::new(true);
+    let past = step
+        .list_values("string.rep('a', 8 * 1024 * 1024 - 8), 'items', 'text'")
+        .unwrap_err();
+    assert!(
+        past.contains("checked path exceeds the operation limit"),
+        "{past}"
+    );
+    assert_eq!(step.write_count(), 0);
+}
+
+#[test]
 fn script_set_all_refuses_the_whole_batch_with_the_first_rule_code() {
     let step = Step::new(true);
     assert_eq!(step.flags(), [true, false, false]);

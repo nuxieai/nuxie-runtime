@@ -1,5 +1,8 @@
 //! Literal hidden benchmark from grid_scroll_bench_test.cpp at 160085c6.
 //! Kept ignored like upstream's [.bench]; normal validation is not a performance campaign.
+// ArtboardComponentList::set_verify_quiet_rows is an upstream TESTING seam.
+#![cfg(feature = "testing")]
+
 #[path = "support/virtual_scroll.rs"]
 mod support;
 use nuxie_runtime::source::viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem;

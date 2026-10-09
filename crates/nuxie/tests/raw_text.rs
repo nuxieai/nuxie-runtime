@@ -103,7 +103,7 @@ fn d_rt_api_defaults_empty_run_and_lazy_equality_noops() {
 }
 
 #[test]
-fn d_rt_api_append_nul_style_identity_clear_and_stale_bounds() {
+fn d_rt_api_append_nul_style_identity_clear_and_empty_bounds() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let mut renderer = factory.borrow().make_renderer();
     let (mut raw, factory_handle) = raw_text(&mut factory);
@@ -123,18 +123,27 @@ fn d_rt_api_append_nul_style_identity_clear_and_stale_bounds() {
         0xff00_0000,
     );
     raw.append("!", Some(paint), font, 12.0, 40.0, 3.0, 0xffff_0000);
+    // Pinned style identity is paint plus foreground color (upstream
+    // db31ea87), so the shared paint still yields one style per color.
+    assert_eq!(raw.debug_style_count(), 2);
     let before = raw.bounds();
     assert!(before.width() > 0.0 && before.height() > 0.0);
     raw.render(&mut renderer, None);
 
     raw.clear();
     assert!(raw.empty());
-    assert_eq!(raw.bounds(), before, "C++ retains stale bounds after clear");
+    // Pinned RawText::update zeroes the bounds of empty text so layout
+    // readers never see the cleared runs (upstream db31ea87).
+    assert_eq!(
+        raw.bounds(),
+        nuxie::Aabb::new(0.0, 0.0, 0.0, 0.0),
+        "C++ resets bounds after clear"
+    );
     raw.render(&mut renderer, None);
     drop(raw);
     assert_eq!(
         factory.borrow().stream().matches("drawPath").count(),
-        1,
+        2,
         "cleared draw commands stay empty"
     );
 }

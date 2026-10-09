@@ -337,6 +337,11 @@ impl DataConverter {
                 DataConverterFormula::detach_source_dependency,
             );
             crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
+            // The released binding context can hold the last File lease.
+            // Retain the arena so its teardown runs after this converter's
+            // borrow ends, never re-entering it from a dropped DataBind or
+            // script input.
+            let _retained = owner.retain_arena();
             owner.with_downcast_mut::<ScriptedDataConverter, _>(
                 ScriptedDataConverter::clear_binding_context,
             );

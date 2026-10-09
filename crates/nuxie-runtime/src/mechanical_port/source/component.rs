@@ -197,6 +197,11 @@ impl ComponentOccurrenceHandle {
     pub(crate) fn notify_artboard(&self) {
         self.with_component(Component::notify_artboard);
     }
+    /// The runtime helpers' onDirty (PathComposer::onDirty; the variation
+    /// helper has none), for a graph member whose dirt is already set.
+    pub(crate) fn on_dirty_helper(&self, dirt: ComponentDirt) {
+        self.on_dirty(dirt);
+    }
     fn on_dirty_authored(handle: &CoreHandle, dirt: ComponentDirt) {
         let callback = handle
             .with_mut(|object| {
@@ -258,6 +263,25 @@ impl ComponentOccurrenceHandle {
         }
     }
     pub fn add_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {
+        match self {
+            Self::Authored(handle) => {
+                if let Some((graph, index)) = handle.component_graph() {
+                    return graph.add_dirt(index, value, recurse);
+                }
+            }
+            Self::PathComposer(_) | Self::TextVariationHelper(_) => {
+                if let Some((graph, index)) = self
+                    .with_component(|component| {
+                        component
+                            .graph_binding()
+                            .map(|(graph, index)| (std::rc::Rc::clone(graph), index))
+                    })
+                    .flatten()
+                {
+                    return graph.add_dirt(index, value, recurse);
+                }
+            }
+        }
         if let Self::Authored(handle) = self {
             let action = handle
                 .with_mut(|object| {
@@ -726,6 +750,36 @@ impl ComponentOccurrenceHandle {
     /// Artboard::updateComponents' per-occurrence preparation. Read under a
     /// shared borrow so clean/collapsed entries need no exclusive access; clear
     /// dirt only for an actual update and release preparation before callbacks.
+    /// A runtime helper's update for a graph member whose dirt the graph walk
+    /// has already read and cleared.
+    pub(crate) fn update_helper(&self, dirt: ComponentDirt) {
+        match self {
+            Self::PathComposer(handle) => {
+                let owner = handle
+                    .upgrade()
+                    .expect("live component in dependency graph");
+                let shape = owner.borrow_mut().update(dirt);
+                if let Some((shape, measured_geometry_changed)) = shape {
+                    shape.with_mut(|shape| {
+                        let shape = shape.as_shape_mut().expect("PathComposer Shape");
+                        if measured_geometry_changed {
+                            shape.mark_bounds_dirty();
+                        } else {
+                            shape.mark_world_bounds_dirty();
+                        }
+                    });
+                }
+            }
+            Self::TextVariationHelper(handle) => {
+                handle
+                    .upgrade()
+                    .expect("live component in dependency graph")
+                    .borrow_mut()
+                    .update(dirt);
+            }
+            Self::Authored(_) => unreachable!("authored occurrences are not helpers"),
+        }
+    }
     pub(crate) fn update_if_dirty(&self) -> bool {
         let needs_update = |dirt: ComponentDirt| {
             dirt != ComponentDirt::NONE && !dirt.contains(ComponentDirt::COLLAPSED)
@@ -831,6 +885,12 @@ impl ComponentOccurrenceHandle {
 enum ComponentDirtStorage {
     Inline(ComponentDirt),
     Artboard(RuntimeArtboardDirtyHandle),
+    // A member of its initialized Artboard's ComponentGraph: the graph's dirt
+    // column at this graph order is the only copy.
+    Graph(
+        std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        u32,
+    ),
 }
 
 // A separate Background can read TextStylePaint's actual parent while a
@@ -916,6 +976,31 @@ impl Component {
         Rc::downgrade(parent)
     }
 
+    /// Move this member's dirt into its Artboard's ComponentGraph.
+    pub(crate) fn bind_graph_dirt(
+        &mut self,
+        graph: std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        index: u32,
+    ) {
+        if let ComponentDirtStorage::Artboard(_) = self.dirt {
+            return;
+        }
+        graph.set_dirt(index, self.dirt());
+        self.dirt = ComponentDirtStorage::Graph(graph, index);
+    }
+
+    pub(crate) fn graph_binding(
+        &self,
+    ) -> Option<(
+        &std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        u32,
+    )> {
+        match &self.dirt {
+            ComponentDirtStorage::Graph(graph, index) => Some((graph, *index)),
+            _ => None,
+        }
+    }
+
     pub(crate) fn bind_artboard_dirt(&mut self, dirty: RuntimeArtboardDirtyHandle) {
         // Alias the root's existing field, including when a temporary generated
         // base stands in for it during copy/deserialize. Never replace its bits.
@@ -961,6 +1046,10 @@ impl Component {
     }
 
     pub(crate) fn notify_artboard(&self) {
+        if let ComponentDirtStorage::Graph(graph, index) = &self.dirt {
+            graph.notify_artboard(*index);
+            return;
+        }
         if let Some(dirty) = self
             .artboard
             .as_ref()
@@ -1137,6 +1226,7 @@ impl Component {
     pub fn dirt(&self) -> ComponentDirt {
         match &self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt,
+            ComponentDirtStorage::Graph(graph, index) => graph.dirt(*index),
             ComponentDirtStorage::Artboard(dirty) => Self::artboard_dirt(dirty),
         }
     }
@@ -1151,6 +1241,7 @@ impl Component {
     pub fn set_dirt(&mut self, value: ComponentDirt) {
         match &mut self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt = value,
+            ComponentDirtStorage::Graph(graph, index) => graph.set_dirt(*index, value),
             ComponentDirtStorage::Artboard(dirty) => dirty.set_component_dirt(value),
         }
     }

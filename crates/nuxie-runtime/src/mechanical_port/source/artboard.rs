@@ -215,6 +215,17 @@ impl RuntimeArtboardDirtyHandle {
     pub fn has_component_dirt(&self) -> bool {
         self.0.dirt.get().contains(ComponentDirt::COMPONENTS)
     }
+    pub(crate) fn clear_components_dirt(&self) {
+        self.0
+            .dirt
+            .set(self.0.dirt.get() & !ComponentDirt::COMPONENTS);
+    }
+    pub(crate) fn set_depth(&self, depth: u32) {
+        self.0.depth.set(depth);
+    }
+    pub(crate) fn depth(&self) -> u32 {
+        self.0.depth.get()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -252,6 +263,8 @@ pub struct Artboard {
     animations: Vec<CoreHandle>,
     state_machines: Vec<CoreHandle>,
     dependency_order: Vec<crate::mechanical_port::source::component::ComponentOccurrenceHandle>,
+    // Built once initialize has fixed the edges; see component_graph.rs.
+    component_graph: Option<Rc<crate::mechanical_port::source::component_graph::ComponentGraph>>,
     dependency_order_recipe: std::cell::RefCell<Vec<DependencyOrderEntry>>,
     recipe_state: std::cell::Cell<RecipeState>,
     dispose_source_for_replacement: bool,
@@ -356,6 +369,7 @@ impl Default for Artboard {
             animations: Vec::new(),
             state_machines: Vec::new(),
             dependency_order: Vec::new(),
+            component_graph: None,
             dependency_order_recipe: std::cell::RefCell::new(Vec::new()),
             recipe_state: std::cell::Cell::new(RecipeState::Unbuilt),
             dispose_source_for_replacement: false,
@@ -1445,6 +1459,21 @@ impl Artboard {
                     )
                 }),
         ));
+        // Every edge is in place now (including the DrawTarget edges above).
+        // Build without an Artboard borrow: the order includes the root itself.
+        if let Some((order, dirty)) = root.with_downcast::<Artboard, _>(|artboard| {
+            (
+                artboard.dependency_order.clone(),
+                artboard.dirty_state.clone(),
+            )
+        }) {
+            let graph = crate::mechanical_port::source::component_graph::ComponentGraph::build(
+                root, &order, dirty,
+            );
+            root.with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.component_graph = Some(graph);
+            });
+        }
         Self::init_scripted_objects_handle(root);
         StatusCode::Ok
     }
@@ -2858,6 +2887,14 @@ impl Artboard {
         };
         if !dirty {
             return false;
+        }
+        if let Some(graph) = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.component_graph.clone())
+            .flatten()
+        {
+            graph.update_components();
+            drop(runtime_receiver);
+            return true;
         }
         let mut step = 0;
         while step < 100

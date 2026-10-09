@@ -999,21 +999,43 @@ impl std::fmt::Debug for RegisteredGpuCanvasShaderAsset {
 
 #[derive(Debug)]
 enum RegisteredGpuCanvasShaderAssetState {
+    Native {
+        asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
+        decoded_payload: Option<Vec<u8>>,
+    },
     Valid(ShaderAsset),
     Invalid(String),
 }
 
 impl RegisteredGpuCanvasShaderAsset {
+    fn decoded_payload_identity(&self) -> Option<&[u8]> {
+        match &self.asset {
+            RegisteredGpuCanvasShaderAssetState::Native {
+                decoded_payload, ..
+            } => decoded_payload.as_deref(),
+            // Standalone assets are immutable for this registration.
+            _ => None,
+        }
+    }
+
+    fn resolved_payload_matches(
+        &mut self,
+        name: &str,
+        profile: GpuCanvasShaderProfile,
+        payload: Option<&[u8]>,
+    ) -> bool {
+        self.resolve(name, profile).is_ok() && self.decoded_payload_identity() == payload
+    }
+
     pub(crate) fn from_native(
         asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
         provenance: Option<GpuCanvasShaderProvenance>,
     ) -> Self {
-        let asset = match ShaderAsset::from_native(asset) {
-            Ok(asset) => RegisteredGpuCanvasShaderAssetState::Valid(asset),
-            Err(error) => RegisteredGpuCanvasShaderAssetState::Invalid(error.to_string()),
-        };
         Self {
-            asset,
+            asset: RegisteredGpuCanvasShaderAssetState::Native {
+                asset,
+                decoded_payload: None,
+            },
             provenance,
             decoded: None,
             prepared_module: None,
@@ -1043,12 +1065,53 @@ impl RegisteredGpuCanvasShaderAsset {
         name: &str,
         profile: GpuCanvasShaderProfile,
     ) -> Result<&GpuCanvasShaderArtifact> {
+        if let RegisteredGpuCanvasShaderAssetState::Native {
+            asset,
+            decoded_payload,
+        } = &mut self.asset
+        {
+            // Referenced assets may decode after File::finishImport. Retain
+            // their actual owner, and recheck its pure admitted accessor even
+            // when a previously decoded artifact is cached.
+            let payload = asset
+                .with_downcast::<nuxie_runtime::source::assets::shader_asset::ShaderAsset, _>(
+                    |asset| (!asset.rstb().is_empty()).then(|| asset.encoded_payload().to_vec()),
+                )
+                .flatten();
+            let Some(payload) = payload else {
+                *decoded_payload = None;
+                self.decoded = None;
+                self.prepared_module = None;
+                return Err(Error::runtime("ShaderAsset is unavailable"));
+            };
+            if decoded_payload.as_ref() != Some(&payload)
+                || self
+                    .decoded
+                    .as_ref()
+                    .is_none_or(|(decoded, _)| *decoded != profile)
+            {
+                self.decoded = None;
+                self.prepared_module = None;
+                // Admission above precedes reflection parsing and module
+                // construction. Native provenance/size checks remain intact.
+                let decoded = ShaderAsset::from_native(asset.clone())?.decode_for_profile(
+                    name,
+                    profile,
+                    self.provenance.clone(),
+                )?;
+                self.decoded = Some((profile, decoded));
+                *decoded_payload = Some(payload);
+            }
+        }
         if self
             .decoded
             .as_ref()
             .is_none_or(|(decoded, _)| *decoded != profile)
         {
             let asset = match &self.asset {
+                RegisteredGpuCanvasShaderAssetState::Native { .. } => {
+                    unreachable!("native asset was resolved above")
+                }
                 RegisteredGpuCanvasShaderAssetState::Valid(asset) => asset,
                 RegisteredGpuCanvasShaderAssetState::Invalid(error) => {
                     return Err(Error::runtime(error.clone()));
@@ -1239,8 +1302,14 @@ impl GpuCanvasContextBindings {
             if !selected.factory_matches {
                 continue;
             }
-            let shader = {
+            let (shader, payload_identity) = {
                 let mut owner = entry.owner.borrow_mut();
+                // Resolve first: a cached device module cannot hide a later
+                // asset refusal or replacement.
+                let shader = match owner.resolve(&entry.name, selected.profile) {
+                    Ok(shader) => shader.clone(),
+                    Err(_) => continue,
+                };
                 if owner
                     .prepared_module
                     .as_ref()
@@ -1249,10 +1318,7 @@ impl GpuCanvasContextBindings {
                     continue;
                 }
                 owner.prepared_module = None;
-                match owner.resolve(&entry.name, selected.profile) {
-                    Ok(shader) => shader.clone(),
-                    Err(_) => continue,
-                }
+                (shader, owner.decoded_payload_identity().map(<[u8]>::to_vec))
             };
             let load = bindings
                 .with_factory(|factory| Ok(factory.load_gpu_canvas_shader_artifact(&shader)))?;
@@ -1270,11 +1336,13 @@ impl GpuCanvasContextBindings {
                     continue;
                 }
                 let mut owner = entry.owner.borrow_mut();
-                if owner
-                    .decoded
-                    .as_ref()
-                    .is_some_and(|(profile, _)| *profile == prepared.profile)
-                {
+                // A late asset decode can complete while compilation awaits.
+                // Never attach A's module to B's currently decoded metadata.
+                if owner.resolved_payload_matches(
+                    &entry.name,
+                    prepared.profile,
+                    payload_identity.as_deref(),
+                ) {
                     owner.prepared_module = Some(prepared);
                 }
             }
@@ -3303,6 +3371,125 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
 
 #[cfg(test)]
 mod tests {
+    fn late_shader_payload() -> Vec<u8> {
+        let source = b"@vertex fn main() -> @builtin(position) vec4f { return vec4f(); }";
+        let mut module = vec![1, 0];
+        for _ in 0..2 {
+            module.extend_from_slice(&4u16.to_le_bytes());
+            module.extend_from_slice(b"main");
+        }
+        module.extend_from_slice(&(source.len() as u32).to_le_bytes());
+        module.extend_from_slice(source);
+        let map = [3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+        let mut payload = vec![0];
+        payload.extend_from_slice(&0x5253_5442u32.to_le_bytes());
+        payload.extend_from_slice(&4u16.to_le_bytes());
+        payload.extend_from_slice(&[2, 0]);
+        for (target, offset, size) in [(0u8, 0, module.len()), (16, module.len(), map.len())] {
+            payload.push(target);
+            payload.extend_from_slice(&(offset as u32).to_le_bytes());
+            payload.extend_from_slice(&(size as u32).to_le_bytes());
+        }
+        payload.extend_from_slice(&module);
+        payload.extend_from_slice(&map);
+        payload
+    }
+
+    #[test]
+    fn native_shader_owner_recovers_after_late_admitted_decode() {
+        use nuxie_runtime::source::{assets::shader_asset::ShaderAsset, core::CoreArena};
+        let arena = CoreArena::default();
+        let mut native = ShaderAsset::default();
+        // Tools imports admit unsigned editor content; host-created assets in
+        // runtime builds are likewise unimported, as in upstream decodeBareRstb.
+        #[cfg(feature = "tools")]
+        native.imported_with(false);
+        native.finish_import();
+        let handle = arena.insert(native);
+        let mut owner = super::RegisteredGpuCanvasShaderAsset::from_native(handle.clone(), None);
+        let profile = nuxie_render_api::GpuCanvasShaderProfile::WebGpu;
+        assert!(owner.resolve("late", profile).is_err());
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory::new());
+        let factory = nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        handle
+            .with_downcast_mut::<ShaderAsset, _>(|asset| {
+                assert!(asset.decode(&late_shader_payload(), &factory))
+            })
+            .unwrap();
+        let artifact = owner.resolve("late", profile).unwrap();
+        assert_eq!(artifact.entries().len(), 1);
+        assert_eq!(artifact.entries()[0].physical_entry_point, "main");
+        let payload_a = owner.decoded_payload_identity().unwrap().to_vec();
+        // SignedContentHeader rejects this before changing any source bytes.
+        handle
+            .with_downcast_mut::<ShaderAsset, _>(|asset| {
+                assert!(!asset.decode(&[0x80], &factory));
+            })
+            .unwrap();
+        assert!(owner.resolved_payload_matches("late", profile, Some(&payload_a)));
+        assert_eq!(
+            owner.resolve("late", profile).unwrap().entries()[0].physical_entry_point,
+            "main"
+        );
+
+        // Model an async load of A, then a late decode and resolution of B,
+        // then A completing. The actual publication predicate must reject A.
+        let mut payload_b = late_shader_payload();
+        let at = payload_b
+            .windows(4)
+            .position(|bytes| bytes == b"main")
+            .unwrap();
+        payload_b[at..at + 4].copy_from_slice(b"next");
+        handle
+            .with_downcast_mut::<ShaderAsset, _>(|asset| {
+                assert!(asset.decode(&payload_b, &factory));
+            })
+            .unwrap();
+        assert_eq!(
+            owner.resolve("late", profile).unwrap().entries()[0].logical_entry_point,
+            "next"
+        );
+        assert!(!owner.resolved_payload_matches("late", profile, Some(&payload_a)));
+        assert!(owner.resolved_payload_matches("late", profile, Some(&payload_b)));
+        // A subsequent refused decode must invalidate the successful cache,
+        // without dropping the same native owner or accepting raw bytes.
+        handle
+            .with_downcast_mut::<ShaderAsset, _>(|asset| {
+                asset.imported_with(true);
+                assert!(asset.decode(&late_shader_payload(), &factory));
+                assert!(asset.rstb().is_empty());
+            })
+            .unwrap();
+        assert!(owner.resolve("late", profile).is_err());
+        assert!(owner.decoded.is_none());
+        assert!(owner.prepared_module.is_none());
+    }
+
+    #[test]
+    fn native_shader_owner_keeps_refused_late_content_unavailable() {
+        use nuxie_runtime::source::{assets::shader_asset::ShaderAsset, core::CoreArena};
+        let arena = CoreArena::default();
+        let mut native = ShaderAsset::default();
+        native.imported_with(true);
+        native.finish_import();
+        let handle = arena.insert(native);
+        let mut owner = super::RegisteredGpuCanvasShaderAsset::from_native(handle.clone(), None);
+        let profile = nuxie_render_api::GpuCanvasShaderProfile::WebGpu;
+        assert!(owner.resolve("refused", profile).is_err());
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory::new());
+        let factory = nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        handle
+            .with_downcast_mut::<ShaderAsset, _>(|asset| {
+                assert!(asset.decode(&late_shader_payload(), &factory))
+            })
+            .unwrap();
+        assert!(owner.resolve("refused", profile).is_err());
+        assert!(owner.resolve("refused", profile).is_err());
+        assert!(owner.decoded.is_none());
+    }
+
     use super::{
         GpuCanvasContextBindings, GpuCanvasShaderEntry, GpuCanvasShaderStage, GpuShader,
         checked_gpu_buffer_write_range, resolve_shader_entry,

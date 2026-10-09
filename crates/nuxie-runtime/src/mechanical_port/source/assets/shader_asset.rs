@@ -27,6 +27,11 @@ pub struct ShaderAsset {
     bytes: Vec<u8>,
     index: HashMap<u8, ShaderVariant>,
     pairs: Vec<TextureSamplerPair>,
+    indexed: bool,
+    imported: bool,
+    require_signed_scripts: bool,
+    import_finished: bool,
+    refusal_logged: bool,
 }
 
 impl Default for ShaderAsset {
@@ -37,6 +42,11 @@ impl Default for ShaderAsset {
             bytes: Vec::new(),
             index: HashMap::new(),
             pairs: Vec::new(),
+            indexed: false,
+            imported: false,
+            require_signed_scripts: false,
+            import_finished: false,
+            refusal_logged: false,
         }
     }
 }
@@ -47,12 +57,66 @@ impl ShaderAsset {
     }
 
     pub fn decode(&mut self, data: &[u8], _factory: &RuntimeFactoryHandle) -> bool {
-        self.encoded_payload = data.to_vec();
         let envelope = SignedContentHeader::new(data);
         if !envelope.is_valid() {
             return false;
         }
+        self.encoded_payload = data.to_vec();
+        self.base.set_verified(
+            envelope.is_signed()
+                && crate::source::importers::text_asset_importer::verifies_content_signature(
+                    envelope.signature(),
+                    envelope.content(),
+                ),
+        );
+        self.refusal_logged = false;
         self.bytes = envelope.content().to_vec();
+        self.indexed = false;
+        let indexed = self.admit();
+        if self.import_finished {
+            self.log_refusal();
+        }
+        indexed
+    }
+
+    pub fn imported_with(&mut self, require_signed_scripts: bool) {
+        self.imported = true;
+        self.require_signed_scripts = require_signed_scripts;
+    }
+
+    fn accepted(&self) -> bool {
+        !self.imported
+            || crate::source::file::File::accepts_script(
+                self.require_signed_scripts,
+                self.base.verified(),
+            )
+    }
+
+    pub fn admit(&mut self) -> bool {
+        if self.indexed || !self.accepted() {
+            return true;
+        }
+        self.indexed = self.index();
+        self.indexed
+    }
+
+    pub fn finish_import(&mut self) {
+        self.import_finished = true;
+        self.log_refusal();
+    }
+
+    fn log_refusal(&mut self) {
+        if self.indexed || self.refusal_logged || self.bytes.is_empty() || self.accepted() {
+            return;
+        }
+        self.refusal_logged = true;
+        eprintln!(
+            "Shader '{}' is unavailable: its signature did not verify.",
+            self.base.name()
+        );
+    }
+
+    fn index(&mut self) -> bool {
         self.index.clear();
         self.pairs.clear();
 
@@ -152,10 +216,16 @@ impl ShaderAsset {
     }
     /// Decoded RSTB container for forwarding across process or module boundaries.
     pub fn rstb(&self) -> &[u8] {
+        if !self.indexed {
+            return &[];
+        }
         &self.bytes
     }
 
     pub fn find_shader(&self, target: u8) -> &[u8] {
+        if !self.indexed {
+            return &[];
+        }
         let Some(variant) = self.index.get(&target) else {
             return &[];
         };
@@ -164,6 +234,9 @@ impl ShaderAsset {
     }
 
     pub fn texture_sampler_pairs(&self) -> &[TextureSamplerPair] {
+        if !self.indexed {
+            return &[];
+        }
         &self.pairs
     }
 }

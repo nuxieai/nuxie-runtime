@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_depthstencil_triangles_nocolor.main";
 pub const PINNED_SOURCE_SHA256: &str = "ba30fcdd603ff8919ff7c5ff6868c7793244b38035864d492af36155e39c3666";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_depthstencil_triangles_nocolor";

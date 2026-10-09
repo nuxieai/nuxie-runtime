@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/unreal/draw_depthstencil_image_mesh.usf";
 pub const PINNED_SOURCE_SHA256: &str = "5416f06d0ae9cd4073e92e435fd0dcc2b6a0751235368aa2fce9c310df332b40";
 pub const OWNERSHIP_UNIT: &str = "shader:source:unreal_draw_depthstencil_image_mesh";

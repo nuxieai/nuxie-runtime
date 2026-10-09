@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "7aa93402a27c800db8a36acc8672612c100ea9b1";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "df9c6087f6dac668a3e274862ed34fb1df19c9a88bea87f4ccd93410cee7dd2b";
 pub const OWNERSHIP_UNIT: &str = "shader:source:tessellate";

@@ -110,6 +110,15 @@ impl ShaderAsset {
     pub(crate) fn from_native(
         asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
     ) -> Result<Self> {
+        // The retained envelope is provenance data, not permission to parse a
+        // refused asset. Match the admitted ShaderAsset accessors before any
+        // supplemental-reflection parsing below.
+        if asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.rstb().is_empty())
+            .unwrap_or(true)
+        {
+            return Err(Error::runtime("ShaderAsset is unavailable"));
+        }
         let payload = asset
             .with_downcast::<NativeShaderAsset, _>(|asset| asset.encoded_payload().to_vec())
             .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
@@ -572,6 +581,7 @@ fn decode_per_entry_glsl(
         let stage = match cursor.read_u8("GLSL shader stage")? {
             0 => GpuCanvasShaderStage::Vertex,
             1 => GpuCanvasShaderStage::Fragment,
+            2 => GpuCanvasShaderStage::Compute,
             other => {
                 return Err(Error::runtime(format!(
                     "ShaderAsset '{name}' WebGL2 stage {other} is unsupported"
@@ -580,19 +590,25 @@ fn decode_per_entry_glsl(
         };
         let logical_entry_point = cursor.read_string("GLSL logical entry point")?;
         let physical_entry_point = cursor.read_string("GLSL physical entry point")?;
+        let source_length = usize::try_from(cursor.read_u32("GLSL source length")?)
+            .map_err(|_| Error::runtime("GLSL source length is not addressable"))?;
+        let source_bytes = cursor.read_bytes(source_length, "GLSL source")?;
+        // visitShaderAssetModules parses the whole per-entry container, but
+        // only vertex/fragment entries create GLSL modules.
+        if stage == GpuCanvasShaderStage::Compute {
+            continue;
+        }
         if logical_entry_point.is_empty() || physical_entry_point != "main" {
             return Err(Error::runtime(format!(
                 "ShaderAsset '{name}' WebGL2 entries require a logical name and physical entry 'main'"
             )));
         }
-        let source_length = usize::try_from(cursor.read_u32("GLSL source length")?)
-            .map_err(|_| Error::runtime("GLSL source length is not addressable"))?;
         if source_length == 0 || source_length > MAX_SHADER_MODULE_BYTES {
             return Err(Error::runtime(format!(
                 "ShaderAsset '{name}' GLSL module size must be between 1 and {MAX_SHADER_MODULE_BYTES} bytes"
             )));
         }
-        let source = std::str::from_utf8(cursor.read_bytes(source_length, "GLSL source")?)
+        let source = std::str::from_utf8(source_bytes)
             .map_err(|_| Error::runtime(format!("ShaderAsset '{name}' GLSL source is not UTF-8")))?
             .to_owned();
         if !source.starts_with("#version 300 es") {
@@ -1700,6 +1716,28 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn per_entry_modules_skip_compute_in_source_order() {
+        let container = per_entry_source_container(&[
+            (0, "first", "main", "#version 300 es\nvoid main() {}"),
+            (
+                2,
+                "unused",
+                "compute_main",
+                "not a GLSL vertex or fragment module",
+            ),
+            (1, "last", "main", "#version 300 es\nvoid main() {}"),
+        ]);
+        let (entries, sources) = decode_per_entry_glsl("mixed", &container).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].logical_entry_point, "first");
+        assert_eq!(entries[1].logical_entry_point, "last");
+        assert_eq!(sources.len(), 2);
+        let mut malformed = container;
+        malformed.pop();
+        assert!(decode_per_entry_glsl("mixed", &malformed).is_err());
     }
 
     #[test]

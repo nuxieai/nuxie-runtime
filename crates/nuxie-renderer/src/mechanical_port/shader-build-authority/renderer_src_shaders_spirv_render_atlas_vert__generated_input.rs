@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/render_atlas.vert";
 pub const PINNED_SOURCE_SHA256: &str = "109e973cde4ace814cc88b472a9b3c1d85152a85b0068108027b9fbecfd552cb";
 pub const OWNERSHIP_UNIT: &str = "shader:source:render_atlas";

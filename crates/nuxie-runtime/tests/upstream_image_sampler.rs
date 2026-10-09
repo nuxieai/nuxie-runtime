@@ -17,6 +17,26 @@ use nuxie_runtime::{
     Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
 };
 
+#[test]
+fn named_bilinear_sampler_keys_match_const_constructors() {
+    use nuxie_runtime::source::shapes::paint::image_sampler::{
+        BilinearClampImageSamplerKey, BilinearRepeatImageSamplerKey,
+    };
+    assert_eq!(BilinearClampImageSamplerKey, 0);
+    assert_eq!(BilinearRepeatImageSamplerKey, 4);
+    assert_eq!(
+        ImageSampler::linear_clamp().as_key(),
+        BilinearClampImageSamplerKey
+    );
+    assert_eq!(
+        ImageSampler::linear_wrap().as_key(),
+        BilinearRepeatImageSamplerKey
+    );
+    for key in 0..ImageSampler::MAX_SAMPLER_PERMUTATIONS as u8 {
+        assert_eq!(ImageSampler::sampler_from_key(key).as_key(), key);
+    }
+}
+
 fn tape_fixture() -> (RuntimeFileHandle, CoreHandle, CoreHandle) {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());

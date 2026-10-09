@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/stencil_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "f05d05ee97d8bcb65284e92a9b102ea6fc8e494dee5575a73a0e733cb5684202";
 pub const OWNERSHIP_UNIT: &str = "shader:source:stencil_draw";

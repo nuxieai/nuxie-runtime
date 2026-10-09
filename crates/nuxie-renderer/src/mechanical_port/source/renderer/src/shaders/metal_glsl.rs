@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/metal.glsl.
  *
- * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "20116330a891582022b640d3c1b20e33f450dd91a31cce9871e6825966829dd5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 536;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 27236;
+    "130728353bd3d3a2e015a8b412cca76cf421d7e3f6a03da36a34062669dde726";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 540;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 27528;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
@@ -168,6 +168,10 @@ pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
 
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
     $constexpr $sampler NAME($filter::$linear, $mip_filter::$none);
+#define SAMPLER_LINEAR_WRAP(TEXTURE_IDX, NAME)                                 \
+    $constexpr $sampler NAME($filter::$linear,                                 \
+                             $mip_filter::$none,                               \
+                             $address::$repeat);
 #define SAMPLER_DYNAMIC(SET, IDX, NAME) [[$sampler(IDX)]] $sampler NAME;
 #define SAMPLER_DYNAMIC_IMAGE(NAME)                                            \
     [[$sampler(IMAGE_TEXTURE_IDX)]] $sampler NAME;

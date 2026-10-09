@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_depthstencil_image_mesh.main";
 pub const PINNED_SOURCE_SHA256: &str = "33526daa726bfd6eea27edf0da68cdd046574fc12cf579b01edde54867e5a88b";
 pub const OWNERSHIP_UNIT: &str = "shader:source:spirv_draw_depthstencil_image_mesh";

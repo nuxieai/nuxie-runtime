@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_fullscreen_quad.vert";
 pub const PINNED_SOURCE_SHA256: &str = "4b321cfed79e4faa7238e7b94d65e8196541e614de304d3f1c53c8152b296859";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_fullscreen_quad";

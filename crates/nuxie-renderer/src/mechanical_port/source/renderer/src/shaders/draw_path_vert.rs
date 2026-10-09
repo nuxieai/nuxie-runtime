@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: 8398db3199cea4cd3eba53747aac562b5c0df3da
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "0975678982bb41fb41da031a50449e23e3ae5d58120b830e3a326f2f03121d96";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 519;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18185;
+    "a711a9e5894e149852785b746d347f3dec78e35c555859ba09d0fde196575f2b";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 511;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17818;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -274,18 +274,14 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
                                  pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 1u);
 
-        // paintData.y (gradient texture row + 1) in the integer part
-        // additiveness in range 0/256 to 255/256 in the fraction.
+        float additivenessComplement = uintBitsToFloat(paintData.y);
         v_paint = packGradientData(fragCoord,
                                    paintMatrix,
                                    paintTranslate.xy,
-                                   float(paintType),
                                    paintTranslate.zw,
-                                   uintBitsToFloat(paintData.y));
-
-        // Make this negative to signal to the fragment shader that it's a
-        // gradient
-        v_paint.a = -v_paint.a;
+                                   paintType,
+                                   additivenessComplement,
+                                   1.0); // coverage
     }
 
 #if defined(@ENABLE_MODULATED_IMAGE)
@@ -433,15 +429,9 @@ INLINE half4 find_paint_color(
     }
     else // Paint is a gradient (linear or radial)?
     {
-        // Flip this back to positive (it was only negative to signal that this
-        // is a gradient)
-        paint.a = -paint.a;
-        // paint.a stores (gradient texture row + 1) in the integer part and
-        // additiveness, in range 0/256 to 255/256 in the fraction.
-        half additiveness = cast_float_to_half(fract(paint.a) * (256. / 255.));
-        paint.a = floor(paint.a) * uniforms.gradTextureYScale +
-                  uniforms.gradTextureYBias;
-        float2 gradientTexCoord = getGradientCoord(paint);
+        float2 gradientTexCoord = getGradientUV(paint,
+                                                uniforms.gradTextureYScale,
+                                                uniforms.gradTextureYBias);
         color =
             TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, gradientTexCoord, .0);
 
@@ -449,8 +439,10 @@ INLINE half4 find_paint_color(
         // doing the hardware filter.
         if (!paintHasAdvancedBlend)
         {
+            half additivenessComplement =
+                getGradientAdditivenessComplement(paint);
             color.rgb *= color.a;
-            color.a *= additiveness;
+            color.a *= additivenessComplement;
         }
     }
 

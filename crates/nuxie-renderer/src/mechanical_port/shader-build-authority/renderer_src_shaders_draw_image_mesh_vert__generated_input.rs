@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_image_mesh.vert";
 pub const PINNED_SOURCE_SHA256: &str = "a657670a0b00b3dded6c4250eb501da2c51739b3cada654cbde90d56d037cee2";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_image_mesh";

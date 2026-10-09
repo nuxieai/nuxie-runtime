@@ -6,6 +6,9 @@
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
+use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
+    BilinearClampImageSamplerKey, BilinearRepeatImageSamplerKey,
+};
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 
 use super::render_context_webgpu_decl::{
@@ -157,7 +160,7 @@ const GLSL_ENABLE_FEATHER: &str = "HB";
 const GLSL_ENABLE_INSTANCE_INDEX: &str = "EE";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "FE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "SC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "RC";
 const GLSL_CLEAR_COLOR: &str = "ZE";
 const GLSL_LOAD_COLOR: &str = "BF";
 const GLSL_STORE_COLOR: &str = "GE";
@@ -166,8 +169,8 @@ const GLSL_CLEAR_CLIP: &str = "ZF";
 const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
-const GLSL_ENABLE_EVEN_ODD: &str = "XC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "DD";
+const GLSL_ENABLE_EVEN_ODD: &str = "WC";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "CD";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
 const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
@@ -178,7 +181,7 @@ const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "VF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_DRAW_IMAGE: &str = "OE";
-const GLSL_DRAW_IMAGE_RECT: &str = "ED";
+const GLSL_DRAW_IMAGE_RECT: &str = "DD";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
 const GLSL_CLOCKWISE_FILL: &str = "IE";
@@ -950,7 +953,7 @@ pub(crate) fn generateMipmaps(context: &mut RenderContextWebGPUImpl, texture: &W
         textureEntry.textureView = sourceView.Get();
         let mut samplerEntry = WGPUBindGroupEntry::default();
         samplerEntry.binding = WEBGPU_IMAGE_SAMPLER_IDX;
-        samplerEntry.sampler = context.m_linearSampler.Get();
+        samplerEntry.sampler = context.m_imageSamplers[BilinearClampImageSamplerKey as usize].Get();
         let entries = [textureEntry, samplerEntry];
         let mut bindGroupDescriptor = WGPUBindGroupDescriptor::default();
         bindGroupDescriptor.layout = pipeline.m_perDrawBindGroupLayout.Get();
@@ -1228,7 +1231,6 @@ pub(crate) fn newContext(
         m_featherAtlasTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_featherAtlasTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
         m_drawPipelines: std::mem::ManuallyDrop::new(Default::default()),
-        m_linearSampler: std::mem::ManuallyDrop::new(Sampler::default()),
         m_imageSamplers: std::mem::ManuallyDrop::new(std::array::from_fn(|_| Sampler::default())),
         m_samplerBindings: std::mem::ManuallyDrop::new(BindGroup::default()),
         m_emptyBindingsLayout: std::mem::ManuallyDrop::new(BindGroupLayout::default()),
@@ -3328,13 +3330,6 @@ pub(crate) fn initGPUObjects(context: &mut RenderContextWebGPUImpl) {
     nullBufferDesc.size = std::mem::size_of::<u32>() as u64;
     *context.m_nullStorageBuffer = unsafe { device.CreateBuffer(&nullBufferDesc) };
 
-    let mut linearDesc = WGPUSamplerDescriptor::default();
-    linearDesc.addressModeU = super::webgpu_cpp_decl::AddressMode::ClampToEdge.into();
-    linearDesc.addressModeV = super::webgpu_cpp_decl::AddressMode::ClampToEdge.into();
-    linearDesc.magFilter = super::webgpu_cpp_decl::FilterMode::Linear.into();
-    linearDesc.minFilter = super::webgpu_cpp_decl::FilterMode::Linear.into();
-    linearDesc.mipmapFilter = super::webgpu_cpp_decl::MipmapFilterMode::Nearest.into();
-    *context.m_linearSampler = unsafe { device.CreateSampler(&linearDesc) };
     for index in 0..ImageSampler::MAX_SAMPLER_PERMUTATIONS {
         let filter = ImageSampler::GetFilterOptionFromKey(index as u8);
         let mut descriptor = WGPUSamplerDescriptor::default();
@@ -3353,13 +3348,13 @@ pub(crate) fn initGPUObjects(context: &mut RenderContextWebGPUImpl) {
         .Get();
     let mut samplerEntries: [WGPUBindGroupEntry; 3] =
         std::array::from_fn(|_| WGPUBindGroupEntry::default());
-    for (entry, binding) in samplerEntries.iter_mut().zip([
-        GRAD_TEXTURE_IDX,
-        GAUSSIAN_INTEGRAL_TEXTURE_IDX,
-        FEATHER_ATLAS_TEXTURE_IDX,
+    for (entry, (binding, sampler)) in samplerEntries.iter_mut().zip([
+        (GRAD_TEXTURE_IDX, BilinearRepeatImageSamplerKey),
+        (GAUSSIAN_INTEGRAL_TEXTURE_IDX, BilinearClampImageSamplerKey),
+        (FEATHER_ATLAS_TEXTURE_IDX, BilinearClampImageSamplerKey),
     ]) {
         entry.binding = binding;
-        entry.sampler = context.m_linearSampler.Get();
+        entry.sampler = context.m_imageSamplers[sampler as usize].Get();
     }
     let mut samplerGroupDesc = WGPUBindGroupDescriptor::default();
     samplerGroupDesc.layout = samplerLayout;
@@ -4794,7 +4789,7 @@ pub(crate) fn MakeContext(
 
 pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5013;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 206657] = [(); PINNED_SOURCE.len()];
+const _: [(); 206390] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4970,7 +4965,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            53_235
+            53_649
         );
     }
 

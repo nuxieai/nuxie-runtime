@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_path.main";
 pub const PINNED_SOURCE_SHA256: &str = "e81f62d9c9e5d3c786261fe4424284626be83ee550e1ebd12469278ee0d38154";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_path";

@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/clear_clockwise_atomic_clip.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "75e9b26beb81bf9279a78e13c0510dca4e60f704ad9710ae368c116b1aa13da6";
 pub const OWNERSHIP_UNIT: &str = "shader:source:clear_clockwise_atomic_clip";

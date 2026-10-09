@@ -569,8 +569,7 @@ pub(crate) struct FlushUniforms {
     pub render_target_bottom_up: u32,
     pub grad_texture_y_scale: f32,
     pub grad_texture_y_bias: f32,
-    pub grad_texture_y_scale_packed: f32,
-    pub padding: [u8; 136],
+    pub padding: [u8; 140],
 }
 
 #[repr(C)]
@@ -643,16 +642,6 @@ fn swizzle_rive_color_to_rgba_premul_additive(
     (rgba & 0x00ff_ffff) | ((((color >> 24) as f32 * complement + 0.5) as u32) << 24)
 }
 
-fn packed_gradient_row(row: u32, blend_mode: BlendMode, additiveness: f32) -> f32 {
-    assert!(row <= 0xffff && additiveness >= 0.0 && additiveness <= 1.0);
-    let complement = if blend_mode == BlendMode::SrcOver {
-        1.0 - additiveness
-    } else {
-        1.0
-    };
-    (row + 1) as f32 + (complement * 255.0 + 0.5) as u32 as f32 * (1.0 / 256.0)
-}
-
 impl PaintData {
     fn fill_flag(fill_rule: FillRule) -> u32 {
         match fill_rule {
@@ -700,34 +689,34 @@ impl PaintData {
 
     pub(crate) fn gradient(
         paint_type: PaintType,
-        texture_row: u32,
         fill_rule: FillRule,
         blend_mode: BlendMode,
         additiveness: f32,
     ) -> Self {
+        assert!(additiveness >= 0.0 && additiveness <= 1.0);
         debug_assert!(matches!(
             paint_type,
             PaintType::LinearGradient | PaintType::RadialGradient
         ));
         Self {
             params: paint_type as u32 | Self::fill_flag(fill_rule) | blend_mode_id(blend_mode) << 4,
-            value: packed_gradient_row(texture_row, blend_mode, additiveness).to_bits(),
+            value: (1.0 - additiveness).to_bits(),
         }
     }
 
     pub(crate) fn gradient_stroke(
         paint_type: PaintType,
-        texture_row: u32,
         blend_mode: BlendMode,
         additiveness: f32,
     ) -> Self {
+        assert!(additiveness >= 0.0 && additiveness <= 1.0);
         debug_assert!(matches!(
             paint_type,
             PaintType::LinearGradient | PaintType::RadialGradient
         ));
         Self {
             params: paint_type as u32 | blend_mode_id(blend_mode) << 4,
-            value: packed_gradient_row(texture_row, blend_mode, additiveness).to_bits(),
+            value: (1.0 - additiveness).to_bits(),
         }
     }
 
@@ -1126,7 +1115,6 @@ mod tests {
             assert_eq!(
                 PaintData::gradient(
                     PaintType::LinearGradient,
-                    0,
                     fill_rule,
                     BlendMode::Multiply,
                     0.0,

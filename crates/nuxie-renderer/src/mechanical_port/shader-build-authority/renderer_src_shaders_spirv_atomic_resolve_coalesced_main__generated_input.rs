@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/atomic_resolve_coalesced.main";
 pub const PINNED_SOURCE_SHA256: &str = "f12d67000ab8246082540fbfa41a4266a772280ceef9186bd14d4043050bfde9";
 pub const OWNERSHIP_UNIT: &str = "shader:source:atomic_resolve_coalesced";

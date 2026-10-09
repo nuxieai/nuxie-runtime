@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/bezier_utils.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "c18b0d2aac6f33dff72a6f17bdcc4b40ee337651fa0ecdd104e85641701e385f";
 pub const OWNERSHIP_UNIT: &str = "shader:source:bezier_utils";

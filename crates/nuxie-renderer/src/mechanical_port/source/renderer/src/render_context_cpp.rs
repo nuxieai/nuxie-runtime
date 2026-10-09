@@ -6436,7 +6436,6 @@ impl LogicalFlush {
             draw_contents,
             draw.paintType(),
             draw.simplePaintValue(),
-            self.m_grad_texture_layout,
             draw.clipID(),
             draw.hasClipRect(),
             draw.hasImageTexture(),
@@ -6475,6 +6474,7 @@ impl LogicalFlush {
             *draw.imageMatrix(),
             draw.paintType(),
             draw.simplePaintValue(),
+            self.m_grad_texture_layout,
             gradient_coeffs,
             draw.inverseGradientTransform(),
             image_size,
@@ -6663,24 +6663,21 @@ impl LogicalFlush {
         };
         let mut gradient_type = 0;
         let mut gradient_matrix = nuxie_render_api::Mat2D::IDENTITY;
-        let mut gradient_span = [0.0; 2];
-        let mut gradient_y = 0.0;
+        let mut gradient_x = 0;
+        let mut gradient_y = 0;
         if let Some(gradient) = unsafe { (*draw).gradient().as_ref() } {
             gradient_type = gradient.paintType() as u32;
             debug_assert_ne!(gradient_type, 0);
             let coeffs = unsafe { core::slice::from_raw_parts(gradient.coeffs(), 3) };
-            (gradient_matrix, gradient_span) = gpu_cpp::getGradientMatrixAndSpan(
+            (gradient_matrix, gradient_x, gradient_y) = gpu_cpp::getGradientMatrixAndCoord(
                 gradient.paintType(),
                 [coeffs[0], coeffs[1], coeffs[2]],
                 unsafe { (*draw).rampLocation() },
+                self.m_grad_texture_layout,
                 unsafe { (*draw).inverseGradientTransform() },
                 unsafe { *(*draw).gradientMatrix() },
                 unsafe { self.m_flush_desc.renderTarget.unwrap().as_ref() },
                 context.platformFeatures(),
-            );
-            gradient_y = gpu_cpp::getGradientY(
-                unsafe { (*draw).rampLocation() },
-                self.m_grad_texture_layout,
             );
         }
         let instance = gpu::ImageRectInstance::new(
@@ -6693,7 +6690,7 @@ impl LogicalFlush {
             *unsafe { (*draw).imageMatrix() },
             gradient_matrix,
             gradient_type,
-            gradient_span,
+            gradient_x,
             gradient_y,
             unsafe { (*draw).additiveness() },
         );
@@ -7233,7 +7230,6 @@ impl LogicalFlush {
             gpu::DrawContents::none,
             gpu::PaintType::solidColor,
             clear_value,
-            gpu::GradTextureLayout::default(),
             0,
             false,
             false,

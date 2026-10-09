@@ -282,13 +282,13 @@ mod tests {
 
     #[test]
     fn embedded_and_declared_shader_denominators_are_exact() {
-        assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 99);
+        assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 97);
         #[cfg(not(target_os = "android"))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 99);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 97);
         #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 83);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 81);
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 39);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 37);
         let color_ramp = color_ramp_vert.read().expect("embedded shader");
         assert_eq!(color_ramp.first(), Some(&0x0723_0203));
         assert!(color_ramp.len() > 4);
@@ -344,10 +344,10 @@ mod tests {
             &draw_msaa_resolve_frag,
         ));
         #[cfg(not(target_os = "android"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x1061]);
+        assert_eq!(assignments.last().unwrap().1, &[0x105f]);
         #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x1051]);
+        assert_eq!(assignments.last().unwrap().1, &[0x104f]);
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        assert_eq!(assignments.last().unwrap().1, &[0x1026]);
+        assert_eq!(assignments.last().unwrap().1, &[0x1024]);
     }
 }

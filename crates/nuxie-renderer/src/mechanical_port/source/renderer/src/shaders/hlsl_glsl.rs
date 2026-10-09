@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/hlsl.glsl.
  *
- * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/hlsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "39534fd45bfb3aec17e664ceb56827521c92a4970185be007cd3afcf5d4aa521";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 465;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 19077;
+    "55a3fe453ea3052e71fec769d18d3a3be5b451eefdc89d20086c88a9c4924615";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 466;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 19113;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_HLSL_GLSL_SOURCE: &str = r###"/*
@@ -153,6 +153,7 @@ $typedef float3 packed_float3;
 // parameters are defined at the API level.
 #define SAMPLER(IDX, NAME) $SamplerState NAME : $register($s##IDX);
 #define SAMPLER_LINEAR SAMPLER
+#define SAMPLER_LINEAR_WRAP SAMPLER
 #define SAMPLER_DYNAMIC(SET, IDX, NAME) SAMPLER(IDX, NAME)
 #define SAMPLER_DYNAMIC_IMAGE(NAME) SAMPLER(IMAGE_TEXTURE_IDX, NAME)
 

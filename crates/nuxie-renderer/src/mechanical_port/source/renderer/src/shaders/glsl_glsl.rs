@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/glsl.glsl.
  *
- * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/glsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c24401654da284230ffbf34a71e4546592b184aee27709f88a9fadbd174081db";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 750;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 31545;
+    "b4f0a86bd0789da1e4d908f48e5e0363da49b08396df66ecab931ac53c00ed31";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 753;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 31678;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
@@ -221,12 +221,14 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
     layout(set = WEBGPU_SAMPLER_BINDINGS_SET, binding = TEXTURE_IDX)           \
         uniform mediump sampler NAME;
+#define SAMPLER_LINEAR_WRAP SAMPLER_LINEAR
 #define SAMPLER_DYNAMIC_IMAGE(NAME)                                            \
     SAMPLER_DYNAMIC(PER_DRAW_BINDINGS_SET, WEBGPU_IMAGE_SAMPLER_IDX, NAME)
 #else
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
     layout(set = PER_FLUSH_BINDINGS_SET, binding = TEXTURE_IDX)                \
         uniform mediump sampler NAME;
+#define SAMPLER_LINEAR_WRAP SAMPLER_LINEAR
 #define SAMPLER_DYNAMIC_IMAGE(NAME)                                            \
     SAMPLER_DYNAMIC(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, NAME)
 #endif
@@ -249,6 +251,7 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 // SAMPLER_LINEAR is a no-op because in GL, sampling parameters are API-level
 // state tied to the texture.
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)
+#define SAMPLER_LINEAR_WRAP(TEXTURE_IDX, NAME)
 #define SAMPLER_DYNAMIC(SET, IDX, NAME)
 #define SAMPLER_DYNAMIC_IMAGE(NAME)
 #define TEXTURE_SAMPLE(NAME, SAMPLER_NAME, COORD) texture(NAME, COORD)

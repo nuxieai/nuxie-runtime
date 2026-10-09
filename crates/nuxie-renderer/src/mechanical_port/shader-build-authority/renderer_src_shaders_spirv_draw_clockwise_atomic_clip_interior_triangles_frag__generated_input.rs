@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_clockwise_atomic_clip_interior_triangles.frag";
 pub const PINNED_SOURCE_SHA256: &str = "52f3e2347defdfd97ebf4a28fc054e40107795da7a9337567389dc36b494a32f";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_clockwise_atomic_clip_interior_triangles";

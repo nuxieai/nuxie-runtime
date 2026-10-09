@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/flush_uniforms.glsl.
  *
- * Upstream source revision: 625454e362a27bb3168f00cd87e9487f54d39338
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/flush_uniforms.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "e4d61497e4e01f3ee262a4eec38d3d2968248def95d3abf0a55a0f14af4010c5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 65;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2831;
+    "a629fa5ad38939de27aa5d0851dbc58cb2672e14fe70b05ef27268bf2906f48d";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 63;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2716;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_FLUSH_UNIFORMS_GLSL_SOURCE: &str = r###"#ifndef DECLARE_UNIFORM_FLOAT
@@ -80,8 +80,6 @@ DECLARE_UNIFORM_UINT(renderTargetBottomUp)
 // Scale and Bias computes gradient V coord from integral row
 DECLARE_UNIFORM_FLOAT(gradTextureYScale)
 DECLARE_UNIFORM_FLOAT(gradTextureYBias)
-// gradTextureYScale / (1 << 17), for a row still packed at bit 17.
-DECLARE_UNIFORM_FLOAT(gradTextureYScalePacked)
 UNIFORM_BLOCK_END(uniforms)"###;
 
 /// Stable source aliases.

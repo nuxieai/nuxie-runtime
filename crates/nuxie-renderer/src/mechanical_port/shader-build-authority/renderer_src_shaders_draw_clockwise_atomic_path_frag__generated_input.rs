@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_clockwise_atomic_path.frag";
 pub const PINNED_SOURCE_SHA256: &str = "233479d666b090dd93cb66451db5b8d8f8878745553afaaf30f80b9f13adbaee";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_clockwise_atomic_path";

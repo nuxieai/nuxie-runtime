@@ -11,7 +11,7 @@ impl From<u8> for ImageFilter {
         Self(value)
     }
 }
-pub const NUM_IMAGE_FILTERS: usize = 2;
+pub const ImageFilterCount: usize = 2;
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ImageWrap(u8);
@@ -26,7 +26,7 @@ impl From<u8> for ImageWrap {
         Self(value)
     }
 }
-pub const NUM_IMAGE_WRAP: usize = 3;
+pub const ImageWrapCount: usize = 3;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ImageSampler {
@@ -44,8 +44,7 @@ impl Default for ImageSampler {
     }
 }
 impl ImageSampler {
-    pub const LINEAR_CLAMP_SAMPLER_KEY: u8 = 0;
-    pub const MAX_SAMPLER_PERMUTATIONS: usize = NUM_IMAGE_FILTERS * NUM_IMAGE_WRAP * NUM_IMAGE_WRAP;
+    pub const MAX_SAMPLER_PERMUTATIONS: usize = ImageFilterCount * ImageWrapCount * ImageWrapCount;
     pub const fn linear_clamp() -> Self {
         Self {
             wrap_x: ImageWrap::Clamp,
@@ -54,9 +53,22 @@ impl ImageSampler {
         }
     }
     pub const fn as_key(self) -> u8 {
-        (self.wrap_x.0 as u16
-            + self.wrap_y.0 as u16 * NUM_IMAGE_WRAP as u16
-            + self.filter.0 as u16 * NUM_IMAGE_WRAP as u16 * NUM_IMAGE_WRAP as u16) as u8
+        Self::make_key(self.filter, self.wrap_x, self.wrap_y)
+    }
+    pub const fn linear_wrap() -> Self {
+        Self {
+            wrap_x: ImageWrap::Repeat,
+            wrap_y: ImageWrap::Repeat,
+            filter: ImageFilter::Bilinear,
+        }
+    }
+    pub const fn make_key(filter: ImageFilter, wrap_x: ImageWrap, wrap_y: ImageWrap) -> u8 {
+        (wrap_x.0 as usize
+            + wrap_y.0 as usize * ImageWrapCount
+            + filter.0 as usize * ImageWrapCount * ImageWrapCount) as u8
+    }
+    pub const fn make_key_for_wrap(filter: ImageFilter, wrap: ImageWrap) -> u8 {
+        Self::make_key(filter, wrap, wrap)
     }
     pub fn sampler_from_key(key: u8) -> Self {
         Self {
@@ -66,15 +78,22 @@ impl ImageSampler {
         }
     }
     pub fn get_wrap_x_option_from_key(key: u8) -> ImageWrap {
-        ImageWrap::from(key % NUM_IMAGE_WRAP as u8)
+        ImageWrap::from(key % ImageWrapCount as u8)
     }
     pub fn get_wrap_y_option_from_key(key: u8) -> ImageWrap {
-        ImageWrap::from((key / NUM_IMAGE_WRAP as u8) % NUM_IMAGE_WRAP as u8)
+        ImageWrap::from((key / ImageWrapCount as u8) % ImageWrapCount as u8)
     }
     pub fn get_filter_option_from_key(key: u8) -> ImageFilter {
-        ImageFilter::from(key / (NUM_IMAGE_WRAP * NUM_IMAGE_WRAP) as u8)
+        ImageFilter::from(key / (ImageWrapCount * ImageWrapCount) as u8)
     }
 }
+
+#[allow(non_upper_case_globals)]
+pub const BilinearClampImageSamplerKey: u8 =
+    ImageSampler::make_key_for_wrap(ImageFilter::Bilinear, ImageWrap::Clamp);
+#[allow(non_upper_case_globals)]
+pub const BilinearRepeatImageSamplerKey: u8 =
+    ImageSampler::make_key_for_wrap(ImageFilter::Bilinear, ImageWrap::Repeat);
 
 impl From<ImageSampler> for nuxie_render_api::ImageSampler {
     fn from(value: ImageSampler) -> Self {

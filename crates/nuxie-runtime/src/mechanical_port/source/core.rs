@@ -280,6 +280,10 @@ struct CoreArenaSlot {
         Option<crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer>,
     >,
     hot: CoreAccessFields,
+    // The initialized Artboard graph this Component belongs to (its index is
+    // component_graph_order). Cleared at retirement to break the cycle.
+    component_graph:
+        Cell<Option<Rc<crate::mechanical_port::source::component_graph::ComponentGraph>>>,
     runtime_artboard:
         RefCell<Option<Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>>>,
 }
@@ -311,6 +315,7 @@ impl CoreArenaSlot {
                 occupied: Cell::new(false),
                 core_type: Cell::new(0),
             },
+            component_graph: Cell::new(None),
             runtime_artboard: RefCell::new(None),
         }
     }
@@ -356,6 +361,7 @@ impl CoreArenaSlot {
         self.core_type.set(0);
         self.type_predicate.set(None);
         self.component_graph_order.set(None);
+        let _component_graph = self.component_graph.take();
 
         // First invalidate identity, then release fields in their original
         // declaration order. An aggregate's drop glue also releases later
@@ -621,6 +627,7 @@ impl CoreArena {
         slot.artboard_dirty.borrow_mut().take();
         slot.text_read_projection.borrow_mut().take();
         slot.component_graph_order.set(None);
+        drop(slot.component_graph.take());
         slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
@@ -645,6 +652,7 @@ impl CoreArena {
         slot.artboard_dirty.borrow_mut().take();
         slot.text_read_projection.borrow_mut().take();
         slot.component_graph_order.set(None);
+        drop(slot.component_graph.take());
         slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
@@ -725,6 +733,39 @@ impl CoreHandle {
     pub(crate) fn slot_address(&self) -> usize {
         Rc::as_ptr(&self.identity.slot.retirement) as usize
     }
+    /// This handle's occurrence is still the slot's current generation.
+    #[inline]
+    pub(crate) fn is_current_generation(&self) -> bool {
+        let slot = &self.identity.slot;
+        slot.generation.get() == slot.identity_generation
+    }
+
+    pub(crate) fn bind_component_graph(
+        &self,
+        graph: Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+    ) {
+        self.identity.slot.component_graph.set(Some(graph));
+    }
+
+    /// The graph and graph order of a live member, read without borrowing
+    /// the payload.
+    #[inline]
+    pub(crate) fn component_graph(
+        &self,
+    ) -> Option<(
+        Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        u32,
+    )> {
+        let slot = &self.identity.slot;
+        if slot.generation.get() != slot.identity_generation {
+            return None;
+        }
+        let graph = slot.component_graph.take()?;
+        let result = Rc::clone(&graph);
+        slot.component_graph.set(Some(graph));
+        Some((result, slot.component_graph_order.get()?))
+    }
+
     pub fn identity_key(&self) -> (usize, usize, u64) {
         (
             self.identity.arena.as_ptr() as usize,

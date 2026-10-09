@@ -21,6 +21,7 @@ pub mod command_queue;
 pub mod command_server;
 pub mod component;
 pub mod component_dirt;
+pub mod component_graph;
 pub mod component_origin;
 pub mod constraints;
 pub mod container_component;

@@ -217,6 +217,9 @@ struct CoreAccessFields {
     retirement_pending: Cell<bool>,
     occupied: Cell<bool>,
     core_type: Cell<CoreTypeKey>,
+    // Concrete type of the authored payload, recorded at insertion so typed
+    // access compares it directly instead of dispatching as_any/type_id.
+    payload_type: Cell<Option<std::any::TypeId>>,
 }
 
 struct CoreArenaSlot {
@@ -263,6 +266,7 @@ impl CoreArenaSlot {
                 retirement_pending: Cell::new(false),
                 occupied: Cell::new(false),
                 core_type: Cell::new(0),
+                payload_type: Cell::new(None),
             },
             runtime_artboard: RefCell::new(None),
         }
@@ -388,6 +392,19 @@ impl Drop for CoreSlotLease<'_> {
         if self.0.retirement_pending.get() {
             self.0.retire_after_lease();
         }
+    }
+}
+
+/// Typed handle access learns an authored payload's concrete type from the
+/// first dynamic downcast, at the point as_any is already called, so no extra
+/// projection is observed. Only an identity as_any is recorded; projections
+/// (as_any returning another object) keep dynamic dispatch.
+fn record_payload_type(slot: &CoreArenaSlot, object: &dyn CoreObject, any: &dyn Any) {
+    let payload = object as &dyn Any;
+    if payload.type_id() == any.type_id()
+        && std::ptr::addr_eq(payload as *const dyn Any, any as *const dyn Any)
+    {
+        slot.payload_type.set(Some(payload.type_id()));
     }
 }
 
@@ -563,6 +580,7 @@ impl CoreArena {
             return None;
         }
         let mut value = slot.object.borrow_mut().take()?;
+        slot.payload_type.set(None);
         // Intrusive links must be spliced while this generation is still
         // resolvable. The removed box can outlive its arena identity.
         if let Some(bind) = value.as_data_bind_mut() {
@@ -910,11 +928,43 @@ impl CoreHandle {
     }
 
     pub fn with_downcast<T: Any, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
-        self.with(|object| object.as_any().downcast_ref::<T>().map(f))?
+        let slot = &self.identity.slot;
+        if let Some(payload_type) = slot.payload_type.get() {
+            if payload_type != std::any::TypeId::of::<T>() {
+                return None;
+            }
+            return self.with(|object| {
+                // SAFETY: payload_type records that this boxed payload's
+                // concrete type is T and that as_any is the payload itself.
+                f(unsafe { &*(object as *const dyn CoreObject).cast::<T>() })
+            });
+        }
+        self.with(|object| {
+            let any = object.as_any();
+            record_payload_type(slot, object, any);
+            any.downcast_ref::<T>().map(f)
+        })?
     }
 
     pub fn with_downcast_mut<T: Any, R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
-        self.with_mut(|object| object.as_any_mut().downcast_mut::<T>().map(f))?
+        let slot = &self.identity.slot;
+        if let Some(payload_type) = slot.payload_type.get() {
+            if payload_type != std::any::TypeId::of::<T>() {
+                return None;
+            }
+            return self.with_mut(|object| {
+                // SAFETY: as in with_downcast.
+                f(unsafe { &mut *(object as *mut dyn CoreObject).cast::<T>() })
+            });
+        }
+        self.with_mut(|object| {
+            let payload = object as *const dyn CoreObject;
+            let any = object.as_any_mut();
+            // SAFETY: payload is the live object borrowed above; only its
+            // address and concrete type are read.
+            record_payload_type(slot, unsafe { &*payload }, any);
+            any.downcast_mut::<T>().map(f)
+        })?
     }
 
     pub fn clone_occurrence(&self) -> Option<CoreHandle> {

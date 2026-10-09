@@ -39,15 +39,15 @@ fn setup() -> (
     let root = RuntimeOwnedViewModelHandle::new(
         RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
     );
-    let options = ["a", "b", "c"].map(|_| {
+    let records = ["a", "b", "c"].map(|_| {
         RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(file.clone(), 0).unwrap(),
         )
     });
-    for option in &options {
-        assert!(root.push_list_item_by_property_name_path("picks", option));
+    for record in &records {
+        assert!(root.push_list_item_by_property_name_path("picks", record));
     }
-    options[0]
+    records[0]
         .borrow_mut()
         .set_boolean_by_property_name("b", true);
     let mut policy = RuntimeValuePolicy::new(file);
@@ -62,7 +62,7 @@ fn setup() -> (
             },
             mode: RuntimeValueRuleMode::Refuse,
             code: "maxItems".into(),
-            message: "Choose fewer options.".into(),
+            message: "Too many.".into(),
         }])
         .unwrap();
     policy
@@ -79,17 +79,17 @@ fn setup() -> (
         }])
         .unwrap();
     let roots = BTreeMap::from([
-        ("form".into(), root.clone()),
-        ("a".into(), options[0].clone()),
-        ("b".into(), options[1].clone()),
-        ("c".into(), options[2].clone()),
+        ("main".into(), root.clone()),
+        ("a".into(), records[0].clone()),
+        ("b".into(), records[1].clone()),
+        ("c".into(), records[2].clone()),
     ]);
-    (policy, root, options, roots, factory)
+    (policy, root, records, roots, factory)
 }
 
 #[test]
 fn checked_batch_refuses_whole_replacement_with_native_message() {
-    let (policy, root, options, roots, _factory) = setup();
+    let (policy, root, records, roots, _factory) = setup();
     let transaction =
         RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096).unwrap();
     let capture = RuntimeViewModelChangeCapture::begin().unwrap();
@@ -115,14 +115,14 @@ fn checked_batch_refuses_whole_replacement_with_native_message() {
             refusal: Some(RuntimeCheckedValueRefusal {
                 rule_index: 0,
                 code: "maxItems".into(),
-                message: "Choose fewer options.".into()
+                message: "Too many.".into()
             })
         }
     );
     assert_eq!(
-        options
+        records
             .each_ref()
-            .map(|option| option.borrow().boolean_value_by_property_name("b").unwrap()),
+            .map(|record| record.borrow().boolean_value_by_property_name("b").unwrap()),
         [true, false, false]
     );
     operation
@@ -154,14 +154,14 @@ fn checked_batch_refuses_whole_replacement_with_native_message() {
             .string_value_by_property_name("message")
             .unwrap()
             .as_ref(),
-        b"Choose fewer options."
+        b"Too many."
     );
     assert_eq!(operation.reports().len(), 1);
     assert!(operation.reports()[0].refused);
     // The report names the selection that breaks the maximum, not the deselect.
     assert_eq!(
         operation.reports()[0].owner_instance_identity,
-        options[1].instance_identity()
+        records[1].instance_identity()
     );
     assert_eq!(
         operation.reports()[0].attempted,
@@ -173,7 +173,7 @@ fn checked_batch_refuses_whole_replacement_with_native_message() {
     )
     .unwrap();
     assert!(!changes.iter().any(|(owner, change)| {
-        options
+        records
             .iter()
             .any(|o| o.instance_identity() == owner.instance_identity())
             && change.property_index == 2
@@ -186,7 +186,7 @@ fn checked_batch_refuses_whole_replacement_with_native_message() {
 fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_restores_it() {
     for reverse in [false, true] {
         for commit in [false, true] {
-            let (policy, root, options, roots, _factory) = setup();
+            let (policy, root, records, roots, _factory) = setup();
             let transaction =
                 RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096)
                     .unwrap();
@@ -233,14 +233,14 @@ fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_rest
             );
             assert_eq!(operation.reports().len(), 1);
             // An ordinary later write is evaluated against the accepted batch.
-            options[2]
+            records[2]
                 .borrow_mut()
                 .set_boolean_by_property_name("b", true);
             operation
                 .apply(&policy, &capture, std::slice::from_ref(&root))
                 .unwrap();
             assert_eq!(
-                options
+                records
                     .each_ref()
                     .map(|o| o.borrow().boolean_value_by_property_name("b").unwrap()),
                 [false, true, false]
@@ -248,7 +248,7 @@ fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_rest
             assert_eq!(operation.reports().len(), 2);
             assert_eq!(
                 operation.reports()[1].owner_instance_identity,
-                options[2].instance_identity()
+                records[2].instance_identity()
             );
             let changes = RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
                 &operation.retained_roots(),
@@ -262,11 +262,11 @@ fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_rest
                 .collect::<Vec<_>>();
             let mut expected = vec![
                 (
-                    options[1].instance_identity(),
+                    records[1].instance_identity(),
                     RuntimeViewModelChangeValue::Boolean(true),
                 ),
                 (
-                    options[0].instance_identity(),
+                    records[0].instance_identity(),
                     RuntimeViewModelChangeValue::Boolean(false),
                 ),
             ];
@@ -281,7 +281,7 @@ fn checked_batch_accepts_final_selection_in_either_order_and_outer_rollback_rest
                 drop(transaction);
             }
             assert_eq!(
-                options
+                records
                     .each_ref()
                     .map(|o| o.borrow().boolean_value_by_property_name("b").unwrap()),
                 if commit {
@@ -343,9 +343,9 @@ fn checked_batch_marking_breaches_apply_and_clear_keeps_marker_and_journal_order
             &mut operation,
             &roots,
             vec![
-                entry("form", "n", RuntimeCheckedValueInput::Number(11.0)),
+                entry("main", "n", RuntimeCheckedValueInput::Number(11.0)),
                 entry(
-                    "form",
+                    "main",
                     "text",
                     RuntimeCheckedValueInput::Text(b"abc".to_vec())
                 )
@@ -393,8 +393,8 @@ fn checked_batch_marking_breaches_apply_and_clear_keeps_marker_and_journal_order
             &mut operation,
             &roots,
             vec![
-                entry("form", "n", RuntimeCheckedValueInput::Clear),
-                entry("form", "text", RuntimeCheckedValueInput::Clear)
+                entry("main", "n", RuntimeCheckedValueInput::Clear),
+                entry("main", "text", RuntimeCheckedValueInput::Clear)
             ]
         )
         .unwrap()
@@ -447,11 +447,11 @@ fn checked_batch_first_refusal_and_suppressed_marker_survive_until_a_new_value()
         &roots,
         vec![
             entry(
-                "form",
+                "main",
                 "text",
                 RuntimeCheckedValueInput::Text(b"abc".to_vec()),
             ),
-            entry("form", "n", RuntimeCheckedValueInput::Number(11.0)),
+            entry("main", "n", RuntimeCheckedValueInput::Number(11.0)),
         ],
     )
     .unwrap();
@@ -482,7 +482,7 @@ fn checked_batch_first_refusal_and_suppressed_marker_survive_until_a_new_value()
             &mut operation,
             &roots,
             vec![entry(
-                "form",
+                "main",
                 "n_set",
                 RuntimeCheckedValueInput::Boolean(true)
             )]
@@ -496,7 +496,7 @@ fn checked_batch_first_refusal_and_suppressed_marker_survive_until_a_new_value()
             &policy,
             &mut operation,
             &roots,
-            vec![entry("form", "n", RuntimeCheckedValueInput::Number(5.0))]
+            vec![entry("main", "n", RuntimeCheckedValueInput::Number(5.0))]
         )
         .unwrap()
         .applied
@@ -537,11 +537,11 @@ fn checked_batch_invalid_or_over_budget_candidates_leave_values_and_journal_usab
     let mut operation = policy.begin_rules(std::slice::from_ref(&root)).unwrap();
     for (second, expected) in [
         (
-            entry("form", "missing", RuntimeCheckedValueInput::Number(2.0)),
+            entry("main", "missing", RuntimeCheckedValueInput::Number(2.0)),
             RuntimeValuePolicyError::NotFound,
         ),
         (
-            entry("form", "text", RuntimeCheckedValueInput::Boolean(true)),
+            entry("main", "text", RuntimeCheckedValueInput::Boolean(true)),
             RuntimeValuePolicyError::InvalidArgument,
         ),
         (
@@ -550,7 +550,7 @@ fn checked_batch_invalid_or_over_budget_candidates_leave_values_and_journal_usab
         ),
         (
             entry(
-                "form",
+                "main",
                 "text",
                 RuntimeCheckedValueInput::Text(b"ok".to_vec()),
             ),
@@ -563,7 +563,7 @@ fn checked_batch_invalid_or_over_budget_candidates_leave_values_and_journal_usab
                 &mut operation,
                 &roots,
                 vec![
-                    entry("form", "n", RuntimeCheckedValueInput::Number(5.0)),
+                    entry("main", "n", RuntimeCheckedValueInput::Number(5.0)),
                     second
                 ]
             )
@@ -579,7 +579,7 @@ fn checked_batch_invalid_or_over_budget_candidates_leave_values_and_journal_usab
             &policy,
             &mut operation,
             &roots,
-            vec![entry("form", "n", RuntimeCheckedValueInput::Number(8.0))]
+            vec![entry("main", "n", RuntimeCheckedValueInput::Number(8.0))]
         )
         .unwrap()
         .applied
@@ -603,9 +603,9 @@ fn checked_batch_refusal_blocks_only_the_markers_of_refused_entries() {
         &mut operation,
         &roots,
         vec![
-            entry("form", "n", RuntimeCheckedValueInput::Number(5.0)),
+            entry("main", "n", RuntimeCheckedValueInput::Number(5.0)),
             entry(
-                "form",
+                "main",
                 "text",
                 RuntimeCheckedValueInput::Text(b"abc".to_vec()),
             ),
@@ -630,7 +630,7 @@ fn checked_batch_refusal_blocks_only_the_markers_of_refused_entries() {
             &mut operation,
             &roots,
             vec![entry(
-                "form",
+                "main",
                 "n_set",
                 RuntimeCheckedValueInput::Boolean(true)
             )]
@@ -673,7 +673,7 @@ fn checked_batch_refuses_out_of_scope_or_oversized_batches_before_any_write() {
     let (foreign, _foreign_factory) = foreign_root();
     let mut with_foreign = roots.clone();
     with_foreign.insert("foreign".into(), foreign);
-    let five = || vec![entry("form", "n", RuntimeCheckedValueInput::Number(5.0))];
+    let five = || vec![entry("main", "n", RuntimeCheckedValueInput::Number(5.0))];
     let unchanged = || assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
 
     // No graph transaction: a capture and operation alone are not enough.
@@ -710,14 +710,14 @@ fn checked_batch_refuses_out_of_scope_or_oversized_batches_before_any_write() {
         (
             &roots,
             (0..4097)
-                .map(|_| entry("form", "n", RuntimeCheckedValueInput::Number(5.0)))
+                .map(|_| entry("main", "n", RuntimeCheckedValueInput::Number(5.0)))
                 .collect::<Vec<_>>(),
             RuntimeValuePolicyError::LimitExceeded,
         ),
         (
             &roots,
             vec![entry(
-                "form",
+                "main",
                 "text",
                 RuntimeCheckedValueInput::Text(vec![b'a'; 8 * 1024 * 1024]),
             )],

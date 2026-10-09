@@ -76,7 +76,60 @@ impl nuxie::ScriptHostExtension for Extension {
                 checked(&file, &root, &path, input).map_err(Into::into)
             })
             .map_err(script_error)?;
+        let file = Rc::clone(&self.file);
+        let set_all = lua
+            .create_function(move |_, writes| {
+                let entries = nuxie::script_checked_value_batch_entries(writes)?;
+                with_step(&file, |context, policy| {
+                    let mut operation = context
+                        .operation
+                        .as_ref()
+                        .ok_or("checked batches require a value rule operation")?
+                        .try_borrow_mut()
+                        .map_err(|_| "value rule operation is active")?;
+                    nuxie::runtime_checked_value_write_batch(
+                        policy,
+                        &mut operation,
+                        &context.roots,
+                        entries,
+                    )
+                    .map(|result| (result.applied, result.refusal.map(|refusal| refusal.code)))
+                    .map_err(|error| format!("checked value batch: {error:?}"))
+                })
+                .map_err(Into::into)
+            })
+            .map_err(script_error)?;
+        let file = Rc::clone(&self.file);
+        let list_values = lua
+            .create_function(
+                move |lua, (root, path, property): (String, String, String)| {
+                    if root
+                        .len()
+                        .saturating_add(path.len())
+                        .saturating_add(property.len())
+                        > MAX_PLAYER_STEP_RESULT_BYTES
+                    {
+                        return Err("checked path exceeds the operation limit".into());
+                    }
+                    with_step(&file, |context, policy| {
+                        nuxie::script_list_property_values(
+                            lua,
+                            policy,
+                            &context.roots,
+                            &root,
+                            &path,
+                            &property,
+                        )
+                    })
+                    .map_err(Into::into)
+                },
+            )
+            .map_err(script_error)?;
         module.set("set", setter).map_err(script_error)?;
+        module.set("setAll", set_all).map_err(script_error)?;
+        module
+            .set("listValues", list_values)
+            .map_err(script_error)?;
         module.set_readonly(true);
         vm.register_host_module(module_name, module)
             .map_err(script_error)?;
@@ -141,6 +194,34 @@ fn checked(
     if root_name.len().saturating_add(path.len()) > MAX_PLAYER_STEP_RESULT_BYTES {
         return Err("checked path exceeds the operation limit".into());
     }
+    with_step(file, |context, policy| {
+        let mut operation = context
+            .operation
+            .as_ref()
+            .map(|operation| {
+                operation
+                    .try_borrow_mut()
+                    .map_err(|_| "value rule operation is active")
+            })
+            .transpose()?;
+        nuxie::runtime_checked_value_write(
+            policy,
+            operation.as_deref_mut(),
+            &context.roots,
+            root_name,
+            path,
+            input,
+        )
+        .map_err(|error| format!("checked value write: {error:?}"))
+    })
+}
+
+/// Run one script call inside the active step of this file, with its roots,
+/// its value policy (or an empty one) and its rule operation, if any.
+fn with_step<T>(
+    file: &FileSlot,
+    run: impl FnOnce(&Context, &nuxie::RuntimeValuePolicy) -> Result<T, String>,
+) -> Result<T, String> {
     let file = file
         .borrow()
         .as_ref()
@@ -157,25 +238,7 @@ fn checked(
         .try_borrow()
         .map_err(|_| "value policy is active")?;
     let fallback = nuxie::RuntimeValuePolicy::new(file);
-    let policy = policy.as_ref().unwrap_or(&fallback);
-    let mut operation = context
-        .operation
-        .as_ref()
-        .map(|operation| {
-            operation
-                .try_borrow_mut()
-                .map_err(|_| "value rule operation is active")
-        })
-        .transpose()?;
-    nuxie::runtime_checked_value_write(
-        policy,
-        operation.as_deref_mut(),
-        &context.roots,
-        root_name,
-        path,
-        input,
-    )
-    .map_err(|error| format!("checked value write: {error:?}"))
+    run(&context, policy.as_ref().unwrap_or(&fallback))
 }
 
 #[cfg(test)]

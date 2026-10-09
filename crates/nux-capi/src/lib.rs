@@ -2462,6 +2462,15 @@ pub(crate) fn import_file_with_prepared_host_commands(
 /// Empty root selects the bound model; other roots name host-installed globals.
 /// An accepted `set` returns true and no code, including a marking breach.
 /// A refused `set` returns false and the refusing rule's code.
+/// The module also has `setAll(writes)`: a list (keys 1..n, at most 4096) of
+/// `{root, path, value}` writes addressed as for `set`, where an absent value
+/// clears. The step checks the list against the installed rules as one
+/// replacement and applies every write or none, returning true and no code,
+/// or false and the first refusing rule's code. `setAll` requires installed
+/// value rules or groups and raises without them.
+/// `listValues(root, path, property)` returns `property` from every item of
+/// the list at `path`, in list order; it returns nil when `path` names a
+/// property that is not a list and raises on a null item.
 /// This function performs no package/signature authentication; choosing this
 /// explicit import path is the caller's trust assertion. Ordinary
 /// `nux_file_import` remains script-inert.

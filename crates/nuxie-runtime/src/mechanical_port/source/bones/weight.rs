@@ -67,10 +67,21 @@ impl Weight {
         };
         parent
             .with_mut(|parent| {
+                if !crate::mechanical_port::source::core::CoreObject::is_type_of(
+                    parent,
+                    crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::TYPE_KEY,
+                ) {
+                    return StatusCode::MissingObject;
+                }
                 let Some(vertex) = parent.as_vertex_behavior_mut() else {
                     return StatusCode::MissingObject;
                 };
-                vertex.set_weight(this);
+                // Vertex::weight(Weight*) is a nonvirtual private source setter.
+                // Install on the concrete base rather than an open trait override.
+                crate::mechanical_port::source::shapes::vertex::VertexBehavior::set_weight(
+                    vertex.vertex_mut(),
+                    this,
+                );
                 StatusCode::Ok
             })
             .unwrap_or(StatusCode::MissingObject)
@@ -96,18 +107,17 @@ impl Weight {
 
             let normalized_weight = weight as f32 / 255.0;
             let bone_index = Self::encoded_weight_value(index_in_packed_values, indices);
-            let mut transform_index = bone_index * 6;
-            xx = bone_transforms[transform_index].mul_add(normalized_weight, xx);
-            transform_index += 1;
-            xy = bone_transforms[transform_index].mul_add(normalized_weight, xy);
-            transform_index += 1;
-            yx = bone_transforms[transform_index].mul_add(normalized_weight, yx);
-            transform_index += 1;
-            yy = bone_transforms[transform_index].mul_add(normalized_weight, yy);
-            transform_index += 1;
-            tx = bone_transforms[transform_index].mul_add(normalized_weight, tx);
-            transform_index += 1;
-            ty = bone_transforms[transform_index].mul_add(normalized_weight, ty);
+            let transform_index = bone_index * 6;
+            // Source reads one contiguous affine transform. Check its complete
+            // extent once, after the zero-weight gate, keeping the six fused
+            // accumulations in source order.
+            let transform = &bone_transforms[transform_index..transform_index + 6];
+            xx = transform[0].mul_add(normalized_weight, xx);
+            xy = transform[1].mul_add(normalized_weight, xy);
+            yx = transform[2].mul_add(normalized_weight, yx);
+            yy = transform[3].mul_add(normalized_weight, yy);
+            tx = transform[4].mul_add(normalized_weight, tx);
+            ty = transform[5].mul_add(normalized_weight, ty);
         }
 
         Mat2D::new(xx, xy, yx, yy, tx, ty) * (*world * in_point)
@@ -125,8 +135,50 @@ impl crate::mechanical_port::source::generated::bones::weight_base::WeightBaseCa
 }
 
 #[cfg(test)]
+#[path = "weight_contract_tests.rs"]
+mod contract_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_weights_do_not_resolve_packed_bone_indices() {
+        assert_eq!(
+            Weight::deform(Vec2D::new(2.0, 3.0), u32::MAX, 0, &Mat2D::default(), &[]),
+            Vec2D::new(0.0, 0.0),
+        );
+    }
+
+    #[test]
+    fn nonzero_weight_requires_a_complete_transform_including_the_last_bone() {
+        for length in 0..6 {
+            assert!(
+                std::panic::catch_unwind(|| {
+                    Weight::deform(
+                        Vec2D::new(2.0, 3.0),
+                        0,
+                        255,
+                        &Mat2D::default(),
+                        &vec![0.0; length],
+                    )
+                })
+                .is_err()
+            );
+        }
+        let mut transforms = vec![0.0; 256 * 6];
+        transforms[255 * 6..].copy_from_slice(&[1.0, 0.0, 0.0, 1.0, 10.0, 20.0]);
+        assert_eq!(
+            Weight::deform(
+                Vec2D::new(2.0, 3.0),
+                u32::MAX,
+                255,
+                &Mat2D::default(),
+                &transforms
+            ),
+            Vec2D::new(12.0, 23.0),
+        );
+    }
 
     #[test]
     fn deform_matches_pinned_fused_weight_accumulation() {

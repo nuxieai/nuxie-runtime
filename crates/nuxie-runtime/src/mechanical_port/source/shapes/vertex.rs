@@ -89,7 +89,7 @@ pub trait VertexBehavior {
     fn deform(&mut self, world: &Mat2D, bone_transforms: &[f32]) {
         // Imported skinned vertices can lack a Weight too. Preserve their
         // bind-space position instead of attempting to deform a missing weight.
-        let Some(weight) = self.vertex().state.weight.clone() else {
+        let Some(weight) = self.vertex().state.weight.as_ref() else {
             return;
         };
         let position = Vec2D::new(self.vertex().base.x(), self.vertex().base.y());

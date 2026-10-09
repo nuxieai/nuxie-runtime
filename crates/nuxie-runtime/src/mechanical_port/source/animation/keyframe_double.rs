@@ -26,8 +26,8 @@ impl KeyFrameDouble {
         context
             .and_then(|c| {
                 self.base
-                    .handle()
-                    .and_then(|keyframe| c.number_value(&keyframe))
+                    .handle_ref()
+                    .and_then(|keyframe| c.number_value(keyframe))
             })
             .unwrap_or_else(|| self.base.value())
     }
@@ -50,9 +50,12 @@ impl KeyFrameDouble {
         context: Option<&dyn KeyFrameValueContext>,
     ) -> bool {
         if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
+            // Select the source receiver first, then evaluate the open value
+            // callback before borrowing the accumulator for applyDouble.
+            let value = self.effective_value(context);
             accumulator
                 .borrow_mut()
-                .apply_double(object, key, mix, self.effective_value(context));
+                .apply_double(object, key, mix, value);
             return true;
         }
         Self::apply_value(object, key, mix, self.effective_value(context))
@@ -122,3 +125,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "keyframe_double_context_tests.rs"]
+mod context_tests;

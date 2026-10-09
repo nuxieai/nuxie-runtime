@@ -163,7 +163,13 @@ impl Skin {
             self.base.ty(),
         );
 
-        let Some(parent) = context.resolve(self.component().base.parent_id()) else {
+        // Super has already resolved and published the source parent. Query
+        // that occurrence, not CoreContext a second time. Skinnable::from uses
+        // the source exact core-type switch, rather than a capability test.
+        self.skinnable = self.component().parent_handle().and_then(|parent| {
+            crate::mechanical_port::source::bones::skinnable::from(parent, context)
+        });
+        let Some(parent) = self.skinnable.as_ref() else {
             return StatusCode::MissingObject;
         };
         let installed = parent
@@ -177,7 +183,6 @@ impl Skin {
         if !installed {
             return StatusCode::MissingObject;
         }
-        self.skinnable = Some(parent);
         StatusCode::Ok
     }
 
@@ -187,7 +192,7 @@ impl Skin {
             .as_mut()
             .expect("buildDependencies initializes the bone transform buffer");
         let mut transform_index = 6;
-        for tendon_handle in self.tendons.iter().cloned() {
+        for tendon_handle in &self.tendons {
             let bone_handle = tendon_handle
                 .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
                     |tendon| tendon.bone(),
@@ -249,17 +254,13 @@ impl Skin {
     }
 
     pub fn build_dependencies(&mut self, this: CoreHandle) {
-        for tendon_handle in self.tendons.iter().cloned() {
+        for tendon_handle in &self.tendons {
             let bone_handle = tendon_handle
                 .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
                     |tendon| tendon.bone(),
                 )
                 .flatten()
                 .expect("Tendon::onAddedDirty resolves its Bone before dependency building");
-            let peer_constraints = bone_handle
-                .with(|bone| bone.as_bone().map(|bone| bone.peer_constraints().to_vec()))
-                .flatten()
-                .expect("a Tendon Bone handle must remain a Bone");
             bone_handle
                 .with_mut(|bone| {
                     bone.as_component_mut()
@@ -267,6 +268,10 @@ impl Skin {
                         .add_dependent(this.clone());
                 })
                 .expect("a Tendon Bone handle must remain live");
+            let peer_constraints = bone_handle
+                .with(|bone| bone.as_bone().map(|bone| bone.peer_constraints().to_vec()))
+                .flatten()
+                .expect("a Tendon Bone handle must remain a Bone");
             for constraint_handle in peer_constraints {
                 let constraint_parent = constraint_handle
                     .with(|constraint| {
@@ -300,11 +305,20 @@ impl Skin {
     }
 
     pub fn deform(&self, vertices: &[CoreHandle]) {
+        self.deform_borrowed_vertices(vertices);
+    }
+
+    // The source receives a Span over its caller's existing vertex membership.
+    // Keep the same per-vertex virtual operation without owning a copied list.
+    pub(crate) fn deform_borrowed_vertices<'a>(
+        &self,
+        vertices: impl IntoIterator<Item = &'a CoreHandle>,
+    ) {
         let bone_transforms = self
             .bone_transforms
             .as_deref()
             .expect("buildDependencies initializes the bone transform buffer");
-        for vertex_handle in vertices.iter().cloned() {
+        for vertex_handle in vertices {
             vertex_handle
                 .with_mut(|vertex| {
                     if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
@@ -412,6 +426,31 @@ impl Skin {
         }
     }
 
+    /// Mesh::markDrawableDirty calls Skin::addDirt while that Mesh is active.
+    /// Publish Skin dirt, run the same virtual onDirty action, then notify its
+    /// artboard. The caller's final Mesh dirt attempt remains a separate step.
+    pub(crate) fn add_dirt_from_mesh(
+        &mut self,
+        mesh: &mut crate::source::shapes::mesh::Mesh,
+    ) -> bool {
+        let Some(dirt) = self.component_mut().add_dirt_state(ComponentDirt::SKIN) else {
+            return false;
+        };
+        if mesh
+            .base
+            .handle()
+            .is_some_and(|active| self.skinnable.as_ref() == Some(&active))
+        {
+            mesh.mark_skin_dirty();
+        } else {
+            // An absent target is the source no-op. A different stored target
+            // receives its own onDirty callback; it is never replaced by Mesh.
+            self.on_dirty(dirt);
+        }
+        self.component().notify_artboard();
+        true
+    }
+
     pub(crate) fn add_dirt_from_points_path(
         &mut self,
         path: &mut crate::mechanical_port::source::shapes::points_path::PointsPath,
@@ -467,5 +506,87 @@ impl Skin {
     #[cfg(test)]
     pub fn tendons_mut(&mut self) -> &mut Vec<CoreHandle> {
         &mut self.tendons
+    }
+}
+
+#[cfg(test)]
+mod mesh_source_contract_tests {
+    use super::*;
+    use crate::source::{core::CoreArena, shapes::mesh::Mesh};
+
+    #[test]
+    fn skin_dirt_publishes_active_mesh_vertices_before_returning() {
+        let arena = CoreArena::default();
+        let mesh = arena.insert(Mesh::default());
+        let mut skin = Skin::default();
+        skin.skinnable = Some(mesh.clone());
+        let skin = arena.insert(skin);
+        mesh.with_downcast_mut::<Mesh, _>(|mesh| {
+            mesh.skinnable.set_skin(skin.clone());
+            mesh.base.set_dirt(ComponentDirt::NONE);
+            skin.with_downcast_mut::<Skin, _>(|skin| {
+                skin.component_mut().set_dirt(ComponentDirt::NONE);
+                assert!(skin.add_dirt_from_mesh(mesh));
+                assert_eq!(
+                    mesh.base.dirt(),
+                    ComponentDirt::VERTICES,
+                    "Skin's virtual onDirty must have marked the active Mesh before addDirt returns"
+                );
+                assert_eq!(skin.component().dirt(), ComponentDirt::SKIN);
+                mesh.base.set_dirt(ComponentDirt::NONE);
+                assert!(!skin.add_dirt_from_mesh(mesh));
+                assert_eq!(
+                    mesh.base.dirt(),
+                    ComponentDirt::NONE,
+                    "unchanged dirt must not call onDirty again"
+                );
+            })
+            .unwrap();
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn mesh_skin_dirt_uses_actual_stored_target_and_allows_no_target() {
+        let arena = CoreArena::default();
+        let active = arena.insert(Mesh::default());
+        let other = arena.insert(Mesh::default());
+        for target in [None, Some(other.clone())] {
+            let mut skin = Skin::default();
+            skin.skinnable = target.clone();
+            skin.component_mut().set_dirt(ComponentDirt::NONE);
+            other
+                .with_downcast_mut::<Mesh, _>(|mesh| mesh.base.set_dirt(ComponentDirt::NONE))
+                .unwrap();
+            active
+                .with_downcast_mut::<Mesh, _>(|mesh| {
+                    mesh.base.set_dirt(ComponentDirt::NONE);
+                    assert!(skin.add_dirt_from_mesh(mesh));
+                    assert_eq!(
+                        mesh.base.dirt(),
+                        ComponentDirt::NONE,
+                        "a different or absent Skin target must not become the active Mesh"
+                    );
+                })
+                .unwrap();
+            assert_eq!(
+                other.with_downcast::<Mesh, _>(|mesh| mesh.base.dirt()),
+                Some(if target.is_some() {
+                    ComponentDirt::VERTICES
+                } else {
+                    ComponentDirt::NONE
+                })
+            );
+        }
+        let mut unregistered = Mesh::default();
+        unregistered.base.set_dirt(ComponentDirt::NONE);
+        let mut unbound_skin = Skin::default();
+        unbound_skin.component_mut().set_dirt(ComponentDirt::NONE);
+        assert!(unbound_skin.add_dirt_from_mesh(&mut unregistered));
+        assert_eq!(
+            unregistered.base.dirt(),
+            ComponentDirt::NONE,
+            "two missing identities are not a match"
+        );
     }
 }

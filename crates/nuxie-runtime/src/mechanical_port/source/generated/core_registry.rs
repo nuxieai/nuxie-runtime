@@ -1688,79 +1688,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -4734,6 +4728,28 @@ pub trait DataConverterCapability {
         crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
         Option<CoreHandle>,
     );
+    /// Select an occurrence operation without keeping this receiver borrowed.
+    /// Custom converters retain their virtual unbind unless they provide a
+    /// released implementation, as the builtin owners do.
+    fn unbind_handler(
+        &self,
+    ) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterUnbindHandler
+    {
+        |owner| {
+            owner.with_mut(|owner| {
+                if let Some(converter) = owner.as_data_converter_capability_mut() {
+                    converter.unbind();
+                }
+            });
+        }
+    }
+    // Released builtin handlers select these phases through the actual
+    // capability, which may be embedded in a custom outer CoreObject.
+    fn unbind_group_items(&self) -> Option<Vec<CoreHandle>> {
+        None
+    }
+    fn detach_unbind_source(&mut self) {}
+    fn clear_unbound_context(&mut self) {}
     fn unbind(&mut self);
     fn update(&mut self);
     fn reset(&mut self);
@@ -7260,79 +7276,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ShapeLength => {
                 if self.length() != value {
@@ -7798,79 +7808,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::TextWidth => {
                 if self.base.set_width_value(value) {
@@ -8127,6 +8131,223 @@ pub trait CoreRegistryFactory {
 }
 
 pub struct CoreRegistry;
+
+// Only the actual registered native owner takes this released callback route.
+// Opaque and projected custom objects keep their public virtual setter path.
+fn prepare_layout_participant_uint(
+    object: &mut dyn crate::source::core::CoreObject,
+    owner: &CoreHandle,
+    property_key: i32,
+    value: u32,
+    completion: &mut crate::source::core::PropertySetterCompletion,
+) -> bool {
+    if ![crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::JUSTIFY_SELF_VALUE_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::DISPLAY_VALUE_PROPERTY_KEY].into_iter().any(|key| i32::from(key) == property_key) { return false; }
+    let Some(participant) = (object as &mut dyn Any)
+        .downcast_mut::<crate::source::layout::layout_participant::LayoutParticipant>(
+    ) else {
+        return false;
+    };
+    match property_key {
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_layout_width_scale_type_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_layout_height_scale_type_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_width_units_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_height_units_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_min_width_units_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_max_width_units_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_min_height_units_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_max_height_units_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::JUSTIFY_SELF_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_justify_self_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::JUSTIFY_SELF_VALUE_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::DISPLAY_VALUE_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_display_value_value(value as u8) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::DISPLAY_VALUE_PROPERTY_KEY }>);
+            }
+        }
+        _ => unreachable!(),
+    }
+    true
+}
+
+// Only the actual registered native owner takes this released callback route.
+// Opaque and projected custom objects keep their public virtual setter path.
+fn prepare_layout_participant_double(
+    object: &mut dyn crate::source::core::CoreObject,
+    owner: &CoreHandle,
+    property_key: i32,
+    value: f32,
+    completion: &mut crate::source::core::PropertySetterCompletion,
+) -> bool {
+    if ![crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_WIDTH_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_WIDTH_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_HEIGHT_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_HEIGHT_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::WIDTH_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::HEIGHT_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::FRACTIONAL_WIDTH_PROPERTY_KEY, crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::FRACTIONAL_HEIGHT_PROPERTY_KEY].into_iter().any(|key| i32::from(key) == property_key) { return false; }
+    let Some(participant) = (object as &mut dyn Any)
+        .downcast_mut::<crate::source::layout::layout_participant::LayoutParticipant>(
+    ) else {
+        return false;
+    };
+    match property_key {
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_WIDTH_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_min_width_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_WIDTH_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_WIDTH_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_max_width_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_WIDTH_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_HEIGHT_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_min_height_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MIN_HEIGHT_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_HEIGHT_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_max_height_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::MAX_HEIGHT_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::WIDTH_PROPERTY_KEY) => {
+            if participant.base.base.base.set_width_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::WIDTH_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::HEIGHT_PROPERTY_KEY) => {
+            if participant.base.base.base.set_height_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::HEIGHT_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::FRACTIONAL_WIDTH_PROPERTY_KEY) => {
+            if participant.base.base.base.set_fractional_width_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::FRACTIONAL_WIDTH_PROPERTY_KEY }>);
+            }
+        },
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::FRACTIONAL_HEIGHT_PROPERTY_KEY) => {
+            if participant.base.base.base.set_fractional_height_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::FRACTIONAL_HEIGHT_PROPERTY_KEY }>);
+            }
+        }
+        _ => unreachable!(),
+    }
+    true
+}
+
+// Only the actual registered native owner takes this released callback route.
+// Opaque and projected custom objects keep their public virtual setter path.
+fn prepare_layout_participant_bool(
+    object: &mut dyn crate::source::core::CoreObject,
+    owner: &CoreHandle,
+    property_key: i32,
+    value: bool,
+    completion: &mut crate::source::core::PropertySetterCompletion,
+) -> bool {
+    if ![crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HUG_UNBOUNDED_PROPERTY_KEY].into_iter().any(|key| i32::from(key) == property_key) { return false; }
+    let Some(participant) = (object as &mut dyn Any)
+        .downcast_mut::<crate::source::layout::layout_participant::LayoutParticipant>(
+    ) else {
+        return false;
+    };
+    match property_key {
+        key if key == i32::from(crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HUG_UNBOUNDED_PROPERTY_KEY) => {
+            if participant.base.base.base.base.base.set_hug_unbounded_value(value) {
+                completion.before_notification(owner.clone(), complete_layout_participant_sizing::<{ crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HUG_UNBOUNDED_PROPERTY_KEY }>);
+            }
+        }
+        _ => unreachable!(),
+    }
+    true
+}
+
+// The registered setter ends its receiver loan before the sizing callback can
+// collapse the host and synchronously visit its children. Notify only after the
+// callback, using the participant's current observer list.
+fn complete_layout_participant_sizing<const KEY: u16>(owner: &CoreHandle) {
+    use crate::source::layout::layout_participant::LayoutParticipant;
+    LayoutParticipant::sync_style_changes_occurrence(owner, None);
+    LayoutParticipant::mark_layout_node_dirty_occurrence(owner, false);
+    let mut completion = crate::source::core::PropertySetterCompletion::default();
+    owner.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+        completion.record(crate::source::core::CoreObject::core(participant), KEY);
+    });
+    completion.finish();
+}
+
+// Bind the three concrete source validators without projecting a typed input
+// to an exact base object. Both native subclasses and custom type predicates
+// therefore participate in the same null/type checks as the C++ validators.
+fn import_native_listener_input_change(
+    change: &mut crate::source::animation::listener_input_change::ListenerInputChange,
+    stack: &mut crate::source::importers::import_stack::ImportStack,
+    input_type: u16,
+    nested_type: u16,
+) -> crate::source::status_code::StatusCode {
+    use crate::source::{
+        animation::state_machine::StateMachine,
+        artboard::Artboard,
+        generated::{animation::state_machine_base::StateMachineBase, artboard_base::ArtboardBase},
+        importers::{
+            artboard_importer::ArtboardImporter, state_machine_importer::StateMachineImporter,
+        },
+        status_code::StatusCode,
+    };
+    let Some(machine_importer) = stack.latest::<StateMachineImporter>(StateMachineBase::TYPE_KEY)
+    else {
+        return StatusCode::MissingObject;
+    };
+    let machine = machine_importer.state_machine();
+    let Some(artboard_importer) = stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY) else {
+        return StatusCode::MissingObject;
+    };
+    let nested = artboard_importer
+        .artboard()
+        .with_downcast::<Artboard, _>(|artboard| artboard.resolve_handle(change.nested_input_id()))
+        .flatten();
+    if let Some(nested) = nested {
+        if !nested.is_type_of(nested_type) {
+            return StatusCode::InvalidObject;
+        }
+    } else {
+        let input = machine
+            .with_downcast::<StateMachine, _>(|machine| machine.input(change.input_id() as usize))
+            .flatten();
+        if input.is_some_and(|input| !input.is_type_of(input_type)) {
+            return StatusCode::InvalidObject;
+        }
+    }
+    change.base.base.import(stack)
+}
 
 impl CoreRegistry {
     pub fn flush_scripted_transition_property_changes(handle: &CoreHandle) {
@@ -10185,7 +10406,17 @@ impl CoreRegistry {
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let pending = handle.with_mut(|object| {
-            Self::set_uint_with_completion(object, property_key, value, &mut completion);
+            {
+                if !prepare_layout_participant_uint(
+                    object,
+                    handle,
+                    property_key,
+                    value,
+                    &mut completion,
+                ) {
+                    Self::set_uint_with_completion(object, property_key, value, &mut completion);
+                }
+            };
             object
                 .as_any()
                 .downcast_ref::<crate::source::scripted::scripted_transition::ScriptedTransition>()
@@ -10242,7 +10473,15 @@ impl CoreRegistry {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
             .with_mut(|object| {
-                Self::set_bool_with_completion(object, property_key, value, &mut completion)
+                if !prepare_layout_participant_bool(
+                    object,
+                    handle,
+                    property_key,
+                    value,
+                    &mut completion,
+                ) {
+                    Self::set_bool_with_completion(object, property_key, value, &mut completion);
+                }
             })
             .is_some();
         completion.finish();
@@ -10254,7 +10493,34 @@ impl CoreRegistry {
         if matches!(property_key, 761 | 762 | 763)
             && handle.is_type_of(ScrollConstraintBase::TYPE_KEY)
         {
-            return crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_value_occurrence(handle, property_key as u16, value);
+            use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+            use crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks;
+            let Some(equal) = handle.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                let current = match property_key {
+                    761 => ScrollConstraintBaseCallbacks::scroll_percent_x(scroll),
+                    762 => ScrollConstraintBaseCallbacks::scroll_percent_y(scroll),
+                    763 => ScrollConstraintBaseCallbacks::scroll_index(scroll),
+                    _ => unreachable!(),
+                };
+                current == value
+            }) else {
+                return false;
+            };
+            if equal {
+                return true;
+            }
+            if !ScrollConstraint::set_scroll_value_occurrence(handle, property_key as u16, value) {
+                return false;
+            }
+            let mut completion = crate::source::core::PropertySetterCompletion::default();
+            handle.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                completion.record(
+                    crate::source::core::CoreObject::core(scroll),
+                    property_key as u16,
+                );
+            });
+            completion.finish();
+            return true;
         }
         if property_key == 575 && handle.is_type_of(crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase::TYPE_KEY) {
             return crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber::set_value_handle(handle, value);
@@ -10312,10 +10578,18 @@ impl CoreRegistry {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
             .with_mut(|object| {
-                Self::set_double_with_completion(object, property_key, value, &mut completion)
+                if !prepare_layout_participant_double(
+                    object,
+                    handle,
+                    property_key,
+                    value,
+                    &mut completion,
+                ) {
+                    Self::set_double_with_completion(object, property_key, value, &mut completion);
+                }
             })
             .is_some();
-        completion.finish();
+        completion.finish_in_place();
         written
     }
 
@@ -10377,6 +10651,8 @@ impl CoreRegistry {
 
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
+            222 | 1087 | 1094 => 0,
+            1095 => 4,
             453 | 454 => 0,
             455 | 459 | 460 => 0,
             456 | 457 | 461 => 4,
@@ -10387,11 +10663,11 @@ impl CoreRegistry {
             269 => 0,
             270 => 0,
             271 => 0,
-            416 => 1,
-            368 => 1,
-            369 => 1,
-            410 => 1,
-            411 => 1,
+            416 => 2,
+            368 => 2,
+            369 => 2,
+            410 => 2,
+            411 => 2,
             412 => 0,
             118 => 0,
             136 => 0,
@@ -11038,6 +11314,8 @@ impl CoreRegistry {
     }
     pub fn property_owner_type_key(property_key: u32) -> u16 {
         match property_key {
+            222 | 1094 | 1095 => 569,
+            1087 => 1071,
             453 | 454 => 487,
             455..=465 => 154,
             273 => 110,
@@ -18635,7 +18913,12 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 466);
                 }
             },
-            CoreField::ScrollConstraintScrollActive => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_active(self, value),
+            CoreField::ScrollConstraintScrollActive => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_active(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_scroll_active(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_ACTIVE_PROPERTY_KEY);
+                }
+            },
             _ => {}
         }
     }
@@ -18664,23 +18947,58 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
                 }
             },
-            CoreField::ScrollConstraintScrollPercentX => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_percent_x(self, value),
-            CoreField::ScrollConstraintScrollPercentY => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_percent_y(self, value),
-            CoreField::ScrollConstraintScrollIndex => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_index(self, value),
+            CoreField::ScrollConstraintScrollPercentX => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_percent_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_scroll_percent_x(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_PERCENT_X_PROPERTY_KEY);
+                }
+            },
+            CoreField::ScrollConstraintScrollPercentY => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_percent_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_scroll_percent_y(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_PERCENT_Y_PROPERTY_KEY);
+                }
+            },
+            CoreField::ScrollConstraintScrollIndex => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_index(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_scroll_index(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_INDEX_PROPERTY_KEY);
+                }
+            },
             CoreField::ScrollConstraintThreshold => {
                 if self.base.set_threshold_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::THRESHOLD_PROPERTY_KEY);
                 }
             },
-            CoreField::ScrollConstraintVelocityX => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_velocity_x(self, value),
-            CoreField::ScrollConstraintVelocityY => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_velocity_y(self, value),
+            CoreField::ScrollConstraintVelocityX => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::velocity_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_velocity_x(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::VELOCITY_X_PROPERTY_KEY);
+                }
+            },
+            CoreField::ScrollConstraintVelocityY => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::velocity_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_velocity_y(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::VELOCITY_Y_PROPERTY_KEY);
+                }
+            },
             CoreField::ScrollConstraintDragMultiplier => {
                 if self.base.set_drag_multiplier_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::DRAG_MULTIPLIER_PROPERTY_KEY);
                 }
             },
-            CoreField::ScrollConstraintComputedContentWidth => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_computed_content_width(self, value),
-            CoreField::ScrollConstraintComputedContentHeight => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_computed_content_height(self, value),
+            CoreField::ScrollConstraintComputedContentWidth => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::computed_content_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_computed_content_width(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::COMPUTED_CONTENT_WIDTH_PROPERTY_KEY);
+                }
+            },
+            CoreField::ScrollConstraintComputedContentHeight => {
+                if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::computed_content_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::set_computed_content_height(self, value);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::COMPUTED_CONTENT_HEIGHT_PROPERTY_KEY);
+                }
+            },
             _ => {}
         }
     }
@@ -20156,51 +20474,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.set_x_value(value) {
                     <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    self, value, completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.set_y_value(value) {
                     <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    self, value, completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(self, value)
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -20514,79 +20854,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -20980,79 +21314,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::NestedArtboardSpeed => {
                 if self.base.set_speed_value(value) {
@@ -21448,79 +21776,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -22018,79 +22340,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::solo::Solo as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::solo::Solo as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -22440,79 +22756,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -22827,6 +23137,10 @@ impl CoreRegistryObject
 impl crate::mechanical_port::source::core::CoreObject
     for crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter
 {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase::is_type_of
     }
@@ -23203,79 +23517,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -24084,79 +24392,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::NestedArtboardSpeed => {
                 if self.base.base.base.set_speed_value(value) {
@@ -27072,79 +27374,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::NSlicedNodeInitialWidth => {
                 if self.base.set_initial_width_value(value) {
@@ -40496,79 +40792,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::points_path::PointsPath as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::points_path::PointsPath as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -41193,79 +41483,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::rectangle::Rectangle as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::rectangle::Rectangle as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ParametricPathWidth => {
                 if self.base.base.base.set_width_value(value) {
@@ -41982,79 +42266,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::triangle::Triangle as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::triangle::Triangle as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ParametricPathWidth => {
                 if self.base.base.base.set_width_value(value) {
@@ -42485,79 +42763,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::ellipse::Ellipse as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::ellipse::Ellipse as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ParametricPathWidth => {
                 if self.base.base.base.set_width_value(value) {
@@ -43000,79 +43272,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::list_path::ListPath as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::list_path::ListPath as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -43656,79 +43922,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::polygon::Polygon as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::polygon::Polygon as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ParametricPathWidth => {
                 if self.base.base.base.set_width_value(value) {
@@ -44204,7 +44464,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self
                     .base
                     .base
@@ -44221,14 +44481,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self
                     .base
                     .base
@@ -44245,60 +44498,61 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ParametricPathWidth => {
                 if self.base.base.base.base.base.set_width_value(value) {
@@ -44803,79 +45057,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::ImageOriginX => {
                 if self.base.set_origin_x_value(value) {
@@ -46771,79 +47019,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::LayoutComponentWidth => {
                 if self.base.set_width_value(value) {
@@ -47304,79 +47546,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::LayoutComponentWidth => {
                 if self.base.base.base.set_width_value(value) {
@@ -49709,6 +49945,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_number_to_list::DataConverterNumberToList {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        (Some(Box::new(self.clone_occurrence_definition())), Some(Self::complete_occurrence_clone))
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_number_to_list_base::DataConverterNumberToListBase::is_type_of
     }
@@ -49792,6 +50032,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_formula_base::DataConverterFormulaBase::is_type_of
     }
@@ -49865,6 +50109,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_to_number::DataConverterToNumber {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_to_number_base::DataConverterToNumberBase::is_type_of
     }
@@ -49948,6 +50196,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_operation::DataConverterOperation {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_base::DataConverterOperationBase::is_type_of
     }
@@ -50042,6 +50294,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_operation_value::DataConverterOperationValue {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_value_base::DataConverterOperationValueBase::is_type_of
     }
@@ -50136,6 +50392,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_system_degs_to_rads::DataConverterSystemDegsToRads {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_system_degs_to_rads_base::DataConverterSystemDegsToRadsBase::is_type_of
     }
@@ -50264,6 +50524,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_range_mapper::DataConverterRangeMapper {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_range_mapper_base::DataConverterRangeMapperBase::is_type_of
     }
@@ -50366,6 +50630,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_interpolator::DataConverterInterpolator {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_interpolator_base::DataConverterInterpolatorBase::is_type_of
     }
@@ -50462,6 +50730,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_system_normalizer::DataConverterSystemNormalizer {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_system_normalizer_base::DataConverterSystemNormalizerBase::is_type_of
     }
@@ -50535,6 +50807,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_list_to_length::DataConverterListToLength {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_list_to_length_base::DataConverterListToLengthBase::is_type_of
     }
@@ -50680,6 +50956,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_group::DataConverterGroup {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase::is_type_of
     }
@@ -50753,6 +51033,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_string_remove_zeros::DataConverterStringRemoveZeros {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_string_remove_zeros_base::DataConverterStringRemoveZerosBase::is_type_of
     }
@@ -50837,6 +51121,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_rounder::DataConverterRounder {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_rounder_base::DataConverterRounderBase::is_type_of
     }
@@ -50935,6 +51223,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_string_pad::DataConverterStringPad {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_string_pad_base::DataConverterStringPadBase::is_type_of
     }
@@ -51008,6 +51300,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_trigger::DataConverterTrigger {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_trigger_base::DataConverterTriggerBase::is_type_of
     }
@@ -51092,6 +51388,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_string_trim::DataConverterStringTrim {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_string_trim_base::DataConverterStringTrimBase::is_type_of
     }
@@ -51827,6 +52127,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_operation_viewmodel::DataConverterOperationViewModel {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_viewmodel_base::DataConverterOperationViewModelBase::is_type_of
     }
@@ -51900,6 +52204,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_boolean_negate::DataConverterBooleanNegate {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_boolean_negate_base::DataConverterBooleanNegateBase::is_type_of
     }
@@ -51998,6 +52306,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::converter
     }
 }
 impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::data_bind::converters::data_converter_to_string::DataConverterToString {
+    fn clone_occurrence_parts(&self) -> crate::mechanical_port::source::core::CoreCloneParts {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self)
+    }
+
     fn type_predicate(&self) -> fn(u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::data_converter_to_string_base::DataConverterToStringBase::is_type_of
     }
@@ -53168,79 +53480,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::NestedArtboardSpeed => {
                 if self.base.base.base.set_speed_value(value) {
@@ -55495,79 +55801,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -56001,79 +56301,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -57434,79 +57728,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -57953,79 +58241,73 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             CoreField::TextInputSelectionRadius => {
                 if self.base.set_selection_radius_value(value) {
@@ -58614,79 +58896,73 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeX => {
+            CoreField::NodeX | CoreField::NodeXArtboard => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
-            CoreField::NodeY => {
+            CoreField::NodeY | CoreField::NodeYArtboard => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                    completion,
-                )
-            }
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::set_computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::set_computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_local_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_local_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::set_computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::set_computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_world_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_world_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::set_computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_x(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::set_computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_root_y(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_root_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::set_computed_width(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_width(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_width_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_WIDTH_PROPERTY_KEY);
+                }
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::set_computed_height(
-                    &mut self.base.base.base.base.base.base,
-                    value,
-                )
+                if <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height(self) != value {
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::set_computed_height(self, value);
+                    <Self as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::computed_height_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY);
+                }
             }
             _ => {}
         }
@@ -60775,29 +61051,27 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
         value: u32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        use crate::mechanical_port::source::{
+            core::CoreObject,
+            generated::{
+                audio_event_base::{AudioEventBase, AudioEventBaseCallbacks},
+                component_base::{ComponentBase, ComponentBaseCallbacks},
+            },
+        };
         match field {
-            CoreField::ComponentParentId => {
-                if self
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .set_parent_id_value(value)
-                {
-                    <crate::mechanical_port::source::audio_event::AudioEvent as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
-                }
+            CoreField::ComponentParentId if self.base.set_parent_id_value(value) => {
+                ComponentBaseCallbacks::parent_id_changed(self);
+                completion.record(
+                    CoreObject::core(self),
+                    ComponentBase::PARENT_ID_PROPERTY_KEY,
+                );
             }
-            CoreField::AudioEventAssetId => {
-                if self.base.set_asset_id_value(value) {
-                    <crate::mechanical_port::source::audio_event::AudioEvent as crate::mechanical_port::source::generated::audio_event_base::AudioEventBaseCallbacks>::asset_id_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::audio_event_base::AudioEventBase::ASSET_ID_PROPERTY_KEY);
-                }
+            CoreField::AudioEventAssetId if self.base.set_asset_id_value(value) => {
+                AudioEventBaseCallbacks::asset_id_changed(self);
+                completion.record(
+                    CoreObject::core(self),
+                    AudioEventBase::ASSET_ID_PROPERTY_KEY,
+                );
             }
             _ => {}
         }
@@ -60808,50 +61082,35 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
         value: String,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        match field {
-            CoreField::ComponentName => {
-                if self
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .set_name_value(value)
-                {
-                    <crate::mechanical_port::source::audio_event::AudioEvent as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
-                }
-            }
-            _ => {}
+        use crate::mechanical_port::source::{
+            core::CoreObject,
+            generated::component_base::{ComponentBase, ComponentBaseCallbacks},
+        };
+        if matches!(field, CoreField::ComponentName) && self.base.set_name_value(value) {
+            ComponentBaseCallbacks::name_changed(self);
+            completion.record(CoreObject::core(self), ComponentBase::NAME_PROPERTY_KEY);
         }
     }
     fn set_color_with_completion(
         &mut self,
-        field: CoreField,
-        value: i32,
+        _field: CoreField,
+        _value: i32,
         _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        let _ = (field, value);
     }
     fn set_bool_with_completion(
         &mut self,
-        field: CoreField,
-        value: bool,
+        _field: CoreField,
+        _value: bool,
         _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        let _ = (field, value);
     }
     fn set_double_with_completion(
         &mut self,
-        field: CoreField,
-        value: f32,
+        _field: CoreField,
+        _value: f32,
         _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        let _ = (field, value);
     }
     fn set_callback_with_completion(
         &mut self,
@@ -60859,70 +61118,40 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
         mut value: CallbackData<'_>,
         _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        match field {
-            CoreField::EventTrigger => crate::mechanical_port::source::event::Event::trigger(
-                &mut self.base.base,
-                &mut value,
-            ),
-            _ => {}
+        if matches!(field, CoreField::EventTrigger) {
+            crate::mechanical_port::source::audio_event::AudioEvent::trigger(self, &mut value);
         }
     }
     fn set_int_with_completion(
         &mut self,
-        field: CoreField,
-        value: i32,
+        _field: CoreField,
+        _value: i32,
         _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ComponentParentId => self
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .parent_id(),
+            CoreField::ComponentParentId => self.base.parent_id(),
             CoreField::AudioEventAssetId => self.base.asset_id(),
             _ => 0,
         }
     }
     fn get_string(&mut self, field: CoreField) -> String {
         match field {
-            CoreField::ComponentName => self
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .base
-                .name()
-                .to_owned(),
+            CoreField::ComponentName => self.base.name().to_owned(),
             _ => String::new(),
         }
     }
-    fn get_color(&mut self, field: CoreField) -> i32 {
-        let _ = field;
+    fn get_color(&mut self, _field: CoreField) -> i32 {
         0
     }
-    fn get_bool(&mut self, field: CoreField) -> bool {
-        let _ = field;
+    fn get_bool(&mut self, _field: CoreField) -> bool {
         false
     }
-    fn get_double(&mut self, field: CoreField) -> f32 {
-        let _ = field;
+    fn get_double(&mut self, _field: CoreField) -> f32 {
         0.0
     }
-    fn get_int(&mut self, field: CoreField) -> i32 {
-        let _ = field;
+    fn get_int(&mut self, _field: CoreField) -> i32 {
         0
     }
 }
@@ -60933,10 +61162,10 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::audio_event_base::AudioEventBase::is_type_of
     }
     fn core(&self) -> &crate::mechanical_port::source::core::Core {
-        &self.base.base.base.base.base.base.base.base.base.base
+        &self.base
     }
     fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
-        &mut self.base.base.base.base.base.base.base.base.base.base
+        &mut self.base
     }
     fn core_type(&self) -> u16 {
         crate::mechanical_port::source::generated::audio_event_base::AudioEventBase::TYPE_KEY
@@ -60947,7 +61176,9 @@ impl crate::mechanical_port::source::core::CoreObject
         )
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.clone_event()))
+        Some(Box::new(
+            crate::mechanical_port::source::audio_event::AudioEvent::clone_event(self),
+        ))
     }
     fn deserialize(
         &mut self,
@@ -61992,6 +62223,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset
 {
+    fn as_view_model_instance_asset(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset>{
+        Some(&*self)
+    }
+    fn as_view_model_instance_asset_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset>{
+        Some(&mut *self)
+    }
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -63307,6 +63544,17 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint
 {
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(
+            crate::mechanical_port::source::component::Component::validate(
+                &mut self.base.base.base.base.base.base,
+                context,
+            ),
+        )
+    }
     fn component_on_dirty_handler(
         &self,
     ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
@@ -67179,33 +67427,18 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_in
         &self,
         object: crate::mechanical_port::source::core::CoreHandle,
         key: i32,
-        time: f32,
-        next: crate::mechanical_port::source::core::CoreHandle,
+        _time: f32,
+        _next: crate::mechanical_port::source::core::CoreHandle,
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
-        let result = {
-            next.with(|next| {
-                next.as_key_frame().is_some_and(|next| {
-                    object
-                        .with_mut(|object| {
-                            self.apply_interpolation_with_completion(
-                                object,
-                                key,
-                                time,
-                                next,
-                                mix,
-                                context,
-                                &mut completion,
-                            );
-                            true
-                        })
-                        .unwrap_or(false)
-                })
+        let result = object
+            .with_mut(|object| {
+                self.apply_with_completion(object, key, mix, context, &mut completion);
+                true
             })
-            .unwrap_or(false)
-        };
+            .unwrap_or(false);
         completion.finish();
         result
     }
@@ -67600,15 +67833,18 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_bo
         &self,
         object: crate::mechanical_port::source::core::CoreHandle,
         key: i32,
-        time: f32,
-        next: crate::mechanical_port::source::core::CoreHandle,
+        _time: f32,
+        _next: crate::mechanical_port::source::core::CoreHandle,
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
-        let result = {
-            next.with_downcast::<crate::mechanical_port::source::animation::keyframe_bool::KeyFrameBool, _>(|next| object.with_mut(|object| { self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion); true }).unwrap_or(false)).unwrap_or(false)
-        };
+        let result = object
+            .with_mut(|object| {
+                self.apply_with_completion(object, key, mix, context, &mut completion);
+                true
+            })
+            .unwrap_or(false);
         completion.finish();
         result
     }
@@ -67632,9 +67868,11 @@ impl CoreCapabilities
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
-            crate::mechanical_port::source::animation::listener_action::ListenerAction::import(
-                &mut self.base.base.base.base,
+            import_native_listener_input_change(
+                &mut self.base.base,
                 stack,
+                crate::source::generated::animation::state_machine_bool_base::StateMachineBoolBase::TYPE_KEY,
+                crate::source::generated::animation::nested_bool_base::NestedBoolBase::TYPE_KEY,
             ),
         )
     }
@@ -68189,15 +68427,18 @@ impl CoreCapabilities
         &self,
         object: crate::mechanical_port::source::core::CoreHandle,
         key: i32,
-        time: f32,
-        next: crate::mechanical_port::source::core::CoreHandle,
+        _time: f32,
+        _next: crate::mechanical_port::source::core::CoreHandle,
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
-        let result = {
-            next.with_downcast::<crate::mechanical_port::source::animation::keyframe_string::KeyFrameString, _>(|next| object.with_mut(|object| { self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion); true }).unwrap_or(false)).unwrap_or(false)
-        };
+        let result = object
+            .with_mut(|object| {
+                self.apply_with_completion(object, key, mix, context, &mut completion);
+                true
+            })
+            .unwrap_or(false);
         completion.finish();
         result
     }
@@ -68221,9 +68462,11 @@ impl CoreCapabilities
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
-            crate::mechanical_port::source::animation::listener_action::ListenerAction::import(
-                &mut self.base.base.base.base,
+            import_native_listener_input_change(
+                &mut self.base.base,
                 stack,
+                crate::source::generated::animation::state_machine_number_base::StateMachineNumberBase::TYPE_KEY,
+                crate::source::generated::animation::nested_number_base::NestedNumberBase::TYPE_KEY,
             ),
         )
     }
@@ -68818,9 +69061,11 @@ impl CoreCapabilities
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
-            crate::mechanical_port::source::animation::listener_action::ListenerAction::import(
-                &mut self.base.base.base.base,
+            import_native_listener_input_change(
+                &mut self.base.base,
                 stack,
+                crate::source::generated::animation::state_machine_trigger_base::StateMachineTriggerBase::TYPE_KEY,
+                crate::source::generated::animation::nested_trigger_base::NestedTriggerBase::TYPE_KEY,
             ),
         )
     }
@@ -74017,8 +74262,8 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
         ),
     ) -> bool {
         let path = match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.local_clockwise_path() };
-        if let Some(path) = path {
-            f(path);
+        if let Some(mut path) = path {
+            f(&mut path);
             true
         } else {
             false
@@ -74321,8 +74566,8 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
         ),
     ) -> bool {
         let path = match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path() };
-        if let Some(path) = path {
-            f(path);
+        if let Some(mut path) = path {
+            f(&mut path);
             true
         } else {
             false
@@ -76726,6 +76971,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_variation_modifier::TextVariationModifier
 {
+    fn as_text_modifier(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::text::text_modifier::TextModifier> {
+        Some(&self.base.base.base.base)
+    }
+    fn as_text_modifier_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::text::text_modifier::TextModifier> {
+        Some(&mut self.base.base.base.base)
+    }
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -78512,23 +78767,13 @@ impl CoreCapabilities for crate::mechanical_port::source::audio_event::AudioEven
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<bool> {
-        Some(
-            crate::mechanical_port::source::component::Component::validate(
-                &mut self.base.base.base.base.base.base.base.base,
-                context,
-            ),
-        )
+        Some(crate::mechanical_port::source::component::Component::validate(self, context))
     }
     fn lifecycle_on_added_dirty(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::on_added_dirty(
-                &mut self.base.base.base.base.base.base.base.base,
-                context,
-            ),
-        )
+        Some(crate::mechanical_port::source::component::Component::on_added_dirty(self, context))
     }
     fn lifecycle_import(
         &mut self,
@@ -78536,7 +78781,6 @@ impl CoreCapabilities for crate::mechanical_port::source::audio_event::AudioEven
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::audio_event::AudioEvent::import(self, stack))
     }
-
     fn as_file_asset_referencer_mut(
         &mut self,
     ) -> Option<
@@ -78559,22 +78803,22 @@ impl CoreCapabilities for crate::mechanical_port::source::audio_event::AudioEven
         true
     }
     fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
-        Some(&self.base.base.base.base.base.base.base.base)
+        Some(self)
     }
     fn as_component_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::component::Component> {
-        Some(&mut self.base.base.base.base.base.base.base.base)
+        Some(self)
     }
     fn as_container_component(
         &self,
     ) -> Option<&crate::mechanical_port::source::container_component::ContainerComponent> {
-        Some(&self.base.base.base.base.base.base)
+        Some(self)
     }
     fn as_container_component_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
-        Some(&mut self.base.base.base.base.base.base)
+        Some(self)
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::inputs::user_input::UserInput {}
@@ -81280,6 +81524,7 @@ impl crate::mechanical_port::source::generated::layout::layout_node_style_base::
     }
 }
 impl crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks for crate::mechanical_port::source::layout::layout_node_style::LayoutNodeStyle {
+    forward_callback_methods!(crate::mechanical_port::source::layout::layout_node_style::LayoutNodeStyle; layout_width_scale_type_changed, layout_height_scale_type_changed, width_units_value_changed, height_units_value_changed, min_width_units_value_changed, max_width_units_value_changed, min_height_units_value_changed, max_height_units_value_changed, justify_self_value_changed, display_value_changed, min_width_changed, max_width_changed, min_height_changed, max_height_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -81295,12 +81540,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBaseCallbacks for crate::mechanical_port::source::layout::layout_participant::LayoutParticipant {
-    forward_callback_methods!(crate::mechanical_port::source::layout::layout_node_style::LayoutNodeStyle; fractional_height_changed, fractional_width_changed, height_changed, width_changed);
+    forward_callback_methods!(crate::mechanical_port::source::layout::layout_participant::LayoutParticipant; fractional_height_changed, fractional_width_changed, height_changed, width_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::layout::layout_sizing_style::LayoutSizingStyle as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks for crate::mechanical_port::source::layout::layout_participant::LayoutParticipant {
+    forward_callback_methods!(crate::mechanical_port::source::layout::layout_participant::LayoutParticipant; layout_width_scale_type_changed, layout_height_scale_type_changed, width_units_value_changed, height_units_value_changed, min_width_units_value_changed, max_width_units_value_changed, min_height_units_value_changed, max_height_units_value_changed, justify_self_value_changed, display_value_changed, min_width_changed, max_width_changed, min_height_changed, max_height_changed);
     forward_callback_methods!(crate::mechanical_port::source::layout::layout_participant::LayoutParticipant; hug_unbounded_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
@@ -84479,8 +84725,8 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_width(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_width(
-            &mut self.base.base.base.base.base.base,
+        crate::mechanical_port::source::layout_component::LayoutComponent::computed_width(
+            &mut self.base.base,
         )
     }
     fn set_computed_height(&mut self, value: f32) {
@@ -84490,8 +84736,8 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_height(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_height(
-            &mut self.base.base.base.base.base.base,
+        crate::mechanical_port::source::layout_component::LayoutComponent::computed_height(
+            &mut self.base.base,
         )
     }
 }
@@ -86164,7 +86410,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_width(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_width(&mut self.base.base.base.base)
+        crate::mechanical_port::source::text::text::Text::computed_width(self)
     }
     fn set_computed_height(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_height(
@@ -86173,7 +86419,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_height(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_height(&mut self.base.base.base.base)
+        crate::mechanical_port::source::text::text::Text::computed_height(self)
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text::Text {
@@ -86483,17 +86729,14 @@ impl crate::mechanical_port::source::generated::event_base::EventBaseCallbacks
     for crate::mechanical_port::source::audio_event::AudioEvent
 {
     fn trigger(&mut self, value: &mut CallbackData<'_>) {
-        crate::mechanical_port::source::event::Event::trigger(&mut self.base.base, value)
+        crate::mechanical_port::source::audio_event::AudioEvent::trigger(self, value);
     }
 }
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
     for crate::mechanical_port::source::audio_event::AudioEvent
 {
     fn notify_property_changed(&mut self, property_key: u16) {
-        crate::mechanical_port::source::core::Core::notify_property_changed(
-            &mut self.base.base.base.base.base.base.base.base,
-            property_key,
-        )
+        crate::mechanical_port::source::core::Core::notify_property_changed(self, property_key);
     }
 }
 impl

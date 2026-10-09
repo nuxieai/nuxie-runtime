@@ -4,16 +4,18 @@
 //! (roots, policy and rule operation) and call these with it, so every host
 //! runs the same checks and raises the same texts.
 use nuxie_runtime::{
-    RuntimeCheckedValueBatchEntry, RuntimeCheckedValueInput, RuntimeOwnedViewModelHandle,
-    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeValuePolicyOperation,
-    RuntimeViewModelChangeValue, runtime_checked_value_write_batch,
+    RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES, RuntimeCheckedValueBatchEntry,
+    RuntimeCheckedValueInput, RuntimeOwnedViewModelHandle, RuntimeValuePolicy,
+    RuntimeValuePolicyError, RuntimeValuePolicyOperation, RuntimeViewModelChangeValue,
+    runtime_checked_value_write_batch,
 };
 use nuxie_scripting::{Lua, Value};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-/// The most writes one script batch carries, the runtime batch's own bound.
-const MAX_SCRIPT_BATCH_WRITES: usize = 4096;
+/// The most writes one script batch carries: the runtime batch's own bound,
+/// so a list that reads here is never refused for its length by the batch.
+const MAX_SCRIPT_BATCH_WRITES: usize = RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES;
 
 const KEYS: &str = "checked writes must have the keys 1..n";
 const ROOT_AND_PATH: &str = "checked write needs a string root and path";

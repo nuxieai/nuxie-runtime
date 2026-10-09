@@ -319,7 +319,11 @@ fn d_rt_api_live_cpp_table() {
         raw.debug_style_foreground(0),
         append["foreground"].as_u64().map(|v| v as u32)
     );
-    assert_eq!(raw.debug_command_kinds(), vec!["style"]);
+    assert_eq!(
+        Value::from(raw.debug_command_kinds()),
+        append["order"],
+        "draw command order"
+    );
     assert_bounds_close(bounds_array(populated), &append["bounds"], 0.05);
 
     raw.set_sizing(raw.sizing());
@@ -350,15 +354,20 @@ fn d_rt_api_live_cpp_table() {
     let _ = raw.bounds();
     assert_eq!(!raw.debug_has_clip(), cpp["api"]["clip"]["released"]);
 
-    let stale = raw.bounds();
+    let previous = raw.bounds();
     raw.clear();
-    assert_eq!(raw.bounds(), stale);
-    assert_eq!(raw.empty(), cpp["api"]["clear"]["empty"]);
+    let cleared = raw.bounds();
+    let clear = &cpp["api"]["clear"];
+    assert_eq!(cleared == previous, clear["stale"]);
+    assert_eq!(raw.empty(), clear["empty"]);
     assert_eq!(
         raw.debug_style_count(),
-        cpp["api"]["clear"]["stylesRetained"].as_u64().unwrap() as usize
+        clear["stylesRetained"].as_u64().unwrap() as usize
     );
-    assert!(raw.debug_command_kinds().is_empty());
+    assert_eq!(
+        raw.debug_command_kinds().len(),
+        clear["commands"].as_u64().unwrap() as usize
+    );
     drop(raw);
 
     for expected in cpp["api"]["layout"].as_array().expect("layout matrix") {

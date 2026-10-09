@@ -1,4 +1,4 @@
-//! Additive host policy: an atomic answer replacement inside an active operation.
+//! Additive host policy: an atomic replacement of several values inside an active operation.
 //! Ordinary Rive setters, listeners and file behavior do not enter this API.
 use super::checked_write::checked_candidate;
 use super::*;

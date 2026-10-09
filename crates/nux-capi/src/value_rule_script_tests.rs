@@ -477,7 +477,7 @@ fn script_set_all_rejects_malformed_writes_before_any_write() {
             end)())",
             "checked writes exceed 4096 entries",
         ),
-        // The single-value form stays scalar or nil.
+        // The single-value set stays scalar or nil.
         (
             "bridge.set('', 'y/on', {})",
             "checked value must be a scalar or nil",

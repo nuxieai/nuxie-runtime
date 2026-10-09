@@ -1484,8 +1484,8 @@ advance, or draw behavior.
 
 ### Atomic checked host replacements
 
-`runtime_checked_value_write_batch` is an additive host API for one authored
-answer replacement inside an existing policy operation, graph transaction
+`runtime_checked_value_write_batch` is an additive host API for one atomic
+replacement of several values inside an existing policy operation, graph transaction
 (`RuntimeOwnedViewModelGraphTransaction`, whose checkpoint can roll back every
 batch write) and change capture. It resolves distinct input properties (including
 paired markers), checks the complete candidate values against the installed
@@ -1506,5 +1506,16 @@ subsequent dependency writes still use normal policy replay. Hosts settle
 bindings, markers and groups and commit before publishing.
 
 The public-boundary tests are in `host_viewmodel/checked_batch_tests.rs`, including
-the milestone 16 three-option, maximum-one refusal and unchanged selection.
+a three-item, at-most-one refusal that leaves every value unchanged.
 Tracking: [UNIV-4125](https://universe.basis.dev/issue/UNIV-4125).
+
+Scripts reach the batch through two facade readers behind the `scripting`
+feature, so every host shares their checks and error texts.
+`script_checked_value_batch_entries` reads a Luau list of `{root, path, value}`
+tables (keys exactly 1..n, at most 4096, scalar or absent values) into batch
+entries before any write. `script_list_property_values` reads one property
+from every item of a list in order through the null-preserving item accessors,
+so a null item raises instead of being skipped. nux-capi installs them as
+`setAll` and `listValues` beside `set` in the configured command module, with
+the same step context; `setAll` requires the step's rule operation.
+Tracking: [UNIV-4130](https://universe.basis.dev/issue/UNIV-4130).

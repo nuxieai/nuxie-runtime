@@ -418,18 +418,19 @@ pub(crate) fn compileAndAttachOwnedShader(
     ));
 }
 
-pub(crate) fn SetTexture2DSamplingParams(minFilter: GLenum, magFilter: GLenum) {
+pub(crate) fn SetTexture2DSamplingParams(
+    minFilter: GLenum,
+    magFilter: GLenum,
+    wrapU: GLint,
+    wrapV: GLint,
+) {
     for (parameter, value) in [
-        (GL_TEXTURE_MIN_FILTER, minFilter),
-        (GL_TEXTURE_MAG_FILTER, magFilter),
-        (GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE),
-        (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE),
+        (GL_TEXTURE_MIN_FILTER, minFilter as GLint),
+        (GL_TEXTURE_MAG_FILTER, magFilter as GLint),
+        (GL_TEXTURE_WRAP_S, wrapU),
+        (GL_TEXTURE_WRAP_T, wrapV),
     ] {
-        recordGLCommand(GLCommand::TextureParameter(
-            GL_TEXTURE_2D,
-            parameter,
-            value as GLint,
-        ));
+        recordGLCommand(GLCommand::TextureParameter(GL_TEXTURE_2D, parameter, value));
     }
 }
 
@@ -541,10 +542,10 @@ mod tests {
     fn complete_source_and_generated_input_denominators_are_frozen() {
         assert_eq!(
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
-            294
+            297
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 506);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10680);
+        assert_eq!(PINNED_SOURCE.lines().count(), 509);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10725);
     }
 
     #[test]
@@ -590,9 +591,9 @@ mod tests {
             "#define KC 300\n",
             "#define EB\n",
             "#define CUSTOM true\n",
-            "#define VE _baseVertex\n",
-            "#define EE _baseInstance\n",
-            "#define PF\n",
+            "#define WE _baseVertex\n",
+            "#define FE _baseInstance\n",
+            "#define QF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));
@@ -646,6 +647,29 @@ mod tests {
                 GLCommand::DeleteProgram(13),
                 GLCommand::DeleteShader(12),
                 GLCommand::DeleteShader(11),
+            ]
+        );
+    }
+
+    #[test]
+    fn gradient_sampling_uses_explicit_repeat_in_both_axes() {
+        resetGLCommandStream();
+        SetTexture2DSamplingParams(GL_LINEAR, GL_LINEAR, GL_REPEAT as GLint, GL_REPEAT as GLint);
+        assert_eq!(
+            takeGLCommands(),
+            vec![
+                GLCommand::TextureParameter(
+                    GL_TEXTURE_2D,
+                    GL_TEXTURE_MIN_FILTER,
+                    GL_LINEAR as GLint
+                ),
+                GLCommand::TextureParameter(
+                    GL_TEXTURE_2D,
+                    GL_TEXTURE_MAG_FILTER,
+                    GL_LINEAR as GLint
+                ),
+                GLCommand::TextureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT as GLint),
+                GLCommand::TextureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT as GLint),
             ]
         );
     }

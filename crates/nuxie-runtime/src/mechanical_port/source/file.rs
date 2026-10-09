@@ -510,7 +510,13 @@ impl File {
         }
         let mut import_stack = ImportStack::default();
         import_stack.set_version(header.major_version(), header.minor_version());
-        self.read_objects(reader, header, &mut import_stack, None, admission)
+        let result = self.read_objects(reader, header, &mut import_stack, None, admission);
+        if result.0 == ImportResult::Success {
+            for asset in &self.file_assets {
+                asset.with_downcast_mut::<crate::source::assets::shader_asset::ShaderAsset, _>(|shader| shader.finish_import());
+            }
+        }
+        result
     }
 
     fn read_objects(
@@ -774,8 +780,12 @@ impl File {
                     ));
                     stack_type = crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::TYPE_KEY;
                 }
-                crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY
-                | crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
+                crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY => {
+                    stack_object = Some(Box::new(FileAssetImporter::new(object.clone(), self.asset_loader.clone(), self.factory.clone()).with_admission(admission.clone())));
+                    stack_type = crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::TYPE_KEY;
+                }
+                crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
+                    object.with_downcast_mut::<crate::source::assets::shader_asset::ShaderAsset, _>(|shader| shader.imported_with(self.require_signed_scripts));
                     stack_object = Some(Box::new(
                         crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
                             object.clone(),
@@ -1246,7 +1256,7 @@ impl File {
         self.scripting_vm = vm;
     }
 
-    fn accepts_script(require_signed_scripts: bool, verified: bool) -> bool {
+    pub fn accepts_script(require_signed_scripts: bool, verified: bool) -> bool {
         if require_signed_scripts {
             !cfg!(feature = "test-script-signature") && verified
         } else {

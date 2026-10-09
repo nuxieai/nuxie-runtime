@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main";
 pub const PINNED_SOURCE_SHA256: &str = "f94fff896ffcde07a3cf5ab06932284a4fa9dc6b87e48bb8256e018939bef0ea";
 pub const OWNERSHIP_UNIT: &str = "shader:source:blit_texture_as_draw_filtered";

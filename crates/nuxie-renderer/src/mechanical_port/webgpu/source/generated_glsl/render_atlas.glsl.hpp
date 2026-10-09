@@ -6,65 +6,65 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char render_atlas[] = R"===(#ifdef BB
-f1(f0) K(0,e,XB);K(1,e,YB);g1
+d1(f0) K(0,f,XB);K(1,f,YB);e1
 #endif
-w2 F0 X(0,e,S);l2
+v2 F0 W(0,f,S);k2
 #ifdef BB
-x1(AG,f0,B,F,r){L(F,B,XB,e);L(F,B,YB,e);V(S,e);e I;uint c0;c i0;if(ka(XB,YB,r,c0,i0,S P3)){O Z3=p0(KB,c0*4u+2u);M X7=uintBitsToFloat(Z3.yzw);i0=i0*X7.x+X7.yz;I=Y8(i0,j.De.x,j.De.y);
+w1(AG,f0,B,F,r){L(F,B,XB,f);L(F,B,YB,f);V(S,f);f I;uint c0;c i0;if(pa(XB,YB,r,c0,i0,S Q3)){O Z3=p0(KB,c0*4u+2u);M Z7=uintBitsToFloat(Z3.yzw);i0=i0*Z7.x+Z7.yz;I=d9(i0,j.De.x,j.De.y);
 #ifdef MC
 I.y=-I.y;
 #endif
-}else{I=e(j.h3,j.h3,j.h3,j.h3);}Z(S);y1(I);}
+}else{I=f(j.h3,j.h3,j.h3,j.h3);}Z(S);x1(I);}
 #endif
 #ifdef EB
 #ifdef NC
-f d T6(e T,bool Ui a4){d l=L8(T n1);if(!Ui) l=-l;return l;}
+e d X6(f T,bool Si c4){d n=Q8(T m1);if(!Si) n=-n;return n;}
 #endif
 #ifdef AE
 layout(location=0) inout O w0;
 #ifdef NC
-void main(){float l=uintBitsToFloat(w0.x);l+=T6(S,gl_FrontFacing n1);w0.x=floatBitsToUint(l);}
+void main(){float n=uintBitsToFloat(w0.x);n+=X6(S,gl_FrontFacing m1);w0.x=floatBitsToUint(n);}
 #endif
-#ifdef SC
-void main(){float l=uintBitsToFloat(w0.x);l=max(l,R4(S));w0.x=floatBitsToUint(l);}
+#ifdef RC
+void main(){float n=uintBitsToFloat(w0.x);n=max(n,T4(S));w0.x=floatBitsToUint(n);}
 #endif
 #elif defined(BE)
-__pixel_localEXT i2{layout(r32f) float w0;};
+__pixel_localEXT h2{layout(r32f) float w0;};
 #ifdef NC
-void main(){w0+=T6(S,gl_FrontFacing n1);}
+void main(){w0+=X6(S,gl_FrontFacing m1);}
 #endif
-#ifdef SC
-void main(){w0=max(w0,R4(S));}
+#ifdef RC
+void main(){w0=max(w0,T4(S));}
 #endif
 #elif defined(EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
 layout(binding=0,r32ui) uniform highp upixelLocalANGLE w0;
 #ifdef NC
-void main(){float l=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);l+=T6(S,gl_FrontFacing n1);pixelLocalStoreANGLE(w0,O(floatBitsToUint(l)));}
+void main(){float n=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);n+=X6(S,gl_FrontFacing m1);pixelLocalStoreANGLE(w0,O(floatBitsToUint(n)));}
 #endif
-#ifdef SC
-void main(){float l=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);l=max(l,R4(S));pixelLocalStoreANGLE(w0,O(floatBitsToUint(l)));}
+#ifdef RC
+void main(){float n=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);n=max(n,T4(S));pixelLocalStoreANGLE(w0,O(floatBitsToUint(n)));}
 #endif
 #elif defined(CE)
-layout(binding=0,r32i) uniform highp coherent iimage2D T9;ivec2 Ye(){return ivec2(floor(d0));}int Ze(float l){return int(l*de);}
+layout(binding=0,r32i) uniform highp coherent iimage2D X9;ivec2 Ye(){return ivec2(floor(d0));}int Ze(float n){return int(n*ee);}
 #ifdef NC
-void main(){int l=Ze(T6(S,gl_FrontFacing n1));imageAtomicAdd(T9,Ye(),l);}
+void main(){int n=Ze(X6(S,gl_FrontFacing m1));imageAtomicAdd(X9,Ye(),n);}
 #endif
-#ifdef SC
-void main(){int l=Ze(R4(S));imageAtomicMax(T9,Ye(),l);}
+#ifdef RC
+void main(){int n=Ze(T4(S));imageAtomicMax(X9,Ye(),n);}
 #endif
 #elif defined(CF)
 #ifdef NC
-Q6(i,DF){q(S,e);d l=T6(S,R6 n1);if(abs(l)>lh-1e-3){K2(l>.0?H0(.0,.0,1./255.,.0):H0(.0,.0,.0,1./255.));}else{l*=1./ub;K2(H0(max(l,.0),max(-l,.0),.0,.0));}}
+U6(i,DF){q(S,f);d n=X6(S,V6 m1);if(abs(n)>mh-1e-3){K2(n>.0?H0(.0,.0,1./255.,.0):H0(.0,.0,.0,1./255.));}else{n*=1./zb;K2(H0(max(n,.0),max(-n,.0),.0,.0));}}
 #endif
-#ifdef SC
-W2(i,EF){q(S,e);d l=R4(S n1);l*=1./ub;K2(H0(l,.0,.0,.0));}
+#ifdef RC
+V2(i,EF){q(S,f);d n=T4(S m1);n*=1./zb;K2(H0(n,.0,.0,.0));}
 #endif
 #else
 #ifdef NC
-Q6(float,DF){q(S,e);K2(T6(S,R6 n1));}
+U6(float,DF){q(S,f);K2(X6(S,V6 m1));}
 #endif
-#ifdef SC
-W2(float,EF){q(S,e);K2(R4(S n1));}
+#ifdef RC
+V2(float,EF){q(S,f);K2(T4(S m1));}
 #endif
 #endif
 #endif

@@ -1275,7 +1275,6 @@ impl GradientUploadData {
                 gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver, false),
                 gpu::PaintData::gradient(
                     draw.gradient.paint_type,
-                    draw.gradient.texture_y,
                     FillRule::NonZero,
                     BlendMode::SrcOver,
                 ),

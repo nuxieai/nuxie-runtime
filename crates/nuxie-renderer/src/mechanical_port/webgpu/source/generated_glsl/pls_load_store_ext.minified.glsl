@@ -14,30 +14,30 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140) uniform Kk{uniform highp vec4 Ri;}Si;
+layout(binding=0,std140) uniform Jk{uniform highp vec4 Pi;}Qi;
 #else
 uniform mediump vec4 AF;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
 #ifdef STORE_COLOR
-__pixel_local_inEXT i2
+__pixel_local_inEXT h2
 #else
-__pixel_local_outEXT i2
+__pixel_local_outEXT h2
 #endif
-{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 G4;layout(r32ui) highp uint k8;};
+{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 I4;layout(r32ui) highp uint m8;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef LOAD_COLOR
-layout(location=0) inout mediump vec4 hc;
+layout(location=0) inout mediump vec4 nc;
 #endif
 #endif
 #ifdef STORE_COLOR
-layout(location=0) out mediump vec4 hc;
+layout(location=0) out mediump vec4 nc;
 #endif
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-n0=Si.Ri;
+n0=Qi.Pi;
 #else
 n0=AF;
 #endif
@@ -46,20 +46,20 @@ n0=AF;
 #ifdef GL_ARM_shader_framebuffer_fetch
 n0=gl_LastFragColorARM;
 #else
-n0=hc;
+n0=nc;
 #endif
 #endif
 #ifdef CLEAR_COVERAGE
-k8=0u;
+m8=0u;
 #endif
 #ifdef CLEAR_CLIP
 m0=0u;
 #endif
 #ifdef STORE_COLOR
-hc=n0;
+nc=n0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 Ti;void main(){Ti=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 Ri;void main(){Ri=vec4(0,1,0,1);}
 #endif
 #endif

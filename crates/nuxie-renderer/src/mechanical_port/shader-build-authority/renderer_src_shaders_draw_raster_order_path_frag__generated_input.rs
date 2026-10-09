@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_raster_order_path.frag";
 pub const PINNED_SOURCE_SHA256: &str = "f2485e48efb969f0df1d4d8eb5a127c3839d19108242ba897a1656e37bbf8253";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_raster_order_path";

@@ -3616,8 +3616,7 @@ pub struct FlushUniforms {
     pub m_renderTargetBottomUp: u32,
     pub m_gradTextureYScale: f32,
     pub m_gradTextureYBias: f32,
-    pub m_gradTextureYScalePacked: f32,
-    pub m_padTo256Bytes: [u8; 256 - 120],
+    pub m_padTo256Bytes: [u8; 256 - 116],
 }
 
 impl FlushUniforms {
@@ -3681,7 +3680,7 @@ pub const kPathBufferAlignmentInElements: usize = 256 / core::mem::size_of::<Pat
 #[derive(Clone, Copy)]
 pub union PaintDataValue {
     pub m_color: u32,
-    pub m_gradTextureRowAndAdditiveness: f32,
+    pub m_gradientAdditivenessComplement: f32,
     pub m_shiftedClipReplacementID: u32,
 }
 
@@ -3694,7 +3693,7 @@ pub struct PaintData {
 
 impl PaintData {
     pub const kBufferStructure: StorageBufferStructure = StorageBufferStructure::uint32x2;
-    // void set(DrawContents, PaintType, SimplePaintValue, GradTextureLayout,
+    // void set(DrawContents, PaintType, SimplePaintValue,
     //          uint32_t clipID, bool hasClipRect, bool hasImage, BlendMode,
     //          bool solidUnmultiplied);
 }
@@ -3704,7 +3703,8 @@ pub const kPaintBufferAlignmentInElements: usize = 256 / core::mem::size_of::<Pa
 #[derive(Clone, Copy)]
 pub struct PaintAuxData {
     pub m_paintMatrix: [f32; 6],
-    pub m_gradTextureHorizontalSpan: [f32; 2],
+    pub m_gradTextureX: f32,
+    pub m_gradTextureY: f32,
     pub m_clipRectInverseMatrix: [f32; 6],
     pub m_inverseFwidth: Vec2D,
     pub m_imageMatrix: [f32; 6],
@@ -3835,9 +3835,10 @@ pub struct ImageRectInstance {
     pub m_gradientMatrix: [f32; 4],
     pub m_imageTranslate: [f32; 2],
     pub m_gradientTranslate: [f32; 2],
-    pub m_gradTextureHorizontalSpan: [f32; 2],
+    pub m_gradTextureX: f32,
     pub m_gradTextureY: f32,
-    pub m_gradientType: f32,
+    pub m_gradientType: u32,
+    pub m_padding: f32,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]

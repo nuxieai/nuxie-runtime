@@ -7,18 +7,44 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `71713c9f086723a44df580db4678a3ae5d68c6c2`
+- LAST_SYNCED_SHA: `f40c9dfe8a0c4accf3e963f48429e893798854a5`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6f3510dcc545bc8b2a78f1004a06929d17cd022b` (refreshed 2026-10-09 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 214 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (236 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 215 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (237 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `f40c9dfe`, integrated atop downstream `a49b777f7f`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including correction and fixture rereviews, are clean. Both browser products
+  compile for wasm32-unknown-unknown. All 566 GL/Vulkan unit tests pass (11
+  ignored); 42 shader-asset tests, two native shader lifecycle regressions,
+  two sampler tests and nine signature cases under each of production-key tools
+  and sample-key tools configurations pass. Four instrumented Metal resource
+  tests pass. The final required-live Metal suite passes 673 tests (six ignored),
+  including all four refreshed pixel cases and cross-shader-mode stability.
+  Shader reproduction is exact (66 WGSL modules/56 headers); current
+  SPIR-V, GLSL, Metal input inventories and source pins are regenerated.
+  Source/pipeline tests pass 12 and manifest tests pass 27.
+  Reviews corrected late-loaded shader owner retention, admission before cached
+  artifact use, preservation after malformed envelopes, and payload identity
+  after asynchronous compilation. Async replacement coverage exercises the
+  actual publication predicate, not an end-to-end scheduler. The ORE visitor
+  remains split across the existing runtime/artifact/scripting owners with
+  approved authentication, UTF-8, entry-point, module-size and mapping limits.
+  Validation restored two accidentally omitted approved Metal coverage guards
+  and updated exact generated-name/count/hash assertions; no tolerance changed.
+  Four older GM references were rebuilt from fresh f40 C++ with only the existing
+  FMA/coverage adaptations: additive_blend, additive_advanced_blend,
+  gradienttransform and image_paint each match corrected Rust at zero differing
+  pixels. Pristine captures and historical provenance remain separate. No new
+  browser-pixel, Vulkan/Android hardware or broad runtime Golden/Silver result
+  is claimed; guest execution remains deferred under UNIV-3728.
 - Validation at `71713c9f`, integrated atop downstream `cb39d02fc5`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All 27 native scroll-input and four velocity tests pass with the
@@ -561,6 +587,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f40c9dfe8a0c4accf3e963f48429e893798854a5` | Translate shader signature admission before indexing/reflection, signed-content group separation and signature verification helpers through live Rust import/scripting owners; retain approved host authentication and resource limits. Translate integer gradient coordinates, exact additive complement, uniform/instance packing, repeat gradient sampling and all supported-backend shader consumers; regenerate current shader artifacts. D3D and Unreal-specific HarfBuzz flags are unshipped. Guest unsigned-module execution, SIMD admission, WAMR cache/AOT and guest shader APIs remain deferred; import-shape tests do not imply execution support. Private signer/editor/export changes absent from the public delta are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `71713c9f086723a44df580db4678a3ae5d68c6c2` | Track elastic platform momentum through dragView while it can stretch and consume the delta; release at tracked coast speed when crossing or landing exactly on an edge. Preserve primed-clock sampling and absorption of the remaining tail. Translate both edge regressions and the upstream velocity expectation update. Private .rive_head contents are absent and not claimed. | — |
 | `9f47f07639009b16097985fe7b794c3fe09287dc` | Translate WebGPU pseudo-dynamic fill state as three retained pipeline passes, framebuffer/dynamic cache-key separation, per-pass stencil reference and color-write-disable vertex flags; enable the upstream dynamic-state capability. Shared dynamic stencil masks include the union of all three pass masks. Preserve the wasm32-unknown-unknown browser boundary; upstream private .rive_head implementation is not present or claimed imported. | — |
 | `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` | Dirty cursor drawables with Paint only when a blink phase changes effective caret visibility, preserving the blink clock and scrolled input position. Translate the upstream artboard didChange regression covering mid-phase, hide/show, even phases and selection-hidden carets. Public .rive_head metadata does not expose or establish any additional private implementation. | — |

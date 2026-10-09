@@ -97,7 +97,6 @@ pub(crate) struct PipelineManagerVulkan {
     // PipelineManagerVulkan fields, in source order.
     pub(crate) m_vk: Arc<VulkanContext>,
     pub(crate) m_featherAtlasFormat: vk::Format,
-    pub(crate) m_linearSampler: vk::Sampler,
     pub(crate) m_imageSamplers: [vk::Sampler; MAX_SAMPLER_PERMUTATIONS],
     pub(crate) m_perFlushDescriptorSetLayout: vk::DescriptorSetLayout,
     pub(crate) m_perDrawDescriptorSetLayout: vk::DescriptorSetLayout,
@@ -129,7 +128,8 @@ impl PipelineManagerVulkan {
         mode: ShaderCompilationMode,
     ) -> ShaderCompilationMode {
         let old = self.shaderCompilationMode();
-        self.m_mode.store(mode as i32, std::sync::atomic::Ordering::Relaxed);
+        self.m_mode
+            .store(mode as i32, std::sync::atomic::Ordering::Relaxed);
         old
     }
 
@@ -150,9 +150,6 @@ impl PipelineManagerVulkan {
     }
     pub(crate) fn emptyDescriptorSetLayout(&self) -> vk::DescriptorSetLayout {
         self.m_emptyDescriptorSetLayout
-    }
-    pub(crate) fn linearSampler(&self) -> vk::Sampler {
-        self.m_linearSampler
     }
     pub(crate) fn imageSampler(&self, i: u32) -> vk::Sampler {
         self.m_imageSamplers[i as usize]

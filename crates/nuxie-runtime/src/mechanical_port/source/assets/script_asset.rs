@@ -11,7 +11,7 @@ use crate::mechanical_port::source::{
 };
 
 use crate::mechanical_port::source::{
-    importers::text_asset_importer::SCRIPT_VERIFICATION_PUBLIC_KEY,
+    importers::text_asset_importer::verifies_content_signature,
     lua::scripting_vm::RuntimeScriptingVmHandle,
 };
 
@@ -492,12 +492,7 @@ impl ScriptAsset {
                 self.base.base.set_verified(false);
                 return false;
             };
-            if !nuxie_script_signature::verify(
-                &signature,
-                bytecode,
-                b"RiveCode",
-                &SCRIPT_VERIFICATION_PUBLIC_KEY,
-            ) {
+            if !verifies_content_signature(&signature, bytecode) {
                 self.base.base.set_verified(false);
                 return false;
             }

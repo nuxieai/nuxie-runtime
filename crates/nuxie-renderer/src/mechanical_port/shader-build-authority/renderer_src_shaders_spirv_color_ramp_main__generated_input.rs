@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/color_ramp.main";
 pub const PINNED_SOURCE_SHA256: &str = "076d5d45b3af0d27a138f41ac6fc32fd7411384cccc74c9a7b85c2cf376ea2e5";
 pub const OWNERSHIP_UNIT: &str = "shader:source:color_ramp";

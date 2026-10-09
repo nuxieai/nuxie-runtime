@@ -28,6 +28,21 @@ pub struct InBandContent {
     bytes: Vec<u8>,
 }
 
+/// Mirrors verifiesContentSignature: wrong-sized signatures never verify.
+pub fn verifies_content_signature(signature: &[u8], content: &[u8]) -> bool {
+    let Ok(signature): Result<[u8; nuxie_script_signature::SIGNATURE_BYTES], _> =
+        signature.try_into()
+    else {
+        return false;
+    };
+    nuxie_script_signature::verify(
+        &signature,
+        content,
+        b"RiveCode",
+        &SCRIPT_VERIFICATION_PUBLIC_KEY,
+    )
+}
+
 impl InBandContent {
     pub fn new(asset: CoreHandle, bytes: &[u8]) -> Self {
         Self {
@@ -114,12 +129,7 @@ impl ImportStackObject for TextAssetImporter {
         else {
             return StatusCode::Ok;
         };
-        let verified = nuxie_script_signature::verify(
-            &signature,
-            &combined_bytecode,
-            b"RiveCode",
-            &SCRIPT_VERIFICATION_PUBLIC_KEY,
-        );
+        let verified = verifies_content_signature(&signature, &combined_bytecode);
         for in_band in verification_set.iter() {
             in_band
                 .asset
@@ -131,6 +141,13 @@ impl ImportStackObject for TextAssetImporter {
                         .set_verified(verified);
                 })
                 .expect("verification participant remains alive");
+            in_band
+                .asset
+                .with_downcast_mut::<crate::source::assets::shader_asset::ShaderAsset, _>(
+                    |shader| {
+                        shader.admit();
+                    },
+                );
         }
         verification_set.clear();
         StatusCode::Ok

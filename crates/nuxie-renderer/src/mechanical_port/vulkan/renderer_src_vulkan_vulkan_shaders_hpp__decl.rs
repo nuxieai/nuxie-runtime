@@ -125,7 +125,7 @@ pub(crate) use super::vulkan_shaders_impl::{
     draw_clockwise_path_frag, draw_clockwise_path_vert,
 };
 
-pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 99;
+pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 97;
 #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
 pub(crate) const TARGET_SHADER_SYMBOL_COUNT: usize = DECLARED_SHADER_SYMBOL_COUNT - 16;
 #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]

@@ -22,7 +22,6 @@ impl ScriptModuleAsset {
     pub const ANIMA_SCRIPT_NAME: &'static str = "scripts_as";
 
     pub fn decode(&mut self, data: &mut Vec<u8>, _factory: &RuntimeFactoryHandle) -> bool {
-        self.base.base.set_verified(false);
         let header = SignedContentHeader::new(data);
         if !header.is_valid() {
             return false;
@@ -46,7 +45,7 @@ mod tests {
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
 
     #[test]
-    fn signed_module_preserves_content_and_resets_verification() {
+    fn signed_module_preserves_content_and_verification() {
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
         let mut asset = ScriptModuleAsset::default();
@@ -63,12 +62,12 @@ mod tests {
         assert_eq!(bytes, original);
         asset.base.base.set_verified(true);
         assert!(!asset.decode(&mut vec![0x80], &factory));
-        assert!(!asset.base.verified());
+        assert!(asset.base.verified());
         assert_eq!(asset.module(), module);
         assert!(!asset.decode(&mut Vec::new(), &factory));
         asset.base.base.set_verified(true);
         assert!(asset.decode(&mut vec![0, 42, 0, 43], &factory));
-        assert!(!asset.base.verified());
+        assert!(asset.base.verified());
         assert_eq!(asset.module(), &[42, 0, 43]);
     }
 

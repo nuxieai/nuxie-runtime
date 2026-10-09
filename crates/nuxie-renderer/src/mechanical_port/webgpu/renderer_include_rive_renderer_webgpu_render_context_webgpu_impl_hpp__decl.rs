@@ -192,7 +192,6 @@ pub(crate) struct RenderContextWebGPUImpl {
     pub(crate) m_featherAtlasTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_featherAtlasTextureView: ManuallyDrop<TextureView>,
     pub(crate) m_drawPipelines: ManuallyDrop<BTreeMap<u64, DrawPipeline>>,
-    pub(crate) m_linearSampler: ManuallyDrop<Sampler>,
     pub(crate) m_imageSamplers: ManuallyDrop<[Sampler; ImageSampler::MAX_SAMPLER_PERMUTATIONS]>,
     pub(crate) m_samplerBindings: ManuallyDrop<BindGroup>,
     pub(crate) m_emptyBindingsLayout: ManuallyDrop<BindGroupLayout>,
@@ -355,7 +354,6 @@ impl Drop for RenderContextWebGPUImpl {
             ManuallyDrop::drop(&mut self.m_emptyBindingsLayout);
             ManuallyDrop::drop(&mut self.m_samplerBindings);
             dropArrayReverse(&mut self.m_imageSamplers);
-            ManuallyDrop::drop(&mut self.m_linearSampler);
             ManuallyDrop::drop(&mut self.m_drawPipelines);
             ManuallyDrop::drop(&mut self.m_featherAtlasTextureView);
             ManuallyDrop::drop(&mut self.m_featherAtlasTexture);
@@ -523,7 +521,7 @@ pub(crate) const SOURCE_TOP_LEVEL_CLASS_COUNT: usize = 3;
 pub(crate) const SOURCE_NESTED_CLASS_COUNT: usize = 11;
 pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 36;
 pub(crate) const SOURCE_RENDER_TARGET_FIELD_COUNT: usize = 21;
-const _: [(); 12849] = [(); PINNED_SOURCE.len()];
+const _: [(); 12814] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

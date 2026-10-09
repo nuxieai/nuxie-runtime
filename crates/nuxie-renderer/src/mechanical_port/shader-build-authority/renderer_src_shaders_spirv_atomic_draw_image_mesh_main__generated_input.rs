@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/atomic_draw_image_mesh.main";
 pub const PINNED_SOURCE_SHA256: &str = "06fbd52a990b3ae38b460b661967cb8069787621948308d1eb8cdfda83522276";
 pub const OWNERSHIP_UNIT: &str = "shader:source:atomic_draw_image_mesh";

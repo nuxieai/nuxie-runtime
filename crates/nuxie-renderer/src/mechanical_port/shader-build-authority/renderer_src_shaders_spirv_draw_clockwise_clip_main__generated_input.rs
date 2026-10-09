@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_clockwise_clip.main";
 pub const PINNED_SOURCE_SHA256: &str = "40d9a8188736ccc7efd359084b9e1aa07bee537bffb5b3f9ca2737eb8fefc933";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_clockwise_clip";

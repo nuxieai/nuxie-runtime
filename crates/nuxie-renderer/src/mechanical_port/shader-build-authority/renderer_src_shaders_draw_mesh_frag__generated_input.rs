@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_mesh.frag";
 pub const PINNED_SOURCE_SHA256: &str = "f1d04c96e07fba636aa6aa3ef31fec31aafbe1c2dc7790be812492fe1a31e381";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_mesh";

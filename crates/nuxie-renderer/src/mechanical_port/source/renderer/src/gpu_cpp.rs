@@ -3596,12 +3596,13 @@ mod additive_packing_tests {
     }
 
     #[test]
-    fn gradient_row_packs_complement_and_advanced_blends_ignore_additiveness() {
+    fn gradient_packs_unquantized_additiveness_complement() {
         for (blend, additive, expected) in [
-            (BlendMode::SrcOver, 0.0, 8.0 + 255.0 / 256.0),
-            (BlendMode::SrcOver, 0.5, 8.5),
-            (BlendMode::SrcOver, 1.0, 8.0),
-            (BlendMode::Multiply, 1.0, 8.0 + 255.0 / 256.0),
+            (BlendMode::SrcOver, 0.0, 1.0),
+            (BlendMode::SrcOver, 0.5, 0.5),
+            (BlendMode::SrcOver, 1.0, 0.0),
+            (BlendMode::Multiply, 1.0, 0.0),
+            (BlendMode::SrcOver, 0.12345, 1.0 - 0.12345),
         ] {
             let mut paint: PaintData = unsafe { core::mem::zeroed() };
             paint.set(
@@ -3613,7 +3614,6 @@ mod additive_packing_tests {
                         ..Default::default()
                     },
                 },
-                GradTextureLayout::default(),
                 0,
                 false,
                 false,
@@ -3624,10 +3624,88 @@ mod additive_packing_tests {
                 nuxie_render_api::LayerMaskMode::Alpha,
             );
             assert_eq!(
-                unsafe { paint.value.m_gradTextureRowAndAdditiveness },
+                unsafe { paint.value.m_gradientAdditivenessComplement },
                 expected
             );
         }
+    }
+
+    #[test]
+    fn gradient_coordinates_are_integer_texels_with_negative_complex_marker() {
+        let target = RenderTarget::new(32, 64);
+        let platform = PlatformFeatures::default();
+        let layout = GradTextureLayout {
+            complexOffsetY: 11,
+            inverseHeight: 1.0 / 128.0,
+        };
+        for (location, expected) in [
+            (ColorRampLocation { row: 0, col: 0 }, (0, 0)),
+            (ColorRampLocation { row: 7, col: 510 }, (510, 7)),
+            (
+                ColorRampLocation {
+                    row: 7,
+                    col: ColorRampLocation::kComplexGradientMarker,
+                },
+                (-1, 18),
+            ),
+        ] {
+            let (matrix, x, y) = getGradientMatrixAndCoord(
+                PaintType::linearGradient,
+                [1.0, 0.0, 0.0],
+                location,
+                layout,
+                Mat2D::IDENTITY,
+                Mat2D::IDENTITY,
+                &target,
+                &platform,
+            );
+            assert_eq!((x, y), expected);
+            assert_eq!(matrix.0, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+            let mut aux: PaintAuxData = unsafe { core::mem::zeroed() };
+            aux.set(
+                Mat2D::IDENTITY,
+                Mat2D::IDENTITY,
+                PaintType::linearGradient,
+                SimplePaintValue {
+                    colorRampLocation: location,
+                },
+                layout,
+                Some([1.0, 0.0, 0.0]),
+                Mat2D::IDENTITY,
+                None,
+                None,
+                &target,
+                &platform,
+            );
+            assert_eq!(
+                (aux.m_gradTextureX, aux.m_gradTextureY),
+                (x as f32, y as f32)
+            );
+        }
+    }
+
+    #[test]
+    fn image_gradient_instance_keeps_integer_type_bits_and_texel_coordinates() {
+        let instance = ImageRectInstance::new(
+            Mat2D::IDENTITY,
+            0xff_ff_ff_ff,
+            None,
+            0,
+            BlendMode::SrcOver,
+            0,
+            Mat2D::IDENTITY,
+            Mat2D::IDENTITY,
+            PaintType::radialGradient as u32,
+            -1,
+            18,
+            0.0,
+        );
+        assert_eq!(instance.m_gradTextureX, -1.0);
+        assert_eq!(instance.m_gradTextureY, 18.0);
+        assert_eq!(instance.m_gradientType, 3);
+        assert_eq!(core::mem::size_of::<ImageRectInstance>(), 128);
+        assert_eq!(core::mem::size_of::<FlushUniforms>(), 256);
+        assert_eq!(core::mem::offset_of!(FlushUniforms, m_padTo256Bytes), 116);
     }
 }
 
@@ -3637,7 +3715,6 @@ impl PaintData {
         singleDrawContents: DrawContents,
         paintType: PaintType,
         simplePaintValue: SimplePaintValue,
-        gradTextureLayout: GradTextureLayout,
         clipID: u32,
         hasClipRect: bool,
         hasImage: bool,
@@ -3670,11 +3747,7 @@ impl PaintData {
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::linearGradient | PaintType::radialGradient => {
-                    let loc = simplePaintValue.colorRampLocation;
-                    let row = getGradientRow(loc, gradTextureLayout);
-                    assert!(row <= 0xffff);
-                    self.value.m_gradTextureRowAndAdditiveness = (row + 1) as f32
-                        + (complementAdditiveness * 255.0 + 0.5) as u32 as f32 * (1.0 / 256.0);
+                    self.value.m_gradientAdditivenessComplement = 1.0 - additiveness;
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::clipUpdate => {
@@ -3720,29 +3793,16 @@ fn swizzleRiveColorToRGBAPremulAdditive(color: ColorInt, complement: f32) -> u32
     red | (green << 8) | (blue << 16) | (((alpha as f32 * complement + 0.5) as u32) << 24)
 }
 
-pub fn getGradientRow(location: ColorRampLocation, layout: GradTextureLayout) -> u32 {
-    let row = location.row as u32
-        + if location.isComplex() {
-            layout.complexOffsetY
-        } else {
-            0
-        };
-    row
-}
-
-pub fn getGradientY(location: ColorRampLocation, layout: GradTextureLayout) -> f32 {
-    (getGradientRow(location, layout) as f32 + 0.5) * layout.inverseHeight
-}
-
-pub fn getGradientMatrixAndSpan(
+pub fn getGradientMatrixAndCoord(
     paint_type: PaintType,
     coeffs: [f32; 3],
     location: ColorRampLocation,
+    layout: GradTextureLayout,
     inverse_gradient_transform: Mat2D,
     view_matrix: Mat2D,
     render_target: &RenderTarget,
     platform_features: &PlatformFeatures,
-) -> (Mat2D, [f32; 2]) {
+) -> (Mat2D, i32, u32) {
     let mut matrix = inverse_mat2d(view_matrix).unwrap_or(Mat2D::IDENTITY);
     if render_target.bottomUp(platform_features) {
         matrix = multiply_mat2d(
@@ -3764,13 +3824,12 @@ pub fn getGradientMatrixAndSpan(
             matrix,
         );
     }
-    let (left, right) = if location.isComplex() {
-        (0.0, 512.0)
+    let (x, y) = if location.isComplex() {
+        (-1, location.row as u32 + layout.complexOffsetY)
     } else {
-        let left = location.col as f32;
-        (left, left + 2.0)
+        (location.col as i32, location.row as u32)
     };
-    (matrix, [(right - left - 1.0) / 512.0, (left + 0.5) / 512.0])
+    (matrix, x, y)
 }
 
 /// Source-shaped image/gradient paint auxiliary writer. The native texture
@@ -3781,6 +3840,7 @@ pub fn set_paint_aux_data(
     imageMatrix: Mat2D,
     paintType: PaintType,
     simplePaintValue: SimplePaintValue,
+    gradTextureLayout: GradTextureLayout,
     gradientCoeffs: Option<[f32; 3]>,
     inverseGradientTransform: Mat2D,
     imageSize: Option<(u32, u32)>,
@@ -3793,16 +3853,18 @@ pub fn set_paint_aux_data(
         PaintType::linearGradient | PaintType::radialGradient
     ) {
         let coeffs = gradientCoeffs.expect("gradient is required");
-        let (paintMatrix, span) = getGradientMatrixAndSpan(
+        let (paintMatrix, gradTextureX, gradTextureY) = getGradientMatrixAndCoord(
             paintType,
             coeffs,
             unsafe { simplePaintValue.colorRampLocation },
+            gradTextureLayout,
             inverseGradientTransform,
             viewMatrix,
             renderTarget,
             platformFeatures,
         );
-        out.m_gradTextureHorizontalSpan = span;
+        out.m_gradTextureX = gradTextureX as f32;
+        out.m_gradTextureY = gradTextureY as f32;
         out.m_paintMatrix = paintMatrix.0;
     }
     if paintType != PaintType::clipUpdate {
@@ -3851,6 +3913,7 @@ impl PaintAuxData {
         imageMatrix: Mat2D,
         paintType: PaintType,
         simplePaintValue: SimplePaintValue,
+        gradTextureLayout: GradTextureLayout,
         gradientCoeffs: Option<[f32; 3]>,
         inverseGradientTransform: Mat2D,
         imageSize: Option<(u32, u32)>,
@@ -3864,6 +3927,7 @@ impl PaintAuxData {
             imageMatrix,
             paintType,
             simplePaintValue,
+            gradTextureLayout,
             gradientCoeffs,
             inverseGradientTransform,
             imageSize,
@@ -4180,10 +4244,8 @@ impl FlushUniforms {
             m_wireframeEnabled: flushDesc.wireframe as u32,
             m_renderTargetBottomUp: renderTarget.bottomUp(platformFeatures) as u32,
             m_gradTextureYScale: 1.0 / flushDesc.gradTextureHeight as f32,
-            m_gradTextureYBias: -0.5 / flushDesc.gradTextureHeight as f32,
-            m_gradTextureYScalePacked: (1.0 / flushDesc.gradTextureHeight as f32)
-                * 2.0f32.powi(-17),
-            m_padTo256Bytes: [0; 256 - 120],
+            m_gradTextureYBias: 0.5 / flushDesc.gradTextureHeight as f32,
+            m_padTo256Bytes: [0; 256 - 116],
         }
     }
 }
@@ -4221,8 +4283,8 @@ impl ImageRectInstance {
         imageMatrix: Mat2D,
         gradientMatrix: Mat2D,
         gradientType: u32,
-        gradTextureHorizontalSpan: [f32; 2],
-        gradTextureY: f32,
+        gradTextureX: i32,
+        gradTextureY: u32,
         additiveness: f32,
     ) -> Self {
         Self {
@@ -4239,9 +4301,10 @@ impl ImageRectInstance {
             m_gradientMatrix: gradientMatrix.0[..4].try_into().unwrap(),
             m_imageTranslate: imageMatrix.0[4..].try_into().unwrap(),
             m_gradientTranslate: gradientMatrix.0[4..].try_into().unwrap(),
-            m_gradTextureHorizontalSpan: gradTextureHorizontalSpan,
-            m_gradTextureY: gradTextureY,
-            m_gradientType: gradientType as f32,
+            m_gradTextureX: gradTextureX as f32,
+            m_gradTextureY: gradTextureY as f32,
+            m_gradientType: gradientType,
+            m_padding: 0.0,
         }
     }
 }
@@ -4824,7 +4887,6 @@ mod dynamic_color_write_tests {
             DrawContents::none,
             PaintType::solidColor,
             SimplePaintValue { color: 0 },
-            GradTextureLayout::default(),
             2,
             false,
             true,

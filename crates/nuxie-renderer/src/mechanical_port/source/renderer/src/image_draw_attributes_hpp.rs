@@ -1,4 +1,5 @@
-//! Mechanical translation of renderer/src/image_draw_attributes.hpp at 4921ab81.
+//! Mechanical translation of renderer/src/image_draw_attributes.hpp.
+//! Shader export names synchronized with upstream f40c9dfe.
 //! Semantic names come from the same ordered minifier batch as the shader owners.
 #![allow(non_upper_case_globals)]
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
@@ -10,7 +11,7 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         format: VertexElementFormat::float4,
         attributeIndex: 2,
         byteOffset: 0,
-        semanticName: "YB",
+        semanticName: "ZB",
     },
     VertexAttribute {
         format: VertexElementFormat::float4,
@@ -28,25 +29,25 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         format: VertexElementFormat::uint32,
         attributeIndex: 5,
         byteOffset: 48,
-        semanticName: "ZB",
+        semanticName: "AC",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 6,
         byteOffset: 52,
-        semanticName: "AC",
+        semanticName: "BC",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 7,
         byteOffset: 56,
-        semanticName: "BC",
+        semanticName: "CC",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 8,
         byteOffset: 60,
-        semanticName: "MC",
+        semanticName: "LC",
     },
 ];
 pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [
@@ -57,17 +58,45 @@ pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [
     ImageDrawInstanceBaseAttributes[4],
     ImageDrawInstanceBaseAttributes[5],
     ImageDrawInstanceBaseAttributes[6],
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "OD" },
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 10, byteOffset: 80, semanticName: "PD" },
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 11, byteOffset: 96, semanticName: "DD" },
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 12, byteOffset: 112, semanticName: "PC" },
+    VertexAttribute {
+        format: VertexElementFormat::float4,
+        attributeIndex: 9,
+        byteOffset: 64,
+        semanticName: "QD",
+    },
+    VertexAttribute {
+        format: VertexElementFormat::float4,
+        attributeIndex: 10,
+        byteOffset: 80,
+        semanticName: "RD",
+    },
+    VertexAttribute {
+        format: VertexElementFormat::float4,
+        attributeIndex: 11,
+        byteOffset: 96,
+        semanticName: "ED",
+    },
+    VertexAttribute {
+        format: VertexElementFormat::float4,
+        attributeIndex: 12,
+        byteOffset: 112,
+        semanticName: "FD",
+    },
 ];
 pub const ImageMeshInstanceAttributes: [VertexAttribute; 8] = [
-    ImageDrawInstanceBaseAttributes[0], ImageDrawInstanceBaseAttributes[1],
-    ImageDrawInstanceBaseAttributes[2], ImageDrawInstanceBaseAttributes[3],
-    ImageDrawInstanceBaseAttributes[4], ImageDrawInstanceBaseAttributes[5],
+    ImageDrawInstanceBaseAttributes[0],
+    ImageDrawInstanceBaseAttributes[1],
+    ImageDrawInstanceBaseAttributes[2],
+    ImageDrawInstanceBaseAttributes[3],
+    ImageDrawInstanceBaseAttributes[4],
+    ImageDrawInstanceBaseAttributes[5],
     ImageDrawInstanceBaseAttributes[6],
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "IC" },
+    VertexAttribute {
+        format: VertexElementFormat::float4,
+        attributeIndex: 9,
+        byteOffset: 64,
+        semanticName: "HC",
+    },
 ];
 
 const _: () = {
@@ -115,9 +144,10 @@ const _: () = {
     assert!(offset_of!(ImageRectInstance, m_gradientMatrix) == 80);
     assert!(offset_of!(ImageRectInstance, m_imageTranslate) == 96);
     assert!(offset_of!(ImageRectInstance, m_gradientTranslate) == 104);
-    assert!(offset_of!(ImageRectInstance, m_gradTextureHorizontalSpan) == 112);
-    assert!(offset_of!(ImageRectInstance, m_gradTextureY) == 120);
-    assert!(offset_of!(ImageRectInstance, m_gradientType) == 124);
+    assert!(offset_of!(ImageRectInstance, m_gradTextureX) == 112);
+    assert!(offset_of!(ImageRectInstance, m_gradTextureY) == 116);
+    assert!(offset_of!(ImageRectInstance, m_gradientType) == 120);
+    assert!(offset_of!(ImageRectInstance, m_padding) == 124);
     assert!(offset_of!(ImageMeshInstance, m_commons) == 0);
     assert!(offset_of!(ImageMeshInstance, m_uvTransform) == 64);
 };

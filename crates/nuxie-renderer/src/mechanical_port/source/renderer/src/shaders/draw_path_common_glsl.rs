@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "1b42169e5f45b5b8450de9c742d5496695c2a7e4db7f4d9c0ef366379bd24e37";
+    "6c7df10c9a8e2dad8f49ed22bc14b097aeab7c4500d34bb8b26f43fe556c7c0e";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 931;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 40135;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 40140;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -90,7 +90,7 @@ DST_COLOR_TEXTURE(@dstColorTexture);
 #endif
 FRAG_TEXTURE_BLOCK_END
 
-SAMPLER_LINEAR(GRAD_TEXTURE_IDX, gradSampler)
+SAMPLER_LINEAR_WRAP(GRAD_TEXTURE_IDX, gradSampler)
 // Metal defines @VERTEX and @FRAGMENT at the same time, so yield to the vertex
 // definition of gaussianIntegralSampler in this case.
 #ifdef @FEATHER_ATLAS_BLIT

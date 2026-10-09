@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 154768] = [(); PINNED_SOURCE.len()];
+const _: [(); 154997] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -79,7 +79,7 @@ const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = gpu::ImageMeshInstance::LastAttribIdx
 
 // Exact export substitutions emitted by the frozen shader minifier.
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "SC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "RC";
 const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "CE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "AE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
@@ -93,14 +93,14 @@ const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "GD";
 const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "SF";
 const GLSL_DRAW_IMAGE: &str = "OE";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_DRAW_IMAGE_RECT: &str = "ED";
+const GLSL_DRAW_IMAGE_RECT: &str = "DD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_DRAW_PATH: &str = "PD";
 const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "KF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
 const GLSL_ENABLE_INSTANCE_INDEX: &str = "EE";
-const GLSL_DS_POLAR_STROKE: &str = "AD";
-const GLSL_DS_HAIRLINE_STROKE: &str = "BD";
+const GLSL_DS_POLAR_STROKE: &str = "ZC";
+const GLSL_DS_HAIRLINE_STROKE: &str = "AD";
 const GLSL_ENABLE_BASE_VERTEX: &str = "VE";
 const GLSL_DRAW_DEPTHSTENCIL_PATH: &str =
     include_str!("source/generated_glsl_embedded/draw_depthstencil_path.minified.glsl");
@@ -110,18 +110,18 @@ const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
 const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "SD";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
-const GLSL_RESOLVE_PLS: &str = "VC";
+const GLSL_RESOLVE_PLS: &str = "UC";
 const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "TF";
 const GLSL_FlushUniforms: &str = "VB";
 const GLSL_atlasRenderTexture: &str = "FF";
-const GLSL_contourBuffer: &str = "CD";
+const GLSL_contourBuffer: &str = "BD";
 const GLSL_dstColorTexture: &str = "KD";
 const GLSL_featherAtlasTexture: &str = "HD";
-const GLSL_gaussianIntegralTexture: &str = "ZC";
-const GLSL_gradTexture: &str = "YC";
+const GLSL_gaussianIntegralTexture: &str = "YC";
+const GLSL_gradTexture: &str = "XC";
 const GLSL_imageTexture: &str = "TB";
 const GLSL_paintAuxBuffer: &str = "JB";
-const GLSL_paintBuffer: &str = "WC";
+const GLSL_paintBuffer: &str = "VC";
 const GLSL_pathBuffer: &str = "KB";
 const GLSL_sourceTexture: &str = "IC";
 const GLSL_tessVertexTexture: &str = "UB";
@@ -457,7 +457,12 @@ impl TexelBufferRingWebGL {
                 width,
                 height,
             });
-            glutils::SetTexture2DSamplingParams(GL_NEAREST, GL_NEAREST);
+            glutils::SetTexture2DSamplingParams(
+                GL_NEAREST,
+                GL_NEAREST,
+                GL_CLAMP_TO_EDGE as GLint,
+                GL_CLAMP_TO_EDGE as GLint,
+            );
             recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
         });
         owner
@@ -756,7 +761,12 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
         } else {
             GL_NEAREST
         };
-        glutils::SetTexture2DSamplingParams(filter, filter);
+        glutils::SetTexture2DSamplingParams(
+            filter,
+            filter,
+            GL_CLAMP_TO_EDGE as GLint,
+            GL_CLAMP_TO_EDGE as GLint,
+        );
 
         let tessellateSources = [
             GLSL_CONSTANTS,
@@ -1221,7 +1231,12 @@ pub(crate) fn resizeGradientTexture(context: &mut RenderContextGLImpl, width: u3
                 width,
                 height,
             });
-            glutils::SetTexture2DSamplingParams(GL_LINEAR, GL_LINEAR);
+            glutils::SetTexture2DSamplingParams(
+                GL_LINEAR,
+                GL_LINEAR,
+                GL_REPEAT as GLint,
+                GL_REPEAT as GLint,
+            );
             texture
         };
         recordGLCommand(GLCommand::BindFramebuffer(
@@ -1261,7 +1276,12 @@ pub(crate) fn resizeTessellationTexture(
                 width,
                 height,
             });
-            glutils::SetTexture2DSamplingParams(GL_NEAREST, GL_NEAREST);
+            glutils::SetTexture2DSamplingParams(
+                GL_NEAREST,
+                GL_NEAREST,
+                GL_CLAMP_TO_EDGE as GLint,
+                GL_CLAMP_TO_EDGE as GLint,
+            );
             texture
         };
         recordGLCommand(GLCommand::BindFramebuffer(
@@ -1496,7 +1516,12 @@ pub(crate) fn resizeFeatherAtlasTexture(
                 width,
                 height,
             });
-            glutils::SetTexture2DSamplingParams(GL_NEAREST, GL_NEAREST);
+            glutils::SetTexture2DSamplingParams(
+                GL_NEAREST,
+                GL_NEAREST,
+                GL_CLAMP_TO_EDGE as GLint,
+                GL_CLAMP_TO_EDGE as GLint,
+            );
         }
         context.m_featherAtlasTexture.moveAssign(GLTexture::new());
         recordGLCommand(GLCommand::ActiveTexture(
@@ -1513,7 +1538,12 @@ pub(crate) fn resizeFeatherAtlasTexture(
             width,
             height,
         });
-        glutils::SetTexture2DSamplingParams(GL_LINEAR, GL_LINEAR);
+        glutils::SetTexture2DSamplingParams(
+            GL_LINEAR,
+            GL_LINEAR,
+            GL_CLAMP_TO_EDGE as GLint,
+            GL_CLAMP_TO_EDGE as GLint,
+        );
         if context.m_featherAtlasVertexShader.id() == 0 {
             buildFeatherAtlasRenderPipelines(context);
         }
@@ -1634,8 +1664,8 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "AB",
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "H",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
-        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "DD",
+        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "WC",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "CD",
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "FC",
         gpu::ShaderFeatures::ENABLE_DITHER => "OB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
@@ -1834,7 +1864,11 @@ fn newDrawShader(
             | gpu::DrawType::depthStrokes
             | gpu::DrawType::depthAAStrokes
             | gpu::DrawType::depthAAOuterHairline => {
-                sources.extend([GLSL_DRAW_PATH_COMMON, GLSL_DRAW_DEPTHSTENCIL_PATH]);
+                sources.extend([
+                    GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
+                    GLSL_DRAW_DEPTHSTENCIL_PATH,
+                ]);
             }
             gpu::DrawType::interiorTriangulation | gpu::DrawType::featherAtlasBlit => {
                 sources.extend([
@@ -4481,8 +4515,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3961);
-        assert_eq!(PINNED_SOURCE.len(), 154768);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3965);
+        assert_eq!(PINNED_SOURCE.len(), 154997);
     }
 
     #[test]
@@ -4653,12 +4687,12 @@ mod tests {
             (
                 "ENABLE_EVEN_ODD",
                 gpu::ShaderFeatures::ENABLE_EVEN_ODD,
-                "XC",
+                "WC",
             ),
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "DD",
+                "CD",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",

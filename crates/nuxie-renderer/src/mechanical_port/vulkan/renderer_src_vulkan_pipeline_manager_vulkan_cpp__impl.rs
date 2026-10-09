@@ -18,7 +18,8 @@ use super::render_pass_vulkan_decl::{
 };
 use super::vulkan_context_decl::VulkanContext;
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
-    ImageFilter, ImageSampler, ImageWrap,
+    BilinearClampImageSamplerKey, BilinearRepeatImageSamplerKey, ImageFilter, ImageSampler,
+    ImageWrap,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
     kVertexShaderFeaturesMask, DrawContents, DrawContentsForDepthStencilPipelineState, DrawType,
@@ -98,7 +99,6 @@ impl PipelineManagerVulkan {
             m_sharedObjectReadyCV: Default::default(),
             m_vk: vk,
             m_featherAtlasFormat: vk::Format::R16_SFLOAT,
-            m_linearSampler: Default::default(),
             m_imageSamplers: [vk::Sampler::null(); MAX_SAMPLER_PERMUTATIONS],
             m_perFlushDescriptorSetLayout: Default::default(),
             m_perDrawDescriptorSetLayout: Default::default(),
@@ -116,22 +116,6 @@ impl PipelineManagerVulkan {
 
     fn init(&mut self, nullTextureView: vk::ImageView) -> bool {
         let vk = Arc::clone(&self.m_vk);
-        let linearInfo = vk::SamplerCreateInfo::default()
-            .mag_filter(vk::Filter::LINEAR)
-            .min_filter(vk::Filter::LINEAR)
-            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
-            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-            .min_lod(0.0)
-            .max_lod(0.0);
-        self.m_linearSampler = vk.createHandle(
-            unsafe { vk.m_ashDevice.create_sampler(&linearInfo, None) },
-            file!(),
-            line!(),
-        );
-        if self.m_linearSampler == Default::default() {
-            return false;
-        }
         for (i, sampler) in self.m_imageSamplers.iter_mut().enumerate() {
             let wrapX = ImageSampler::GetWrapXOptionFromKey(i as u8);
             let wrapY = ImageSampler::GetWrapYOptionFromKey(i as u8);
@@ -197,7 +181,9 @@ impl PipelineManagerVulkan {
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                p_immutable_samplers: std::ptr::from_ref(&self.m_linearSampler),
+                p_immutable_samplers: std::ptr::from_ref(
+                    &self.m_imageSamplers[BilinearRepeatImageSamplerKey as usize],
+                ),
                 ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
@@ -205,7 +191,9 @@ impl PipelineManagerVulkan {
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vertexFragment,
-                p_immutable_samplers: std::ptr::from_ref(&self.m_linearSampler),
+                p_immutable_samplers: std::ptr::from_ref(
+                    &self.m_imageSamplers[BilinearClampImageSamplerKey as usize],
+                ),
                 ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
@@ -213,7 +201,9 @@ impl PipelineManagerVulkan {
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                p_immutable_samplers: std::ptr::from_ref(&self.m_linearSampler),
+                p_immutable_samplers: std::ptr::from_ref(
+                    &self.m_imageSamplers[BilinearClampImageSamplerKey as usize],
+                ),
                 ..Default::default()
             },
         ];
@@ -292,7 +282,7 @@ impl PipelineManagerVulkan {
                 .dst_binding(IMAGE_TEXTURE_IDX)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER),
             &[vk::DescriptorImageInfo::default()
-                .sampler(self.m_imageSamplers[ImageSampler::LINEAR_CLAMP_SAMPLER_KEY as usize])
+                .sampler(self.m_imageSamplers[BilinearClampImageSamplerKey as usize])
                 .image_view(nullTextureView)
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)],
         );
@@ -319,9 +309,6 @@ impl Drop for PipelineManagerVulkan {
             for sampler in self.m_imageSamplers {
                 self.m_vk.m_ashDevice.destroy_sampler(sampler, None);
             }
-            self.m_vk
-                .m_ashDevice
-                .destroy_sampler(self.m_linearSampler, None);
         }
     }
 }

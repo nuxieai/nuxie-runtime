@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c73593c3a868f87b5dcd328432255db33e3e2266";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "afd2d84e69cc09c49c66e524f89d0ad23435daf6e559b5142c0cef8a2de44add";
 pub const OWNERSHIP_UNIT: &str = "shader:source:specialization";

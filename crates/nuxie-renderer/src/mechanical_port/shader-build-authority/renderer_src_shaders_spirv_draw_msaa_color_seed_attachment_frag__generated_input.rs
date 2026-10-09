@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag";
 pub const PINNED_SOURCE_SHA256: &str = "0baeda14de63ded97fc2247240b01b71f891be7235b3c73a2a950810402c44d5";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_msaa_color_seed_attachment";

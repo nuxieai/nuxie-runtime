@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/rhi.glsl.
  *
- * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
+ * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/rhi.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "1762e95a0cac23926472b303350cd06f5fee876980076050f129c850824d50ac";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 610;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 25399;
+    "25000e26adba0e149561b026a25bcb229fe04b8467d5b1bc1c3704e8ef1b78c3";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 611;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 25435;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_RHI_GLSL_SOURCE: &str = r###"/*
@@ -171,6 +171,7 @@ $typedef $uint ushort;
 // parameters are defined at the API level.
 #define SAMPLER(IDX, NAME) $SamplerState NAME;
 #define SAMPLER_LINEAR SAMPLER
+#define SAMPLER_LINEAR_WRAP SAMPLER
 #define SAMPLER_DYNAMIC(SET, IDX, NAME) SAMPLER(IDX, NAME)
 #define SAMPLER_DYNAMIC_IMAGE(NAME) SAMPLER(IMAGE_TEXTURE_IDX, NAME)
 

@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/atomic_draw_atlas_blit.main";
 pub const PINNED_SOURCE_SHA256: &str = "c5d2e1d8e70a1c4bf50a5ba40993860f15ac680d3ebfcd78ea30c1ce81e6a669";
 pub const OWNERSHIP_UNIT: &str = "shader:source:atomic_draw_atlas_blit";

@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/clear_clockwise_atomic_clip.main";
 pub const PINNED_SOURCE_SHA256: &str = "2ca4727f99a6be9e4baf3125fee091a05c49370a0f384c925a25ec0ea17426ca";
 pub const OWNERSHIP_UNIT: &str = "shader:source:clear_clockwise_atomic_clip";

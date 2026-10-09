@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
+pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/common.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "ee9d8efa482164ab747f47cf5c1beb0d43fada40a13e4b99473b5e00a1ce3e53";
 pub const OWNERSHIP_UNIT: &str = "shader:source:common";

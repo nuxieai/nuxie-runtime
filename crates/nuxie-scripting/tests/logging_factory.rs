@@ -48,9 +48,11 @@ fn factory_creates_the_native_vm_with_the_supplied_renderer_and_host_sink() {
         vm.install_rive_globals().unwrap();
         vm.register_module("logging-factory", &payload).unwrap();
     });
+    // The pinned LoggingScriptingContext::printSeparator joins print's
+    // arguments with a tab inside the one flushed line.
     assert_eq!(
         lines.lock().unwrap().as_slice(),
-        [(ScriptingLogLevel::Info, b"native7".to_vec())]
+        [(ScriptingLogLevel::Info, b"native\t7".to_vec())]
     );
 }
 

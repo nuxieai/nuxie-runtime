@@ -976,6 +976,13 @@ fn run_once(
             String::from_utf8_lossy(&output.stderr)
         ));
     }
+    if let Some(counts) = instruction_counts(&output.stderr) {
+        let kind = if warmup { "warmup" } else { "iteration" };
+        println!(
+            "perf-compare instructions runner={label} file={} {kind}={iteration} {counts}",
+            target.id
+        );
+    }
     if options.runner_benchmark {
         let benchmark = parse_benchmark_output(&output.stdout).map_err(|error| {
             let kind = if warmup { "warmup" } else { "iteration" };
@@ -1056,6 +1063,22 @@ const BENCHMARK_PHASES: [(&str, &str); 4] = [
     ("prepare", "prepare_ms"),
     ("draw", "draw_ms"),
 ];
+
+/// Retired-instruction counts a runner prints on stderr when run with
+/// RIVE_GOLDEN_INSTRUCTIONS=1, as `key=value` pairs (`frame_loop=... advance=...`).
+fn instruction_counts(stderr: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(stderr);
+    let counts = text
+        .lines()
+        .filter_map(|line| line.split_once('='))
+        .filter_map(|(key, value)| {
+            let phase = key.strip_suffix("_instructions")?;
+            value.parse::<u64>().ok()?;
+            Some(format!("{phase}={value}"))
+        })
+        .collect::<Vec<_>>();
+    (!counts.is_empty()).then(|| counts.join(" "))
+}
 
 #[derive(Debug)]
 struct BenchmarkOutput {
@@ -1389,6 +1412,16 @@ fn millis(duration: Duration) -> f64 {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn reports_runner_instruction_counts_from_stderr() {
+        let stderr = b"frame_loop_allocations=3\nframe_loop_instructions=1200\nadvance_instructions=700\ninput_instructions=0\ndraw_instructions=480\n";
+        assert_eq!(
+            instruction_counts(stderr).as_deref(),
+            Some("frame_loop=1200 advance=700 input=0 draw=480")
+        );
+        assert_eq!(instruction_counts(b"frame_loop_allocations=3\n"), None);
+    }
 
     #[test]
     fn parses_required_file_and_optional_values() {

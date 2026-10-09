@@ -439,15 +439,15 @@ impl ShapePaint {
         path: &'a mut ShapePaintPath,
         active_factory: Option<&RuntimeFactoryHandle>,
     ) -> &'a mut dyn nuxie_render_api::RenderPath {
-        let factory = active_factory.cloned().unwrap_or_else(|| {
+        if let Some(factory) = active_factory {
+            return path.render_path(factory);
+        }
+        path.render_path_with_deferred_factory(|| {
             self.base
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("a drawing ShapePaint has its imported Artboard factory")
-        });
-        // Retain the resolved factory only for this request, not across the
-        // following renderer callbacks. The path owns its resulting resource.
-        path.render_path(&factory)
+        })
     }
 
     fn draw_with_context(
@@ -541,8 +541,8 @@ impl ShapePaint {
                     saved = true;
                     renderer.save();
                 }
-                // renderPath(Component*) resolves the factory at each request,
-                // after preceding renderer callbacks (including editor edits).
+                // A missing RenderPath resolves the factory after preceding
+                // renderer callbacks, at the source's resource creation point.
                 if let Some(effect) = path_effect.as_ref() {
                     renderer.clip_path(
                         self.render_path_for_draw(&mut effect.borrow_mut(), active_factory),
@@ -934,3 +934,7 @@ impl EffectsContainer for ShapePaint {
         ShapePaint::add_stroke_effect(self, identity, effect);
     }
 }
+
+#[cfg(test)]
+#[path = "shape_paint_factory_contract_tests.rs"]
+mod factory_contract_tests;

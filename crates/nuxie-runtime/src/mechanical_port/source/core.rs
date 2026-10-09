@@ -24,6 +24,12 @@ pub mod vector_binary_writer;
 
 pub type CoreTypeKey = u16;
 
+/// A clone definition and its optional completion after arena identity exists.
+pub type CoreCloneParts = (
+    Option<Box<dyn CoreObject>>,
+    Option<fn(&CoreHandle, &CoreHandle) -> bool>,
+);
+
 /// The generated C++ `T::typeKey` used by `Core::is<T>()`.
 ///
 /// This belongs to source types, including abstract base owners, rather than
@@ -94,6 +100,13 @@ pub trait CoreObject: CoreRegistryObject + Any {
     fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool;
     fn clone_boxed(&self) -> Option<Box<dyn CoreObject>> {
         None
+    }
+    /// Prepare an occurrence clone while the source receiver is already borrowed.
+    /// The default preserves the public clone helpers and their evaluation order.
+    /// Native overrides may defer source fields until the completion callback;
+    /// custom owners forwarding only the existing helpers retain their old route.
+    fn clone_occurrence_parts(&self) -> CoreCloneParts {
+        (self.clone_boxed(), self.clone_completion_handler())
     }
     fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
         crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_validate(
@@ -171,12 +184,46 @@ enum CoreTextReadProjection {
     TextStylePaint(Weak<RefCell<Option<CoreHandle>>>),
 }
 
-struct CoreArenaSlot {
-    property_observers: RefCell<Weak<PropertyObservers>>,
+// Slot reuse shares only retirement accounting, not payload storage. Open
+// metadata callbacks can remove and reuse their index before dropping the arena;
+// their existing lease interval must still protect the replacement occurrence.
+#[derive(Default)]
+struct CoreRetirementDomain {
+    leases: Cell<usize>,
+    current: RefCell<Weak<CoreHandleIdentity>>,
+    pending: RefCell<Option<CorePendingRetirement>>,
+}
+
+// A replacement may implement set_core_handle without retaining its identity.
+// Keep that pending payload alive until the last metadata lease exits. Taking
+// this owner out of the domain before cleanup breaks the temporary cycle and
+// gives unwinding the same retirement work as a normal return.
+struct CorePendingRetirement(Rc<CoreHandleIdentity>);
+
+impl Drop for CorePendingRetirement {
+    fn drop(&mut self) {
+        self.0.slot.retire_if_idle();
+    }
+}
+
+// Canonical access fields occupy one inline region. The immutable occurrence
+// generation is distinct from the mutable retirement generation; neither is a
+// copy or cache. Keep the object at its original field destruction position.
+#[repr(C)]
+struct CoreAccessFields {
+    identity_generation: u64,
     generation: Cell<u64>,
+    object: RefCell<Option<Box<dyn CoreObject>>>,
+    retirement_pending: Cell<bool>,
     occupied: Cell<bool>,
-    source_global_id: Cell<Option<u32>>,
     core_type: Cell<CoreTypeKey>,
+}
+
+struct CoreArenaSlot {
+    // The arena owns payload lifetime; handles retain only allocation storage.
+    retirement: Rc<CoreRetirementDomain>,
+    property_observers: RefCell<Weak<PropertyObservers>>,
+    source_global_id: Cell<Option<u32>>,
     type_predicate: Cell<Option<fn(CoreTypeKey) -> bool>>,
     component_graph_order: Cell<Option<u32>>,
     text_read_projection: RefCell<Option<CoreTextReadProjection>>,
@@ -185,33 +232,178 @@ struct CoreArenaSlot {
     data_bind_container: RefCell<
         Option<crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer>,
     >,
-    object: RefCell<Option<Box<dyn CoreObject>>>,
+    hot: CoreAccessFields,
     runtime_artboard:
         RefCell<Option<Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>>>,
 }
 
+impl std::ops::Deref for CoreArenaSlot {
+    type Target = CoreAccessFields;
+
+    fn deref(&self) -> &Self::Target {
+        &self.hot
+    }
+}
+
 impl CoreArenaSlot {
-    fn vacant() -> Self {
+    fn vacant(generation: u64, retirement: Rc<CoreRetirementDomain>) -> Self {
         Self {
+            retirement,
             property_observers: RefCell::new(Weak::new()),
-            generation: Cell::new(0),
-            occupied: Cell::new(false),
             source_global_id: Cell::new(None),
-            core_type: Cell::new(0),
             type_predicate: Cell::new(None),
             component_graph_order: Cell::new(None),
             text_read_projection: RefCell::new(None),
             artboard_dirty: RefCell::new(None),
             data_bind_container: RefCell::new(None),
-            object: RefCell::new(None),
+            hot: CoreAccessFields {
+                identity_generation: generation,
+                generation: Cell::new(generation),
+                object: RefCell::new(None),
+                retirement_pending: Cell::new(false),
+                occupied: Cell::new(false),
+                core_type: Cell::new(0),
+            },
             runtime_artboard: RefCell::new(None),
+        }
+    }
+    fn lease(&self) -> CoreSlotLease<'_> {
+        self.retirement.leases.set(
+            self.retirement
+                .leases
+                .get()
+                .checked_add(1)
+                .expect("Core slot lease overflow"),
+        );
+        CoreSlotLease(self)
+    }
+
+    #[inline(never)]
+    fn retire_after_lease(&self) {
+        // Any lease spanning a pending replacement belongs to an owner
+        // already retired by reuse. Release the pending field guard before
+        // cleanup, retaining the removed owner locally through unwinding.
+        let pending = if self.retirement.leases.get() == 0 {
+            self.retirement.pending.borrow_mut().take()
+        } else {
+            None
+        };
+        self.retire_if_idle();
+        drop(pending);
+    }
+
+    // This is cold: a normal access only checks retirement_pending on exit.
+    // A Ref/RefMut still in scope pins its payload just as the old temporary
+    // strong slot reference did. Do not gate accesses on arena liveness.
+    fn retire_if_idle(&self) {
+        if !self.retirement_pending.get() || self.retirement.leases.get() != 0 {
+            return;
+        }
+        let Ok(mut object) = self.object.try_borrow_mut() else {
+            return;
+        };
+        self.retirement_pending.set(false);
+        self.generation.set(self.generation.get().wrapping_add(1));
+        self.occupied.set(false);
+        self.source_global_id.set(None);
+        self.core_type.set(0);
+        self.type_predicate.set(None);
+        self.component_graph_order.set(None);
+
+        // First invalidate identity, then release fields in their original
+        // declaration order. An aggregate's drop glue also releases later
+        // fields when a destructor unwinds. No user destructor runs while a
+        // slot RefCell guard is held.
+        let retired = RetiredCoreSlot {
+            _property_observers: self.property_observers.take(),
+            _text_read_projection: self.text_read_projection.take(),
+            _artboard_dirty: self.artboard_dirty.take(),
+            _data_bind_container: self.data_bind_container.take(),
+            _object: object.take(),
+            _runtime_artboard: self.runtime_artboard.take(),
+        };
+        drop(object);
+        drop(retired);
+    }
+}
+
+struct RetiredCoreSlot {
+    _property_observers: Weak<PropertyObservers>,
+    _text_read_projection: Option<CoreTextReadProjection>,
+    _artboard_dirty: Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle>,
+    _data_bind_container:
+        Option<crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer>,
+    _object: Option<Box<dyn CoreObject>>,
+    _runtime_artboard:
+        Option<Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>>,
+}
+
+// Each vector element releases its own payload. Do not mark every sibling
+// dead up front: earlier destructors can still observe later live slots.
+// Vec's element drop glue continues with later owners on a single unwind.
+struct CoreSlotOwner(Rc<CoreHandleIdentity>);
+
+impl std::ops::Deref for CoreSlotOwner {
+    type Target = CoreArenaSlot;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.slot
+    }
+}
+
+impl Drop for CoreSlotOwner {
+    fn drop(&mut self) {
+        let slot = &self.0.slot;
+        slot.retirement_pending.set(true);
+        if slot.retirement.leases.get() != 0 {
+            let is_current = slot.retirement.current.borrow().as_ptr() == Rc::as_ptr(&self.0);
+            if is_current {
+                let mut pending = slot.retirement.pending.borrow_mut();
+                if pending.is_none() {
+                    *pending = Some(CorePendingRetirement(Rc::clone(&self.0)));
+                }
+            }
+        }
+        slot.retire_if_idle();
+    }
+}
+
+// Metadata operations may call an open type predicate or drop a replaced
+// retained field. Preserve their complete old slot-retention interval without
+// adding this counter to ordinary authored with/with_mut accesses.
+struct CoreSlotLease<'a>(&'a CoreArenaSlot);
+
+impl std::ops::Deref for CoreSlotLease<'_> {
+    type Target = CoreArenaSlot;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl Drop for CoreSlotLease<'_> {
+    fn drop(&mut self) {
+        let retirement = &self.0.retirement;
+        retirement.leases.set(retirement.leases.get() - 1);
+        if self.0.retirement_pending.get() {
+            self.0.retire_after_lease();
+        }
+    }
+}
+
+struct CoreBorrowRelease<'a>(&'a CoreArenaSlot);
+
+impl Drop for CoreBorrowRelease<'_> {
+    fn drop(&mut self) {
+        if self.0.retirement_pending.get() {
+            self.0.retire_if_idle();
         }
     }
 }
 
 #[derive(Default)]
 struct CoreArenaInner {
-    slots: Vec<Rc<CoreArenaSlot>>,
+    slots: Vec<CoreSlotOwner>,
     free: Vec<usize>,
 }
 
@@ -263,7 +455,13 @@ impl CoreArena {
         let arena = self.inner.upgrade().expect("live runtime Artboard arena");
         let mut inner = arena.borrow_mut();
         let index = inner.slots.len();
-        let slot = Rc::new(CoreArenaSlot::vacant());
+        let identity = CoreHandleIdentity::new(
+            self.inner.clone(),
+            index,
+            0,
+            Rc::new(CoreRetirementDomain::default()),
+        );
+        let slot = &identity.slot;
         slot.core_type
             .set(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY);
         slot.type_predicate.set(Some(
@@ -276,13 +474,8 @@ impl CoreArena {
             *slot.artboard_dirty.borrow_mut() = Some(root.base.dirty_handle());
         }
         *slot.runtime_artboard.borrow_mut() = Some(artboard);
-        inner.slots.push(slot);
-        CoreHandle {
-            arena: self.inner.clone(),
-            slot: Rc::downgrade(&inner.slots[index]),
-            index,
-            generation: 0,
-        }
+        inner.slots.push(CoreSlotOwner(Rc::clone(&identity)));
+        CoreHandle { identity }
     }
     pub fn insert<T: CoreObject>(&self, value: T) -> CoreHandle {
         self.insert_boxed(Box::new(value))
@@ -290,24 +483,33 @@ impl CoreArena {
 
     pub fn insert_boxed(&self, mut value: Box<dyn CoreObject>) -> CoreHandle {
         let arena = self.inner.upgrade().expect("live Core graph insertion");
-        let (index, slot) = {
+        let (handle, previous_owner) = {
             let mut inner = arena.borrow_mut();
             if let Some(index) = inner.free.pop() {
-                (index, Rc::clone(&inner.slots[index]))
+                let previous = &inner.slots[index];
+                let generation = previous.generation.get();
+                let retirement = Rc::clone(&previous.retirement);
+                let identity =
+                    CoreHandleIdentity::new(self.inner.clone(), index, generation, retirement);
+                let previous_owner =
+                    std::mem::replace(&mut inner.slots[index], CoreSlotOwner(Rc::clone(&identity)));
+                (CoreHandle { identity }, Some(previous_owner))
             } else {
                 let index = inner.slots.len();
-                let slot = Rc::new(CoreArenaSlot::vacant());
-                inner.slots.push(Rc::clone(&slot));
-                (index, slot)
+                let identity = CoreHandleIdentity::new(
+                    self.inner.clone(),
+                    index,
+                    0,
+                    Rc::new(CoreRetirementDomain::default()),
+                );
+                inner.slots.push(CoreSlotOwner(Rc::clone(&identity)));
+                (CoreHandle { identity }, None)
             }
         };
-        let generation = slot.generation.get();
-        let handle = CoreHandle {
-            arena: self.inner.clone(),
-            slot: Rc::downgrade(&slot),
-            index,
-            generation,
-        };
+        // The old retirement owner may execute cleanup; never drop it while
+        // the arena's table is borrowed. Its generation was captured above.
+        drop(previous_owner);
+        let slot = &handle.identity.slot;
         slot.source_global_id.set(None);
         *slot.property_observers.borrow_mut() = Weak::new();
         slot.core_type.set(value.core_type());
@@ -352,11 +554,12 @@ impl CoreArena {
             return None;
         }
         let arena = self.inner.upgrade()?;
-        let slot = {
+        let identity = {
             let inner = arena.borrow();
-            Rc::clone(inner.slots.get(handle.index)?)
+            Rc::clone(&inner.slots.get(handle.identity.index)?.0)
         };
-        if slot.generation.get() != handle.generation {
+        let slot = &identity.slot;
+        if slot.generation.get() != handle.identity.slot.hot.identity_generation {
             return None;
         }
         let mut value = slot.object.borrow_mut().take()?;
@@ -374,7 +577,7 @@ impl CoreArena {
         slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
-        arena.borrow_mut().free.push(handle.index);
+        arena.borrow_mut().free.push(handle.identity.index);
         Some(value)
     }
 
@@ -398,7 +601,7 @@ impl CoreArena {
         slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
-        arena.borrow_mut().free.push(handle.index);
+        arena.borrow_mut().free.push(handle.identity.index);
     }
 
     pub fn len(&self) -> usize {
@@ -420,15 +623,38 @@ impl CoreArena {
 
 /// Opaque stable identity for one occurrence in a `CoreArena`.
 ///
-/// The weak arena reference prevents object graphs from owning themselves.
-/// Generation checks make a handle to a removed occurrence permanently stale,
-/// even if its slot is later reused.
+/// The arena alone owns payload lifetime. Handles retain stable slot storage;
+/// arena retirement empties it even when graph links form cycles. Generation
+/// checks keep removed occurrences stale after slot reuse.
 #[derive(Clone)]
 pub struct CoreHandle {
+    identity: Rc<CoreHandleIdentity>,
+}
+
+// Identity and payload storage share an allocation, but the arena alone owns
+// the payload lifetime. Every reused index gets a fresh immutable occurrence;
+// only its metadata retirement domain and address token span generations.
+struct CoreHandleIdentity {
     arena: Weak<RefCell<CoreArenaInner>>,
-    slot: Weak<CoreArenaSlot>,
     index: usize,
-    generation: u64,
+    slot: CoreArenaSlot,
+}
+
+impl CoreHandleIdentity {
+    fn new(
+        arena: Weak<RefCell<CoreArenaInner>>,
+        index: usize,
+        generation: u64,
+        retirement: Rc<CoreRetirementDomain>,
+    ) -> Rc<Self> {
+        let identity = Rc::new(Self {
+            arena,
+            index,
+            slot: CoreArenaSlot::vacant(generation, retirement),
+        });
+        *identity.slot.retirement.current.borrow_mut() = Rc::downgrade(&identity);
+        identity
+    }
 }
 
 impl CoreHandle {
@@ -450,10 +676,14 @@ impl CoreHandle {
     /// Stable allocation identity for source tables that hash object addresses.
     /// This does not dereference the slot; equality still checks its generation.
     pub(crate) fn slot_address(&self) -> usize {
-        self.slot.as_ptr() as usize
+        Rc::as_ptr(&self.identity.slot.retirement) as usize
     }
     pub fn identity_key(&self) -> (usize, usize, u64) {
-        (self.arena.as_ptr() as usize, self.index, self.generation)
+        (
+            self.identity.arena.as_ptr() as usize,
+            self.identity.index,
+            self.identity.slot.hot.identity_generation,
+        )
     }
     pub(crate) fn source_global_id(&self) -> Option<u32> {
         self.slot()?.source_global_id.get()
@@ -520,12 +750,12 @@ impl CoreHandle {
     }
 
     fn belongs_to(&self, arena: &CoreArena) -> bool {
-        Weak::ptr_eq(&self.arena, &arena.inner)
+        Weak::ptr_eq(&self.identity.arena, &arena.inner)
     }
 
-    fn slot(&self) -> Option<Rc<CoreArenaSlot>> {
-        let slot = self.slot.upgrade()?;
-        (slot.generation.get() == self.generation).then_some(slot)
+    fn slot(&self) -> Option<CoreSlotLease<'_>> {
+        (self.identity.slot.generation.get() == self.identity.slot.hot.identity_generation)
+            .then(|| self.identity.slot.lease())
     }
 
     pub fn is_alive(&self) -> bool {
@@ -596,7 +826,12 @@ impl CoreHandle {
     }
 
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
-        let slot = self.slot()?;
+        let slot = &self.identity.slot;
+        if slot.generation.get() != self.identity.slot.hot.identity_generation {
+            return None;
+        }
+        // Release after the payload Ref/RefMut, including callback unwinding.
+        let _release = CoreBorrowRelease(slot);
         // Authored objects and runtime Artboard roots occupy disjoint slots.
         // An authored receiver needs only its object borrow, not a second
         // borrow of the empty root route. Release an empty object guard before
@@ -607,16 +842,26 @@ impl CoreHandle {
                 return Some(f(object));
             }
         }
-        let runtime_artboard = slot.runtime_artboard.borrow().clone();
+        let _root_lease = slot.lease();
+        let runtime_artboard = slot
+            .runtime_artboard
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade);
         if let Some(root) = runtime_artboard {
-            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root.upgrade()?);
+            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root);
             return Some(root.with_artboard(|root| f(&root.base)));
         }
         None
     }
 
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
-        let slot = self.slot()?;
+        let slot = &self.identity.slot;
+        if slot.generation.get() != self.identity.slot.hot.identity_generation {
+            return None;
+        }
+        // Release after the payload Ref/RefMut, including callback unwinding.
+        let _release = CoreBorrowRelease(slot);
         // Keep the two payload cells separate: liveness/type queries remain
         // available while an authored object is mutably borrowed. As above,
         // never carry the empty object guard into a runtime-root callback.
@@ -626,12 +871,42 @@ impl CoreHandle {
                 return Some(f(object));
             }
         }
-        let runtime_artboard = slot.runtime_artboard.borrow().clone();
+        let _root_lease = slot.lease();
+        let runtime_artboard = slot
+            .runtime_artboard
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade);
         if let Some(root) = runtime_artboard {
-            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root.upgrade()?);
+            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root);
             return Some(root.with_artboard_mut(|root| f(&mut root.base)));
         }
         None
+    }
+
+    /// Resolve a Component's typed Artboard owner at the point of use.
+    /// Runtime roots already carry a typed receiver; keep its ordinary retained
+    /// handle and cleanup while avoiding the erased CoreObject round trip.
+    pub(crate) fn with_artboard<R>(
+        &self,
+        f: impl FnOnce(&crate::mechanical_port::source::artboard::Artboard) -> R,
+    ) -> Option<R> {
+        let slot = self.slot()?;
+        let runtime_artboard = slot
+            .runtime_artboard
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade);
+        if let Some(root) = runtime_artboard {
+            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root);
+            return Some(root.with_artboard(|root| f(&root.base)));
+        }
+        let object = slot.object.borrow();
+        object
+            .as_deref()?
+            .as_any()
+            .downcast_ref::<crate::mechanical_port::source::artboard::Artboard>()
+            .map(f)
     }
 
     pub fn with_downcast<T: Any, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
@@ -647,12 +922,11 @@ impl CoreHandle {
     }
 
     pub fn retain_arena(&self) -> Option<CoreArena> {
-        self.arena.upgrade().map(CoreArena::from_inner)
+        self.identity.arena.upgrade().map(CoreArena::from_inner)
     }
 
     pub fn clone_occurrence_into(&self, arena: &CoreArena) -> Option<CoreHandle> {
-        let (clone, complete) =
-            self.with(|source| (source.clone_boxed(), source.clone_completion_handler()))?;
+        let (clone, complete) = self.with(|source| source.clone_occurrence_parts())?;
         let clone = clone?;
         let clone = arena.insert_boxed(clone);
         if let Some(complete) = complete {
@@ -671,7 +945,7 @@ impl CoreHandle {
     /// handle has the same ownership and generation guarantees as an object
     /// deserialized directly by the registry.
     pub fn insert_sibling<T: CoreObject>(&self, value: T) -> Option<CoreHandle> {
-        let arena = CoreArena::from_inner(self.arena.upgrade()?);
+        let arena = CoreArena::from_inner(self.identity.arena.upgrade()?);
         Some(arena.insert(value))
     }
 
@@ -681,7 +955,7 @@ impl CoreHandle {
     /// cloned handles become stale and a later sibling cannot reuse this
     /// identity accidentally.
     pub fn remove_occurrence(&self) -> bool {
-        let Some(inner) = self.arena.upgrade() else {
+        let Some(inner) = self.identity.arena.upgrade() else {
             return false;
         };
         CoreArena::from_inner(inner).remove(self).is_some()
@@ -690,9 +964,10 @@ impl CoreHandle {
 
 impl PartialEq for CoreHandle {
     fn eq(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.arena, &other.arena)
-            && self.index == other.index
-            && self.generation == other.generation
+        Weak::ptr_eq(&self.identity.arena, &other.identity.arena)
+            && self.identity.index == other.identity.index
+            && self.identity.slot.hot.identity_generation
+                == other.identity.slot.hot.identity_generation
     }
 }
 
@@ -700,9 +975,9 @@ impl Eq for CoreHandle {}
 
 impl Hash for CoreHandle {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.arena.as_ptr().hash(state);
-        self.index.hash(state);
-        self.generation.hash(state);
+        self.identity.arena.as_ptr().hash(state);
+        self.identity.index.hash(state);
+        self.identity.slot.hot.identity_generation.hash(state);
     }
 }
 
@@ -710,9 +985,9 @@ impl std::fmt::Debug for CoreHandle {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("CoreHandle")
-            .field("arena", &self.arena.as_ptr())
-            .field("index", &self.index)
-            .field("generation", &self.generation)
+            .field("arena", &self.identity.arena.as_ptr())
+            .field("index", &self.identity.index)
+            .field("generation", &self.identity.slot.hot.identity_generation)
             .finish()
     }
 }
@@ -760,6 +1035,22 @@ impl PropertySetterCompletion {
             callback(&owner);
         }
         if let Some((head, property_key)) = self.notification {
+            head.notify(property_key);
+        }
+    }
+
+    /// Complete a local occurrence write without transporting the aggregate.
+    /// Move both resources here before the first callback so unwind still
+    /// destroys the callback owner, then the notification, before the caller.
+    pub(crate) fn finish_in_place(&mut self) {
+        if self.before_notification.is_none() && self.notification.is_none() {
+            return;
+        }
+        let notification = self.notification.take();
+        if let Some((owner, callback)) = self.before_notification.take() {
+            callback(&owner);
+        }
+        if let Some((head, property_key)) = notification {
             head.notify(property_key);
         }
     }
@@ -884,6 +1175,11 @@ impl Core {
         self.handle.clone()
     }
 
+    /// Borrow this occurrence identity while its Core receiver remains borrowed.
+    pub(crate) fn handle_ref(&self) -> Option<&CoreHandle> {
+        self.handle.as_ref()
+    }
+
     pub fn set_handle(&mut self, handle: CoreHandle) {
         let slot = handle
             .slot()
@@ -895,6 +1191,7 @@ impl Core {
         if let Some(observers) = &self.observers {
             *slot.property_observers.borrow_mut() = Rc::downgrade(observers);
         }
+        drop(slot);
         self.handle = Some(handle);
     }
 
@@ -982,8 +1279,410 @@ impl Drop for Core {
 
 #[cfg(test)]
 mod tests {
-    use super::CoreArena;
+    use super::{Core, CoreArena, CoreHandle, CoreObject, PropertySetterCompletion};
     use crate::mechanical_port::source::{node::Node, shapes::shape::Shape};
+    use std::{cell::RefCell, rc::Rc};
+
+    // An open host owner exercises destruction without depending on a native
+    // geometry owner's incidental fields. All accesses cross CoreHandle.
+    #[derive(Default)]
+    struct SlotDropProbe {
+        core: Core,
+        links: Vec<CoreHandle>,
+        definition_owner: Option<CoreArena>,
+        predicate: Option<fn(u16) -> bool>,
+        omit_handle: bool,
+        on_drop: Option<Box<dyn FnOnce()>>,
+    }
+
+    impl Drop for SlotDropProbe {
+        fn drop(&mut self) {
+            if let Some(on_drop) = self.on_drop.take() {
+                on_drop();
+            }
+        }
+    }
+
+    impl crate::mechanical_port::source::generated::core_registry::CoreCapabilities for SlotDropProbe {}
+
+    impl crate::mechanical_port::source::generated::core_registry::CoreRegistryObject
+        for SlotDropProbe
+    {
+        fn as_registry_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn as_registry_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+        fn is_type_of(&self, key: u16) -> bool {
+            key == 65000
+        }
+        fn set_uint_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: u32,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn set_string_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: String,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn set_color_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: i32,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn set_bool_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: bool,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn set_double_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: f32,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn set_callback_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: super::field_types::core_callback_type::CallbackData<'_>,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn set_int_with_completion(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+            _: i32,
+            _: &mut PropertySetterCompletion,
+        ) {
+        }
+        fn get_uint(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+        ) -> u32 {
+            0
+        }
+        fn get_string(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+        ) -> String {
+            String::new()
+        }
+        fn get_color(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+        ) -> i32 {
+            0
+        }
+        fn get_bool(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+        ) -> bool {
+            false
+        }
+        fn get_double(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+        ) -> f32 {
+            0.0
+        }
+        fn get_int(
+            &mut self,
+            _: crate::mechanical_port::source::generated::core_registry::CoreField,
+        ) -> i32 {
+            0
+        }
+    }
+
+    impl CoreObject for SlotDropProbe {
+        fn set_core_handle(&mut self, handle: CoreHandle) {
+            if !self.omit_handle {
+                self.core.set_handle(handle);
+            }
+        }
+        fn core(&self) -> &Core {
+            &self.core
+        }
+        fn core_mut(&mut self) -> &mut Core {
+            &mut self.core
+        }
+        fn core_type(&self) -> u16 {
+            65000
+        }
+        fn is_type_of(&self, key: u16) -> bool {
+            key == 65000
+        }
+        fn type_predicate(&self) -> fn(u16) -> bool {
+            self.predicate.unwrap_or(|key| key == 65000)
+        }
+        fn deserialize(&mut self, _: u16, _: &mut super::binary_reader::BinaryReader<'_>) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn slot_owned_payloads_break_cross_links_and_retained_metadata_cycles() {
+        use crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer;
+        let arena = CoreArena::default();
+        let drops = Rc::new(RefCell::new(Vec::new()));
+        let first = arena.insert(SlotDropProbe::default());
+        let second = arena.insert(SlotDropProbe::default());
+        for (owner, other, label) in [(&first, &second, 1), (&second, &first, 2)] {
+            let drops = drops.clone();
+            owner
+                .with_downcast_mut::<SlotDropProbe, _>(|object| {
+                    object.links.push(other.clone());
+                    object.on_drop = Some(Box::new(move || drops.borrow_mut().push(label)));
+                })
+                .unwrap();
+            let container = DataBindContainer::default();
+            container.set_owner(owner.clone());
+            assert!(owner.data_bind_container().is_some());
+        }
+        let first_slot = Rc::downgrade(&first.identity);
+        let second_slot = Rc::downgrade(&second.identity);
+        drop(arena);
+        assert_eq!(*drops.borrow(), vec![1, 2]);
+        assert!(!first.is_alive() && !second.is_alive());
+        assert!(first.data_bind_container().is_none());
+        assert!(second.data_bind_container().is_none());
+        drop(first);
+        drop(second);
+        assert!(first_slot.upgrade().is_none());
+        assert!(second_slot.upgrade().is_none());
+    }
+
+    #[test]
+    fn authored_access_keeps_only_active_payload_after_last_arena_owner_drops() {
+        for mutable in [false, true] {
+            let arena = CoreArena::default();
+            let drops = Rc::new(RefCell::new(Vec::new()));
+            let first = arena.insert(SlotDropProbe::default());
+            let second = arena.insert(SlotDropProbe::default());
+            for (owner, label) in [(&first, 1), (&second, 2)] {
+                let drops = drops.clone();
+                owner
+                    .with_downcast_mut::<SlotDropProbe, _>(|object| {
+                        object.on_drop = Some(Box::new(move || drops.borrow_mut().push(label)));
+                    })
+                    .unwrap();
+            }
+            let callback = || {
+                drop(arena);
+                assert!(first.is_alive());
+                assert!(first.type_metadata().is_some());
+                assert!(!second.is_alive());
+                assert_eq!(*drops.borrow(), vec![2]);
+            };
+            if mutable {
+                first.with_mut(|_| callback()).unwrap();
+            } else {
+                first
+                    .with(|_| {
+                        first.with(|_| callback()).unwrap();
+                        assert!(first.is_alive(), "outer shared borrow still pins payload");
+                        assert_eq!(*drops.borrow(), vec![2]);
+                    })
+                    .unwrap();
+            }
+            assert!(!first.is_alive());
+            assert!(first.with(|_| ()).is_none());
+            assert_eq!(*drops.borrow(), vec![2, 1]);
+        }
+    }
+
+    #[test]
+    fn authored_pending_retirement_finishes_on_access_unwind() {
+        for mutable in [false, true] {
+            let arena = CoreArena::default();
+            let drops = Rc::new(RefCell::new(0));
+            let observed = drops.clone();
+            let owner = arena.insert(SlotDropProbe {
+                core: Core::default(),
+                links: Vec::new(),
+                definition_owner: None,
+                predicate: None,
+                omit_handle: false,
+                on_drop: Some(Box::new(move || *observed.borrow_mut() += 1)),
+            });
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let callback = || {
+                    drop(arena);
+                    assert!(owner.is_alive());
+                    panic!("callback unwind");
+                };
+                if mutable {
+                    owner.with_mut(|_| callback());
+                } else {
+                    owner.with(|_| owner.with(|_| callback()));
+                }
+            }));
+            assert!(result.is_err());
+            assert_eq!(*drops.borrow(), 1);
+            assert!(!owner.is_alive());
+            assert!(owner.with_mut(|_| ()).is_none());
+        }
+    }
+
+    thread_local! {
+        static SLOT_PREDICATE_CONTEXT: RefCell<Option<(CoreArena, CoreHandle)>> = const { RefCell::new(None) };
+    }
+
+    fn drop_arena_in_type_predicate(_: u16) -> bool {
+        let (arena, owner) =
+            SLOT_PREDICATE_CONTEXT.with(|context| context.borrow_mut().take().unwrap());
+        drop(arena);
+        assert!(
+            owner.is_alive(),
+            "metadata lease pins without borrowing the payload"
+        );
+        assert!(owner.with_mut(|_| ()).is_some());
+        true
+    }
+
+    #[test]
+    fn metadata_predicate_keeps_slot_alive_until_open_callback_returns() {
+        let arena = CoreArena::default();
+        let owner = arena.insert(Node::default());
+        // Installation mirrors CoreObject::type_predicate; the call itself
+        // crosses the ordinary public metadata interface.
+        owner
+            .slot()
+            .unwrap()
+            .type_predicate
+            .set(Some(drop_arena_in_type_predicate));
+        SLOT_PREDICATE_CONTEXT.with(|context| *context.borrow_mut() = Some((arena, owner.clone())));
+        assert!(owner.is_type_of(0));
+        assert!(!owner.is_alive());
+        assert!(owner.with(|_| ()).is_none());
+    }
+
+    #[test]
+    fn arena_retirement_preserves_sibling_visibility_and_unwinds_later_slots() {
+        for panic_first in [false, true] {
+            let arena = CoreArena::default();
+            let drops = Rc::new(RefCell::new(Vec::new()));
+            let first = arena.insert(SlotDropProbe::default());
+            let second = arena.insert(SlotDropProbe::default());
+            let first_copy = first.clone();
+            let second_copy = second.clone();
+            let observed = drops.clone();
+            first
+                .with_downcast_mut::<SlotDropProbe, _>(|object| {
+                    object.on_drop = Some(Box::new(move || {
+                        assert!(!first_copy.is_alive());
+                        assert!(second_copy.is_alive(), "later arena slot remains live");
+                        observed.borrow_mut().push(1);
+                        if panic_first {
+                            panic!("destructor unwind");
+                        }
+                    }));
+                })
+                .unwrap();
+            let observed = drops.clone();
+            second
+                .with_downcast_mut::<SlotDropProbe, _>(|object| {
+                    object.on_drop = Some(Box::new(move || observed.borrow_mut().push(2)));
+                })
+                .unwrap();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(arena)));
+            assert_eq!(result.is_err(), panic_first);
+            assert_eq!(*drops.borrow(), vec![1, 2]);
+            assert!(!first.is_alive() && !second.is_alive());
+        }
+    }
+
+    #[test]
+    fn removed_box_identity_does_not_retain_reused_slot_payload() {
+        use std::hash::{Hash, Hasher};
+        fn hash(handle: &CoreHandle) -> u64 {
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            handle.hash(&mut hash);
+            hash.finish()
+        }
+        let arena = CoreArena::default();
+        let old = arena.insert(SlotDropProbe::default());
+        let identity = old.identity_key();
+        let old_hash = hash(&old);
+        let conflict = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            old.with(|_| arena.remove(&old));
+        }));
+        assert!(conflict.is_err());
+        assert!(old.is_alive());
+        let removed = arena.remove(&old).unwrap();
+        let drops = Rc::new(RefCell::new(0));
+        let observed = drops.clone();
+        let replacement = arena.insert(SlotDropProbe {
+            core: Core::default(),
+            links: Vec::new(),
+            definition_owner: None,
+            predicate: None,
+            omit_handle: false,
+            on_drop: Some(Box::new(move || *observed.borrow_mut() += 1)),
+        });
+        assert_eq!(old.identity_key().1, replacement.identity_key().1);
+        assert_ne!(old, replacement);
+        assert_eq!(old.identity_key(), identity);
+        assert_eq!(hash(&old), old_hash);
+        assert!(old.with(|_| ()).is_none());
+        drop(arena);
+        assert_eq!(
+            *drops.borrow(),
+            1,
+            "retained removed box cannot own replacement payload"
+        );
+        assert!(!replacement.is_alive());
+        assert_eq!(removed.core().handle(), Some(old.clone()));
+        assert_eq!(old.identity_key(), identity);
+        assert_eq!(hash(&old), old_hash);
+        drop(removed);
+    }
+
+    #[test]
+    fn cross_arena_slots_do_not_extend_strong_definition_owner_lifetime() {
+        let definitions = CoreArena::default();
+        let occurrences = CoreArena::default();
+        let weak_definitions = definitions.inner.clone();
+        let weak_occurrences = occurrences.inner.clone();
+        let definition = definitions.insert(SlotDropProbe::default());
+        let occurrence = occurrences.insert(SlotDropProbe {
+            core: Core::default(),
+            definition_owner: Some(definitions.clone()),
+            predicate: None,
+            omit_handle: false,
+            links: vec![definition.clone()],
+            on_drop: None,
+        });
+        definition
+            .with_downcast_mut::<SlotDropProbe, _>(|object| {
+                object.links.push(occurrence.clone());
+            })
+            .unwrap();
+        assert!(
+            occurrence
+                .with_downcast::<SlotDropProbe, _>(|object| object.definition_owner.is_some())
+                .unwrap()
+        );
+        drop(definitions);
+        assert!(
+            weak_definitions.upgrade().is_some(),
+            "the occurrence still legitimately owns its definitions"
+        );
+        drop(occurrences);
+        assert!(weak_definitions.upgrade().is_none());
+        assert!(weak_occurrences.upgrade().is_none());
+        assert!(!definition.is_alive() && !occurrence.is_alive());
+    }
 
     #[test]
     fn authored_access_keeps_live_metadata_available_during_mutable_borrow() {
@@ -1055,6 +1754,56 @@ mod tests {
             assert!(root.with(|_| ()).is_none());
             assert!(replacement.with(|_| ()).is_some());
         }
+    }
+
+    #[test]
+    fn typed_artboard_access_retains_last_owner_through_callback_and_cleanup() {
+        use crate::mechanical_port::source::artboard::Artboard;
+
+        let definitions = CoreArena::default();
+        let source = definitions.insert(Artboard::default());
+        let runtime = Artboard::instance_from_handle(&source).unwrap();
+        let _manager = runtime.ensure_focus_manager();
+        let weak = runtime.downgrade();
+        let root = runtime.core_handle();
+        let arena = root.retain_arena().unwrap();
+        root.with_artboard(|_| {
+            drop(runtime);
+            assert!(weak.upgrade().is_some());
+            assert!(root.is_alive());
+            assert!(arena.remove(&root).is_none());
+            assert_eq!(root.with_artboard(|_| 7), Some(7));
+        })
+        .unwrap();
+        assert!(weak.upgrade().is_none());
+        assert!(!root.is_alive());
+        assert!(root.with_artboard(|_| ()).is_none());
+    }
+
+    #[test]
+    fn typed_artboard_access_preserves_authored_projection_and_stale_identity() {
+        use crate::mechanical_port::source::artboard::Artboard;
+
+        let arena = CoreArena::default();
+        let authored = arena.insert(Artboard::default());
+        authored
+            .with(|object| {
+                let expected = object.as_any().downcast_ref::<Artboard>().unwrap();
+                assert_eq!(
+                    authored.with_artboard(|artboard| std::ptr::eq(artboard, expected)),
+                    Some(true)
+                );
+            })
+            .unwrap();
+        let removed = arena.remove(&authored).unwrap();
+        let replacement = arena.insert(Artboard::default());
+        assert_eq!(authored.identity_key().1, replacement.identity_key().1);
+        assert_ne!(authored.identity_key().2, replacement.identity_key().2);
+        assert!(authored.with_artboard(|_| ()).is_none());
+        assert_eq!(replacement.with_artboard(|_| 11), Some(11));
+        let wrong_type = arena.insert(Node::default());
+        assert!(wrong_type.with_artboard(|_| ()).is_none());
+        drop(removed);
     }
 
     #[test]
@@ -1283,4 +2032,272 @@ mod tests {
         assert_eq!(twin.text_style_parent(), None);
         assert_eq!(replacement.text_style_parent(), None);
     }
+
+    struct ReusePredicateContext {
+        arena: CoreArena,
+        old: CoreHandle,
+        log: Rc<RefCell<Vec<&'static str>>>,
+        replacement: Rc<RefCell<Option<CoreHandle>>>,
+    }
+    thread_local! {
+        static REUSE_PREDICATE_CONTEXT: RefCell<Option<ReusePredicateContext>> = const { RefCell::new(None) };
+    }
+    fn remove_reuse_and_drop_arena_in_predicate(_: u16) -> bool {
+        let context = REUSE_PREDICATE_CONTEXT.with(|state| state.borrow_mut().take().unwrap());
+        let ReusePredicateContext {
+            arena,
+            old,
+            log,
+            replacement,
+        } = context;
+        log.borrow_mut().push("predicate-enter");
+        let removed = arena
+            .remove(&old)
+            .expect("metadata predicate holds no payload loan");
+        let dropped = log.clone();
+        let mut replacement_owner = SlotDropProbe::default();
+        replacement_owner.on_drop = Some(Box::new(move || {
+            dropped.borrow_mut().push("replacement-drop")
+        }));
+        let new = arena.insert(replacement_owner);
+        assert_eq!(new.identity_key().1, old.identity_key().1);
+        assert_ne!(new.identity_key().2, old.identity_key().2);
+        assert!(!old.is_alive());
+        *replacement.borrow_mut() = Some(new.clone());
+        drop(arena);
+        // The outstanding metadata lease belongs to the physical reusable slot.
+        // Its interval still protects the replacement after removal advances the
+        // generation. This is an established Rust ownership contract.
+        assert!(
+            new.is_alive(),
+            "replacement remains live until the old predicate lease ends"
+        );
+        assert_eq!(&*log.borrow(), &["predicate-enter"]);
+        drop(removed);
+        log.borrow_mut().push("predicate-return");
+        true
+    }
+    #[test]
+    fn metadata_lease_across_remove_reuse_pins_replacement_until_predicate_returns() {
+        let arena = CoreArena::default();
+        let mut old_owner = SlotDropProbe::default();
+        old_owner.predicate = Some(remove_reuse_and_drop_arena_in_predicate);
+        let old = arena.insert(old_owner);
+        let identity = old.identity_key();
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let replacement = Rc::new(RefCell::new(None));
+        REUSE_PREDICATE_CONTEXT.with(|state| {
+            *state.borrow_mut() = Some(ReusePredicateContext {
+                arena,
+                old: old.clone(),
+                log: log.clone(),
+                replacement: replacement.clone(),
+            })
+        });
+        // Goes through public registration and the public metadata operation;
+        // no private slot mutation or forced RefCell conflict establishes it.
+        assert!(old.is_type_of(65000));
+        assert_eq!(old.identity_key(), identity);
+        assert!(!old.is_alive());
+        assert!(!replacement.borrow().as_ref().unwrap().is_alive());
+        assert_eq!(
+            &*log.borrow(),
+            &["predicate-enter", "predicate-return", "replacement-drop"]
+        );
+    }
+
+    struct NoSelfReuseContext {
+        arena: CoreArena,
+        old: CoreHandle,
+        log: Rc<RefCell<Vec<&'static str>>>,
+        reuses: usize,
+        unwind: bool,
+    }
+    thread_local! {
+        static NO_SELF_REUSE_CONTEXT: RefCell<Option<NoSelfReuseContext>> = const { RefCell::new(None) };
+    }
+    fn no_self_handle_reuse_predicate(_: u16) -> bool {
+        let context = NO_SELF_REUSE_CONTEXT.with(|state| state.borrow_mut().take().unwrap());
+        let NoSelfReuseContext {
+            arena,
+            old,
+            log,
+            reuses,
+            unwind,
+        } = context;
+        log.borrow_mut().push("predicate-enter");
+        drop(arena.remove(&old).unwrap());
+        for index in 0..reuses {
+            let last = index + 1 == reuses;
+            let mut value = SlotDropProbe::default();
+            value.omit_handle = true;
+            let dropped = log.clone();
+            value.on_drop = Some(Box::new(move || {
+                dropped.borrow_mut().push(if last {
+                    "final-drop"
+                } else {
+                    "intermediate-drop"
+                })
+            }));
+            let replacement = arena.insert(value);
+            assert_eq!(replacement.identity_key().1, old.identity_key().1);
+            assert_ne!(replacement.identity_key().2, old.identity_key().2);
+            assert!(
+                replacement
+                    .with(|owner| owner.core().handle().is_none())
+                    .unwrap()
+            );
+            if !last {
+                drop(arena.remove(&replacement).unwrap());
+            }
+            // Final payload has no self-handle and no external identity owner.
+            drop(replacement);
+        }
+        drop(arena);
+        assert!(
+            !log.borrow().contains(&"final-drop"),
+            "old metadata lease still owns replacement lifetime"
+        );
+        log.borrow_mut().push(if unwind {
+            "predicate-unwind"
+        } else {
+            "predicate-return"
+        });
+        assert!(
+            !unwind,
+            "intentional predicate unwind after arena retirement"
+        );
+        true
+    }
+    fn no_self_reuse_case(reuses: usize, unwind: bool) {
+        let arena = CoreArena::default();
+        let mut value = SlotDropProbe::default();
+        value.predicate = Some(no_self_handle_reuse_predicate);
+        let old = arena.insert(value);
+        let log = Rc::new(RefCell::new(Vec::new()));
+        NO_SELF_REUSE_CONTEXT.with(|state| {
+            *state.borrow_mut() = Some(NoSelfReuseContext {
+                arena,
+                old: old.clone(),
+                log: log.clone(),
+                reuses,
+                unwind,
+            })
+        });
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| old.is_type_of(65000)));
+        assert_eq!(result.is_err(), unwind);
+        assert!(!old.is_alive());
+        let mut expected = vec!["predicate-enter"];
+        expected.extend(std::iter::repeat_n("intermediate-drop", reuses - 1));
+        expected.push(if unwind {
+            "predicate-unwind"
+        } else {
+            "predicate-return"
+        });
+        expected.push("final-drop");
+        assert_eq!(*log.borrow(), expected);
+    }
+    #[test]
+    fn metadata_reuse_without_self_handle_retains_replacement() {
+        no_self_reuse_case(1, false);
+    }
+    #[test]
+    fn metadata_reuse_without_self_handle_survives_multiple_generations() {
+        no_self_reuse_case(3, false);
+    }
+    #[test]
+    fn metadata_reuse_without_self_handle_retires_during_unwind() {
+        no_self_reuse_case(3, true);
+    }
+
+    struct NestedReuseContext {
+        arena: CoreArena,
+        owner: CoreHandle,
+        log: Rc<RefCell<Vec<&'static str>>>,
+    }
+    thread_local! {
+        static NESTED_REUSE_CONTEXT: RefCell<Option<NestedReuseContext>> = const { RefCell::new(None) };
+    }
+    fn nested_inner_reuse_predicate(_: u16) -> bool {
+        let NestedReuseContext { arena, owner, log } =
+            NESTED_REUSE_CONTEXT.with(|state| state.borrow_mut().take().unwrap());
+        log.borrow_mut().push("inner-enter");
+        drop(arena.remove(&owner).unwrap());
+        let mut value = SlotDropProbe::default();
+        value.omit_handle = true;
+        let dropped = log.clone();
+        value.on_drop = Some(Box::new(move || dropped.borrow_mut().push("final-drop")));
+        let replacement = arena.insert(value);
+        assert_eq!(replacement.identity_key().1, owner.identity_key().1);
+        assert_ne!(replacement.identity_key().2, owner.identity_key().2);
+        assert_eq!(replacement.slot_address(), owner.slot_address());
+        assert!(
+            replacement
+                .with(|value| value.core().handle().is_none())
+                .unwrap()
+        );
+        drop(replacement);
+        drop(arena);
+        assert!(!log.borrow().contains(&"final-drop"));
+        log.borrow_mut().push("inner-return");
+        true
+    }
+    fn nested_outer_reuse_predicate(_: u16) -> bool {
+        let NestedReuseContext { arena, owner, log } =
+            NESTED_REUSE_CONTEXT.with(|state| state.borrow_mut().take().unwrap());
+        log.borrow_mut().push("outer-enter");
+        drop(arena.remove(&owner).unwrap());
+        let mut value = SlotDropProbe::default();
+        value.predicate = Some(nested_inner_reuse_predicate);
+        let middle = arena.insert(value);
+        assert_eq!(middle.identity_key().1, owner.identity_key().1);
+        assert_ne!(middle.identity_key().2, owner.identity_key().2);
+        assert_eq!(middle.slot_address(), owner.slot_address());
+        NESTED_REUSE_CONTEXT.with(|state| {
+            *state.borrow_mut() = Some(NestedReuseContext {
+                arena,
+                owner: middle.clone(),
+                log: log.clone(),
+            })
+        });
+        assert!(middle.is_type_of(65000));
+        assert!(
+            !log.borrow().contains(&"final-drop"),
+            "the outer metadata lease outlives the inner one"
+        );
+        log.borrow_mut().push("outer-return");
+        true
+    }
+    #[test]
+    fn nested_generation_metadata_leases_preserve_latest_payload_until_outer_return() {
+        let arena = CoreArena::default();
+        let mut value = SlotDropProbe::default();
+        value.predicate = Some(nested_outer_reuse_predicate);
+        let owner = arena.insert(value);
+        let log = Rc::new(RefCell::new(Vec::new()));
+        NESTED_REUSE_CONTEXT.with(|state| {
+            *state.borrow_mut() = Some(NestedReuseContext {
+                arena,
+                owner: owner.clone(),
+                log: log.clone(),
+            })
+        });
+        assert!(owner.is_type_of(65000));
+        assert!(!owner.is_alive());
+        assert_eq!(
+            &*log.borrow(),
+            &[
+                "outer-enter",
+                "inner-enter",
+                "inner-return",
+                "outer-return",
+                "final-drop"
+            ]
+        );
+    }
 }
+
+#[cfg(test)]
+#[path = "core_completion_in_place_tests.rs"]
+mod completion_in_place_tests;

@@ -1,6 +1,12 @@
+//! Authored Node owner from pinned rive-runtime 160085c6 node.hpp/node.cpp.
+
 use crate::mechanical_port::source::{
+    artboard::Artboard,
+    core::{CoreHandle, PropertySetterCompletion},
     generated::node_base::{NodeBase, NodeBaseCallbacks},
+    layout_component::LayoutComponent,
     math::{mat2d::Mat2D, vec2d::Vec2D},
+    transform_component::TransformUpdate,
 };
 
 pub struct Node {
@@ -29,61 +35,6 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl Node {
-    /// Node::updateWorldTransform: mark the derived local matrix stale before
-    /// invoking TransformComponent's virtual composition/constraint sequence.
-    pub(crate) fn update_world_transform_occurrence<
-        T: crate::mechanical_port::source::transform_component::TransformUpdate,
-    >(
-        owner: &crate::mechanical_port::source::core::CoreHandle,
-    ) {
-        if owner
-            .with_downcast_mut::<T, _>(|object| {
-                object
-                    .as_node_mut()
-                    .expect("Node virtual receiver")
-                    .update_world_transform_before_super();
-            })
-            .is_some()
-        {
-            crate::mechanical_port::source::transform_component::update_world_transform_super::<T>(
-                owner,
-            );
-        }
-    }
-    pub fn set_x(&mut self, value: f32) {
-        let mut completion = crate::source::core::PropertySetterCompletion::default();
-        self.set_x_with_completion(value, &mut completion);
-        completion.finish();
-    }
-
-    pub(crate) fn set_x_with_completion(
-        &mut self,
-        value: f32,
-        completion: &mut crate::source::core::PropertySetterCompletion,
-    ) {
-        if self.base.set_x_value(value) {
-            self.x_changed();
-            completion.record(&self.base, NodeBase::X_PROPERTY_KEY);
-        }
-    }
-
-    pub fn set_y(&mut self, value: f32) {
-        let mut completion = crate::source::core::PropertySetterCompletion::default();
-        self.set_y_with_completion(value, &mut completion);
-        completion.finish();
-    }
-
-    pub(crate) fn set_y_with_completion(
-        &mut self,
-        value: f32,
-        completion: &mut crate::source::core::PropertySetterCompletion,
-    ) {
-        if self.base.set_y_value(value) {
-            self.y_changed();
-            completion.record(&self.base, NodeBase::Y_PROPERTY_KEY);
-        }
-    }
-
     pub fn set_computed_local_x(&mut self, _value: f32) {}
     pub fn set_computed_local_y(&mut self, _value: f32) {}
     pub fn set_computed_world_x(&mut self, _value: f32) {}
@@ -115,9 +66,9 @@ impl Node {
         };
         let world = *self.base.base.world_transform();
         artboard
-            .with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
-                |artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).x,
-            )
+            .with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.root_transform(Vec2D::new(world[4], world[5])).x
+            })
             .expect("computedRootX requires a live artboard")
     }
 
@@ -127,9 +78,9 @@ impl Node {
         };
         let world = *self.base.base.world_transform();
         artboard
-            .with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
-                |artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).y,
-            )
+            .with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.root_transform(Vec2D::new(world[4], world[5])).y
+            })
             .expect("computedRootY requires a live artboard")
     }
 
@@ -139,6 +90,25 @@ impl Node {
 
     pub fn computed_height(&mut self) -> f32 {
         0.0
+    }
+
+    /// Node's cache invalidation precedes the most-derived composition and
+    /// constraints, as in Node::updateWorldTransform and its superclass.
+    pub(crate) fn update_world_transform_occurrence<T: TransformUpdate>(owner: &CoreHandle) {
+        if owner
+            .with_downcast_mut::<T, _>(|object| {
+                object
+                    .as_node_mut()
+                    .expect("Node virtual receiver")
+                    .update_world_transform_before_super();
+                // This prefix only invalidates a matrix cache; composition can
+                // share the same receiver loan. Constraints can reenter it.
+                T::compose_world_transform(object);
+            })
+            .is_some()
+        {
+            T::update_constraints(owner);
+        }
     }
 
     pub(crate) fn update_world_transform_before_super(&mut self) {
@@ -179,20 +149,57 @@ impl Node {
     pub fn mark_layout_node_dirty(&mut self) {
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
-            let (is_layout, next) = current
-                .with(|current| {
-                    (
-                        current.as_layout_component().is_some(),
-                        current
-                            .as_component()
-                            .and_then(|component| component.parent_handle()),
-                    )
-                })
+            let is_layout = current
+                .with(|current| current.as_layout_component().is_some())
                 .expect("a Node ancestor remains live");
             if is_layout {
-                crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
+                LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
             }
-            parent = next;
+            // The source for-loop reads p->parent() after marking this ancestor.
+            // Its synchronous callbacks may have reparented the same ancestor.
+            parent = current
+                .with(|current| {
+                    current
+                        .as_component()
+                        .and_then(|component| component.parent_handle())
+                })
+                .expect("a Node ancestor remains live");
+        }
+    }
+
+    // NodeBase's generated x/y setter order, with the existing safe-Rust
+    // notification completion boundary retained for occurrence callers.
+    pub fn set_x(&mut self, value: f32) {
+        let mut completion = PropertySetterCompletion::default();
+        self.set_x_with_completion(value, &mut completion);
+        completion.finish();
+    }
+
+    pub(crate) fn set_x_with_completion(
+        &mut self,
+        value: f32,
+        completion: &mut PropertySetterCompletion,
+    ) {
+        if self.base.set_x_value(value) {
+            self.x_changed();
+            completion.record(&self.base, NodeBase::X_PROPERTY_KEY);
+        }
+    }
+
+    pub fn set_y(&mut self, value: f32) {
+        let mut completion = PropertySetterCompletion::default();
+        self.set_y_with_completion(value, &mut completion);
+        completion.finish();
+    }
+
+    pub(crate) fn set_y_with_completion(
+        &mut self,
+        value: f32,
+        completion: &mut PropertySetterCompletion,
+    ) {
+        if self.base.set_y_value(value) {
+            self.y_changed();
+            completion.record(&self.base, NodeBase::Y_PROPERTY_KEY);
         }
     }
 }

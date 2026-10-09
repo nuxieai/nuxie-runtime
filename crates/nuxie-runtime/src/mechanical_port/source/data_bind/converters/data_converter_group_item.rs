@@ -30,13 +30,24 @@ impl Default for DataConverterGroupItem {
 impl Drop for DataConverterGroupItem {
     fn drop(&mut self) {
         if self.owns_converter {
-            // Converter clones are CoreArena occurrences. This field is a
-            // retained identity, never authority to reconstruct a Box.
-            self.data_converter = None;
+            // Cloned items own their converter, unlike authored references.
+            // Retire that occurrence before this item's Core base drops.
+            if let Some(converter) = self.data_converter.take() {
+                converter.remove_occurrence();
+            }
         }
     }
 }
 impl DataConverterGroupItem {
+    pub fn converter(&self) -> Option<CoreHandle> {
+        self.data_converter.clone()
+    }
+    pub fn set_converter(&mut self, value: Option<CoreHandle>) {
+        self.data_converter = value
+    }
+    pub fn set_owns_converter(&mut self, value: bool) {
+        self.owns_converter = value
+    }
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(backboard) = stack.latest::<BackboardImporter>(BackboardBase::TYPE_KEY) else {
             return StatusCode::MissingObject;
@@ -57,15 +68,6 @@ impl DataConverterGroupItem {
             })
             .expect("DataConverterGroupImporter retains the actual group owner");
         self.base.base.import(stack)
-    }
-    pub fn converter(&self) -> Option<CoreHandle> {
-        self.data_converter.clone()
-    }
-    pub fn set_converter(&mut self, value: Option<CoreHandle>) {
-        self.data_converter = value
-    }
-    pub fn set_owns_converter(&mut self, value: bool) {
-        self.owns_converter = value
     }
     pub fn clone_definition(&self) -> Self {
         let mut cloned = Self::default();

@@ -90,6 +90,13 @@ pub(crate) fn update_transform_super<T: TransformUpdate>(owner: &CoreHandle, dir
     if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
         T::update_world_transform(owner);
     }
+    update_render_opacity_super::<T>(owner, dirt);
+}
+
+pub(crate) fn update_render_opacity_super<T: TransformUpdate>(
+    owner: &CoreHandle,
+    dirt: ComponentDirt,
+) {
     if dirt.contains(ComponentDirt::RENDER_OPACITY) {
         let parent = owner
             .with_downcast::<T, _>(|object| {

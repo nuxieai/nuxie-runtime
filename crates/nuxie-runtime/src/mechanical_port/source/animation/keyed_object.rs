@@ -1,3 +1,5 @@
+//! Runtime KeyedObject owner translated against pinned Rive 160085c654874d35.
+
 use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
@@ -9,6 +11,7 @@ use crate::mechanical_port::source::{
         keyed_object_base::KeyedObjectBase, linear_animation_base::LinearAnimationBase,
     },
     importers::{import_stack::ImportStack, linear_animation_importer::LinearAnimationImporter},
+    lazy_vector::LazyVector,
     status_code::StatusCode,
 };
 pub trait KeyedObjectContext: CoreContext {
@@ -20,20 +23,20 @@ pub trait KeyedObjectContext: CoreContext {
 #[derive(Default)]
 pub struct KeyedObject {
     pub base: KeyedObjectBase,
-    keyed_properties: Vec<CoreHandle>,
+    keyed_properties: LazyVector<CoreHandle>,
 }
 impl KeyedObject {
     pub fn add_keyed_property(&mut self, value: CoreHandle) {
-        self.keyed_properties.push(value);
+        self.keyed_properties.push_back(value);
     }
     pub fn keyed_properties(&self) -> &[CoreHandle] {
-        &self.keyed_properties
+        self.keyed_properties.view()
     }
     pub fn get_property(&self, index: usize) -> Option<CoreHandle> {
-        self.keyed_properties.get(index).cloned()
+        self.keyed_properties.view().get(index).cloned()
     }
     pub fn num_keyed_properties(&self) -> usize {
-        self.keyed_properties.len()
+        self.keyed_properties.size()
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         if !context.resolves_object(self.base.object_id()) {
@@ -41,8 +44,8 @@ impl KeyedObject {
         }
         let core_object = context.resolve_object(self.base.object_id());
         let mut index = 0;
-        while index < self.keyed_properties.len() {
-            let property_key = self.keyed_properties[index]
+        while index < self.keyed_properties.size() {
+            let property_key = self.keyed_properties.view()[index]
                 .with_downcast::<KeyedProperty, _>(|property| property.base.property_key());
             let Some(property_key) = property_key else {
                 return StatusCode::MissingObject;
@@ -60,7 +63,7 @@ impl KeyedObject {
                     });
                 }
             }
-            let code = self.keyed_properties[index]
+            let code = self.keyed_properties.view()[index]
                 .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
@@ -71,7 +74,7 @@ impl KeyedObject {
         StatusCode::Ok
     }
     pub fn on_added_clean(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
-        for property in &self.keyed_properties {
+        for property in self.keyed_properties.iter() {
             property
                 .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_clean(context));
         }
@@ -84,20 +87,50 @@ impl KeyedObject {
         to: f32,
         at_start: bool,
     ) {
-        for property in &self.keyed_properties {
-            property.with_downcast::<KeyedProperty, _>(|property| {
-                if property.is_callback() {
-                    property.report_keyed_callbacks(
-                        reporter,
-                        self.base.object_id(),
-                        from,
-                        to,
-                        at_start,
-                    );
-                }
-            });
+        for property in self.keyed_properties.iter() {
+            let is_callback = property
+                .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
+                .expect("KeyedObject retains KeyedProperty occurrences");
+            if is_callback {
+                KeyedProperty::report_keyed_callbacks_occurrence(
+                    property,
+                    reporter,
+                    self.base.object_id(),
+                    from,
+                    to,
+                    at_start,
+                );
+            }
         }
     }
+    /// Enter through an occurrence when callbacks can edit this keyed owner.
+    /// objectId is read for each property, at the same point as the C++ call.
+    pub(crate) fn report_keyed_callbacks_occurrence(
+        owner: &CoreHandle,
+        reporter: &mut dyn KeyedCallbackReporter,
+        from: f32,
+        to: f32,
+        at_start: bool,
+    ) {
+        let properties = owner
+            .with_downcast::<Self, _>(|object| object.keyed_properties.snapshot())
+            .expect("callback traversal retains its KeyedObject");
+        for property in properties.iter() {
+            let is_callback = property
+                .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
+                .expect("KeyedObject retains KeyedProperty occurrences");
+            if !is_callback {
+                continue;
+            }
+            let object_id = owner
+                .with_downcast::<Self, _>(|object| object.base.object_id())
+                .expect("callback traversal retains its KeyedObject");
+            KeyedProperty::report_keyed_callbacks_occurrence(
+                property, reporter, object_id, from, to, at_start,
+            );
+        }
+    }
+
     pub fn apply(
         &mut self,
         artboard: &mut dyn KeyedObjectContext,
@@ -108,16 +141,58 @@ impl KeyedObject {
         let Some(object) = artboard.resolve_object(self.base.object_id()) else {
             return;
         };
-        for property in &self.keyed_properties {
-            property.with_downcast::<KeyedProperty, _>(|property| {
-                if !property.is_callback() {
-                    let override_mix = artboard
-                        .overrides_keyed_interpolation(&object, property.base.property_key());
-                    property.apply(object.clone(), time, mix, context, override_mix);
-                }
-            });
+        for property in self.keyed_properties.iter() {
+            let is_callback = property
+                .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
+                .expect("KeyedObject retains KeyedProperty occurrences");
+            if !is_callback {
+                KeyedProperty::apply_occurrence(
+                    property,
+                    object.clone(),
+                    time,
+                    mix,
+                    context,
+                    artboard,
+                );
+            }
         }
     }
+
+    /// Match source application while letting host interpolation hooks edit
+    /// this definition: only occurrence identities cross the hook boundary.
+    pub(crate) fn apply_occurrence(
+        owner: &CoreHandle,
+        artboard: &mut dyn KeyedObjectContext,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) {
+        let object_id = owner
+            .with_downcast::<Self, _>(|object| object.base.object_id())
+            .expect("animation application retains its KeyedObject");
+        let Some(object) = artboard.resolve_object(object_id) else {
+            return;
+        };
+        let properties = owner
+            .with_downcast::<Self, _>(|object| object.keyed_properties.snapshot())
+            .expect("animation application retains its KeyedObject");
+        for property in properties.iter() {
+            let is_callback = property
+                .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
+                .expect("KeyedObject retains KeyedProperty occurrences");
+            if !is_callback {
+                KeyedProperty::apply_occurrence(
+                    property,
+                    object.clone(),
+                    time,
+                    mix,
+                    context,
+                    artboard,
+                );
+            }
+        }
+    }
+
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = stack.latest::<LinearAnimationImporter>(LinearAnimationBase::TYPE_KEY)
         else {

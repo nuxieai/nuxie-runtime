@@ -121,15 +121,55 @@ impl Path {
         owner: &CoreHandle,
         dirt: ComponentDirt,
     ) {
-        owner.with_downcast_mut::<T, _>(|object| {
-            object
-                .as_path_mut()
-                .expect("Path receiver")
-                .update_before_transform_super();
-        });
-        crate::mechanical_port::source::transform_component::update_transform_super::<T>(
-            owner, dirt,
-        );
+        // Every registered Path owner inherits Node's world-update prefix.
+        // Keep the actual native receiver through the adjacent pure local work,
+        // and release it before constraints or opacity can revisit this path.
+        // A custom owner can project T from as_any_mut; preserve that owner's
+        // original projection calls and released update sequence below.
+        let native_prefix = owner
+            .with_mut(|object| {
+                if dirt.contains(ComponentDirt::TRANSFORM)
+                    || dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                {
+                    if let Some(object) = (object as &mut dyn std::any::Any).downcast_mut::<T>() {
+                        object
+                            .as_path_mut()
+                            .expect("Path receiver")
+                            .update_before_transform_super();
+                        if dirt.contains(ComponentDirt::TRANSFORM) {
+                            T::update_transform(object);
+                        }
+                        if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
+                            object
+                                .as_node_mut()
+                                .expect("Path inherits Node")
+                                .update_world_transform_before_super();
+                            T::compose_world_transform(object);
+                        }
+                        return true;
+                    }
+                }
+                if let Some(object) = object.as_any_mut().downcast_mut::<T>() {
+                    object
+                        .as_path_mut()
+                        .expect("Path receiver")
+                        .update_before_transform_super();
+                }
+                false
+            })
+            .unwrap_or(false);
+        if native_prefix {
+            if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
+                T::update_constraints(owner);
+            }
+            crate::mechanical_port::source::transform_component::update_render_opacity_super::<T>(
+                owner, dirt,
+            );
+        } else {
+            crate::mechanical_port::source::transform_component::update_transform_super::<T>(
+                owner, dirt,
+            );
+        }
         owner.with_downcast_mut::<T, _>(|object| {
             let closed = Self::is_path_closed_for(object);
             let skin = object.as_points_path().map(|path| {
@@ -1220,3 +1260,7 @@ mod path_owner_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "legacy_node_alias_tests.rs"]
+mod legacy_node_alias_tests;

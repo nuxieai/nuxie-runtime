@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    assets::script_asset::ScriptInput,
     core::{CoreHandle, CoreObject},
     data_bind::{
         data_context::RuntimeDataContextHandle,
@@ -43,6 +44,15 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
         Self::bind_from_context_occurrence
     }
+    fn unbind_handler(
+        &self,
+    ) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterUnbindHandler
+    {
+        Self::unbind_occurrence
+    }
+    fn clear_unbound_context(&mut self) {
+        Self::clear_binding_context(self);
+    }
     fn unbind(&mut self) {
         self.base.base.unbind();
         self.clear_binding_context();
@@ -63,8 +73,9 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 
 #[derive(Default)]
 pub struct ScriptedDataConverter {
-    pub base: ScriptedDataConverterBase,
+    // C++ destroys ScriptedObject before its DataConverter base.
     pub scripted: ScriptedObject,
+    pub base: ScriptedDataConverterBase,
     data_value: Option<Box<dyn DataValue>>,
     pub properties: Vec<CoreHandle>,
 }
@@ -72,10 +83,26 @@ pub struct ScriptedDataConverter {
 impl Drop for ScriptedDataConverter {
     fn drop(&mut self) {
         ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
+        self.data_value = None;
     }
 }
 
 impl ScriptedDataConverter {
+    pub fn unbind_occurrence(owner: &CoreHandle) {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::unbind_base_handle(owner);
+        // The projected VM context duplicates the inherited source context;
+        // clear it only after the base operation and its callbacks complete.
+        // That context can hold the last File lease: retain the arena so its
+        // teardown runs after this converter's borrow ends instead of
+        // re-entering it from a dropped DataBind or script input (8afe1a49b2).
+        let _retained = owner.retain_arena();
+        owner.with_mut(|owner| {
+            if let Some(converter) = owner.as_data_converter_capability_mut() {
+                converter.clear_unbound_context();
+            }
+        });
+    }
+
     pub(crate) fn clear_binding_context(&mut self) {
         // The projected script model owns a File lease. Once detached, this
         // File-owned converter must not retain its former binding's lease.
@@ -293,10 +320,15 @@ impl ScriptedDataConverter {
     }
 
     pub fn add_property(&mut self, property: CoreHandle) {
-        let owner = CoreObject::core(self).handle();
-        property.with_mut(|property| {
-            property.script_input_set_scripted_object(owner);
-        });
+        if let Some(input) = property
+            .core_type()
+            .and_then(|key| ScriptInput::from(property.clone(), key))
+        {
+            let owner = CoreObject::core(self).handle();
+            input.with_mut(|input| {
+                input.script_input_set_scripted_object(owner);
+            });
+        }
         if !self.properties.contains(&property) {
             self.properties.push(property);
         }
@@ -346,39 +378,62 @@ impl ScriptedDataConverter {
         base.copy(&self.base, &mut clone);
         clone.base = base;
         clone
-            .scripted
-            .file_asset_referencer_mut()
-            .set_asset_unattached(self.scripted.script_asset());
-        clone
     }
 
     /// Completes DataConverter::copy, then the ScriptedDataConverter override.
     /// The destination already has its final identity before binding targets.
     pub fn complete_clone(source: &CoreHandle, clone: &CoreHandle) -> bool {
-        let Some((source_binds, source_properties)) = source.with_downcast::<Self, _>(|source| {
-            (source.base.base.data_binds(), source.properties.clone())
-        }) else {
+        let Some(source_binds) =
+            source.with_downcast::<Self, _>(|source| source.base.base.data_binds())
+        else {
             return false;
         };
         for source_bind in &source_binds {
             let bind = source_bind
                 .clone_occurrence()
                 .expect("a retained DataBind has a clone");
+            bind.with_mut(|bind| {
+                bind.as_data_bind_mut()
+                    .unwrap()
+                    .set_target(Some(clone.clone()));
+            });
             let file = source_bind
                 .with(|bind| bind.as_data_bind().unwrap().file())
                 .unwrap();
-            bind.with_mut(|bind| {
-                let bind = bind.as_data_bind_mut().unwrap();
-                bind.set_target(Some(clone.clone()));
-                bind.set_file(file);
-            });
+            bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_file(file));
             clone
                 .with_downcast_mut::<Self, _>(|clone| clone.base.base.add_data_bind(bind))
                 .expect("the converter clone remains live");
         }
-        let twin_binds = clone
-            .with_downcast::<Self, _>(|clone| clone.base.base.data_binds())
-            .unwrap();
+        // The qualified DataConverter copy reads Name after cloning its bindings.
+        // Use the existing Scripted projection; custom outer owners need not expose
+        // a second DataConverter capability or publish its cached container.
+        let Some(name) =
+            source.with_downcast::<Self, _>(|source| source.base.base.base.name().to_owned())
+        else {
+            return false;
+        };
+        if clone
+            .with_downcast_mut::<Self, _>(|clone| {
+                clone.base.base.base.set_name_value(name);
+            })
+            .is_none()
+        {
+            return false;
+        }
+        if let Some(asset) = source
+            .with_downcast::<Self, _>(|source| source.scripted.script_asset())
+            .flatten()
+        {
+            clone
+                .with_downcast_mut::<Self, _>(|owner| {
+                    owner.scripted.set_asset(clone.clone(), Some(asset));
+                })
+                .expect("the converter clone remains live");
+        }
+        let source_properties = source
+            .with_downcast::<Self, _>(|source| source.properties.clone())
+            .expect("the source converter remains live");
         for property in source_properties {
             let cloned_property = property
                 .clone_occurrence()
@@ -386,10 +441,23 @@ impl ScriptedDataConverter {
             clone
                 .with_downcast_mut::<Self, _>(|clone| clone.add_property(cloned_property.clone()))
                 .unwrap();
-            let source_has_bind = property
-                .with(|property| property.script_input_data_bind().is_some())
-                .unwrap();
-            if source_has_bind {
+            let cloned_input = cloned_property
+                .core_type()
+                .and_then(|key| ScriptInput::from(cloned_property.clone(), key));
+            let source_input = property
+                .core_type()
+                .and_then(|key| ScriptInput::from(property.clone(), key));
+            let source_binds = source
+                .with_downcast::<Self, _>(|source| source.base.base.data_binds())
+                .expect("the source converter remains live");
+            let twin_binds = clone
+                .with_downcast::<Self, _>(|clone| clone.base.base.data_binds())
+                .expect("the converter clone remains live");
+            if let (Some(cloned_input), Some(source_input)) = (cloned_input, source_input)
+                && source_input
+                    .with(|input| input.script_input_data_bind().is_some())
+                    .unwrap()
+            {
                 for (index, source_bind) in source_binds.iter().enumerate() {
                     let targets_property = source_bind
                         .with(|bind| {
@@ -402,7 +470,7 @@ impl ScriptedDataConverter {
                                 .unwrap()
                                 .set_target(Some(cloned_property.clone()))
                         });
-                        cloned_property.with_mut(|input| {
+                        cloned_input.with_mut(|input| {
                             input.script_input_set_data_bind(Some(bind.clone()), true);
                         });
                     }
@@ -417,3 +485,7 @@ impl ScriptedDataConverter {
         true
     }
 }
+
+#[cfg(test)]
+#[path = "source_owner_destruction_order_tests.rs"]
+mod source_owner_destruction_order_tests;

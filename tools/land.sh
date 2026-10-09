@@ -48,7 +48,10 @@ run_gate() {
     fi
     local rc
     case "$g" in
-        cargo-test-runtime)  cargo test -p nuxie-runtime > "$cache/$g.log" 2>&1; rc=$? ;;
+        # The workspace run unifies tools (silver-corpus, rust-golden-runner)
+        # and testing (nuxie-renderer) into nuxie-runtime; a bare -p build
+        # skipped every test needing those seams, which rotted unseen.
+        cargo-test-runtime)  cargo test -p nuxie-runtime --features tools,testing > "$cache/$g.log" 2>&1; rc=$? ;;
         cargo-test-scripting) cargo test -p nuxie --features scripting > "$cache/$g.log" 2>&1; rc=$? ;;
         # The gate above exercises the nuxie crate's scripting feature, not
         # the nuxie-scripting crate's own tests — those went red invisibly

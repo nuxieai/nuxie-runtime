@@ -28,6 +28,10 @@ pub(crate) enum RuntimeTransactionKind {
     PlayerFrame,
 }
 
+pub(crate) fn has_host_transaction() -> bool {
+    HOST_TRANSACTION_PUBLICATION.with(|active| active.get().is_some())
+}
+
 pub(crate) struct RuntimeHostTransactionPublication;
 impl RuntimeHostTransactionPublication {
     pub(crate) fn begin(kind: RuntimeTransactionKind) -> Option<Self> {
@@ -244,6 +248,44 @@ impl RuntimeViewModelChangeCapture {
             } else {
                 Ok(state.changes)
             }
+        })
+    }
+
+    /// Reserve and append an already checked atomic host replacement. Failure
+    /// leaves the journal usable and unchanged, unlike overflow during a write.
+    pub(crate) fn append_checked_batch(
+        &self,
+        changes: Vec<RuntimeViewModelCapturedChange>,
+    ) -> Result<usize, RuntimeViewModelChangeLimitExceeded> {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let state = slot.as_mut().ok_or(RuntimeViewModelChangeLimitExceeded)?;
+            let count = state
+                .changes
+                .len()
+                .checked_add(changes.len())
+                .filter(|count| *count <= state.maximum_changes)
+                .ok_or(RuntimeViewModelChangeLimitExceeded)?;
+            let bytes = changes
+                .iter()
+                .try_fold(state.value_bytes, |bytes, change| {
+                    let payload = match &change.value {
+                        RuntimeViewModelChangeValue::String(value) => value.len(),
+                        RuntimeViewModelChangeValue::List(items) => {
+                            items.len().saturating_mul(std::mem::size_of::<u64>())
+                        }
+                        _ => 0,
+                    };
+                    bytes.checked_add(payload)
+                })
+                .filter(|bytes| *bytes <= state.maximum_value_bytes)
+                .ok_or(RuntimeViewModelChangeLimitExceeded)?;
+            if state.overflowed {
+                return Err(RuntimeViewModelChangeLimitExceeded);
+            }
+            state.changes.extend(changes);
+            state.value_bytes = bytes;
+            Ok(count)
         })
     }
 

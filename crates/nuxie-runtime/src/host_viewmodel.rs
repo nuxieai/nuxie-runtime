@@ -15,6 +15,7 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
+mod checked_batch;
 mod checked_write;
 mod context;
 mod instance;
@@ -24,6 +25,7 @@ mod source_handles;
 mod transactions;
 mod value_policy;
 mod value_rules;
+pub use checked_batch::*;
 pub use checked_write::*;
 pub use context::*;
 pub use instance::*;

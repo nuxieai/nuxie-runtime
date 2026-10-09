@@ -35,6 +35,44 @@ pub fn runtime_checked_value_write(
         .get(root_name)
         .ok_or(RuntimeValuePolicyError::NotFound)?;
     let current = policy.property_value(root, path)?;
+    let (candidate, marker) = checked_candidate(input, current)?;
+    let write = || {
+        write_native(policy, root, path, &candidate)?;
+        if marker == Some(false) {
+            let (owner, index) = policy.resolve_property(root, path)?;
+            if let Some(index) = policy.marker_property(&owner, index) {
+                owner
+                    .borrow_mut()
+                    .set_boolean_by_property_index(index, false);
+            }
+        }
+        Ok(())
+    };
+    if let Some(operation) = operation {
+        operation.apply_pending_writes(policy, &roots.values().cloned().collect::<Vec<_>>())?;
+        let result =
+            operation.checked_write(policy, root, path, candidate.clone(), marker, write)?;
+        let code = if result.applied {
+            None
+        } else {
+            result
+                .rule_indices
+                .first()
+                .and_then(|index| policy.rule(*index))
+                .map(|rule| rule.code.clone())
+        };
+        Ok((result.applied, code))
+    } else {
+        policy.invalidate();
+        write()?;
+        Ok((true, None))
+    }
+}
+
+pub(super) fn checked_candidate(
+    input: RuntimeCheckedValueInput,
+    current: RuntimeViewModelChangeValue,
+) -> Result<(RuntimeViewModelChangeValue, Option<bool>), RuntimeValuePolicyError> {
     let marker = matches!(input, RuntimeCheckedValueInput::Clear).then_some(false);
     let candidate = match (input, current) {
         (RuntimeCheckedValueInput::Number(value), RuntimeViewModelChangeValue::Number(_)) => {
@@ -82,40 +120,10 @@ pub fn runtime_checked_value_write(
         }
         _ => return Err(RuntimeValuePolicyError::InvalidArgument),
     };
-    let write = || {
-        write_native(policy, root, path, &candidate)?;
-        if marker == Some(false) {
-            let (owner, index) = policy.resolve_property(root, path)?;
-            if let Some(index) = policy.marker_property(&owner, index) {
-                owner
-                    .borrow_mut()
-                    .set_boolean_by_property_index(index, false);
-            }
-        }
-        Ok(())
-    };
-    if let Some(operation) = operation {
-        operation.apply_pending_writes(policy, &roots.values().cloned().collect::<Vec<_>>())?;
-        let result =
-            operation.checked_write(policy, root, path, candidate.clone(), marker, write)?;
-        let code = if result.applied {
-            None
-        } else {
-            result
-                .rule_indices
-                .first()
-                .and_then(|index| policy.rule(*index))
-                .map(|rule| rule.code.clone())
-        };
-        Ok((result.applied, code))
-    } else {
-        policy.invalidate();
-        write()?;
-        Ok((true, None))
-    }
+    Ok((candidate, marker))
 }
 
-fn write_native(
+pub(super) fn write_native(
     policy: &RuntimeValuePolicy,
     root: &RuntimeOwnedViewModelHandle,
     path: &str,

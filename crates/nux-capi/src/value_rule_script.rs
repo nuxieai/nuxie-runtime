@@ -64,7 +64,7 @@ impl nuxie::ScriptHostExtension for Extension {
         let file = Rc::clone(&self.file);
         let set_all = lua
             .create_function(move |_, writes| {
-                with_step(&file, |context, policy| {
+                with_step(&file, "write", |context, policy| {
                     nuxie::script_checked_value_write_batch(
                         policy,
                         context.operation.as_deref(),
@@ -87,7 +87,7 @@ impl nuxie::ScriptHostExtension for Extension {
                     {
                         return Err("checked path exceeds the operation limit".into());
                     }
-                    with_step(&file, |context, policy| {
+                    with_step(&file, "read", |context, policy| {
                         nuxie::script_list_property_values(
                             lua,
                             policy,
@@ -170,7 +170,7 @@ fn checked(
     if root_name.len().saturating_add(path.len()) > MAX_PLAYER_STEP_RESULT_BYTES {
         return Err("checked path exceeds the operation limit".into());
     }
-    with_step(file, |context, policy| {
+    with_step(file, "write", |context, policy| {
         let mut operation = context
             .operation
             .as_ref()
@@ -193,9 +193,11 @@ fn checked(
 }
 
 /// Run one script call inside the active step of this file, with its roots,
-/// its value policy (or an empty one) and its rule operation, if any.
+/// its value policy (or an empty one) and its rule operation, if any. `access`
+/// ("read" or "write") names the call in the errors it raises here.
 fn with_step<T>(
     file: &FileSlot,
+    access: &str,
     run: impl FnOnce(&Context, &nuxie::RuntimeValuePolicy) -> Result<T, String>,
 ) -> Result<T, String> {
     let file = file
@@ -205,9 +207,9 @@ fn with_step<T>(
         .ok_or("value rule file is unavailable")?;
     let context = ACTIVE
         .with(|slot| slot.borrow().clone())
-        .ok_or("checked writes require an active step")?;
+        .ok_or_else(|| format!("checked {access}s require an active step"))?;
     if !context.file.ptr_eq(&file) {
-        return Err("checked write belongs to a different file".into());
+        return Err(format!("checked {access} belongs to a different file"));
     }
     let policy = context
         .policy

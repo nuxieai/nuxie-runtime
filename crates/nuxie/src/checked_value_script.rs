@@ -4,10 +4,10 @@
 //! (roots, policy and rule operation) and call these with it, so every host
 //! runs the same checks and raises the same texts.
 use nuxie_runtime::{
-    RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES, RuntimeCheckedValueBatchEntry,
-    RuntimeCheckedValueInput, RuntimeOwnedViewModelHandle, RuntimeValuePolicy,
-    RuntimeValuePolicyError, RuntimeValuePolicyOperation, RuntimeViewModelChangeValue,
-    runtime_checked_value_write_batch,
+    RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES, RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES,
+    RuntimeCheckedValueBatchEntry, RuntimeCheckedValueInput, RuntimeOwnedViewModelHandle,
+    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeValuePolicyOperation,
+    RuntimeViewModelChangeValue, runtime_checked_value_write_batch,
 };
 use nuxie_scripting::{Lua, Value};
 use std::cell::RefCell;
@@ -22,14 +22,14 @@ const ROOT_AND_PATH: &str = "checked write needs a string root and path";
 
 /// Run one script batch inside a host step. `writes` is a Luau list of
 /// `{root = <string>, path = <string>, value = <scalar>}` tables with the keys
-/// 1..n (at most 4096), where an absent value clears the property and its
-/// paired marker. The step's rule operation is required. The writes are
-/// checked against the installed rules as one replacement and applied all or
-/// none: the result is `(true, None)` when applied, or `(false, Some(code))`
-/// with the first refusing rule's code. A malformed list, a missing or
-/// borrowed operation and every batch error (an unknown root or path, a
-/// mismatched type, a repeated property, a limit) raise, and nothing is
-/// written.
+/// 1..n (at most 4096, with at most 8 MiB of root, path and text in all),
+/// where an absent value clears the property and its paired marker. The
+/// step's rule operation is required. The writes are checked against the
+/// installed rules as one replacement and applied all or none: the result is
+/// `(true, None)` when applied, or `(false, Some(code))` with the first
+/// refusing rule's code. A malformed list, a missing or borrowed operation
+/// and every batch error (an unknown root or path, a mismatched type, a
+/// repeated property, a limit) raise, and nothing is written.
 pub fn script_checked_value_write_batch(
     policy: &RuntimeValuePolicy,
     operation: Option<&RefCell<RuntimeValuePolicyOperation>>,
@@ -50,7 +50,10 @@ pub fn script_checked_value_write_batch(
 /// tables into batch entries, in list order. The keys must be exactly 1..n,
 /// with n at most 4096. A boolean, number or string value is a candidate; an
 /// absent value clears the property and its paired marker. Any other shape
-/// fails here, before the batch runs, so nothing is written.
+/// fails here, before the batch runs, so nothing is written. The root, path
+/// and text bytes are counted as each string is read, and the read stops once
+/// they pass the batch's byte bound, so a string that many writes share is
+/// never copied past it.
 fn script_checked_value_batch_entries(
     writes: Value,
 ) -> Result<Vec<RuntimeCheckedValueBatchEntry>, String> {
@@ -68,6 +71,7 @@ fn script_checked_value_batch_entries(
     }
     let mut entries = Vec::with_capacity(pairs.len());
     entries.resize_with(pairs.len(), || None);
+    let mut bytes = 0;
     for (key, write) in pairs {
         let slot = key
             .as_integer()
@@ -75,7 +79,7 @@ fn script_checked_value_batch_entries(
             .and_then(|key| key.checked_sub(1))
             .and_then(|index| entries.get_mut(index))
             .ok_or(KEYS)?;
-        *slot = Some(script_checked_value_batch_entry(&write)?);
+        *slot = Some(script_checked_value_batch_entry(&write, &mut bytes)?);
     }
     // Table keys are distinct, so n keys inside 1..=n fill every slot.
     entries
@@ -86,6 +90,7 @@ fn script_checked_value_batch_entries(
 
 fn script_checked_value_batch_entry(
     write: &Value,
+    bytes: &mut usize,
 ) -> Result<RuntimeCheckedValueBatchEntry, String> {
     let fields = write
         .as_table()
@@ -95,9 +100,14 @@ fn script_checked_value_batch_entry(
     for pair in fields.pairs::<Value, Value>() {
         let (key, field) = pair.map_err(|error| error.to_string())?;
         match key.as_string().map(|key| key.as_bytes()).as_deref() {
-            Some(b"root") => root_name = Some(script_text(&field)?),
-            Some(b"path") => path = Some(script_text(&field)?),
-            Some(b"value") => value = script_checked_value_input(&field)?,
+            Some(b"root") => root_name = Some(script_text(&field, bytes)?),
+            Some(b"path") => path = Some(script_text(&field, bytes)?),
+            Some(b"value") => {
+                value = script_checked_value_input(&field)?;
+                if let RuntimeCheckedValueInput::Text(text) = &value {
+                    count_batch_bytes(bytes, text.len())?;
+                }
+            }
             _ => return Err("checked write fields are root, path and value".into()),
         }
     }
@@ -111,11 +121,27 @@ fn script_checked_value_batch_entry(
     }
 }
 
-fn script_text(value: &Value) -> Result<String, String> {
-    value
+fn script_text(value: &Value, bytes: &mut usize) -> Result<String, String> {
+    let text = value
         .as_string()
         .and_then(|text| text.to_str().ok())
-        .ok_or_else(|| ROOT_AND_PATH.to_owned())
+        .ok_or_else(|| ROOT_AND_PATH.to_owned())?;
+    count_batch_bytes(bytes, text.len())?;
+    Ok(text)
+}
+
+/// Add one string just read to the batch's running byte total, raising once
+/// the total passes the runtime batch's bound. luaur gives a string's length
+/// only with a copy of its bytes, so the check follows each copy: the reader
+/// holds at most the bound plus one string, however many writes share it.
+fn count_batch_bytes(total: &mut usize, bytes: usize) -> Result<(), String> {
+    *total = total.saturating_add(bytes);
+    if *total > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES {
+        return Err(format!(
+            "checked writes exceed {RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES} bytes"
+        ));
+    }
+    Ok(())
 }
 
 /// Read one script value as a checked write candidate: a boolean, number or

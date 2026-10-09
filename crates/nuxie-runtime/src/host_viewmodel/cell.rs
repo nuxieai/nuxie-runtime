@@ -28,8 +28,13 @@ pub(crate) enum RuntimeTransactionKind {
     PlayerFrame,
 }
 
-pub(crate) fn has_host_transaction() -> bool {
-    HOST_TRANSACTION_PUBLICATION.with(|active| active.get().is_some())
+/// A graph transaction (`RuntimeOwnedViewModelGraphTransaction`) is the
+/// PlayerFrame kind: its checkpoint covers every property of the graph, so it
+/// can roll back writes made outside its own setters. A per-owner host mutation
+/// transaction restores only the properties it captured itself.
+pub(crate) fn has_graph_transaction() -> bool {
+    HOST_TRANSACTION_PUBLICATION
+        .with(|active| active.get() == Some(RuntimeTransactionKind::PlayerFrame))
 }
 
 pub(crate) struct RuntimeHostTransactionPublication;

@@ -1,7 +1,8 @@
 //! Additive host policy: an atomic answer replacement inside an active operation.
 //! Ordinary Rive setters, listeners and file behavior do not enter this API.
-use super::checked_write::{checked_candidate, write_native};
+use super::checked_write::checked_candidate;
 use super::*;
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
 
 /// One scalar candidate (or explicit clear), addressed through the caller's roots.
 pub struct RuntimeCheckedValueBatchEntry {
@@ -35,23 +36,27 @@ pub(super) struct CheckedBatchValue {
 }
 
 /// Check a complete replacement against the final candidate values, applying
-/// all or none. Requires this file's active graph transaction, capture and policy
-/// operation. Earlier writes are settled once and preserved. A refusal writes no
-/// candidates; its native reports/errors remain available at the usual boundary.
+/// all or none. Requires this file's active graph transaction
+/// (`RuntimeOwnedViewModelGraphTransaction`, whose checkpoint restores every
+/// batch write on rollback), capture and policy operation. Earlier writes are
+/// settled once and preserved. A refusal writes no candidates; its native
+/// reports/errors remain available at the usual boundary. Each report names the
+/// entry that breaks its rule on its own, and a refusal suppresses only the
+/// paired markers of entries its rules refuse.
 ///
 /// Entries must resolve to distinct properties, including implicit paired markers
 /// (duplicate aliases are invalid). At most 4096 entries and 8 MiB of names/text
 /// are accepted, subject to the operation's remaining journal/report budgets.
-/// Validation/capacity errors precede batch mutation. As with scalar checked
-/// writes, an unexpected native writer error requires aborting the outer operation.
-/// Hosts still settle bindings/markers/groups and commit before publishing.
+/// Validation/capacity errors precede batch mutation. Writers address the
+/// properties resolved during validation, so an accepted batch cannot stop part
+/// way. Hosts still settle bindings/markers/groups and commit before publishing.
 pub fn runtime_checked_value_write_batch(
     policy: &RuntimeValuePolicy,
     operation: &mut RuntimeValuePolicyOperation,
     roots: &BTreeMap<String, RuntimeOwnedViewModelHandle>,
     entries: Vec<RuntimeCheckedValueBatchEntry>,
 ) -> Result<RuntimeCheckedValueBatchResult, RuntimeValuePolicyError> {
-    if !crate::view_model_cell::has_host_transaction() {
+    if !crate::view_model_cell::has_graph_transaction() {
         return Err(RuntimeValuePolicyError::BorrowConflict);
     }
     if entries.len() > 4096 {
@@ -60,7 +65,6 @@ pub fn runtime_checked_value_write_batch(
     let mut bytes = 0usize;
     let mut occupied = BTreeSet::new();
     let mut values = Vec::new();
-    let mut writers = Vec::new();
     for entry in entries {
         bytes = bytes
             .saturating_add(entry.root_name.len())
@@ -87,14 +91,11 @@ pub fn runtime_checked_value_write_batch(
         values.push(CheckedBatchValue {
             owner: owner.clone(),
             index,
-            property: property.clone(),
-            value: candidate.clone(),
+            property,
+            value: candidate,
             implicit_marker: false,
         });
-        let marker = policy
-            .marker_property(&owner, index)
-            .map(|index| (index, marker.unwrap_or(true)));
-        if let Some((index, value)) = marker {
+        if let Some(index) = policy.marker_property(&owner, index) {
             if !occupied.insert((owner.instance_identity(), index)) {
                 return Err(RuntimeValuePolicyError::InvalidArgument);
             }
@@ -103,37 +104,60 @@ pub fn runtime_checked_value_write_batch(
                 .property_by_path(&[index])
                 .ok_or(RuntimeValuePolicyError::NotFound)?;
             values.push(CheckedBatchValue {
-                owner: owner.clone(),
+                owner,
                 index,
                 property,
-                value: RuntimeViewModelChangeValue::Boolean(value),
+                value: RuntimeViewModelChangeValue::Boolean(marker.unwrap_or(true)),
                 implicit_marker: true,
             });
         }
-        writers.push((root.clone(), entry.path, candidate, property, owner, marker));
     }
     RuntimeViewModelChangeCapture::with_current(|capture| {
         operation.checked_batch(policy, roots, &values, capture, || {
-            for (root, path, candidate, property, owner, marker) in &writers {
-                capture.correcting(instance::identity(property) as usize, || {
-                    write_native(policy, root, path, candidate)
-                })?;
-                if let Some((index, value)) = marker {
-                    let property = owner
-                        .borrow()
-                        .property_by_path(&[*index])
-                        .ok_or(RuntimeValuePolicyError::NotFound)?;
-                    capture.correcting(instance::identity(&property) as usize, || {
-                        owner
-                            .borrow_mut()
-                            .set_boolean_by_property_index(*index, *value);
-                    });
-                }
+            for value in &values {
+                capture.correcting(instance::identity(&value.property) as usize, || {
+                    write_indexed(value)
+                });
             }
-            Ok(())
         })
     })
     .ok_or(RuntimeValuePolicyError::BorrowConflict)?
+}
+
+/// Write one validated candidate through its resolved owner and index. The
+/// candidate's type matched the property during validation, so this cannot
+/// fail part way through an accepted batch.
+fn write_indexed(value: &CheckedBatchValue) {
+    let mut owner = value.owner.borrow_mut();
+    match &value.value {
+        RuntimeViewModelChangeValue::Number(number) => {
+            owner.set_number_by_property_index(value.index, *number);
+        }
+        RuntimeViewModelChangeValue::Boolean(boolean) => {
+            owner.set_boolean_by_property_index(value.index, *boolean);
+        }
+        RuntimeViewModelChangeValue::String(text) => {
+            owner.set_string_by_property_index(value.index, text);
+        }
+        RuntimeViewModelChangeValue::Color(color) => {
+            owner.set_color_by_property_index(value.index, *color);
+        }
+        RuntimeViewModelChangeValue::Enum(choice) => {
+            owner.set_enum_by_property_index(value.index, *choice);
+        }
+        // checked_candidate produces only the empty list (a clear).
+        RuntimeViewModelChangeValue::List(_) => {
+            drop(owner);
+            instance::mutate(|| {
+                value
+                    .property
+                    .with_downcast_mut::<ViewModelInstanceList, _>(
+                        ViewModelInstanceList::remove_all_items,
+                    )
+            });
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]

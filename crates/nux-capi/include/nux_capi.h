@@ -95,6 +95,16 @@
  *    schema name; path is a slash-separated property path. The value must be a
  *    matching scalar or nil (clear). Invalid roots, paths, types, unavailable
  *    step context or exceeded limits raise a script error, not a refusal.
+ *    The same module exposes setAll(writes): a list (keys 1..n, at most 4096)
+ *    of {root, path, value} tables addressed as for set, where an absent value
+ *    clears. The step checks the list against the installed rules as one
+ *    replacement and applies every write or none; setAll returns true and no
+ *    code, or false and the first refusing rule's code. setAll requires
+ *    installed value rules or groups and raises without them, and raises on a
+ *    malformed list before any write. listValues(root, path, property) returns
+ *    property from every item of the list at path, in list order, as booleans,
+ *    numbers and strings; it returns nil when path names a property that is
+ *    not a list and raises on a null item.
  *    Arguments are consumed synchronously; no caller bytes are retained.
  *    Ordinary nux_file_import remains script-inert.
  *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,

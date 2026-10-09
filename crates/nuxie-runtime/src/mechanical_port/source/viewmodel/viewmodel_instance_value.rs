@@ -421,7 +421,11 @@ impl ViewModelInstanceValue {
     }
 
     pub fn set_view_model_instance(&mut self, value: CoreHandle) {
-        self.view_model_instance = Some(value);
+        self.set_view_model_instance_option(Some(value));
+    }
+
+    pub(super) fn set_view_model_instance_option(&mut self, value: Option<CoreHandle>) {
+        self.view_model_instance = value;
         self.register_symbol();
     }
 

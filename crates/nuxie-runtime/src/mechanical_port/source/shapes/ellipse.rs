@@ -21,7 +21,9 @@ impl std::ops::DerefMut for Ellipse {
 crate::mechanical_port::source::transform_component::impl_transform_update!(
     Ellipse,
     |owner, dirt| {
-        owner.with_downcast_mut::<Self, _>(|object| object.update_before_path_super(dirt));
+        if dirt.contains(ComponentDirt::PATH) {
+            owner.with_downcast_mut::<Self, _>(|object| object.update_before_path_super(dirt));
+        }
         crate::mechanical_port::source::shapes::path::Path::update_occurrence::<Self>(owner, dirt);
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,

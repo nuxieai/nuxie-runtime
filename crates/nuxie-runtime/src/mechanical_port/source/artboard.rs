@@ -265,7 +265,7 @@ pub struct Artboard {
     semantic_boundary_node: Option<SemanticNodeRef>,
     // Only File-vended top-level instances carry the pre-roll. Clone starts
     // from Default and deliberately does not copy this owner.
-    watermark: Option<Box<crate::mechanical_port::source::watermark::Watermark>>,
+    watermark: Option<Rc<RefCell<crate::mechanical_port::source::watermark::Watermark>>>,
     #[cfg(feature = "tools")]
     external_parent_focus_node: Option<FocusNodeRef>,
     draw_order_change_counter: u8,
@@ -435,7 +435,17 @@ impl LinearAnimationArtboard for ArtboardObjectContext {
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
-        object.with_downcast_mut::<KeyedObject, _>(|object| object.apply(self, time, mix, context));
+        KeyedObject::apply_occurrence(&object, self, time, mix, context);
+    }
+
+    fn apply_keyed_object_borrowed(
+        &mut self,
+        object: &CoreHandle,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_occurrence(object, self, time, mix, context);
     }
 }
 
@@ -456,7 +466,7 @@ impl CoreContext for RuntimeArtboardObjectContext {
 
     fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
         self.root
-            .with_downcast::<Artboard, _>(|artboard| artboard.resolve_handle(id))
+            .with_artboard(|artboard| artboard.resolve_handle(id))
             .flatten()
     }
 }
@@ -497,7 +507,17 @@ impl LinearAnimationArtboard for RuntimeArtboardObjectContext {
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
-        object.with_downcast_mut::<KeyedObject, _>(|object| object.apply(self, time, mix, context));
+        KeyedObject::apply_occurrence(&object, self, time, mix, context);
+    }
+
+    fn apply_keyed_object_borrowed(
+        &mut self,
+        object: &CoreHandle,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_occurrence(object, self, time, mix, context);
     }
 }
 
@@ -935,22 +955,13 @@ impl Artboard {
     }
 
     pub fn initialize_handle(root: &CoreHandle) -> StatusCode {
-        let Some((arena, objects, animations, state_machines, is_instance)) = root
-            .with_downcast::<Artboard, _>(|artboard| {
-                (
-                    artboard.core_arena.clone(),
-                    artboard.objects.clone(),
-                    artboard.animations.clone(),
-                    artboard.state_machines.clone(),
-                    artboard.is_instance,
-                )
-            })
+        let Some(arena) = root.with_downcast::<Artboard, _>(|artboard| artboard.core_arena.clone())
         else {
             return StatusCode::MissingObject;
         };
-        let mut context = ArtboardObjectContext {
+        let mut context = RuntimeArtboardObjectContext {
             arena,
-            objects: objects.clone(),
+            root: root.clone(),
         };
         root.with_downcast_mut::<Artboard, _>(|artboard| {
             artboard
@@ -963,17 +974,37 @@ impl Artboard {
         let mut clipping_shapes = Vec::new();
         let mut layer_masks = Vec::new();
 
-        for object in objects.clone().into_iter().flatten() {
-            let code = object
-                .with_mut(|object| object.on_added_dirty(&mut context))
-                .unwrap_or(StatusCode::MissingObject);
+        let objects = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects.clone())
+            .unwrap();
+        for object in objects.into_iter().flatten() {
+            // The root's borrowed lifecycle needs its already-resolved object
+            // table. Other callbacks resolve the current Artboard table.
+            let code = if &object == root {
+                let mut root_context = ArtboardObjectContext {
+                    arena: context.arena.clone(),
+                    objects: root
+                        .with_downcast::<Artboard, _>(|a| a.objects.clone())
+                        .unwrap(),
+                };
+                object.with_mut(|object| object.on_added_dirty(&mut root_context))
+            } else {
+                object.with_mut(|object| object.on_added_dirty(&mut context))
+            }
+            .unwrap_or(StatusCode::MissingObject);
             if !can_continue(code) {
                 return code;
             }
         }
 
+        let is_instance = root
+            .with_downcast::<Artboard, _>(|a| a.is_instance)
+            .unwrap();
         if !is_instance {
-            for animation in animations.clone() {
+            let animations = root
+                .with_downcast::<Artboard, _>(|a| a.animations.clone())
+                .unwrap();
+            for animation in animations {
                 let code = animation
                     .with_downcast_mut::<LinearAnimation, _>(|animation| {
                         animation.on_added_dirty(&mut context)
@@ -983,7 +1014,10 @@ impl Artboard {
                     return code;
                 }
             }
-            for state_machine in state_machines.clone() {
+            let state_machines = root
+                .with_downcast::<Artboard, _>(|a| a.state_machines.clone())
+                .unwrap();
+            for state_machine in state_machines {
                 let code = state_machine
                     .with_mut(|state_machine| state_machine.on_added_dirty(&mut context))
                     .unwrap_or(StatusCode::MissingObject);
@@ -991,7 +1025,12 @@ impl Artboard {
                     return code;
                 }
             }
-            if animations.is_empty() && state_machines.is_empty() {
+            if root
+                .with_downcast::<Artboard, _>(|a| {
+                    a.animations.is_empty() && a.state_machines.is_empty()
+                })
+                .unwrap()
+            {
                 let owner = root;
                 let mut state_machine = StateMachine::default();
                 state_machine.set_name("Auto Generated State Machine".into());
@@ -1005,7 +1044,10 @@ impl Artboard {
         }
 
         let mut component_draw_rules = HashMap::<CoreHandle, CoreHandle>::new();
-        for object in objects.clone().into_iter().flatten() {
+        let objects = root
+            .with_downcast::<Artboard, _>(|a| a.objects.clone())
+            .unwrap();
+        for object in objects.into_iter().flatten() {
             let code = if &object == root {
                 let code = LayoutComponent::on_added_clean_occurrence(root, &mut context);
                 if code == StatusCode::Ok {
@@ -1074,8 +1116,14 @@ impl Artboard {
             }
         }
 
-        if !is_instance {
-            for animation in animations.clone() {
+        if !root
+            .with_downcast::<Artboard, _>(|a| a.is_instance)
+            .unwrap()
+        {
+            let animations = root
+                .with_downcast::<Artboard, _>(|a| a.animations.clone())
+                .unwrap();
+            for animation in animations {
                 let code = animation
                     .with_downcast_mut::<LinearAnimation, _>(|animation| {
                         animation.on_added_clean(&mut context)
@@ -1100,7 +1148,10 @@ impl Artboard {
             }
         }
 
-        for object in objects.clone().into_iter().flatten() {
+        let objects = root
+            .with_downcast::<Artboard, _>(|a| a.objects.clone())
+            .unwrap();
+        for object in objects.into_iter().flatten() {
             object.with_mut(|object| {
                 object.component_build_dependencies();
             });
@@ -1226,6 +1277,9 @@ impl Artboard {
             artboard.layer_masks = layer_masks;
             artboard.sort_dependencies();
         });
+        let objects = root
+            .with_downcast::<Artboard, _>(|a| a.objects.clone())
+            .unwrap();
         let rules_list: Vec<CoreHandle> = objects
             .iter()
             .flatten()
@@ -1766,40 +1820,34 @@ impl Artboard {
         let mut previous_applied_save = false;
         let mut applied_clipping_save_operations = Vec::<bool>::new();
         while let Some(current) = current_drawable {
-            let previous = current
-                .with_mut(|drawable| {
-                    drawable.set_needs_save_operation(true);
-                    drawable.prev_drawable()
-                })
-                .expect("draw-order occurrence always resolves");
-            let is_clip_start = current.is_clip_start();
-            let is_clip_end = current.is_clip_end();
-            let will_clip = current.will_clip();
+            current.with_mut(|drawable| drawable.set_needs_save_operation(true));
             if previous_applied_save {
-                if is_clip_start {
+                if current.is_clip_start() {
                     applied_clipping_save_operations.push(false);
                     current.with_mut(|drawable| drawable.set_needs_save_operation(false));
-                } else if is_clip_end {
+                } else if current.is_clip_end() {
                     let applied = applied_clipping_save_operations
                         .pop()
                         .expect("clip end has matching clip start");
                     current.with_mut(|drawable| drawable.set_needs_save_operation(applied));
-                } else if previous
-                    .as_ref()
+                } else if current
+                    .with(Drawable::prev_drawable)
+                    .flatten()
                     .is_some_and(|previous| previous.is_clip_end())
                 {
                     current.with_mut(|drawable| drawable.set_needs_save_operation(false));
                 }
-            } else if is_clip_start {
+            } else if current.is_clip_start() {
                 applied_clipping_save_operations.push(true);
-            } else if is_clip_end {
+            } else if current.is_clip_end() {
                 let applied = applied_clipping_save_operations
                     .pop()
                     .expect("clip end has matching clip start");
                 current.with_mut(|drawable| drawable.set_needs_save_operation(applied));
             }
-            previous_applied_save = is_clip_start && (will_clip || previous_applied_save);
-            current_drawable = previous;
+            previous_applied_save =
+                current.is_clip_start() && (current.will_clip() || previous_applied_save);
+            current_drawable = current.with(Drawable::prev_drawable).flatten();
         }
         assert!(applied_clipping_save_operations.is_empty());
     }
@@ -2518,7 +2566,7 @@ impl Artboard {
         } else {
             background
         };
-        let paths = self.base.base.mutable_render_paths();
+        let mut paths = self.base.base.mutable_render_paths();
         paths.local.rewind();
         paths.local.add_rect(background, PathDirection::Clockwise);
         paths.world.rewind();
@@ -3106,18 +3154,21 @@ impl Artboard {
         &mut self,
         watermark: Option<Box<crate::mechanical_port::source::watermark::Watermark>>,
     ) {
-        self.watermark = watermark;
+        self.watermark = watermark.map(|watermark| Rc::new(RefCell::new(*watermark)));
     }
 
-    pub fn watermark(&self) -> Option<&crate::mechanical_port::source::watermark::Watermark> {
-        self.watermark.as_deref()
+    pub fn watermark(
+        &self,
+    ) -> Option<std::cell::Ref<'_, crate::mechanical_port::source::watermark::Watermark>> {
+        self.watermark.as_ref().map(|watermark| watermark.borrow())
     }
 
     pub fn advance_watermark(&mut self, elapsed_seconds: f32) -> bool {
-        let Some(watermark) = self.watermark.as_mut() else {
+        let Some(watermark) = self.watermark.as_ref() else {
             return false;
         };
-        if !watermark.advance(elapsed_seconds) {
+        let playing = watermark.borrow_mut().advance(elapsed_seconds);
+        if !playing {
             self.watermark = None;
             return false;
         }
@@ -3125,22 +3176,23 @@ impl Artboard {
     }
 
     pub fn draw_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        let _runtime_receiver = root.runtime_artboard_instance();
         nuxie_render_api::increment_artboard_draw_frame_id();
         // Nested draws enter draw_internal directly. A never-started watermark
         // leaves non-state-machine playback drawing its own content.
-        let drew_watermark = root
-            .with_downcast_mut::<Artboard, _>(|artboard| {
-                let bounds = artboard.bounds();
-                if let Some(watermark) = artboard.watermark.as_mut() {
-                    if watermark.is_playing() {
-                        watermark.draw(renderer, &bounds);
-                        return true;
-                    }
-                }
-                false
+        let watermark = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard
+                    .watermark
+                    .as_ref()
+                    .filter(|watermark| watermark.borrow().is_playing())
+                    .cloned()
             })
-            .unwrap_or(false);
-        if drew_watermark {
+            .flatten();
+        if let Some(watermark) = watermark {
+            if let Some(bounds) = root.with_downcast::<Artboard, _>(Artboard::bounds) {
+                watermark.borrow_mut().draw(renderer, &bounds);
+            }
             return;
         }
         // A standalone/root artboard is never cached as a bitmap: it is
@@ -3278,6 +3330,7 @@ impl Artboard {
         renderer: &mut Renderer,
         visitor: Option<RuntimeDrawVisitor>,
     ) {
+        let _runtime_receiver = root.runtime_artboard_instance();
         let visible = root.with_downcast::<Artboard, _>(|artboard| {
             artboard.dirty_state.0.did_change.set(false);
             artboard.child_opacity() != 0.0
@@ -3294,86 +3347,97 @@ impl Artboard {
             artboard: root.clone(),
             previous,
         };
-        let Some((save, first_drawable)) = root
-            .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
-            .flatten()
-        else {
+        let Some((has_self, save)) = root.with_downcast::<Artboard, _>(|artboard| {
+            let has_self = artboard.has_self_transform();
+            (
+                has_self,
+                artboard.clip() || artboard.frame_origin || has_self,
+            )
+        }) else {
             return;
         };
-        Self::draw_drawable_range_handle(root, renderer, first_drawable, None);
-        if save {
-            renderer.restore();
-        }
-    }
-
-    fn draw_background(
-        &mut self,
-        renderer: &mut Renderer,
-    ) -> Option<(bool, Option<RuntimeDrawableOccurrence>)> {
-        if self.child_opacity() == 0.0 {
-            return None;
-        }
-        let has_self = self.has_self_transform();
-        let save = self.clip() || self.frame_origin || has_self;
         if save {
             renderer.save();
         }
-        if self.frame_origin {
-            let transform = Mat2D::from_translate(
-                self.layout_width() * self.origin_x(),
-                self.layout_height() * self.origin_y(),
-            );
+        // C++ reads each property after the preceding renderer callback.
+        let frame_transform = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard.frame_origin.then(|| {
+                    Mat2D::from_translate(
+                        artboard.layout_width() * artboard.origin_x(),
+                        artboard.layout_height() * artboard.origin_y(),
+                    )
+                })
+            })
+            .flatten();
+        if let Some(transform) = frame_transform {
             renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
         }
         if has_self {
-            renderer.transform(nuxie_render_api::Mat2D(*self.self_transform().values()));
+            if let Some(transform) = root.with_downcast::<Artboard, _>(Artboard::self_transform) {
+                renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
+            }
         }
-        let factory = self.factory().expect("Artboard renderer factory");
-        if self.clip() {
-            let path = self
-                .base
-                .base
-                .mutable_render_paths()
-                .local
-                .render_path(&factory);
-            renderer.clip_path(path);
+        let clipping = root
+            .with_downcast_mut::<Artboard, _>(|artboard| {
+                if !artboard.clip() {
+                    return None;
+                }
+                drop(artboard.base.base.mutable_render_paths());
+                Some((
+                    artboard.base.base.render_paths_handle().unwrap(),
+                    artboard.factory().expect("Artboard renderer factory"),
+                ))
+            })
+            .flatten();
+        if let Some((paths, factory)) = clipping {
+            renderer.clip_path(paths.borrow_mut().local.render_path(&factory));
         }
-        let world_transform = self.world_transform();
         let mut paint_index = 0;
-        while let Some(paint) = self
-            .base
-            .base
-            .shape_paint_container()
-            .shape_paints()
-            .get(paint_index)
-            .cloned()
-        {
+        loop {
+            let paint = root
+                .with_downcast::<Artboard, _>(|artboard| {
+                    artboard
+                        .base
+                        .base
+                        .shape_paint_container()
+                        .shape_paints()
+                        .get(paint_index)
+                        .cloned()
+                })
+                .flatten();
+            let Some(paint) = paint else {
+                break;
+            };
             paint_index += 1;
             paint.with_mut(|paint| {
                 let Some(behavior) = paint.as_shape_paint_behavior_mut() else { return; };
                 if !behavior.should_draw() { return; }
                 let kind = behavior.pick_path_kind();
                 let fill_rule = behavior.fill_rule();
+                let paths = root.with_downcast::<Artboard, _>(|artboard| artboard.base.base.render_paths_handle()).flatten();
+                let Some(paths) = paths else { return; };
+                let Some(world_transform) = root.with_downcast::<Artboard, _>(Artboard::world_transform) else { return; };
+                let mut paths = paths.borrow_mut();
                 let path = match kind {
-                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(),
-                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path(),
-                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(),
+                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local |
+                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => &mut paths.local,
+                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => &mut paths.world,
                 };
-                let Some(path) = path else { return; };
                 behavior.shape_paint_mut().draw_with_active_container(
-                    renderer,
-                    path,
-                    world_transform,
-                    false,
+                    renderer, path, world_transform, false, None, true, fill_rule,
+                    &|| root.with_downcast::<Artboard, _>(Artboard::world_transform).unwrap_or(world_transform),
                     None,
-                    true,
-                    fill_rule,
-                    &|| world_transform,
-                    Some(&factory),
                 );
             });
         }
-        Some((save, self.first_drawable.clone()))
+        let first_drawable = root
+            .with_downcast::<Artboard, _>(Artboard::first_drawable)
+            .flatten();
+        Self::draw_drawable_range_handle(root, renderer, first_drawable, None);
+        if save {
+            renderer.restore();
+        }
     }
 
     pub fn draw_drawable_range_handle(
@@ -3458,7 +3522,11 @@ impl Artboard {
                 current.draw(renderer);
             }
             // Match C++'s for-loop increment: callbacks may relink the list.
-            drawable = current.with(Drawable::prev_drawable).flatten();
+            // The next iteration's receiver access checks authored liveness;
+            // avoid checking the same slot again while reading this link.
+            drawable = current
+                .with(Drawable::prev_drawable_for_draw_range)
+                .flatten();
         }
     }
 
@@ -3567,12 +3635,10 @@ impl Artboard {
             }
         }
         let _guard = DrawingGuard(mask.clone());
-        let Some(host) = root
-            .with_downcast::<Artboard, _>(|a| {
-                a.factory()
-                    .and_then(|f| f.with_factory_mut(|f| f.canvas_content_host()))
-            })
-            .flatten()
+        let factory = root
+            .with_downcast::<Artboard, _>(Artboard::factory)
+            .flatten();
+        let Some(host) = factory.and_then(|f| f.with_factory_mut(|f| f.canvas_content_host()))
         else {
             return false;
         };
@@ -3586,14 +3652,9 @@ impl Artboard {
         if !offscreen::plan_raster_scale(renderer, resolution, &mut plan) {
             return false;
         }
-        let (content_changed, source_start, source_end, mode) = mask
+        let content_changed = mask
             .with_downcast::<LayerMask, _>(|m| {
-                (
-                    m.content_canvas.is_none() || m.mask_canvas.is_none() || m.dirty,
-                    m.source_start.clone(),
-                    m.source_end.clone(),
-                    m.mask_mode(),
-                )
+                m.content_canvas.is_none() || m.mask_canvas.is_none() || m.dirty
             })
             .unwrap();
         fn intersect(a: Aabb, b: Aabb) -> Option<Aabb> {
@@ -3628,6 +3689,9 @@ impl Artboard {
             let mut coverage_draws = false;
             let mut source_box = Aabb::default();
             let mut source_fidelity = BoundsFidelity::None;
+            let (source_start, source_end) = mask
+                .with_downcast::<LayerMask, _>(|m| (m.source_start.clone(), m.source_end.clone()))
+                .unwrap();
             if let Some(source_start) = &source_start {
                 source_fidelity = Self::range_draw_bounds(
                     source_start.with(Drawable::prev_drawable).flatten(),
@@ -3648,7 +3712,11 @@ impl Artboard {
                 }
             }
             if !coverage_draws {
-                return matches!(mode, MaskMode::Alpha | MaskMode::Luminance);
+                return mask
+                    .with_downcast::<LayerMask, _>(|m| {
+                        matches!(m.mask_mode(), MaskMode::Alpha | MaskMode::Luminance)
+                    })
+                    .unwrap();
             }
             let (custom, authored) = mask
                 .with_downcast::<LayerMask, _>(|m| (m.use_custom_bounds(), m.custom_bounds()))
@@ -3663,7 +3731,12 @@ impl Artboard {
                 measured = content_box;
                 if source_fidelity != BoundsFidelity::None {
                     let overlap = intersect(measured, source_box);
-                    if matches!(mode, MaskMode::Alpha | MaskMode::Luminance) {
+                    if mask
+                        .with_downcast::<LayerMask, _>(|m| {
+                            matches!(m.mask_mode(), MaskMode::Alpha | MaskMode::Luminance)
+                        })
+                        .unwrap()
+                    {
                         let Some(overlap) = overlap else {
                             return true;
                         };
@@ -3717,11 +3790,11 @@ impl Artboard {
                 let content = host
                     .borrow_mut()
                     .make_content_canvas(plan.width_px, plan.height_px);
+                mask.with_downcast_mut::<LayerMask, _>(|m| m.content_canvas = content);
                 let coverage = host
                     .borrow_mut()
                     .make_content_canvas(plan.width_px, plan.height_px);
                 mask.with_downcast_mut::<LayerMask, _>(|m| {
-                    m.content_canvas = content;
                     m.mask_canvas = coverage;
                     #[cfg(any(test, feature = "testing"))]
                     {
@@ -3729,20 +3802,29 @@ impl Artboard {
                     }
                 });
             }
-            let (content, coverage) = mask
+            let ready = mask
                 .with_downcast::<LayerMask, _>(|m| {
-                    (m.content_canvas.clone(), m.mask_canvas.clone())
+                    m.content_canvas.is_some() && m.mask_canvas.is_some()
                 })
                 .unwrap();
-            let (Some(content), Some(coverage)) = (content, coverage) else {
+            if !ready {
                 mask.with_downcast_mut::<LayerMask, _>(LayerMask::release_canvases);
                 return false;
-            };
+            }
             let mut opened = true;
             {
+                let coverage = mask
+                    .with_downcast::<LayerMask, _>(|m| m.mask_canvas.clone())
+                    .flatten()
+                    .expect("live mask canvas");
                 let mut scope =
                     offscreen::CanvasContentScope::new(Some(&host), Some(&coverage), &plan, 0);
                 if let Some(r) = scope.renderer() {
+                    let (source_start, source_end) = mask
+                        .with_downcast::<LayerMask, _>(|m| {
+                            (m.source_start.clone(), m.source_end.clone())
+                        })
+                        .unwrap();
                     Self::draw_drawable_range_handle(
                         root,
                         r,
@@ -3756,6 +3838,10 @@ impl Artboard {
                 }
             }
             if opened {
+                let content = mask
+                    .with_downcast::<LayerMask, _>(|m| m.content_canvas.clone())
+                    .flatten()
+                    .expect("live content canvas");
                 let mut scope =
                     offscreen::CanvasContentScope::new(Some(&host), Some(&content), &plan, 0);
                 if let Some(r) = scope.renderer() {
@@ -3765,12 +3851,20 @@ impl Artboard {
                         start.with(Drawable::prev_drawable).flatten(),
                         Some(end.clone()),
                     );
-                    if let Some(image) = host.borrow_mut().content_canvas_image(&coverage) {
+                    let coverage = mask
+                        .with_downcast::<LayerMask, _>(|m| m.mask_canvas.clone())
+                        .flatten()
+                        .expect("live mask canvas");
+                    let image = host.borrow_mut().content_canvas_image(&coverage);
+                    if let Some(image) = image {
                         r.save();
                         let inv = 1.0 / plan.raster_scale;
                         r.translate(plan.bounds.left(), plan.bounds.top());
                         r.transform(nuxie_render_api::Mat2D([inv, 0.0, 0.0, inv, 0.0, 0.0]));
-                        let mode = match mode {
+                        let mode = match mask
+                            .with_downcast::<LayerMask, _>(LayerMask::mask_mode)
+                            .unwrap()
+                        {
                             MaskMode::Alpha => nuxie_render_api::LayerMaskMode::Alpha,
                             MaskMode::InvertedAlpha => {
                                 nuxie_render_api::LayerMaskMode::InvertedAlpha
@@ -3807,21 +3901,22 @@ impl Artboard {
                 m.dirty = false;
             });
         }
-        let (content, coverage, scale, bounds) = mask
-            .with_downcast::<LayerMask, _>(|m| {
-                (
-                    m.content_canvas.clone().unwrap(),
-                    m.mask_canvas.clone().unwrap(),
-                    m.raster_scale,
-                    m.raster_box,
-                )
-            })
-            .unwrap();
+        let content = mask
+            .with_downcast::<LayerMask, _>(|m| m.content_canvas.clone())
+            .flatten()
+            .expect("live content canvas");
         let content_image = host.borrow_mut().content_canvas_image(&content);
+        let coverage = mask
+            .with_downcast::<LayerMask, _>(|m| m.mask_canvas.clone())
+            .flatten()
+            .expect("live mask canvas");
         let coverage_image = host.borrow_mut().content_canvas_image(&coverage);
         let (Some(image), Some(_)) = (content_image, coverage_image) else {
             return false;
         };
+        let (scale, bounds) = mask
+            .with_downcast::<LayerMask, _>(|m| (m.raster_scale, m.raster_box))
+            .unwrap();
         let mut placement =
             offscreen::begin_composite_for_box(renderer, Some(&host), &plan, scale, &bounds);
         let opacity = placement.opacity;
@@ -3902,15 +3997,9 @@ impl Artboard {
         // NestedArtboard turns frame_origin off on everything it hosts, which
         // is the only way to reach this path. bounds() also tracks the resolved
         // layout size rather than the authored width/height.
-        let Some((bx, has_self_transform, did_change)) =
-            root.with_downcast::<Artboard, _>(|artboard| {
-                (
-                    artboard.bounds(),
-                    artboard.has_self_transform(),
-                    artboard.did_change(),
-                )
-            })
-        else {
+        let Some((bx, has_self_transform)) = root.with_downcast::<Artboard, _>(|artboard| {
+            (artboard.bounds(), artboard.has_self_transform())
+        }) else {
             return false;
         };
         let w = bx.width();
@@ -3943,6 +4032,9 @@ impl Artboard {
         // (resolution changed), the target size or raster scale changed
         // (artboard resized, or viewed at a different zoom), or the content
         // changed this frame.
+        let did_change = root
+            .with_downcast::<Artboard, _>(Artboard::did_change)
+            .unwrap_or(false);
         let needs_render = cache
             .with_downcast::<BitmapCache, _>(|cache| {
                 let geom_changed = width_px != cache.width_px
@@ -3954,13 +4046,8 @@ impl Artboard {
         if needs_render {
             Self::render_into_canvas_handle(root, &cache, &deferred_host, &plan);
         }
-        let Some((canvas, cache_raster_scale)) = cache
-            .with_downcast::<BitmapCache, _>(|cache| {
-                cache
-                    .canvas
-                    .clone()
-                    .map(|canvas| (canvas, cache.raster_scale))
-            })
+        let Some(canvas) = cache
+            .with_downcast::<BitmapCache, _>(|cache| cache.canvas.clone())
             .flatten()
         else {
             return false; // allocation failed; fall back to vector draw.
@@ -3977,6 +4064,9 @@ impl Artboard {
         let Some(image) = deferred_host.borrow_mut().content_canvas_image(&canvas) else {
             return false;
         };
+        let cache_raster_scale = cache
+            .with_downcast::<BitmapCache, _>(|cache| cache.raster_scale)
+            .unwrap();
         let mut placement =
             offscreen::begin_composite(renderer, Some(&deferred_host), &plan, cache_raster_scale);
         let opacity = placement.opacity;
@@ -4037,22 +4127,20 @@ impl Artboard {
     pub fn add_to_render_path(&mut self, path: &mut RenderPath, transform: &Mat2D) {
         let mut drawable = self.first_drawable.clone();
         while let Some(current) = drawable {
-            drawable = current.with(Drawable::prev_drawable).flatten();
-            if current.is_hidden() {
-                continue;
+            if !current.is_hidden() {
+                current.add_to_render_path(path, transform);
             }
-            current.add_to_render_path(path, transform);
+            drawable = current.with(Drawable::prev_drawable).flatten();
         }
     }
 
     pub fn add_to_raw_path(&mut self, path: &mut RawPath, transform: Option<&Mat2D>) {
         let mut drawable = self.first_drawable.clone();
         while let Some(current) = drawable {
-            drawable = current.with(Drawable::prev_drawable).flatten();
-            if current.is_hidden() {
-                continue;
+            if !current.is_hidden() {
+                current.add_to_raw_path(path, transform);
             }
-            current.add_to_raw_path(path, transform);
+            drawable = current.with(Drawable::prev_drawable).flatten();
         }
     }
     pub fn add_to_raw_path_handle(
@@ -4064,11 +4152,10 @@ impl Artboard {
             .with_downcast::<Artboard, _>(|artboard| artboard.first_drawable.clone())
             .flatten();
         while let Some(current) = drawable {
-            drawable = current.with(Drawable::prev_drawable).flatten();
-            if current.is_hidden() {
-                continue;
+            if !current.is_hidden() {
+                current.add_to_raw_path(path, transform);
             }
-            current.add_to_raw_path(path, transform);
+            drawable = current.with(Drawable::prev_drawable).flatten();
         }
     }
 
@@ -4377,15 +4464,25 @@ impl Artboard {
     #[cfg(test)]
     pub fn clip_path(
         &mut self,
-    ) -> &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath {
-        &mut self.base.base.mutable_render_paths().world
+    ) -> std::cell::RefMut<
+        '_,
+        crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+    > {
+        std::cell::RefMut::map(self.base.base.mutable_render_paths(), |paths| {
+            &mut paths.world
+        })
     }
 
     #[cfg(test)]
     pub fn background_path(
         &mut self,
-    ) -> &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath {
-        &mut self.base.base.mutable_render_paths().local
+    ) -> std::cell::RefMut<
+        '_,
+        crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+    > {
+        std::cell::RefMut::map(self.base.base.mutable_render_paths(), |paths| {
+            &mut paths.local
+        })
     }
 
     #[cfg(feature = "tools")]
@@ -6224,6 +6321,20 @@ impl RuntimeArtboardInstanceHandle {
         let mut target = RuntimeArtboardObjectContext { arena, root };
         animation.apply(&mut target, time, mix, context);
     }
+    pub(crate) fn apply_linear_animation_owner(
+        &self,
+        animation: &crate::mechanical_port::source::animation::linear_animation::LinearAnimationOwner,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        let root = self.core_handle();
+        let arena = root
+            .retain_arena()
+            .expect("live Artboard animation retains its object arena");
+        let mut target = RuntimeArtboardObjectContext { arena, root };
+        animation.apply(&mut target, time, mix, context);
+    }
     pub fn state_machine_instance_handle(
         &self,
         index: usize,
@@ -7046,9 +7157,17 @@ impl LinearAnimationArtboard for Artboard {
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
-        object.with_downcast_mut::<KeyedObject, _>(|object| {
-            object.apply(self, time, mix, context);
-        });
+        KeyedObject::apply_occurrence(&object, self, time, mix, context);
+    }
+
+    fn apply_keyed_object_borrowed(
+        &mut self,
+        object: &CoreHandle,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_occurrence(object, self, time, mix, context);
     }
 }
 
@@ -7060,8 +7179,199 @@ impl LinearAnimationArtboard for ArtboardInstance {
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
-        object.with_downcast_mut::<KeyedObject, _>(|object| {
-            object.apply(&mut self.base, time, mix, context);
-        });
+        KeyedObject::apply_occurrence(&object, &mut self.base, time, mix, context);
+    }
+
+    fn apply_keyed_object_borrowed(
+        &mut self,
+        object: &CoreHandle,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_occurrence(object, &mut self.base, time, mix, context);
     }
 }
+
+#[cfg(test)]
+mod draw_range_link_tests {
+    use super::{Artboard, RuntimeDrawVisitor};
+    use crate::source::{
+        component_dirt::ComponentDirt,
+        core::{CoreArena, CoreHandle},
+        drawable::{RuntimeDrawableOccurrence, RuntimeDrawableWeakOccurrence},
+        shapes::shape::Shape,
+    };
+    use nuxie_render_api::NullRenderer;
+    use std::{cell::RefCell, rc::Rc};
+
+    fn tagged_shape(arena: &CoreArena) -> CoreHandle {
+        let shape = arena.insert(Shape::default());
+        shape
+            .with_mut(|object| {
+                object
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::NONE);
+                object
+                    .as_drawable_mut()
+                    .unwrap()
+                    .mark_has_custom_properties();
+                object
+                    .as_transform_component_mut()
+                    .unwrap()
+                    .update_render_opacity_state(None);
+            })
+            .unwrap();
+        shape
+    }
+
+    fn link(owner: &CoreHandle, previous: &CoreHandle) {
+        owner
+            .with_mut(|object| {
+                object.as_drawable_mut().unwrap().prev =
+                    Some(RuntimeDrawableWeakOccurrence::Authored(previous.clone()));
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn draw_range_stops_at_retired_predecessor_even_after_slot_reuse() {
+        for reuse_slot in [false, true] {
+            let arena = CoreArena::default();
+            let root = arena.insert(Artboard::default());
+            let first = tagged_shape(&arena);
+            let retired = tagged_shape(&arena);
+            let tail = tagged_shape(&arena);
+            link(&first, &retired);
+            link(&retired, &tail);
+            drop(arena.remove(&retired).unwrap());
+            if reuse_slot {
+                let replacement = tagged_shape(&arena);
+                assert_eq!(retired.identity_key().1, replacement.identity_key().1);
+                assert_ne!(retired.identity_key().2, replacement.identity_key().2);
+                link(&replacement, &tail);
+            }
+            let visits = Rc::new(RefCell::new(Vec::new()));
+            let recorded = visits.clone();
+            let visitor: RuntimeDrawVisitor = Rc::new(move |owner, _| {
+                recorded.borrow_mut().push(owner.clone());
+            });
+            root.with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.draw_visitor = Some(visitor);
+            })
+            .unwrap();
+            Artboard::draw_drawable_range_handle(
+                &root,
+                &mut NullRenderer::new(),
+                Some(RuntimeDrawableOccurrence::Authored(first.clone())),
+                None,
+            );
+            assert_eq!(*visits.borrow(), vec![first]);
+        }
+    }
+
+    #[test]
+    fn draw_range_follows_callback_relink_and_stops_when_current_is_retired() {
+        let arena = CoreArena::default();
+        let root = arena.insert(Artboard::default());
+        let first = tagged_shape(&arena);
+        let old_previous = tagged_shape(&arena);
+        let redirected = tagged_shape(&arena);
+        let tail = tagged_shape(&arena);
+        link(&first, &old_previous);
+        link(&redirected, &tail);
+        let visits = Rc::new(RefCell::new(Vec::new()));
+        let recorded = visits.clone();
+        let arena_for_callback = arena.weak_handle();
+        let first_for_callback = first.clone();
+        let redirected_for_callback = redirected.clone();
+        let visitor: RuntimeDrawVisitor = Rc::new(move |owner, _| {
+            recorded.borrow_mut().push(owner.clone());
+            if owner == &first_for_callback {
+                drop(arena_for_callback.remove(&old_previous).unwrap());
+                let replacement = tagged_shape(&arena_for_callback);
+                assert_eq!(old_previous.identity_key().1, replacement.identity_key().1);
+                assert_ne!(old_previous.identity_key().2, replacement.identity_key().2);
+                link(owner, &redirected_for_callback);
+            } else if owner == &redirected_for_callback {
+                drop(arena_for_callback.remove(owner).unwrap());
+            }
+        });
+        root.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.draw_visitor = Some(visitor);
+        })
+        .unwrap();
+        Artboard::draw_drawable_range_handle(
+            &root,
+            &mut NullRenderer::new(),
+            Some(RuntimeDrawableOccurrence::Authored(first.clone())),
+            None,
+        );
+        assert_eq!(*visits.borrow(), vec![first, redirected.clone()]);
+        assert!(!redirected.is_alive());
+        assert!(tail.is_alive());
+    }
+}
+
+#[cfg(test)]
+mod source_draw_order_tests {
+    use super::*;
+    use crate::source::drawable::{DrawableProxy, ProxyDrawing};
+
+    struct Probe {
+        owner: CoreHandle,
+        calls: Rc<RefCell<Vec<&'static str>>>,
+    }
+    impl ProxyDrawing for Probe {
+        fn owner_handle(&self) -> CoreHandle {
+            self.owner.clone()
+        }
+        fn draw_proxy(&mut self, _: &mut Renderer, _: bool) {}
+        fn is_proxy_hidden(&self) -> bool {
+            false
+        }
+        fn is_clip_start(&self) -> bool {
+            self.calls.borrow_mut().push("start");
+            false
+        }
+        fn is_clip_end(&self) -> bool {
+            self.calls.borrow_mut().push("end");
+            false
+        }
+        fn will_clip(&self) -> bool {
+            self.calls.borrow_mut().push("will_clip");
+            true
+        }
+    }
+    #[test]
+    fn clear_operations_preserves_source_short_circuit_virtual_calls() {
+        let arena = CoreArena::default();
+        let owner = arena.insert(crate::source::node::Node::default());
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let proxy = Rc::new(RefCell::new(DrawableProxy::new(Box::new(Probe {
+            owner,
+            calls: calls.clone(),
+        }))));
+        let mut artboard = Artboard::default();
+        artboard.first_drawable = Some(RuntimeDrawableOccurrence::runtime_proxy(proxy));
+        artboard.clear_redundant_operations();
+        assert_eq!(&*calls.borrow(), &["start", "end", "start"]);
+    }
+}
+
+#[cfg(test)]
+#[path = "artboard_init_contract_tests.rs"]
+mod artboard_init_contract_tests;
+
+#[cfg(test)]
+#[path = "artboard_draw_contract_tests.rs"]
+mod artboard_draw_contract_tests;
+
+#[cfg(test)]
+#[path = "artboard_animation_context_tests.rs"]
+mod artboard_animation_context_tests;
+
+#[cfg(test)]
+#[path = "artboard_keyed_object_borrow_tests.rs"]
+mod keyed_object_borrow_tests;

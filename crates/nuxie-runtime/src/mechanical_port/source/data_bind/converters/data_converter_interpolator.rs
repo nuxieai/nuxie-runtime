@@ -361,6 +361,10 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         super::data_converter::DataConverter::bind_from_context_handle
     }
 
+    fn unbind_handler(&self) -> super::data_converter::ConverterUnbindHandler {
+        super::data_converter::DataConverter::unbind_base_handle
+    }
+
     fn unbind(&mut self) {
         self.base.base.unbind();
     }

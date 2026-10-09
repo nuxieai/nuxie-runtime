@@ -42,6 +42,9 @@ pub struct LayerMaskProxyDrawable {
 }
 struct MaskDrawing(Rc<RefCell<LayerMaskProxyDrawable>>);
 impl ProxyDrawing for MaskDrawing {
+    fn hittable_component(&self) -> Option<CoreHandle> {
+        None
+    }
     fn draw_proxy(&mut self, _: &mut Renderer, _: bool) {}
     fn is_proxy_hidden(&self) -> bool {
         false

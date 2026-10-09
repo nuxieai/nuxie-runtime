@@ -625,11 +625,15 @@ impl StateMachineLayerInstance {
             return false;
         }
         machine.mark_view_model_changes_searched();
-        if self.try_change_state_from(machine, self.any_state_instance.clone()) {
-            return true;
+        if let Some(any_state) = self.any_state_instance.clone() {
+            if self.try_change_state_from(machine, Some(any_state)) {
+                return true;
+            }
         }
-        if self.try_change_state_from(machine, self.current_state.clone()) {
-            return true;
+        if let Some(current_state) = self.current_state.clone() {
+            if self.try_change_state_from(machine, Some(current_state)) {
+                return true;
+            }
         }
         if !self.waiting_for_exit
             && !machine.settling.binds_pending.get()
@@ -745,8 +749,7 @@ impl StateMachineLayerInstance {
     fn can_change_state(&mut self, state_to: &Option<CoreHandle>) -> bool {
         self.current_state
             .as_ref()
-            .map(RuntimeStateInstanceHandle::definition)
-            .as_ref()
+            .map(RuntimeStateInstanceHandle::definition_ref)
             != state_to.as_ref()
     }
 
@@ -754,8 +757,7 @@ impl StateMachineLayerInstance {
         if self
             .current_state
             .as_ref()
-            .map(RuntimeStateInstanceHandle::definition)
-            .as_ref()
+            .map(RuntimeStateInstanceHandle::definition_ref)
             == state_to.as_ref()
         {
             return;
@@ -786,7 +788,7 @@ impl StateMachineLayerInstance {
         machine: &mut StateMachineInstance,
         from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
-        let state = from_instance.definition();
+        let state = from_instance.definition_ref();
         let mut total_weight = 0u32;
         let transition_count = state
             .with(|state| state.layer_state_transition_count())
@@ -841,11 +843,18 @@ impl StateMachineLayerInstance {
         }
         let random_weight = RandomProvider::generate_random_float() as f64 * total_weight as f64;
         let mut current_weight = 0.0;
-        for index in 0..transition_count {
-            let Some(transition) = state
-                .with(|state| state.layer_state_transition(index))
+        let mut index = 0;
+        while index
+            < state
+                .with(|state| state.layer_state_transition_count())
                 .flatten()
-            else {
+                .unwrap_or(0)
+        {
+            let transition = state
+                .with(|state| state.layer_state_transition(index))
+                .flatten();
+            index += 1;
+            let Some(transition) = transition else {
                 continue;
             };
             let weight = transition
@@ -869,7 +878,7 @@ impl StateMachineLayerInstance {
         machine: &mut StateMachineInstance,
         from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
-        let state = from_instance.definition();
+        let state = from_instance.definition_ref();
         let flags = state
             .with(|state| state.layer_state_flags())
             .flatten()
@@ -1041,7 +1050,9 @@ impl StateMachineLayerInstance {
         self.perform_listener_actions(machine, 0, &actions);
         self.transition_completed = self.resolved_duration() == 0;
         if self.transition_completed {
+            let events = Self::layer_component_events(&transition);
             self.fire_events(machine, 1, &events);
+            let actions = Self::layer_component_listener_actions(&transition);
             self.perform_listener_actions(machine, 1, &actions);
         }
         self.state_from = out_state;
@@ -1635,28 +1646,22 @@ impl HitDrawable {
     }
 
     fn add_listener(&self, group: RuntimeListenerGroupHandle) {
-        let (can_early_out, needs_down, needs_up) = self
-            .component
+        self.component
             .with_component(|component| {
                 group.with_group(|group| {
-                    (
-                        group.can_early_out(component),
-                        group.needs_down_listener(component),
-                        group.needs_up_listener(component),
-                    )
+                    if !group.can_early_out(component) {
+                        self.can_early_out.set(false);
+                    } else {
+                        if group.needs_down_listener(component) {
+                            self.has_down_listener.set(true);
+                        }
+                        if group.needs_up_listener(component) {
+                            self.has_up_listener.set(true);
+                        }
+                    }
                 })
             })
             .expect("a hit target remains in its CoreArena");
-        if !can_early_out {
-            self.can_early_out.set(false);
-        } else {
-            if needs_down {
-                self.has_down_listener.set(true);
-            }
-            if needs_up {
-                self.has_up_listener.set(true);
-            }
-        }
         self.listeners.borrow_mut().push(group);
     }
 }
@@ -3436,30 +3441,46 @@ impl StateMachineInstance {
             else {
                 continue;
             };
-            let Some(original_target) = source
+            if source
                 .with(|source| source.as_data_bind().and_then(DataBind::target))
                 .flatten()
-            else {
+                .is_none()
+            {
                 continue;
-            };
+            }
             let clone = source
                 .clone_occurrence()
                 .expect("a state-machine DataBind must be cloneable in its authored arena");
-            let (file, converter) = source
-                .with(|source| {
-                    let source = source.as_data_bind()?;
-                    Some((source.file(), source.converter()))
-                })
+            let file = source
+                .with(|source| source.as_data_bind().map(DataBind::file))
                 .flatten()
                 .unwrap_or_default();
-            let converter = converter.and_then(|converter| converter.clone_occurrence());
             clone.with_mut(|clone| {
                 if let Some(clone) = clone.as_data_bind_mut() {
                     clone.set_file(file);
-                    clone.set_converter(converter);
                 }
             });
-            if original_target.is_type_of(BindablePropertyBase::TYPE_KEY) {
+            let converter = source
+                .with(|source| source.as_data_bind().and_then(DataBind::converter))
+                .flatten();
+            if let Some(converter) = converter {
+                let converter = converter.clone_occurrence();
+                clone.with_mut(|clone| {
+                    if let Some(clone) = clone.as_data_bind_mut() {
+                        clone.set_converter(converter);
+                    }
+                });
+            }
+            let target_is_bindable = source
+                .with(|source| source.as_data_bind().and_then(DataBind::target))
+                .flatten()
+                .expect("a cloned state-machine binding retains its source target")
+                .is_type_of(BindablePropertyBase::TYPE_KEY);
+            let original_target = source
+                .with(|source| source.as_data_bind().and_then(DataBind::target))
+                .flatten()
+                .expect("a cloned state-machine binding retains its selected target");
+            if target_is_bindable {
                 let property = if let Some(property) = self
                     .ensure_bindables()
                     .property_instances
@@ -3535,16 +3556,19 @@ impl StateMachineInstance {
 
     fn initialize_listeners(&mut self, hit_lookup: &mut HashMap<RuntimeDrawableOccurrence, usize>) {
         let machine = self.occurrence.clone();
-        let listener_count = self
-            .machine
-            .with_downcast::<StateMachine, _>(StateMachine::listener_count)
-            .unwrap_or(0);
-        for index in 0..listener_count {
-            let Some(listener) = self
+        let mut index = 0;
+        while index
+            < self
+                .machine
+                .with_downcast::<StateMachine, _>(StateMachine::listener_count)
+                .unwrap_or(0)
+        {
+            let listener = self
                 .machine
                 .with_downcast::<StateMachine, _>(|machine| machine.listener(index))
-                .flatten()
-            else {
+                .flatten();
+            index += 1;
+            let Some(listener) = listener else {
                 continue;
             };
             if self.listener_has(&listener, ListenerType::Event) {
@@ -3562,10 +3586,10 @@ impl StateMachineInstance {
                 ));
                 continue;
             }
-            let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
             if self.listener_has(&listener, ListenerType::Focus)
                 || self.listener_has(&listener, ListenerType::Blur)
             {
+                let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
                 if let Some(focus_data) = target.as_ref().and_then(Self::focus_data_child) {
                     let group = RuntimeFocusListenerGroupHandle::new(
                         focus_data,
@@ -3578,6 +3602,7 @@ impl StateMachineInstance {
             if self.listener_has(&listener, ListenerType::Keyboard)
                 || self.listener_has(&listener, ListenerType::TextInput)
             {
+                let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
                 if let Some(focus_data) = target.as_ref().and_then(Self::focus_data_child) {
                     let group = RuntimeKeyboardListenerGroupHandle::new(
                         focus_data,
@@ -3590,6 +3615,7 @@ impl StateMachineInstance {
                 }
             }
             if self.listener_has(&listener, ListenerType::SemanticAction) {
+                let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
                 if let Some(semantic_data) = target.as_ref().and_then(Self::semantic_data_child) {
                     let group = RuntimeSemanticListenerGroupHandle::new(
                         semantic_data,
@@ -3607,6 +3633,7 @@ impl StateMachineInstance {
             {
                 let group =
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
+                let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
                 if let Some(target) = target.as_ref() {
                     let is_layout = target
                         .with(|target| target.as_layout_component().is_some())
@@ -3635,6 +3662,7 @@ impl StateMachineInstance {
                 self.listener_groups.push(group);
             }
             if self.listener_has(&listener, ListenerType::Gamepad) {
+                let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
                 if let Some(focus_data) = target.as_ref().and_then(Self::focus_data_child) {
                     let group = RuntimeGamepadListenerGroupHandle::new(
                         focus_data,
@@ -3903,14 +3931,14 @@ impl StateMachineInstance {
             } else {
                 let drawable = if is_text_run {
                     let text = authored_target
-                        .with_mut(|target| {
-                            let run = target.as_text_value_run_mut()?;
-                            run.set_is_hit_target(true);
-                            run.text_component()
-                        })
+                        .with(|target| target.as_text_value_run()?.text_component())
                         .flatten()
                         .expect("a text run hit target retains its Text");
                     text.with_mut(|text| text.component_add_dirt(ComponentDirt::PATH, true));
+                    let text = authored_target
+                        .with(|target| target.as_text_value_run()?.text_component())
+                        .flatten()
+                        .expect("a text run hit target retains its Text after dirt");
                     RuntimeDrawableOccurrence::Authored(text)
                 } else {
                     authored_target.with_mut(|target| {
@@ -3921,6 +3949,14 @@ impl StateMachineInstance {
                     target.clone()
                 };
                 let hit = HitDrawable::new(drawable, target.clone(), false, true, true);
+                if is_text_run {
+                    authored_target.with_mut(|target| {
+                        target
+                            .as_text_value_run_mut()
+                            .expect("a text run hit target retains its run")
+                            .set_is_hit_target(true);
+                    });
+                }
                 let index = self.hit_components.len();
                 self.hit_components.push(Rc::new(hit));
                 hit_lookup.insert(target, index);
@@ -5279,51 +5315,62 @@ impl StateMachineInstance {
         if events.is_empty() {
             return;
         }
-        let listener_count = self
-            .machine
-            .with_downcast::<StateMachine, _>(StateMachine::listener_count)
-            .unwrap_or(0);
-        for index in 0..listener_count {
-            let Some(listener) = self
+        let mut index = 0;
+        while index
+            < self
+                .machine
+                .with_downcast::<StateMachine, _>(StateMachine::listener_count)
+                .unwrap_or(0)
+        {
+            let listener = self
                 .machine
                 .with_downcast::<StateMachine, _>(|machine| machine.listener(index))
-                .flatten()
-            else {
+                .flatten();
+            index += 1;
+            let Some(listener) = listener else {
                 continue;
             };
+            let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
             if !self.listener_has(&listener, ListenerType::Event) {
                 continue;
             }
-            let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
             if source
                 .as_ref()
                 .is_some_and(|source| target.as_ref() != Some(source))
             {
                 continue;
             }
-            let source_artboard = if let Some(source) = source.as_ref() {
-                source
-                    .with(|source| {
-                        source
-                            .as_nested_artboard()
-                            .and_then(|nested| nested.artboard_instance_default())
-                    })
-                    .flatten()
-                    .map(|artboard| artboard.downgrade())
-                    .expect("an event source retains its nested ArtboardInstance")
-            } else {
-                self.artboard_instance.clone()
-            };
             for report in events {
+                let source_artboard = if let Some(source) = source.as_ref() {
+                    source
+                        .with(|source| {
+                            source
+                                .as_nested_artboard()
+                                .and_then(|nested| nested.artboard_instance_default())
+                        })
+                        .flatten()
+                        .map(|artboard| artboard.downgrade())
+                        .expect("an event source retains its nested ArtboardInstance")
+                } else {
+                    self.artboard_instance.clone()
+                };
                 if source.is_none() {
                     let resolved_target = source_artboard
                         .with_artboard(|artboard| {
-                            artboard.resolve_handle(Self::listener_target_id(&listener))
+                            let target =
+                                artboard.resolve_handle(Self::listener_target_id(&listener))?;
+                            // Old files can target another Artboard whose event
+                            // index also resolves here. Only this Artboard's
+                            // identity bypasses the Event predicate.
+                            let current = crate::mechanical_port::source::core::CoreObject::core(
+                                &artboard.base,
+                            )
+                            .handle();
+                            Some((target, current))
                         })
                         .flatten();
-                    if resolved_target.as_ref().is_some_and(|resolved_target| {
-                        !resolved_target.is_type_of(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY)
-                            && !resolved_target.is_type_of(EventBase::TYPE_KEY)
+                    if resolved_target.as_ref().is_some_and(|(target, current)| {
+                        current.as_ref() != Some(target) && !target.is_type_of(EventBase::TYPE_KEY)
                     }) {
                         continue;
                     }
@@ -5332,16 +5379,7 @@ impl StateMachineInstance {
                     listener.with_downcast::<StateMachineListenerSingle, _>(|listener| {
                         listener.base.event_id()
                     });
-                let event_ids = if let Some(event_id) = single_event {
-                    vec![event_id]
-                } else {
-                    listener.with(|listener| listener.state_machine_listener_input_types()).flatten()
-                        .expect("a listener retains its input types").into_iter()
-                        .filter_map(|input| input.with_downcast::<crate::mechanical_port::source::animation::listener_types::listener_input_type_event::ListenerInputTypeEvent, _>(|input| input.base.event_id()))
-                        .collect()
-                };
-                let mut matched = false;
-                for event_id in event_ids {
+                if let Some(event_id) = single_event {
                     if source_artboard
                         .with_artboard(|artboard| artboard.resolve_handle(event_id))
                         .flatten()
@@ -5355,12 +5393,46 @@ impl StateMachineInstance {
                             &listener,
                             ListenerInvocation::reported_event(event.clone(), report.seconds_delay),
                         );
-                        matched = true;
                         break;
                     }
-                }
-                if matched && single_event.is_some() {
-                    break;
+                } else {
+                    let mut input_index = 0;
+                    loop {
+                        let input = listener
+                            .with(|listener| {
+                                listener
+                                    .state_machine_listener_input_types()
+                                    .expect("a listener retains its input types")
+                                    .get(input_index)
+                                    .cloned()
+                            })
+                            .flatten();
+                        let Some(input) = input else {
+                            break;
+                        };
+                        input_index += 1;
+                        let Some(event_id) = input.with_downcast::<crate::mechanical_port::source::animation::listener_types::listener_input_type_event::ListenerInputTypeEvent, _>(|input| input.base.event_id()) else {
+                            continue;
+                        };
+                        if source_artboard
+                            .with_artboard(|artboard| artboard.resolve_handle(event_id))
+                            .flatten()
+                            .as_ref()
+                            == report.event.as_ref()
+                        {
+                            let Some(event) = report.event.as_ref() else {
+                                continue;
+                            };
+                            self.perform_listener_changes(
+                                &listener,
+                                ListenerInvocation::reported_event(
+                                    event.clone(),
+                                    report.seconds_delay,
+                                ),
+                            );
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -6145,3 +6217,7 @@ impl Drop for StateMachineInstance {
         drop(extras);
     }
 }
+
+#[cfg(test)]
+#[path = "state_machine_owner_order_tests.rs"]
+mod state_machine_owner_order_tests;

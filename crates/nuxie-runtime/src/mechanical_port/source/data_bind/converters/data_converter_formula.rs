@@ -457,6 +457,17 @@ impl DataConverterFormula {
             self.randoms.clear();
         }
     }
+    pub fn unbind_occurrence(owner: &CoreHandle) {
+        // The source removes its ViewModel dependency before unbinding its
+        // own children. Release this receiver before observer detachment.
+        owner.with_mut(|owner| {
+            if let Some(converter) = owner.as_data_converter_capability_mut() {
+                converter.detach_unbind_source();
+            }
+        });
+        super::data_converter::DataConverter::unbind_base_handle(owner);
+    }
+
     pub fn unbind(&mut self) {
         self.detach_source_dependency();
         self.base.base.unbind();
@@ -481,6 +492,14 @@ impl DataConverterFormula {
 impl Drop for DataConverterFormula {
     fn drop(&mut self) {
         self.unbind();
+        let owned_tokens = if self.is_instance {
+            &self.output_queue
+        } else {
+            &self.tokens
+        };
+        for token in owned_tokens {
+            token.remove_occurrence();
+        }
         self.output_queue.clear();
         self.tokens.clear();
     }
@@ -556,6 +575,13 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
                 });
             }
         }
+    }
+
+    fn unbind_handler(&self) -> super::data_converter::ConverterUnbindHandler {
+        Self::unbind_occurrence
+    }
+    fn detach_unbind_source(&mut self) {
+        Self::detach_source_dependency(self);
     }
 
     fn unbind(&mut self) {

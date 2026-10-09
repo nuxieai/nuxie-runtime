@@ -115,7 +115,9 @@ impl LayoutParticipant {
     }
 
     fn owner_handle(&self) -> Option<CoreHandle> {
-        self.base.parent_handle()
+        let parent = self.base.parent_handle()?;
+        parent.is_type_of(crate::source::generated::transform_component_base::TransformComponentBase::TYPE_KEY)
+            .then_some(parent)
     }
 
     fn with_host_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
@@ -123,7 +125,9 @@ impl LayoutParticipant {
     }
 
     fn owning_layout_handle(&self) -> Option<CoreHandle> {
-        Self::owning_layout_from(self.owner_handle())
+        // Source owningLayout walks every Component ancestor independently of
+        // transformComponent's stricter host type check.
+        Self::owning_layout_from(self.base.parent_handle())
     }
     fn owning_layout_from(mut current: Option<CoreHandle>) -> Option<CoreHandle> {
         while let Some(owner) = current {
@@ -181,20 +185,32 @@ impl LayoutParticipant {
         if code != StatusCode::Ok {
             return code;
         }
-        let has_host = owner
+        let host = owner
             .with_downcast_mut::<Self, _>(|participant| {
-                if participant.owner_handle().is_none() {
-                    return false;
-                }
+                let host = participant.owner_handle()?;
                 if participant.layout_data.is_none() {
                     participant.layout_data = Some(Box::new(LayoutData::default()));
                     participant.add_layout_style_applier(owner.clone());
                 }
-                true
+                Some(host)
             })
             .expect("live LayoutParticipant");
-        if !has_host {
+        let Some(host) = host else {
             return StatusCode::Ok;
+        };
+        // A placement that cleaned before allocation could not add itself.
+        // Replay the source's unique-applier registration before style sync.
+        let placement = host
+            .with(|host| {
+                crate::source::layout::grid_item_placement::GridItemPlacement::from(
+                    host.as_container_component(),
+                )
+            })
+            .flatten();
+        if let Some(placement) = placement {
+            owner.with_downcast_mut::<Self, _>(|participant| {
+                participant.add_layout_style_applier(placement)
+            });
         }
         Self::sync_style_changes_occurrence(owner, None);
         if let Some(layout) = owner
@@ -203,8 +219,9 @@ impl LayoutParticipant {
         {
             LayoutComponent::sync_layout_children_occurrence(&layout);
         }
-        Self::dirty_host_transform_occurrence(owner);
-        owner.with_downcast_mut::<Self, _>(|participant| participant.mark_layout_node_dirty(true));
+        crate::source::component::ComponentOccurrenceHandle::Authored(host)
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        Self::mark_layout_node_dirty_occurrence(owner, true);
         StatusCode::Ok
     }
 
@@ -280,9 +297,9 @@ impl LayoutParticipant {
     }
 
     pub fn resync(&mut self) {
-        if self.owner_handle().is_none() {
+        let Some(host) = self.owner_handle() else {
             return;
-        }
+        };
         if self.layout_data.is_none() {
             self.layout_data = Some(Box::new(LayoutData::default()));
             if let Some(this) = self.base.handle() {
@@ -291,22 +308,21 @@ impl LayoutParticipant {
         }
         // A sibling placement may have cleaned before this participant had
         // layout data. Re-register it now; appliers are unique.
-        if let Some(placement) = self.owner_handle().and_then(|owner| {
-            owner
-                .with(|owner| {
-                    crate::source::layout::grid_item_placement::GridItemPlacement::from(
-                        owner.as_container_component(),
-                    )
-                })
-                .flatten()
-        }) {
+        if let Some(placement) = host
+            .with(|host| {
+                crate::source::layout::grid_item_placement::GridItemPlacement::from(
+                    host.as_container_component(),
+                )
+            })
+            .flatten()
+        {
             self.add_layout_style_applier(placement);
         }
         self.sync_style_changes();
         if let Some(layout) = self.owning_layout_handle() {
             LayoutComponent::sync_layout_children_with_participant_occurrence(&layout, Some(self));
         }
-        self.with_host_mut(|host| {
+        host.with_mut(|host| {
             if let Some(host) = host.as_transform_component_mut() {
                 host.add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
             }
@@ -489,6 +505,9 @@ impl LayoutParticipant {
         &mut self,
         active_parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
     ) -> bool {
+        if self.layout_data.is_none() {
+            return false;
+        }
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let layout = self.owning_layout_handle();
         let (parent_is_row, parent_is_grid, parent_is_stack, justify, direction_ltr) = active_parent_style.filter(|snapshot| layout.as_ref() == Some(&snapshot.owner)).map(|snapshot| (snapshot.is_row, snapshot.is_grid, snapshot.is_stack, snapshot.justify_items as u8, snapshot.is_ltr)).or_else(|| layout
@@ -639,7 +658,7 @@ impl LayoutParticipant {
                 return false;
             }
             data.has_new_layout = false;
-            let new_layout = data.solved_layout;
+            let new_layout = self.solved_layout();
             if self.animation.is_some() && animate && self.has_solved_layout {
                 let animation = self.animation.as_mut().unwrap();
                 let data = if animation.is_smoothing {
@@ -682,6 +701,21 @@ impl LayoutParticipant {
             if let Some(layout) = self.owning_layout_handle() {
                 LayoutComponent::mark_layout_node_dirty_occurrence(&layout, force);
             }
+        }
+    }
+    pub(crate) fn mark_layout_node_dirty_occurrence(owner: &CoreHandle, force: bool) {
+        let layout = owner
+            .with_downcast_mut::<Self, _>(|participant| {
+                if let Some(data) = participant.layout_data.as_deref_mut() {
+                    data.dirty = true;
+                }
+                participant.owning_layout_handle()
+            })
+            .flatten();
+        // The parent can synchronously invoke the tools layout callback. Its
+        // reads and mutations of this participant occur after the local write.
+        if let Some(layout) = layout {
+            LayoutComponent::mark_layout_node_dirty_occurrence(&layout, force);
         }
     }
     pub(crate) fn mark_layout_node_dirty_from_host(&mut self, host: &dyn CoreObject, force: bool) {
@@ -1038,3 +1072,7 @@ impl LayoutNodeProvider for LayoutParticipant {
         LayoutParticipant::cascade_layout_style(self, interpolation, interpolator, time, direction)
     }
 }
+
+#[cfg(test)]
+#[path = "layout_participant_contract_tests.rs"]
+mod layout_participant_contract_tests;

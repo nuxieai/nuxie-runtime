@@ -1,7 +1,12 @@
 use crate::mechanical_port::source::{
+    artboard::Artboard,
     assets::{audio_asset::AudioAsset, file_asset_referencer::FileAssetReferencer},
+    audio::audio_engine::AudioEngine,
     core::{CoreHandle, field_types::core_callback_type::CallbackData},
-    generated::audio_event_base::{AudioEventBase, AudioEventBaseCallbacks},
+    generated::{
+        assets::audio_asset_base::AudioAssetBase,
+        audio_event_base::{AudioEventBase, AudioEventBaseCallbacks},
+    },
     importers::import_stack::ImportStack,
     status_code::StatusCode,
 };
@@ -13,10 +18,6 @@ pub struct AudioEvent {
 }
 
 impl AudioEvent {
-    pub(crate) fn file_asset_referencer_mut(&mut self) -> &mut FileAssetReferencer {
-        &mut self.file_asset_referencer
-    }
-
     pub fn play(&mut self) {
         let Some(asset) = self.file_asset_referencer.asset() else {
             return;
@@ -32,44 +33,41 @@ impl AudioEvent {
         let Some(artboard) = self.base.base.base.base.artboard_handle() else {
             return;
         };
-        let Some((volume, engine, artboard_identity)) = artboard
-            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(|artboard| {
-                (
-                    asset_volume * artboard.volume(),
-                    artboard.audio_engine_handle().or_else(|| {
-                        crate::mechanical_port::source::audio::audio_engine::AudioEngine::runtime_engine(true)
-                    }),
-                    artboard.runtime_weak_handle().audio_identity(),
-                )
+        let Some((volume, engine, identity)) = artboard
+            .with_downcast::<Artboard, _>(|artboard| {
+                let volume = asset_volume * artboard.volume();
+                // Source rejects silence before resolving/creating an engine.
+                if volume <= 0.0 {
+                    return None;
+                }
+                let engine = artboard
+                    .audio_engine_handle()
+                    .or_else(|| AudioEngine::runtime_engine(true))?;
+                Some((
+                    volume,
+                    engine,
+                    artboard.runtime_weak_handle().audio_identity()?,
+                ))
             })
+            .flatten()
         else {
             return;
         };
-        if volume <= 0.0 {
-            return;
-        }
-        let (Some(engine), Some(artboard_identity)) = (engine, artboard_identity) else {
-            return;
-        };
         let time = engine.time_in_frames();
-        let Some(sound) = crate::mechanical_port::source::audio::audio_engine::AudioEngine::play(
-            &engine,
-            audio_source,
-            time,
-            0,
-            0,
-            Some(artboard_identity),
-        ) else {
-            return;
-        };
-        if volume != 1.0 {
-            sound.set_volume(volume);
+        if let Some(sound) = AudioEngine::play(&engine, audio_source, time, 0, 0, Some(identity)) {
+            if volume != 1.0 {
+                sound.set_volume(volume);
+            }
         }
     }
 
     pub fn trigger(&mut self, value: &mut CallbackData<'_>) {
         self.base.base.trigger(value);
-        if value.context().is_none_or(|context| !context.plays_audio()) {
+        if !value
+            .context()
+            .expect("AudioEvent::trigger requires CallbackData context")
+            .plays_audio()
+        {
             self.play();
         }
     }
@@ -90,7 +88,7 @@ impl AudioEvent {
     pub fn set_asset(&mut self, asset: Option<CoreHandle>) {
         if asset
             .as_ref()
-            .is_some_and(|asset| asset.is_type_of(crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY))
+            .is_some_and(|asset| asset.is_type_of(AudioAssetBase::TYPE_KEY))
         {
             let Some(this) = self.core_handle() else {
                 return;
@@ -104,6 +102,8 @@ impl AudioEvent {
         let mut base = std::mem::take(&mut cloned.base);
         base.copy(&self.base, &mut cloned);
         cloned.base = base;
+        // The cloned owner acquires occurrence identity when inserted. Its
+        // FileAssetReferencer attaches to that identity at the existing seam.
         if let Some(asset) = self.file_asset_referencer.asset() {
             cloned
                 .file_asset_referencer
@@ -114,6 +114,10 @@ impl AudioEvent {
 
     pub fn asset_id(&self) -> u32 {
         self.base.asset_id()
+    }
+
+    pub(crate) fn file_asset_referencer_mut(&mut self) -> &mut FileAssetReferencer {
+        &mut self.file_asset_referencer
     }
 
     fn core_handle(&self) -> Option<CoreHandle> {

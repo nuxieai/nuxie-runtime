@@ -205,6 +205,9 @@ fn a_shader_without_its_signature_is_refused_unless_unsigned_content_is_accepted
     }
 }
 
+// The fixture's rstb is indexed only once accepted: under tools, or when the
+// sample key verifies. Upstream's unit-test build always has WITH_RIVE_TOOLS.
+#[cfg(any(feature = "tools", feature = "test-script-signature"))]
 #[test]
 fn a_referenced_shader_verifies_its_own_signature() {
     let bytes = fixture(SHADER_SIGNED);

@@ -134,7 +134,9 @@ pub use native_file::import_native;
 #[cfg(feature = "scripting")]
 mod checked_value_script;
 #[cfg(feature = "scripting")]
-pub use checked_value_script::{script_checked_value_write_batch, script_list_property_values};
+pub use checked_value_script::{
+    script_checked_value_input, script_checked_value_write_batch, script_list_property_values,
+};
 #[cfg(feature = "scripting")]
 mod script_import;
 #[cfg(feature = "scripting")]

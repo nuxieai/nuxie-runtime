@@ -1509,15 +1509,22 @@ The public-boundary tests are in `host_viewmodel/checked_batch_tests.rs`, includ
 a three-item, at-most-one refusal that leaves every value unchanged.
 Tracking: [UNIV-4125](https://universe.basis.dev/issue/UNIV-4125).
 
-Scripts reach the batch through two facade functions behind the `scripting`
+Scripts reach the batch through three facade functions behind the `scripting`
 feature, so every host shares their checks and error texts.
 `script_checked_value_write_batch` runs a whole script batch: it reads a Luau
 list of `{root, path, value}` tables (keys exactly 1..n, at most 4096, scalar
 or absent values) before any write, requires the step's rule operation, runs
 the batch and returns the applied flag and the first refusing rule's code.
+While it reads, it adds each root, path and text to a running total and
+raises once the total passes the batch's byte bound
+(`RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES`, 8 MiB), so a string shared by many
+writes is not copied past the bound.
 `script_list_property_values` reads one property from every item of a list in
 order through the null-preserving item accessors, so a null item raises
-instead of being skipped. nux-capi installs them as `setAll` and `listValues`
-beside `set` in the configured command module, with the same step context, and
-passes them the step's roots, policy and operation.
+instead of being skipped; its root, path and property share the same 8 MiB
+bound. `script_checked_value_input` reads one scalar or nil as a checked write
+candidate, for a host's single write and for each batch value. nux-capi
+installs the first two as `setAll` and `listValues` beside `set`, which reads
+its value with the third, in the configured command module, with the same
+step context, and passes them the step's roots, policy and operation.
 Tracking: [UNIV-4130](https://universe.basis.dev/issue/UNIV-4130).

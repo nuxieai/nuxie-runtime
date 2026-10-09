@@ -101,13 +101,14 @@
  *    replacement and applies every write or none; setAll returns true and no
  *    code, or false and the first refusing rule's code. setAll requires
  *    installed value rules or groups and raises without them, and raises on a
- *    malformed list before any write. Each write must name a different
- *    property, counting the paired marker that a value write also sets; a
- *    property named twice, even through another root or path, raises.
- *    listValues(root, path, property) returns property from every item of the
- *    list at path, in list order, as booleans, numbers and strings; it returns
- *    nil when path names a property that is not a list and raises on a null
- *    item.
+ *    malformed list before any write. The roots, paths and text values of one
+ *    list may total at most 8 MiB; setAll raises as soon as it reads past
+ *    that. Each write must name a different property, counting the paired
+ *    marker that a value write also sets; a property named twice, even through
+ *    another root or path, raises. listValues(root, path, property) returns
+ *    property from every item of the list at path, in list order, as booleans,
+ *    numbers and strings; it returns nil when path names a property that is
+ *    not a list and raises on a null item.
  *    Arguments are consumed synchronously; no caller bytes are retained.
  *    Ordinary nux_file_import remains script-inert.
  *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,

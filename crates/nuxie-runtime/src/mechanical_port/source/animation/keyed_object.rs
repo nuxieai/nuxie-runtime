@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_property::KeyedProperty,
+        keyframe_cells::{KeyedPropertyCells, PropertyEntry},
         keyframe_interpolator::KeyFrameInterpolator,
     },
     core::CoreHandle,
@@ -28,6 +29,22 @@ pub struct KeyedObject {
 }
 impl KeyedObject {
     pub fn add_keyed_property(&mut self, value: CoreHandle) {
+        let cells = value
+            .with_downcast::<KeyedProperty, _>(|property| std::rc::Rc::clone(property.base.cells()))
+            .expect("KeyedObject retains KeyedProperty occurrences");
+        self.add_keyed_property_with_cells(value, cells);
+    }
+
+    /// Add a keyed property the caller already borrows, with its shared cells.
+    pub(crate) fn add_keyed_property_with_cells(
+        &mut self,
+        value: CoreHandle,
+        cells: std::rc::Rc<KeyedPropertyCells>,
+    ) {
+        self.base.cells().push_property(PropertyEntry {
+            handle: value.clone(),
+            cells,
+        });
         self.keyed_properties.push_back(value);
     }
     pub fn keyed_properties(&self) -> &[CoreHandle] {
@@ -53,6 +70,7 @@ impl KeyedObject {
             };
             if !context.object_supports_property(self.base.object_id(), property_key) {
                 self.keyed_properties.remove(index);
+                self.base.cells().remove_property(index);
                 continue;
             }
             if property_key == u32::from(crate::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY) {
@@ -170,23 +188,24 @@ impl KeyedObject {
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        let object_id = owner
-            .with_downcast::<Self, _>(|object| object.base.object_id())
+        // The id, the target resolution and then the property snapshot are
+        // read in that order through the shared cells; the open resolution
+        // may edit this keyed owner.
+        let cells = owner
+            .with_downcast::<Self, _>(|object| std::rc::Rc::clone(object.base.cells()))
             .expect("animation application retains its KeyedObject");
-        let Some(object) = artboard.resolve_object(object_id) else {
+        let Some(object) = artboard.resolve_object(cells.object_id()) else {
             return;
         };
+        // InterpolatorHost::from, once for every property of this target.
         let interpolator_host = KeyFrameInterpolator::host_from(object.clone());
-        let properties = owner
-            .with_downcast::<Self, _>(|object| object.keyed_properties.snapshot())
-            .expect("animation application retains its KeyedObject");
+        let properties = cells.properties();
         for property in properties.iter() {
-            let is_callback = property
-                .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
-                .expect("KeyedObject retains KeyedProperty occurrences");
-            if !is_callback {
-                KeyedProperty::apply_occurrence_with_interpolator_host(
-                    property,
+            if !crate::mechanical_port::source::generated::core_registry::CoreRegistry::is_callback(
+                property.cells.property_key(),
+            ) {
+                KeyedProperty::apply_cells(
+                    &property.cells,
                     object.clone(),
                     time,
                     mix,

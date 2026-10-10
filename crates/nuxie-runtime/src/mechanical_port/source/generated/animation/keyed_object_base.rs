@@ -8,14 +8,14 @@ pub trait KeyedObjectBaseCallbacks {
 
 pub struct KeyedObjectBase {
     pub base: Core,
-    object_id: u32,
+    cells: std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells>,
 }
 
 impl Default for KeyedObjectBase {
     fn default() -> Self {
         Self {
             base: Core::default(),
-            object_id: 0,
+            cells: std::rc::Rc::new(crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells::default()),
         }
     }
 }
@@ -34,8 +34,11 @@ impl KeyedObjectBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(&self) -> &std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells> {
+        &self.cells
+    }
     pub fn object_id(&self) -> u32 {
-        self.object_id
+        self.cells.object_id()
     }
     pub fn set_object_id(&mut self, value: u32, callbacks: &mut impl KeyedObjectBaseCallbacks) {
         if !self.set_object_id_value(value) {
@@ -45,10 +48,10 @@ impl KeyedObjectBase {
     }
 
     pub(crate) fn set_object_id_value(&mut self, value: u32) -> bool {
-        if self.object_id == value {
+        if self.cells.object_id() == value {
             return false;
         }
-        self.object_id = value;
+        self.cells.set_object_id(value);
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl KeyedObjectBaseCallbacks) -> KeyedObject {
@@ -57,7 +60,7 @@ impl KeyedObjectBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl KeyedObjectBaseCallbacks) {
-        self.object_id = object.object_id;
+        self.cells.set_object_id(object.object_id());
     }
     pub fn deserialize(
         &mut self,
@@ -67,7 +70,7 @@ impl KeyedObjectBase {
     ) -> bool {
         match property_key {
             Self::OBJECT_ID_PROPERTY_KEY => {
-                self.object_id = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_object_id(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             _ => false,

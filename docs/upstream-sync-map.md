@@ -7,18 +7,25 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1e55b86a79b97d57065e892ac8fc3b219596e768`
+- LAST_SYNCED_SHA: `3f67b2f86d5c62e5767f3f5b93edfb4b26f68853`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Four upstream commits remain after this checkpoint at the fetched target.
-  All 220 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (242 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 221 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (243 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `3f67b2f8`, integrated atop downstream `de0cace647`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Both complete live skinned-rig regressions and all eight existing
+  bone/weight unit tests pass. Source/pipeline tests pass 12, manifest tests
+  pass 27, and formatting/generated-file/diff checks pass. This scoped shared
+  runtime guard has no new platform path; no fresh browser compile, hardware
+  execution or broad Golden/Silver run is claimed for this commit.
 - Validation at `1e55b86a`, integrated atop downstream `53118749fe`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All seven scripting-artboard tests pass, including the exact upstream
@@ -657,6 +664,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `3f67b2f86d5c62e5767f3f5b93edfb4b26f68853` | Translate runtime cubic-vertex missing-weight guard and Weight::fitsVertex registration rule, rejecting base Weight for cubic vertices. Port both complete live skinned-rig regressions. Private editor parent-change and agent add_vertices work described in the message is absent from the public delta and is not claimed imported. | — |
 | `1e55b86a79b97d57065e892ac8fc3b219596e768` | Guard script artboard-input instancing with a thread-local stack of source-artboard identities, leaving only repeated inputs unset and removing the guard on unwind. Translate the public Host/Holder cycle regression with the exact upstream fixture. Shared runtime/Luau behavior is in scope; guest execution remains parked and private .rive_head changes are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `439ffe0c1c79c6c20b7c9e553f8f0586bbd9e2f6` | Claim artboard slots before object import and retain empty slots on failure; match script inputs to their owner's parent ID, including unreadable owners. Translate the immutable binary reader counterpart, initial-valid orphan pruning, and failed-super view-model import return. Component-list null-row iteration/pooling is already represented by non-null Rust map entries; preserve it and port both upstream regressions alongside all new malformed-import cases. No private .rive_head/editor changes are claimed. | — |
 | `671423924df5b251d0f9b3c9f929062bbd27eef6` | Translate the shipped WebGL branch's removal of per-pass finish/liveness probes and exact successful-framebuffer attachment-key caching; the upstream native-GL branch is unshipped. Add shared target-exposure capability (base false, deferred true with pre-init setter), gate Luau gpuTarget, and preserve unresolved canvas/backend wrapping diagnostics. Translate the new upstream host-never-exposes-target case. Guest Wasm target gating remains deferred; private .rive_head contents are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

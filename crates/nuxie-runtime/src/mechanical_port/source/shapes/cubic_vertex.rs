@@ -90,6 +90,11 @@ pub trait CubicVertexBehavior: VertexBehavior {
         // Qualified Super::deform calls the concrete Vertex base, bypassing
         // any most-derived override of the public deformation operation.
         VertexBehavior::deform(self.vertex_mut(), world, bones);
+        // A skinned cubic vertex may have no weight; hold its bind position,
+        // just as Vertex::deform does.
+        if !self.has_weight() {
+            return;
+        }
         let weight = self
             .cubic_vertex()
             .base

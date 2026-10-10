@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path, PureWindowsPath
 from dataclasses import replace
+import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -208,6 +209,83 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertNotIn("--action_env=NUX_RUNTIME_SOURCE_REVISION", arguments)
         self.assertIn("--action_env=NUX_RUNTIME_RIVE_ORACLE", arguments)
         self.assertIn("--action_env=RIVE_RUNTIME_DIR", arguments)
+
+    def test_apple_deployment_targets_reach_toolchain_and_rust_invocations(self):
+        package = self.package("core")
+        product = self.root / "bazel-product"
+        product.write_bytes(b"declared toolchain product")
+        tools = self.root / "fake-tools"
+        tools.mkdir()
+        calls = self.root / "calls.jsonl"
+        bazel = tools / "bazel"
+        bazel.write_text("#!" + sys.executable + "\n" + """import json, sys
+from pathlib import Path
+Path(""" + repr(str(calls)) + """).open('a').write(json.dumps(sys.argv[1:]) + '\\n')
+if 'cquery' in sys.argv:
+    print('bazel-product')
+""")
+        xcodebuild = tools / "xcodebuild"
+        xcodebuild.write_text("#!" + sys.executable + "\nprint('Xcode 26.0\\nBuild version fixture')\n")
+        xcrun = tools / "xcrun"
+        xcrun.write_text("#!" + sys.executable + "\n" + """import sys
+from pathlib import Path
+assert sys.argv[1] == '--sdk' and sys.argv[3:] == ['--show-sdk-path']
+assert sys.argv[2] in ('iphoneos', 'iphonesimulator', 'macosx')
+print(Path(""" + repr(str(self.root / "SDKs")) + """) / (sys.argv[2] + '.sdk'))
+""")
+        for tool in (bazel, xcodebuild, xcrun):
+            tool.chmod(0o755)
+        cases = (
+            ("aarch64-apple-ios", {"IPHONEOS_DEPLOYMENT_TARGET": "16.0"}, "16.0", "12.0", "iphoneos", "arm64-apple-ios16.0"),
+            ("x86_64-apple-ios", {"IPHONEOS_DEPLOYMENT_TARGET": "17.1"}, "17.1", "12.0", "iphonesimulator", "x86_64-apple-ios17.1-simulator"),
+            ("aarch64-apple-darwin", {"MACOSX_DEPLOYMENT_TARGET": "13.2"}, "15.0", "13.2", "macosx", "arm64-apple-macos13.2"),
+            ("aarch64-apple-ios", {}, "15.0", "12.0", "iphoneos", "arm64-apple-ios15.0"),
+            (None, {"MACOSX_DEPLOYMENT_TARGET": "12.0"}, None, "12.0", None, None),
+            (None, {}, None, None, None, None),
+        )
+        for target, supplied, ios, macos, sdk, triple in cases:
+            with self.subTest(target=target, supplied=supplied):
+                calls.unlink(missing_ok=True)
+                environment = {"NUXIE_BAZEL_BIN": str(bazel), "PATH": str(tools) + os.pathsep + os.defpath, **supplied}
+                arguments = ["runtime.py", "build", "-p", "core", "--lib"]
+                if target:
+                    arguments += ["--target", target]
+                with patch.dict(os.environ, environment, clear=True), \
+                     patch.object(runtime.sys, "platform", "darwin"), \
+                     patch.object(runtime, "packages_from_workspace", return_value=collect_packages([package])), \
+                     patch.object(sys, "argv", arguments):
+                    self.assertEqual(runtime.main(), 0)
+                build = next(call for call in map(json.loads, calls.read_text().splitlines()) if "build" in call)
+                if ios:
+                    self.assertIn("--ios_minimum_os=" + ios, build)
+                if macos:
+                    self.assertIn("--macos_minimum_os=" + macos, build)
+                else:
+                    self.assertFalse(any(argument.startswith(("--ios_minimum_os=", "--macos_minimum_os=")) for argument in build))
+                for name, value in supplied.items():
+                    self.assertIn("--action_env=" + name + "=" + value, build)
+                for name in ("IPHONEOS_DEPLOYMENT_TARGET", "MACOSX_DEPLOYMENT_TARGET"):
+                    if name not in supplied:
+                        self.assertFalse(any(argument.startswith("--action_env=" + name + "=") for argument in build))
+                if sdk:
+                    self.assertIn("--action_env=BINDGEN_EXTRA_CLANG_ARGS=--target=" + triple + " --sysroot=" + str(self.root / "SDKs" / (sdk + ".sdk")), build)
+                destination = self.root / "target"
+                if target:
+                    destination /= target
+                self.assertEqual((destination / "debug/bazel-product").read_bytes(), b"declared toolchain product")
+
+    def test_invalid_apple_deployment_versions_stop_before_tool_invocation(self):
+        for name in ("IPHONEOS_DEPLOYMENT_TARGET", "MACOSX_DEPLOYMENT_TARGET"):
+            for value in ("", "0.0", "-1", "16.x", "16.0 --other-flag", "16.0\n"):
+                with self.subTest(name=name, value=value), \
+                     patch.dict(os.environ, {name: value}, clear=True), \
+                     patch.object(runtime, "packages_from_workspace", return_value={}), \
+                     patch.object(runtime, "materialize", return_value=["//core:core"]), \
+                     patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+                     patch.object(runtime.subprocess, "run") as run, \
+                     patch.object(sys, "argv", ["runtime.py", "build", "-p", "core", "--target", "aarch64-apple-ios"]):
+                    self.assertEqual(runtime.main(), 2)
+                    run.assert_not_called()
 
     def test_publication_replaces_read_only_artifacts_and_reuses_identical_bytes(self):
         source = self.root / "bazel-product"

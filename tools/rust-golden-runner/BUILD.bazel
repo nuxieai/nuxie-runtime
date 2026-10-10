@@ -50,6 +50,7 @@ rust_binary(
 rust_test(
     name = "rust-golden-runner__unit_test",
     crate = ":rust-golden-runner__test",
+    crate_features = ["default"],
     deps = ["//crates/nuxie-binary:nuxie-binary__test"],
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/rust-golden-runner"),

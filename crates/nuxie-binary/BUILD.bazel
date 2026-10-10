@@ -57,6 +57,7 @@ rust_library(
 rust_test(
     name = "nuxie-binary__unit_test",
     crate = ":nuxie-binary__test",
+    crate_features = ["default", "test-support"],
     deps = crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/nuxie-binary"),
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-binary"),

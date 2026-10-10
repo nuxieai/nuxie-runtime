@@ -7,6 +7,7 @@ use super::gles3_decl::{GLExecutionDomain, GLExecutionStamp, GLint};
 use nuxie_ore_metal::context::{Context, ShaderTarget};
 use nuxie_ore_metal::types::Features;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
@@ -56,6 +57,7 @@ pub(crate) struct ContextGL {
     pub(super) m_savedState: GLSavedState,
     pub(super) m_executionStamp: ManuallyDrop<GLExecutionStamp>,
     pub(super) m_lastReportedError: String,
+    pub(super) m_completeAttachmentKeys: HashSet<u64>,
     pub(super) rust_scratch: Option<Rc<ScratchPassObjects>>,
 }
 
@@ -70,6 +72,7 @@ impl ContextGL {
             base: ManuallyDrop::new(base),
             m_savedState: GLSavedState::default(),
             m_lastReportedError: String::new(),
+            m_completeAttachmentKeys: HashSet::new(),
             rust_scratch: Some(Rc::new(ScratchPassObjects {
                 state: RefCell::new(ScratchPassState::default()),
                 execution: executionStamp.clone(),
@@ -139,10 +142,10 @@ impl DerefMut for ContextGL {
 
 pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 20;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
-pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 15;
+pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 16;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
 pub(crate) const RUST_EXECUTION_SIDECAR_COUNT: usize = 1;
-const _: [(); 4982] = [(); PINNED_SOURCE.len()];
+const _: [(); 5210] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -151,10 +154,10 @@ mod tests {
 
     #[test]
     fn complete_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 132);
+        assert_eq!(PINNED_SOURCE.lines().count(), 137);
         assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 20);
         assert_eq!(SOURCE_FRIEND_COUNT, 3);
-        assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 15);
+        assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 16);
         assert_eq!(SOURCE_DELETED_COPY_OPERATION_COUNT, 2);
         assert_eq!(RUST_EXECUTION_SIDECAR_COUNT, 1);
         assert_eq!(std::mem::size_of::<GLSavedState>(), 20);

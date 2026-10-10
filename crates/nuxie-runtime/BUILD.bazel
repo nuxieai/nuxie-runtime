@@ -57,6 +57,7 @@ rust_library(
 rust_test(
     name = "nuxie-runtime__unit_test",
     crate = ":nuxie-runtime__test",
+    crate_features = ["default", "js-host-seed", "policy-pass-counter", "testing", "tools"],
     deps = ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test"] + crate_deps(["png", "sha2"], package_name = "bazel/cargo/nuxie-runtime"),
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),

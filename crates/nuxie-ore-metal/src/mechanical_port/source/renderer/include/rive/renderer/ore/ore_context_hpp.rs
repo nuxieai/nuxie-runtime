@@ -343,6 +343,11 @@ pub trait ContextApi {
     fn targetView(&mut self) -> Option<AnyResourceHandle> {
         None
     }
+    // False where the host can never expose its target, so scripts get nil
+    // and keep a gpuCanvas instead.
+    fn exposesTarget(&self) -> bool {
+        false
+    }
     fn setRenderTarget(&self, target: Option<RenderTargetInfo>) {
         *self.contextBase().renderTarget.borrow_mut() = target;
     }

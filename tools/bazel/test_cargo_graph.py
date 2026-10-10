@@ -60,6 +60,23 @@ class CargoGraphTest(unittest.TestCase):
             actual = eval(expression, {"__builtins__": {}, "crate_deps": lambda aliases, **_: aliases})
             self.assertEqual(actual, expected)
 
+    def test_unit_tests_receive_the_wrapped_crates_features(self):
+        # rules_rust recompiles the wrapped crate using rust_test's own feature
+        # attributes; it does not inherit rust_library/rust_binary features.
+        for kind, source_name in (("library", "lib.rs"), ("binary", "main.rs")):
+            manifest = self.package(kind, '[features]\ndefault = ["enabled"]\nenabled = []\n')
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src" / source_name).write_text("fn main() {}")
+            packages = collect_packages([manifest])
+            for selected in ([], ["default"]):
+                graph = resolve_features(packages, {kind: selected}, include_dev=True)
+                rendered = render_package(packages[kind], {"test": graph}, lambda name, _: "//root:" + name)
+                unit_rule = next(block for block in rendered.split("rust_test(")[1:]
+                                 if f'name = "{kind}__unit_test"' in block.split(")", 1)[0])
+                features = next(line.strip()[len("crate_features = "):-1]
+                                for line in unit_rule.splitlines() if line.strip().startswith("crate_features = "))
+                self.assertEqual(json.loads(features), sorted(graph.features[kind]))
+
     def test_provenance_inputs_are_scoped_to_distribution_build_scripts(self):
         provenance_input = object()
         for name in ("nux-capi", "nux-apple-product-extension", "ordinary"):

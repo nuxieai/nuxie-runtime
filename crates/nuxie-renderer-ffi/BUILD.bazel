@@ -82,6 +82,7 @@ rust_library(
 rust_test(
     name = "nuxie-renderer-ffi__unit_test",
     crate = ":nuxie-renderer-ffi__test",
+    crate_features = ["default"],
     deps = ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-stream:nuxie-render-stream__test", "//crates/nuxie-renderer:nuxie-renderer__test", "//crates/nuxie-runtime:nuxie-runtime__test"] + crate_deps(["anyhow", "sha2"], package_name = "bazel/cargo/nuxie-renderer-ffi"),
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-renderer-ffi"),

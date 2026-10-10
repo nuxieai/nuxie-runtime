@@ -15,7 +15,7 @@ use super::ore_sampler_gl_decl::SamplerGL;
 use super::ore_shader_module_gl_decl::ShaderModuleGL;
 use super::ore_texture_gl_decl::{TextureGL, TextureViewGL};
 use super::render_target_gl_decl::{
-    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
+    RenderTargetGL, TextureRenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -29,10 +29,10 @@ use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::shader_module::GLFixupKind;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
-    CompareFunction, Features, Filter, LoadOp, PipelineDesc, RenderPassDesc, SamplerDesc,
-    ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc, TextureFormat, TextureType,
-    TextureViewDesc, TextureViewDimension, WrapMode, kMaxBindGroups,
+    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
+    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, PipelineDesc,
+    RenderPassDesc, SamplerDesc, ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc,
+    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, WrapMode,
 };
 use std::ffi::c_void;
 
@@ -372,6 +372,12 @@ fn beginFrameCurrent(context: &mut ContextGL, _descriptor: &FrameDescriptor) {
 /// Exact authored no-op. Do not add finish, flush, or waiting here.
 fn waitForGPUCurrent(_context: &mut ContextGL) {}
 
+// RIVE_WEBGL omits the synchronous object-liveness probes. The browser
+// provider owns GLuint-to-WebGL-object binding, including deleted names.
+fn savedNameAlive(_context: &ContextGL, _kind: GLObjectKind, _name: GLint) -> bool {
+    true
+}
+
 fn endFrameCurrent(context: &mut ContextGL) {
     {
         let mut scratch = context.rust_scratch.as_ref().unwrap().state.borrow_mut();
@@ -381,29 +387,17 @@ fn endFrameCurrent(context: &mut ContextGL) {
         scratch.m_scratchVAOLent = false;
     }
     let program = context.m_savedState.program;
-    if program == 0
-        || context
-            .executionDomain()
-            .isObject(GLObjectKind::Program, program as GLuint)
-    {
+    if savedNameAlive(context, GLObjectKind::Program, program) {
         submit(context, GLCommand::UseProgram(program as GLuint));
     }
 
     let vertexArray = context.m_savedState.vertexArray;
-    if vertexArray == 0
-        || context
-            .executionDomain()
-            .isObject(GLObjectKind::VertexArray, vertexArray as GLuint)
-    {
+    if savedNameAlive(context, GLObjectKind::VertexArray, vertexArray) {
         submit(context, GLCommand::BindVertexArray(vertexArray as GLuint));
     }
 
     let arrayBuffer = context.m_savedState.arrayBuffer;
-    if arrayBuffer == 0
-        || context
-            .executionDomain()
-            .isObject(GLObjectKind::Buffer, arrayBuffer as GLuint)
-    {
+    if savedNameAlive(context, GLObjectKind::Buffer, arrayBuffer) {
         submit(
             context,
             GLCommand::BindBuffer(GL_ARRAY_BUFFER, arrayBuffer as GLuint),
@@ -411,11 +405,7 @@ fn endFrameCurrent(context: &mut ContextGL) {
     }
 
     let uniformBuffer = context.m_savedState.uniformBuffer;
-    if uniformBuffer == 0
-        || context
-            .executionDomain()
-            .isObject(GLObjectKind::Buffer, uniformBuffer as GLuint)
-    {
+    if savedNameAlive(context, GLObjectKind::Buffer, uniformBuffer) {
         submit(
             context,
             GLCommand::BindBuffer(GL_UNIFORM_BUFFER, uniformBuffer as GLuint),
@@ -423,11 +413,7 @@ fn endFrameCurrent(context: &mut ContextGL) {
     }
 
     let framebuffer = context.m_savedState.framebuffer;
-    if framebuffer == 0
-        || context
-            .executionDomain()
-            .isObject(GLObjectKind::Framebuffer, framebuffer as GLuint)
-    {
+    if savedNameAlive(context, GLObjectKind::Framebuffer, framebuffer) {
         submit(
             context,
             GLCommand::BindFramebuffer(GL_FRAMEBUFFER, framebuffer as GLuint),
@@ -504,11 +490,14 @@ fn makeBufferCurrent(context: &mut ContextGL, desc: &BufferDesc<'_>) -> Option<A
             },
         );
         if let Some(data) = data {
-            submit(context, GLCommand::BufferSubData {
-                target: GL_COPY_WRITE_BUFFER,
-                offset: 0,
-                data,
-            });
+            submit(
+                context,
+                GLCommand::BufferSubData {
+                    target: GL_COPY_WRITE_BUFFER,
+                    offset: 0,
+                    data,
+                },
+            );
         }
         submit(context, GLCommand::BindBuffer(GL_COPY_WRITE_BUFFER, 0));
     }
@@ -1061,7 +1050,7 @@ fn makePipelineCurrent(
         None => None,
     };
 
-    use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
+    use nuxie_ore_metal::bind_group_layout::{validatePipelineDesc, NativeSlotScope};
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;
     let layoutHandles = desc
         .bindGroupLayouts
@@ -1298,7 +1287,9 @@ fn makeBindGroupCurrent(
                 entry.size
             } else {
                 buffer.size() - entry.offset
-            }).wrapping_add(15) & !15,
+            })
+            .wrapping_add(15)
+                & !15,
             binding: entry.slot,
             slot,
             hasDynamicOffset,
@@ -1450,6 +1441,27 @@ fn makeBindGroupLayoutCurrent(
 
 type GLAttachment<'a> = (&'a TextureViewGL, &'a TextureGL);
 
+fn mixAttachmentKey(key: &mut u64, value: u64) {
+    *key = (*key ^ value).wrapping_mul(1099511628211);
+}
+
+fn mixAttachment(key: &mut u64, point: GLenum, texture: &TextureGL, view: &TextureViewGL) {
+    mixAttachmentKey(key, point as u64);
+    mixAttachmentKey(key, texture.m_glTexture as u64);
+    mixAttachmentKey(key, texture.m_glRenderbuffer as u64);
+    mixAttachmentKey(key, texture.r#type() as u64);
+    mixAttachmentKey(key, texture.format() as u64);
+    mixAttachmentKey(
+        key,
+        ((texture.width() as u64) << 32) | texture.height() as u64,
+    );
+    mixAttachmentKey(key, texture.sampleCount() as u64);
+    mixAttachmentKey(
+        key,
+        ((view.baseMipLevel() as u64) << 32) | view.baseLayer() as u64,
+    );
+}
+
 fn glAttachment<'a>(
     context: &ContextGL,
     owner: &'a AnyResourceHandle,
@@ -1573,12 +1585,15 @@ fn beginRenderPassCurrent(
         GLCommand::BindFramebuffer(GL_FRAMEBUFFER, state.m_glFBO),
     );
 
+    let mut attachmentKey = 14695981039346656037u64;
+    mixAttachmentKey(&mut attachmentKey, desc.colorCount as u64);
     let mut drawBuffers = vec![GL_NONE; desc.colorCount as usize];
     for index in 0..desc.colorCount as usize {
         let Some((view, texture)) = colors[index] else {
             continue;
         };
         let attachment = GL_COLOR_ATTACHMENT0.wrapping_add(index as GLenum);
+        mixAttachment(&mut attachmentKey, attachment, texture, view);
         if texture.m_glRenderbuffer != 0 {
             submit(
                 context,
@@ -1658,6 +1673,7 @@ fn beginRenderPassCurrent(
             GL_DEPTH_ATTACHMENT
         };
         state.m_glDepthAttachment = attachment;
+        mixAttachment(&mut attachmentKey, attachment, texture, view);
         if texture.m_glRenderbuffer != 0 {
             submit(
                 context,
@@ -1683,10 +1699,20 @@ fn beginRenderPassCurrent(
         }
     }
 
-    let status = context
-        .executionDomain()
-        .checkFramebufferStatus(GL_FRAMEBUFFER);
-    if status != GL_FRAMEBUFFER_COMPLETE {
+    let knownComplete = context.m_completeAttachmentKeys.contains(&attachmentKey);
+    let status = if knownComplete {
+        GL_FRAMEBUFFER_COMPLETE
+    } else {
+        context
+            .executionDomain()
+            .checkFramebufferStatus(GL_FRAMEBUFFER)
+    };
+    if status == GL_FRAMEBUFFER_COMPLETE && !knownComplete {
+        if context.m_completeAttachmentKeys.len() >= 256 {
+            context.m_completeAttachmentKeys.clear();
+        }
+        context.m_completeAttachmentKeys.insert(attachmentKey);
+    } else if status != GL_FRAMEBUFFER_COMPLETE {
         context.base.setLastError(format!(
             "beginRenderPass: GL framebuffer incomplete (0x{status:x}); color/depth attachments must share size and sampleCount"
         ));
@@ -1938,7 +1964,10 @@ pub(crate) fn makeTexture(
     withCurrentContext(context, |context| makeTextureCurrent(context, desc))
 }
 
-pub(crate) fn makeTextureView(context: &mut ContextGL, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+pub(crate) fn makeTextureView(
+    context: &mut ContextGL,
+    desc: &TextureViewDesc<'_>,
+) -> Option<AnyResourceHandle> {
     ContextApi::makeTextureView(context, desc)
 }
 
@@ -2034,8 +2063,12 @@ impl ContextApi for ContextGL {
         &mut self,
         target: nuxie_ore_metal::context::RenderTargetInfo,
     ) -> Option<AnyResourceHandle> {
-        let target = unsafe { target.target.cast::<crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget>().as_ref() }?;
-        withCurrentContext(self, |context| unsafe { glWrapTarget(context, target, true) })
+        let target = unsafe {
+            target.target.cast::<crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget>().as_ref()
+        }?;
+        withCurrentContext(self, |context| unsafe {
+            glWrapTarget(context, target, true)
+        })
     }
     fn usesDeferredFrameReplay(&self) -> bool {
         false
@@ -2133,10 +2166,10 @@ impl ContextApi for ContextGL {
     }
 }
 
-pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
+pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 9;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 24;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 52622] = [(); PINNED_SOURCE.len()];
+const _: [(); 54180] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2164,6 +2197,9 @@ mod tests {
         enabledExtensions: Vec<String>,
         lifecycleIngress: Option<GLContextLifecycleIngress>,
         finalReleaseIngress: Option<GLFinalReleaseIngress>,
+        objectProbes: usize,
+        framebufferChecks: usize,
+        framebufferStatus: Option<GLenum>,
     }
 
     struct FakeProvider(Rc<RefCell<FakeProviderState>>);
@@ -2247,11 +2283,14 @@ mod tests {
         }
 
         fn isObject(&mut self, _kind: GLObjectKind, name: GLuint) -> bool {
+            self.0.borrow_mut().objectProbes += 1;
             name != 0
         }
 
         fn checkFramebufferStatus(&mut self, _target: GLenum) -> GLenum {
-            GL_FRAMEBUFFER_COMPLETE
+            let mut state = self.0.borrow_mut();
+            state.framebufferChecks += 1;
+            state.framebufferStatus.unwrap_or(GL_FRAMEBUFFER_COMPLETE)
         }
 
         fn shaderParameter(&mut self, _shader: GLuint, _parameter: GLenum) -> GLint {
@@ -2297,8 +2336,7 @@ mod tests {
     }
 
     fn context(domain: &GLExecutionDomain) -> Box<ContextGL> {
-        ContextGL::Make(domain.stamp())
-            .expect("fake WebGL2 context is constructible")
+        ContextGL::Make(domain.stamp()).expect("fake WebGL2 context is constructible")
     }
 
     fn clearTrace(state: &Rc<RefCell<FakeProviderState>>) {
@@ -2367,8 +2405,8 @@ mod tests {
         }
         assert!(unsafe { &*canvas.get() }.isBacked());
         assert_eq!(unsafe { &mut *canvas.get() }.renderImage(), image);
-        let mut context = ContextGL::Make(domain.stamp())
-            .expect("ORE context on the same GL owner");
+        let mut context =
+            ContextGL::Make(domain.stamp()).expect("ORE context on the same GL owner");
         let color_view = unsafe { context.wrapCanvasTexture(canvas.get().cast()) }.unwrap();
         let source = unsafe { (*(*canvas.get()).renderImage()).getTexture() };
         let source_name = unsafe { (*source).nativeHandle() } as usize as GLuint;
@@ -2384,7 +2422,11 @@ mod tests {
             unsafe { context.wrapImageSampleView(info) }.expect("immediate sampling view");
         let sampled = sampled.downcast_ref::<TextureViewGL>().unwrap();
         assert_eq!(
-            sampled.texture().downcast_ref::<TextureGL>().unwrap().m_glTexture,
+            sampled
+                .texture()
+                .downcast_ref::<TextureGL>()
+                .unwrap()
+                .m_glTexture,
             source_name,
             "canvas sampling wraps the same top-down source texture directly"
         );
@@ -2543,7 +2585,7 @@ mod tests {
     #[test]
     fn deferred_replay_reaches_the_webgl2_state_scrub() {
         use crate::deferred::cmd::{
-            deferred_replayer::{DeferredFrameSink, DeferredReplayer, snapshot_frame},
+            deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
             deferred_session::DeferredSession,
             render_replay::RendererOwner,
         };
@@ -2616,7 +2658,7 @@ mod tests {
         DeferredReplayer::default().replay_frame(&frame, &mut sink);
 
         let commands = state.borrow().commands.clone();
-        assert!(commands.contains(&GLCommand::Finish));
+        assert!(!commands.contains(&GLCommand::Finish));
         assert!(commands.contains(&GLCommand::BindSampler(0, 0)));
         drop(sink);
         domain.shutdown();
@@ -2624,10 +2666,62 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1446);
-        assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1484);
+        assert_eq!(SOURCE_STATIC_HELPER_COUNT, 9);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 24);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
+    }
+
+    #[test]
+    fn webgl_saved_names_restore_without_synchronous_liveness_probes() {
+        let (domain, trace) = execution(1..=16);
+        let mut ctx = context(&domain);
+        ctx.m_savedState.program = 41;
+        ctx.m_savedState.vertexArray = 42;
+        ctx.m_savedState.arrayBuffer = 43;
+        ctx.m_savedState.uniformBuffer = 44;
+        ctx.m_savedState.framebuffer = 45;
+        endFrame(&mut ctx);
+        assert_eq!(trace.borrow().objectProbes, 0);
+        assert!(trace.borrow().commands.contains(&GLCommand::UseProgram(41)));
+        assert!(trace
+            .borrow()
+            .commands
+            .contains(&GLCommand::BindFramebuffer(GL_FRAMEBUFFER, 45)));
+        drop(ctx);
+        domain.shutdown();
+    }
+
+    #[test]
+    fn complete_attachment_cache_skips_rechecks_and_clears_at_256() {
+        let (domain, trace) = execution(1..=16);
+        let mut ctx = context(&domain);
+        let desc = RenderPassDesc::default();
+        beginRenderPass(&mut ctx, &desc, None).unwrap().finish();
+        beginRenderPass(&mut ctx, &desc, None).unwrap().finish();
+        assert_eq!(trace.borrow().framebufferChecks, 1);
+        ctx.m_completeAttachmentKeys = (0..256).collect();
+        beginRenderPass(&mut ctx, &desc, None).unwrap().finish();
+        assert_eq!(trace.borrow().framebufferChecks, 2);
+        assert_eq!(ctx.m_completeAttachmentKeys.len(), 1);
+        drop(ctx);
+        domain.shutdown();
+    }
+
+    #[test]
+    fn incomplete_attachments_are_never_cached() {
+        let (domain, trace) = execution(1..=16);
+        let mut ctx = context(&domain);
+        trace.borrow_mut().framebufferStatus = Some(0x8cd6);
+        for _ in 0..2 {
+            beginRenderPass(&mut ctx, &RenderPassDesc::default(), None)
+                .unwrap()
+                .finish();
+        }
+        assert_eq!(trace.borrow().framebufferChecks, 2);
+        assert!(ctx.m_completeAttachmentKeys.is_empty());
+        drop(ctx);
+        domain.shutdown();
     }
 
     #[test]
@@ -2657,21 +2751,33 @@ mod tests {
                     let mut context = context(&domain);
                     clearTrace(&state);
                     let data = vec![0x5a; size as usize];
-                    let buffer = makeBuffer(&mut context, &BufferDesc {
-                        usage,
-                        size,
-                        data: initialized.then_some(data.as_slice()),
-                        immutable: false,
-                        label: None,
-                    }).expect("buffer");
+                    let buffer = makeBuffer(
+                        &mut context,
+                        &BufferDesc {
+                            usage,
+                            size,
+                            data: initialized.then_some(data.as_slice()),
+                            immutable: false,
+                            label: None,
+                        },
+                    )
+                    .expect("buffer");
                     assert_eq!(buffer.downcast_ref::<BufferGL>().unwrap().size(), size);
                     let mut expected = vec![
                         GLCommand::BindBuffer(GL_COPY_WRITE_BUFFER, 701),
                         GLCommand::BufferData {
                             target: GL_COPY_WRITE_BUFFER,
-                            size: if usage == BufferUsage::uniform { rounded } else { size as usize },
+                            size: if usage == BufferUsage::uniform {
+                                rounded
+                            } else {
+                                size as usize
+                            },
                             data: None,
-                            usage: if initialized { GL_STATIC_DRAW } else { GL_DYNAMIC_DRAW },
+                            usage: if initialized {
+                                GL_STATIC_DRAW
+                            } else {
+                                GL_DYNAMIC_DRAW
+                            },
                         },
                     ];
                     if initialized {
@@ -2696,30 +2802,61 @@ mod tests {
         use nuxie_ore_metal::types::UBOEntry;
         let (domain, _) = execution([701]);
         let mut context = context(&domain);
-        let buffer = makeBuffer(&mut context, &BufferDesc::uninitialized(BufferUsage::uniform, 20))
-            .expect("uniform buffer");
+        let buffer = makeBuffer(
+            &mut context,
+            &BufferDesc::uninitialized(BufferUsage::uniform, 20),
+        )
+        .expect("uniform buffer");
         let entries = [BindGroupLayoutEntry {
             binding: 0,
             kind: BindingKind::uniformBuffer,
             nativeSlotVS: 3,
             ..BindGroupLayoutEntry::default()
         }];
-        let layout = makeBindGroupLayout(&mut context, &BindGroupLayoutDesc {
-            entries: Some(&entries),
-            entryCount: 1,
-            ..BindGroupLayoutDesc::default()
-        }).expect("uniform layout");
-        for (offset, size, rounded) in [(0, 0, 32), (0, 4, 16), (0, 16, 16), (0, 20, 32), (16, 0, 16), (16, 4, 16)] {
-            let ubos = [UBOEntry { slot: 0, buffer: Some(&buffer), offset, size }];
-            let group = makeBindGroup(&mut context, &BindGroupDesc {
-                layout: Some(&layout),
-                ubos: &ubos,
-                uboCount: 1,
-                ..BindGroupDesc::default()
-            }).expect("uniform bind group");
-            assert_eq!(&*group.downcast_ref::<BindGroupGL>().unwrap().m_glUBOs, &[GLUBOBinding {
-                buffer: 701, offset, size: rounded, binding: 0, slot: 3, hasDynamicOffset: false,
-            }]);
+        let layout = makeBindGroupLayout(
+            &mut context,
+            &BindGroupLayoutDesc {
+                entries: Some(&entries),
+                entryCount: 1,
+                ..BindGroupLayoutDesc::default()
+            },
+        )
+        .expect("uniform layout");
+        for (offset, size, rounded) in [
+            (0, 0, 32),
+            (0, 4, 16),
+            (0, 16, 16),
+            (0, 20, 32),
+            (16, 0, 16),
+            (16, 4, 16),
+        ] {
+            let ubos = [UBOEntry {
+                slot: 0,
+                buffer: Some(&buffer),
+                offset,
+                size,
+            }];
+            let group = makeBindGroup(
+                &mut context,
+                &BindGroupDesc {
+                    layout: Some(&layout),
+                    ubos: &ubos,
+                    uboCount: 1,
+                    ..BindGroupDesc::default()
+                },
+            )
+            .expect("uniform bind group");
+            assert_eq!(
+                &*group.downcast_ref::<BindGroupGL>().unwrap().m_glUBOs,
+                &[GLUBOBinding {
+                    buffer: 701,
+                    offset,
+                    size: rounded,
+                    binding: 0,
+                    slot: 3,
+                    hasDynamicOffset: false,
+                }]
+            );
         }
         assert_eq!(buffer.downcast_ref::<BufferGL>().unwrap().size(), 20);
         drop(layout);

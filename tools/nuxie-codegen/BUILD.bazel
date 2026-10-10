@@ -50,6 +50,7 @@ rust_binary(
 rust_test(
     name = "nuxie-codegen__unit_test",
     crate = ":nuxie-codegen__test",
+    crate_features = ["default"],
     deps = [],
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-codegen"),

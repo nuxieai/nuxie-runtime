@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 154997] = [(); PINNED_SOURCE.len()];
+const _: [(); 155092] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -961,7 +961,7 @@ pub(crate) fn invalidateGLState(context: &mut RenderContextGLImpl) {
 pub(crate) fn scrubStateAfterOre(context: &mut RenderContextGLImpl) {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
-        recordGLCommand(GLCommand::Finish);
+        // RIVE_WEBGL replays both renderers on one ordered context.
         for unit in 0..=DEFAULT_BINDINGS_SET_SIZE {
             recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0 + unit));
             recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
@@ -4515,8 +4515,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3965);
-        assert_eq!(PINNED_SOURCE.len(), 154997);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3968);
+        assert_eq!(PINNED_SOURCE.len(), 155092);
     }
 
     #[test]

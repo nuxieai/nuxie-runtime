@@ -78,6 +78,7 @@ rust_shared_library(
 rust_test(
     name = "webgpu-renderer-replay__unit_test",
     crate = ":webgpu-renderer-replay__test",
+    crate_features = ["default"],
     deps = [],
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/webgpu-renderer-replay"),

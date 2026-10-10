@@ -60,6 +60,17 @@ end
 }
 
 #[test]
+fn gpu_target_is_nil_where_the_host_can_never_expose_one() {
+    let ore = recording();
+    ore.borrow_mut().setExposesTarget(false);
+    let vm = vm_with_target(Some(ore));
+    assert!(run_init(
+        &vm,
+        "function init(self, context) return context:gpuTarget() == nil end"
+    ));
+}
+
+#[test]
 fn hidden_target_still_validates_the_pass_it_drops() {
     let ore = recording();
     let vm = vm_with_target(Some(ore.clone()));

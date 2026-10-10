@@ -82,6 +82,7 @@ rust_library(
 rust_test(
     name = "nuxie-scripting__unit_test",
     crate = ":nuxie-scripting__test",
+    crate_features = ["async", "compiler", "default", "js-host-seed", "luau", "tools", "upstream-test-seams"],
     deps = ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-renderer:nuxie-renderer__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["image-webp", "libhydrogen", "sha2"], package_name = "bazel/cargo/nuxie-scripting"),
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-scripting"),

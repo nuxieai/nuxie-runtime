@@ -4947,6 +4947,12 @@ impl StateMachineInstance {
         self.artboard_instance.clone()
     }
 
+    /// Whether this machine drives `artboard`, without cloning its handle.
+    #[inline]
+    pub(crate) fn drives(&self, artboard: &crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle) -> bool {
+        self.artboard_instance.refers_to(artboard)
+    }
+
     pub fn input_count(&self) -> usize {
         self.input_instances.len()
     }

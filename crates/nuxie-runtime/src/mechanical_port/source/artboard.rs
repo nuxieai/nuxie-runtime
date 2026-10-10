@@ -6746,6 +6746,12 @@ impl RuntimeArtboardInstanceWeakHandle {
         Weak::ptr_eq(&self.0, &other.0)
     }
 
+    /// `ptr_eq(&artboard.downgrade())`, without creating that weak handle.
+    #[inline]
+    pub(crate) fn refers_to(&self, artboard: &RuntimeArtboardInstanceHandle) -> bool {
+        std::ptr::eq(self.0.as_ptr(), Rc::as_ptr(&artboard.0))
+    }
+
     pub fn audio_identity(&self) -> Option<usize> {
         // AudioEngine uses this only as an identity, like C++ Artboard*. The
         // final strong reference is already gone during Artboard::drop, but

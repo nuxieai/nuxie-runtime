@@ -50,7 +50,7 @@ impl TextInputCursor {
             let parent = parent
                 .as_text_input_mut()
                 .expect("TextInputDrawable parent");
-            let world = *parent.base.world_transform();
+            let world = parent.base.world_transform();
             let path = if parent.is_cursor_visible() {
                 Some(parent.raw_text_input().cursor_path())
             } else {

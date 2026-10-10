@@ -143,7 +143,7 @@ fn constrained_parts_hidden_during_a_fade_come_back_constrained() {
         shown.advance_default(0.0);
         let world = |handle: &CoreHandle| {
             handle
-                .with(|object| *object.as_transform_component().unwrap().world_transform())
+                .with(|object| object.as_transform_component().unwrap().world_transform())
                 .unwrap()
         };
         assert_eq!(world(&constrained), world(&reference));

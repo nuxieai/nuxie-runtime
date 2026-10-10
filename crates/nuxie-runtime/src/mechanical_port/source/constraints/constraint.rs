@@ -227,17 +227,18 @@ impl Constraint {
         let component = component
             .as_transform_component_mut()
             .expect("constraint TransformComponent");
-        let world = component.mutable_world_transform();
-        if anchor.x == 0.0 && anchor.y == 0.0 {
-            *world = Mat2D::compose(composed);
-            return;
-        }
-        let before = *world * anchor;
-        let mut result = Mat2D::compose(composed);
-        let after = result * anchor;
-        result[4] += before.x - after.x;
-        result[5] += before.y - after.y;
-        *world = result;
+        component.with_world_transform_mut(|world| {
+            if anchor.x == 0.0 && anchor.y == 0.0 {
+                *world = Mat2D::compose(composed);
+                return;
+            }
+            let before = *world * anchor;
+            let mut result = Mat2D::compose(composed);
+            let after = result * anchor;
+            result[4] += before.x - after.x;
+            result[5] += before.y - after.y;
+            *world = result;
+        });
     }
 
     pub fn land_anchor(component: &mut dyn CoreObject, strength: f32) {
@@ -245,12 +246,13 @@ impl Constraint {
         if anchor.x == 0.0 && anchor.y == 0.0 {
             return;
         }
-        let world = component
+        component
             .as_transform_component_mut()
             .expect("constraint TransformComponent")
-            .mutable_world_transform();
-        world[4] -= (world[0] * anchor.x + world[2] * anchor.y) * strength;
-        world[5] -= (world[1] * anchor.x + world[3] * anchor.y) * strength;
+            .with_world_transform_mut(|world| {
+                world[4] -= (world[0] * anchor.x + world[2] * anchor.y) * strength;
+                world[5] -= (world[1] * anchor.x + world[3] * anchor.y) * strength;
+            });
     }
 
     pub fn compose_landing_anchor(
@@ -258,17 +260,17 @@ impl Constraint {
         composed: &TransformComponents,
         strength: f32,
     ) {
-        *component
+        component
             .as_transform_component_mut()
             .expect("constraint TransformComponent")
-            .mutable_world_transform() = Mat2D::compose(composed);
+            .set_world_transform(Mat2D::compose(composed));
         Self::land_anchor(component, strength);
     }
 
     pub fn offset_in_parent_frame(component: &TransformComponent, offset: &Mat2D) -> Mat2D {
         let parent_world = get_parent_world(component);
         let delta = (parent_world * *offset).translation() - parent_world.translation();
-        let mut result = *component.world_transform();
+        let mut result = component.world_transform();
         result[4] += delta.x;
         result[5] += delta.y;
         result
@@ -282,7 +284,7 @@ pub fn get_parent_world(component: &TransformComponent) -> Mat2D {
             parent.with(|parent| {
                 parent
                     .as_world_transform_component()
-                    .map(|parent| *parent.world_transform())
+                    .map(|parent| parent.world_transform())
             })
         })
         .flatten()

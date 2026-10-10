@@ -189,7 +189,7 @@ impl LinearGradient {
                 .with(|container| {
                     container
                         .as_world_transform_component()
-                        .map(|container| *container.world_transform())
+                        .map(|container| container.world_transform())
                 })
                 .flatten()
         });

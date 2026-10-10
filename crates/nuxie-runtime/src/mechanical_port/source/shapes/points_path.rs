@@ -99,9 +99,9 @@ impl PointsPath {
         }
     }
 
-    pub fn path_transform(&self) -> &Mat2D {
+    pub fn path_transform(&self) -> Mat2D {
         if self.skin().is_some() {
-            &IDENTITY
+            IDENTITY
         } else {
             self.base.world_transform()
         }

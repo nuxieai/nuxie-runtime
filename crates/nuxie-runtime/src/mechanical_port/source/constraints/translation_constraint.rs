@@ -27,7 +27,7 @@ impl TranslationConstraint {
                     .expect("validated targeted constraint target");
                 (
                     target.is_collapsed(),
-                    *target.world_transform(),
+                    target.world_transform(),
                     get_parent_world(target),
                 )
             };
@@ -42,7 +42,7 @@ impl TranslationConstraint {
         if target_state.is_some_and(|target| target.0) {
             return;
         }
-        let transform_a = *component
+        let transform_a = component
             .as_transform_component()
             .expect("constraint TransformComponent")
             .world_transform();
@@ -133,12 +133,13 @@ impl TranslationConstraint {
         }
         let t = self.base.strength();
         let ti = 1.0 - t;
-        let transform_a = component
+        component
             .as_transform_component_mut()
             .expect("constraint TransformComponent")
-            .mutable_world_transform();
-        transform_a[4] = translation_a.x * ti + translation_b.x * t;
-        transform_a[5] = translation_a.y * ti + translation_b.y * t;
+            .with_world_transform_mut(|transform_a| {
+                transform_a[4] = translation_a.x * ti + translation_b.x * t;
+                transform_a[5] = translation_a.y * ti + translation_b.y * t;
+            });
         Constraint::land_anchor(component, t);
     }
 }

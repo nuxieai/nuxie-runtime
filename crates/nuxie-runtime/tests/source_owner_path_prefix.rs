@@ -194,7 +194,7 @@ fn native_path_owners_release_composition_before_constraints_and_reread_tail() {
                         7.0,
                         "local composition precedes constraint"
                     );
-                    transform.mutable_world_transform()[4] = 11.0;
+                    transform.with_world_transform_mut(|world| world[4] = 11.0);
                 })
                 .unwrap();
             assert!(CoreRegistry::set_double_handle(&owner, nuxie_runtime::source::generated::world_transform_component_base::WorldTransformComponentBase::OPACITY_PROPERTY_KEY.into(), 0.25));
@@ -285,7 +285,7 @@ fn panic_in_path_constraint_releases_receiver_and_allows_retry() {
                 object
                     .as_transform_component_mut()
                     .unwrap()
-                    .mutable_world_transform()[4] = 19.0
+                    .with_world_transform_mut(|world| world[4] = 19.0)
             })
             .unwrap();
         if callback_first.replace(false) {

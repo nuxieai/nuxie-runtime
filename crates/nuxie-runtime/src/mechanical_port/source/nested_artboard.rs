@@ -1770,7 +1770,7 @@ impl NestedArtboard {
     }
 
     fn world_transform(&self) -> Mat2D {
-        *self.base.base.world_transform()
+        self.base.base.world_transform()
     }
 
     fn needs_save_operation(&self) -> bool {

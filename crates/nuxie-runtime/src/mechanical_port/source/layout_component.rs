@@ -470,7 +470,7 @@ impl LayoutComponent {
     ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
         crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
             &self.local_bounds(),
-            self.base.world_transform(),
+            &self.base.world_transform(),
             Some(&self.paints),
             out,
         )
@@ -1240,11 +1240,24 @@ impl LayoutComponent {
         own
     }
     pub fn update_transform(&mut self) {
-        *self.base.base.base.base.base.base.mutable_transform() = self.build_own_transform();
+        let transform = self.build_own_transform();
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .with_transform_mut(|local| *local = transform);
     }
     pub(crate) fn update_transform_for_artboard(&mut self, origin_x: f32, origin_y: f32) {
-        *self.base.base.base.base.base.base.mutable_transform() =
-            self.build_own_transform_with(false, origin_x, origin_y);
+        let transform = self.build_own_transform_with(false, origin_x, origin_y);
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .with_transform_mut(|local| *local = transform);
     }
     pub fn compose_world_transform(&mut self) {
         let parent_world = self
@@ -1259,13 +1272,13 @@ impl LayoutComponent {
                     .with(|parent| {
                         parent
                             .as_world_transform_component()
-                            .map(|parent| *parent.world_transform())
+                            .map(|parent| parent.world_transform())
                     })
                     .flatten()
             })
             .unwrap_or_else(Mat2D::identity);
         let base = Mat2D::from_translation(self.layout_translation());
-        let own = *self.base.base.base.base.base.base.transform();
+        let own = self.base.base.base.base.base.base.transform();
         self.base
             .base
             .base
@@ -1274,10 +1287,10 @@ impl LayoutComponent {
     }
     fn computed_origin_local(&self) -> Vec2D {
         self.layout_translation()
-            + *self.base.base.base.base.base.base.transform() * self.local_anchor()
+            + self.base.base.base.base.base.base.transform() * self.local_anchor()
     }
     pub fn shape_world_transform(&self) -> Mat2D {
-        *self.base.base.base.base.world_transform()
+        self.base.base.base.base.world_transform()
     }
     pub fn artboard_handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.artboard_handle()
@@ -1289,16 +1302,16 @@ impl LayoutComponent {
         self.computed_origin_local().y
     }
     pub fn computed_world_x(&self) -> f32 {
-        (*self.base.base.base.base.world_transform() * self.local_anchor()).x
+        (self.base.base.base.base.world_transform() * self.local_anchor()).x
     }
     pub fn computed_world_y(&self) -> f32 {
-        (*self.base.base.base.base.world_transform() * self.local_anchor()).y
+        (self.base.base.base.base.world_transform() * self.local_anchor()).y
     }
     pub fn computed_root_x(&self) -> f32 {
         let Some(artboard) = self.artboard_handle() else {
             return 0.0;
         };
-        let point = *self.base.base.base.base.world_transform() * self.local_anchor();
+        let point = self.base.base.base.base.world_transform() * self.local_anchor();
         artboard
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point).x)
             .expect("computedRootX requires a live artboard")
@@ -1307,7 +1320,7 @@ impl LayoutComponent {
         let Some(artboard) = self.artboard_handle() else {
             return 0.0;
         };
-        let point = *self.base.base.base.base.world_transform() * self.local_anchor();
+        let point = self.base.base.base.base.world_transform() * self.local_anchor();
         artboard
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point).y)
             .expect("computedRootY requires a live artboard")
@@ -1810,7 +1823,7 @@ impl LayoutComponent {
                 }
             });
             let bounds = Aabb::new(0.0, 0.0, self.layout.width(), self.layout.height());
-            let world = *self.base.base.base.base.world_transform();
+            let world = self.base.base.base.base.world_transform();
             let mut paths_owner = self.mutable_render_paths();
             let paths = &mut *paths_owner;
             paths.background.rewind();

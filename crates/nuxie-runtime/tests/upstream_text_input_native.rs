@@ -442,7 +442,7 @@ fn native_input_point_hit_respects_drawable_hidden_flag() {
             let viewport = viewport.as_layout_component().expect("layout viewport");
             let center = viewport.local_bounds().center();
             assert!(viewport.local_bounds().contains(center));
-            *viewport.world_transform() * center
+            viewport.world_transform() * center
         })
         .expect("live viewport");
     assert!(with_input(&input, |input| input.hit_test_point(point, false, true)));

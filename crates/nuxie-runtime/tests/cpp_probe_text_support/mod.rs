@@ -150,7 +150,7 @@ pub(super) fn world_point(
     y: f32,
 ) -> Vec2D {
     let point = with_input(input, |input| {
-        *input.base.world_transform() * Vec2D::new(x, y)
+        input.base.world_transform() * Vec2D::new(x, y)
     });
     artboard.with_artboard_mut(|artboard| artboard.root_transform(point))
 }

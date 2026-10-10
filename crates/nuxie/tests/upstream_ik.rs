@@ -87,7 +87,7 @@ fn world_transform(owner: &CoreHandle) -> Mat2D {
         .with(|owner| {
             owner
                 .as_world_transform_component()
-                .map(|owner| *owner.world_transform())
+                .map(|owner| owner.world_transform())
         })
         .flatten()
         .expect("WorldTransformComponent")

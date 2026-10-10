@@ -71365,7 +71365,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
     fn shape_paint_world_transform(
         &self,
     ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
-        Some(*self.shape_world_transform())
+        Some(self.shape_world_transform())
     }
     fn shape_paint_path_builder(
         &self,

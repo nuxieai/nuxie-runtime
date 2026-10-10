@@ -540,7 +540,7 @@ fn node_root_polygon(component: &CoreHandle) -> Option<[Vec2D; 4]> {
         let node = object.as_node()?;
         Some((
             object.semantic_provider_local_bounds()?,
-            *node.world_transform(),
+            node.world_transform(),
             node.artboard_handle(),
         ))
     })??;

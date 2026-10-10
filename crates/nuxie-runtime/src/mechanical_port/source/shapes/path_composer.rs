@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
         paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags, shape_cells::ShapeCells,
         shape_paint_container::ContainerCells,
     },
-    transform_component::TransformCells,
+    world_transform_component::TransformCells,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -220,7 +220,7 @@ impl PathComposer {
                 let shape = object.as_shape().expect("PathComposer Shape");
                 (
                     shape.paths(),
-                    *shape.world_transform(),
+                    shape.world_transform(),
                     shape.paint_container.path_flags()
                         & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE),
                 )
@@ -322,7 +322,7 @@ impl PathComposer {
                     shape.is_flagged(PathFlags::LOCAL),
                     shape.is_flagged(PathFlags::LOCAL_CLOCKWISE),
                     shape.is_flagged(PathFlags::WORLD),
-                    *shape.world_transform(),
+                    shape.world_transform(),
                     shape.paths(),
                 ))
             })
@@ -342,7 +342,7 @@ impl PathComposer {
                     if !path.is_hidden() && !path.is_collapsed() {
                         let path_transform = object
                             .as_points_path()
-                            .map(|points| *points.path_transform())
+                            .map(|points| points.path_transform())
                             .unwrap_or_else(|| path.path_transform());
                         self.local_path
                             .add_path(path.raw_path(), Some(&(inverse * path_transform)));
@@ -361,7 +361,7 @@ impl PathComposer {
                     }
                     let path_transform = object
                         .as_points_path()
-                        .map(|points| *points.path_transform())
+                        .map(|points| points.path_transform())
                         .unwrap_or_else(|| path.path_transform());
                     let local_transform = inverse * path_transform;
                     let not_clockwise = object.as_points_path_mut().is_some_and(|points| {
@@ -386,7 +386,7 @@ impl PathComposer {
                     if !path.is_hidden() && !path.is_collapsed() {
                         let path_transform = object
                             .as_points_path()
-                            .map(|points| *points.path_transform())
+                            .map(|points| points.path_transform())
                             .unwrap_or_else(|| path.path_transform());
                         self.world_path
                             .add_path(path.raw_path(), Some(&path_transform));

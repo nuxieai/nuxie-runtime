@@ -81,7 +81,7 @@ fn cpp_max(a: f64, b: f64) -> f64 {
 
 fn allowed_delta(shape: &CoreHandle) -> f64 {
     let world = shape
-        .with_downcast::<Shape, _>(|shape| *shape.world_transform())
+        .with_downcast::<Shape, _>(|shape| shape.world_transform())
         .unwrap();
     let mut scale = cpp_max(
         cpp_max(1.0, f64::from(world[4].abs())),
@@ -91,7 +91,7 @@ fn allowed_delta(shape: &CoreHandle) -> f64 {
         let world = path
             .with(|object| {
                 if let Some(points) = object.as_points_path() {
-                    *points.path_transform()
+                    points.path_transform()
                 } else {
                     object.as_path().unwrap().path_transform()
                 }
@@ -107,7 +107,7 @@ fn allowed_delta(shape: &CoreHandle) -> f64 {
 
 fn set_world(artboard: &RuntimeArtboardInstanceHandle, world: Mat2D) {
     artboard.with_artboard_mut(|board| {
-        *board.mutable_world_transform() = world;
+        board.set_world_transform(world);
         board.mark_world_transform_dirty();
     });
 }

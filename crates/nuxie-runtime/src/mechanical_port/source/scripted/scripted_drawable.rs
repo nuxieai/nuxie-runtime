@@ -101,7 +101,7 @@ impl ScriptedDrawable {
                     drawable.scripted.runtime_instance()?,
                     owner.as_transform_component()?.render_opacity(),
                     drawable.base.needs_save_operation(),
-                    *owner.as_world_transform_component()?.world_transform(),
+                    owner.as_world_transform_component()?.world_transform(),
                     owner.as_component()?.artboard_handle(),
                 ))
             })

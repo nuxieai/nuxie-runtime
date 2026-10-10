@@ -221,7 +221,7 @@ impl ScrollBarConstraint {
             );
             TransformConstraint::constrain_world(
                 component,
-                *component.world_transform(),
+                component.world_transform(),
                 self.components_a,
                 target_transform,
                 self.components_b,

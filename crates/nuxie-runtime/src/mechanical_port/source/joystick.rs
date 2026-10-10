@@ -139,7 +139,7 @@ impl Joystick {
                 .with(|parent| {
                     parent
                         .as_world_transform_component()
-                        .map(|parent| *parent.world_transform())
+                        .map(|parent| parent.world_transform())
                 })
                 .flatten()
         {

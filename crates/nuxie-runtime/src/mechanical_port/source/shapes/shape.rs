@@ -79,7 +79,7 @@ impl Shape {
         let reach =
             crate::mechanical_port::source::shapes::paint::paint_outset::shape_paints_world_reach(
                 Some(&self.paint_container),
-                self.base.world_transform(),
+                &self.base.world_transform(),
             );
         if reach.world_outset > 0.0 {
             bounds = bounds.outset(reach.world_outset, reach.world_outset);
@@ -91,7 +91,7 @@ impl Shape {
             crate::mechanical_port::source::drawable::BoundsFidelity::Approximate
         }
     }
-    pub fn shape_world_transform(&self) -> &Mat2D {
+    pub fn shape_world_transform(&self) -> Mat2D {
         self.base.world_transform()
     }
     pub fn new() -> Self {
@@ -326,7 +326,7 @@ impl Shape {
             .flatten()
             .expect("Shape renderer factory");
         if self.is_flagged(PathFlags::LOCAL) {
-            let transform = transform * *self.base.world_transform();
+            let transform = transform * self.base.world_transform();
             self.with_path_mut(ShapePaintPathKind::Local, |source| {
                 path.add_render_path(
                     source.render_path(&factory),
@@ -346,8 +346,8 @@ impl Shape {
     pub fn add_to_raw_path(&mut self, path: &mut RawPath, transform: Option<Mat2D>) {
         if self.is_flagged(PathFlags::LOCAL) {
             let matrix = transform
-                .map(|v| v * *self.base.world_transform())
-                .unwrap_or_else(|| *self.base.world_transform());
+                .map(|v| v * self.base.world_transform())
+                .unwrap_or_else(|| self.base.world_transform());
             self.with_path_mut(ShapePaintPathKind::Local, |source| {
                 path.add_path(source.raw_path(), Some(&matrix));
             });
@@ -361,7 +361,7 @@ impl Shape {
     pub fn draw(&mut self, renderer: &mut Renderer) {
         let needs_save =
             self.base.needs_save_operation() || self.paint_container.shape_paints().len() > 1;
-        let transform = *self.base.world_transform();
+        let transform = self.base.world_transform();
         for paint in self.paint_container.shape_paints() {
             paint.with_mut(|object| {
                 let Some(behavior) = object.as_shape_paint_behavior_mut() else {
@@ -437,7 +437,7 @@ impl Shape {
             };
             let paint_local = !(flags & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE)).is_empty();
             let matrix = if paint_local {
-                xform * *self.base.world_transform()
+                xform * self.base.world_transform()
             } else {
                 xform
             };
@@ -695,7 +695,7 @@ impl Shape {
                 }
                 let bounds = if !path.needs_path_build() {
                     path.raw_path()
-                        .precise_bounds_with_transform(*path.base.transform())
+                        .precise_bounds_with_transform(path.base.transform())
                 } else {
                     let mut property = Aabb::default();
                     used_pending = true;
@@ -715,7 +715,7 @@ impl Shape {
                             object.as_points_path().is_some_and(|points| crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(points).is_some()),
                             self,
                         );
-                        pending.precise_bounds_with_transform(*path.base.transform())
+                        pending.precise_bounds_with_transform(path.base.transform())
                     }
                 };
                 if !(bounds.width() >= 0.0 && bounds.height() >= 0.0) {
@@ -940,13 +940,13 @@ impl Shape {
             .with(|parent| {
                 parent
                     .as_world_transform_component()
-                    .map(|parent| *parent.world_transform())
+                    .map(|parent| parent.world_transform())
             })
             .flatten()
         else {
             return false;
         };
-        let transform = *self.base.transform();
+        let transform = self.base.transform();
         self.base
             .set_world_transform(parent_world * base * transform * Mat2D::from_scale(sx, sy));
         true
@@ -1025,10 +1025,9 @@ mod path_deformer_virtual_tests {
             if skinned {
                 path.set_skin(arena.insert(Skin::default()));
             }
-            *path
-                .as_world_transform_component_mut()
+            path.as_world_transform_component_mut()
                 .unwrap()
-                .mutable_world_transform() = Mat2D::new(1.0, 0.0, 0.0, 1.0, 10.0, 0.0);
+                .set_world_transform(Mat2D::new(1.0, 0.0, 0.0, 1.0, 10.0, 0.0));
             path.as_component_mut()
                 .unwrap()
                 // Shape::length uses Component::hasDirt's all-bits check.

@@ -87,7 +87,7 @@ impl MeshHost {
         self.image_or(Image::render_scale_y, |n| n.scale_y())
     }
     pub fn world_transform(&self) -> Mat2D {
-        self.image_or(|i| *i.world_transform(), |n| n.world_transform())
+        self.image_or(|i| i.world_transform(), |n| n.world_transform())
     }
     pub fn ready(&self) -> bool {
         self.image_or(|i| i.image_asset().is_some(), |n| n.ready())

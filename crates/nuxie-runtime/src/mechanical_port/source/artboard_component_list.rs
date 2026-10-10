@@ -1717,7 +1717,7 @@ impl ArtboardComponentList {
                 }
             }
         } else {
-            let transform = *self.transform().world_transform();
+            let transform = self.transform().world_transform();
             renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
             let indices = self.ordered_list_indices().to_vec();
             for index in indices {
@@ -1755,10 +1755,10 @@ impl ArtboardComponentList {
         let bounds = self.artboard_position(artboard);
         let offset = Vec2D::new(bounds.x + position.x, bounds.y + position.y);
         let transform = if self.virtualization_enabled() {
-            self.layout_parent_ref(|parent| *parent.world_transform())
+            self.layout_parent_ref(|parent| parent.world_transform())
                 .unwrap_or_else(Mat2D::identity)
         } else {
-            *self.transform().world_transform()
+            self.transform().world_transform()
         };
         self.component()
             .with_parent(|parent| {
@@ -1782,13 +1782,13 @@ impl ArtboardComponentList {
                         .with(|parent| {
                             parent
                                 .as_layout_component()
-                                .map(|layout| *layout.world_transform())
+                                .map(|layout| layout.world_transform())
                         })
                         .flatten()
                 })
                 .unwrap_or_else(Mat2D::identity)
         } else {
-            *self.transform().world_transform()
+            self.transform().world_transform()
         };
         let local = transform * offset;
         self.component()
@@ -1811,7 +1811,7 @@ impl ArtboardComponentList {
             if let Some(transform) = parent_layout
                 .with(|parent| {
                     parent.as_layout_component().map(|layout| {
-                        *layout.world_transform()
+                        layout.world_transform()
                             * Mat2D::from_translate(bounds.left(), bounds.top())
                     })
                 })
@@ -1828,13 +1828,13 @@ impl ArtboardComponentList {
                         .with(|parent| {
                             parent
                                 .as_layout_component()
-                                .map(|layout| *layout.world_transform())
+                                .map(|layout| layout.world_transform())
                         })
                         .flatten()
                 })
                 .unwrap_or_else(Mat2D::identity)
         } else {
-            *self.transform().world_transform()
+            self.transform().world_transform()
         };
         transform * Mat2D::from_translate(position.x, position.y)
     }
@@ -1850,10 +1850,10 @@ impl ArtboardComponentList {
         // different upstream contract: it deliberately omits scroll and is
         // reserved for scroll-into-view calculations.
         let host_transform = if self.virtualization_enabled_ref() {
-            self.layout_parent_ref(|parent| *parent.world_transform())
+            self.layout_parent_ref(|parent| parent.world_transform())
                 .unwrap_or_else(Mat2D::identity)
         } else {
-            *self.transform().world_transform()
+            self.transform().world_transform()
         };
         Some(host_transform * artboard_transform)
     }
@@ -2082,10 +2082,10 @@ impl ArtboardComponentList {
         };
         let offset = self.artboard_position(&artboard);
         let transform = if self.virtualization_enabled() {
-            self.layout_parent_ref(|parent| *parent.world_transform())
+            self.layout_parent_ref(|parent| parent.world_transform())
                 .unwrap_or_else(Mat2D::identity)
         } else {
-            *self.transform().world_transform()
+            self.transform().world_transform()
         };
         let artboard_transform = transform * Mat2D::from_translate(offset.x, offset.y);
         let mut to_mounted_artboard = Mat2D::identity();
@@ -2785,7 +2785,7 @@ impl ArtboardComponentList {
             .with_mut(|parent| parent.as_layout_component_mut().map(use_parent))?
     }
 
-    pub fn list_transform(&self) -> &Mat2D {
+    pub fn list_transform(&self) -> Mat2D {
         self.transform().world_transform()
     }
 
@@ -2993,7 +2993,7 @@ impl ConstrainableList for ArtboardComponentList {
         &mut self.constrainable_list_state
     }
 
-    fn list_transform(&self) -> &Mat2D {
+    fn list_transform(&self) -> Mat2D {
         ArtboardComponentList::list_transform(self)
     }
 

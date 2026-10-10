@@ -33,7 +33,7 @@ impl TextInputDrawable {
         }
     }
     pub fn shape_world_transform(&self) -> Mat2D {
-        *self.base.world_transform()
+        self.base.world_transform()
     }
     pub fn path_builder(&self) -> CoreHandle {
         self.text_input_handle()

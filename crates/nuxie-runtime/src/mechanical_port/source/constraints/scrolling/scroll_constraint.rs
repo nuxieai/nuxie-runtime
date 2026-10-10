@@ -862,7 +862,7 @@ impl ScrollConstraint {
         let applied = owner
             .with_mut(|owner| {
                 let component = owner.as_transform_component_mut()?;
-                let current = *component.world_transform();
+                let current = component.world_transform();
                 let target = Constraint::offset_in_parent_frame(component, &scroll_transform);
                 TransformConstraint::constrain_world(
                     component,

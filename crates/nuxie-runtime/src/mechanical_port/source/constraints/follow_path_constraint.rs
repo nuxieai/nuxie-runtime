@@ -149,7 +149,7 @@ impl FollowPathConstraint {
         if target.as_shape().is_some() || target.as_path().is_some() {
             let measured = self.path_measure.at_percentage(distance_offset);
             let position = measured.pos;
-            let mut transform_b = *transform.world_transform();
+            let mut transform_b = transform.world_transform();
             if self.base.orient() {
                 let components_b = transform_b.decompose();
                 let tangent_rotation = measured.tan.y.atan2(measured.tan.x);
@@ -166,7 +166,7 @@ impl FollowPathConstraint {
             transform_b[5] = position.y + offset_position.y;
             transform_b
         } else {
-            *transform.world_transform()
+            transform.world_transform()
         }
     }
 
@@ -207,7 +207,7 @@ impl FollowPathConstraint {
             .as_transform_component()
             .expect("constraint TransformComponent");
         let component_parent_world = get_parent_world(component_transform);
-        let world = *component_transform.world_transform();
+        let world = component_transform.world_transform();
         let components = self.constrain_helper(
             &world,
             &mut transform_b,

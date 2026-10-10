@@ -668,7 +668,7 @@ impl ArtboardInstance {
         let transform = self.object_handle(local_id)?.with(|object| {
             object
                 .as_world_transform_component()
-                .map(|component| *component.world_transform())
+                .map(|component| component.world_transform())
         })??;
         Some(native_to_render_matrix(transform))
     }
@@ -685,7 +685,7 @@ impl ArtboardInstance {
         let (bounds, world, render_opacity) = handle.with(|object| {
             Some((
                 object.semantic_provider_local_bounds()?,
-                *object.as_world_transform_component()?.world_transform(),
+                object.as_world_transform_component()?.world_transform(),
                 object.as_transform_component()?.render_opacity(),
             ))
         })??;
@@ -706,7 +706,7 @@ impl ArtboardInstance {
             let child_world = child.with(|object| {
                 object
                     .as_world_transform_component()
-                    .map(|component| *component.world_transform())
+                    .map(|component| component.world_transform())
             })??;
             let (constraints, parent) = ancestor.with(|object| {
                 let transform = object.as_transform_component()?;
@@ -938,7 +938,7 @@ fn collect_geometry(
             .with(|object| {
                 Some((
                     object.semantic_provider_local_bounds()?,
-                    *object.as_world_transform_component()?.world_transform(),
+                    object.as_world_transform_component()?.world_transform(),
                 ))
             })
             .flatten()
@@ -1112,7 +1112,7 @@ fn collect_semantic_text(
                         return None;
                     }
                     let bounds = input.local_bounds();
-                    let world = *input.base.world_transform();
+                    let world = input.base.world_transform();
                     // Inspection must never carry secure source text into
                     // diagnostics, recordings, or downstream serialization.
                     let value = if input.base.obscured() {
@@ -1129,7 +1129,7 @@ fn collect_semantic_text(
                 }
                 Some((
                     text.local_bounds(),
-                    *object.as_world_transform_component()?.world_transform(),
+                    object.as_world_transform_component()?.world_transform(),
                     text.settled_text_value(),
                 ))
             })

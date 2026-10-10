@@ -172,10 +172,12 @@ fn semantic_actions_refuse_semantic_ancestors_then_resume() {
             .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
             .unwrap();
         let data = node.borrow().semantic_data.clone().unwrap();
-        let ancestor = node
-            .borrow()
-            .parent()
-            .expect("dropdown has a registered semantic ancestor");
+        // The fixture's dropdown is a semantic root. Give it a registered
+        // semantic ancestor through the same public manager API as a host.
+        let ancestor = nuxie_runtime::source::semantic::semantic_node::SemanticNode::new(0);
+        fixture.manager.add_child(None, ancestor.clone());
+        fixture.manager.remove_child(&node);
+        fixture.manager.add_child(Some(ancestor.clone()), node);
         let previous = ancestor.borrow().state_flags;
         ancestor.borrow_mut().state_flags |= state.0;
         assert!(

@@ -910,6 +910,8 @@ unsafe fn count_one_subpass(draw: *mut Draw, _: &gpu::PlatformFeatures) {
     unsafe {
         (*draw).prepass_count = 0;
         (*draw).subpass_count = 1;
+        // Clip resets and image draws push the contents of their one pass.
+        (*draw).pass_draw_contents[0] = (*draw).combined_draw_contents;
     }
 }
 
@@ -1924,6 +1926,35 @@ mod transformed_area_consumer_tests {
     };
     use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
     use nuxie_render_api::Vec2D;
+
+    #[test]
+    fn single_pass_draws_push_their_combined_contents() {
+        use super::{ClipResetAction, gpu_cpp, make_clip_reset};
+        // Clip resets, image rects and image meshes push the contents of
+        // their one pass. depthStencil decides from them whether a reset
+        // intersects a nested clip with the clip before it or clears the
+        // clip: pushed without them, a nested clip's reset clears the outer
+        // clip and everything drawn inside the nested clip is lost.
+        let features = gpu::PlatformFeatures::default();
+        let bounds = gpu::IAABB { left: 0, top: 0, right: 8, bottom: 8 };
+        for (action, stencil_type) in [
+            (ClipResetAction::intersectPreviousClip, gpu::StencilType::nestedClipReset),
+            (ClipResetAction::clearPreviousClip, gpu::StencilType::clipReset),
+        ] {
+            let mut reset = make_clip_reset(bounds, 1, gpu::DrawContents::clockwiseFill, action);
+            unsafe { reset.base.countSubpasses(&features) };
+            assert_eq!(reset.base.prepassCount(), 0);
+            assert_eq!(reset.base.subpassCount(), 1);
+            let pushed = reset.base.subpassDrawContents(0);
+            assert_eq!(pushed, reset.base.combinedDrawContents());
+            let info = gpu_cpp::get_stencil_info(
+                gpu::InterlockMode::depthStencil,
+                gpu::DrawType::clipReset,
+                pushed,
+            );
+            assert_eq!(info.stencilType, stencil_type);
+        }
+    }
 
     #[test]
     fn inkbleed_fill_hairline_preserves_signed_pass_contents() {

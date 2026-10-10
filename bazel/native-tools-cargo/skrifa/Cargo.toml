@@ -1,0 +1,28 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "skrifa"
+version = "0.45.1"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+name = "skrifa"
+
+[features]
+"autohint_shaping" = []
+"__bazel_dependency_default" = ["std", "autohint_shaping"]
+"libm" = ["dep:core_maths", "read-fonts/libm"]
+"spec_next" = ["read-fonts/spec_next"]
+"std" = ["read-fonts/std"]
+"traversal" = ["std", "read-fonts/experimental_traverse"]
+"default" = []
+
+[dependencies]
+"bytemuck" = { "version" = "1.13.1" }
+"core_maths" = { "version" = "0.1", "optional" = true }
+"read-fonts" = { "version" = "0.42.1", "default-features" = false }

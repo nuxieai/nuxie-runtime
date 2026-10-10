@@ -1,0 +1,17 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "golden-compare"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"anyhow" = { "version" = "1" }
+"nuxie-binary" = { "path" = "../nuxie-binary" }

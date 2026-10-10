@@ -1,0 +1,27 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-script-signature"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+
+[features]
+"freestanding-tests" = []
+
+[dev-dependencies]
+"serde_json" = { "version" = "1" }
+
+[build-dependencies]
+"cc" = { "version" = "1" }
+"sha2" = { "version" = "0.10" }
+
+[target."cfg(not(all(target_arch = \"wasm32\", target_os = \"unknown\")))".dependencies]
+"libhydrogen" = { "version" = "=0.4.6" }
+"libhydrogen-sys" = { "version" = "=0.9.4" }

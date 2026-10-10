@@ -944,6 +944,9 @@ pub struct ScriptVm {
         RefCell<Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>>,
     logging: LoggingScriptingContext,
     module_hooks: RefCell<Option<Rc<dyn ModuleHooks>>>,
+    // The image decode registry once found in this VM's app data; async
+    // polling runs every frame and skips the app-data lookup after that.
+    image_decode: std::cell::OnceCell<Rc<lua_image_decode::ImageDecodeRegistry>>,
 }
 
 #[cfg(test)]
@@ -2105,6 +2108,7 @@ impl ScriptVm {
             native_shader_authorities: RefCell::new(Vec::new()),
             logging: LoggingScriptingContext::default(),
             module_hooks: RefCell::new(None),
+            image_decode: std::cell::OnceCell::new(),
         }
     }
 
@@ -2894,6 +2898,18 @@ pub fn validate_executable_luau_bytecode(
     validate_luau_bytecode(bytecode)
 }
 
+impl ScriptVm {
+    /// The image decode registry installed in this VM, kept once found.
+    fn image_decode_registry(&self) -> Option<&Rc<lua_image_decode::ImageDecodeRegistry>> {
+        if self.image_decode.get().is_none() {
+            if let Some(registry) = lua_image_decode::installed_registry(&self.lua) {
+                let _ = self.image_decode.set(registry);
+            }
+        }
+        self.image_decode.get()
+    }
+}
+
 impl RuntimeScriptingVm for ScriptVm {
     #[cfg(feature = "tools")]
     fn dispose_orphan_scripted_properties(&self, all_tags: bool) {
@@ -3061,7 +3077,10 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn has_pending_async_work(&self) -> bool {
-        if lua_image_decode::has_pending_work(&self.lua) {
+        if self
+            .image_decode_registry()
+            .is_some_and(|registry| lua_image_decode::registry_has_pending_work(registry))
+        {
             return true;
         }
         #[cfg(feature = "scriptnet")]
@@ -3071,7 +3090,10 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {
-        match lua_image_decode::poll_completed(&self.lua) {
+        let Some(registry) = self.image_decode_registry().cloned() else {
+            return Ok(false);
+        };
+        match lua_image_decode::poll_registry_completed(&self.lua, registry, usize::MAX) {
             Ok(settled) => Ok(settled),
             Err(error) => {
                 self.logging.log_error(&error);
@@ -3081,11 +3103,14 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn pending_async_work_sequence(&self) -> Option<u64> {
-        lua_image_decode::pending_completion_sequence(&self.lua)
+        lua_image_decode::registry_pending_completion_sequence(self.image_decode_registry()?)
     }
 
     fn poll_next_async_work(&self) -> std::result::Result<bool, ScriptError> {
-        match lua_image_decode::poll_next_completed(&self.lua) {
+        let Some(registry) = self.image_decode_registry().cloned() else {
+            return Ok(false);
+        };
+        match lua_image_decode::poll_registry_completed(&self.lua, registry, 1) {
             Ok(settled) => Ok(settled),
             Err(error) => {
                 self.logging.log_error(&error);

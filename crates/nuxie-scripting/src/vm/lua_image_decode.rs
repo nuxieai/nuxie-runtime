@@ -123,7 +123,7 @@ struct PendingDecode {
     cancellation: WorkCancellationHandle,
 }
 
-struct ImageDecodeRegistry {
+pub(super) struct ImageDecodeRegistry {
     next_request_id: Cell<u64>,
     owner_id: u64,
     decoder: Arc<dyn ScriptImageDecoder>,
@@ -226,18 +226,29 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     Ok(promise)
 }
 
+/// The registry `install` placed in this VM's app data, if any. The VM keeps
+/// it once found, so per-frame async polling skips the app-data lookup.
+pub(super) fn installed_registry(lua: &Lua) -> Option<Rc<ImageDecodeRegistry>> {
+    lua.app_data_ref::<ImageDecodeRegistryOwner>()
+        .map(|owner| Rc::clone(&owner.0))
+}
+
 pub(super) fn has_pending_work(lua: &Lua) -> bool {
     let Some(owner) = lua.app_data_ref::<ImageDecodeRegistryOwner>() else {
         return false;
     };
+    registry_has_pending_work(&owner.0)
+}
+
+pub(super) fn registry_has_pending_work(registry: &ImageDecodeRegistry) -> bool {
     // The wasm32-unknown-unknown lane uses the same Rust decoder and pool;
     // there are no browser-native requests outside this owner to count.
     // Pool callbacks hand off to the Lua-thread queue before settling promises.
-    if !lock_unpoisoned(&owner.0.completions).is_empty() {
+    if !lock_unpoisoned(&registry.completions).is_empty() {
         return true;
     }
     nuxie_runtime::get_global_work_pool_if_exists()
-        .is_some_and(|pool| pool.has_pending_work_for_owner(owner.0.owner_id))
+        .is_some_and(|pool| pool.has_pending_work_for_owner(registry.owner_id))
 }
 
 #[cfg(feature = "upstream-test-seams")]
@@ -254,7 +265,11 @@ pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
 
 pub(super) fn pending_completion_sequence(lua: &Lua) -> Option<u64> {
     let owner = lua.app_data_ref::<ImageDecodeRegistryOwner>()?;
-    let completions = lock_unpoisoned(&owner.0.completions);
+    registry_pending_completion_sequence(&owner.0)
+}
+
+pub(super) fn registry_pending_completion_sequence(registry: &ImageDecodeRegistry) -> Option<u64> {
+    let completions = lock_unpoisoned(&registry.completions);
     completions.front().map(|completion| match completion {
         DecodeCompletion::Success { sequence, .. } | DecodeCompletion::Failure { sequence, .. } => {
             *sequence
@@ -273,6 +288,14 @@ fn poll_completed_limit(lua: &Lua, limit: usize) -> Result<bool> {
     else {
         return Ok(false);
     };
+    poll_registry_completed(lua, registry, limit)
+}
+
+pub(super) fn poll_registry_completed(
+    lua: &Lua,
+    registry: Rc<ImageDecodeRegistry>,
+    limit: usize,
+) -> Result<bool> {
     let completions = {
         let mut queue = lock_unpoisoned(&registry.completions);
         let count = queue.len().min(limit);

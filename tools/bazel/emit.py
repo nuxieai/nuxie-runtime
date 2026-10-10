@@ -212,7 +212,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
             if (package.directory / "src/main.rs").is_file():
                 binaries.setdefault(package.name, {"name": package.name, "path": "src/main.rs"})
             for path in package.directory.glob("src/bin/*.rs"):
-                binaries.setdefault(path.stem, {"name": path.stem, "path": str(path.relative_to(package.directory))})
+                binaries.setdefault(path.stem, {"name": path.stem, "path": path.relative_to(package.directory).as_posix()})
         binary_products = {}
         for binary_name, binary in sorted(binaries.items()):
             if not set(binary.get("required-features", [])).issubset(features):
@@ -238,7 +238,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
             example_specs = {example["name"]: example for example in package.manifest.get("example", [])}
             if package.manifest["package"].get("autoexamples", True):
                 for path in package.directory.glob("examples/*.rs"):
-                    example_specs.setdefault(path.stem, {"name": path.stem, "path": str(path.relative_to(package.directory))})
+                    example_specs.setdefault(path.stem, {"name": path.stem, "path": path.relative_to(package.directory).as_posix()})
             for example_name, example in sorted(example_specs.items()):
                 if not set(example.get("required-features", [])).issubset(features):
                     continue
@@ -294,7 +294,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                 lines.extend([
                     'rust_test(', f'    name = {quoted(package.name + "__test_" + test_name)},',
                     f'    crate_name = {quoted(test_name.replace("-", "_"))},',
-                    f'    crate_root = {quoted(source(str(file.relative_to(package.directory))))},',
+                    f'    crate_root = {quoted(source(file.relative_to(package.directory).as_posix()))},',
                     '    srcs = _test_sources,', '    compile_data = _compile_data,',
                     '    data = _compile_data + ' + quoted(list(binary_products.values())) + ',',
                     f'    edition = {quoted(package.edition)},', f'    version = {quoted(package.version)},',

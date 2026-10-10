@@ -138,6 +138,7 @@ jobs:
           path: rive-rust
 
       - name: Install Bazelisk
+        working-directory: ${{ github.workspace }}/rive-rust
         run: tools/bazel/install.sh
 
       - name: Install Rust stable
@@ -229,6 +230,9 @@ jobs:
     steps:
       - name: Checkout nuxie-runtime
         uses: actions/checkout@v4
+
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
 
       - name: Checkout pinned Rive source oracle
         uses: actions/checkout@v4
@@ -441,6 +445,7 @@ jobs:
           path: rive-runtime
 
       - name: Install Bazelisk
+        working-directory: ${{ github.workspace }}/rive-rust
         run: tools/bazel/install.sh
 
       - name: Install Rust stable

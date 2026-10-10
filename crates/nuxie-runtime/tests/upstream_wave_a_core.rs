@@ -92,7 +92,7 @@ fn upstream_background_shape_bounds_call_the_world_and_local_owners() {
     close(extended.width(), 138.01093, "extended width");
     close(extended.height(), 29.995453, "extended height");
     write::<Artboard, _>(&artboard, |artboard| {
-        artboard.mutable_world_transform().scale_by_values(0.5, 0.5);
+        artboard.with_world_transform_mut(|world| world.scale_by_values(0.5, 0.5));
         artboard.mark_world_transform_dirty();
     });
     advance(&artboard);

@@ -98,7 +98,7 @@ impl NestedArtboardMeshHost {
     pub fn world_transform(&self) -> Mat2D {
         let world = self
             .owner
-            .with_downcast::<NestedArtboard, _>(|n| *n.world_transform())
+            .with_downcast::<NestedArtboard, _>(|n| n.world_transform())
             .unwrap();
         self.instance()
             .and_then(|a| {

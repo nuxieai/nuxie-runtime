@@ -26,12 +26,12 @@ impl BoneChainLink {
     fn holds_our_solve(&self) -> bool {
         self.solved
             && IKConstraint::with_bone(&self.bone, |bone| {
-                get_parent_world(bone) * self.solved_local == *bone.world_transform()
+                get_parent_world(bone) * self.solved_local == bone.world_transform()
             })
     }
 
     fn record_solve(&mut self) {
-        self.solved_local = IKConstraint::with_bone(&self.bone, |bone| *bone.transform());
+        self.solved_local = IKConstraint::with_bone(&self.bone, |bone| bone.transform());
         self.solved = true;
     }
 }
@@ -309,21 +309,22 @@ impl IKConstraint {
         let bone = self.fk_chain[index].bone.clone();
         let components = self.fk_chain[index].transform_components;
         Self::with_bone_mut(&bone, |bone| {
-            let transform = bone.mutable_transform();
-            *transform = Mat2D::from_rotation(rotation);
-            transform[4] = components.x();
-            transform[5] = components.y();
-            let scale_x = components.scale_x();
-            let scale_y = components.scale_y();
-            transform[0] *= scale_x;
-            transform[1] *= scale_x;
-            transform[2] *= scale_y;
-            transform[3] *= scale_y;
-            let skew = components.skew();
-            if skew != 0.0 {
-                transform[2] = transform[0].mul_add(skew, transform[2]);
-                transform[3] = transform[1].mul_add(skew, transform[3]);
-            }
+            bone.with_transform_mut(|transform| {
+                *transform = Mat2D::from_rotation(rotation);
+                transform[4] = components.x();
+                transform[5] = components.y();
+                let scale_x = components.scale_x();
+                let scale_y = components.scale_y();
+                transform[0] *= scale_x;
+                transform[1] *= scale_x;
+                transform[2] *= scale_y;
+                transform[3] *= scale_y;
+                let skew = components.skew();
+                if skew != 0.0 {
+                    transform[2] = transform[0].mul_add(skew, transform[2]);
+                    transform[3] = transform[1].mul_add(skew, transform[3]);
+                }
+            });
             bone.compose_world_transform();
         });
     }
@@ -352,7 +353,7 @@ impl IKConstraint {
                     let parent_world_inverse = get_parent_world(bone).invert_or_identity();
                     (
                         parent_world_inverse,
-                        (parent_world_inverse * *bone.world_transform()).decompose(),
+                        (parent_world_inverse * bone.world_transform()).decompose(),
                     )
                 });
             link.parent_world_inverse = parent_world_inverse;

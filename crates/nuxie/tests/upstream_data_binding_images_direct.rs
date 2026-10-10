@@ -328,7 +328,7 @@ fn image_fit_alignment_preserves_generated_owners_and_all_three_twenty_frame_pha
             .find(|i| image_fit(i) == Fit::None as u32)
             .expect("Fit::none Image");
         let transform = no_scale
-            .with_downcast::<Image, _>(|i| *i.base.transform())
+            .with_downcast::<Image, _>(|i| i.base.transform())
             .expect("transform");
         assert!(transform[4] < 0.0);
         assert!(transform[5] < 0.0);

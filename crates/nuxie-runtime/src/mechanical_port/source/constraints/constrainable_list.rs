@@ -10,7 +10,7 @@ pub struct ConstrainableListState {
 
 pub trait ConstrainableList {
     fn constrainable_list_state(&mut self) -> &mut ConstrainableListState;
-    fn list_transform(&self) -> &Mat2D;
+    fn list_transform(&self) -> Mat2D;
     fn list_composed_translation(&self) -> Vec2D;
     // Visit the same ordered mutable occurrences without manufacturing
     // simultaneous Rust references into the list's transform map.

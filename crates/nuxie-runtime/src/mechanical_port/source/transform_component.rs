@@ -1,4 +1,4 @@
-use std::{cell::Cell, rc::Rc};
+use std::rc::Rc;
 
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
@@ -11,36 +11,15 @@ use crate::mechanical_port::source::{
     intrinsically_sizeable::IntrinsicallySizeable,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     status_code::StatusCode,
+    world_transform_component::TransformCells,
 };
 
 pub struct TransformComponent {
     pub base: TransformComponentBase,
-    transform: Mat2D,
-    // Shared with the path pipeline's cells (see TransformCells).
-    cells: Rc<TransformCells>,
     parent_transform_component: Option<CoreHandle>,
+    // The parent's cells, for its world transform and child opacity.
+    parent_cells: Option<Rc<TransformCells>>,
     constraints: Vec<CoreHandle>,
-}
-
-/// The part of a TransformComponent that the path pipeline reads from cells
-/// (ShapeCells) instead of borrowing the component.
-#[derive(Default)]
-pub(crate) struct TransformCells {
-    // None until the first RenderOpacity update.
-    render_opacity: Cell<Option<f32>>,
-    has_constraints: Cell<bool>,
-}
-
-impl TransformCells {
-    #[inline]
-    pub(crate) fn render_opacity(&self) -> f32 {
-        self.render_opacity.get().unwrap_or(0.0)
-    }
-
-    #[inline]
-    pub(crate) fn has_constraints(&self) -> bool {
-        self.has_constraints.get()
-    }
 }
 
 /// Source virtual dispatch with the Rust occurrence lifetime made explicit.
@@ -222,9 +201,8 @@ impl Default for TransformComponent {
     fn default() -> Self {
         Self {
             base: TransformComponentBase::default(),
-            transform: Mat2D::default(),
-            cells: Rc::default(),
             parent_transform_component: None,
+            parent_cells: None,
             constraints: Vec::new(),
         }
     }
@@ -256,18 +234,19 @@ impl TransformComponent {
     }
 
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
-        self.parent_transform_component =
-            self.base
-                .base
-                .base
-                .base
-                .base
-                .parent_handle()
-                .filter(|parent| {
+        let parent = self.base.base.base.base.base.parent_handle();
+        let parent_cells = parent
+            .as_ref()
+            .and_then(|parent| {
+                parent.with(|parent| {
                     parent
-                        .with(|parent| parent.as_world_transform_component().is_some())
-                        .unwrap_or(false)
-                });
+                        .as_world_transform_component()
+                        .map(|parent| Rc::clone(parent.cells()))
+                })
+            })
+            .flatten();
+        self.parent_transform_component = parent.filter(|_| parent_cells.is_some());
+        self.parent_cells = parent_cells;
         StatusCode::Ok
     }
 
@@ -438,26 +417,27 @@ impl TransformComponent {
     }
 
     pub fn update_transform_state(&mut self, x: f32, y: f32) {
-        self.transform = Mat2D::from_rotation(self.base.rotation());
-        self.transform[4] = x;
-        self.transform[5] = y;
-        self.transform
-            .scale_by_values(self.base.scale_x(), self.base.scale_y());
+        let mut transform = Mat2D::from_rotation(self.base.rotation());
+        transform[4] = x;
+        transform[5] = y;
+        transform.scale_by_values(self.base.scale_x(), self.base.scale_y());
+        self.cells().set_local(transform);
     }
 
     pub fn compose_world_transform(&mut self) {
-        let parent_transform = self.parent_transform_component.as_ref().and_then(|parent| {
-            parent
-                .with(|parent| {
-                    parent
-                        .as_world_transform_component()
-                        .map(|parent| *parent.world_transform())
-                })
-                .flatten()
-        });
-        *self.base.base.mutable_world_transform() = parent_transform
-            .map(|parent| parent * self.transform)
-            .unwrap_or(self.transform);
+        let transform = self.cells().local();
+        let world = match self.parent_world_transform() {
+            Some(parent) => parent * transform,
+            None => transform,
+        };
+        self.cells().set_world(world);
+    }
+
+    /// The live parent WorldTransformComponent's world transform.
+    pub(crate) fn parent_world_transform(&self) -> Option<Mat2D> {
+        let parent = self.parent_transform_component.as_ref()?;
+        let cells = self.parent_cells.as_ref()?;
+        parent.is_occupied().then(|| cells.world())
     }
 
     pub fn apply_constraints(component: CoreHandle, constraints: Vec<CoreHandle>) {
@@ -473,7 +453,7 @@ impl TransformComponent {
         if let Some(parent_child_opacity) = parent_child_opacity {
             opacity *= parent_child_opacity;
         }
-        self.cells.render_opacity.set(Some(opacity));
+        self.cells().set_render_opacity(opacity);
     }
 
     pub fn child_opacity(&self) -> f32 {
@@ -481,23 +461,27 @@ impl TransformComponent {
     }
 
     pub fn render_opacity(&self) -> f32 {
-        self.cells.render_opacity()
+        self.cells().render_opacity()
     }
 
     pub(crate) fn has_computed_render_opacity(&self) -> bool {
-        self.cells.render_opacity.get().is_some()
+        self.cells().computed_render_opacity().is_some()
     }
 
     pub(crate) fn cells(&self) -> &Rc<TransformCells> {
-        &self.cells
+        self.base.base.cells()
     }
 
-    pub fn transform(&self) -> &Mat2D {
-        &self.transform
+    pub fn transform(&self) -> Mat2D {
+        self.cells().local()
     }
 
-    pub fn mutable_transform(&mut self) -> &mut Mat2D {
-        &mut self.transform
+    /// Edit the local transform in place.
+    pub fn with_transform_mut<R>(&mut self, edit: impl FnOnce(&mut Mat2D) -> R) -> R {
+        let mut transform = self.cells().local();
+        let result = edit(&mut transform);
+        self.cells().set_local(transform);
+        result
     }
 
     /// Our translation in the parent's frame — what a constraint's offset
@@ -525,7 +509,7 @@ impl TransformComponent {
 
     pub fn add_constraint(&mut self, constraint: CoreHandle) {
         self.constraints.push(constraint);
-        self.cells.has_constraints.set(true);
+        self.cells().set_has_constraints();
     }
 
     pub fn constraint_bounds(&self) -> Aabb {

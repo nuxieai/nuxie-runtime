@@ -228,7 +228,7 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                 };
                 let Some((mut value, mut world, artboard)) = input
                     .with_downcast_mut::<TextInput, _>(|input| {
-                        let world = *input.base.world_transform();
+                        let world = input.base.world_transform();
                         let artboard = input.base.artboard_handle();
                         let bounds = input.local_bounds();
                         let baseline = input
@@ -277,7 +277,7 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                         .with(|value| {
                             value
                                 .as_transform_component()
-                                .map(|value| *value.world_transform())
+                                .map(|value| value.world_transform())
                         })
                         .flatten()
                     else {
@@ -425,7 +425,7 @@ pub unsafe extern "C" fn nux_player_text_run_geometry(
             Err(status) => return status,
         };
         let Some(mut value) = owner.with_downcast::<Text, _>(|text| {
-            let world = *text.base.world_transform();
+            let world = text.base.world_transform();
             let content = world * text.internal_transform();
             let bounds = text.local_bounds();
             let first_baseline = text.first_baseline();

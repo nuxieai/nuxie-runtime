@@ -62,7 +62,7 @@ fn nested(artboard: &RuntimeArtboardInstanceHandle) -> (CoreHandle, RuntimeArtbo
 fn world(owner: &CoreHandle) -> Mat2D {
     owner
         .with(|owner| {
-            *owner
+            owner
                 .as_transform_component()
                 .expect("transform")
                 .world_transform()

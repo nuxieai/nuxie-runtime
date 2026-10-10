@@ -114,7 +114,7 @@ impl NSlicedNode {
         }
     }
     fn update_map_world_point(&mut self) {
-        let world = *self.base.world_transform();
+        let world = self.base.world_transform();
         let mut inverse_world = Mat2D::default();
         if !world.invert(&mut inverse_world) {
             self.map_world_point = Box::new(|_point| {});

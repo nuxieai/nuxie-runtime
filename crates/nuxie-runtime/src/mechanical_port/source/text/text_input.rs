@@ -59,7 +59,7 @@ impl TextInput {
         let fidelity =
             crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
                 &self.local_bounds(),
-                self.base.world_transform(),
+                &self.base.world_transform(),
                 None,
                 out,
             );
@@ -752,7 +752,7 @@ impl TextInput {
         self.mark_paint_dirty();
     }
     pub fn world_position(&mut self, out: &mut Vec2D) -> bool {
-        let local = *self.base.world_transform() * Vec2D::new(0.0, 0.0);
+        let local = self.base.world_transform() * Vec2D::new(0.0, 0.0);
         *out = self
             .base
             .with_artboard_mut(|artboard| artboard.root_transform(local))

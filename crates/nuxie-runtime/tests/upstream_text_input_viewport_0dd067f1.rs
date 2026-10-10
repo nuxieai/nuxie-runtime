@@ -88,7 +88,7 @@ fn a_press_anywhere_in_the_viewport_reaches_the_text_input() {
                     (viewport.layout_width() - 300.0).abs() <= 100.0 * f32::EPSILON * 300.0,
                     "{name}"
                 );
-                *viewport.world_transform()
+                viewport.world_transform()
                     * Vec2D::new(
                         viewport.layout_width() - 2.0,
                         viewport.layout_height() - 2.0,
@@ -131,7 +131,7 @@ fn a_press_anywhere_in_the_viewport_reaches_the_text_input() {
         });
         let outside = viewport
             .with_downcast::<LayoutComponent, _>(|viewport| {
-                *viewport.world_transform()
+                viewport.world_transform()
                     * Vec2D::new(
                         viewport.layout_width() + 5.0,
                         viewport.layout_height() * 0.5,

@@ -64,7 +64,7 @@ impl Node {
         let Some(artboard) = self.base.artboard_handle() else {
             return 0.0;
         };
-        let world = *self.base.base.world_transform();
+        let world = self.base.base.world_transform();
         artboard
             .with_downcast_mut::<Artboard, _>(|artboard| {
                 artboard.root_transform(Vec2D::new(world[4], world[5])).x
@@ -76,7 +76,7 @@ impl Node {
         let Some(artboard) = self.base.artboard_handle() else {
             return 0.0;
         };
-        let world = *self.base.base.world_transform();
+        let world = self.base.base.world_transform();
         artboard
             .with_downcast_mut::<Artboard, _>(|artboard| {
                 artboard.root_transform(Vec2D::new(world[4], world[5])).y
@@ -121,7 +121,7 @@ impl Node {
             if let Some(parent) = self.base.base.parent_transform_component() {
                 let parent_world = parent
                     .with(|parent| {
-                        *parent
+                        parent
                             .as_world_transform_component()
                             .expect("parent transform")
                             .world_transform()
@@ -129,7 +129,7 @@ impl Node {
                     .expect("live parent transform");
                 let mut inverse = Mat2D::default();
                 if parent_world.invert(&mut inverse) {
-                    self.local_transform = inverse * *self.base.base.world_transform();
+                    self.local_transform = inverse * self.base.base.world_transform();
                     return self.local_transform;
                 }
             }

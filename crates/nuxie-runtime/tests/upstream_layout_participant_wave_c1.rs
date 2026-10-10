@@ -518,7 +518,7 @@ fn a_participant_with_an_empty_path_keeps_a_sane_world_transform() {
             .with_downcast::<Shape, _>(|shape| {
                 (
                     shape.compute_intrinsic_bounds(),
-                    *shape.base.world_transform(),
+                    shape.base.world_transform(),
                 )
             })
             .expect("Shape");

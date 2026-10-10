@@ -48,7 +48,7 @@ fn native_import_instance_advance_and_draw_preserves_upstream_dependencies() {
         .expect("upstream Rectangle shape");
     instance.advance_default(0.0);
     let world = rectangle
-        .with_downcast::<Shape, _>(|shape| *shape.shape_world_transform())
+        .with_downcast::<Shape, _>(|shape| shape.shape_world_transform())
         .expect("live Rectangle shape");
     assert_eq!(world[4], 39.203125_f32);
     assert_eq!(world[5], 29.535156_f32);

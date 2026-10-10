@@ -46,7 +46,7 @@ impl DistanceConstraint {
         let component = component
             .as_transform_component_mut()
             .expect("constraint TransformComponent");
-        let world = component.mutable_world_transform();
+        let mut world = component.world_transform();
         let anchor_world = Vec2D::new(
             world[0] * anchor.x + world[2] * anchor.y,
             world[1] * anchor.x + world[3] * anchor.y,
@@ -77,6 +77,7 @@ impl DistanceConstraint {
         position = Vec2D::lerp(our_translation, position, self.base.strength());
         world[4] = position.x - anchor_world.x;
         world[5] = position.y - anchor_world.y;
+        component.set_world_transform(world);
     }
 
     pub fn distance_changed(&mut self) {

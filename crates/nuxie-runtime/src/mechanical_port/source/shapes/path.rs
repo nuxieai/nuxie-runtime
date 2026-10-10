@@ -308,13 +308,13 @@ impl Path {
         self.cells.shape_handle()
     }
     pub fn path_transform(&self) -> Mat2D {
-        *self.base.world_transform()
+        self.base.world_transform()
     }
     pub(crate) fn path_transform_for(
         owner: &dyn crate::mechanical_port::source::core::CoreObject,
     ) -> Mat2D {
         if let Some(points) = owner.as_points_path() {
-            *points.path_transform()
+            points.path_transform()
         } else {
             owner
                 .as_path()
@@ -1061,7 +1061,7 @@ impl Path {
                     .with(|object| {
                         object
                             .as_transform_component()
-                            .map(|parent| *parent.world_transform())
+                            .map(|parent| parent.world_transform())
                     })
                     .flatten()
             }) {

@@ -521,7 +521,7 @@ impl Text {
         let fidelity =
             crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
                 &self.local_bounds(),
-                self.base.world_transform(),
+                &self.base.world_transform(),
                 None,
                 out,
             );
@@ -1194,7 +1194,7 @@ impl Text {
             .intersects(ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH | ComponentDirt::PAINT)
         {
             self.clip_path.rewind();
-            self.set_shape_world_transform(*self.base.world_transform() * self.internal_transform);
+            self.set_shape_world_transform(self.base.world_transform() * self.internal_transform);
             self.clip_path
                 .add_path(&self.clip_rect, Some(&self.shape_world_transform()));
         }
@@ -2046,13 +2046,13 @@ impl Text {
                 .with(|parent| {
                     parent
                         .as_world_transform_component()
-                        .map(|parent| *parent.world_transform())
+                        .map(|parent| parent.world_transform())
                 })
                 .flatten()
         });
         if let (Some(translation), Some(parent_world)) = (participant, parent_world) {
             let base = Mat2D::from_translation(translation);
-            let transform = *self.base.transform();
+            let transform = self.base.transform();
             self.base
                 .set_world_transform(parent_world * base * transform);
             return true;

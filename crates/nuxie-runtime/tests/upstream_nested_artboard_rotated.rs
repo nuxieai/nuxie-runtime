@@ -80,7 +80,7 @@ fn fixture_transforms() -> Transforms {
     });
     let parent = row
         .with(|owner| {
-            *owner
+            owner
                 .as_transform_component()
                 .expect("row transform")
                 .world_transform()
@@ -91,7 +91,7 @@ fn fixture_transforms() -> Transforms {
             let transform = owner
                 .as_transform_component()
                 .expect("nested host transform");
-            (*transform.transform(), *transform.world_transform())
+            (transform.transform(), transform.world_transform())
         })
         .expect("live nested host");
     Transforms {

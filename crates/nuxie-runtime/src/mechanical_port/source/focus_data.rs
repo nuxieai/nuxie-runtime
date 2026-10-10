@@ -835,7 +835,7 @@ impl FocusData {
             .with(|viewport| {
                 viewport
                     .as_layout_component()
-                    .map(|viewport| *viewport.world_transform())
+                    .map(|viewport| viewport.world_transform())
             })
             .flatten()
         else {

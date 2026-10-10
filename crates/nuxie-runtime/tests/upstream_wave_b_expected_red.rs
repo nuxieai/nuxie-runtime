@@ -854,7 +854,7 @@ fn wave_b_data_binding_images_test_005_direct_port_expected_red() {
     fixture.advance(0.0);
     let no_scale = no_scale_image().expect("unscaled image");
     let transform = no_scale
-        .with_downcast::<Image, _>(|image| *image.base.transform())
+        .with_downcast::<Image, _>(|image| image.base.transform())
         .unwrap();
     assert!(transform[4] < 0.0);
     assert!(transform[5] < 0.0);
@@ -868,7 +868,7 @@ fn wave_b_data_binding_images_test_005_direct_port_expected_red() {
     fixture.advance(0.0);
     let no_scale = no_scale_image().expect("unscaled image");
     let transform = no_scale
-        .with_downcast::<Image, _>(|image| *image.base.transform())
+        .with_downcast::<Image, _>(|image| image.base.transform())
         .unwrap();
     assert!(transform[4] < 0.0);
     assert!(transform[5] < 0.0);
@@ -3210,7 +3210,7 @@ fn wave_b_file_test_006_direct_port_expected_red() {
     );
     let world = shape
         .with(|object| {
-            *object
+            object
                 .as_world_transform_component()
                 .unwrap()
                 .world_transform()
@@ -8042,7 +8042,7 @@ fn wave_b_ik_constraint_test_001_direct_port_expected_red() {
 fn binding_ik_world_about_equal(bone: &CoreHandle, expected: [f32; 6]) {
     let actual = bone
         .with(|object| {
-            *object
+            object
                 .as_world_transform_component()
                 .expect("bone world transform")
                 .world_transform()

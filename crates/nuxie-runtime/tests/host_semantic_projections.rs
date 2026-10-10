@@ -246,7 +246,7 @@ fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
     let point = viewport
         .with(|viewport| {
             let viewport = viewport.as_layout_component().expect("layout viewport");
-            let center = *viewport.world_transform() * viewport.local_bounds().center();
+            let center = viewport.world_transform() * viewport.local_bounds().center();
             Vec2D::new(center.x, center.y)
         })
         .expect("live viewport");

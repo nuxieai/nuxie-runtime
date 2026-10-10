@@ -74,7 +74,7 @@ impl ListFollowPathConstraint {
 
 impl ListConstraint for ListFollowPathConstraint {
     fn constrain_list(&mut self, list: &mut dyn ConstrainableList) {
-        let list_transform = *list.list_transform();
+        let list_transform = list.list_transform();
         let offset_position = if self.base.offset() {
             list.list_composed_translation()
         } else {

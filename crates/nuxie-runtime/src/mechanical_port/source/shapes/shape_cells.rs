@@ -13,7 +13,7 @@ use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::CoreHandle,
     shapes::{path_flags::PathFlags, shape::Shape, shape_paint_container::ContainerCells},
-    transform_component::TransformCells,
+    world_transform_component::TransformCells,
 };
 
 pub(crate) struct ShapeCells {

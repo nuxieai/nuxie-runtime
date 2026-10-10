@@ -117,18 +117,19 @@ impl NestedArtboardLayout {
                     .with(|parent| {
                         parent
                             .as_world_transform_component()
-                            .map(|parent| *parent.world_transform())
+                            .map(|parent| parent.world_transform())
                     })
                     .flatten()
             });
-        let world = self.base.base.mutable_world_transform();
-        if let Some(parent) = parent_world {
-            world[4] += parent[0] * base.x + parent[2] * base.y;
-            world[5] += parent[1] * base.x + parent[3] * base.y;
-        } else {
-            world[4] += base.x;
-            world[5] += base.y;
-        }
+        self.base.base.with_world_transform_mut(|world| {
+            if let Some(parent) = parent_world {
+                world[4] += parent[0] * base.x + parent[2] * base.y;
+                world[5] += parent[1] * base.x + parent[3] * base.y;
+            } else {
+                world[4] += base.x;
+                world[5] += base.y;
+            }
+        });
     }
 
     pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {

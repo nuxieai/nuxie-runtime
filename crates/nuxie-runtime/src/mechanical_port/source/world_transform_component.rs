@@ -1,3 +1,5 @@
+use std::{cell::Cell, rc::Rc};
+
 use crate::mechanical_port::source::{
     generated::core_registry::CoreCapabilities,
     generated::world_transform_component_base::{
@@ -9,7 +11,66 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct WorldTransformComponent {
     pub base: WorldTransformComponentBase,
-    world_transform: Mat2D,
+    // The world transform, and the TransformComponent state built on it,
+    // shared with the path pipeline's cells (see TransformCells).
+    cells: Rc<TransformCells>,
+}
+
+/// A transform component's derived state: its world and local transforms,
+/// render opacity and whether constraints apply. Shared so the dirt cascade,
+/// the path pipeline and child transforms read it without borrowing the
+/// component.
+#[derive(Default)]
+pub(crate) struct TransformCells {
+    world: Cell<Mat2D>,
+    local: Cell<Mat2D>,
+    // None until the first RenderOpacity update.
+    render_opacity: Cell<Option<f32>>,
+    has_constraints: Cell<bool>,
+}
+
+impl TransformCells {
+    #[inline]
+    pub(crate) fn world(&self) -> Mat2D {
+        self.world.get()
+    }
+
+    #[inline]
+    pub(crate) fn set_world(&self, world: Mat2D) {
+        self.world.set(world);
+    }
+
+    #[inline]
+    pub(crate) fn local(&self) -> Mat2D {
+        self.local.get()
+    }
+
+    #[inline]
+    pub(crate) fn set_local(&self, local: Mat2D) {
+        self.local.set(local);
+    }
+
+    #[inline]
+    pub(crate) fn render_opacity(&self) -> f32 {
+        self.render_opacity.get().unwrap_or(0.0)
+    }
+
+    pub(crate) fn computed_render_opacity(&self) -> Option<f32> {
+        self.render_opacity.get()
+    }
+
+    pub(crate) fn set_render_opacity(&self, opacity: f32) {
+        self.render_opacity.set(Some(opacity));
+    }
+
+    #[inline]
+    pub(crate) fn has_constraints(&self) -> bool {
+        self.has_constraints.get()
+    }
+
+    pub(crate) fn set_has_constraints(&self) {
+        self.has_constraints.set(true);
+    }
 }
 
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
@@ -48,20 +109,28 @@ impl WorldTransformComponent {
         CoreCapabilities::world_transform_mark_dirty(self);
     }
 
-    pub fn world_transform(&self) -> &Mat2D {
-        &self.world_transform
+    pub fn world_transform(&self) -> Mat2D {
+        self.cells.world()
     }
 
-    pub fn mutable_world_transform(&mut self) -> &mut Mat2D {
-        &mut self.world_transform
+    /// Edit the world transform in place.
+    pub fn with_world_transform_mut<R>(&mut self, edit: impl FnOnce(&mut Mat2D) -> R) -> R {
+        let mut world = self.cells.world();
+        let result = edit(&mut world);
+        self.cells.set_world(world);
+        result
     }
 
     pub fn set_world_transform(&mut self, transform: Mat2D) {
-        self.world_transform = transform;
+        self.cells.set_world(transform);
     }
 
     pub fn world_translation(&self) -> Vec2D {
-        self.world_transform.translation()
+        self.cells.world().translation()
+    }
+
+    pub(crate) fn cells(&self) -> &Rc<TransformCells> {
+        &self.cells
     }
 
     pub fn opacity_changed(&mut self) {

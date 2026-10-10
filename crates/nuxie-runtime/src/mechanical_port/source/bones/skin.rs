@@ -201,7 +201,7 @@ impl Skin {
                 .expect("Tendon::onAddedDirty resolves its Bone before update");
             let (bone_world, inverse_bind) = (
                 bone_handle
-                    .with(|bone| bone.as_bone().map(|bone| *bone.base.world_transform()))
+                    .with(|bone| bone.as_bone().map(|bone| bone.base.world_transform()))
                     .flatten()
                     .expect("a Tendon Bone handle must remain a Bone"),
                 tendon_handle

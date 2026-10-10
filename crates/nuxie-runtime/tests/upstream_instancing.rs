@@ -337,7 +337,7 @@ fn custom_clip_changes_preserve_native_semantic_snapshots() {
     let id = target.id;
     let original = target.bounds();
     let transform = node
-        .with(|object| *object.as_node().unwrap().world_transform())
+        .with(|object| object.as_node().unwrap().world_transform())
         .unwrap();
     let clip = &clips[0];
     instance.advance_default(0.0);
@@ -409,7 +409,7 @@ fn custom_clip_changes_preserve_native_semantic_snapshots() {
         "rendered clip must move completely beyond the target"
     );
     assert_eq!(
-        node.with(|object| *object.as_node().unwrap().world_transform())
+        node.with(|object| object.as_node().unwrap().world_transform())
             .unwrap(),
         transform
     );

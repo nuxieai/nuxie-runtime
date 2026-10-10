@@ -2699,31 +2699,31 @@ impl Artboard {
 
     pub fn computed_local_x(&self) -> f32 {
         (self.base.base.layout_translation()
-            + *self.base.base.base.base.base.base.base.base.transform() * self.local_anchor())
+            + self.base.base.base.base.base.base.base.base.transform() * self.local_anchor())
         .x
     }
 
     pub fn computed_local_y(&self) -> f32 {
         (self.base.base.layout_translation()
-            + *self.base.base.base.base.base.base.base.base.transform() * self.local_anchor())
+            + self.base.base.base.base.base.base.base.base.transform() * self.local_anchor())
         .y
     }
 
     pub fn computed_world_x(&self) -> f32 {
-        (*self.base.base.base.base.base.base.world_transform() * self.local_anchor()).x
+        (self.base.base.base.base.base.base.world_transform() * self.local_anchor()).x
     }
 
     pub fn computed_world_y(&self) -> f32 {
-        (*self.base.base.base.base.base.base.world_transform() * self.local_anchor()).y
+        (self.base.base.base.base.base.base.world_transform() * self.local_anchor()).y
     }
 
     pub fn computed_root_x(&mut self) -> f32 {
-        let point = *self.base.base.base.base.base.base.world_transform() * self.local_anchor();
+        let point = self.base.base.base.base.base.base.world_transform() * self.local_anchor();
         self.root_transform(point).x
     }
 
     pub fn computed_root_y(&mut self) -> f32 {
-        let point = *self.base.base.base.base.base.base.world_transform() * self.local_anchor();
+        let point = self.base.base.base.base.base.base.world_transform() * self.local_anchor();
         self.root_transform(point).y
     }
 
@@ -6167,7 +6167,7 @@ impl Artboard {
     }
 
     pub fn world_transform(&self) -> Mat2D {
-        *self.base.base.world_transform()
+        self.base.base.world_transform()
     }
 
     pub fn add_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {

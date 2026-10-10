@@ -51,7 +51,7 @@ impl ForegroundLayoutDrawable {
         };
         crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
             &bounds,
-            self.base.world_transform(),
+            &self.base.world_transform(),
             Some(&self.paint_container),
             out,
         )
@@ -171,7 +171,7 @@ impl ForegroundLayoutDrawable {
         None
     }
     pub fn shape_world_transform(&self) -> Mat2D {
-        *self.base.world_transform()
+        self.base.world_transform()
     }
     pub fn path_builder(&self) -> Option<CoreHandle> {
         self.base.parent_handle()

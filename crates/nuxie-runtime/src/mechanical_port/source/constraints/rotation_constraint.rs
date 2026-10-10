@@ -29,7 +29,7 @@ impl RotationConstraint {
                     .expect("validated targeted constraint target");
                 (
                     target.is_collapsed(),
-                    *target.world_transform(),
+                    target.world_transform(),
                     get_parent_world(target),
                 )
             };
@@ -47,7 +47,7 @@ impl RotationConstraint {
         let transform = component
             .as_transform_component()
             .expect("constraint TransformComponent");
-        let transform_a = *transform.world_transform();
+        let transform_a = transform.world_transform();
         let mut transform_b;
         self.components_a = transform_a.decompose();
         if target_state.is_none() {

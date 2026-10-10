@@ -129,7 +129,10 @@ impl NestedArtboardLeaf {
         );
         owner
             .with_downcast_mut::<Self, _>(|owner| {
-                *owner.base.base.mutable_world_transform() *= view_transform;
+                owner
+                    .base
+                    .base
+                    .with_world_transform_mut(|world| *world *= view_transform);
             })
             .expect("live NestedArtboardLeaf");
     }

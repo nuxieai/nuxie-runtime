@@ -29,7 +29,7 @@ impl TransformConstraint {
             bounds.left() + bounds.width() * self.base.origin_x(),
             bounds.top() + bounds.height() * self.base.origin_y(),
         );
-        *target.world_transform() * local
+        target.world_transform() * local
     }
 
     pub fn constrain(&mut self, component: &mut dyn CoreObject) {
@@ -60,7 +60,7 @@ impl TransformConstraint {
         let transform = component
             .as_transform_component()
             .expect("constraint TransformComponent");
-        let transform_a = *transform.world_transform();
+        let transform_a = transform.world_transform();
         if self.base.source_space() == TransformSpace::Local {
             let mut inverse = Mat2D::default();
             if !target_parent_world.invert(&mut inverse) {
@@ -118,6 +118,6 @@ impl TransformConstraint {
         components_to.set_scale_x(components_from.scale_x() * ti + components_to.scale_x() * t);
         components_to.set_scale_y(components_from.scale_y() * ti + components_to.scale_y() * t);
         components_to.set_skew(components_from.skew() * ti + components_to.skew() * t);
-        *component.mutable_world_transform() = Mat2D::compose(&components_to);
+        component.set_world_transform(Mat2D::compose(&components_to));
     }
 }

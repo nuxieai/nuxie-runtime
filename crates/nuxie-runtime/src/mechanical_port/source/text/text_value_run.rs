@@ -266,7 +266,7 @@ impl TextValueRun {
                             return Some(false);
                         }
                     }
-                    let world = *text.world_transform() * text.internal_transform();
+                    let world = text.world_transform() * text.internal_transform();
                     let mut inv = Mat2D::default();
                     Some(world.invert(&mut inv) && self.local_bounds.contains(inv * position))
                 })
@@ -290,7 +290,7 @@ impl TextValueRun {
             .and_then(|text| {
                 text.with(|text| {
                     text.as_text()
-                        .map(|text| *text.world_transform() * text.internal_transform())
+                        .map(|text| text.world_transform() * text.internal_transform())
                 })
             })
             .flatten()

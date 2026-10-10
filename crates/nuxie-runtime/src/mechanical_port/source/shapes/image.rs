@@ -84,7 +84,7 @@ impl Image {
         }
         crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
             &self.local_bounds(),
-            self.base.world_transform(),
+            &self.base.world_transform(),
             None,
             out,
         )
@@ -152,7 +152,7 @@ impl Image {
                     owner.mesh.clone(),
                     owner.image_sampler(),
                     owner.base.needs_save_operation(),
-                    *owner.base.world_transform(),
+                    owner.base.world_transform(),
                     owner.base.origin_x(),
                     owner.base.origin_y(),
                     owner.base.blend_mode(),
@@ -286,7 +286,7 @@ impl Image {
             println!("Missing mesh");
         } else {
             let matrix = xform
-                * *self.base.world_transform()
+                * self.base.world_transform()
                 * Mat2D::from_translate(
                     -width * self.base.origin_x(),
                     -height * self.base.origin_y(),
@@ -471,13 +471,13 @@ impl Image {
                 .with(|parent| {
                     parent
                         .as_world_transform_component()
-                        .map(|parent| *parent.world_transform())
+                        .map(|parent| parent.world_transform())
                 })
                 .flatten()
         });
         if let (Some(translation), Some(parent_world)) = (participant, parent_world) {
             let base = Mat2D::from_translation(translation);
-            let transform = *self.base.transform();
+            let transform = self.base.transform();
             self.base
                 .set_world_transform(parent_world * base * transform);
             return true;
@@ -514,11 +514,13 @@ impl Image {
     }
 
     pub(crate) fn update_transform_after_super(&mut self) {
-        self.base
-            .mutable_transform()
-            .scale_by_values(self.layout_scale_x, self.layout_scale_y);
-        self.base.mutable_transform()[4] += self.layout_offset_x;
-        self.base.mutable_transform()[5] += self.layout_offset_y;
+        let (scale_x, scale_y) = (self.layout_scale_x, self.layout_scale_y);
+        let (offset_x, offset_y) = (self.layout_offset_x, self.layout_offset_y);
+        self.base.with_transform_mut(|transform| {
+            transform.scale_by_values(scale_x, scale_y);
+            transform[4] += offset_x;
+            transform[5] += offset_y;
+        });
     }
 
     fn update_image_scale(&mut self) {

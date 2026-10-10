@@ -569,7 +569,7 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
                 component
                     .semantic_provider_local_bounds()
                     .expect("control has geometry"),
-                *node.world_transform(),
+                node.world_transform(),
                 node.artboard_handle().unwrap(),
             )
         })
@@ -938,7 +938,7 @@ fn authored_corner_radius_changes_host_geometry_not_native_semantic_bounds() {
         bounds.push(rendered_geometry_bounds(Some(&owner)));
         transforms.push(
             owner
-                .with(|object| *object.as_node().unwrap().world_transform())
+                .with(|object| object.as_node().unwrap().world_transform())
                 .unwrap(),
         );
     }

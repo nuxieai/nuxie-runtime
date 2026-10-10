@@ -320,7 +320,7 @@ impl ClippingShape {
                 let shape = shape.as_shape()?;
                 Some((
                     shape.paint_container.shape_paints().to_vec(),
-                    *shape.base.world_transform(),
+                    shape.base.world_transform(),
                 ))
             })
             .flatten()

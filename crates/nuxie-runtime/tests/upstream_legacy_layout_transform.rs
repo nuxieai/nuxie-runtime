@@ -69,7 +69,7 @@ fn imported_instance_world_transform(bytes: &[u8]) -> Mat2D {
         .expect("cloned LayoutComponent");
     cloned_layout
         .with(|object| {
-            *object
+            object
                 .as_world_transform_component()
                 .expect("world-transform component")
                 .world_transform()

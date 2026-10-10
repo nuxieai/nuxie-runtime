@@ -13,3 +13,6 @@ def source_path(source_label = None):
         source_label = _repository_prefix() + "//" + native.package_name() + ":Cargo.toml"
     label = Label(source_label)
     return ("external/" + label.workspace_name + "/" if label.workspace_name else "") + label.package
+
+def provenance_env_file():
+    return Label(":provenance_env")

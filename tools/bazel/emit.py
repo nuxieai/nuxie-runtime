@@ -100,7 +100,9 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
         'package(default_visibility = ["//visibility:public"])',
     ]
     source_repo = source_owner.split("//", 1)[0] if source_owner else ""
-    lines.insert(-1, 'load(' + quoted(source_repo + '//bazel:source-path.bzl') + ', "source_path")')
+    provenance = package.name in ("nux-capi", "nux-apple-product-extension")
+    helpers = ', "provenance_env_file"' if provenance else ''
+    lines.insert(-1, 'load(' + quoted(source_repo + '//bazel:source-path.bzl') + ', "source_path"' + helpers + ')')
     lines.append('_source_dir = source_path(' + (quoted(source_owner + ':Cargo.toml') if source_owner else '') + ')')
     if source_owner:
         lines.extend([
@@ -174,6 +176,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                 f'    deps = {build_expr},',
                 f'    proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = {quoted(registry_package)}),',
                 *(['    rundir = _source_dir,', '    build_script_env = {"CARGO_MANIFEST_DIR": _source_dir},'] if source_owner else []),
+                *(['    build_script_env_files = [provenance_env_file()],'] if provenance else []),
                 '    use_default_shell_env = True,' if package.name in ("nux-capi", "nux-apple-product-extension", "nuxie-renderer", "nuxie-renderer-ffi", "nuxie-video-host") else '    use_default_shell_env = False,',
                 ')', '',
             ])
@@ -313,4 +316,4 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                 current_rule = None
             rendered.append(line)
         lines = rendered
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines).rstrip("\n") + "\n"

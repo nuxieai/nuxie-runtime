@@ -147,6 +147,10 @@ sha256() {
   fi
 }
 
+matches_checksum() {
+  [[ -f "$1" && "$(sha256 "$1")" == "$2" ]]
+}
+
 for entry in "${assets[@]}"; do
   IFS='|' read -r relative expected source_ref source_path <<< "$entry"
   source_ref=${source_ref:-$ref}
@@ -155,7 +159,11 @@ for entry in "${assets[@]}"; do
   destination="$repo_root/fixtures/$relative"
   mkdir -p "$(dirname "$destination")"
 
-  if [[ -n "$runtime_dir" && -n "$source_ref" ]] \
+  if matches_checksum "$destination" "$expected"; then
+    # Preserve fixture mtimes when the pinned bytes are already available.
+    # Bazel may be reading the same declared inputs in another build.
+    :
+  elif [[ -n "$runtime_dir" && -n "$source_ref" ]] \
     && git -C "$runtime_dir" cat-file -e "$source_ref:tests/unit_tests/assets/$source_path" 2>/dev/null; then
     # Fetch at the recorded source ref: the pinned working tree may hold a
     # different revision of the same asset than the ref that vendored it.
@@ -192,7 +200,9 @@ for entry in "${assets[@]}"; do
     for target in fuzz_import fuzz_runtime fuzz_pointer; do
       seed_dir="$repo_root/fuzz/seeds/$target"
       mkdir -p "$seed_dir"
-      cp "$destination" "$seed_dir/$name"
+      if ! matches_checksum "$seed_dir/$name" "$expected"; then
+        cp "$destination" "$seed_dir/$name"
+      fi
     done
   fi
 done
@@ -207,7 +217,9 @@ for entry in "${gm_assets[@]}"; do
   IFS='|' read -r name expected source_ref <<< "$entry"
   destination="$repo_root/fixtures/gm/$name"
   mkdir -p "$(dirname "$destination")"
-  if [[ -n "$runtime_dir" ]]; then
+  if matches_checksum "$destination" "$expected"; then
+    :
+  elif [[ -n "$runtime_dir" ]]; then
     git -C "$runtime_dir" show "$source_ref:tests/gm/$name" > "$destination"
   elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
     curl --fail --location --silent --show-error \
@@ -220,7 +232,8 @@ raster_font_destination="$repo_root/fixtures/fonts/sbix.ttf"
 raster_font_expected="caf017485804582021c4bf67df4d8e089db5fac7f3e56ef83866ce97b197669c"
 raster_font_url="https://raw.githubusercontent.com/google/skia/750673c775648c29002389a3f56fba459288eea9/resources/fonts/sbix.ttf"
 mkdir -p "$(dirname "$raster_font_destination")"
-if [[ -n "$runtime_dir" \
+if ! matches_checksum "$raster_font_destination" "$raster_font_expected" \
+  && [[ -n "$runtime_dir" \
   && -f "$runtime_dir/skia/dependencies/skia/resources/fonts/sbix.ttf" ]]; then
   cp "$runtime_dir/skia/dependencies/skia/resources/fonts/sbix.ttf" \
     "$raster_font_destination"
@@ -239,7 +252,9 @@ fi
 
 silver_destination="$repo_root/fixtures/sync/data_bind_blob_test.sriv"
 silver_expected="e3fc7bfbb227bd57c77c63589607616e81f7c7223239eb0d56efebf1d90ce079"
-if [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/silvers/data_bind_blob_test.sriv" ]]; then
+if matches_checksum "$silver_destination" "$silver_expected"; then
+  :
+elif [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/silvers/data_bind_blob_test.sriv" ]]; then
   cp "$runtime_dir/tests/unit_tests/silvers/data_bind_blob_test.sriv" "$silver_destination"
 elif [[ ! -f "$silver_destination" || "$(sha256 "$silver_destination")" != "$silver_expected" ]]; then
   curl --fail --location --silent --show-error \
@@ -254,7 +269,9 @@ fi
 
 color_silver_destination="$repo_root/fixtures/sync/color_passthrough_test.sriv"
 color_silver_expected="6f6482774fb736db12b4fb150b8219237c9c97cc82fd65ba83c69fc349dd76b6"
-if [[ -n "$runtime_dir" ]]; then
+if matches_checksum "$color_silver_destination" "$color_silver_expected"; then
+  :
+elif [[ -n "$runtime_dir" ]]; then
   git -C "$runtime_dir" show \
     "74c0d601c516f86db4847521198dba42080db06a:tests/unit_tests/silvers/color_passthrough_test.sriv" \
     > "$color_silver_destination"
@@ -271,7 +288,9 @@ fi
 
 global_view_models_silver_destination="$repo_root/fixtures/sync/global_view_models_scripting_test.sriv"
 global_view_models_silver_expected="7b3cf99eed9e2d9af8476b761b744e379945220b79ee95f7d59f638121de950e"
-if [[ -n "$runtime_dir" ]]; then
+if matches_checksum "$global_view_models_silver_destination" "$global_view_models_silver_expected"; then
+  :
+elif [[ -n "$runtime_dir" ]]; then
   git -C "$runtime_dir" show \
     "309e901fca858a692d5ed928a87f9841b65848b3:tests/unit_tests/silvers/global_view_models_scripting_test.sriv" \
     > "$global_view_models_silver_destination"
@@ -289,7 +308,9 @@ fi
 
 fit_hug_silver_destination="$repo_root/fixtures/sync/fit_font_size_hug_test.sriv"
 fit_hug_silver_expected="405da71bda084b2146c30fd475044d376fd312b87907ab83f3fb90c8aeefffca"
-if [[ -n "$runtime_dir" ]]; then
+if matches_checksum "$fit_hug_silver_destination" "$fit_hug_silver_expected"; then
+  :
+elif [[ -n "$runtime_dir" ]]; then
   git -C "$runtime_dir" show \
     "45d4d01dfd1fe70d3f9e73764538c16f63a04d07:tests/unit_tests/silvers/fit_font_size_hug_test.sriv" \
     > "$fit_hug_silver_destination"

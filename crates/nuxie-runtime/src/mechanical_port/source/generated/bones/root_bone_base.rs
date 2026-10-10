@@ -11,16 +11,12 @@ pub trait RootBoneBaseCallbacks: BoneBaseCallbacks {
 
 pub struct RootBoneBase {
     pub base: Bone,
-    x: f32,
-    y: f32,
 }
 
 impl Default for RootBoneBase {
     fn default() -> Self {
         Self {
             base: Bone::default(),
-            x: 0.0,
-            y: 0.0,
         }
     }
 }
@@ -43,7 +39,7 @@ impl RootBoneBase {
     }
 
     pub fn x(&self) -> f32 {
-        self.x
+        self.base.cells().x()
     }
 
     pub fn set_x<C: RootBoneBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
@@ -55,15 +51,15 @@ impl RootBoneBase {
     }
 
     pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
-        if self.x == value {
+        if self.base.cells().x() == value {
             return false;
         }
-        self.x = value;
+        self.base.cells().set_x(value);
         true
     }
 
     pub fn y(&self) -> f32 {
-        self.y
+        self.base.cells().y()
     }
 
     pub fn set_y<C: RootBoneBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
@@ -75,10 +71,10 @@ impl RootBoneBase {
     }
 
     pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
-        if self.y == value {
+        if self.base.cells().y() == value {
             return false;
         }
-        self.y = value;
+        self.base.cells().set_y(value);
         true
     }
 
@@ -89,8 +85,8 @@ impl RootBoneBase {
     }
 
     pub fn copy<C: RootBoneBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
-        self.x = object.x;
-        self.y = object.y;
+        self.base.cells().set_x(object.x());
+        self.base.cells().set_y(object.y());
         self.base.base.copy(&object.base.base, callbacks);
     }
 
@@ -102,11 +98,11 @@ impl RootBoneBase {
     ) -> bool {
         match property_key {
             Self::X_PROPERTY_KEY => {
-                self.x = CoreDoubleType::deserialize(reader);
+                self.base.cells().set_x(CoreDoubleType::deserialize(reader));
                 true
             }
             Self::Y_PROPERTY_KEY => {
-                self.y = CoreDoubleType::deserialize(reader);
+                self.base.cells().set_y(CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),

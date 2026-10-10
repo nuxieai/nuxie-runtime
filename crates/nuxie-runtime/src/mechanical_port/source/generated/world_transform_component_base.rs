@@ -11,14 +11,15 @@ pub trait WorldTransformComponentBaseCallbacks:
 
 pub struct WorldTransformComponentBase {
     pub base: ContainerComponent,
-    opacity: f32,
+    // The transform inputs and derived state (see TransformCells).
+    cells: std::rc::Rc<crate::mechanical_port::source::world_transform_component::TransformCells>,
 }
 
 impl Default for WorldTransformComponentBase {
     fn default() -> Self {
         Self {
             base: ContainerComponent::default(),
-            opacity: 1.0,
+            cells: std::rc::Rc::default(),
         }
     }
 }
@@ -37,8 +38,13 @@ impl WorldTransformComponentBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(
+        &self,
+    ) -> &std::rc::Rc<crate::mechanical_port::source::world_transform_component::TransformCells> {
+        &self.cells
+    }
     pub fn opacity(&self) -> f32 {
-        self.opacity
+        self.cells.opacity()
     }
     pub fn set_opacity(
         &mut self,
@@ -56,10 +62,10 @@ impl WorldTransformComponentBase {
     }
 
     pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {
-        if self.opacity == value {
+        if self.cells.opacity() == value {
             return false;
         }
-        self.opacity = value;
+        self.cells.set_opacity(value);
         true
     }
     pub fn copy(
@@ -67,7 +73,7 @@ impl WorldTransformComponentBase {
         object: &Self,
         callbacks: &mut impl WorldTransformComponentBaseCallbacks,
     ) {
-        self.opacity = object.opacity;
+        self.cells.set_opacity(object.opacity());
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -78,7 +84,7 @@ impl WorldTransformComponentBase {
     ) -> bool {
         match property_key {
             Self::OPACITY_PROPERTY_KEY => {
-                self.opacity = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.cells.set_opacity(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

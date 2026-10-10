@@ -11,8 +11,8 @@ use crate::mechanical_port::source::{
 
 pub struct Node {
     pub base: NodeBase,
+    // Cached inverse(parent world) * world; its stale flag is in the cells.
     local_transform: Mat2D,
-    local_transform_needs_recompute: bool,
 }
 
 impl Default for Node {
@@ -20,7 +20,6 @@ impl Default for Node {
         Self {
             base: NodeBase::default(),
             local_transform: Mat2D::default(),
-            local_transform_needs_recompute: false,
         }
     }
 }
@@ -112,12 +111,11 @@ impl Node {
     }
 
     pub(crate) fn update_world_transform_before_super(&mut self) {
-        self.local_transform_needs_recompute = true;
+        self.base.cells().mark_node_local_stale();
     }
 
     pub fn local_transform(&mut self) -> Mat2D {
-        if self.local_transform_needs_recompute {
-            self.local_transform_needs_recompute = false;
+        if self.base.cells().take_node_local_stale() {
             if let Some(parent) = self.base.base.parent_transform_component() {
                 let parent_world = parent
                     .with(|parent| {

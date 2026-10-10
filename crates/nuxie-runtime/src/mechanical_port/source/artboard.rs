@@ -333,7 +333,6 @@ pub struct Artboard {
     runtime_self: RuntimeArtboardInstanceWeakHandle,
     audio_engine: Option<AudioEngineRef>,
     volume: f32,
-    host_opacity: f32,
     skip_self_transform: bool,
     #[cfg(feature = "tools")]
     layout_changed_callback: Option<ArtboardCallback>,
@@ -423,7 +422,6 @@ impl Default for Artboard {
             runtime_self: RuntimeArtboardInstanceWeakHandle::default(),
             audio_engine: None,
             volume: 1.0,
-            host_opacity: 1.0,
             skip_self_transform: false,
             #[cfg(feature = "tools")]
             layout_changed_callback: None,
@@ -871,11 +869,11 @@ impl Artboard {
     }
 
     pub fn host_opacity(&self) -> f32 {
-        self.host_opacity
+        self.cells().host_opacity()
     }
 
     pub fn child_opacity(&self) -> f32 {
-        self.render_opacity() * self.host_opacity
+        self.cells().child_opacity()
     }
 
     pub fn has_self_transform(&self) -> bool {
@@ -4702,10 +4700,10 @@ impl Artboard {
     }
 
     pub fn set_host_opacity(&mut self, value: f32) {
-        if self.host_opacity == value {
+        if self.cells().host_opacity() == value {
             return;
         }
-        self.host_opacity = value;
+        self.cells().set_host_opacity(value);
         self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
     }
 

@@ -1,0 +1,20 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "pixel-compare"
+version = "0.1.0"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
+"png" = { "version" = "0.18.1" }
+"serde" = { "version" = "1", "features" = ["derive"] }
+"sha2" = { "version" = "0.10" }
+"toml" = { "version" = "0.9" }

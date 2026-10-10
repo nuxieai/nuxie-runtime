@@ -1,0 +1,22 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "runtime-test-support"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "default-features" = false }
+"nuxie-schema" = { "path" = "../nuxie-schema" }
+"sha2" = { "version" = "0.10" }

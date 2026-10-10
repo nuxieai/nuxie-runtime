@@ -9,6 +9,7 @@ import tomllib
 
 from cargo_graph import collect_packages, graph_feature_union, resolve_features, resolve_native_features, write_registry_workspace
 from emit import render_package
+from runtime_features import NATIVE_TOOLS_ROOTS
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -58,21 +59,26 @@ def main():
     outputs = {}
     # Cargo.Bazel.lock is a separate crate_universe pin. Regeneration retains
     # the flattened Cargo lock that produced it; --reset-lock is explicit.
-    with tempfile.TemporaryDirectory() as scratch:
-        destination = Path(scratch)
-        seed = ROOT / "bazel/cargo/Cargo.lock"
-        if args.reset_lock or not seed.exists():
-            seed = ROOT / "Cargo.lock"
-        write_registry_workspace(packages, destination, seed, patch_names,
-                                 workspace_members=workspace_names,
-                                 enabled_features=graph_feature_union(graphs))
-        for path in destination.rglob("*"):
-            if path.is_file():
-                outputs[ROOT / "bazel/cargo" / path.relative_to(destination)] = path.read_text()
-    outputs[ROOT / "bazel/cargo/BUILD.bazel"] = '\n'.join([
-        'package(default_visibility = ["//visibility:public"])',
-        'exports_files(glob(["**/Cargo.toml", "Cargo.lock", "Cargo.Bazel.lock", "**/lib.rs", "**/build.rs"]))',
-    ]) + '\n'
+    registry_graphs = {
+        "cargo": graphs,
+        "native-tools-cargo": {**graphs, "native-tools": resolve_native_features(packages, NATIVE_TOOLS_ROOTS)},
+    }
+    for registry, selected_graphs in registry_graphs.items():
+        with tempfile.TemporaryDirectory() as scratch:
+            destination = Path(scratch)
+            seed = ROOT / "bazel" / registry / "Cargo.lock"
+            if args.reset_lock or not seed.exists():
+                seed = ROOT / "Cargo.lock"
+            write_registry_workspace(packages, destination, seed, patch_names,
+                                     workspace_members=workspace_names,
+                                     enabled_features=graph_feature_union(selected_graphs))
+            for path in destination.rglob("*"):
+                if path.is_file():
+                    outputs[ROOT / "bazel" / registry / path.relative_to(destination)] = path.read_text()
+        outputs[ROOT / "bazel" / registry / "BUILD.bazel"] = '\n'.join([
+            'package(default_visibility = ["//visibility:public"])',
+            'exports_files(glob(["**/Cargo.toml", "Cargo.lock", "Cargo.Bazel.lock", "**/lib.rs", "**/build.rs"]))',
+        ]) + '\n'
 
     def label_for(name, variant):
         package = packages[name]

@@ -1,0 +1,78 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-renderer"
+version = "0.1.0"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+
+[features]
+"default" = ["native-metal-experimental", "native-ore-metal-experimental", "native-ore-vulkan-experimental", "native-vulkan-experimental", "native-webgl2-experimental", "native-webgpu-experimental", "ore-gl", "renderer-metal", "renderer-vulkan", "renderer-webgl2", "renderer-webgpu", "rive-decoders", "webgl2-test-support", "with-rive-tools"]
+"renderer-vulkan" = ["native-ore-vulkan-experimental", "rive-decoders"]
+"renderer-webgpu" = ["native-webgpu-experimental", "rive-decoders"]
+"renderer-webgl2" = ["native-webgl2-experimental", "rive-decoders"]
+"webgl2-test-support" = ["renderer-webgl2", "with-rive-tools"]
+"renderer-metal" = ["native-ore-metal-experimental", "rive-decoders"]
+"native-metal-experimental" = []
+"native-vulkan-experimental" = ["dep:ash", "dep:vk-mem"]
+"android-vulkan-atomics" = []
+"native-webgpu-experimental" = ["dep:libc", "dep:wasm-bindgen", "dep:web-time"]
+"native-webgl2-experimental" = ["ore-gl", "dep:js-sys", "dep:wasm-bindgen", "dep:web-time", "dep:web-sys"]
+"native-wagyu-experimental" = ["native-webgpu-experimental"]
+"with-rive-tools" = ["nuxie-ore-metal/with-rive-tools"]
+"track-rive-shader-id" = ["nuxie-ore-metal/track-rive-shader-id"]
+"native-ore-metal-experimental" = ["native-metal-experimental", "nuxie-ore-metal/metal-backend"]
+"native-ore-vulkan-experimental" = ["native-vulkan-experimental"]
+"rive-generate-feather-lut" = []
+"rive-ktx2" = []
+"rive-decoders" = []
+"with-rive-path-query" = []
+"ore-gl" = []
+
+[dependencies]
+"bytemuck" = { "version" = "1.24", "features" = ["derive"] }
+"libc" = { "version" = "0.2", "optional" = true }
+"nuxie-image-codec" = { "path" = "../nuxie-image-codec" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+"nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false }
+"png" = { "version" = "0.18" }
+"regex" = { "version" = "1" }
+"smallvec" = { "version" = "1.15.2" }
+"sha2" = { "version" = "0.10" }
+
+[dev-dependencies]
+"nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "features" = ["testing"] }
+"pixel-compare" = { "path" = "../pixel-compare" }
+
+[build-dependencies]
+"regex" = { "version" = "1" }
+
+[target."cfg(not(target_arch = \"wasm32\"))".dependencies]
+"ash" = { "version" = "=0.38.0", "optional" = true }
+"vk-mem" = { "version" = "=0.5.0", "path" = "../vk-mem", "optional" = true, "default-features" = false, "features" = ["__bazel_dependency_default"] }
+
+[target."cfg(target_vendor = \"apple\")".dependencies]
+"objc2" = { "version" = "0.6.4" }
+
+[target."cfg(target_vendor = \"apple\")".dev-dependencies]
+"objc2-core-foundation" = { "version" = "0.3.2", "default-features" = false, "features" = ["CFCGTypes", "CFString", "objc2"] }
+
+[target."cfg(any(target_os = \"ios\", target_os = \"macos\", target_os = \"tvos\", target_os = \"visionos\"))".dependencies]
+"block2" = { "version" = "0.6.2" }
+"objc2-foundation" = { "version" = "0.3.2", "default-features" = false, "features" = ["NSError", "NSString"] }
+"objc2-metal" = { "version" = "0.3.2", "default-features" = false, "features" = ["block2", "MTLAllocation", "MTLBlitCommandEncoder", "MTLBuffer", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDevice", "MTLDrawable", "MTLLibrary", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLRenderPipeline", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes"] }
+"objc2-quartz-core" = { "version" = "0.3.2", "default-features" = false, "features" = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
+
+[target."cfg(target_arch = \"wasm32\")".dependencies]
+"js-sys" = { "version" = "0.3", "optional" = true }
+"raw-window-handle" = { "version" = "0.6" }
+"wasm-bindgen" = { "version" = "0.2.126", "optional" = true }
+"web-time" = { "version" = "1.1.0", "optional" = true }
+"web-sys" = { "version" = "0.3", "optional" = true, "features" = ["Event", "EventTarget", "HtmlCanvasElement", "WebGl2RenderingContext"] }

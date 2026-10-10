@@ -1,0 +1,22 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-image-codec"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"image-webp" = { "version" = "0.2.4" }
+"jpeg-decoder" = { "version" = "0.3", "default-features" = false, "features" = ["rive_v9f"], "path" = "../jpeg-decoder" }
+"moxcms" = { "version" = "0.8.1" }
+"png" = { "version" = "0.18" }
+
+[dev-dependencies]
+"nuxie-render-stream" = { "path" = "../nuxie-render-stream" }

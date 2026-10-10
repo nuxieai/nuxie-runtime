@@ -54,6 +54,28 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertNotIn(':dep"', (self.root / plain[0][2:].replace(":core", "/BUILD.bazel")).read_text())
         self.assertIn(':dep"', (self.root / optional[0][2:].replace(":core", "/BUILD.bazel")).read_text())
 
+    def test_native_tools_do_not_widen_shipping_registry(self):
+        audio = self.package("nuxie-audio", '[features]\naudio-device = ["dep:cpal"]\n[dependencies]\ncpal = { version = "0.16", optional = true }\n')
+        capi = self.package("nux-capi", '[dependencies]\nnuxie-audio = { path = "../nuxie-audio" }\n')
+        replay = self.package("renderer-replay", '[features]\nnative-metal = ["dep:objc2"]\nnative-ore-metal = ["native-metal"]\n[dependencies]\nobjc2 = { version = "0.6", optional = true }\n')
+        packages = collect_packages([audio, capi, replay])
+        for package, features, expected_registry in (
+            ("nux-capi", [], "@runtime_crates"),
+            ("nuxie-audio", [], "@runtime_crates"),
+            ("nuxie-audio", ["audio-device"], "@runtime_native_tools_crates"),
+            ("renderer-replay", ["native-metal"], "@runtime_native_tools_crates"),
+            ("renderer-replay", ["native-ore-metal"], "@runtime_native_tools_crates"),
+        ):
+            options = runtime.command_options(["check", "-p", package] + (["--features", ",".join(features)] if features else []))
+            labels = runtime.materialize(options, packages)
+            build = (self.root / labels[0][2:].replace(":" + package, "/BUILD.bazel")).read_text()
+            registry_load = next(line for line in build.splitlines() if '"all_crate_deps"' in line)
+            self.assertEqual(registry_load.split('"')[1], expected_registry + "//:defs.bzl")
+            if package == "nux-capi":
+                package_directory = self.root / labels[0][2:].split(":")[0]
+                audio_build = (package_directory.parent / "nuxie-audio/BUILD.bazel").read_text()
+                self.assertNotIn('crate_deps(["cpal"]', audio_build)
+
     def test_bazel_uses_absolute_cache_location_and_preserves_spaces(self):
         executable = self.root / "bazel with spaces"
         executable.write_text("#!/bin/sh\nexit 0\n")

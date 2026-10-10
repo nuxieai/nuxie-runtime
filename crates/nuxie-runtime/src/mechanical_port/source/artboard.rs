@@ -150,11 +150,18 @@ impl RuntimeArtboardDirtyHandle {
         self.0.dirt.set(dirt);
     }
 
+    /// Every component dirt notification passes here; only an artboard that a
+    /// host has marked quiet has a row to wake.
+    #[inline]
     pub fn wake_if_quiet_row(&self) {
-        let row = self.0.quiet_host_row.replace(Artboard::NO_QUIET_ROW);
-        if row == Artboard::NO_QUIET_ROW {
-            return;
+        if self.0.quiet_host_row.get() != Artboard::NO_QUIET_ROW {
+            self.wake_quiet_row();
         }
+    }
+
+    #[inline(never)]
+    fn wake_quiet_row(&self) {
+        let row = self.0.quiet_host_row.replace(Artboard::NO_QUIET_ROW);
         // Dispatch to the CURRENT host, not the list that originally marked
         // this artboard quiet. The shared callback state performs the same
         // current row identity check without borrowing a live layout host.

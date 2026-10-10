@@ -14,7 +14,10 @@ import subprocess
 import sys
 import tomllib
 
-from bazel_cache import startup_options
+try:
+    from .bazel_cache import startup_options
+except ImportError:
+    from bazel_cache import startup_options
 
 BAZEL_VERSION = "9.3.0"
 RUST_VERSION = "1.94.1"

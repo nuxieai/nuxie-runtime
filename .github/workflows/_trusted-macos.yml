@@ -61,6 +61,7 @@ jobs:
           path: rive-runtime
 
       - name: Install Bazelisk
+        working-directory: ${{ github.workspace }}/rive-rust
         run: tools/bazel/install.sh
 
       - name: Install Rust stable
@@ -129,6 +130,7 @@ jobs:
           path: rive-runtime
 
       - name: Install Bazelisk
+        working-directory: ${{ github.workspace }}/rive-rust
         run: tools/bazel/install.sh
 
       - name: Install Rust stable

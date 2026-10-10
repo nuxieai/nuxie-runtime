@@ -198,7 +198,7 @@ def cfg_matches(condition, platform="native"):
     else:
         system = {"darwin": "macos", "win32": "windows"}.get(sys.platform, "linux")
         arch = {"arm64": "aarch64", "AMD64": "x86_64"}.get(host_platform.machine(), host_platform.machine())
-        target = {"target_arch": arch, "target_os": system, "target_vendor": "apple" if system == "macos" else "unknown", "target_env": "msvc" if system == "windows" else "gnu" if system == "linux" else "", "target_abi": ""}
+        target = {"target_arch": arch, "target_os": system, "target_vendor": "apple" if system == "macos" else "pc" if system == "windows" else "unknown", "target_env": "msvc" if system == "windows" else "gnu" if system == "linux" else "", "target_abi": ""}
     if not condition.startswith("cfg("):
         raise ValueError(f"unsupported Cargo target triple predicate {condition}")
     tokens = re.findall(r'"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[(),=]', condition)

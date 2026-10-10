@@ -1,6 +1,7 @@
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+from dataclasses import replace
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -33,6 +34,29 @@ class RuntimeBuildTest(unittest.TestCase):
         (manifest.parent / "tests/stroke.rs").write_text("#[test] fn strokes() {}\n")
         labels = runtime.materialize(runtime.command_options(["test", "-p", "core", "--lib", "--test", "stroke"]), collect_packages([manifest]))
         self.assertEqual({label.split(":")[1] for label in labels}, {"core__unit_test", "core__test_stroke"})
+
+    def test_windows_paths_emit_valid_bazel_labels_and_source_roots(self):
+        # Keep real temporary files, but expose Windows spelling from every
+        # relative path, including paths discovered by glob in the emitter.
+        class WindowsSpellingPath(type(Path())):
+            def relative_to(self, *args, **kwargs):
+                return PureWindowsPath(super().relative_to(*args, **kwargs))
+
+        manifest = self.package("core")
+        (manifest.parent / "src/bin").mkdir()
+        (manifest.parent / "src/bin/probe.rs").write_text("fn main() {}\n")
+        packages = {
+            name: replace(package, directory=WindowsSpellingPath(package.directory))
+            for name, package in collect_packages([manifest]).items()
+        }
+        with patch.object(runtime, "ROOT", WindowsSpellingPath(self.root)):
+            labels = runtime.materialize(runtime.command_options(["build", "-p", "core"]), packages)
+        self.assertEqual({label.split(":")[1] for label in labels}, {"core", "probe"})
+        self.assertTrue(all("\\" not in label for label in labels))
+        build_path = self.root / labels[0][2:].split(":")[0] / "BUILD.bazel"
+        build = build_path.read_text()
+        self.assertIn('crate_root = "//crates/core:src/lib.rs"', build)
+        self.assertIn('crate_root = "//crates/core:src/bin/probe.rs"', build)
 
     def test_workspace_exclude_and_all_targets_select_binary_and_example(self):
         core = self.package("core")
@@ -86,6 +110,38 @@ class RuntimeBuildTest(unittest.TestCase):
         with patch.dict(os.environ, {"NUXIE_BAZEL_BIN": str(executable), "NUXIE_BAZEL_OUTPUT_USER_ROOT": "relative"}):
             with self.assertRaisesRegex(ValueError, "must be absolute"):
                 runtime.bazel_command()
+
+    def test_windows_uses_native_bazelisk_binary_instead_of_npm_shim(self):
+        package = self.root / "target/bazel-tools/node_modules/@bazel/bazelisk"
+        package.mkdir(parents=True)
+        native = package / "bazelisk-windows_amd64.exe"
+        native.touch()
+        shim = self.root / "target/bazel-tools/node_modules/.bin/bazelisk"
+        shim.parent.mkdir(parents=True)
+        shim.write_text("#!/bin/sh\n")
+        with patch.dict(os.environ, {}, clear=True), patch.object(runtime.sys, "platform", "win32"), \
+             patch.object(runtime.host_platform, "machine", return_value="AMD64"), \
+             patch.object(runtime.shutil, "which", return_value=None):
+            self.assertEqual(runtime.bazel_command()[0], str(native))
+
+    def test_windows_binary_publication_keeps_exe_and_ignores_debug_sidecars(self):
+        executable = self.root / "bazel-out/corpus-r.exe"
+        executable.parent.mkdir()
+        executable.write_bytes(b"compiled Windows binary")
+        sidecar = executable.with_suffix(".pdb")
+        sidecar.write_bytes(b"debug symbols")
+        output = "\n".join(path.relative_to(self.root).as_posix() for path in (executable, sidecar))
+        with patch.object(runtime.sys, "platform", "win32"), \
+             patch.object(runtime, "packages_from_workspace", return_value={}), \
+             patch.object(runtime, "materialize", return_value=["//runner:corpus-r"]), \
+             patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+             patch.object(runtime.subprocess, "check_output", return_value=output), \
+             patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+             patch("sys.argv", ["runtime.py", "run", "-p", "pixel-compare", "--bin", "corpus-r", "--", "--manifest", "corpus-r.toml"]):
+            self.assertEqual(runtime.main(), 0)
+        published = self.root / "target/debug/corpus-r.exe"
+        self.assertEqual(published.read_bytes(), executable.read_bytes())
+        self.assertEqual(run.call_args.args[0], [str(published), "--manifest", "corpus-r.toml"])
 
     def test_shared_cache_override_preserves_default_output_isolation(self):
         executable = self.root / "bazel"

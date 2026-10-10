@@ -1,0 +1,52 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-scripting"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+
+[features]
+"default" = ["android-authored-wgsl", "apple-authored-msl", "async", "compiler", "js-host-seed", "luau", "tools", "upstream-test-seams"]
+"strict-fp" = ["nuxie-runtime/strict-fp"]
+"async" = ["luau", "luaur-rt/async"]
+"scriptnet" = ["luau", "nuxie-runtime/scriptnet"]
+"compiler" = ["luau", "luaur-rt/compiler"]
+"js-host-seed" = ["nuxie-runtime/js-host-seed"]
+"apple-authored-msl" = ["luau", "dep:sha2"]
+"android-authored-wgsl" = ["luau", "dep:sha2"]
+"upstream-test-seams" = ["luau"]
+"tools" = ["nuxie-runtime/tools"]
+"luau" = ["dep:luaur-common", "dep:luaur-rt", "dep:luaur-vm", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
+
+[dependencies]
+"nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false, "optional" = true }
+"nuxie-render-api" = { "path" = "../nuxie-render-api", "optional" = true }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false }
+"luaur-common" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-rt" = { "version" = "=0.1.8", "optional" = true, "default-features" = false, "path" = "../luaur-rt" }
+"luaur-vm" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-vm", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"nuxie-image-codec" = { "path" = "../nuxie-image-codec", "optional" = true }
+"sha2" = { "version" = "0.10", "optional" = true }
+
+[dev-dependencies]
+"nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false }
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "default-features" = false }
+"nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
+"nuxie-schema" = { "path" = "../nuxie-schema" }
+"nuxie-sriv" = { "path" = "../nuxie-sriv" }
+"libhydrogen" = { "version" = "=0.4.6" }
+"luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"image-webp" = { "version" = "0.2.4" }
+"sha2" = { "version" = "0.10" }
+"runtime-test-support" = { "path" = "../runtime-test-support" }
+
+[build-dependencies]
+"luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }

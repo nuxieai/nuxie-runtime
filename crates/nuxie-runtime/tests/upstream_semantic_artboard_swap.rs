@@ -30,8 +30,10 @@ fn fixture() -> (
 ) {
     let path = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
         || {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/sync/swappable_artboards_focus.riv")
+            PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("../../fixtures/sync/swappable_artboards_focus.riv")
         },
         |root| PathBuf::from(root).join("tests/unit_tests/assets/swappable_artboards_focus.riv"),
     );

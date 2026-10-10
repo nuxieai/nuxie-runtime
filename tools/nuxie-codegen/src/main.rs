@@ -90,7 +90,10 @@ struct Args {
 
 impl Args {
     fn parse(raw: Vec<String>) -> Result<Self> {
-        let mut extensions = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../defs/nuxie");
+        let mut extensions = PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("../../defs/nuxie");
         let mut defs = None;
         let mut out = None;
         let mut args = raw.into_iter();

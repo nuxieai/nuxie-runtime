@@ -168,9 +168,11 @@ fn channel_keys_report_a_uint_field_type_for_data_binding() {
 }
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync")
-        .join(name);
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync")
+    .join(name);
     std::fs::read(&path).unwrap_or_else(|error| {
         panic!(
             "read pinned fixture {}: {error}; run tools/fetch-test-assets.sh",

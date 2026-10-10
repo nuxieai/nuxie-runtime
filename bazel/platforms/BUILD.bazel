@@ -1,0 +1,19 @@
+load("@rules_rust//rust/platform:triple_mappings.bzl", "triple_to_constraint_set")
+
+package(default_visibility = ["//visibility:public"])
+
+[
+    platform(
+        name = target,
+        constraint_values = triple_to_constraint_set(target),
+    )
+    for target in [
+        "aarch64-linux-android",
+        "x86_64-linux-android",
+        "aarch64-apple-ios",
+        "aarch64-apple-ios-sim",
+        "x86_64-apple-ios",
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+    ]
+]

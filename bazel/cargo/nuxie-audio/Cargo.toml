@@ -1,0 +1,24 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-audio"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[features]
+"audio-device" = ["dep:cpal"]
+
+[dependencies]
+"cpal" = { "version" = "0.16", "optional" = true }
+"symphonia-bundle-flac" = { "version" = "=0.5.5", "default-features" = false, "path" = "../symphonia-bundle-flac" }
+"symphonia-bundle-mp3" = { "version" = "=0.5.5", "default-features" = false, "features" = ["mp3"], "path" = "../symphonia-bundle-mp3" }
+"symphonia-codec-pcm" = { "version" = "=0.5.5" }
+"symphonia-core" = { "version" = "=0.5.5" }
+"symphonia-format-riff" = { "version" = "=0.5.5", "default-features" = false, "features" = ["wav"], "path" = "../symphonia-format-riff" }

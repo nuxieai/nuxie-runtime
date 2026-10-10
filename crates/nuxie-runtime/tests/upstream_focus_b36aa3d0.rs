@@ -131,8 +131,10 @@ fn assert_near(actual: f32, expected: f32) {
 
 #[test]
 fn focus_bounds_track_a_nested_artboard_host_that_moves() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/focus_bounds_moving_host.riv");
+    let fixture = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/focus_bounds_moving_host.riv");
     let bytes = std::fs::read(&fixture).unwrap_or_else(|error| {
         panic!(
             "read pinned fixture {} (run make fixtures): {error}",

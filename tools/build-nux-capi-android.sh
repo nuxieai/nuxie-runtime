@@ -4,7 +4,6 @@ set -euo pipefail
 script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -P "${script_dir}/.." && pwd -P)"
 rust_toolchain="1.94.1"
-cargo_ndk_version="4.1.2"
 ndk_version="29.0.14206865"
 android_api="23"
 features="android-vulkan,scripting,android-authored-wgsl"
@@ -17,7 +16,8 @@ if [[ "${1:-}" == "--plan" ]]; then
         "release-tag: $(python3 "${script_dir}/android_runtime_contract.py" release-tag)" \
         'root-package: nux-capi' \
         'rust-toolchain: 1.94.1' \
-        'cargo-ndk: 4.1.2' \
+        'build-system: Bazel 9.3.0 / rules_rust 0.74.0' \
+        'bazel-target: //crates/nux-capi:nux-capi__android__cdylib' \
         'android-ndk: 29.0.14206865' \
         'android-api: 23' \
         'targets: aarch64-linux-android x86_64-linux-android' \
@@ -107,42 +107,9 @@ ndk_host_tag="$(basename "${ndk_prebuilt}")"
 ndk_bin="${ndk_prebuilt}/bin"
 ndk_sysroot_lib="${ndk_prebuilt}/sysroot/usr/lib"
 
-rust_cargo="$(rustup which --toolchain "${rust_toolchain}" cargo)"
-rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
-cargo_home="${CARGO_HOME:-${HOME}/.cargo}"
-cargo_ndk="${NUX_ANDROID_CARGO_NDK:-${cargo_home}/bin/cargo-ndk}"
-for config in "${cargo_home}/config" "${cargo_home}/config.toml"; do
-    if [[ -f "${config}" ]]; then
-        echo "release build refuses external Cargo configuration: ${config}" >&2
-        exit 4
-    fi
-done
-config_search_root="${repo_root}"
-while [[ "${config_search_root}" != "/" ]]; do
-    for config in "${config_search_root}/.cargo/config" "${config_search_root}/.cargo/config.toml"; do
-        if [[ -f "${config}" ]]; then
-            echo "release build refuses unaudited Cargo configuration: ${config}" >&2
-            exit 4
-        fi
-    done
-    config_search_root="$(dirname "${config_search_root}")"
-done
-if [[ ! -x "${cargo_ndk}" ]]; then
-    echo "missing cargo-ndk ${cargo_ndk_version}: ${cargo_ndk}" >&2
-    exit 3
-fi
-PATH="$(dirname "${cargo_ndk}"):$(dirname "${rust_cargo}"):${PATH}"
-export PATH
-if [[ "$("${rust_cargo}" ndk --version)" != "cargo-ndk ${cargo_ndk_version}" ]]; then
-    echo "cargo-ndk must be exactly ${cargo_ndk_version}" >&2
-    exit 3
-fi
-for target in "${targets[@]}"; do
-    if ! rustup target list --toolchain "${rust_toolchain}" --installed | grep -qx "${target}"; then
-        echo "missing Rust target ${target} for toolchain ${rust_toolchain}" >&2
-        exit 3
-    fi
-done
+export ANDROID_NDK_HOME="${resolved_ndk_root}"
+export ANDROID_NDK_ROOT="${resolved_ndk_root}"
+
 for path in \
     "${ndk_bin}/aarch64-linux-android${android_api}-clang" \
     "${ndk_bin}/x86_64-linux-android${android_api}-clang" \
@@ -176,10 +143,11 @@ done
 runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-capi/Cargo.toml" | head -1)"
 source_date_epoch="$(git -C "${repo_root}" show -s --format=%ct HEAD)"
 contract_fingerprint="$(python3 "${script_dir}/android_runtime_contract.py" fingerprint --repo-root "${repo_root}")"
-rustc_version="$("${rust_compiler}" -vV | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+rustc_version="$(python3 "${script_dir}/bazel_runtime_build.py" toolchain \
+    --repo-root "${repo_root}" --label //crates/nux-capi:nux-capi__android__cdylib \
+    --target aarch64-linux-android | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
 
 build_root="${output_root}/build"
-cargo_target_dir="${build_root}/cargo"
 prebuilt_root="${build_root}/prebuilt"
 build_inputs="${build_root}/BUILD_INPUTS.json"
 archive="${output_root}/NuxieRuntimeAndroid.zip"
@@ -200,39 +168,23 @@ build_inputs_hash="$(
         --source-revision "${source_revision}" \
         --runtime-version "${runtime_version}" \
         --source-date-epoch "${source_date_epoch}" \
-        --rustc "${rust_compiler}" \
-        --cargo "${rust_cargo}" \
-        --cargo-ndk "${cargo_ndk}" \
         --ndk-root "${resolved_ndk_root}" \
         --ndk-host-tag "${ndk_host_tag}"
 )"
 
-RUSTUP_TOOLCHAIN="${rust_toolchain}" \
-RUSTC="${rust_compiler}" \
-CARGO="${rust_cargo}" \
-ANDROID_NDK_HOME="${resolved_ndk_root}" \
-ANDROID_NDK_ROOT="${resolved_ndk_root}" \
-SOURCE_DATE_EPOCH="${source_date_epoch}" \
-CARGO_TARGET_DIR="${cargo_target_dir}" \
-NUX_RUNTIME_SOURCE_REVISION="${source_revision}" \
-NUX_RUNTIME_BUILD_INPUTS_HASH="${build_inputs_hash}" \
-NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \
-NUX_RUNTIME_BUILD_PROFILE="release" \
-NUX_RUNTIME_RUSTC_VERSION="${rustc_version}" \
-NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE="nux-capi" \
-    "${rust_cargo}" ndk \
-        --target arm64-v8a \
-        --target x86_64 \
-        --platform "${android_api}" \
-        --link-libcxx-shared \
-        --output-dir "${prebuilt_root}/jniLibs" \
-        --manifest-path "${repo_root}/Cargo.toml" \
-        build \
-        --locked \
-        --package nux-capi \
-        --no-default-features \
-        --features "${features}" \
-        --release
+for index in "${!targets[@]}"; do
+    NUX_RUNTIME_SOURCE_REVISION="${source_revision}" \
+    NUX_RUNTIME_BUILD_INPUTS_HASH="${build_inputs_hash}" \
+    NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \
+    NUX_RUNTIME_BUILD_PROFILE="release" \
+    NUX_RUNTIME_RUSTC_VERSION="${rustc_version}" \
+    NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE="nux-capi" \
+        python3 "${script_dir}/bazel_runtime_build.py" build \
+            --repo-root "${repo_root}" \
+            --label //crates/nux-capi:nux-capi__android__cdylib \
+            --target "${targets[index]}" \
+            --output "${prebuilt_root}/jniLibs/${abis[index]}/libnux_capi.so"
+done
 
 cp "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" \
     "${prebuilt_root}/include/nux_capi.generated.h"

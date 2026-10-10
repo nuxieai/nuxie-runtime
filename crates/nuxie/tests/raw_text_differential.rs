@@ -23,7 +23,7 @@ type PaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
 // D-RT-COLOR-423, D-RT-COLOR-457, D-RT-COLOR-474.
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
         .parent()
         .and_then(Path::parent)
         .expect("nuxie crate is in the workspace")
@@ -177,7 +177,8 @@ fn with_fallback<R>(font: FontRef, work: impl FnOnce() -> R) -> R {
 }
 
 fn raster_font_asset() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/sbix.ttf")
+    PathBuf::from(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+        .join("../../fixtures/fonts/sbix.ttf")
 }
 
 fn cpp_report() -> Option<Value> {

@@ -4526,8 +4526,10 @@ mod tests {
 
     #[test]
     fn scripted_blob_property_reads_and_writes_bytes() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/sync/data_bind_blob_test.riv");
+        let path = std::path::Path::new(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("../../fixtures/sync/data_bind_blob_test.riv");
         let bytes = std::fs::read(path).expect("vendored blob fixture");
         let file = native_test_file(&bytes);
         let model = nuxie_runtime::script_view_models(&file)
@@ -4581,8 +4583,10 @@ mod tests {
 
     #[test]
     fn scripted_blob_property_fires_listeners_only_when_identity_changes() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/sync/data_bind_blob_test.riv");
+        let path = std::path::Path::new(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("../../fixtures/sync/data_bind_blob_test.riv");
         let bytes = std::fs::read(path).expect("vendored blob fixture");
         let file = native_test_file(&bytes);
         let model = nuxie_runtime::script_view_models(&file)

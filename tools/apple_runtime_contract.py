@@ -466,8 +466,8 @@ def validate_size_report(report: object, budgets: object, *, release: bool) -> N
 def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) -> None:
     if not isinstance(document, dict) or set(document) != BUILD_INPUT_KEYS:
         raise ContractError("build-input manifest has an incomplete or unknown schema")
-    if document["schemaVersion"] != 1:
-        raise ContractError("build-input manifest schemaVersion must be exactly 1")
+    if document["schemaVersion"] != 2:
+        raise ContractError("build-input manifest schemaVersion must be exactly 2")
     root_package = document["rootPackage"]
     features = document["features"]
     if root_package != SHIPPING_ROOT_PACKAGE:
@@ -493,12 +493,14 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
     if not isinstance(configuration, dict) or set(configuration) != {
         "buildProfile",
         "buildEnvironment",
-        "cargo",
+        "buildSystem",
+        "bazel",
+        "bazelTarget",
+        "bazelPlatforms",
         "minimumIOSVersion",
         "minimumMacOSVersion",
         "rustToolchain",
         "rustc",
-        "hostTarget",
         "rustLibraries",
         "toolBinaries",
         "sdk",
@@ -509,9 +511,19 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
         isinstance(value, str) and value
         for key, value in configuration.items()
         if key
-        not in {"buildEnvironment", "rustLibraries", "sdk", "toolBinaries", "xcode"}
+        not in {"buildEnvironment", "rustLibraries", "sdk", "toolBinaries", "xcode", "bazelPlatforms"}
     ):
         raise ContractError("build-input manifest has an empty toolchain value")
+    if (
+        configuration["buildSystem"] != "bazel"
+        or configuration["bazel"] != "bazel 9.3.0"
+        or configuration["bazelTarget"] != "//crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib"
+        or configuration["bazelPlatforms"] != {target: f"//bazel/platforms:{target}" for target in BUILD_TARGETS}
+        or configuration["rustToolchain"] != "1.94.1"
+        or configuration["buildProfile"] != "release-apple"
+        or not configuration["rustc"].startswith("rustc 1.94.1 ")
+    ):
+        raise ContractError("build-input manifest does not describe the pinned direct Bazel release")
     if configuration["buildEnvironment"] != {}:
         raise ContractError("build-input manifest contains forbidden environment overrides")
     if (

@@ -963,7 +963,10 @@ mod tests {
     }
 
     fn manifest() -> Manifest {
-        let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml");
+        let manifest_path = Path::new(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("renderer-scenes.toml");
         load_manifest(&manifest_path).expect("fixture manifest must be valid")
     }
 
@@ -1291,8 +1294,13 @@ mod tests {
     fn manifest_rejects_an_unapproved_scene_set() {
         let mut manifest = manifest();
         manifest.scene[0].id = "something-else".to_owned();
-        let error = validate_manifest(&manifest, Path::new(env!("CARGO_MANIFEST_DIR")))
-            .expect_err("fixed scene list must not drift");
+        let error = validate_manifest(
+            &manifest,
+            Path::new(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            ),
+        )
+        .expect_err("fixed scene list must not drift");
         assert!(error.contains("scene 1"));
     }
 
@@ -1300,8 +1308,13 @@ mod tests {
     fn manifest_rejects_unpinned_defaults() {
         let mut manifest = manifest();
         manifest.defaults.width = 1;
-        let error = validate_manifest(&manifest, Path::new(env!("CARGO_MANIFEST_DIR")))
-            .expect_err("benchmark defaults must not drift");
+        let error = validate_manifest(
+            &manifest,
+            Path::new(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            ),
+        )
+        .expect_err("benchmark defaults must not drift");
         assert!(error.contains("manifest defaults must be"));
     }
 

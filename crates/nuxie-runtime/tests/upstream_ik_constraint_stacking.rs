@@ -18,7 +18,10 @@ fn load(name: &str) -> (RuntimeFileHandle, CoreHandle) {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .map(|root| std::path::PathBuf::from(root).join("tests/unit_tests/assets"))
         .unwrap_or_else(|| {
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/sync")
+            std::path::PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("../../fixtures/sync")
         });
     let bytes = std::fs::read(root.join(name)).expect("pinned IK fixture");
     let mut factory = PersistentFactory::new(RecordingFactory::new());

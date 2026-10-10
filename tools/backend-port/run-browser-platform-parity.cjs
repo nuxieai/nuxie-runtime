@@ -166,7 +166,7 @@ function runCorpus(sourceReplay, candidateReplay) {
     args.push("--entry", entry);
   }
   return new Promise((resolve, reject) => {
-    const child = spawn(process.env.CARGO || "cargo", args, {
+    const child = spawn(path.join(repo, "tools/bazel/runtime.py"), args, {
       cwd: repo,
       env: {
         ...process.env,

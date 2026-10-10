@@ -81,7 +81,7 @@ fn verify_generated_header() {
     let config = cbindgen::Config::from_file(crate_dir.join("cbindgen.toml"))
         .expect("read crates/nux-capi/cbindgen.toml");
     let bindings = cbindgen::Builder::new()
-        .with_crate(&crate_dir)
+        .with_src(crate_dir.join("src/lib.rs"))
         .with_config(config)
         .generate()
         .expect("generate nux-capi C header");

@@ -9,7 +9,6 @@ impl<'a> Printer<'a> {
         attributes: &AstArray<*mut AstAttr>,
         attr_lists: *const AstArray<*mut CstAttrList>,
     ) {
-
         if attr_lists.is_null() {
             for attribute in attributes.iter() {
                 self.visualize_attribute(unsafe { &mut **attribute });
@@ -29,9 +28,7 @@ impl<'a> Printer<'a> {
                 };
 
             if use_standalone {
-                self.visualize_attribute(unsafe {
-                    &mut **attributes.data.add(attribute_index)
-                });
+                self.visualize_attribute(unsafe { &mut **attributes.data.add(attribute_index) });
                 attribute_index += 1;
             } else {
                 let cst_attr_list = unsafe { *attr_lists.data.add(list_index) };
@@ -53,9 +50,7 @@ impl<'a> Printer<'a> {
                 }
 
                 luaur_common::LUAU_ASSERT!(attribute_index != attributes.size);
-                self.visualize_attribute(unsafe {
-                    &mut **attributes.data.add(attribute_index)
-                });
+                self.visualize_attribute(unsafe { &mut **attributes.data.add(attribute_index) });
                 attribute_index += 1;
                 self.maybe_advance_and_write(
                     unsafe { &(*cst_attr_list).close_bracket_position },

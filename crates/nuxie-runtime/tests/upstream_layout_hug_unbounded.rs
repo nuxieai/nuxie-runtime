@@ -16,8 +16,10 @@ impl Fixture {
     fn new() -> Self {
         let path = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
             || {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../fixtures/sync/layout/hug_unbounded.riv")
+                PathBuf::from(
+                    option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+                )
+                .join("../../fixtures/sync/layout/hug_unbounded.riv")
             },
             |root| PathBuf::from(root).join("tests/unit_tests/assets/layout/hug_unbounded.riv"),
         );

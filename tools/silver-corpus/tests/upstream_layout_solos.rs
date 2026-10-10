@@ -31,8 +31,12 @@ fn run(id: &str) -> anyhow::Result<()> {
     let runtime = std::env::var_os("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
-    let manifest =
-        read_manifest(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../silver-corpus.toml"))?;
+    let manifest = read_manifest(
+        &PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("../../silver-corpus.toml"),
+    )?;
     let case = manifest
         .cases
         .iter()

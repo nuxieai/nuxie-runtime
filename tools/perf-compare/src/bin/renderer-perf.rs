@@ -100,7 +100,10 @@ struct Options {
 impl Options {
     fn parse(args: impl IntoIterator<Item = String>) -> Result<Self, String> {
         let mut options = Self {
-            manifest: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml"),
+            manifest: PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("renderer-scenes.toml"),
             baseline_runner: None,
             candidate_runner: None,
             json: PathBuf::from("rive-renderer-perf.json"),

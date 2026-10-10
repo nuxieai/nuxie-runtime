@@ -42,7 +42,7 @@ if grep -Eiq '(^|[[:space:]│├└─])(wgpu($|[-_ @v])|naga($|[ @v])|apple-ms
   exit 1
 fi
 
-MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 cargo test --locked \
+MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 "$repo_root/tools/bazel/runtime.py" test --locked \
   -p nuxie --no-default-features --features ore-metal-authored-msl \
   --test ore_metal_authored_gpu_canvas --target "$host_target" --no-run \
   --message-format=json-render-diagnostics >"$artifacts_file"

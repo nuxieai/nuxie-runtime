@@ -4,6 +4,9 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from tools.bazel_runtime_build import BazelRuntime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -62,22 +65,25 @@ class SlimRuntimeSourceTests(unittest.TestCase):
     def test_builder_gives_bindgen_each_target_clang_target_and_sdk_sysroot(
         self,
     ) -> None:
-        builder = (REPO_ROOT / "tools/build-nux-capi-xcframeworks.sh").read_text()
-        for sdk in ("iphoneos", "iphonesimulator", "macosx"):
-            self.assertIn(f'xcrun --sdk {sdk} --show-sdk-path', builder)
-        for clang_target in (
-            "arm64-apple-ios${deployment_target}",
-            "arm64-apple-ios${deployment_target}-simulator",
-            "x86_64-apple-ios${deployment_target}-simulator",
-            "arm64-apple-macos${macos_deployment_target}",
-            "x86_64-apple-macos${macos_deployment_target}",
+        for target, sdk, clang_target in (
+            ("aarch64-apple-ios", "iphoneos", "arm64-apple-ios16.0"),
+            ("aarch64-apple-ios-sim", "iphonesimulator", "arm64-apple-ios16.0-simulator"),
+            ("x86_64-apple-ios", "iphonesimulator", "x86_64-apple-ios16.0-simulator"),
+            ("aarch64-apple-darwin", "macosx", "arm64-apple-macos13.0"),
+            ("x86_64-apple-darwin", "macosx", "x86_64-apple-macos13.0"),
         ):
-            self.assertIn(f'clang_target="{clang_target}"', builder)
-        self.assertIn('SDKROOT="${sdk_path}"', builder)
-        self.assertIn(
-            'BINDGEN_EXTRA_CLANG_ARGS="--target=${clang_target} --sysroot=${sdk_path}"',
-            builder,
-        )
+            with self.subTest(target=target), patch.dict("os.environ", {}, clear=True):
+                def selected_tool(arguments, **kwargs):
+                    if arguments == ["xcodebuild", "-version"]:
+                        return "Xcode 26.2\nBuild version 17C52\n"
+                    self.assertEqual(arguments, ["xcrun", "--sdk", sdk, "--show-sdk-path"])
+                    return f"/selected/{sdk}.sdk\n"
+                with patch("tools.bazel_runtime_build.subprocess.check_output", side_effect=selected_tool):
+                    options = BazelRuntime.options(target, ios="16.0", macos="13.0")
+                self.assertIn(f"--action_env=BINDGEN_EXTRA_CLANG_ARGS=--target={clang_target} "
+                              f"--sysroot=/selected/{sdk}.sdk", options)
+                self.assertIn("--ios_minimum_os=16.0", options)
+                self.assertIn("--macos_minimum_os=13.0", options)
 
     def test_distribution_exposes_one_module_and_platform_symbol_partitions(self) -> None:
         extension_root = REPO_ROOT / "crates/nux-apple-product-extension"

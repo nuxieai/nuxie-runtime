@@ -78,8 +78,10 @@ fn fl_e8_fixtures_are_reproducible_importable_and_schema_typed() {
     assert_eq!(
         first_bytes,
         fs::read(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/layout-dirt/grid_justify_items_bind.riv")
+            Path::new(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR"))
+            )
+            .join("../../fixtures/layout-dirt/grid_justify_items_bind.riv")
         )
         .unwrap(),
         "the checked-in layout-dirt fixture must be regenerated through nuxie-codegen",
@@ -105,8 +107,10 @@ fn fl_e8_fixtures_are_reproducible_importable_and_schema_typed() {
     assert_eq!(
         first_bytes,
         fs::read(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/univ-1278/parent_child_opacity.riv")
+            Path::new(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR"))
+            )
+            .join("../../fixtures/univ-1278/parent_child_opacity.riv")
         )
         .unwrap(),
         "the checked-in UNIV-1278 fixture must be regenerated through nuxie-codegen",

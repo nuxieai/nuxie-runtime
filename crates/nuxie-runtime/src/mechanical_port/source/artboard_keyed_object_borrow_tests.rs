@@ -200,6 +200,7 @@ fn all_four_native_entries_release_definition_loans_and_read_each_current_object
         &mut RuntimeArtboardObjectContext {
             arena: arena.clone(),
             root: root.core_handle(),
+            instance: Some(&root),
         },
         &arena,
         &target,

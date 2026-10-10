@@ -1011,6 +1011,24 @@ impl CoreHandle {
         None
     }
 
+    /// Whether this runtime root's slot names the runtime artboard at
+    /// `instance` with no retirement pending: then `with_artboard` lends that
+    /// artboard and its lease's release has nothing to run.
+    #[inline]
+    pub(crate) fn names_runtime_artboard(
+        &self,
+        instance: *const RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>,
+    ) -> bool {
+        let slot = &self.identity.slot;
+        slot.generation.get() == slot.hot.identity_generation
+            && !slot.retirement_pending.get()
+            && slot
+                .runtime_artboard
+                .borrow()
+                .as_ref()
+                .is_some_and(|root| std::ptr::eq(root.as_ptr(), instance))
+    }
+
     /// Resolve a Component's typed Artboard owner at the point of use.
     /// Runtime roots already carry a typed receiver; keep its ordinary retained
     /// handle and cleanup while avoiding the erased CoreObject round trip.

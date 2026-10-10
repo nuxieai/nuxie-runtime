@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_property::KeyedProperty,
-        keyframe_cells::{KeyedPropertyCells, PropertyEntry},
+        keyframe_cells::{KeyedObjectCells, KeyedPropertyCells, PropertyEntry},
         keyframe_interpolator::KeyFrameInterpolator,
     },
     core::CoreHandle,
@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
     generated::animation::{
         keyed_object_base::KeyedObjectBase, linear_animation_base::LinearAnimationBase,
     },
+    generated::{core_type_tree::PARENT_TYPE_KEYS, layout_component_base::LayoutComponentBase},
     importers::{import_stack::ImportStack, linear_animation_importer::LinearAnimationImporter},
     lazy_vector::LazyVector,
     status_code::StatusCode,
@@ -22,6 +23,50 @@ pub trait KeyedObjectContext: CoreContext {
     fn object_supports_property(&self, id: u32, key: u32) -> bool;
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool;
 }
+
+/// Whether each type key is a LayoutComponent, the only InterpolatorHost:
+/// InterpolatorHost::from's cast, computed from the type tree at compile time.
+const INTERPOLATOR_HOSTS: [bool; PARENT_TYPE_KEYS.len()] = {
+    let mut hosts = [false; PARENT_TYPE_KEYS.len()];
+    let mut key = 0;
+    while key < hosts.len() {
+        let mut current = key;
+        loop {
+            if current == LayoutComponentBase::TYPE_KEY as usize {
+                hosts[key] = true;
+                break;
+            }
+            let parent = PARENT_TYPE_KEYS[current] as usize;
+            if parent == 0 {
+                break;
+            }
+            current = parent;
+        }
+        key += 1;
+    }
+    hosts
+};
+
+/// KeyedProperty::apply's InterpolatorHost::from(object) followed by
+/// overridesKeyedInterpolation(propertyKey). A target that is not a
+/// LayoutComponent answers from its type key, without a loan.
+pub(crate) fn interpolator_host_overrides(object: &CoreHandle, key: u32) -> bool {
+    let is_host = object.occupied_core_type().is_some_and(|type_key| {
+        INTERPOLATOR_HOSTS
+            .get(usize::from(type_key))
+            .copied()
+            .unwrap_or(false)
+    });
+    is_host
+        && object
+            .with_mut(|object| {
+                object
+                    .overrides_keyed_interpolation(key as i32)
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
+}
+
 #[derive(Default)]
 pub struct KeyedObject {
     pub base: KeyedObjectBase,
@@ -198,6 +243,18 @@ impl KeyedObject {
         let cells = owner
             .with_downcast::<Self, _>(|object| std::rc::Rc::clone(object.base.cells()))
             .expect("animation application retains its KeyedObject");
+        Self::apply_cells(&cells, artboard, time, mix, context);
+    }
+
+    /// apply_occurrence for a keyed object entered through the shared cells
+    /// its animation recorded at import.
+    pub(crate) fn apply_cells(
+        cells: &KeyedObjectCells,
+        artboard: &mut dyn KeyedObjectContext,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) {
         let Some(object) = artboard.resolve_object(cells.object_id()) else {
             return;
         };
@@ -229,7 +286,7 @@ impl KeyedObject {
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
-        importer.add_keyed_object(this);
+        importer.add_keyed_object_with_cells(this, std::rc::Rc::clone(self.base.cells()));
         self.base.base.import(stack)
     }
 }

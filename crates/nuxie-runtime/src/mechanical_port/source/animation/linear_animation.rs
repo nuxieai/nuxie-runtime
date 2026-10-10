@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
         keyed_callback_reporter::KeyedCallbackReporter,
         keyed_object::{KeyedObject, KeyedObjectContext},
         keyed_property::KeyedProperty,
+        keyframe_cells::KeyedObjectCells,
         r#loop::Loop,
     },
     core::CoreHandle,
@@ -50,6 +51,35 @@ pub trait LinearAnimationArtboard {
     ) {
         self.apply_keyed_object(object.clone(), time, mix, context);
     }
+
+    /// Apply a keyed object through the shared cells its animation recorded
+    /// for it. A context without a cells path applies it by its handle.
+    fn apply_keyed_object_cells(
+        &mut self,
+        object: &CoreHandle,
+        cells: &KeyedObjectCells,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) {
+        let _ = cells;
+        self.apply_keyed_object_borrowed(object, time, mix, context);
+    }
+}
+
+/// One keyed object of an animation, through its cells when it has them.
+fn apply_keyed_object_entry(
+    artboard: &mut dyn LinearAnimationArtboard,
+    object: &CoreHandle,
+    cells: &Option<Rc<KeyedObjectCells>>,
+    time: f32,
+    mix: f32,
+    context: Option<&dyn KeyFrameValueContext>,
+) {
+    match cells {
+        Some(cells) => artboard.apply_keyed_object_cells(object, cells, time, mix, context),
+        None => artboard.apply_keyed_object_borrowed(object, time, mix, context),
+    }
 }
 
 /// The two existing Rust representations of C++'s retained animation pointer.
@@ -87,15 +117,18 @@ impl LinearAnimationOwner {
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        let objects = self.with(|animation| {
+        let (objects, cells) = self.with(|animation| {
             if animation.base.quantize() {
                 let fps = animation.base.fps() as f32;
                 time = (time * fps).floor() / fps;
             }
-            animation.keyed_objects.snapshot()
+            (
+                animation.keyed_objects.snapshot(),
+                animation.keyed_object_cells.snapshot(),
+            )
         });
-        for object in objects.iter() {
-            artboard.apply_keyed_object_borrowed(object, time, mix, context);
+        for (object, cells) in objects.iter().zip(cells.iter()) {
+            apply_keyed_object_entry(artboard, object, cells, time, mix, context);
         }
     }
 
@@ -135,6 +168,9 @@ pub struct LinearAnimation {
     first_key_frame: u16,
     last_key_frame: u16,
     keyed_objects: LazyVector<CoreHandle>,
+    // Each keyed object's shared cells, in step with `keyed_objects`; None
+    // for one added by handle alone, which applies through that handle.
+    keyed_object_cells: LazyVector<Option<Rc<KeyedObjectCells>>>,
 }
 impl Default for LinearAnimation {
     fn default() -> Self {
@@ -145,6 +181,7 @@ impl Default for LinearAnimation {
             first_key_frame: 0,
             last_key_frame: u16::MAX,
             keyed_objects: LazyVector::default(),
+            keyed_object_cells: LazyVector::default(),
         }
     }
 }
@@ -169,7 +206,16 @@ impl LinearAnimation {
         DELETE_COUNT.load(Ordering::Relaxed)
     }
     pub fn add_keyed_object(&mut self, v: CoreHandle) {
-        self.keyed_objects.push_back(v)
+        self.add_keyed_object_with_cells(v, None);
+    }
+    /// Add a keyed object with the shared cells its application reads.
+    pub(crate) fn add_keyed_object_with_cells(
+        &mut self,
+        v: CoreHandle,
+        cells: Option<Rc<KeyedObjectCells>>,
+    ) {
+        self.keyed_objects.push_back(v);
+        self.keyed_object_cells.push_back(cells);
     }
     pub fn keyed_objects(&self) -> &[CoreHandle] {
         self.keyed_objects.view()
@@ -190,6 +236,7 @@ impl LinearAnimation {
         }
         for i in failed.into_iter().rev() {
             self.keyed_objects.remove(i);
+            self.keyed_object_cells.remove(i);
         }
         if status == StatusCode::MissingObject {
             StatusCode::Ok
@@ -258,8 +305,8 @@ impl LinearAnimation {
             let fps = self.base.fps() as f32;
             time = (time * fps).floor() / fps;
         }
-        for object in self.keyed_objects.iter() {
-            artboard.apply_keyed_object_borrowed(object, time, mix, context)
+        for (object, cells) in self.keyed_objects.iter().zip(self.keyed_object_cells.iter()) {
+            apply_keyed_object_entry(artboard, object, cells, time, mix, context);
         }
     }
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {

@@ -10,6 +10,7 @@ pub mod image;
 pub mod list_path;
 pub mod mesh;
 pub mod mesh_drawable;
+pub mod mesh_host;
 pub mod mesh_vertex;
 pub mod paint;
 pub mod parametric_path;

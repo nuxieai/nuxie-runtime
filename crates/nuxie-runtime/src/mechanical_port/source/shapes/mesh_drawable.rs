@@ -27,6 +27,7 @@ pub trait MeshDrawable {
         MeshType::Vertex
     }
     fn on_asset_loaded(&mut self, image: &dyn RenderImage);
+    fn uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D);
     fn draw(
         &mut self,
         renderer: &mut dyn Renderer,

@@ -1677,7 +1677,7 @@ impl ArtboardComponentList {
                     let host = read(owner, |this| {
                         this.parent_artboard().expect("component list artboard")
                     });
-                    Artboard::draw_hosted_handle(&host, &artboard.core_handle(), renderer);
+                    Artboard::draw_hosted_handle(&host, &artboard.core_handle(), renderer, false);
                     renderer.restore();
                 }
             }
@@ -1710,6 +1710,7 @@ impl ArtboardComponentList {
                             &self.parent_artboard().expect("component list artboard"),
                             &artboard.core_handle(),
                             renderer,
+                            false,
                         );
                         renderer.restore();
                     }
@@ -1730,6 +1731,7 @@ impl ArtboardComponentList {
                         &self.parent_artboard().expect("component list artboard"),
                         &artboard.core_handle(),
                         renderer,
+                        false,
                     );
                     renderer.restore();
                 }

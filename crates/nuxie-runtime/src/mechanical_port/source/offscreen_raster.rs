@@ -1,6 +1,39 @@
 //! Translation of offscreen_raster.{hpp,cpp}, upstream 8398db31.
 use super::math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D};
 use nuxie_render_api::{DeferredCanvasHostHandle, RenderCanvasHandle, Renderer};
+use std::sync::atomic::{AtomicU32, Ordering};
+
+pub struct CachedRaster {
+    pub canvas: Option<RenderCanvasHandle>,
+    pub width_px: u32,
+    pub height_px: u32,
+    pub raster_scale: f32,
+    pub bounds: Aabb,
+    pub content_revision: u64,
+    pub dirty: bool,
+}
+impl Default for CachedRaster {
+    fn default() -> Self {
+        Self {
+            canvas: None,
+            width_px: 0,
+            height_px: 0,
+            raster_scale: 1.0,
+            bounds: Aabb::default(),
+            content_revision: 0,
+            dirty: true,
+        }
+    }
+}
+impl CachedRaster {
+    pub fn release(&mut self) {
+        self.canvas = None;
+        self.width_px = 0;
+        self.height_px = 0;
+        self.content_revision = 0;
+        self.dirty = true;
+    }
+}
 
 pub const K_MAX_DIM: u32 = 2048;
 pub const K_SHRINK_DRAWS: u8 = 30;
@@ -72,7 +105,7 @@ pub fn plan_raster_scale(renderer: &dyn Renderer, resolution: f32, out: &mut Ras
     if out.have_ctm {
         let s = out.ctm.find_max_scale();
         if s.is_finite() && s > 0.0 {
-            device_scale = (s * 16.0).ceil() / 16.0;
+            device_scale = (s * 16.0 - 1.0 / 1024.0).ceil() / 16.0;
         }
     }
     let res = cpp_min(cpp_max(resolution, 0.01), 8.0);
@@ -221,6 +254,57 @@ pub fn plan_raster(
     true
 }
 
+static DISPLAY_SCALE: AtomicU32 = AtomicU32::new(1.0f32.to_bits());
+pub fn set_display_scale(scale: f32) {
+    if !scale.is_finite() || scale <= 0.0 {
+        return;
+    }
+    DISPLAY_SCALE.store(
+        cpp_min(cpp_max(scale, 1.0), 4.0).to_bits(),
+        Ordering::Relaxed,
+    );
+}
+pub fn display_scale() -> f32 {
+    f32::from_bits(DISPLAY_SCALE.load(Ordering::Relaxed))
+}
+pub fn plan_fixed_raster_size(bounds: &Aabb, resolution: f32, out: &mut RasterPlan) -> bool {
+    let res = cpp_min(cpp_max(resolution, 0.01), 8.0) * display_scale();
+    if !(res > 0.0) || !res.is_finite() {
+        return false;
+    }
+    let mut plan = RasterPlan {
+        raster_scale: res,
+        ..RasterPlan::default()
+    };
+    if !fit_raster_to_box(bounds, 0, RasterFit::Exact, &mut plan) {
+        return false;
+    }
+    *out = plan;
+    true
+}
+pub fn plan_fixed_raster(
+    renderer: &dyn Renderer,
+    bounds: &Aabb,
+    resolution: f32,
+    out: &mut RasterPlan,
+) -> bool {
+    let mut plan = RasterPlan::default();
+    if !plan_fixed_raster_size(bounds, resolution, &mut plan) {
+        return false;
+    }
+    if let Some(ctm) = renderer.current_transform() {
+        plan.have_ctm = true;
+        let m = ctm.0;
+        plan.ctm = Mat2D::new(m[0], m[1], m[2], m[3], m[4], m[5]);
+    }
+    if let Some(opacity) = renderer.current_modulated_opacity() {
+        plan.have_opacity = true;
+        plan.modulated_opacity = opacity;
+    }
+    *out = plan;
+    true
+}
+
 pub struct CanvasContentScope {
     host: Option<DeferredCanvasHostHandle>,
     canvas: Option<RenderCanvasHandle>,
@@ -342,4 +426,30 @@ pub fn begin_composite_for_box<'a>(
 }
 pub fn end_composite(mut placement: CompositePlacement<'_>) {
     placement.renderer().restore();
+}
+pub fn begin_placement<'a>(
+    renderer: &'a mut dyn Renderer,
+    host: Option<&DeferredCanvasHostHandle>,
+    plan: &RasterPlan,
+) -> CompositePlacement<'a> {
+    let fresh = host.and_then(|host| host.borrow_mut().composite_renderer());
+    let mut placement = if let Some(fresh) = fresh.filter(|_| plan.have_ctm && plan.have_opacity) {
+        CompositePlacement {
+            renderer: CompositeRenderer::Fresh(fresh),
+            opacity: plan.modulated_opacity,
+        }
+    } else {
+        CompositePlacement {
+            renderer: CompositeRenderer::Original(renderer),
+            opacity: 1.0,
+        }
+    };
+    let is_fresh = matches!(placement.renderer, CompositeRenderer::Fresh(_));
+    placement.renderer().save();
+    if is_fresh {
+        placement
+            .renderer()
+            .transform(nuxie_render_api::Mat2D(*plan.ctm.values()));
+    }
+    placement
 }

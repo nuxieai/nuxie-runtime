@@ -429,7 +429,7 @@ fn hosting_visitor(
     let visitor: RuntimeDrawVisitor = Rc::new(move |drawable, renderer| {
         visits.borrow_mut().push(drawable.clone());
         if !did.replace(true) {
-            Artboard::draw_hosted_handle(&host, &hosted, renderer);
+            Artboard::draw_hosted_handle(&host, &hosted, renderer, false);
         }
         Drawable::draw_handle(drawable, renderer);
     });

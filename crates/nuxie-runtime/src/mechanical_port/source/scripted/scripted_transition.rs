@@ -817,7 +817,7 @@ impl ScriptedTransition {
             renderer.transform(child.transform);
             let host = Self::read(owner, |this| this.component().artboard_handle())
                 .expect("transition artboard");
-            Artboard::draw_hosted_handle(&host, &instance.core_handle(), renderer);
+            Artboard::draw_hosted_handle(&host, &instance.core_handle(), renderer, false);
             renderer.restore();
         }
     }

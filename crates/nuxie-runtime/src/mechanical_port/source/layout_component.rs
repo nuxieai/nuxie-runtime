@@ -813,13 +813,19 @@ impl LayoutComponent {
             &crate::mechanical_port::source::layout::layout_participant::LayoutParticipant,
         >,
     ) {
-        Self::sync_layout_children_with_active_owners(owner, active_participant, None);
+        Self::sync_layout_children_with_active_owners(owner, active_participant, None, None);
     }
     pub(crate) fn sync_layout_children_from_solo(
         owner: &CoreHandle,
         solo: &crate::mechanical_port::source::solo::Solo,
     ) {
-        Self::sync_layout_children_with_active_owners(owner, None, Some(solo));
+        Self::sync_layout_children_with_active_owners(owner, None, Some(solo), None);
+    }
+    pub(crate) fn sync_layout_children_from_nested(
+        owner: &CoreHandle,
+        nested: &crate::source::nested_artboard::NestedArtboard,
+    ) {
+        Self::sync_layout_children_with_active_owners(owner, None, None, Some(nested));
     }
     fn sync_layout_children_with_active_owners(
         owner: &CoreHandle,
@@ -827,6 +833,7 @@ impl LayoutComponent {
             &crate::mechanical_port::source::layout::layout_participant::LayoutParticipant,
         >,
         active_solo: Option<&crate::mechanical_port::source::solo::Solo>,
+        active_nested: Option<&crate::source::nested_artboard::NestedArtboard>,
     ) {
         let detached = owner
             .with_mut(|object| {
@@ -844,6 +851,23 @@ impl LayoutComponent {
             if let Some(participant) = active {
                 for index in 0..participant.num_layout_nodes() {
                     if let Some(node) = participant.layout_node_key(index) {
+                        nodes.push(node);
+                    }
+                }
+            } else if let Some(nested) = active_nested.filter(|nested| {
+                crate::source::core::CoreObject::core(*nested)
+                    .handle()
+                    .as_ref()
+                    == Some(&provider)
+            }) {
+                // NestedArtboardLayout::layoutNode(0) exposes its mounted
+                // artboard's native node. The provider is already borrowed
+                // by nest(), so use that same live instance directly.
+                if let Some(instance) = nested.artboard_instance_handle(0) {
+                    if let Some(node) = instance.with_artboard_mut(|artboard| {
+                        artboard.take_layout_data();
+                        artboard.layout_node_key(0)
+                    }) {
                         nodes.push(node);
                     }
                 }

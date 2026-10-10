@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
     generated::layout::n_slicer_base::NSlicerBase,
     layout::n_slicer_details::{NSlicerDetails, NSlicerDetailsState},
-    shapes::{image::Image, slice_mesh::SliceMesh},
+    shapes::{mesh_host::MeshHost, slice_mesh::SliceMesh},
 };
 
 impl std::ops::Deref for NSlicer {
@@ -35,12 +35,8 @@ impl NSlicer {
             slice_mesh: Box::new(SliceMesh::empty()),
         }
     }
-    pub fn image_handle(&self) -> Option<CoreHandle> {
-        self.base.parent_handle().filter(|parent| {
-            parent.is_type_of(
-                crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY,
-            )
-        })
+    pub fn host(&self) -> Option<MeshHost> {
+        MeshHost::from_handle(self.base.parent_handle())
     }
     pub fn slice_mesh(&mut self) -> &mut SliceMesh {
         &mut self.slice_mesh
@@ -63,14 +59,14 @@ impl NSlicer {
         if code != StatusCode::Ok {
             return code;
         }
-        let Some(parent) = self.image_handle() else {
+        let Some(parent) = self.host() else {
             return StatusCode::MissingObject;
         };
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
         };
         self.slice_mesh = Box::new(SliceMesh::new(this.clone()));
-        parent.with_downcast_mut::<Image, _>(|image| image.set_mesh(Some(this)));
+        parent.set_mesh(Some(this));
         StatusCode::Ok
     }
     pub fn build_dependencies(&mut self) {
@@ -78,6 +74,11 @@ impl NSlicer {
         if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
             parent.with_mut(|parent| parent.component_add_dependent(this));
         }
+    }
+    pub fn uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D) {
+        let mut mesh = std::mem::take(&mut self.slice_mesh);
+        mesh.uv_transform_changed(self, transform);
+        self.slice_mesh = mesh;
     }
     pub fn update(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::N_SLICER)

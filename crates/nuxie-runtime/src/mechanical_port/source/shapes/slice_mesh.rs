@@ -76,7 +76,7 @@ impl SliceMesh {
         opacity: f32,
         additiveness: f32,
     ) {
-        let Some(image) = nslicer.image_handle() else {
+        let Some(host) = nslicer.host() else {
             return;
         };
         if self.vertex_render_buffer.is_none()
@@ -85,19 +85,10 @@ impl SliceMesh {
         {
             return;
         }
-        let Some((world, offset_x, offset_y)) =
-            image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                |image| {
-                    (
-                        *image.base.world_transform(),
-                        -image.width() * image.base.origin_x(),
-                        -image.height() * image.base.origin_y(),
-                    )
-                },
-            )
-        else {
-            return;
-        };
+        let world = host.world_transform();
+        let origin = host.origin();
+        let offset_x = -host.width() * origin.x;
+        let offset_y = -host.height() * origin.y;
         renderer.transform(nuxie_render_api::Mat2D(*world.values()));
         renderer.translate(offset_x, offset_y);
         let vertex = self
@@ -123,6 +114,13 @@ impl SliceMesh {
         );
     }
     pub fn on_asset_loaded(&mut self, _image: Option<&dyn RenderImage>) {}
+    pub fn uv_transform_changed(
+        &mut self,
+        nslicer: &mut NSlicer,
+        _transform: nuxie_render_api::Mat2D,
+    ) {
+        self.update(nslicer);
+    }
 
     fn update_buffers(&mut self, nslicer: &mut NSlicer) {
         let Some(factory) = nslicer
@@ -179,15 +177,7 @@ impl SliceMesh {
                     )
                 }))));
         }
-        let uv_transform = nslicer
-            .image_handle()
-            .and_then(|image| {
-                image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                    |image| image.render_image().map(|image| image.uv_transform()),
-                )
-            })
-            .flatten()
-            .unwrap_or(nuxie_render_api::Mat2D::IDENTITY);
+        let uv_transform = nslicer.host().unwrap().uv_transform();
         if let Some(buffer) = self.uv_render_buffer.as_ref() {
             let mut buffer = buffer.borrow_mut();
             {
@@ -231,18 +221,13 @@ impl SliceMesh {
     }
 
     fn uv_stops(&self, nslicer: &mut NSlicer, axis: AxisType) -> Vec<f32> {
-        let Some((size, scale)) = nslicer.image_handle().and_then(|image| {
-            image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                |image| {
-                    if axis == AxisType::X {
-                        (image.width(), image.render_scale_x().abs())
-                    } else {
-                        (image.height(), image.render_scale_y().abs())
-                    }
-                },
-            )
-        }) else {
+        let Some(host) = nslicer.host() else {
             return Vec::new();
+        };
+        let (size, scale) = if axis == AxisType::X {
+            (host.width(), host.scale_x().abs())
+        } else {
+            (host.height(), host.scale_y().abs())
         };
         if size == 0.0 || scale == 0.0 {
             return Vec::new();
@@ -290,18 +275,13 @@ impl SliceMesh {
         NSlicerHelpers::uv_stops(&refs, size)
     }
     fn vertex_stops(&self, nslicer: &mut NSlicer, stops: &[f32], axis: AxisType) -> Vec<f32> {
-        let Some((size, scale)) = nslicer.image_handle().and_then(|image| {
-            image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                |image| {
-                    if axis == AxisType::X {
-                        (image.width(), image.render_scale_x().abs())
-                    } else {
-                        (image.height(), image.render_scale_y().abs())
-                    }
-                },
-            )
-        }) else {
+        let Some(host) = nslicer.host() else {
             return Vec::new();
+        };
+        let (size, scale) = if axis == AxisType::X {
+            (host.width(), host.scale_x().abs())
+        } else {
+            (host.height(), host.scale_y().abs())
         };
         if size == 0.0 || scale == 0.0 {
             return Vec::new();
@@ -343,20 +323,15 @@ impl SliceMesh {
         let start_v = box_vertices[0].uv.y;
         let end_u = box_vertices[2].uv.x;
         let end_v = box_vertices[2].uv.y;
-        let Some((width, height, sx, sy)) = nslicer.image_handle().and_then(|image| {
-            image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                |image| {
-                    (
-                        image.width(),
-                        image.height(),
-                        image.render_scale_x().abs(),
-                        image.render_scale_y().abs(),
-                    )
-                },
-            )
-        }) else {
+        let Some(host) = nslicer.host() else {
             return 0;
         };
+        let (width, height, sx, sy) = (
+            host.width(),
+            host.height(),
+            host.scale_x().abs(),
+            host.scale_y().abs(),
+        );
         if sx == 0.0 || sy == 0.0 {
             return 0;
         }
@@ -469,12 +444,7 @@ impl SliceMesh {
         }
     }
     pub fn update(&mut self, nslicer: &mut NSlicer) {
-        if nslicer.image_handle().and_then(|image| {
-            image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                |image| image.image_asset().is_some(),
-            )
-        }) != Some(true)
-        {
+        if !nslicer.host().is_some_and(|host| host.ready()) {
             return;
         }
         self.calc(nslicer);

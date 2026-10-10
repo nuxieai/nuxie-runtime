@@ -93,6 +93,32 @@ impl ShapeCells {
         *self.paths.borrow_mut() = paths;
     }
 
+    /// Shape::isEmpty(): every path hidden, collapsed or gone.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.paths.borrow().iter().all(|path| {
+            !path.handle.is_occupied() || path.cells.is_hidden() || path.cells.is_collapsed()
+        })
+    }
+
+    pub(crate) fn paints(
+        &self,
+    ) -> Rc<[crate::mechanical_port::source::shapes::shape_paint_container::ContainerPaint]> {
+        self.paints.paints()
+    }
+
+    /// Run `use_path` on the composer's world path, if the composer lives.
+    pub(crate) fn with_world_path<R>(
+        &self,
+        use_path: impl FnOnce(&mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath) -> R,
+    ) -> Option<R> {
+        let ComponentOccurrenceHandle::PathComposer(composer) = &self.composer else {
+            unreachable!("a shape's composer occurrence is a PathComposer");
+        };
+        let composer = composer.upgrade()?;
+        let mut composer = composer.borrow_mut();
+        Some(use_path(composer.world_path()))
+    }
+
     /// The shape's world transform.
     pub(crate) fn world(&self) -> crate::mechanical_port::source::math::mat2d::Mat2D {
         self.transform.world()

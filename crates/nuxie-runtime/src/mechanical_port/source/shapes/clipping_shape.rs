@@ -9,10 +9,11 @@ use crate::mechanical_port::source::{
     generated::shapes::clipping_shape_base::ClippingShapeBase,
     shapes::{
         paint::{
-            effects_container::EffectsContainer, fill::Fill, shape_paint::ShapePaintPathKind,
+            effects_container::EffectsContainer, fill::Fill, shape_paint::ShapePaintType,
             shape_paint_path::ShapePaintPath,
         },
         path_flags::PathFlags,
+        shape_cells::ShapeCells,
     },
     status_code::StatusCode,
 };
@@ -196,6 +197,8 @@ impl ClippingShape {
 pub struct ClippingShape {
     pub base: ClippingShapeBase,
     shapes: Vec<CoreHandle>,
+    // The source shapes' cells, parallel to `shapes`.
+    shape_cells: Vec<Rc<ShapeCells>>,
     proxy_drawables: Vec<ClippingShapeProxy>,
     pooled_proxy_drawables: Vec<ClippingShapeProxy>,
     source: Option<CoreHandle>,
@@ -210,6 +213,7 @@ impl Default for ClippingShape {
         Self {
             base: ClippingShapeBase::default(),
             shapes: Vec::new(),
+            shape_cells: Vec::new(),
             proxy_drawables: Vec::new(),
             pooled_proxy_drawables: Vec::new(),
             source: None,
@@ -255,13 +259,15 @@ impl ClippingShape {
                     .is_type_of(crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
                 {
                     let handle = component.clone();
-                    component.with_mut(|component| {
-                        component
-                            .as_shape_mut()
-                            .expect("Shape subtype")
-                            .add_flags(PathFlags::WORLD | PathFlags::CLIPPING);
-                    });
+                    let cells = component
+                        .with_mut(|component| {
+                            let shape = component.as_shape_mut().expect("Shape subtype");
+                            shape.add_flags(PathFlags::WORLD | PathFlags::CLIPPING);
+                            Rc::clone(shape.cells())
+                        })
+                        .expect("live clip source Shape");
                     self.shapes.push(handle);
+                    self.shape_cells.push(cells);
                 }
                 true
             });
@@ -314,23 +320,24 @@ impl ClippingShape {
         self.clip_end.set_clipping_shape(this);
     }
 
-    fn add_fill_paths(&mut self, shape: &CoreHandle) -> bool {
-        let Some((paints, world)) = shape
-            .with(|shape| {
-                let shape = shape.as_shape()?;
-                Some((
-                    shape.paint_container.shape_paint_list(),
-                    shape.base.world_transform(),
-                ))
-            })
-            .flatten()
-        else {
+    fn add_fill_paths(&mut self, shape: &CoreHandle, cells: &ShapeCells) -> bool {
+        if !shape.is_occupied() {
             return false;
-        };
+        }
+        let paints = cells.paints();
+        let world = cells.world();
         let mut added_effected = false;
         let mut needs_raw_path = false;
         for paint in paints.iter() {
             // Stroke effect outputs are centerlines, not filled clip geometry.
+            if paint.cells.paint_type() != ShapePaintType::Fill || !paint.handle.is_occupied() {
+                continue;
+            }
+            if !paint.cells.has_effects() {
+                needs_raw_path = true;
+                continue;
+            }
+            let paint = &paint.handle;
             let Some(effected) = paint.with_downcast_mut::<Fill, _>(|fill| {
                 let paint = &mut fill.base.base;
                 if !paint.has_effects() {
@@ -364,17 +371,9 @@ impl ClippingShape {
         if added_effected && !needs_raw_path {
             return true;
         }
-        shape
-            .with(|shape| {
-                let Some(shape) = shape.as_shape() else {
-                    return added_effected;
-                };
-                shape.with_path_mut(ShapePaintPathKind::World, |path| {
-                    self.path.add_shape_paint_path(path, None);
-                });
-                true
-            })
-            .unwrap_or(added_effected)
+        cells
+            .with_world_path(|path| self.path.add_shape_paint_path(path, None))
+            .map_or(added_effected, |()| true)
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
@@ -392,10 +391,9 @@ impl ClippingShape {
             self.clip_path = false;
             for index in 0..self.shapes.len() {
                 let shape = self.shapes[index].clone();
-                let nonempty = shape
-                    .with(|shape| shape.as_shape().is_some_and(|shape| !shape.is_empty()))
-                    .unwrap_or(false);
-                if nonempty && self.add_fill_paths(&shape) {
+                let cells = Rc::clone(&self.shape_cells[index]);
+                let nonempty = shape.is_occupied() && !cells.is_empty();
+                if nonempty && self.add_fill_paths(&shape, &cells) {
                     self.clip_path = true;
                 }
             }

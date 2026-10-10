@@ -24,9 +24,9 @@ pub(crate) struct ContainerCells {
     paints: RefCell<Rc<[ContainerPaint]>>,
 }
 
-struct ContainerPaint {
-    handle: CoreHandle,
-    cells: Rc<PaintCells>,
+pub(crate) struct ContainerPaint {
+    pub(crate) handle: CoreHandle,
+    pub(crate) cells: Rc<PaintCells>,
 }
 
 impl Default for ContainerCells {
@@ -46,6 +46,10 @@ impl ContainerCells {
             .borrow()
             .iter()
             .fold(self.flags.get(), |flags, paint| flags | paint.cells.path_flags())
+    }
+
+    pub(crate) fn paints(&self) -> Rc<[ContainerPaint]> {
+        Rc::clone(&self.paints.borrow())
     }
 
     #[inline]

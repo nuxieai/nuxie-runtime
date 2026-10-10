@@ -4,15 +4,17 @@ use crate::source::{
     nested_artboard::NestedArtboard,
     shapes::image::Image,
 };
+use crate::video::Video;
 
-/// Identity-bearing projection of the two exact upstream MeshHost core types.
+/// Identity-bearing projection of the two exact upstream MeshHost core types,
+/// plus Video, which hosts its mesh on the Image it draws through.
 #[derive(Clone)]
 pub struct MeshHost(CoreHandle);
 impl MeshHost {
     pub fn from_handle(component: Option<CoreHandle>) -> Option<Self> {
         let component = component?;
         match component.core_type()? {
-            Image::TYPE_KEY => {}
+            Image::TYPE_KEY | Video::TYPE_KEY => {}
             NestedArtboard::TYPE_KEY => {
                 component.with_downcast_mut::<NestedArtboard, _>(|n| {
                     n.mesh_host();
@@ -22,9 +24,19 @@ impl MeshHost {
         }
         Some(Self(component))
     }
+    /// The Image an Image or Video host draws its mesh through.
+    fn with_image<T>(&self, read: impl FnOnce(&Image) -> T) -> Option<T> {
+        match self.0.core_type()? {
+            Image::TYPE_KEY => self.0.with_downcast(read),
+            Video::TYPE_KEY => self.0.with_downcast::<Video, _>(|video| read(video.image())),
+            _ => None,
+        }
+    }
     pub fn set_mesh(&self, mesh: Option<CoreHandle>) {
         if self.0.core_type() == Some(Image::TYPE_KEY) {
             self.0.with_downcast_mut::<Image, _>(|i| i.set_mesh(mesh));
+        } else if self.0.core_type() == Some(Video::TYPE_KEY) {
+            self.0.with_downcast_mut::<Video, _>(|video| video.set_mesh(mesh));
         } else {
             let state = self
                 .0
@@ -34,8 +46,7 @@ impl MeshHost {
         }
     }
     pub fn hosted_mesh(&self) -> Option<CoreHandle> {
-        self.0
-            .with_downcast::<Image, _>(Image::mesh)
+        self.with_image(Image::mesh)
             .unwrap_or_else(|| {
                 self.0
                     .with_downcast::<NestedArtboard, _>(NestedArtboard::hosted_mesh)
@@ -47,8 +58,8 @@ impl MeshHost {
         image: impl FnOnce(&Image) -> T,
         nested: impl FnOnce(&crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost) -> T,
     ) -> T {
-        if self.0.core_type() == Some(Image::TYPE_KEY) {
-            self.0.with_downcast(image).unwrap()
+        if matches!(self.0.core_type(), Some(Image::TYPE_KEY | Video::TYPE_KEY)) {
+            self.with_image(image).unwrap()
         } else {
             let state = self
                 .0

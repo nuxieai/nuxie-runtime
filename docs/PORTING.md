@@ -1482,6 +1482,29 @@ advance, or draw behavior.
   Component, so the caller initiates the next draw and no component dirt is
   synthesized.
 
+### Checked host semantic actions (X4)
+
+`RuntimeStateMachineInstanceHandle::fire_semantic_action_checked` is an opt-in
+host admission API in `host_semantics.rs`. It returns false for an absent or
+unsupported action, or a disabled or semantically hidden target, authored
+ancestor, or mounted-artboard host. It reads live authored state before enqueue;
+opacity is not a refusal condition. Once accepted, an action remains queued even
+if eligibility changes before the next advance.
+
+The original `fire_semantic_action`, command-server dispatch and native listener
+delivery remain unchanged. A file run through those upstream APIs has the same
+behavior as before. This is an additional host policy, not a port correction:
+upstream `9ed5b5168d95aab07e873db341fb65613d317cfc`,
+`src/animation/state_machine_instance.cpp:2650-2685` and
+`src/semantic/semantic_data.cpp:550-573`, forwards to registered listeners without
+this admission check. Host consumers must opt into the checked call; the C API
+already validates its captured semantic occurrence separately.
+
+`tests/host_semantic_actions.rs` pins refusal, readmission, accepted queued
+messages, opacity, and raw upstream dispatch on the same disabled file node.
+Unifying the host admission, pointer and semantic-snapshot eligibility walks is
+a separate follow-up. Tracking: [UNIV-3928](https://universe.basis.dev/issue/UNIV-3928).
+
 ### Atomic checked host replacements
 
 `runtime_checked_value_write_batch` is an additive host API for one atomic

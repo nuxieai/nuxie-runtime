@@ -1564,3 +1564,83 @@ impl ArtboardInstance {
         Ok(())
     }
 }
+
+impl RuntimeStateMachineInstanceHandle {
+    /// Opt-in host admission for a semantic action. See `docs/PORTING.md` (X4).
+    /// Returns false for an unavailable action or a disabled/hidden target,
+    /// ancestor, or mounted host. Opacity does not affect admission.
+    /// Accepted actions remain queued if eligibility changes before advance.
+    /// The raw `fire_semantic_action` entry point retains upstream behavior.
+    pub fn fire_semantic_action_checked(&self, node_id: u32, action_type: u8) -> bool {
+        use crate::mechanical_port::source::animation::semantic_listener_group::SemanticActionType;
+
+        let Some(manager) = self.with_instance(|machine| machine.semantic_manager()) else {
+            return false;
+        };
+        let data = manager
+            .with_semantic_manager(|manager| manager.node_by_id(node_id))
+            .and_then(|node| node.borrow().semantic_data.clone());
+        let Some(data) = data else {
+            return false;
+        };
+        if !semantic_activation_allowed(&data) {
+            return false;
+        }
+        data.with(|owner| {
+            let Some(data) = owner.as_semantic_data() else {
+                return false;
+            };
+            if !data.supports_semantic_action(action_type) {
+                return false;
+            }
+            match SemanticActionType::from_raw(u32::from(action_type)) {
+                Some(SemanticActionType::Tap) => data.fire_semantic_tap(),
+                Some(SemanticActionType::Increase) => data.fire_semantic_increase(),
+                Some(SemanticActionType::Decrease) => data.fire_semantic_decrease(),
+                None => return false,
+            }
+            true
+        })
+        .unwrap_or(false)
+    }
+}
+
+fn semantic_activation_allowed(data: &CoreHandle) -> bool {
+    let mut target = Some(data.clone());
+    let mut visited = HashSet::new();
+    while let Some(current) = target {
+        if !visited.insert(current.clone()) {
+            return false;
+        }
+        let Some((allowed, children, parent)) = current.with(|owner| {
+            let allowed = owner
+                .as_semantic_data()
+                .is_none_or(|data| !data.is_disabled() && !data.is_hidden());
+            let children = owner
+                .as_container_component()
+                .map(|container| container.children().to_vec())
+                .unwrap_or_default();
+            let parent = owner
+                .component_parent_handle()
+                .or_else(|| owner.as_artboard().and_then(|artboard| artboard.host()));
+            (allowed, children, parent)
+        }) else {
+            return false;
+        };
+        if !allowed
+            || children.iter().any(|child| {
+                child
+                    .with(|owner| {
+                        owner
+                            .as_semantic_data()
+                            .is_some_and(|data| data.is_disabled() || data.is_hidden())
+                    })
+                    .unwrap_or(true)
+            })
+        {
+            return false;
+        }
+        target = parent;
+    }
+    true
+}

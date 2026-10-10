@@ -200,6 +200,19 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//bazel:wasm-c-tools.bzl%wasm_c_tools": {
+      "general": {
+        "bzlTransitiveDigest": "3pPr8Pn3AHzu9grczMDdPuFVDQG79AH9EPB8uH8p4Qk=",
+        "usagesDigest": "SqpV0f7cGHiTFgwYW9JFsqmDc/u0RHRoYeenUb7iT70=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "nuxie_wasm_c_tools": {
+            "repoRuleId": "@@//bazel:wasm-c-tools.bzl%wasm_c_tools_repository",
+            "attributes": {}
+          }
+        }
+      }
+    },
     "@@rules_android_ndk+//:extension.bzl%android_ndk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "j+NMXk5/a1vnDypModKL+ToEo/4o7DJeXSFhTfbJ7rI=",

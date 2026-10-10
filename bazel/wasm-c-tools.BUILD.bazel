@@ -1,0 +1,11 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(name = "clang", srcs = ["bin/nuxie-wasm-clang"])
+filegroup(name = "llvm-ar", srcs = ["bin/llvm-ar"])
+
+# Clang and llvm-ar may use sibling executables and shared LLVM libraries.
+# The builtin resource headers are action inputs alongside those executables.
+filegroup(
+    name = "compiler_support",
+    srcs = glob(["bin/**", "lib/**"], exclude = ["lib/clang/*/lib/**"]),
+)

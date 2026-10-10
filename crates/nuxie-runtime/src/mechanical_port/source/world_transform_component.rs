@@ -79,10 +79,20 @@ pub(crate) struct PlainTransform {
     pub(crate) translation: Translation,
     // Node::updateWorldTransform first marks its cached local transform stale.
     pub(crate) node: bool,
+    // The type's own work after TransformComponent::update (a Shape's opacity
+    // propagation to its paints).
+    pub(crate) after: Option<fn(&CoreHandle, ComponentDirt)>,
 }
 
 impl PlainTransform {
-    pub(crate) fn update(&self, dirt: ComponentDirt) {
+    pub(crate) fn update(&self, owner: &CoreHandle, dirt: ComponentDirt) {
+        self.update_transform(dirt);
+        if let Some(after) = self.after {
+            after(owner, dirt);
+        }
+    }
+
+    fn update_transform(&self, dirt: ComponentDirt) {
         let parent = self
             .parent
             .as_ref()

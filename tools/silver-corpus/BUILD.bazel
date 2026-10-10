@@ -78,6 +78,7 @@ rust_binary(
 rust_test(
     name = "silver-corpus__unit_test",
     crate = ":silver-corpus__test",
+    crate_features = ["default"],
     deps = ["//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"],
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),

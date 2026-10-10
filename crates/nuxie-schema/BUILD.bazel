@@ -57,6 +57,7 @@ rust_library(
 rust_test(
     name = "nuxie-schema__unit_test",
     crate = ":nuxie-schema__test",
+    crate_features = ["default"],
     deps = crate_deps(["serde_json"], package_name = "bazel/cargo/nuxie-schema"),
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-schema"),

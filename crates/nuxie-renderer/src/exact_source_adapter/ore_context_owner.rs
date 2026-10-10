@@ -121,6 +121,9 @@ impl ContextApi for OwnedContext {
     fn targetView(&mut self) -> Option<AnyResourceHandle> {
         self.context.borrow_mut().targetView()
     }
+    fn exposesTarget(&self) -> bool {
+        self.context.borrow().exposesTarget()
+    }
     unsafe fn wrapImageSampleView(
         &mut self,
         image: CanvasTextureInfo,

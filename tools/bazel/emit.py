@@ -265,12 +265,14 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
         if unit_tests and has_lib:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
+                f'    crate_features = {compiler_features},',
                 f'    deps = {test_deps},', '    data = _compile_data,',
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         elif unit_tests and package.name in binaries:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
+                f'    crate_features = {compiler_features},',
                 f'    deps = {test_deps},', '    data = _compile_data,',
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])

@@ -8,7 +8,7 @@ pub(crate) fn target_userdata(lua: &Lua) -> Result<Option<AnyUserData>> {
     let Some(context) = RendererBindings::for_lua(lua).and_then(|b| b.ore_context()) else {
         return Ok(None);
     };
-    if !context.borrow().isRecording() {
+    if !context.borrow().isRecording() || !context.borrow().exposesTarget() {
         return Ok(None);
     }
     const KEY: &str = "rive.gpuTarget";

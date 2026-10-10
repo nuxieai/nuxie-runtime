@@ -121,6 +121,7 @@ rust_static_library(
 rust_test(
     name = "nux-apple-product-extension__unit_test",
     crate = ":nux-apple-product-extension__test",
+    crate_features = ["default"],
     deps = ["//crates/nuxie-project-data:nuxie-project-data__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test"],
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nux-apple-product-extension"),

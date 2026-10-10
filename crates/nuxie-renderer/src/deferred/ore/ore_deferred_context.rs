@@ -67,6 +67,7 @@ pub struct DeferredOreContext {
     targetWrapped: bool,
     targetDrawn: bool,
     targetHidden: bool,
+    exposesTarget: bool,
 }
 pub struct StreamBytes {
     pub commands: usize,
@@ -124,6 +125,7 @@ impl DeferredOreContext {
             targetWrapped: false,
             targetDrawn: false,
             targetHidden: true,
+            exposesTarget: true,
         };
         out.adoptCapsFeatures();
         out
@@ -331,6 +333,10 @@ impl DeferredOreContext {
     pub fn targetDrawn(&self) -> bool {
         self.targetDrawn
     }
+    // Set before scripts init, which is when they decide on a fallback.
+    pub fn setExposesTarget(&mut self, exposes: bool) {
+        self.exposesTarget = exposes;
+    }
     pub fn drawnTargetSize(&self) -> u32 {
         if self.targetDrawn {
             packTargetSize(self.target.width, self.target.height)
@@ -363,6 +369,9 @@ impl Drop for DeferredOreContext {
     }
 }
 impl ContextApi for DeferredOreContext {
+    fn exposesTarget(&self) -> bool {
+        self.exposesTarget
+    }
     fn targetView(&mut self) -> Option<AnyResourceHandle> {
         if self.targetHidden {
             return None;

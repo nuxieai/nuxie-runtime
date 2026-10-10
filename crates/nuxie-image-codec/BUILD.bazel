@@ -50,6 +50,7 @@ rust_library(
 rust_test(
     name = "nuxie-image-codec__unit_test",
     crate = ":nuxie-image-codec__test",
+    crate_features = ["default"],
     deps = ["//crates/nuxie-render-stream:nuxie-render-stream__test"],
     data = _compile_data,
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-image-codec"),

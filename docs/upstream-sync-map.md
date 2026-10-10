@@ -7,18 +7,32 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `acbb030b2966249cd15a34a7d5b72abf86f0b391`
+- LAST_SYNCED_SHA: `671423924df5b251d0f9b3c9f929062bbd27eef6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Seven upstream commits remain after this checkpoint at the fetched target.
-  All 217 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (239 after `5892bb05`); this
+  Six upstream commits remain after this checkpoint at the fetched target.
+  All 218 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (240 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `67142392`, integrated atop downstream `d425a708c4`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including exact source-count assertion corrections. Both browser
+  products and their test targets compile for wasm32-unknown-unknown. The
+  feature-enabled renderer suite passes 495 tests (six ignored), all seven
+  Luau target-exposure tests pass, and two ORE failure-note tests pass.
+  Validation discovered that Bazel unit-test targets did not inherit wrapped
+  crate features; the emitter now supplies them explicitly for libraries and
+  binaries. That blocking build fix received both reviews; all 28 Python
+  generator/frontend tests and generated-file checks pass. Initial runs that
+  silently excluded feature-gated tests are not counted as coverage.
+  Source/pipeline tests pass 12 and manifest tests pass 27. No browser pixel,
+  new hardware, native-GL product or broad Golden/Silver execution is claimed.
+  Shader artifact provenance is unchanged; guest target gating remains parked.
 - Validation at `acbb030b`, integrated atop downstream `9c64135638`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Both browser products and their test targets compile for
@@ -610,6 +624,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `671423924df5b251d0f9b3c9f929062bbd27eef6` | Translate the shipped WebGL branch's removal of per-pass finish/liveness probes and exact successful-framebuffer attachment-key caching; the upstream native-GL branch is unshipped. Add shared target-exposure capability (base false, deferred true with pre-init setter), gate Luau gpuTarget, and preserve unresolved canvas/backend wrapping diagnostics. Translate the new upstream host-never-exposes-target case. Guest Wasm target gating remains deferred; private .rive_head contents are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `acbb030b2966249cd15a34a7d5b72abf86f0b391` | Retain the browser WebGPU render target across frames, creating it only when absent and invalidating on actual resize; assert acquired surface dimensions and continue refreshing each frame's target view. Native offscreen targets already retain this lifetime. Upstream testing-window overflow handling has no corresponding canvas-product path; private .rive_head contents are not claimed imported. | — |
 | `6f3510dcc545bc8b2a78f1004a06929d17cd022b` | Public delta only adds WasmScriptingVM callDraw save accounting and restoration before renderer-handle release, preserving outer visit state. This guest-execution fix remains deferred; it does not change the Luau or browser-renderer Wasm lanes. The commit message describes private Dart/Flutter frameBoundary integration and a test absent from the public delta; those are not claimed imported. Advance active source/oracle pins and inventory without relabeling unchanged shader artifacts or historical evidence. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `f40c9dfe8a0c4accf3e963f48429e893798854a5` | Translate shader signature admission before indexing/reflection, signed-content group separation and signature verification helpers through live Rust import/scripting owners; retain approved host authentication and resource limits. Translate integer gradient coordinates, exact additive complement, uniform/instance packing, repeat gradient sampling and all supported-backend shader consumers; regenerate current shader artifacts. D3D and Unreal-specific HarfBuzz flags are unshipped. Guest unsigned-module execution, SIMD admission, WAMR cache/AOT and guest shader APIs remain deferred; import-shape tests do not imply execution support. Private signer/editor/export changes absent from the public delta are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

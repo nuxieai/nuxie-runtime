@@ -565,16 +565,28 @@ pub fn replayOreLifecycle(
                 table.set(p.id, wrapped, p.generation, OreKind::textureView);
                 return true;
             }
-            let canvas = canvasAt(p.canvasId);
-            debug_assert!(canvas.is_some(), "missing replay canvas");
-            let wrapped = canvas.and_then(|canvas| unsafe {
+            let Some(canvas) = canvasAt(p.canvasId) else {
+                // Unregistered or unbacked. Noted like an image, so the pass
+                // that binds it says why it dropped.
+                return skipUnresolvedMake(table, p.id, p.generation, "wrapCanvasView", None);
+            };
+            let wrapped = unsafe {
                 if p.mode == WrapCanvasViewMode::sampleView as u32 {
                     ctx.wrapCanvasSampleView(canvas)
                 } else {
                     ctx.wrapCanvasTextureInfo(canvas)
                 }
-            });
-            table.set(p.id, wrapped, p.generation, OreKind::textureView);
+            };
+            setMade(
+                table,
+                p.id,
+                p.generation,
+                OreKind::textureView,
+                wrapped,
+                "wrapCanvasView",
+                None,
+                "the backend could not wrap the canvas",
+            );
         }
         CommandType::destroyResource => {
             let p: DestroyResourcePOD = reader.read();

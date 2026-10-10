@@ -11,18 +11,12 @@ pub trait TransformComponentBaseCallbacks: crate::mechanical_port::source::gener
 
 pub struct TransformComponentBase {
     pub base: WorldTransformComponent,
-    rotation: f32,
-    scale_x: f32,
-    scale_y: f32,
 }
 
 impl Default for TransformComponentBase {
     fn default() -> Self {
         Self {
             base: WorldTransformComponent::default(),
-            rotation: 0.0,
-            scale_x: 1.0,
-            scale_y: 1.0,
         }
     }
 }
@@ -44,7 +38,7 @@ impl TransformComponentBase {
         Self::TYPE_KEY
     }
     pub fn rotation(&self) -> f32 {
-        self.rotation
+        self.base.cells().rotation()
     }
     pub fn set_rotation(
         &mut self,
@@ -62,14 +56,14 @@ impl TransformComponentBase {
     }
 
     pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
-        if self.rotation == value {
+        if self.base.cells().rotation() == value {
             return false;
         }
-        self.rotation = value;
+        self.base.cells().set_rotation(value);
         true
     }
     pub fn scale_x(&self) -> f32 {
-        self.scale_x
+        self.base.cells().scale_x()
     }
     pub fn set_scale_x(
         &mut self,
@@ -87,14 +81,14 @@ impl TransformComponentBase {
     }
 
     pub(crate) fn set_scale_x_value(&mut self, value: f32) -> bool {
-        if self.scale_x == value {
+        if self.base.cells().scale_x() == value {
             return false;
         }
-        self.scale_x = value;
+        self.base.cells().set_scale_x(value);
         true
     }
     pub fn scale_y(&self) -> f32 {
-        self.scale_y
+        self.base.cells().scale_y()
     }
     pub fn set_scale_y(
         &mut self,
@@ -112,16 +106,16 @@ impl TransformComponentBase {
     }
 
     pub(crate) fn set_scale_y_value(&mut self, value: f32) -> bool {
-        if self.scale_y == value {
+        if self.base.cells().scale_y() == value {
             return false;
         }
-        self.scale_y = value;
+        self.base.cells().set_scale_y(value);
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TransformComponentBaseCallbacks) {
-        self.rotation = object.rotation;
-        self.scale_x = object.scale_x;
-        self.scale_y = object.scale_y;
+        self.base.cells().set_rotation(object.rotation());
+        self.base.cells().set_scale_x(object.scale_x());
+        self.base.cells().set_scale_y(object.scale_y());
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -132,15 +126,15 @@ impl TransformComponentBase {
     ) -> bool {
         match property_key {
             Self::ROTATION_PROPERTY_KEY => {
-                self.rotation = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.base.cells().set_rotation(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::SCALE_X_PROPERTY_KEY => {
-                self.scale_x = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.base.cells().set_scale_x(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::SCALE_Y_PROPERTY_KEY => {
-                self.scale_y = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.base.cells().set_scale_y(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

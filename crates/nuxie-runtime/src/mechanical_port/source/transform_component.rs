@@ -433,6 +433,10 @@ impl TransformComponent {
         self.cells().set_world(world);
     }
 
+    pub(crate) fn parent_cells(&self) -> Option<&Rc<TransformCells>> {
+        self.parent_cells.as_ref()
+    }
+
     /// The live parent WorldTransformComponent's world transform.
     pub(crate) fn parent_world_transform(&self) -> Option<Mat2D> {
         let parent = self.parent_transform_component.as_ref()?;

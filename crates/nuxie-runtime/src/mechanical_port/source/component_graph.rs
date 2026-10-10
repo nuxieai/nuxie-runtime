@@ -20,8 +20,13 @@ use crate::mechanical_port::source::{
     component::ComponentOccurrenceHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
+    bones::{bone::Bone, root_bone::RootBone},
+    core::CoreObject,
+    node::Node as NodeObject,
     shapes::{path_cells::PathCells, shape_cells::ShapeCells},
+    world_transform_component::{PlainTransform, Translation},
 };
+use std::any::Any;
 
 type UpdateHandler = fn(&CoreHandle, ComponentDirt) -> bool;
 type DirtyHandler = fn(&CoreHandle, ComponentDirt);
@@ -74,6 +79,8 @@ pub(crate) struct ComponentGraph {
     on_dirty: Box<[Option<DirtyHandler>]>,
     cells: Box<[Option<NodeCells>]>,
     update: Box<[Option<UpdateHandler>]>,
+    // Members whose update runs entirely on transform cells.
+    transforms: Box<[Option<PlainTransform>]>,
     occurrences: Box<[ComponentOccurrenceHandle]>,
     outside: Box<[ComponentOccurrenceHandle]>,
     artboard: RuntimeArtboardDirtyHandle,
@@ -90,9 +97,16 @@ impl ComponentGraph {
         let mut kinds = Vec::with_capacity(order.len());
         let mut on_dirty = Vec::with_capacity(order.len());
         let mut cells = Vec::with_capacity(order.len());
+        let mut transforms = Vec::with_capacity(order.len());
         let mut update = Vec::with_capacity(order.len());
         let mut dirt = Vec::with_capacity(order.len());
         for occurrence in order {
+            transforms.push(match occurrence {
+                ComponentOccurrenceHandle::Authored(handle) if handle != root => {
+                    handle.with(plain_transform).flatten()
+                }
+                _ => None,
+            });
             let (kind, handler, node_cells, update_handler) = match occurrence {
                 ComponentOccurrenceHandle::Authored(handle) if handle == root => {
                     (Kind::Outside, None, None, None)
@@ -176,6 +190,7 @@ impl ComponentGraph {
             on_dirty: on_dirty.into_boxed_slice(),
             cells: cells.into_boxed_slice(),
             update: update.into_boxed_slice(),
+            transforms: transforms.into_boxed_slice(),
             occurrences: order.to_vec().into_boxed_slice(),
             outside: outside.into_boxed_slice(),
             artboard,
@@ -383,6 +398,10 @@ impl ComponentGraph {
             return false;
         }
         node.dirt.set(ComponentDirt::NONE);
+        if let Some(transform) = &self.transforms[i] {
+            transform.update(dirt);
+            return true;
+        }
         let handle = self.authored(i);
         if let Some(update) = self.update[i] {
             update(handle, dirt);
@@ -391,6 +410,51 @@ impl ComponentGraph {
         }
         true
     }
+}
+
+/// The cells-only update of a concrete Node, Bone or RootBone that has no
+/// constraints and whose parent, if any, is a TransformComponent (so its child
+/// opacity is TransformComponent::childOpacity).
+fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
+    let actual: &dyn Any = object;
+    let (translation, node) = if actual.is::<NodeObject>() {
+        (Translation::Own, true)
+    } else if actual.is::<RootBone>() {
+        (Translation::Own, false)
+    } else if actual.is::<Bone>() {
+        (Translation::ParentLength, false)
+    } else {
+        return None;
+    };
+    let transform = object.as_transform_component()?;
+    if transform.cells().has_constraints() {
+        return None;
+    }
+    let parent = match (transform.parent_transform_component(), transform.parent_cells()) {
+        (None, None) => None,
+        (Some(handle), Some(cells)) => {
+            let fits = handle
+                .with(|parent| {
+                    parent.as_transform_component().is_some()
+                        && (translation == Translation::Own || parent.as_bone().is_some())
+                })
+                .unwrap_or(false);
+            if !fits {
+                return None;
+            }
+            Some((handle, Rc::clone(cells)))
+        }
+        _ => return None,
+    };
+    if parent.is_none() && translation == Translation::ParentLength {
+        return None;
+    }
+    Some(PlainTransform {
+        cells: Rc::clone(transform.cells()),
+        parent,
+        translation,
+        node,
+    })
 }
 
 #[inline]

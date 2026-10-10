@@ -12,14 +12,12 @@ pub trait BoneBaseCallbacks:
 
 pub struct BoneBase {
     pub base: SkeletalComponent,
-    length: f32,
 }
 
 impl Default for BoneBase {
     fn default() -> Self {
         Self {
             base: SkeletalComponent::default(),
-            length: 0.0,
         }
     }
 }
@@ -41,7 +39,7 @@ impl BoneBase {
     }
 
     pub fn length(&self) -> f32 {
-        self.length
+        self.base.cells().length()
     }
 
     pub fn set_length<C: BoneBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
@@ -53,10 +51,10 @@ impl BoneBase {
     }
 
     pub(crate) fn set_length_value(&mut self, value: f32) -> bool {
-        if self.length == value {
+        if self.base.cells().length() == value {
             return false;
         }
-        self.length = value;
+        self.base.cells().set_length(value);
         true
     }
 
@@ -67,7 +65,7 @@ impl BoneBase {
     }
 
     pub fn copy<C: BoneBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
-        self.length = object.length;
+        self.base.cells().set_length(object.length());
         self.base.base.base.copy(&object.base.base.base, callbacks);
     }
 
@@ -79,7 +77,7 @@ impl BoneBase {
     ) -> bool {
         match property_key {
             Self::LENGTH_PROPERTY_KEY => {
-                self.length = CoreDoubleType::deserialize(reader);
+                self.base.cells().set_length(CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self

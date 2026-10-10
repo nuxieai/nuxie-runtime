@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from cargo_graph import collect_packages
@@ -101,6 +102,21 @@ class RuntimeBuildTest(unittest.TestCase):
         calls = [json.loads(line) for line in log.read_text().splitlines()]
         self.assertEqual(len(calls), 1)
         self.assertIn("build", calls[0])
+
+    def test_frontend_scopes_provenance_without_changing_other_environment_inputs(self):
+        with patch.dict(os.environ, {"NUX_RUNTIME_SOURCE_REVISION": "revision with spaces=one",
+                                     "NUX_RUNTIME_RIVE_ORACLE": "fixture", "RIVE_RUNTIME_DIR": "rive"}, clear=True), \
+             patch.object(runtime, "packages_from_workspace", return_value={}), \
+             patch.object(runtime, "materialize", return_value=["//core:core"]), \
+             patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+             patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+             patch("sys.argv", ["runtime.py", "test", "-p", "core"]):
+            self.assertEqual(runtime.main(), 0)
+        arguments = run.call_args.args[0]
+        self.assertIn("--define=NUX_RUNTIME_SOURCE_REVISION=revision with spaces=one", arguments)
+        self.assertNotIn("--action_env=NUX_RUNTIME_SOURCE_REVISION", arguments)
+        self.assertIn("--action_env=NUX_RUNTIME_RIVE_ORACLE", arguments)
+        self.assertIn("--action_env=RIVE_RUNTIME_DIR", arguments)
 
     def test_publication_replaces_read_only_artifacts_and_reuses_identical_bytes(self):
         source = self.root / "bazel-product"

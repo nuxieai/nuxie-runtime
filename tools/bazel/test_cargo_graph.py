@@ -60,6 +60,32 @@ class CargoGraphTest(unittest.TestCase):
             actual = eval(expression, {"__builtins__": {}, "crate_deps": lambda aliases, **_: aliases})
             self.assertEqual(actual, expected)
 
+    def test_provenance_inputs_are_scoped_to_distribution_build_scripts(self):
+        provenance_input = object()
+        for name in ("nux-capi", "nux-apple-product-extension", "ordinary"):
+            manifest = self.package(name, "")
+            (manifest.parent / "build.rs").write_text("fn main() {}")
+            package = collect_packages([manifest])[name]
+            graph = resolve_features({name: package}, {name: []})
+            for owner in (None, "@source//crates/" + name):
+                rendered = render_package(package, {"": graph}, lambda name, _: "//root:" + name,
+                                          source_owner=owner)
+                scripts = []
+                def ignore(*args, **kwargs):
+                    pass
+                scope = {"load": ignore, "package": ignore, "exports_files": ignore,
+                         "filegroup": ignore, "glob": lambda *args, **kwargs: [],
+                         "source_path": lambda *args: "crates/" + name,
+                         "provenance_env_file": lambda: provenance_input,
+                         "all_crate_deps": lambda **kwargs: [],
+                         "cargo_build_script": lambda **kwargs: scripts.append(kwargs)}
+                exec(rendered, scope)
+                self.assertEqual(len(scripts), 1)
+                expected = [] if name == "ordinary" else [provenance_input]
+                self.assertEqual(scripts[0].get("build_script_env_files", []), expected)
+                self.assertTrue(rendered.endswith("\n"))
+                self.assertFalse(rendered.endswith("\n\n"))
+
     def test_target_features_do_not_cross_host_and_wasm(self):
         manifests = [
             self.package("root", '[target.\'cfg(target_arch = "wasm32")\'.dependencies]\ndep = { path = "../dep", features = ["browser"], default-features = false }\n[target.\'cfg(not(target_arch = "wasm32"))\'.dependencies]\ndep = { path = "../dep", features = ["native"], default-features = false }\n'),

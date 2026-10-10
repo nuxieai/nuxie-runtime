@@ -404,4 +404,3 @@ rust_binary(
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/golden-compare"),
     rustc_env = dict({"CARGO_PKG_NAME": "golden-compare"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
-

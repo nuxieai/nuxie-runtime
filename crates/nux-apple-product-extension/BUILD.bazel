@@ -2,7 +2,7 @@
 load("@runtime_crates//:defs.bzl", "all_crate_deps", "crate_deps")
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_lint_config", "rust_shared_library", "rust_static_library", "rust_test")
-load("//bazel:source-path.bzl", "source_path")
+load("//bazel:source-path.bzl", "source_path", "provenance_env_file")
 package(default_visibility = ["//visibility:public"])
 _source_dir = source_path()
 _package_inputs = glob(["**"], exclude = ["**/BUILD.bazel", "target/**", "__pycache__/**", "dist/**"], allow_empty = True)
@@ -37,6 +37,7 @@ cargo_build_script(
     crate_features = ["default"],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -83,6 +84,7 @@ cargo_build_script(
     crate_features = ["default"],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -186,6 +188,7 @@ cargo_build_script(
     crate_features = [],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -232,6 +235,7 @@ cargo_build_script(
     crate_features = [],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -278,6 +282,7 @@ cargo_build_script(
     crate_features = [],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -324,6 +329,7 @@ cargo_build_script(
     crate_features = [],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -370,6 +376,7 @@ cargo_build_script(
     crate_features = [],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -416,6 +423,7 @@ cargo_build_script(
     crate_features = ["apple-runtime"],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -462,6 +470,7 @@ cargo_build_script(
     crate_features = [],
     deps = [],
     proc_macro_deps = all_crate_deps(build_proc_macro = True, package_name = "bazel/cargo/nux-apple-product-extension"),
+    build_script_env_files = [provenance_env_file()],
     use_default_shell_env = True,
 )
 
@@ -494,4 +503,3 @@ rust_static_library(
     rustc_env = dict({"CARGO_PKG_NAME": "nux-apple-product-extension"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
     lint_config = ":cargo_lints",
 )
-

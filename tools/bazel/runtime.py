@@ -19,6 +19,8 @@ from emit import render_package
 from runtime_features import uses_native_tools
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+from bazel_runtime_build import BazelRuntime, PROVENANCE_KEYS
 
 
 def packages_from_workspace():
@@ -232,7 +234,8 @@ def main():
         bazel = bazel_command()
         flags = ["--config=release"] if options["profile"] != "debug" else []
         flags += ["--@rules_rust//rust/settings:extra_rustc_flag=" + flag for flag in shlex.split(os.environ.get("RUSTFLAGS", ""))]
-        flags += ["--action_env=" + name for name in sorted(os.environ) if name.startswith(("NUX_RUNTIME_", "RIVE_", "EMSDK", "EM_CONFIG", "EMDAWN"))]
+        flags += BazelRuntime.provenance_options()
+        flags += ["--action_env=" + name for name in sorted(os.environ) if name not in PROVENANCE_KEYS and name.startswith(("NUX_RUNTIME_", "RIVE_", "EMSDK", "EM_CONFIG", "EMDAWN"))]
         if options["profile"] == "release-size":
             flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Copt-level=" + os.environ.get("CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL", "z"), "--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=symbols"]
         elif options["profile"] == "release-apple":
@@ -243,8 +246,6 @@ def main():
             if options["target"].startswith("wasm32"):
                 flags += ["--platforms=@rules_rust//rust/platform:wasm", "--@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort"]
             elif "apple" in options["target"] or options["target"].endswith("linux-android"):
-                sys.path.insert(0, str(ROOT / "tools"))
-                from bazel_runtime_build import BazelRuntime
                 flags += BazelRuntime.platform_options(options["target"])
             else:
                 flags.append("--platforms=//bazel/platforms:" + options["target"])

@@ -200,6 +200,19 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//bazel:browser-tools.bzl%browser_tools": {
+      "general": {
+        "bzlTransitiveDigest": "Qz9n6koqt32R2ZTVeaDiEpxZiLvT+7SZFHoxjdncuK8=",
+        "usagesDigest": "H/zRf+6xrfIJF/zrAT7B/MmqDJk9W5Gknjwvi7eh2wY=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "runtime_browser_tools": {
+            "repoRuleId": "@@//bazel:browser-tools.bzl%_repository",
+            "attributes": {}
+          }
+        }
+      }
+    },
     "//bazel:wasm-c-tools.bzl%wasm_c_tools": {
       "general": {
         "bzlTransitiveDigest": "3pPr8Pn3AHzu9grczMDdPuFVDQG79AH9EPB8uH8p4Qk=",

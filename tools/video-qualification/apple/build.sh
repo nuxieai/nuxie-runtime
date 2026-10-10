@@ -11,9 +11,8 @@ esac
 video_sdk=$(xcrun --sdk iphoneos --show-sdk-path)
 IPHONEOS_DEPLOYMENT_TARGET=16.0 SDKROOT="$video_sdk" \
 BINDGEN_EXTRA_CLANG_ARGS="--target=arm64-apple-ios16.0 --sysroot=$video_sdk" \
-RUSTC="$(rustup which --toolchain stable rustc)" \
 CARGO_TARGET_DIR="$repo_dir/target/video-qualification" \
-"$(rustup which --toolchain stable cargo)" build --manifest-path "$repo_dir/Cargo.toml" -p video-qualification --lib --target aarch64-apple-ios --profile "$video_profile"
+python3 "$repo_dir/tools/bazel/runtime.py" build --manifest-path "$repo_dir/Cargo.toml" -p video-qualification --lib --target aarch64-apple-ios --profile "$video_profile"
 xcodegen generate --spec "$proof_dir/project.yml"
 if [[ -n "${VIDEO_PROOF_DEVELOPMENT_TEAM:-}" ]]; then
   xcodebuild -project "$proof_dir/NuxieVideoProof.xcodeproj" -scheme NuxieVideoProof \

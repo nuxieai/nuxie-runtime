@@ -21,8 +21,8 @@ CXX_aarch64_linux_android="$video_toolchain/bin/aarch64-linux-android23-clang++"
 AR_aarch64_linux_android="$video_toolchain/bin/llvm-ar" \
 CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$video_toolchain/bin/aarch64-linux-android23-clang" \
 BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android23 --sysroot=$video_toolchain/sysroot" \
-RUSTC="$(rustup which --toolchain stable rustc)" CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
-"$(rustup which --toolchain stable cargo)" build -p video-qualification --lib --target aarch64-linux-android --profile "$video_profile"
+RUSTFLAGS="${RUSTFLAGS:-} -Cdebuginfo=0" \
+python3 "$repo_dir/tools/bazel/runtime.py" build -p video-qualification --lib --target aarch64-linux-android --profile "$video_profile" --target-dir "$repo_dir/target"
 javac -source 17 -target 17 -classpath "$video_android_jar" -d "$video_output/classes" \
   "$repo_dir/crates/nuxie-video-host/android/ai/nuxie/runtime/VideoPlayer.java" \
   "$proof_dir/ai/nuxie/videoqualification/MainActivity.java" \

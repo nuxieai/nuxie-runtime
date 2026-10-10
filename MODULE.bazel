@@ -6,6 +6,9 @@ bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "apple_support", version = "2.5.2")
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
+browser = use_extension("//bazel:browser-tools.bzl", "browser_tools")
+use_repo(browser, "runtime_browser_tools")
+
 wasm_c = use_extension("//bazel:wasm-c-tools.bzl", "wasm_c_tools")
 use_repo(wasm_c, "nuxie_wasm_c_tools")
 

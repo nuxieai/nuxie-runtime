@@ -214,48 +214,30 @@ impl PathComposer {
                 transform[3].abs(),
             )
         }
-        let (paths, world, local_flags) = self
-            .shape()
-            .with(|object| {
-                let shape = object.as_shape().expect("PathComposer Shape");
-                (
-                    shape.paths(),
-                    shape.world_transform(),
-                    shape.paint_container.path_flags()
-                        & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE),
-                )
-            })
-            .expect("live PathComposer Shape");
+        assert!(self.shape().is_occupied(), "live PathComposer Shape");
+        let paths = self.cells.paths();
+        let world = self.cells.world();
+        let local_flags =
+            self.cells.path_flags() & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE);
         let inverse = world.invert_or_identity();
         const ULPS: f32 = 16.0 * f32::EPSILON;
         let inverse_linear = linear_magnitude(inverse);
         let inverse_translation = source_max(inverse[4].abs(), inverse[5].abs());
         self.scratch_inputs.clear();
         self.scratch_inputs.reserve(paths.len());
-        for handle in paths.iter() {
-            let input = handle
-                .with(|object| {
-                    let path = object.as_path().expect("Shape path");
-                    let path_world =
-                        crate::mechanical_port::source::shapes::path::Path::path_transform_for(
-                            object,
-                        );
-                    let path_linear = linear_magnitude(path_world);
-                    let path_translation = source_max(path_world[4].abs(), path_world[5].abs());
-                    LocalPathInput {
-                        transform: inverse * path_world,
-                        geometry_version: path.geometry_version(),
-                        skipped: path.is_hidden() || path.is_collapsed(),
-                        linear_tolerance: ULPS * source_max(1.0, inverse_linear * path_linear),
-                        translation_tolerance: ULPS
-                            * source_max(
-                                1.0,
-                                inverse_linear * path_translation + inverse_translation,
-                            ),
-                    }
-                })
-                .expect("live Shape path");
-            self.scratch_inputs.push(input);
+        for path in paths.iter() {
+            let path = &path.cells;
+            let path_world = path.path_transform();
+            let path_linear = linear_magnitude(path_world);
+            let path_translation = source_max(path_world[4].abs(), path_world[5].abs());
+            self.scratch_inputs.push(LocalPathInput {
+                transform: inverse * path_world,
+                geometry_version: path.geometry_version(),
+                skipped: path.is_hidden() || path.is_collapsed(),
+                linear_tolerance: ULPS * source_max(1.0, inverse_linear * path_linear),
+                translation_tolerance: ULPS
+                    * source_max(1.0, inverse_linear * path_translation + inverse_translation),
+            });
         }
         let mut changed = !self.has_local_inputs
             || self.local_inputs.len() != paths.len()
@@ -312,49 +294,38 @@ impl PathComposer {
             return None;
         }
         let shape_handle = self.shape();
-        let inputs = shape_handle
-            .with(|shape| {
-                let shape = shape.as_shape().expect("PathComposer Shape");
-                if shape.can_defer_path_update() {
-                    return None;
-                }
-                Some((
-                    shape.is_flagged(PathFlags::LOCAL),
-                    shape.is_flagged(PathFlags::LOCAL_CLOCKWISE),
-                    shape.is_flagged(PathFlags::WORLD),
-                    shape.world_transform(),
-                    shape.paths(),
-                ))
-            })
-            .expect("live PathComposer Shape");
-        let Some((local, clockwise, world, transform, paths)) = inputs else {
+        assert!(shape_handle.is_occupied(), "live PathComposer Shape");
+        if self.cells.can_defer_path_update() {
             self.cells.set_composer_deferred(true);
             return None;
-        };
+        }
+        // Shape::isFlagged three times over the same paint aggregate.
+        let flags = self.cells.path_flags();
+        let local = !(flags & PathFlags::LOCAL).is_empty();
+        let clockwise = !(flags & PathFlags::LOCAL_CLOCKWISE).is_empty();
+        let world = !(flags & PathFlags::WORLD).is_empty();
+        let transform = self.cells.world();
+        let paths = self.cells.paths();
         self.cells.set_composer_deferred(false);
         let rebuild_local = (local || clockwise) && self.local_inputs_changed();
         if local && rebuild_local {
             self.local_path.rewind();
             let inverse = transform.invert_or_identity();
-            for handle in paths.iter() {
-                handle.with(|object| {
-                    let path = object.as_path().expect("Shape path");
-                    if !path.is_hidden() && !path.is_collapsed() {
-                        let path_transform = object
-                            .as_points_path()
-                            .map(|points| points.path_transform())
-                            .unwrap_or_else(|| path.path_transform());
-                        self.local_path
-                            .add_path(path.raw_path(), Some(&(inverse * path_transform)));
-                    }
-                });
+            for path in paths.iter() {
+                let cells = &path.cells;
+                if path.handle.is_occupied() && !cells.is_hidden() && !cells.is_collapsed() {
+                    self.local_path.add_path(
+                        &cells.raw_path(),
+                        Some(&(inverse * cells.path_transform())),
+                    );
+                }
             }
         }
         if clockwise && rebuild_local {
             self.local_clockwise_path.rewind();
             let inverse = transform.invert_or_identity();
-            for handle in paths.iter() {
-                handle.with_mut(|object| {
+            for path in paths.iter() {
+                path.handle.with_mut(|object| {
                     let path = object.as_path().expect("Shape path");
                     if path.is_hidden() || path.is_collapsed() {
                         return;
@@ -370,38 +341,25 @@ impl PathComposer {
                     let path = object.as_path().expect("Shape path");
                     if not_clockwise != path.is_hole() {
                         self.local_clockwise_path
-                            .add_path_backwards(path.raw_path(), Some(&local_transform));
+                            .add_path_backwards(&path.raw_path(), Some(&local_transform));
                     } else {
                         self.local_clockwise_path
-                            .add_path(path.raw_path(), Some(&local_transform));
+                            .add_path(&path.raw_path(), Some(&local_transform));
                     }
                 });
             }
         }
         if world {
             self.world_path.rewind();
-            for handle in paths.iter() {
-                handle.with(|object| {
-                    let path = object.as_path().expect("Shape path");
-                    if !path.is_hidden() && !path.is_collapsed() {
-                        let path_transform = object
-                            .as_points_path()
-                            .map(|points| points.path_transform())
-                            .unwrap_or_else(|| path.path_transform());
-                        self.world_path
-                            .add_path(path.raw_path(), Some(&path_transform));
-                    }
-                });
+            for path in paths.iter() {
+                let cells = &path.cells;
+                if path.handle.is_occupied() && !cells.is_hidden() && !cells.is_collapsed() {
+                    self.world_path
+                        .add_path(&cells.raw_path(), Some(&cells.path_transform()));
+                }
             }
         }
-        let has_participant = shape_handle
-            .with(|object| {
-                object
-                    .as_shape()
-                    .expect("PathComposer Shape")
-                    .has_layout_participant()
-            })
-            .expect("live PathComposer Shape");
+        let has_participant = self.cells.has_layout_participant();
         let measured_geometry_changed = !has_participant || self.intrinsic_bounds_changed();
         // Carry the source's bounds-dirt choice across the existing Rust
         // borrow handoff; notifying layout can recursively touch the composer.

@@ -9,15 +9,23 @@ pub trait PathBaseCallbacks:
 
 pub struct PathBase {
     pub base: Node,
-    path_flags: u32,
+    // The path's shared cells; they hold pathFlags (see PathCells).
+    cells: std::rc::Rc<crate::mechanical_port::source::shapes::path_cells::PathCells>,
     is_hole: bool,
 }
 
 impl Default for PathBase {
     fn default() -> Self {
+        let mut base = Node::default();
+        let cells = std::rc::Rc::new(
+            crate::mechanical_port::source::shapes::path_cells::PathCells::new(
+                base.share_dirt(),
+                std::rc::Rc::clone(base.cells()),
+            ),
+        );
         Self {
-            base: Node::default(),
-            path_flags: 0,
+            base,
+            cells,
             is_hole: false,
         }
     }
@@ -38,8 +46,13 @@ impl PathBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(
+        &self,
+    ) -> &std::rc::Rc<crate::mechanical_port::source::shapes::path_cells::PathCells> {
+        &self.cells
+    }
     pub fn path_flags(&self) -> u32 {
-        self.path_flags
+        self.cells.authored_flags()
     }
     pub fn set_path_flags(&mut self, value: u32, callbacks: &mut impl PathBaseCallbacks) {
         if !self.set_path_flags_value(value) {
@@ -49,10 +62,10 @@ impl PathBase {
     }
 
     pub(crate) fn set_path_flags_value(&mut self, value: u32) -> bool {
-        if self.path_flags == value {
+        if self.cells.authored_flags() == value {
             return false;
         }
-        self.path_flags = value;
+        self.cells.set_authored_flags(value);
         true
     }
     pub fn is_hole(&self) -> bool {
@@ -74,7 +87,7 @@ impl PathBase {
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl PathBaseCallbacks) {
-        self.path_flags = object.path_flags;
+        self.cells.set_authored_flags(object.path_flags());
         self.is_hole = object.is_hole;
         self.base.copy(&object.base, callbacks);
     }
@@ -86,7 +99,7 @@ impl PathBase {
     ) -> bool {
         match property_key {
             Self::PATH_FLAGS_PROPERTY_KEY => {
-                self.path_flags = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_authored_flags(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::IS_HOLE_PROPERTY_KEY => {

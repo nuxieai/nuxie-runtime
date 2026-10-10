@@ -121,19 +121,27 @@ impl Shape {
     }
 
     pub fn add_path(&mut self, path: CoreHandle) {
-        let has_skin = path
+        let (has_skin, cells) = path
             .with(|object| {
-                object
+                let has_skin = object
                     .as_points_path()
-                    .is_some_and(|points| points.skin().is_some())
+                    .is_some_and(|points| points.skin().is_some());
+                (has_skin, object.as_path().map(|path| Rc::clone(path.cells())))
             })
-            .unwrap_or(false);
-        self.add_path_with_skin(path, has_skin);
+            .expect("live Path");
+        self.add_path_with_skin(path, has_skin, cells.expect("Shape paths are Paths"));
     }
     /// Registration can run while the path's arena slot is already borrowed.
-    /// The caller supplies its current skin state before entering this Shape.
-    pub(crate) fn add_path_with_skin(&mut self, path: CoreHandle, has_skin: bool) {
+    /// The caller supplies its current skin state and cells before entering
+    /// this Shape.
+    pub(crate) fn add_path_with_skin(
+        &mut self,
+        path: CoreHandle,
+        has_skin: bool,
+        cells: Rc<crate::mechanical_port::source::shapes::path_cells::PathCells>,
+    ) {
         assert!(!self.paths.contains(&path));
+        self.cells.add_path(path.clone(), cells);
         self.paths = self.paths.iter().cloned().chain(std::iter::once(path)).collect();
         if has_skin {
             self.add_flags(PathFlags::NEVER_DEFER_UPDATE);
@@ -227,7 +235,8 @@ impl Shape {
                             | ComponentDirt::N_SLICER,
                     );
                     let mut temporary = RawPath::default();
-                    let base = if dirty {
+                    let built;
+                    let base: &RawPath = if dirty {
                         path.build_path_from_shape(
                             &mut temporary,
                             Path::is_path_closed_for(object),
@@ -236,7 +245,8 @@ impl Shape {
                         );
                         &temporary
                     } else {
-                        path.raw_path()
+                        built = path.raw_path();
+                        &built
                     };
                     let source = base.transform(Path::path_transform_for(object));
                     let mut iter = ContourMeasureIter::new(&source, 0.5);

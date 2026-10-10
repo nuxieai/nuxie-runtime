@@ -44,6 +44,7 @@ pub mod keyed_callback_reporter;
 pub mod keyed_object;
 pub mod keyed_property;
 pub mod keyframe;
+pub mod keyframe_cells;
 pub mod keyframe_bool;
 pub mod keyframe_callback;
 pub mod keyframe_color;

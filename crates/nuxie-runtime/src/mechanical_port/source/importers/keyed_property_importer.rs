@@ -29,8 +29,11 @@ impl KeyedPropertyImporter {
         // embedded base for computeSeconds before transferring its handle to
         // the property, matching upstream without borrowing the arena slot again.
         key_frame.compute_seconds(fps as i32);
+        let cells = std::rc::Rc::clone(key_frame.cells());
         self.keyed_property
-            .with_downcast_mut::<KeyedProperty, _>(|property| property.add_key_frame(owner))
+            .with_downcast_mut::<KeyedProperty, _>(|property| {
+                property.add_key_frame_with_cells(owner, cells)
+            })
             .expect("KeyedPropertyImporter retains a KeyedProperty");
     }
 }

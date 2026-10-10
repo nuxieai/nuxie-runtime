@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
-    animation::keyed_property::KeyedProperty,
+    animation::{keyed_property::KeyedProperty, keyframe_cells::KeyFrameCells},
     generated::animation::keyframe_base::KeyFrameBase,
     importers::{import_stack::ImportStack, keyed_property_importer::KeyedPropertyImporter},
     status_code::StatusCode,
@@ -7,25 +9,30 @@ use crate::mechanical_port::source::{
 
 pub struct KeyFrame {
     pub base: KeyFrameBase,
-    seconds: f32,
+    // Seconds and interpolation type, shared with the owning KeyedProperty.
+    cells: Rc<KeyFrameCells>,
 }
 
 impl Default for KeyFrame {
     fn default() -> Self {
         Self {
             base: KeyFrameBase::default(),
-            seconds: 0.0,
+            cells: Rc::default(),
         }
     }
 }
 
 impl KeyFrame {
     pub fn seconds(&self) -> f32 {
-        self.seconds
+        self.cells.seconds()
     }
 
     pub fn compute_seconds(&mut self, fps: i32) {
-        self.seconds = self.base.frame() as f32 / fps as f32;
+        self.cells.set_seconds(self.base.frame() as f32 / fps as f32);
+    }
+
+    pub(crate) fn cells(&self) -> &Rc<KeyFrameCells> {
+        &self.cells
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {

@@ -62,10 +62,19 @@ workspace. Dependency changes require repinning `bazel/cargo/Cargo.Bazel.lock`;
 `--reset-lock` seeds its Cargo input from the authored lockfile. Cargo also remains
 available for formatting and the mandatory compatibility tests.
 
-The diagnostic `renderer-native-metal-platform-matrix` retains Cargo's nightly
-`build-std` path for tvOS and visionOS. Cargo also builds the frozen historical
-WebGL2 source oracle and drives `cargo-fuzz`; these specialist paths are outside
-the normal local, CI, and shipping artifact Bazel frontends.
+Video qualification and renderer replay compile their Rust products through the
+same Bazel frontend. `tools/bazel/browser-tools.py` prepares checksum-pinned
+wasm-bindgen 0.2.126 from Bazel into this checkout's `target/browser-tools`;
+the tool archive reuses the shared download cache across worktrees.
+
+The diagnostic `renderer-native-metal-platform-matrix` uses Bazel for its five
+macOS/iOS configurations. It reports the four remaining tvOS/visionOS standard
+library toolchains as unqualified and fails until
+[UNIV-4184](https://universe.basis.dev/issue/UNIV-4184) is complete. The renderer
+size-report entrypoint also needs its missing independently authored root
+harness restored in [UNIV-4195](https://universe.basis.dev/issue/UNIV-4195).
+Cargo builds the frozen historical WebGL2 source oracle and drives `cargo-fuzz`;
+these specialist paths remain outside normal artifact builds.
 
 The `audio-device`, native Metal replay, and `scriptnet` tool cuts resolve through
 `bazel/native-tools-cargo` and `runtime_native_tools_crates`. Their optional

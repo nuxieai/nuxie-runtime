@@ -5,6 +5,15 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["source-path.bzl", "script-signature-build.bzl", "wasm-c-tools.bzl", "wasm-c-tools.BUILD.bazel"])
 provenance_env(name = "provenance_env")
 
+genrule(
+    name = "wasm_bindgen",
+    srcs = ["@runtime_browser_tools//:wasm-bindgen"],
+    outs = ["wasm-bindgen"],
+    cmd = "cp $(location @runtime_browser_tools//:wasm-bindgen) $@ && chmod +x $@",
+    executable = True,
+    tags = ["manual"],
+)
+
 config_setting(name = "wasm", constraint_values = ["@platforms//cpu:wasm32"])
 config_setting(name = "macos", constraint_values = ["@platforms//os:osx"])
 config_setting(name = "ios", constraint_values = ["@platforms//os:ios"])

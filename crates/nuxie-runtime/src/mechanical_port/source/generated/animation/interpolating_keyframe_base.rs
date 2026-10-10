@@ -10,7 +10,6 @@ pub trait InterpolatingKeyFrameBaseCallbacks:
 
 pub struct InterpolatingKeyFrameBase {
     pub base: KeyFrame,
-    interpolation_type: u32,
     interpolator_id: u32,
 }
 
@@ -18,7 +17,6 @@ impl Default for InterpolatingKeyFrameBase {
     fn default() -> Self {
         Self {
             base: KeyFrame::default(),
-            interpolation_type: 0,
             interpolator_id: u32::MAX,
         }
     }
@@ -40,7 +38,7 @@ impl InterpolatingKeyFrameBase {
         Self::TYPE_KEY
     }
     pub fn interpolation_type(&self) -> u32 {
-        self.interpolation_type
+        self.base.cells().interpolation_type()
     }
     pub fn set_interpolation_type(
         &mut self,
@@ -57,10 +55,10 @@ impl InterpolatingKeyFrameBase {
     }
 
     pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
-        if self.interpolation_type == value {
+        if self.base.cells().interpolation_type() == value {
             return false;
         }
-        self.interpolation_type = value;
+        self.base.cells().set_interpolation_type(value);
         true
     }
     pub fn interpolator_id(&self) -> u32 {
@@ -88,7 +86,7 @@ impl InterpolatingKeyFrameBase {
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl InterpolatingKeyFrameBaseCallbacks) {
-        self.interpolation_type = object.interpolation_type;
+        self.base.cells().set_interpolation_type(object.interpolation_type());
         self.interpolator_id = object.interpolator_id;
         self.base.copy(&object.base, callbacks);
     }
@@ -100,7 +98,7 @@ impl InterpolatingKeyFrameBase {
     ) -> bool {
         match property_key {
             Self::INTERPOLATION_TYPE_PROPERTY_KEY => {
-                self.interpolation_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.base.cells().set_interpolation_type(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::INTERPOLATOR_ID_PROPERTY_KEY => {

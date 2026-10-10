@@ -1,8 +1,11 @@
 //! Runtime KeyedProperty owner translated against pinned Rive 160085c654874d35.
 
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
+        keyframe_cells::KeyFrameCells,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
         keyframe_interpolator::KeyFrameInterpolator, linear_animation::LinearAnimation,
     },
@@ -22,19 +25,29 @@ use crate::mechanical_port::source::{
 pub struct KeyedProperty {
     pub base: KeyedPropertyBase,
     keyframes: Vec<CoreHandle>,
+    // Each keyframe's seconds and interpolation type, by keyframe index.
+    frame_cells: Vec<Rc<KeyFrameCells>>,
 }
 impl KeyedProperty {
     pub fn add_key_frame(&mut self, value: CoreHandle) {
-        self.keyframes.push(value)
+        let cells = value
+            .with(|frame| frame.as_key_frame().map(|frame| Rc::clone(frame.cells())))
+            .flatten()
+            .expect("KeyedProperty retains only KeyFrame-derived occurrences");
+        self.add_key_frame_with_cells(value, cells);
+    }
+
+    /// Add a keyframe the caller already borrows, with its shared cells.
+    pub(crate) fn add_key_frame_with_cells(&mut self, value: CoreHandle, cells: Rc<KeyFrameCells>) {
+        self.keyframes.push(value);
+        self.frame_cells.push(cells);
     }
     pub fn keyframes(&self) -> &[CoreHandle] {
         &self.keyframes
     }
+    #[inline]
     fn keyframe_seconds(&self, index: usize) -> f32 {
-        self.keyframes[index]
-            .with(|keyframe| keyframe.keyframe_seconds())
-            .flatten()
-            .expect("KeyedProperty retains only KeyFrame-derived occurrences")
+        self.frame_cells[index].seconds()
     }
     fn closest_frame_index(&self, seconds: f32, offset: i32) -> i32 {
         let mut start = 0;
@@ -141,12 +154,7 @@ impl KeyedProperty {
             let to = &self.keyframes[index as usize];
             if seconds == self.keyframe_seconds(index as usize) {
                 (property_key, to.clone(), None)
-            } else if from
-                .with(|keyframe| keyframe.keyframe_interpolation_type())
-                .flatten()
-                .unwrap_or(0)
-                == 0
-            {
+            } else if self.frame_cells[index as usize - 1].interpolation_type() == 0 {
                 (property_key, from.clone(), None)
             } else {
                 (property_key, from.clone(), Some(to.clone()))

@@ -697,11 +697,11 @@ fn import_bytes(bytes: &[u8]) -> RuntimeFileHandle {
     file
 }
 fn import_fixture(asset: &str) -> RuntimeFileHandle {
-    let path = std::path::Path::new(
-        option_env!("RIVE_RUNTIME_DIR").unwrap_or("/Users/levi/dev/oss/rive-runtime"),
-    )
-    .join("tests/unit_tests")
-    .join(asset);
+    let runtime_dir = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let path = std::path::Path::new(&runtime_dir)
+        .join("tests/unit_tests")
+        .join(asset);
     let bytes = std::fs::read(&path)
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()));
     import_bytes(&bytes)

@@ -556,13 +556,7 @@ impl Shape {
         StatusCode::Ok
     }
     pub fn is_empty(&self) -> bool {
-        self.paths().iter().all(|path| {
-            path.with(|path| {
-                path.as_path()
-                    .is_none_or(|path| path.is_hidden() || path.base.is_collapsed())
-            })
-            .unwrap_or(true)
-        })
+        self.cells.is_empty()
     }
     pub fn will_draw(&self) -> bool {
         self.base.will_draw() && self.base.render_opacity() != 0.0

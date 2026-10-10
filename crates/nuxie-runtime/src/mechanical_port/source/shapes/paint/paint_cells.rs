@@ -71,6 +71,15 @@ impl PaintCells {
         }
     }
 
+    pub(crate) fn paint_type(&self) -> ShapePaintType {
+        self.paint_type
+    }
+
+    /// EffectsContainer::hasEffects().
+    pub(crate) fn has_effects(&self) -> bool {
+        self.has_other_effects.get() || !self.effect_paths.borrow().is_empty()
+    }
+
     pub(crate) fn set_has_feather(&self) {
         self.has_feather.set(true);
     }

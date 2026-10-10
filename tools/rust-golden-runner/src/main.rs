@@ -844,8 +844,15 @@ fn run() -> Result<String> {
     let mut input = Duration::ZERO;
     let mut draw = Duration::ZERO;
     let mut next_event = 0;
+    let graph_trace = env::var_os("NUXIE_COMPONENT_GRAPH_TRACE");
+    if graph_trace.is_some() {
+        nuxie_runtime::source::component_graph::trace::start();
+    }
     for _ in 0..options.benchmark_repeat {
         for &sample in &options.samples {
+            if graph_trace.is_some() {
+                nuxie_runtime::source::component_graph::trace::frame();
+            }
             while next_event < events.len() && events[next_event].seconds <= sample + TIME_EPSILON {
                 let event = &events[next_event];
                 let keep = timed_result(options.benchmark, &mut advance, || {
@@ -886,6 +893,9 @@ fn run() -> Result<String> {
         }
     }
     let elapsed = started.elapsed();
+    if let Some(path) = graph_trace {
+        nuxie_runtime::source::component_graph::trace::finish(std::path::Path::new(&path))?;
+    }
     if counting {
         instructions.report(process_instructions().saturating_sub(frame_loop_start));
     }

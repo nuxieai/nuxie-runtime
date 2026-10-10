@@ -190,6 +190,8 @@ impl ComponentGraph {
 
     /// Component::addDirt for a member reached without a held payload borrow.
     pub(crate) fn add_dirt(&self, index: u32, value: ComponentDirt, recurse: bool) -> bool {
+        #[cfg(feature = "tools")]
+        trace::event(self, 'A', index, value, recurse);
         let i = index as usize;
         if self.nodes[i].kind == Kind::Outside {
             return self.occurrences[i].add_dirt(value, recurse);
@@ -198,7 +200,7 @@ impl ComponentGraph {
             return false;
         }
         if recurse {
-            self.add_dirt_to_dependents(index, value);
+            self.cascade(index, value);
         }
         true
     }
@@ -253,6 +255,12 @@ impl ComponentGraph {
     /// explicit depth-first walk: each dependent's whole cascade finishes
     /// before its next sibling, exactly as upstream's recursion orders it.
     pub(crate) fn add_dirt_to_dependents(&self, index: u32, value: ComponentDirt) {
+        #[cfg(feature = "tools")]
+        trace::event(self, 'P', index, value, true);
+        self.cascade(index, value);
+    }
+
+    fn cascade(&self, index: u32, value: ComponentDirt) {
         let node = &self.nodes[index as usize];
         let (mut position, mut end) = (node.dependents_start, node.dependents_end);
         let mut stack = CascadeStack::new();
@@ -290,6 +298,8 @@ impl ComponentGraph {
     /// COMPONENTS bit live in the shared dirty handle, so no Artboard borrow is
     /// held while components update.
     pub(crate) fn update_components(&self) {
+        #[cfg(feature = "tools")]
+        trace::event(self, 'W', 0, ComponentDirt::NONE, false);
         let dirty = &self.artboard;
         let count = self.nodes.len();
         let mut step = 0;
@@ -406,5 +416,100 @@ impl DirtBinding {
     #[inline]
     pub(crate) fn index(&self) -> u32 {
         self.index
+    }
+}
+
+/// Records the graphs and dirt traffic of a frame loop so the cascade can be
+/// replayed in isolation (tools only). Text lines:
+/// `G id nodes deps`, `N kind dirt start end` per node, `D deps...`,
+/// `A|P|W graph index value recurse`, and `F` per frame.
+#[cfg(feature = "tools")]
+pub mod trace {
+    use super::{ComponentDirt, ComponentGraph, Kind};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::fmt::Write as _;
+
+    struct Recorder {
+        out: String,
+        graphs: HashMap<*const ComponentGraph, u32>,
+    }
+
+    thread_local! {
+        static RECORDER: RefCell<Option<Recorder>> = const { RefCell::new(None) };
+    }
+
+    pub fn start() {
+        RECORDER.with(|recorder| {
+            *recorder.borrow_mut() = Some(Recorder {
+                out: String::new(),
+                graphs: HashMap::new(),
+            })
+        });
+    }
+
+    pub fn frame() {
+        RECORDER.with(|recorder| {
+            if let Some(recorder) = recorder.borrow_mut().as_mut() {
+                recorder.out.push_str("F\n");
+            }
+        });
+    }
+
+    pub fn finish(path: &std::path::Path) -> std::io::Result<()> {
+        let out = RECORDER.with(|recorder| recorder.borrow_mut().take().map(|r| r.out));
+        std::fs::write(path, out.unwrap_or_default())
+    }
+
+    pub(super) fn event(
+        graph: &ComponentGraph,
+        kind: char,
+        index: u32,
+        value: ComponentDirt,
+        recurse: bool,
+    ) {
+        RECORDER.with(|recorder| {
+            let mut recorder = recorder.borrow_mut();
+            let Some(recorder) = recorder.as_mut() else {
+                return;
+            };
+            let key = graph as *const ComponentGraph;
+            let next = recorder.graphs.len() as u32;
+            let id = *recorder.graphs.entry(key).or_insert(next);
+            if id == next {
+                let _ = writeln!(
+                    recorder.out,
+                    "G {id} {} {}",
+                    graph.nodes.len(),
+                    graph.dependents.len()
+                );
+                for node in graph.nodes.iter() {
+                    let kind = match node.kind {
+                        Kind::Outside => 0,
+                        Kind::Noop => 1,
+                        Kind::Handler => 2,
+                        Kind::Receiver => 3,
+                        Kind::Helper => 4,
+                    };
+                    let _ = writeln!(
+                        recorder.out,
+                        "N {kind} {} {} {}",
+                        node.dirt.get().0,
+                        node.dependents_start,
+                        node.dependents_end
+                    );
+                }
+                recorder.out.push('D');
+                for dependent in graph.dependents.iter() {
+                    let _ = write!(recorder.out, " {dependent}");
+                }
+                recorder.out.push('\n');
+            }
+            let _ = writeln!(
+                recorder.out,
+                "{kind} {id} {index} {} {}",
+                value.0, recurse as u8
+            );
+        });
     }
 }

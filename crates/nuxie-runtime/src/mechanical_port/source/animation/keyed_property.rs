@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
-        keyframe_cells::KeyFrameCells,
+        keyframe_cells::{KeyFrameCells, KeyFrameEntry, KeyedPropertyCells, closest_frame_index},
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
         keyframe_interpolator::KeyFrameInterpolator, linear_animation::LinearAnimation,
     },
@@ -39,6 +39,10 @@ impl KeyedProperty {
 
     /// Add a keyframe the caller already borrows, with its shared cells.
     pub(crate) fn add_key_frame_with_cells(&mut self, value: CoreHandle, cells: Rc<KeyFrameCells>) {
+        self.base.cells().push_frame(KeyFrameEntry {
+            handle: value.clone(),
+            cells: Rc::clone(&cells),
+        });
         self.keyframes.push(value);
         self.frame_cells.push(cells);
     }
@@ -207,6 +211,56 @@ impl KeyedProperty {
         );
     }
 
+    /// apply_occurrence for a property entered through its shared cells: the
+    /// same frame search before the host override and fresh key and frame
+    /// reads after it, without borrowing the property.
+    pub(crate) fn apply_cells(
+        property: &KeyedPropertyCells,
+        object: CoreHandle,
+        seconds: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+        artboard: &dyn KeyedObjectContext,
+        interpolator_host: Option<&CoreHandle>,
+    ) {
+        let (frame_count, index, override_key) = {
+            let frames = property.frames();
+            assert!(!frames.is_empty());
+            (
+                frames.len(),
+                closest_frame_index(&frames, seconds, 0),
+                property.property_key(),
+            )
+        };
+        let mix = if interpolator_host
+            .is_some_and(|host| artboard.overrides_keyed_interpolation(host, override_key))
+        {
+            1.0
+        } else {
+            mix
+        };
+        let selection = {
+            let frames = property.frames();
+            let property_key = property.property_key() as i32;
+            if index == 0 {
+                (property_key, frames[0].handle.clone(), None)
+            } else if index < frame_count as i32 {
+                let from = &frames[index as usize - 1];
+                let to = &frames[index as usize];
+                if seconds == to.cells.seconds() {
+                    (property_key, to.handle.clone(), None)
+                } else if from.cells.interpolation_type() == 0 {
+                    (property_key, from.handle.clone(), None)
+                } else {
+                    (property_key, from.handle.clone(), Some(to.handle.clone()))
+                }
+            } else {
+                (property_key, frames[index as usize - 1].handle.clone(), None)
+            }
+        };
+        Self::apply_selected(selection, object, seconds, mix, context);
+    }
+
     /// The source searches frames before the host override, then reads the
     /// current property key and selected frames after that synchronous call.
     /// Neither the host hook nor keyframe application retains a property loan.
@@ -295,7 +349,7 @@ impl KeyedProperty {
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
-        i.add_keyed_property(this);
+        i.add_keyed_property(this, Rc::clone(self.base.cells()));
         if CoreRegistry::is_callback(self.base.property_key()) {
             if let Some(importer) =
                 stack.latest::<LinearAnimationImporter>(LinearAnimationBase::TYPE_KEY)

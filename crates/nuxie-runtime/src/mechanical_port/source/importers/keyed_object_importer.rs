@@ -13,10 +13,14 @@ impl KeyedObjectImporter {
         Self { keyed_object }
     }
 
-    pub fn add_keyed_property(&mut self, property: CoreHandle) {
+    pub fn add_keyed_property(
+        &mut self,
+        property: CoreHandle,
+        cells: std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells>,
+    ) {
         self.keyed_object
             .with_downcast_mut::<KeyedObject, _>(|keyed_object| {
-                keyed_object.add_keyed_property(property)
+                keyed_object.add_keyed_property_with_cells(property, cells)
             })
             .expect("KeyedObjectImporter retains a KeyedObject");
     }

@@ -8,14 +8,14 @@ pub trait KeyedPropertyBaseCallbacks {
 
 pub struct KeyedPropertyBase {
     pub base: Core,
-    property_key: u32,
+    cells: std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells>,
 }
 
 impl Default for KeyedPropertyBase {
     fn default() -> Self {
         Self {
             base: Core::default(),
-            property_key: Core::INVALID_PROPERTY_KEY as u32,
+            cells: std::rc::Rc::new(crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells::new(Core::INVALID_PROPERTY_KEY as u32)),
         }
     }
 }
@@ -34,8 +34,11 @@ impl KeyedPropertyBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(&self) -> &std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells> {
+        &self.cells
+    }
     pub fn property_key(&self) -> u32 {
-        self.property_key
+        self.cells.property_key()
     }
     pub fn set_property_key(
         &mut self,
@@ -49,10 +52,10 @@ impl KeyedPropertyBase {
     }
 
     pub(crate) fn set_property_key_value(&mut self, value: u32) -> bool {
-        if self.property_key == value {
+        if self.cells.property_key() == value {
             return false;
         }
-        self.property_key = value;
+        self.cells.set_property_key(value);
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl KeyedPropertyBaseCallbacks) -> KeyedProperty {
@@ -61,7 +64,7 @@ impl KeyedPropertyBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl KeyedPropertyBaseCallbacks) {
-        self.property_key = object.property_key;
+        self.cells.set_property_key(object.property_key());
     }
     pub fn deserialize(
         &mut self,
@@ -71,7 +74,7 @@ impl KeyedPropertyBase {
     ) -> bool {
         match property_key {
             Self::PROPERTY_KEY_PROPERTY_KEY => {
-                self.property_key = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_property_key(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             _ => false,

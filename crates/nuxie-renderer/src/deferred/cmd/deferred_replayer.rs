@@ -30,11 +30,9 @@ pub trait DeferredFrameSink {
     // A retained factory projection makes the source's factory and frame
     // operations independently borrowable while a canvas hook is executing.
     fn factory(&mut self) -> PersistentFactoryContext;
-    /// Device on which replay occurs, distinct from the recording factory.
-    /// Without one, unbacked canvas content remains unbacked and is dropped.
-    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
-        None
-    }
+    /// Backs canvases at replay. Required because None drops all canvas content,
+    /// so only a sink with no device should choose it.
+    fn render_context(&mut self) -> Option<PersistentFactoryContext>;
     fn ore_context(&mut self) -> Option<OreContextHandle> {
         self.factory().with_factory(|factory| factory.ore())
     }
@@ -366,6 +364,14 @@ fn resolve_canvas(
         let device = sink.borrow_mut().render_context();
         if let Some(mut device) = device {
             device.ensure_canvas_backing(&canvas);
+        } else {
+            static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            if COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 120 == 0 {
+                eprintln!(
+                    "rive deferred: canvas {} has no backing and the sink returned no renderContext(); its content is dropped",
+                    id
+                );
+            }
         }
     }
     let backed = canvas.borrow().is_backed();

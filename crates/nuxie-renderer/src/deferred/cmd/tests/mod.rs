@@ -22,6 +22,17 @@ mod artboard_bitmap_cache_test;
 ))]
 mod artboard_mesh_test;
 mod canvas_schedule_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod deferred_canvas_backing_test;
 mod deferred_canvas_import_test;
 #[cfg(all(
     feature = "rive-decoders",
@@ -149,6 +160,9 @@ impl Default for TestSink {
     }
 }
 impl DeferredFrameSink for TestSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
     }

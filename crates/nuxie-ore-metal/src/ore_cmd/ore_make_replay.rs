@@ -566,9 +566,18 @@ pub fn replayOreLifecycle(
                 return true;
             }
             let Some(canvas) = canvasAt(p.canvasId) else {
-                // Unregistered or unbacked. Noted like an image, so the pass
-                // that binds it says why it dropped.
-                return skipUnresolvedMake(table, p.id, p.generation, "wrapCanvasView", None);
+                // Not churn, so the pass that binds it names the real cause.
+                setMade(
+                    table,
+                    p.id,
+                    p.generation,
+                    OreKind::textureView,
+                    None,
+                    "wrapCanvasView",
+                    None,
+                    "canvas unregistered or unbacked",
+                );
+                return true;
             };
             let wrapped = unsafe {
                 if p.mode == WrapCanvasViewMode::sampleView as u32 {

@@ -194,6 +194,9 @@ fn canvas_callbacks_can_reborrow_the_replay_factory() {
         opened_screens: usize,
     }
     impl DeferredFrameSink for BorrowingSink {
+        fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+            None
+        }
         fn factory(&mut self) -> PersistentFactoryContext {
             self.factory.persistent_context().unwrap()
         }

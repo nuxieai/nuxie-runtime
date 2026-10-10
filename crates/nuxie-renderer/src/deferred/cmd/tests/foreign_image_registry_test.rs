@@ -54,6 +54,9 @@ impl Default for ImageSink {
     }
 }
 impl DeferredFrameSink for ImageSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.base.factory()
     }

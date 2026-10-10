@@ -7,18 +7,33 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1b9b7381fd92e2de41f9c936f2073d1e0d984717`
+- LAST_SYNCED_SHA: `3ccf0d9d7c2cf8bee0553245acaffe21ae3314b6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 222 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (244 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 223 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (245 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `3ccf0d9d`, integrated atop downstream `0ffd5e5384`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Both canvas-backing regressions and the adapted WebGL2 replay sink
+  execute in the combined Metal/WebGL2 renderer suite: 820 pass, six existing
+  ignores, run serially for the shared Metal lifetime instrumentation.
+  The initial parallel run exposed three interfering instrumentation tests
+  and the existing image-paint test's transient Bazel fixture path. The path
+  now follows the existing Bazel/Cargo lookup convention; both reviews cover
+  this test-only fix, and the unchanged exact pixel assertion passes.
+  Both ORE failure-note tests pass. Both browser renderer products compile
+  for wasm32-unknown-unknown. Source/pipeline tests pass 12, manifest tests
+  pass 27, and formatting/generated-file/diff checks pass. No assertions or
+  tolerances changed. Broad runtime Golden/Silver evidence remains pinned to
+  the preceding `1b9b7381` result below, not relabeled as a fresh run here.
+  No browser-pixel or new Android hardware execution is claimed.
 - Validation at `1b9b7381`, integrated atop downstream `bc67d2413b`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean, including shared raster invalidation across callbacks, unwind-safe
@@ -685,6 +700,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `3ccf0d9d7c2cf8bee0553245acaffe21ae3314b6` | Require every deferred replay sink to supply an explicit render context or explicitly choose none. Preserve replay-time canvas backing and content dropping without a device, add the throttled missing-device warning, and record missing ORE canvas views as a named unregistered/unbacked failure rather than unresolved churn. Translate both canvas-backing regressions and explicit no-device test sinks. Private .rive_head contents are not claimed imported. | — |
 | `1b9b7381fd92e2de41f9c936f2073d1e0d984717` | Translate MeshHost and lazily allocated Node-mode NestedArtboard mesh/N-slice state, fixed display-scaled mesh rasters, draw-time UV refresh, clipping/visitor vector paths, and immediate raster release on source swaps. Bitmap Cache retains on-screen sizing; self transforms move to compositing and independent content revisions prevent stale multi-path caches. Translate public renderer-host capability, all mesh/cache regression cases and hosted semantic-rotation coverage. Private editor/agent/WebGL changes described only in commit prose are not claimed imported. | — |
 | `3f67b2f86d5c62e5767f3f5b93edfb4b26f68853` | Translate runtime cubic-vertex missing-weight guard and Weight::fitsVertex registration rule, rejecting base Weight for cubic vertices. Port both complete live skinned-rig regressions. Private editor parent-change and agent add_vertices work described in the message is absent from the public delta and is not claimed imported. | — |
 | `1e55b86a79b97d57065e892ac8fc3b219596e768` | Guard script artboard-input instancing with a thread-local stack of source-artboard identities, leaving only repeated inputs unset and removing the guard on unwind. Translate the public Host/Holder cycle regression with the exact upstream fixture. Shared runtime/Luau behavior is in scope; guest execution remains parked and private .rive_head changes are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

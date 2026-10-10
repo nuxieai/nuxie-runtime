@@ -247,6 +247,9 @@ impl Default for MSink {
     }
 }
 impl DeferredFrameSink for MSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
     }

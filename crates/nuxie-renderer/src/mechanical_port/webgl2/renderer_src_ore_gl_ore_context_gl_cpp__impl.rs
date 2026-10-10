@@ -2616,6 +2616,9 @@ mod tests {
             factory: PersistentFactory<ExactSourceFactoryCore<Backend>>,
         }
         impl DeferredFrameSink for Sink {
+            fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+                None
+            }
             fn factory(&mut self) -> PersistentFactoryContext {
                 self.factory.persistent_context().unwrap()
             }

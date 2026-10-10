@@ -947,6 +947,8 @@ pub struct ScriptVm {
     // The image decode registry once found in this VM's app data; async
     // polling runs every frame and skips the app-data lookup after that.
     image_decode: std::cell::OnceCell<Rc<lua_image_decode::ImageDecodeRegistry>>,
+    // A lookup found no registry; cleared whenever this VM installs one.
+    image_decode_absent: Cell<bool>,
 }
 
 #[cfg(test)]
@@ -2109,6 +2111,7 @@ impl ScriptVm {
             logging: LoggingScriptingContext::default(),
             module_hooks: RefCell::new(None),
             image_decode: std::cell::OnceCell::new(),
+            image_decode_absent: Cell::new(false),
         }
     }
 
@@ -2413,6 +2416,7 @@ impl ScriptVm {
     #[cfg(feature = "upstream-test-seams")]
     #[doc(hidden)]
     pub fn upstream_test_async_owner_id(&self) -> u64 {
+        self.image_decode_absent.set(false);
         lua_image_decode::upstream_test_owner_id(&self.lua)
     }
 
@@ -2458,6 +2462,7 @@ impl ScriptVm {
         buffer_ext::install_buffer_extensions(&self.lua)?;
         lua_promise::install_promise_globals(&self.lua)?;
         lua_image_decode::install(&self.lua);
+        self.image_decode_absent.set(false);
         #[cfg(feature = "scriptnet")]
         lua_scriptnet::install(&self.lua)?;
         lua_audio::install_audio_global(&self.lua)?;
@@ -2901,9 +2906,12 @@ pub fn validate_executable_luau_bytecode(
 impl ScriptVm {
     /// The image decode registry installed in this VM, kept once found.
     fn image_decode_registry(&self) -> Option<&Rc<lua_image_decode::ImageDecodeRegistry>> {
-        if self.image_decode.get().is_none() {
-            if let Some(registry) = lua_image_decode::installed_registry(&self.lua) {
-                let _ = self.image_decode.set(registry);
+        if self.image_decode.get().is_none() && !self.image_decode_absent.get() {
+            match lua_image_decode::installed_registry(&self.lua) {
+                Some(registry) => {
+                    let _ = self.image_decode.set(registry);
+                }
+                None => self.image_decode_absent.set(true),
             }
         }
         self.image_decode.get()

@@ -46,6 +46,13 @@ tools/bazel/runtime.py test -p nux-capi --lib --test capi
 tools/bazel/runtime.py run -p nuxie-codegen -- --help
 ```
 
+The runtime shares Bazel action, dependency-download, and fetched repository
+caches with other Nuxie Bazel workspaces under `~/.cache/nuxie/bazel`. Each Git worktree retains its own
+Bazel output base and `target/` products. Set an absolute `NUXIE_BAZEL_CACHE_DIR`
+when using the package or distribution frontends to relocate the reusable
+caches; leave the output base at its checkout-specific default. Test the cache
+override with `python3 -B -m unittest discover -s tools -p 'test_bazel_cache.py'`.
+
 Cargo manifests remain the dependency and feature authority. Run
 `python3 tools/bazel/generate.py` after changing them and use `--check` to verify
 checked-in targets. `bazel/cargo` contains dependency-resolution stubs;

@@ -1176,6 +1176,10 @@ impl Component {
         (value & flag) != ComponentDirt::NONE
     }
 
+    pub fn claims_artboard_slot(&self, _import_stack: &mut ImportStack) -> bool {
+        true
+    }
+
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
@@ -1187,12 +1191,11 @@ impl Component {
             return self.base.base.import(import_stack);
         }
 
-        let Some(artboard_importer) =
+        let Some(_artboard_importer) =
             import_stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };
-        artboard_importer.add_component(Some(this));
         self.base.base.import(import_stack)
     }
 

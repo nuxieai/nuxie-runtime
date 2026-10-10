@@ -15,8 +15,15 @@ impl ArtboardImporter {
         Self { artboard }
     }
 
-    pub fn add_component(&mut self, object: Option<CoreHandle>) {
-        self.with_artboard(|artboard| artboard.add_object(object));
+    pub fn add_component(&mut self, object: Option<CoreHandle>) -> usize {
+        self.with_artboard(|artboard| {
+            artboard.add_object(object);
+            artboard.objects().len() - 1
+        })
+    }
+
+    pub fn release_slot(&mut self, index: usize) {
+        self.with_artboard(|artboard| artboard.release_import_slot(index));
     }
 
     pub fn add_animation(&mut self, animation: CoreHandle) {

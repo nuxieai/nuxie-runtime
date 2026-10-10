@@ -108,6 +108,9 @@ impl ViewModelInstanceViewModel {
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let status = self.base.import(import_stack);
+        if status != StatusCode::Ok {
+            return status;
+        }
         if import_stack
             .latest::<ArtboardImporter>(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,

@@ -909,6 +909,10 @@ impl Artboard {
         self.objects.push(object);
     }
 
+    pub(crate) fn release_import_slot(&mut self, index: usize) {
+        self.objects[index] = None;
+    }
+
     pub(crate) fn add_animation(&mut self, object: CoreHandle) {
         self.animations.push(object);
     }
@@ -923,7 +927,8 @@ impl Artboard {
 
     pub fn validate_objects(&mut self) -> bool {
         let size = self.objects.len();
-        let mut valid = vec![false; size];
+        // Register first-cycle failures as changes even when every object fails.
+        let mut valid = vec![true; size];
         for _cycle in 0..100 {
             let mut changed = false;
             for (i, validity) in valid.iter_mut().enumerate().take(size).skip(1) {
@@ -4403,6 +4408,10 @@ impl Artboard {
             _ => {}
         }
         result
+    }
+
+    pub fn claims_artboard_slot(&self, _import_stack: &mut ImportStack) -> bool {
+        false
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {

@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -194,6 +195,21 @@ def write_json(path: Path, payload: dict) -> None:
             os.unlink(handle.name)
 
 
+def publish_runner(source: Path, destination: Path) -> None:
+    """Replace a staged executable without writing through its existing inode.
+
+    Bazel executables can be read-only. Copy into a fresh sibling directory
+    first, preserving executable permissions, then publish on the same filesystem.
+    Neither the source nor an existing destination needs its mode changed.
+    """
+    with tempfile.TemporaryDirectory(
+        dir=destination.parent, prefix=f".{destination.name}-"
+    ) as directory:
+        staged = Path(directory) / destination.name
+        shutil.copy2(source, staged)
+        os.replace(staged, destination)
+
+
 def changed_members(state: dict, recorded) -> list[str]:
     """Members whose digests differ from the recorded state.
 
@@ -281,7 +297,7 @@ def ensure_runner(repo_root: Path, variant: str, profile: str) -> None:
         if variant == "ordinary" and (
             not uplift.is_file() or sha256_path(uplift) != stamp["binary_sha256"]
         ):
-            run(["cp", str(artifact), str(uplift)], cwd=repo_root)
+            publish_runner(artifact, uplift)
         print(
             f"rust runner provenance: reusing verified {variant} runner "
             f"({stamp['binary_sha256'][:16]})"
@@ -297,7 +313,7 @@ def ensure_runner(repo_root: Path, variant: str, profile: str) -> None:
     run(command, cwd=repo_root)
     if not uplift.is_file():
         raise ProvenanceError(f"Bazel build produced no runner at {uplift}")
-    run(["cp", str(uplift), str(artifact)], cwd=repo_root)
+    publish_runner(uplift, artifact)
 
     verify_quiescent(repo_root, members, state)
     write_json(digests_path, state)

@@ -41,12 +41,17 @@ impl RuntimeFile {
         let object_id = usize::try_from(object.id).ok()?;
         let mut latest_bindable_property = None;
         let mut import_context = ImportContext::default();
-        for candidate in self.objects.iter().take(object_id).flatten() {
-            let candidate_id = usize::try_from(candidate.id).ok()?;
+        for (candidate_id, candidate) in self.objects.iter().take(object_id).enumerate() {
             let status = self.import_status(candidate_id)?;
+            if status == RuntimeImportStatus::NullObject {
+                import_context.read_null_object();
+                continue;
+            }
+            let candidate = candidate.as_ref()?;
             let Some(definition) = definition_by_type_key(candidate.type_key) else {
                 continue;
             };
+            let slot = import_context.claim_artboard_slot(candidate);
             if status == RuntimeImportStatus::Imported && definition.is_a("BindableProperty") {
                 latest_bindable_property = Some(candidate);
             }
@@ -67,9 +72,11 @@ impl RuntimeFile {
                     update_import_context(candidate, definition, &mut import_context, false);
                 }
                 RuntimeImportStatus::Dropped { .. } => {
-                    import_context.read_dropped_object(definition);
+                    if let Some(slot) = slot {
+                        import_context.artboard_local_nested_inputs[slot] = None;
+                    }
                 }
-                RuntimeImportStatus::NullObject => import_context.read_null_object(),
+                RuntimeImportStatus::NullObject => unreachable!("handled before object dispatch"),
             }
         }
         latest_bindable_property

@@ -6,6 +6,9 @@ bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "apple_support", version = "2.5.2")
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
+wasm_c = use_extension("//bazel:wasm-c-tools.bzl", "wasm_c_tools")
+use_repo(wasm_c, "nuxie_wasm_c_tools")
+
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",

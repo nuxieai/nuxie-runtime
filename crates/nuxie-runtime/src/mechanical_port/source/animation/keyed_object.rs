@@ -131,21 +131,25 @@ impl KeyedObject {
         to: f32,
         at_start: bool,
     ) {
-        let properties = owner
-            .with_downcast::<Self, _>(|object| object.keyed_properties.snapshot())
+        // The property snapshot, each property's key and the per-callback
+        // object id read through the shared cells, as fresh as before.
+        let cells = owner
+            .with_downcast::<Self, _>(|object| std::rc::Rc::clone(object.base.cells()))
             .expect("callback traversal retains its KeyedObject");
+        let properties = cells.properties();
         for property in properties.iter() {
-            let is_callback = property
-                .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
-                .expect("KeyedObject retains KeyedProperty occurrences");
-            if !is_callback {
+            if !crate::mechanical_port::source::generated::core_registry::CoreRegistry::is_callback(
+                property.cells.property_key(),
+            ) {
                 continue;
             }
-            let object_id = owner
-                .with_downcast::<Self, _>(|object| object.base.object_id())
-                .expect("callback traversal retains its KeyedObject");
             KeyedProperty::report_keyed_callbacks_occurrence(
-                property, reporter, object_id, from, to, at_start,
+                &property.handle,
+                reporter,
+                cells.object_id(),
+                from,
+                to,
+                at_start,
             );
         }
     }

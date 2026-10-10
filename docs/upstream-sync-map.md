@@ -7,18 +7,27 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `439ffe0c1c79c6c20b7c9e553f8f0586bbd9e2f6`
+- LAST_SYNCED_SHA: `1e55b86a79b97d57065e892ac8fc3b219596e768`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Five upstream commits remain after this checkpoint at the fetched target.
-  All 219 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (241 after `5892bb05`); this
+  Four upstream commits remain after this checkpoint at the fetched target.
+  All 220 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (242 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `1e55b86a`, integrated atop downstream `53118749fe`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All seven scripting-artboard tests pass, including the exact upstream
+  cyclic-input fixture and existing instancing/origin/opacity cases. Runtime
+  compilation passes for wasm32-unknown-unknown. Source/pipeline tests pass 12,
+  manifest tests pass 27, and formatting/generated-file checks pass. No fresh
+  broad Golden/Silver run or device/browser-pixel execution is claimed for
+  this scoped guard; the immediately preceding broad results remain below.
+  Guest execution remains deferred, not validated by these Luau cases.
 - Validation at `439ffe0c`, integrated atop downstream `a8acdb89de`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean, including binary secondary-import slot accounting and trait-dispatch
@@ -648,6 +657,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1e55b86a79b97d57065e892ac8fc3b219596e768` | Guard script artboard-input instancing with a thread-local stack of source-artboard identities, leaving only repeated inputs unset and removing the guard on unwind. Translate the public Host/Holder cycle regression with the exact upstream fixture. Shared runtime/Luau behavior is in scope; guest execution remains parked and private .rive_head changes are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `439ffe0c1c79c6c20b7c9e553f8f0586bbd9e2f6` | Claim artboard slots before object import and retain empty slots on failure; match script inputs to their owner's parent ID, including unreadable owners. Translate the immutable binary reader counterpart, initial-valid orphan pruning, and failed-super view-model import return. Component-list null-row iteration/pooling is already represented by non-null Rust map entries; preserve it and port both upstream regressions alongside all new malformed-import cases. No private .rive_head/editor changes are claimed. | — |
 | `671423924df5b251d0f9b3c9f929062bbd27eef6` | Translate the shipped WebGL branch's removal of per-pass finish/liveness probes and exact successful-framebuffer attachment-key caching; the upstream native-GL branch is unshipped. Add shared target-exposure capability (base false, deferred true with pre-init setter), gate Luau gpuTarget, and preserve unresolved canvas/backend wrapping diagnostics. Translate the new upstream host-never-exposes-target case. Guest Wasm target gating remains deferred; private .rive_head contents are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `acbb030b2966249cd15a34a7d5b72abf86f0b391` | Retain the browser WebGPU render target across frames, creating it only when absent and invalidating on actual resize; assert acquired surface dimensions and continue refreshing each frame's target view. Native offscreen targets already retain this lifetime. Upstream testing-window overflow handling has no corresponding canvas-product path; private .rive_head contents are not claimed imported. | — |

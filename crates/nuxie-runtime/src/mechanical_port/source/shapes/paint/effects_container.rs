@@ -49,10 +49,10 @@ impl EffectsContainerState {
         effect: CoreHandle,
         paths: Option<crate::mechanical_port::source::shapes::paint::stroke_effect::EffectPaths>,
     ) {
-        self.effects.push(effect);
         if let Some(paint) = &self.paint {
-            paint.add_effect(paths);
+            paint.add_effect(effect.clone(), paths);
         }
+        self.effects.push(effect);
     }
     pub fn invalidate_effects(&mut self, invalidating: Option<&CoreHandle>) {
         let mut found = invalidating.is_none();

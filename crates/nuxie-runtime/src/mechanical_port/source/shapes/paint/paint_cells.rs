@@ -4,7 +4,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 use crate::mechanical_port::source::{
@@ -20,6 +20,7 @@ use crate::mechanical_port::source::{
             },
         },
         path_flags::PathFlags,
+        shape_paint_container::ContainerCells,
     },
 };
 
@@ -38,6 +39,8 @@ pub(crate) struct PaintCells {
     render_paint: RefCell<Option<RuntimeRenderPaintHandle>>,
     // The paint's own Component dirt.
     dirt: Rc<SharedDirt>,
+    // The container whose flag union includes this paint's flags.
+    container: RefCell<Weak<ContainerCells>>,
 }
 
 impl PaintCells {
@@ -50,6 +53,7 @@ impl PaintCells {
             has_feather: Cell::new(false),
             render_paint: RefCell::new(None),
             dirt,
+            container: RefCell::new(Weak::new()),
         }
     }
 
@@ -59,7 +63,15 @@ impl PaintCells {
     }
 
     pub(crate) fn set_path_flags(&self, flags: PathFlags) {
-        self.path_flags.set(flags);
+        if self.path_flags.replace(flags) != flags {
+            if let Some(container) = self.container.borrow().upgrade() {
+                container.refresh_paint_flags();
+            }
+        }
+    }
+
+    pub(crate) fn set_container(&self, container: Weak<ContainerCells>) {
+        *self.container.borrow_mut() = container;
     }
 
     /// Record an added stroke effect, with its paths when invalidating it

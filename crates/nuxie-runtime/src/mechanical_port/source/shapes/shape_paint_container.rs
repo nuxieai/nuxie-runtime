@@ -22,6 +22,9 @@ pub(crate) struct ContainerCells {
     // Replaced, never edited, when a paint is added, so a pathChanged pass can
     // hold it across paint callbacks.
     paints: RefCell<Rc<[ContainerPaint]>>,
+    // The union of the paints' flags, refreshed when a paint is added or a
+    // paint's flags change.
+    paint_flags: Cell<PathFlags>,
 }
 
 pub(crate) struct ContainerPaint {
@@ -34,6 +37,7 @@ impl Default for ContainerCells {
         Self {
             flags: Cell::new(PathFlags::NONE),
             paints: RefCell::new(Rc::new([])),
+            paint_flags: Cell::new(PathFlags::NONE),
         }
     }
 }
@@ -41,11 +45,19 @@ impl Default for ContainerCells {
 impl ContainerCells {
     /// ShapePaintContainer::pathFlags(): the container's own flags and every
     /// paint's.
+    #[inline]
     pub(crate) fn path_flags(&self) -> PathFlags {
-        self.paints
+        self.flags.get() | self.paint_flags.get()
+    }
+
+    /// Recompute the paints' flag union after a paint's flags change.
+    pub(crate) fn refresh_paint_flags(&self) {
+        let flags = self
+            .paints
             .borrow()
             .iter()
-            .fold(self.flags.get(), |flags, paint| flags | paint.cells.path_flags())
+            .fold(PathFlags::NONE, |flags, paint| flags | paint.cells.path_flags());
+        self.paint_flags.set(flags);
     }
 
     pub(crate) fn paints(&self) -> Rc<[ContainerPaint]> {
@@ -93,6 +105,7 @@ impl ShapePaintContainer {
     }
 
     pub(crate) fn add_paint(&mut self, paint: CoreHandle, cells: Rc<PaintCells>) {
+        cells.set_container(Rc::downgrade(&self.cells));
         self.shape_paints = self
             .shape_paints
             .iter()
@@ -114,6 +127,7 @@ impl ShapePaintContainer {
             }))
             .collect();
         *self.cells.paints.borrow_mut() = paints;
+        self.cells.refresh_paint_flags();
     }
 
     pub fn path_flags(&self) -> PathFlags {

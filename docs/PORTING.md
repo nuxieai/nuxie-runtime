@@ -1485,25 +1485,29 @@ advance, or draw behavior.
 ### Checked host semantic actions (X4)
 
 `RuntimeStateMachineInstanceHandle::fire_semantic_action_checked` is an opt-in
-host admission API in `host_semantics.rs`. It returns false for an absent or
-unsupported action, or a disabled or semantically hidden target, authored
-ancestor, or mounted-artboard host. It reads live authored state before enqueue;
-opacity is not a refusal condition. Once accepted, an action remains queued even
+host admission API in `host_semantics.rs`. It uses the same
+`SemanticNode::is_action_eligible` and `SemanticData::supports_semantic_action`
+checks as `nux_player_queue_semantic_action`: the node must belong to a live
+semantic occurrence, its semantic ancestry must be enabled and visible, its
+source must be visible (including opacity, collapse and clipping), and the
+authored action must be supported. Once accepted, an action remains queued even
 if eligibility changes before the next advance.
 
 The original `fire_semantic_action`, command-server dispatch and native listener
 delivery remain unchanged. A file run through those upstream APIs has the same
-behavior as before. This is an additional host policy, not a port correction:
-upstream `9ed5b5168d95aab07e873db341fb65613d317cfc`,
-`src/animation/state_machine_instance.cpp:2650-2685` and
-`src/semantic/semantic_data.cpp:550-573`, forwards to registered listeners without
-this admission check. Host consumers must opt into the checked call; the C API
-already validates its captured semantic occurrence separately.
+behavior as before. This is additional host policy, not a port correction:
+upstream at recorded pin `6f3510dc`,
+`src/animation/state_machine_instance.cpp:3761-3796` and
+`src/semantic/semantic_data.cpp:550-572`, forwards to registered listeners without
+this admission check. Host consumers must opt into the checked call.
 
-`tests/host_semantic_actions.rs` pins refusal, readmission, accepted queued
-messages, opacity, and raw upstream dispatch on the same disabled file node.
-Unifying the host admission, pointer and semantic-snapshot eligibility walks is
-a separate follow-up. Tracking: [UNIV-3928](https://universe.basis.dev/issue/UNIV-3928).
+Phones already used the C API admission policy before this addition. This Rust
+entry point shares that policy; it does not change phone behavior. C API tests
+pin NOT_FOUND for a disabled activation, no queued effect, then admission and
+the authored effect after enabling. `tests/host_semantic_actions.rs` pins host
+refusal, readmission, accepted queued messages, opacity refusal, and unchanged
+raw dispatch on the same disabled file node. Tracking:
+[UNIV-3928](https://universe.basis.dev/issue/UNIV-3928).
 
 ### Atomic checked host replacements
 

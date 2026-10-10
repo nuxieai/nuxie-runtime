@@ -88,6 +88,9 @@ impl Default for PreserveSink {
     }
 }
 impl DeferredFrameSink for PreserveSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.inner.factory()
     }

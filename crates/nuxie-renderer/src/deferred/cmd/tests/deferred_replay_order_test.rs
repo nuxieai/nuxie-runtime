@@ -70,6 +70,9 @@ impl Default for CountingSink {
     }
 }
 impl DeferredFrameSink for CountingSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
     }

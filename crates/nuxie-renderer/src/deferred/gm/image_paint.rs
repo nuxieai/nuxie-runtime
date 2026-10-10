@@ -21,10 +21,6 @@ const NOMOON_PNG: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../fixtures/renderer/image_paint/nomoon.png"
 ));
-const IMAGE_PAINT_REFERENCE_PNG: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../fixtures/renderer/reference/metal/gm/image_paint.png"
-);
 
 fn multiply(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
     let a = lhs.0;
@@ -177,7 +173,11 @@ fn render_image_paint() -> Vec<u8> {
 
 #[test]
 fn image_paint() {
-    let expected = pixel_compare::RgbaImage::read_png(IMAGE_PAINT_REFERENCE_PNG)
+    let reference = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/renderer/reference/metal/gm/image_paint.png");
+    let expected = pixel_compare::RgbaImage::read_png(&reference)
         .expect("C++ image_paint reference with approved Metal FMA adaptation");
     let actual = pixel_compare::RgbaImage::new(WIDTH, HEIGHT, render_image_paint())
         .expect("live Rust Metal image_paint frame");

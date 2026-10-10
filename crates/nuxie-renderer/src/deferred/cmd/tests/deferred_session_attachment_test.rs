@@ -166,6 +166,9 @@ struct TargetSink {
     opened: Vec<u64>,
 }
 impl DeferredFrameSink for TargetSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.inner.factory()
     }

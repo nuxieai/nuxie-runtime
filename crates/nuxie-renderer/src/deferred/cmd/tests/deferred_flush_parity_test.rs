@@ -32,6 +32,10 @@ struct NullContextSink {
     renderer: Option<RendererOwner>,
 }
 impl DeferredFrameSink for NullContextSink {
+    // Opens no canvas frames, so a backing would stay empty.
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
     }

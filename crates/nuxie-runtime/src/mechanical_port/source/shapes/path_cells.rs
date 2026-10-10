@@ -5,7 +5,7 @@
 //! per-path reads run without borrowing it.
 
 use std::{
-    cell::{Cell, Ref, RefCell},
+    cell::{Cell, OnceCell, Ref, RefCell},
     rc::Rc,
 };
 
@@ -23,7 +23,8 @@ pub(crate) struct PathCells {
     dirt: Rc<SharedDirt>,
     // The path's own transform; its world is the path transform unless skinned.
     transform: Rc<TransformCells>,
-    shape: RefCell<Option<PathShape>>,
+    // Set once, when the path joins its Shape.
+    shape: OnceCell<PathShape>,
     // Whether this update cycle already told the shape its path changed.
     shape_notified: Cell<bool>,
     // The last update skipped the rebuild while the shape was transparent.
@@ -50,7 +51,7 @@ impl PathCells {
         Self {
             dirt,
             transform,
-            shape: RefCell::new(None),
+            shape: OnceCell::new(),
             shape_notified: Cell::new(false),
             deferred: Cell::new(false),
             flags: Cell::new(PathFlags::NONE),
@@ -118,15 +119,18 @@ impl PathCells {
     }
 
     pub(crate) fn shape(&self) -> Option<PathShape> {
-        self.shape.borrow().clone()
+        self.shape.get().cloned()
     }
 
     pub(crate) fn shape_handle(&self) -> Option<CoreHandle> {
-        self.shape.borrow().as_ref().map(|shape| shape.handle.clone())
+        self.shape.get().map(|shape| shape.handle.clone())
     }
 
+    /// Path::onAddedClean's shape link; a path joins one Shape.
     pub(crate) fn bind_shape(&self, handle: CoreHandle, cells: Rc<ShapeCells>) {
-        *self.shape.borrow_mut() = Some(PathShape { handle, cells });
+        if let Err(PathShape { handle, .. }) = self.shape.set(PathShape { handle, cells }) {
+            debug_assert!(self.shape_handle().is_some_and(|bound| bound == handle));
+        }
     }
 
     pub(crate) fn is_flagged(&self, flags: PathFlags) -> bool {
@@ -161,7 +165,7 @@ impl PathCells {
 
     /// Path::canDeferPathUpdate().
     pub(crate) fn can_defer_path_update(&self) -> bool {
-        self.shape.borrow().as_ref().is_some_and(|shape| {
+        self.shape.get().is_some_and(|shape| {
             if !shape.handle.is_occupied() || shape.cells.render_opacity() != 0.0 {
                 return false;
             }
@@ -199,9 +203,14 @@ impl PathCells {
 
     /// Path::shapePathChanged.
     fn notify_shape(&self) {
-        if let Some(shape) = self.take_shape_notification() {
-            shape.cells.path_changed(&shape.handle);
+        if self.shape_notified.get() {
+            return;
         }
+        let Some(shape) = self.shape.get() else {
+            return;
+        };
+        self.shape_notified.set(true);
+        shape.cells.path_changed(&shape.handle);
     }
 
     fn add_dirt(&self, owner: &CoreHandle, value: ComponentDirt) {

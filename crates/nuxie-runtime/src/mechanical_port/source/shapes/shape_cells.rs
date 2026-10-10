@@ -4,7 +4,7 @@
 //! the Shape.
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, OnceCell, RefCell},
     rc::Rc,
 };
 
@@ -29,7 +29,7 @@ pub(crate) struct ShapePath {
 
 pub(crate) struct ShapeCells {
     // The installed Shape; pathChanged's rarer steps still borrow it.
-    shape: RefCell<Option<CoreHandle>>,
+    shape: OnceCell<CoreHandle>,
     // The shape's paths, in order. Replaced, never edited, when one is added.
     paths: RefCell<Rc<[ShapePath]>>,
     transform: Rc<TransformCells>,
@@ -55,7 +55,7 @@ impl ShapeCells {
         composer: ComponentOccurrenceHandle,
     ) -> Self {
         Self {
-            shape: RefCell::new(None),
+            shape: OnceCell::new(),
             paths: RefCell::new(Rc::new([])),
             transform,
             paints,
@@ -71,11 +71,14 @@ impl ShapeCells {
     }
 
     pub(crate) fn shape(&self) -> Option<CoreHandle> {
-        self.shape.borrow().clone()
+        self.shape.get().cloned()
     }
 
+    /// The installed Shape; a composer belongs to one Shape.
     pub(crate) fn bind_shape(&self, shape: CoreHandle) {
-        *self.shape.borrow_mut() = Some(shape);
+        if let Err(shape) = self.shape.set(shape) {
+            debug_assert!(self.shape.get() == Some(&shape));
+        }
     }
 
     pub(crate) fn paths(&self) -> Rc<[ShapePath]> {
@@ -200,9 +203,9 @@ impl ShapeCells {
         if !self.composer_deferred.get() || self.composer_notified.get() {
             return;
         }
-        let shape = self.shape().expect("arena-installed Shape");
+        let shape = self.shape.get().expect("arena-installed Shape");
         self.composer_notified.set(true);
-        self.path_changed(&shape);
+        self.path_changed(shape);
     }
 
     /// Shape::pathChanged() for a caller that holds no Shape borrow: a path,

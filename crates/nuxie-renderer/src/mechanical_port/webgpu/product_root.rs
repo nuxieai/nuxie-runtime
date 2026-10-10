@@ -400,6 +400,7 @@ impl WebGpuProductBackend {
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
+            self.target.operator_assign_null();
             let configuration =
                 browser_surface_configuration(&self.device, self.surface_format, width, height);
             unsafe { self.surface.Configure(&configuration) };
@@ -608,18 +609,25 @@ impl ExactSourceBackend for WebGpuProductBackend {
             }
             let surface_width = unsafe { surface_texture.texture.GetWidth() };
             let surface_height = unsafe { surface_texture.texture.GetHeight() };
-            let mut target = self.context_pin();
-            let implementation = unsafe {
-                &mut *Pin::get_unchecked_mut(target.as_mut())
-                    .static_impl_cast::<RenderContextWebGPUImpl>()
-            };
-            let mut render_target =
-                implementation.makeRenderTarget(self.surface_format, surface_width, surface_height);
-            if !render_target.operator_bool() {
-                return Err(RendererError::Device(
-                    "create exact wasm32 WebGPU render target".into(),
-                ));
+            if !self.target.operator_bool() {
+                let mut target = self.context_pin();
+                let implementation = unsafe {
+                    &mut *Pin::get_unchecked_mut(target.as_mut())
+                        .static_impl_cast::<RenderContextWebGPUImpl>()
+                };
+                self.target = implementation.makeRenderTarget(
+                    self.surface_format,
+                    surface_width,
+                    surface_height,
+                );
+                if !self.target.operator_bool() {
+                    return Err(RendererError::Device(
+                        "create exact wasm32 WebGPU render target".into(),
+                    ));
+                }
             }
+            debug_assert_eq!(unsafe { &*self.target.get() }.width(), surface_width);
+            debug_assert_eq!(unsafe { &*self.target.get() }.height(), surface_height);
             let view_descriptor = WGPUTextureViewDescriptor {
                 format: self.surface_format.into(),
                 dimension: TextureViewDimension::e2D.into(),
@@ -631,9 +639,8 @@ impl ExactSourceBackend for WebGpuProductBackend {
                     "create exact wasm32 WebGPU canvas texture view".into(),
                 ));
             }
-            unsafe { &mut *render_target.get() }
+            unsafe { &mut *self.target.get() }
                 .setTargetTextureView(target_view, surface_texture.texture.clone());
-            self.target = render_target;
             self.target_texture = surface_texture.texture;
         }
         let encoder = unsafe { self.device.CreateCommandEncoder(std::ptr::null()) };
@@ -830,7 +837,6 @@ impl WebGpuProductBackend {
         completion?;
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
-            self.target.operator_assign_null();
             self.target_texture = Texture::default();
         }
         Ok(())

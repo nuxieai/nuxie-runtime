@@ -7,18 +7,26 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6f3510dcc545bc8b2a78f1004a06929d17cd022b`
+- LAST_SYNCED_SHA: `acbb030b2966249cd15a34a7d5b72abf86f0b391`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `6f3510dcc545bc8b2a78f1004a06929d17cd022b` (refreshed 2026-10-09 by the daily upstream sync).
+- Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  No upstream commits remain after this checkpoint at the fetched target.
-  All 216 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (238 after `5892bb05`); this
+  Seven upstream commits remain after this checkpoint at the fetched target.
+  All 217 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (239 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `acbb030b`, integrated atop downstream `9c64135638`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Both browser products and their test targets compile for
+  wasm32-unknown-unknown using the current Bazel frontend. Source/pipeline tests
+  pass 12 and corpus manifest tests pass 27; diff checks pass. The upstream
+  change has no new public regression test. No browser pixel execution, Dawn
+  native execution, new device coverage or broad runtime Golden/Silver run is
+  claimed. Shader bytes and their historical provenance are unchanged.
 - Validation at `6f3510dc`, integrated atop downstream `92e8c5776f`:
   independent source-equivalence accounting and subsequent Rust-integration
   reviews are clean. Source/pipeline tests pass 12 and manifest tests pass 27.
@@ -602,6 +610,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `acbb030b2966249cd15a34a7d5b72abf86f0b391` | Retain the browser WebGPU render target across frames, creating it only when absent and invalidating on actual resize; assert acquired surface dimensions and continue refreshing each frame's target view. Native offscreen targets already retain this lifetime. Upstream testing-window overflow handling has no corresponding canvas-product path; private .rive_head contents are not claimed imported. | — |
 | `6f3510dcc545bc8b2a78f1004a06929d17cd022b` | Public delta only adds WasmScriptingVM callDraw save accounting and restoration before renderer-handle release, preserving outer visit state. This guest-execution fix remains deferred; it does not change the Luau or browser-renderer Wasm lanes. The commit message describes private Dart/Flutter frameBoundary integration and a test absent from the public delta; those are not claimed imported. Advance active source/oracle pins and inventory without relabeling unchanged shader artifacts or historical evidence. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `f40c9dfe8a0c4accf3e963f48429e893798854a5` | Translate shader signature admission before indexing/reflection, signed-content group separation and signature verification helpers through live Rust import/scripting owners; retain approved host authentication and resource limits. Translate integer gradient coordinates, exact additive complement, uniform/instance packing, repeat gradient sampling and all supported-backend shader consumers; regenerate current shader artifacts. D3D and Unreal-specific HarfBuzz flags are unshipped. Guest unsigned-module execution, SIMD admission, WAMR cache/AOT and guest shader APIs remain deferred; import-shape tests do not imply execution support. Private signer/editor/export changes absent from the public delta are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `71713c9f086723a44df580db4678a3ae5d68c6c2` | Track elastic platform momentum through dragView while it can stretch and consume the delta; release at tracked coast speed when crossing or landing exactly on an edge. Preserve primed-clock sampling and absorption of the remaining tail. Translate both edge regressions and the upstream velocity expectation update. Private .rive_head contents are absent and not claimed. | — |

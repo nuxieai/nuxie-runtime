@@ -193,6 +193,13 @@ def target_configuration(triple):
             "target_abi": "sim" if triple.endswith("-sim") else ""}
 
 
+def deployment_version(variable, default):
+    value = os.environ.get(variable, default)
+    if not re.fullmatch(r"[1-9][0-9]*(?:\.[0-9]+){0,2}", value):
+        raise ValueError(variable + " must be a positive deployment version, such as 16.0")
+    return value
+
+
 def bazel_command():
     configured = os.environ.get("NUXIE_BAZEL_BIN") or os.environ.get("BAZEL")
     install_roots = [ROOT / "target/bazel-tools", ROOT, ROOT.parent.parent]
@@ -255,10 +262,23 @@ def main():
             flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=debuginfo"]
         if options["jobs"]:
             flags.append("--jobs=" + options["jobs"])
+        apple_target = options["target"] and "apple" in options["target"]
+        native_apple = not options["target"] and sys.platform == "darwin"
+        if apple_target or native_apple:
+            ios = deployment_version("IPHONEOS_DEPLOYMENT_TARGET", "15.0")
+            macos = deployment_version("MACOSX_DEPLOYMENT_TARGET", "12.0")
+            for variable, setting, value in (("IPHONEOS_DEPLOYMENT_TARGET", "ios", ios),
+                                             ("MACOSX_DEPLOYMENT_TARGET", "macos", macos)):
+                if variable in os.environ:
+                    flags.append("--action_env=" + variable + "=" + value)
+                    if native_apple:
+                        flags.append("--" + setting + "_minimum_os=" + value)
         if options["target"]:
             if options["target"].startswith("wasm32"):
                 flags += ["--platforms=@rules_rust//rust/platform:wasm", "--@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort"]
-            elif "apple" in options["target"] or options["target"].endswith("linux-android"):
+            elif apple_target:
+                flags += BazelRuntime.platform_options(options["target"], ios=ios, macos=macos)
+            elif options["target"].endswith("linux-android"):
                 flags += BazelRuntime.platform_options(options["target"])
             else:
                 flags.append("--platforms=//bazel/platforms:" + options["target"])

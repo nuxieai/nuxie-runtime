@@ -3724,12 +3724,8 @@ impl Artboard {
                 break;
             }
             'draw: {
-                let previous_clips = empty_clips;
-                empty_clips += current.empty_clip_count();
-                match current.draw_range_prelude(
-                    empty_clips != previous_clips || empty_clips > 0,
-                    !pending_clip_operations.is_empty(),
-                ) {
+                match current.draw_range_step(&mut empty_clips, !pending_clip_operations.is_empty())
+                {
                     DrawRangePrelude::Skip => {
                         break 'draw;
                     }

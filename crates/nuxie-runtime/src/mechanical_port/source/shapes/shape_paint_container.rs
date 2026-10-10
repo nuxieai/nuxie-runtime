@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use crate::mechanical_port::source::{
     core::{CoreHandle, CoreObject},
@@ -6,11 +9,18 @@ use crate::mechanical_port::source::{
 };
 
 pub struct ShapePaintContainer {
-    path_flags: PathFlags,
     shape_paints: Vec<CoreHandle>,
-    // The same paints with their cells. Replaced, never edited, when a paint
-    // is added, so a pathChanged pass can hold it across paint callbacks.
-    paints: Rc<[ContainerPaint]>,
+    cells: Rc<ContainerCells>,
+}
+
+/// A paint container's path flags and paints, shared with the path pipeline's
+/// cells (ShapeCells) so they read them without borrowing the container.
+pub(crate) struct ContainerCells {
+    // The container's own flags (clipping, followPath, neverDeferUpdate).
+    flags: Cell<PathFlags>,
+    // Replaced, never edited, when a paint is added, so a pathChanged pass can
+    // hold it across paint callbacks.
+    paints: RefCell<Rc<[ContainerPaint]>>,
 }
 
 struct ContainerPaint {
@@ -18,19 +28,51 @@ struct ContainerPaint {
     cells: Rc<PaintCells>,
 }
 
+impl Default for ContainerCells {
+    fn default() -> Self {
+        Self {
+            flags: Cell::new(PathFlags::NONE),
+            paints: RefCell::new(Rc::new([])),
+        }
+    }
+}
+
+impl ContainerCells {
+    /// ShapePaintContainer::pathFlags(): the container's own flags and every
+    /// paint's.
+    pub(crate) fn path_flags(&self) -> PathFlags {
+        self.paints
+            .borrow()
+            .iter()
+            .fold(self.flags.get(), |flags, paint| flags | paint.cells.path_flags())
+    }
+
+    #[inline]
+    pub(crate) fn is_flagged(&self, flags: PathFlags) -> bool {
+        !(self.path_flags() & flags).is_empty()
+    }
+
+    /// ShapePaintContainer::invalidateStrokeEffects().
+    pub(crate) fn invalidate_stroke_effects(&self) {
+        let paints = Rc::clone(&self.paints.borrow());
+        for paint in paints.iter() {
+            paint.cells.invalidate_effects(&paint.handle);
+        }
+    }
+}
+
 impl Default for ShapePaintContainer {
     fn default() -> Self {
         Self {
-            path_flags: PathFlags::NONE,
             shape_paints: Vec::new(),
-            paints: Rc::new([]),
+            cells: Rc::default(),
         }
     }
 }
 
 impl ShapePaintContainer {
     pub fn add_path_flags(&mut self, flags: PathFlags) {
-        self.path_flags |= flags;
+        self.cells.flags.set(self.cells.flags.get() | flags);
     }
 
     pub fn from_component(component: &dyn CoreObject) -> Option<&Self> {
@@ -41,10 +83,16 @@ impl ShapePaintContainer {
         component.as_shape_paint_container_mut()
     }
 
+    pub(crate) fn cells(&self) -> &Rc<ContainerCells> {
+        &self.cells
+    }
+
     pub(crate) fn add_paint(&mut self, paint: CoreHandle, cells: Rc<PaintCells>) {
         self.shape_paints.push(paint.clone());
-        self.paints = self
+        let paints: Rc<[ContainerPaint]> = self
+            .cells
             .paints
+            .borrow()
             .iter()
             .map(|entry| ContainerPaint {
                 handle: entry.handle.clone(),
@@ -55,36 +103,27 @@ impl ShapePaintContainer {
                 cells,
             }))
             .collect();
+        *self.cells.paints.borrow_mut() = paints;
     }
 
-    /// ShapePaintContainer::pathFlags(): the container's own flags and every
-    /// paint's.
     pub fn path_flags(&self) -> PathFlags {
-        self.paints
-            .iter()
-            .fold(self.path_flags, |flags, paint| flags | paint.cells.path_flags())
+        self.cells.path_flags()
     }
 
     pub fn invalidate_stroke_effects(&mut self) {
-        Self::invalidate_paint_effects(&self.paints);
+        self.cells.invalidate_stroke_effects();
     }
 
     pub(crate) fn invalidate_stroke_effects_occurrence(owner: &CoreHandle) {
-        let paints = owner
+        let cells = owner
             .with(|object| {
                 object
                     .as_shape_paint_container()
-                    .map(|container| Rc::clone(&container.paints))
+                    .map(|container| Rc::clone(&container.cells))
             })
             .flatten();
-        if let Some(paints) = paints {
-            Self::invalidate_paint_effects(&paints);
-        }
-    }
-
-    fn invalidate_paint_effects(paints: &[ContainerPaint]) {
-        for paint in paints {
-            paint.cells.invalidate_effects(&paint.handle);
+        if let Some(cells) = cells {
+            cells.invalidate_stroke_effects();
         }
     }
 

@@ -4,7 +4,11 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     layout::layout_participant::LayoutParticipant,
     math::{aabb::Aabb, mat2d::Mat2D},
-    shapes::{paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags},
+    shapes::{
+        paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags, shape_cells::ShapeCells,
+        shape_paint_container::ContainerCells,
+    },
+    transform_component::TransformCells,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -13,18 +17,28 @@ pub struct RuntimePathComposerHandle(Rc<RefCell<PathComposer>>);
 
 impl RuntimePathComposerHandle {
     pub fn new() -> Self {
+        Self::for_shape(Rc::default(), Rc::default())
+    }
+
+    /// The composer of a Shape whose transform and paint container own these
+    /// cells; the composer creates the ShapeCells they share.
+    pub(crate) fn for_shape(transform: Rc<TransformCells>, paints: Rc<ContainerCells>) -> Self {
         Self(Rc::new_cyclic(|weak| {
+            let occurrence = ComponentOccurrenceHandle::PathComposer(weak.clone());
             let mut component = Component::default();
-            component
-                .bind_runtime_occurrence(ComponentOccurrenceHandle::PathComposer(weak.clone()));
+            component.bind_runtime_occurrence(occurrence.clone());
+            let cells = Rc::new(ShapeCells::new(
+                transform,
+                paints,
+                component.share_dirt(),
+                occurrence,
+            ));
             RefCell::new(PathComposer {
                 component,
-                shape: None,
+                cells,
                 local_path: ShapePaintPath::new(true),
                 world_path: ShapePaintPath::new(false),
                 local_clockwise_path: ShapePaintPath::new(true),
-                deferred_path_dirt: false,
-                shape_notified: false,
                 local_inputs: Vec::new(),
                 scratch_inputs: Vec::new(),
                 reported_intrinsic_bounds: Aabb::default(),
@@ -44,7 +58,10 @@ impl RuntimePathComposerHandle {
         f(&mut self.0.borrow_mut())
     }
     pub fn bind_shape(&self, shape: CoreHandle) {
-        self.0.borrow_mut().shape = Some(shape);
+        self.0.borrow().cells.bind_shape(shape);
+    }
+    pub(crate) fn cells(&self) -> Rc<ShapeCells> {
+        Rc::clone(&self.0.borrow().cells)
     }
     pub fn add_dependent(&self, dependent: impl Into<ComponentOccurrenceHandle>) {
         self.0.borrow_mut().component.add_dependent(dependent);
@@ -128,12 +145,12 @@ impl LocalPathInput {
 
 pub struct PathComposer {
     pub component: Component,
-    shape: Option<CoreHandle>,
+    // Shared with its Shape and the paths: the shape link and this
+    // composer's deferred/notified gates.
+    cells: Rc<ShapeCells>,
     local_path: ShapePaintPath,
     world_path: ShapePaintPath,
     local_clockwise_path: ShapePaintPath,
-    deferred_path_dirt: bool,
-    shape_notified: bool,
     local_inputs: Vec<LocalPathInput>,
     scratch_inputs: Vec<LocalPathInput>,
     reported_intrinsic_bounds: Aabb,
@@ -259,14 +276,17 @@ impl PathComposer {
         changed
     }
     pub fn shape(&self) -> CoreHandle {
-        self.shape.clone().expect("arena-installed Shape")
+        self.cells.shape().expect("arena-installed Shape")
+    }
+    pub(crate) fn cells_ref(&self) -> &Rc<ShapeCells> {
+        &self.cells
     }
 
     pub(crate) fn dirty_shape(&mut self) -> Option<CoreHandle> {
-        if !self.deferred_path_dirt || self.shape_notified {
+        if !self.cells.composer_deferred() || self.cells.composer_notified() {
             return None;
         }
-        self.shape_notified = true;
+        self.cells.set_composer_notified(true);
         Some(self.shape())
     }
 
@@ -287,7 +307,7 @@ impl PathComposer {
     }
 
     pub fn update(&mut self, value: ComponentDirt) -> Option<(CoreHandle, bool)> {
-        self.shape_notified = false;
+        self.cells.set_composer_notified(false);
         if !value.intersects(ComponentDirt::PATH | ComponentDirt::N_SLICER) {
             return None;
         }
@@ -308,10 +328,10 @@ impl PathComposer {
             })
             .expect("live PathComposer Shape");
         let Some((local, clockwise, world, transform, paths)) = inputs else {
-            self.deferred_path_dirt = true;
+            self.cells.set_composer_deferred(true);
             return None;
         };
-        self.deferred_path_dirt = false;
+        self.cells.set_composer_deferred(false);
         let rebuild_local = (local || clockwise) && self.local_inputs_changed();
         if local && rebuild_local {
             self.local_path.rewind();
@@ -417,13 +437,13 @@ mod tests {
         composer.bind_shape(shape.clone());
         composer.with_mut(|composer| {
             assert!(composer.update(ComponentDirt::PATH).is_none());
-            assert!(composer.deferred_path_dirt);
-            assert!(!composer.shape_notified);
+            assert!(composer.cells.composer_deferred());
+            assert!(!composer.cells.composer_notified());
             assert_eq!(composer.dirty_shape(), Some(shape.clone()));
             assert!(composer.dirty_shape().is_none());
             assert!(composer.update(ComponentDirt::N_SLICER).is_none());
-            assert!(composer.deferred_path_dirt);
-            assert!(!composer.shape_notified);
+            assert!(composer.cells.composer_deferred());
+            assert!(!composer.cells.composer_notified());
             assert_eq!(composer.dirty_shape(), Some(shape));
             assert!(composer.dirty_shape().is_none());
         });

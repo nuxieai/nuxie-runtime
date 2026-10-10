@@ -15,22 +15,17 @@ if [[ ! -f "$fixture" ]]; then
 fi
 
 # This is a compile/link matrix, not a packaging path. Its default dev archives
-# stay in Cargo's ignored target directory and are only intermediates for the
+# stay in the ignored target directory and are only intermediates for the
 # exact C and Swift smoke hosts below. Distribution sizing and XCFramework
 # assembly use optimized artifacts in the release pipeline.
 
-# The workspace may be entered with a Homebrew rustc, whose sysroot does not
-# contain rustup-installed Apple cross targets. Pin all matrix work to one
-# rustup toolchain unless the caller supplies an explicit Cargo binary.
+# Cargo only supplies the independent dependency metadata oracle below.
+# Bazel supplies the compiler, cross-target standard libraries, and archives.
 if [[ -n "${CARGO_BIN:-}" ]]; then
     cargo_cmd=("$CARGO_BIN")
-    rustc_cmd=("${RUSTC_BIN:-rustc}")
 else
     cargo_cmd=(rustup run stable cargo)
-    rustc_cmd=(rustup run stable rustc)
 fi
-rust_sysroot=$("${rustc_cmd[@]}" --print sysroot)
-rustc_path="$rust_sysroot/bin/rustc"
 
 if [[ "$profile" == dev ]]; then
     artifact_profile=debug
@@ -58,14 +53,10 @@ targets=(
     x86_64-apple-darwin
 )
 
-for target in "${targets[@]}"; do
-    if [[ ! -d "$rust_sysroot/lib/rustlib/$target/lib" ]]; then
-        echo "missing Rust target: $target" >&2
-        exit 2
-    fi
-done
-
-host_target=$("${rustc_cmd[@]}" -vV | awk '/^host:/ {print $2}')
+host_target=$(python3 "$repo_dir/tools/bazel_runtime_build.py" toolchain \
+    --repo-root "$repo_dir" \
+    --label //crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib \
+    --target aarch64-apple-ios | python3 -c 'import json,re,sys; print(re.search(r" host: (\S+)", json.load(sys.stdin)["version"]).group(1))')
 headers_dir="$work_dir/Headers"
 mkdir -p "$headers_dir"
 cp "$repo_dir/crates/nux-capi/include/nux_capi.h" "$headers_dir/"
@@ -105,13 +96,9 @@ for target in "${targets[@]}"; do
 
     sdk_path=$(xcrun --sdk "$sdk" --show-sdk-path)
     echo "building Nuxie Apple authored-data extension for $target"
-    IPHONEOS_DEPLOYMENT_TARGET=15.0 MACOSX_DEPLOYMENT_TARGET=12.0 \
-        SDKROOT="$sdk_path" \
-        BINDGEN_EXTRA_CLANG_ARGS="--target=${clang_target} --sysroot=${sdk_path}" \
-        RUSTC="$rustc_path" \
-        "${cargo_cmd[@]}" build --locked --manifest-path "$repo_dir/Cargo.toml" \
+    python3 "$repo_dir/tools/bazel/runtime.py" build --locked \
         -p nux-apple-product-extension --no-default-features --features apple-runtime \
-        --profile "$profile" --target "$target"
+        --profile "$profile" --target "$target" --target-dir "$target_root"
 
     artifact_dir="$target_root/$target/$artifact_profile"
     archive="$artifact_dir/libnux_apple_product_extension.a"

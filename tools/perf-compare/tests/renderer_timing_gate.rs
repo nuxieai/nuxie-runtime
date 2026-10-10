@@ -189,7 +189,9 @@ fn run_gate(gate: Gate<'_>) -> Output {
 }
 
 fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../renderer-timing-gate.sh");
+    let script =
+        Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+            .join("../renderer-timing-gate.sh");
     Command::new(script)
         .current_dir(gate.directory)
         .args(["--output-dir", "artifacts"])
@@ -203,7 +205,10 @@ fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
         )
         .env(
             "RENDERER_TIMING_GATE_MANIFEST",
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml"),
+            Path::new(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("renderer-scenes.toml"),
         )
         .env("RENDERER_TIMING_GATE_BASELINE_RUNNER", gate.baseline)
         .env("RENDERER_TIMING_GATE_A_RUNNER", gate.a)

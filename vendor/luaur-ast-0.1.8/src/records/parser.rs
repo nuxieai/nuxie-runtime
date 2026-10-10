@@ -21,8 +21,8 @@ use crate::records::ast_type_or_pack::AstTypeOrPack;
 use crate::records::ast_type_pack::AstTypePack;
 use crate::records::binding::Binding;
 use crate::records::comment::Comment;
-use crate::records::cst_type_instantiation::CstTypeInstantiation;
 use crate::records::cst_attr_list::CstAttrList;
+use crate::records::cst_type_instantiation::CstTypeInstantiation;
 use crate::records::function::Function;
 use crate::records::hot_comment::HotComment;
 use crate::records::lexeme::Lexeme;
@@ -60,7 +60,8 @@ pub struct Parser {
     pub(crate) type_function_depth: usize,
     pub(crate) local_map: DenseHashMap<AstName, *mut AstLocal>,
     pub(crate) local_stack: Vec<*mut AstLocal>,
-    pub(crate) classes_within_module: DenseHashMap<AstName, *mut crate::records::ast_stat_class::AstStatClass>,
+    pub(crate) classes_within_module:
+        DenseHashMap<AstName, *mut crate::records::ast_stat_class::AstStatClass>,
     pub(crate) parse_errors: Vec<ParseError>,
     pub(crate) match_recovery_stop_on_token: Vec<u32>,
     pub(crate) declared_export_bindings: DenseHashMap<AstName, Location>,

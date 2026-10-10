@@ -14,9 +14,13 @@ fn replay_and_compare(id: &str) {
     let upstream = PathBuf::from(
         std::env::var_os("RIVE_RUNTIME_DIR").expect("RIVE_RUNTIME_DIR pinned fixture checkout"),
     );
-    let manifest =
-        read_manifest(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../silver-corpus.toml"))
-            .unwrap();
+    let manifest = read_manifest(
+        &PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("../../silver-corpus.toml"),
+    )
+    .unwrap();
     let case = manifest.cases.iter().find(|case| case.id == id).unwrap();
     let actual = Execution::run(case, &upstream)
         .unwrap_or_else(|error| panic!("{id} replay failed: {error:#}"));

@@ -92,6 +92,12 @@ class EnsureRunnerIntegrationTest(unittest.TestCase):
         environment = mock.patch.dict(os.environ)
         environment.start()
         self.addCleanup(environment.stop)
+        # The synthetic fixture retains the known Cargo mtime failure as the
+        # independent oracle. Production uses the direct Bazel frontend, whose
+        # actual C ABI/native compilation is qualified separately.
+        compiler = mock.patch.object(guard, "runner_build_command", return_value=["cargo"])
+        compiler.start()
+        self.addCleanup(compiler.stop)
         os.environ.pop("CARGO_TARGET_DIR", None)
         self.raw = tempfile.TemporaryDirectory()
         self.addCleanup(self.raw.cleanup)
@@ -169,6 +175,14 @@ class EnsureRunnerIntegrationTest(unittest.TestCase):
         self.ensure()
         self.assertEqual(self.stamp(), first)
         self.assertEqual(artifact.stat().st_mtime_ns, before)
+
+    def test_bazel_configuration_change_invalidates_the_runner_stamp(self):
+        self.ensure()
+        before = self.stamp()["digest_state"]
+        (self.root / "MODULE.bazel").write_text('module(name = "probe", version = "0.1.0")\n')
+        self.ensure()
+        self.assertNotEqual(self.stamp()["digest_state"], before)
+        self.assertEqual(self.runner_output(), "1")
 
     def test_clobbered_uplift_is_restored_from_verified_copy(self):
         self.ensure()

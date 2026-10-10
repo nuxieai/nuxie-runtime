@@ -24,8 +24,10 @@ struct Transforms {
 fn fixture_transforms() -> Transforms {
     let path = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
         || {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/sync/nested_artboard_rotated.riv")
+            PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("../../fixtures/sync/nested_artboard_rotated.riv")
         },
         |root| {
             PathBuf::from(root).join("tests/unit_tests/assets/layout/nested_artboard_rotated.riv")

@@ -1,37 +1,16 @@
 #!/usr/bin/env python3
-"""Content-provenance guard for the Rust golden runners.
+"""Bind staged Rust golden runners to their source and build configuration.
 
-Cargo decides freshness by comparing source mtimes against timestamps it
-recorded when a crate last compiled. That check has no edge from file
-*content*: when a source file (most often the regenerated
-crates/nuxie-schema/src/generated/schema.rs) is rewritten while another cargo
-process is mid-compilation, the rewrite can land with an mtime that is not
-newer than the fingerprint cargo then records, and every later `cargo build`
-silently reuses the stale rlib. The golden gates then compare the pinned C++
-oracle against a Rust runner built from sources that no longer exist, failing
-large swaths of the corpus until an unrelated mtime bump heals the cache.
+The gate consumes binaries from the conventional target directory. A stamp
+binds each variant/profile binary hash to source digests, dependency pins,
+Bazel targets, and the Rust toolchain. A matching stamp reuses the binary;
+otherwise tools/bazel/runtime.py compiles the authored crates directly with
+Bazel and publishes the fresh executable atomically.
 
-This gives the Rust side the discipline runtime-provenance.sh gives librive:
-stamps that bind built artifacts to hashed inputs, with a forced honest
-rebuild whenever the two disagree.
-
-Model (all paths are relative to Cargo's resolved target directory):
-- golden-gate/rust-sources.json records a digest per workspace member
-  as of the last verified state. Invariant: every cached artifact for that
-  member in this target directory was compiled from content matching the
-  digest, or is absent. The invariant is restored by `cargo clean -p
-  <member>` for each member whose digest changed — a member with honest
-  mtimes would be rebuilt by cargo anyway, so the clean only adds work when
-  cargo's own tracking has been poisoned.
-- golden-gate/<variant>-<profile>.json binds the gate's runner binary
-  (by sha256) to the digest state and toolchain that produced it. A matching
-  stamp lets the gate reuse the binary without invoking cargo; any mismatch
-  forces a rebuild from the (now honest) caches.
-
-Residual gap, accepted and documented: if a member's content changes and then
-changes back between gate runs with backdated mtimes both times, and some
-process outside the gates relinked a runner meanwhile, the digest table
-cannot see it. The C++ provenance stamps carry the analogous residual.
+Cargo metadata still discovers workspace members and the target directory.
+Changed member digests clear any legacy Cargo artifacts in that directory,
+so pre-migration artifacts cannot survive a source change. Bazel's own build
+cache uses content fingerprints and does not depend on those Cargo mtimes.
 """
 
 from __future__ import annotations
@@ -168,8 +147,13 @@ def member_digest(repo_root: Path, directory: Path) -> str:
 
 def current_digest_state(repo_root: Path, members: dict[str, Path]) -> dict:
     workspace = hashlib.sha256()
-    for manifest in ("Cargo.toml", "Cargo.lock"):
-        workspace.update(sha256_path(repo_root / manifest).encode())
+    inputs = {repo_root / name for name in ("Cargo.toml", "Cargo.lock", "MODULE.bazel", "MODULE.bazel.lock", ".bazelversion", ".bazelrc", "BUILD.bazel")}
+    inputs.update(path for directory in (repo_root / "bazel", repo_root / "tools/bazel")
+                  for path in directory.rglob("*") if path.is_file() and "__pycache__" not in path.parts)
+    for path in sorted(inputs):
+        if path.is_file():
+            workspace.update(str(path.relative_to(repo_root)).encode())
+            workspace.update(sha256_path(path).encode())
     return {
         "schema": DIGEST_SCHEMA,
         "rustc": run(["rustc", "--version"], cwd=repo_root, capture=True).strip(),
@@ -304,7 +288,7 @@ def ensure_runner(repo_root: Path, variant: str, profile: str) -> None:
         )
         return
 
-    command = ["cargo", "build", "--quiet", "-p", RUNNER_PACKAGE]
+    command = [*runner_build_command(repo_root), "build", "--quiet", "-p", RUNNER_PACKAGE]
     if profile == "release":
         command.append("--release")
     for feature in settings["features"]:
@@ -312,7 +296,7 @@ def ensure_runner(repo_root: Path, variant: str, profile: str) -> None:
     uplift.unlink(missing_ok=True)
     run(command, cwd=repo_root)
     if not uplift.is_file():
-        raise ProvenanceError(f"cargo build produced no runner at {uplift}")
+        raise ProvenanceError(f"Bazel build produced no runner at {uplift}")
     run(["cp", str(uplift), str(artifact)], cwd=repo_root)
 
     verify_quiescent(repo_root, members, state)
@@ -332,6 +316,11 @@ def ensure_runner(repo_root: Path, variant: str, profile: str) -> None:
         f"rust runner provenance: rebuilt {variant} runner"
         + (f" after invalidating {', '.join(changed)}" if changed else "")
     )
+
+
+def runner_build_command(repo_root: Path) -> list[str]:
+    """Select the compiler entrypoint separately from the content stamp guard."""
+    return [str(repo_root / "tools/bazel/runtime.py")]
 
 
 def main() -> int:

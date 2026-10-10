@@ -439,8 +439,10 @@ fn identity_only_outer_save_produces_no_wrappers() {
 fn svg_clip_fixture_renders_one_def_and_merged_group() {
     let mut factory = PersistentFactory::new(SVGFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained SVGFactory");
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/svg_clip_test.riv");
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/svg_clip_test.riv");
     let bytes = std::fs::read(path).expect("pinned svg_clip_test.riv");
     let file = File::import(&bytes, retained, None, None, None).expect("SVG fixture import");
     let artboard = file

@@ -98,8 +98,10 @@ fn probe_fixture_path() -> Option<std::path::PathBuf> {
     if let Some(path) = std::env::var_os("NUX_PROBE_RIV") {
         return Some(path.into());
     }
-    let repository_fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/flow/data_binding_test.riv");
+    let repository_fixture = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/flow/data_binding_test.riv");
     repository_fixture.is_file().then_some(repository_fixture)
 }
 

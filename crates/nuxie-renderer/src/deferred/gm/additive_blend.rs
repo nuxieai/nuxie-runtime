@@ -355,7 +355,10 @@ pub(super) fn compare_scene(
     r.restore();
     let pixels = r.finish().expect("GM readback");
     let actual = pixel_compare::RgbaImage::new(600, height, pixels).expect("GM dimensions");
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join(format!(
         "../../fixtures/renderer/reference/metal/gm/{name}.png"
     ));
     let expected =

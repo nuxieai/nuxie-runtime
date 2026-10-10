@@ -34,14 +34,15 @@ def valid_build_inputs() -> tuple[dict[str, object], bytes, str]:
         "configuration": {
             "buildEnvironment": {},
             "buildProfile": "release-apple",
-            "cargo": "cargo 1.94.1",
-            "hostTarget": "aarch64-apple-darwin",
+            "buildSystem": "bazel", "bazel": "bazel 9.3.0",
+            "bazelTarget": "//crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib",
+            "bazelPlatforms": {target: f"//bazel/platforms:{target}" for target in APPLE_TARGETS},
             "minimumIOSVersion": "15.0",
             "minimumMacOSVersion": "12.0",
             "rustToolchain": "1.94.1",
-            "rustc": "rustc 1.94.1",
+            "rustc": "rustc 1.94.1 (abc) host: aarch64-apple-darwin",
             "rustLibraries": {"aarch64-apple-ios": "1" * 64},
-            "toolBinaries": {"cargo": "e" * 64, "rustc": "f" * 64},
+            "toolBinaries": {"bazel-launcher": "e" * 64, "rustc": "f" * 64},
             "sdk": {
                 "iphoneOS": "26.2 (23C53)",
                 "iphoneSimulator": "26.2 (23C53)",
@@ -51,7 +52,7 @@ def valid_build_inputs() -> tuple[dict[str, object], bytes, str]:
         },
         "features": ["apple-runtime"],
         "files": [
-            {"kind": "cargo-resolution", "path": "Cargo.lock", "sha256": "a" * 64}
+            {"kind": "bazel-input", "path": "Cargo.lock", "sha256": "a" * 64}
         ],
         "packages": [
             {
@@ -88,7 +89,7 @@ def valid_build_inputs() -> tuple[dict[str, object], bytes, str]:
             },
         ],
         "rootPackage": "nux-apple-product-extension",
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "targets": APPLE_TARGETS,
     }
     encoded = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()
@@ -276,7 +277,7 @@ class DistributionContractTests(unittest.TestCase):
         metadata = valid_distribution_metadata()
         target = "aarch64-apple-ios"
         build_inputs = {
-            "configuration": {"buildProfile": "release-apple", "rustc": "rustc 1.94.1"},
+            "configuration": {"buildProfile": "release-apple", "rustc": "rustc 1.94.1 (abc) host: aarch64-apple-darwin"},
             "packages": [
                 {
                     "name": "nux-apple-product-extension",
@@ -292,7 +293,7 @@ class DistributionContractTests(unittest.TestCase):
             "target": target,
             "profile": "release-apple",
             "features": "apple-runtime",
-            "rustc": "rustc 1.94.1",
+            "rustc": "rustc 1.94.1 (abc) host: aarch64-apple-darwin",
             "buildInputsHash": "c" * 64,
             "contractFingerprint": "b" * 64,
         }

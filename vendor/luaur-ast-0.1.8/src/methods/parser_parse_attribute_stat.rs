@@ -24,11 +24,8 @@ impl Parser {
                 self.parse_function_stat(&attributes, cst_attr_lists_ptr) as *mut AstStat
             }
             Type::ReservedLocal => {
-                let attr_loc = self.get_attribute_start_location(
-                    &attributes,
-                    &cst_attr_lists,
-                    start_location,
-                );
+                let attr_loc =
+                    self.get_attribute_start_location(&attributes, &cst_attr_lists, start_location);
 
                 self.parse_local(
                     attr_loc,

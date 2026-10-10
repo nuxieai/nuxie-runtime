@@ -259,7 +259,8 @@ impl<'a> Printer<'a> {
                         {
                             LUAU_ASSERT!(!a.indexer.is_null());
                             unsafe {
-                                if luaur_common::FFlag::LuauPrettyPrintVisualizeIndexerAccess.get() {
+                                if luaur_common::FFlag::LuauPrettyPrintVisualizeIndexerAccess.get()
+                                {
                                     let access = (*a.indexer).access;
                                     if access != AstTableAccess::ReadWrite {
                                         if let Some(loc) = (*a.indexer).access_location {

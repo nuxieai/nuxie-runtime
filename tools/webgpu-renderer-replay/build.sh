@@ -20,7 +20,7 @@ fi
 export RUSTC="$PINNED_RUSTC"
 export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=--export-table"
 
-"$PINNED_CARGO" build \
+python3 "$ROOT/tools/bazel/runtime.py" build \
   --release \
   --package webgpu-renderer-replay \
   --target wasm32-unknown-unknown

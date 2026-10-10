@@ -13,9 +13,11 @@ targets=(
 
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
+        'build-system: Bazel 9.3.0 / rules_rust 0.74.0' \
+        'bazel-target: //crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib' \
         'root-package: nux-apple-product-extension' \
         'feature-set: apple-runtime' \
-        'thin-builds: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin' \
+        "thin-builds: ${targets[*]}" \
         'artifact full-apple: all five thin builds' \
         'artifact ios-only: first three thin builds'
     exit 0
@@ -43,19 +45,24 @@ profile="${NUX_APPLE_PROFILE:-release-apple}"
 deployment_target="${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}"
 macos_deployment_target="${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}"
 rust_toolchain="${NUX_APPLE_RUST_TOOLCHAIN:-1.94.1}"
-rust_cargo="$(rustup which --toolchain "${rust_toolchain}" cargo)"
-rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
-rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
-rust_sysroot="$("${rust_compiler}" --print sysroot)"
-rust_llvm_objcopy="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-objcopy"
+if [[ "${profile}" != "release-apple" || "${rust_toolchain}" != "1.94.1" ]]; then
+    echo "Apple distribution requires release-apple and Rust 1.94.1" >&2
+    exit 3
+fi
+selected_toolchain="$(python3 "${script_dir}/bazel_runtime_build.py" toolchain \
+    --repo-root "${repo_root}" \
+    --label //crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib \
+    --target aarch64-apple-ios \
+    --minimum-ios-version "${deployment_target}" \
+    --minimum-macos-version "${macos_deployment_target}")"
+rust_llvm_objcopy="$(printf '%s' "${selected_toolchain}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["objcopy"])')"
+rustc_version="$(printf '%s' "${selected_toolchain}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
 xcodebuild_path="$(command -v xcodebuild)"
 lipo_path="$(command -v lipo)"
 ditto_path="$(command -v ditto)"
 swift_path="$(command -v swift)"
 clang_path="$(xcrun --find clang)"
 strip_path="$(xcrun --find strip)"
-rustc_version="$("${rust_compiler}" -vV | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
-cargo_version="$("${rust_cargo}" -Vv | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-apple-product-extension/Cargo.toml" | head -1)"
 source_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
 
@@ -67,15 +74,8 @@ if [[ ! -x "${rust_llvm_objcopy}" ]]; then
     echo "missing pinned llvm-objcopy for Rust ${rust_toolchain}" >&2
     exit 3
 fi
-for target in "${targets[@]}"; do
-    if ! rustup target list --toolchain "${rust_toolchain}" --installed | grep -qx "${target}"; then
-        echo "missing Rust target ${target} for toolchain ${rust_toolchain}" >&2
-        exit 3
-    fi
-done
 
 build_root="${output_root}/build"
-cargo_target_dir="${build_root}/cargo"
 stripped_root="${build_root}/stripped"
 headers_dir="${build_root}/Headers"
 universal_root="${build_root}/universal"
@@ -122,21 +122,12 @@ xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
 iphoneos_sdk="$(xcrun --sdk iphoneos --show-sdk-version) ($(xcrun --sdk iphoneos --show-sdk-build-version))"
 iphonesimulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-version) ($(xcrun --sdk iphonesimulator --show-sdk-build-version))"
 macos_sdk="$(xcrun --sdk macosx --show-sdk-version) ($(xcrun --sdk macosx --show-sdk-build-version))"
-iphoneos_sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
-iphonesimulator_sdk_path="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-macos_sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
-
 build_inputs_hash="$(
     python3 "${script_dir}/apple_runtime_input_digest.py" \
         write "${build_inputs_path}" \
         --repo-root "${repo_root}" \
-        --cargo "${rust_cargo}" \
-        --root-package nux-apple-product-extension \
-        --feature apple-runtime \
         --build-profile "${profile}" \
         --rust-toolchain "${rust_toolchain}" \
-        --rustc-version "${rustc_version}" \
-        --cargo-version "${cargo_version}" \
         --xcode-version "${xcode_version}" \
         --xcode-build "${xcode_build}" \
         --iphoneos-sdk "${iphoneos_sdk}" \
@@ -144,8 +135,6 @@ build_inputs_hash="$(
         --macos-sdk "${macos_sdk}" \
         --minimum-ios-version "${deployment_target}" \
         --minimum-macos-version "${macos_deployment_target}" \
-        --tool "cargo=${rust_cargo}" \
-        --tool "rustc=${rust_compiler}" \
         --tool "llvm-objcopy=${rust_llvm_objcopy}" \
         --tool "strip=${strip_path}" \
         --tool "xcodebuild=${xcodebuild_path}" \
@@ -156,55 +145,20 @@ build_inputs_hash="$(
 )"
 
 for target in "${targets[@]}"; do
-    case "${target}" in
-        aarch64-apple-ios)
-            sdk_path="${iphoneos_sdk_path}"
-            clang_target="arm64-apple-ios${deployment_target}"
-            ;;
-        aarch64-apple-ios-sim)
-            sdk_path="${iphonesimulator_sdk_path}"
-            clang_target="arm64-apple-ios${deployment_target}-simulator"
-            ;;
-        x86_64-apple-ios)
-            sdk_path="${iphonesimulator_sdk_path}"
-            clang_target="x86_64-apple-ios${deployment_target}-simulator"
-            ;;
-        aarch64-apple-darwin)
-            sdk_path="${macos_sdk_path}"
-            clang_target="arm64-apple-macos${macos_deployment_target}"
-            ;;
-        x86_64-apple-darwin)
-            sdk_path="${macos_sdk_path}"
-            clang_target="x86_64-apple-macos${macos_deployment_target}"
-            ;;
-        *)
-            echo "unsupported Apple release target: ${target}" >&2
-            exit 3
-            ;;
-    esac
-    IPHONEOS_DEPLOYMENT_TARGET="${deployment_target}" \
-    MACOSX_DEPLOYMENT_TARGET="${macos_deployment_target}" \
-    SDKROOT="${sdk_path}" \
-    BINDGEN_EXTRA_CLANG_ARGS="--target=${clang_target} --sysroot=${sdk_path}" \
+    mkdir -p "${stripped_root}/${target}"
     NUX_RUNTIME_BUILD_INPUTS_HASH="${build_inputs_hash}" \
     NUX_RUNTIME_BUILD_PROFILE="${profile}" \
     NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \
     NUX_RUNTIME_RUSTC_VERSION="${rustc_version}" \
     NUX_RUNTIME_SOURCE_REVISION="${source_revision}" \
     NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE="nux-apple-product-extension" \
-    CARGO_TARGET_DIR="${cargo_target_dir}" \
-    RUSTC="${rust_compiler}" \
-        "${rust_cargo}" build \
-            --manifest-path "${repo_root}/Cargo.toml" \
-            --locked \
-            --package nux-apple-product-extension \
-            --no-default-features \
-            --features apple-runtime \
-            --profile "${profile}" \
-            --target "${target}"
-    mkdir -p "${stripped_root}/${target}"
-    cp "${cargo_target_dir}/${target}/${profile}/libnux_apple_product_extension.a" \
-        "${stripped_root}/${target}/libnux_apple_product_extension.a"
+        python3 "${script_dir}/bazel_runtime_build.py" build \
+            --repo-root "${repo_root}" \
+            --label //crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib \
+            --target "${target}" \
+            --minimum-ios-version "${deployment_target}" \
+            --minimum-macos-version "${macos_deployment_target}" \
+            --output "${stripped_root}/${target}/libnux_apple_product_extension.a"
     "${rust_llvm_objcopy}" \
         --remove-section=__LLVM,__bitcode \
         --remove-section=__LLVM,__cmdline \

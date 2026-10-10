@@ -1060,7 +1060,9 @@ fn object_supports_property_follows_cpp_registry_semantics() {
 /// not the current C++ authority (checked separately in cpp_generated_headers).
 /// Nuxie extensions are not upstream metadata and are excluded here.
 fn schema_defs_json() -> BTreeMap<String, Value> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../defs");
+    let root =
+        Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+            .join("../../defs");
     let mut defs = read_defs_json(&root.join("upstream-runtime"));
     defs.extend(read_defs_json(&root.join("upstream-reconciliation")));
     defs.extend(read_defs_json(&root.join("upstream-overlay")));

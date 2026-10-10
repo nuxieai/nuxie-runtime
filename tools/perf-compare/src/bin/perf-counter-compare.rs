@@ -90,7 +90,10 @@ struct Options {
 
 impl Options {
     fn parse(args: impl IntoIterator<Item = String>) -> Result<Self, String> {
-        let mut manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml");
+        let mut manifest = PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("renderer-scenes.toml");
         let mut baseline_runner = None;
         let mut candidate_runner = None;
         let mut baseline_source_id = None;

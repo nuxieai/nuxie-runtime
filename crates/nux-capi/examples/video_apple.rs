@@ -131,7 +131,7 @@ mod proof {
             };
             let source = format!(
                 "{}/../../fixtures/video/red-blue-sync.mp4",
-                env!("CARGO_MANIFEST_DIR")
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR"))
             );
             let bytes = scene(&source);
             let (mut renderer, mut result) = (ptr::null_mut(), ptr::null_mut());
@@ -313,7 +313,7 @@ mod proof {
             };
             let source = format!(
                 "{}/../../fixtures/video/red-blue-audio.mp4",
-                env!("CARGO_MANIFEST_DIR")
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR"))
             );
             let bytes = scene(&source);
             let (mut renderer, mut result, mut file, mut artboard, mut player) = (

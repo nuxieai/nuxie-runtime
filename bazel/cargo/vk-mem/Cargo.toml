@@ -1,0 +1,30 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "vk-mem"
+version = "0.5.0"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+name = "vk_mem"
+
+[features]
+"__bazel_dependency_default" = ["loaded"]
+"generate_bindings" = ["bindgen"]
+"linked" = ["ash/linked"]
+"loaded" = ["ash/loaded"]
+"recording" = []
+"default" = []
+
+[dependencies]
+"ash" = { "version" = "0.38", "default-features" = false }
+"bitflags" = { "version" = "2.5" }
+
+[build-dependencies]
+"bindgen" = { "version" = "0.69", "optional" = true }
+"cc" = { "version" = "1.0" }

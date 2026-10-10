@@ -113,9 +113,11 @@ fn corpus_script_assets_carry_luau_bytecode_not_source() {
 /// matrix row must bind to an exact recorded fixture hash rather than
 /// whatever revision the local runtime checkout has.
 fn sync_fixture_path(name: &str) -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync")
-        .join(name)
+    std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync")
+    .join(name)
 }
 
 #[cfg(feature = "luau")]

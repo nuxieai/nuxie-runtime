@@ -21,7 +21,7 @@ cargo tree \
   --format '{p}' >"$dependency_tree"
 python3 "$repo_root/tools/check-native-metal-product-dependencies.py" <"$dependency_tree"
 
-cargo build \
+"$repo_root/tools/bazel/runtime.py" build \
   --manifest-path "$repo_root/Cargo.toml" \
   --profile release-size \
   -p renderer-replay \

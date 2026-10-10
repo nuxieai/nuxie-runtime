@@ -22,8 +22,10 @@ fn artboard() -> Artboard {
 
 fn with_text(f: impl FnOnce(&CoreHandle)) {
     // A real imported/shaped Text gives public, source-valid nonzero bounds.
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/text_style_background.riv");
+    let fixture = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/text_style_background.riv");
     let bytes = std::fs::read(&fixture).expect("pinned text_style_background fixture");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");

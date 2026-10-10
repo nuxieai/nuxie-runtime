@@ -197,6 +197,14 @@ impl ComponentOccurrenceHandle {
     pub(crate) fn notify_artboard(&self) {
         self.with_component(Component::notify_artboard);
     }
+    /// A runtime helper whose owning Shape/TextStyle still retains it.
+    pub(crate) fn is_live_helper(&self) -> bool {
+        match self {
+            Self::PathComposer(handle) => handle.strong_count() > 0,
+            Self::TextVariationHelper(handle) => handle.strong_count() > 0,
+            Self::Authored(_) => false,
+        }
+    }
     /// The runtime helpers' onDirty (PathComposer::onDirty; the variation
     /// helper has none), for a graph member whose dirt is already set.
     pub(crate) fn on_dirty_helper(&self, dirt: ComponentDirt) {
@@ -887,10 +895,14 @@ enum ComponentDirtStorage {
     Artboard(RuntimeArtboardDirtyHandle),
     // A member of its initialized Artboard's ComponentGraph: the graph's dirt
     // column at this graph order is the only copy.
-    Graph(
-        std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
-        u32,
-    ),
+    Graph(GraphDirt),
+}
+
+/// A graph member's dirt: its slot in the graph's shared node array (read
+/// directly, without going through the graph) plus the graph for notification.
+struct GraphDirt {
+    dirt: crate::mechanical_port::source::component_graph::DirtBinding,
+    graph: std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
 }
 
 // A separate Background can read TextStylePaint's actual parent while a
@@ -986,7 +998,10 @@ impl Component {
             return;
         }
         graph.set_dirt(index, self.dirt());
-        self.dirt = ComponentDirtStorage::Graph(graph, index);
+        self.dirt = ComponentDirtStorage::Graph(GraphDirt {
+            dirt: graph.dirt_binding(index),
+            graph,
+        });
     }
 
     pub(crate) fn graph_binding(
@@ -996,7 +1011,7 @@ impl Component {
         u32,
     )> {
         match &self.dirt {
-            ComponentDirtStorage::Graph(graph, index) => Some((graph, *index)),
+            ComponentDirtStorage::Graph(binding) => Some((&binding.graph, binding.dirt.index())),
             _ => None,
         }
     }
@@ -1046,8 +1061,8 @@ impl Component {
     }
 
     pub(crate) fn notify_artboard(&self) {
-        if let ComponentDirtStorage::Graph(graph, index) = &self.dirt {
-            graph.notify_artboard(*index);
+        if let ComponentDirtStorage::Graph(binding) = &self.dirt {
+            binding.graph.notify_artboard(binding.dirt.index());
             return;
         }
         if let Some(dirty) = self
@@ -1226,7 +1241,7 @@ impl Component {
     pub fn dirt(&self) -> ComponentDirt {
         match &self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt,
-            ComponentDirtStorage::Graph(graph, index) => graph.dirt(*index),
+            ComponentDirtStorage::Graph(binding) => binding.dirt.get(),
             ComponentDirtStorage::Artboard(dirty) => Self::artboard_dirt(dirty),
         }
     }
@@ -1241,7 +1256,7 @@ impl Component {
     pub fn set_dirt(&mut self, value: ComponentDirt) {
         match &mut self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt = value,
-            ComponentDirtStorage::Graph(graph, index) => graph.set_dirt(*index, value),
+            ComponentDirtStorage::Graph(binding) => binding.dirt.set(value),
             ComponentDirtStorage::Artboard(dirty) => dirty.set_component_dirt(value),
         }
     }

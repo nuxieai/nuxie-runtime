@@ -21,32 +21,47 @@ use crate::mechanical_port::source::{
 };
 
 type UpdateHandler = fn(&CoreHandle, ComponentDirt) -> bool;
+type DirtyHandler = fn(&CoreHandle, ComponentDirt);
 
-#[derive(Clone, Copy)]
-enum Entry {
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum Kind {
     /// The root or another occurrence whose dirt lives outside the graph.
     Outside,
     /// An authored Component whose onDirty is Component's empty default.
-    Noop(Option<UpdateHandler>),
+    Noop,
     /// An authored Component whose onDirty runs after the payload borrow.
-    Handler(fn(&CoreHandle, ComponentDirt), Option<UpdateHandler>),
+    Handler,
     /// An authored Component whose onDirty runs inside the payload borrow.
-    Receiver(Option<UpdateHandler>),
+    Receiver,
     /// Runtime helpers (PathComposer, TextVariationHelper).
     Helper,
 }
 
-enum Dependent {
-    Member(u32),
-    Outside(ComponentOccurrenceHandle),
+/// Everything a cascade step reads, packed so one load fetches it.
+struct Node {
+    dirt: Cell<ComponentDirt>,
+    // Cleared when an authored member's occurrence retires.
+    alive: Cell<bool>,
+    kind: Kind,
+    dependents_start: u32,
+    dependents_end: u32,
 }
 
+/// Dependents are graph orders; this bit marks an index into `outside`
+/// (occurrences that are not graph members, such as DrawTargets).
+const OUTSIDE_DEPENDENT: u32 = 1 << 31;
+
 pub(crate) struct ComponentGraph {
-    dirt: Box<[Cell<ComponentDirt>]>,
-    entries: Box<[Entry]>,
+    // Shared with each member's DirtBinding so Components read their own
+    // dirt directly.
+    nodes: Rc<[Node]>,
+    dependents: Box<[u32]>,
+    // Cold, per member: only real onDirty/update work and fallbacks read these.
+    on_dirty: Box<[Option<DirtyHandler>]>,
+    update: Box<[Option<UpdateHandler>]>,
     occurrences: Box<[ComponentOccurrenceHandle]>,
-    dependents_start: Box<[u32]>,
-    dependents: Box<[Dependent]>,
+    outside: Box<[ComponentOccurrenceHandle]>,
     artboard: RuntimeArtboardDirtyHandle,
 }
 
@@ -58,72 +73,84 @@ impl ComponentGraph {
         order: &[ComponentOccurrenceHandle],
         artboard: RuntimeArtboardDirtyHandle,
     ) -> Rc<Self> {
-        let index_of = |occurrence: &ComponentOccurrenceHandle| -> Option<u32> {
-            // Graph order is the dependency-order index for every member.
-            let order_index = occurrence
-                .with_component(|component| component.graph_order())
-                .filter(|&value| value != u32::MAX)?;
-            (order.get(order_index as usize) == Some(occurrence)).then_some(order_index)
-        };
-        let mut entries = Vec::with_capacity(order.len());
+        let mut kinds = Vec::with_capacity(order.len());
+        let mut on_dirty = Vec::with_capacity(order.len());
+        let mut update = Vec::with_capacity(order.len());
         let mut dirt = Vec::with_capacity(order.len());
-        let mut dependents_start = Vec::with_capacity(order.len() + 1);
-        let mut dependents = Vec::new();
         for occurrence in order {
-            dependents_start.push(dependents.len() as u32);
-            let entry = match occurrence {
-                ComponentOccurrenceHandle::Authored(handle) if handle == root => Entry::Outside,
+            let (kind, handler, update_handler) = match occurrence {
+                ComponentOccurrenceHandle::Authored(handle) if handle == root => {
+                    (Kind::Outside, None, None)
+                }
                 ComponentOccurrenceHandle::Authored(handle) => handle
                     .with(|object| {
-                        let update = object.component_update_handler();
+                        let update_handler = object.component_update_handler();
                         if let Some(handler) = object.component_on_dirty_handler() {
-                            Entry::Handler(handler, update)
+                            (Kind::Handler, Some(handler), update_handler)
                         } else if object.component_on_dirty_is_noop() {
-                            Entry::Noop(update)
+                            (Kind::Noop, None, update_handler)
                         } else {
-                            Entry::Receiver(update)
+                            (Kind::Receiver, None, update_handler)
                         }
                     })
-                    .unwrap_or(Entry::Outside),
-                _ => Entry::Helper,
+                    .unwrap_or((Kind::Outside, None, None)),
+                _ => (Kind::Helper, None, None),
             };
-            dirt.push(Cell::new(
+            kinds.push(kind);
+            on_dirty.push(handler);
+            update.push(update_handler);
+            dirt.push(
                 occurrence
                     .with_component(|component| component.dirt())
                     .unwrap_or(ComponentDirt::NONE),
-            ));
-            entries.push(entry);
+            );
+        }
+        // Graph order is the dependency-order index for every member.
+        let member_index = |occurrence: &ComponentOccurrenceHandle| -> Option<u32> {
+            let index = occurrence
+                .with_component(|component| component.graph_order())
+                .filter(|&value| value != u32::MAX)?;
+            (order.get(index as usize) == Some(occurrence)
+                && kinds[index as usize] != Kind::Outside)
+                .then_some(index)
+        };
+        let mut nodes = Vec::with_capacity(order.len());
+        let mut dependents = Vec::new();
+        let mut outside = Vec::new();
+        for (index, occurrence) in order.iter().enumerate() {
+            let start = dependents.len() as u32;
             for dependent in occurrence
                 .with_component(|component| component.dependents_snapshot())
                 .unwrap_or_default()
                 .iter()
             {
-                dependents.push(match index_of(dependent) {
-                    Some(index) => Dependent::Member(index),
-                    None => Dependent::Outside(dependent.clone()),
+                dependents.push(match member_index(dependent) {
+                    Some(member) => member,
+                    None => {
+                        outside.push(dependent.clone());
+                        (outside.len() as u32 - 1) | OUTSIDE_DEPENDENT
+                    }
                 });
             }
-        }
-        dependents_start.push(dependents.len() as u32);
-        // Members are classified only once every entry is known: a dependent
-        // in the order but Outside (the root) keeps the occurrence path.
-        for dependent in &mut dependents {
-            if let Dependent::Member(index) = *dependent
-                && matches!(entries[index as usize], Entry::Outside)
-            {
-                *dependent = Dependent::Outside(order[index as usize].clone());
-            }
+            nodes.push(Node {
+                dirt: Cell::new(dirt[index]),
+                alive: Cell::new(true),
+                kind: kinds[index],
+                dependents_start: start,
+                dependents_end: dependents.len() as u32,
+            });
         }
         let graph = Rc::new(Self {
-            dirt: dirt.into_boxed_slice(),
-            entries: entries.into_boxed_slice(),
-            occurrences: order.to_vec().into_boxed_slice(),
-            dependents_start: dependents_start.into_boxed_slice(),
+            nodes: Rc::from(nodes),
             dependents: dependents.into_boxed_slice(),
+            on_dirty: on_dirty.into_boxed_slice(),
+            update: update.into_boxed_slice(),
+            occurrences: order.to_vec().into_boxed_slice(),
+            outside: outside.into_boxed_slice(),
             artboard,
         });
         for (index, occurrence) in order.iter().enumerate() {
-            if matches!(graph.entries[index], Entry::Outside) {
+            if graph.nodes[index].kind == Kind::Outside {
                 continue;
             }
             occurrence.with_component_mut(|component| {
@@ -136,14 +163,23 @@ impl ComponentGraph {
         graph
     }
 
-    #[inline]
-    pub(crate) fn dirt(&self, index: u32) -> ComponentDirt {
-        self.dirt[index as usize].get()
+    pub(crate) fn mark_retired(&self, index: u32) {
+        if let Some(node) = self.nodes.get(index as usize) {
+            node.alive.set(false);
+        }
+    }
+
+    /// A member Component's handle on its own dirt in the shared node array.
+    pub(crate) fn dirt_binding(&self, index: u32) -> DirtBinding {
+        DirtBinding {
+            nodes: Rc::clone(&self.nodes),
+            index,
+        }
     }
 
     #[inline]
     pub(crate) fn set_dirt(&self, index: u32, value: ComponentDirt) {
-        self.dirt[index as usize].set(value);
+        self.nodes[index as usize].dirt.set(value);
     }
 
     /// Artboard::onComponentDirty for a member: its graph order is its index.
@@ -155,55 +191,97 @@ impl ComponentGraph {
     /// Component::addDirt for a member reached without a held payload borrow.
     pub(crate) fn add_dirt(&self, index: u32, value: ComponentDirt, recurse: bool) -> bool {
         let i = index as usize;
-        let entry = self.entries[i];
-        let occurrence = &self.occurrences[i];
-        if matches!(entry, Entry::Outside) {
-            return occurrence.add_dirt(value, recurse);
+        if self.nodes[i].kind == Kind::Outside {
+            return self.occurrences[i].add_dirt(value, recurse);
         }
-        if let ComponentOccurrenceHandle::Authored(handle) = occurrence
-            && !handle.is_current_generation()
-        {
+        if !self.mark(i, value) {
             return false;
         }
-        let cell = &self.dirt[i];
-        let dirt = cell.get();
-        if dirt.contains(value) {
-            return false;
-        }
-        let dirt = dirt | value;
-        cell.set(dirt);
-        match (entry, occurrence) {
-            (Entry::Noop(_), _) => {}
-            (Entry::Handler(handler, _), ComponentOccurrenceHandle::Authored(handle)) => {
-                handler(handle, dirt)
-            }
-            (Entry::Receiver(_), ComponentOccurrenceHandle::Authored(handle)) => {
-                handle.with_mut(|object| {
-                    object.component_on_dirty(dirt);
-                });
-            }
-            (Entry::Helper, helper) => helper.on_dirty_helper(dirt),
-            _ => unreachable!("authored entries hold authored occurrences"),
-        }
-        self.notify_artboard(index);
         if recurse {
             self.add_dirt_to_dependents(index, value);
         }
         true
     }
 
-    /// DependencyHelper::addDirtToDependents over the static edges.
+    /// Component::addDirt's own work for member `i`: the duplicate-bit return,
+    /// the dirt write, onDirty and the Artboard notification. Returns whether
+    /// it added dirt (so the caller continues into its dependents).
+    #[inline]
+    fn mark(&self, i: usize, value: ComponentDirt) -> bool {
+        let node = &self.nodes[i];
+        let live = match node.kind {
+            Kind::Helper => self.occurrences[i].is_live_helper(),
+            // Retired authored members behave like a stale handle.
+            _ => node.alive.get(),
+        };
+        if !live {
+            return false;
+        }
+        let dirt = node.dirt.get();
+        if dirt.contains(value) {
+            return false;
+        }
+        let dirt = dirt | value;
+        node.dirt.set(dirt);
+        match node.kind {
+            Kind::Noop => {}
+            Kind::Handler => {
+                let handler = self.on_dirty[i].expect("handler kind records its handler");
+                handler(self.authored(i), dirt)
+            }
+            Kind::Receiver => {
+                self.authored(i).with_mut(|object| {
+                    object.component_on_dirty(dirt);
+                });
+            }
+            Kind::Helper => self.occurrences[i].on_dirty_helper(dirt),
+            Kind::Outside => unreachable!("outside occurrences keep their own path"),
+        }
+        self.notify_artboard(i as u32);
+        true
+    }
+
+    #[inline]
+    fn authored(&self, i: usize) -> &CoreHandle {
+        match &self.occurrences[i] {
+            ComponentOccurrenceHandle::Authored(handle) => handle,
+            _ => unreachable!("authored entries hold authored occurrences"),
+        }
+    }
+
+    /// DependencyHelper::addDirtToDependents over the static edges, as an
+    /// explicit depth-first walk: each dependent's whole cascade finishes
+    /// before its next sibling, exactly as upstream's recursion orders it.
     pub(crate) fn add_dirt_to_dependents(&self, index: u32, value: ComponentDirt) {
-        let start = self.dependents_start[index as usize] as usize;
-        let end = self.dependents_start[index as usize + 1] as usize;
-        for dependent in &self.dependents[start..end] {
-            match dependent {
-                Dependent::Member(member) => {
-                    self.add_dirt(*member, value, true);
-                }
-                Dependent::Outside(occurrence) => {
-                    occurrence.add_dirt(value, true);
-                }
+        let node = &self.nodes[index as usize];
+        let (mut position, mut end) = (node.dependents_start, node.dependents_end);
+        let mut stack = CascadeStack::new();
+        loop {
+            if position == end {
+                let Some((resume, resume_end)) = stack.pop() else {
+                    return;
+                };
+                (position, end) = (resume, resume_end);
+                continue;
+            }
+            let dependent = self.dependents[position as usize];
+            position += 1;
+            if dependent & OUTSIDE_DEPENDENT != 0 {
+                self.outside[(dependent & !OUTSIDE_DEPENDENT) as usize].add_dirt(value, true);
+                continue;
+            }
+            let member = dependent as usize;
+            if self.nodes[member].kind == Kind::Outside {
+                self.occurrences[member].add_dirt(value, true);
+                continue;
+            }
+            if !self.mark(member, value) {
+                continue;
+            }
+            let child = &self.nodes[member];
+            if child.dependents_start != child.dependents_end {
+                stack.push((position, end));
+                (position, end) = (child.dependents_start, child.dependents_end);
             }
         }
     }
@@ -213,7 +291,7 @@ impl ComponentGraph {
     /// held while components update.
     pub(crate) fn update_components(&self) {
         let dirty = &self.artboard;
-        let count = self.entries.len();
+        let count = self.nodes.len();
         let mut step = 0;
         while step < 100 && dirty.has_component_dirt() {
             dirty.clear_components_dirt();
@@ -231,35 +309,28 @@ impl ComponentGraph {
     }
 
     fn update_entry(&self, i: usize) -> bool {
-        let occurrence = &self.occurrences[i];
-        let update = match self.entries[i] {
-            Entry::Outside => return occurrence.update_if_dirty(),
-            Entry::Helper => {
-                let cell = &self.dirt[i];
-                let dirt = cell.get();
+        let node = &self.nodes[i];
+        match node.kind {
+            Kind::Outside => return self.occurrences[i].update_if_dirty(),
+            Kind::Helper => {
+                let dirt = node.dirt.get();
                 if !needs_update(dirt) {
                     return false;
                 }
-                cell.set(ComponentDirt::NONE);
-                occurrence.update_helper(dirt);
+                node.dirt.set(ComponentDirt::NONE);
+                self.occurrences[i].update_helper(dirt);
                 return true;
             }
-            Entry::Noop(update) | Entry::Handler(_, update) | Entry::Receiver(update) => update,
-        };
-        let ComponentOccurrenceHandle::Authored(handle) = occurrence else {
-            unreachable!("authored entries hold authored occurrences");
-        };
-        assert!(
-            handle.is_current_generation(),
-            "live component in dependency graph"
-        );
-        let cell = &self.dirt[i];
-        let dirt = cell.get();
+            Kind::Noop | Kind::Handler | Kind::Receiver => {}
+        }
+        assert!(node.alive.get(), "live component in dependency graph");
+        let dirt = node.dirt.get();
         if !needs_update(dirt) {
             return false;
         }
-        cell.set(ComponentDirt::NONE);
-        if let Some(update) = update {
+        node.dirt.set(ComponentDirt::NONE);
+        let handle = self.authored(i);
+        if let Some(update) = self.update[i] {
             update(handle, dirt);
         } else {
             handle.with_mut(|object| object.component_update(dirt));
@@ -271,4 +342,69 @@ impl ComponentGraph {
 #[inline]
 fn needs_update(dirt: ComponentDirt) -> bool {
     dirt != ComponentDirt::NONE && !dirt.contains(ComponentDirt::COLLAPSED)
+}
+
+/// Resume points for add_dirt_to_dependents: inline for typical depths,
+/// spilling to the heap only for unusually deep dependency chains.
+struct CascadeStack {
+    inline: [(u32, u32); 32],
+    len: usize,
+    spill: Vec<(u32, u32)>,
+}
+
+impl CascadeStack {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            inline: [(0, 0); 32],
+            len: 0,
+            spill: Vec::new(),
+        }
+    }
+
+    #[inline]
+    fn push(&mut self, entry: (u32, u32)) {
+        if self.len < self.inline.len() {
+            self.inline[self.len] = entry;
+            self.len += 1;
+        } else {
+            self.spill.push(entry);
+        }
+    }
+
+    #[inline]
+    fn pop(&mut self) -> Option<(u32, u32)> {
+        if let Some(entry) = self.spill.pop() {
+            return Some(entry);
+        }
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        Some(self.inline[self.len])
+    }
+}
+
+/// One member's dirt in its graph's node array. The graph order doubles as the
+/// index; edges and order are fixed once the graph is built.
+pub(crate) struct DirtBinding {
+    nodes: Rc<[Node]>,
+    index: u32,
+}
+
+impl DirtBinding {
+    #[inline]
+    pub(crate) fn get(&self) -> ComponentDirt {
+        self.nodes[self.index as usize].dirt.get()
+    }
+
+    #[inline]
+    pub(crate) fn set(&self, value: ComponentDirt) {
+        self.nodes[self.index as usize].dirt.set(value);
+    }
+
+    #[inline]
+    pub(crate) fn index(&self) -> u32 {
+        self.index
+    }
 }

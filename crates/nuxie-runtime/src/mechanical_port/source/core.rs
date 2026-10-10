@@ -319,6 +319,15 @@ impl CoreArenaSlot {
             runtime_artboard: RefCell::new(None),
         }
     }
+    /// Mark this occurrence retired in its Artboard graph (so cascades and the
+    /// walk see it as gone without visiting this slot), then drop the graph.
+    fn retire_component_graph_member(&self) {
+        let order = self.component_graph_order.take();
+        if let (Some(graph), Some(order)) = (self.component_graph.take(), order) {
+            graph.mark_retired(order);
+        }
+    }
+
     fn lease(&self) -> CoreSlotLease<'_> {
         self.retirement.leases.set(
             self.retirement
@@ -360,8 +369,7 @@ impl CoreArenaSlot {
         self.source_global_id.set(None);
         self.core_type.set(0);
         self.type_predicate.set(None);
-        self.component_graph_order.set(None);
-        let _component_graph = self.component_graph.take();
+        self.retire_component_graph_member();
 
         // First invalidate identity, then release fields in their original
         // declaration order. An aggregate's drop glue also releases later
@@ -626,8 +634,7 @@ impl CoreArena {
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
         slot.text_read_projection.borrow_mut().take();
-        slot.component_graph_order.set(None);
-        drop(slot.component_graph.take());
+        slot.retire_component_graph_member();
         slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
@@ -651,8 +658,7 @@ impl CoreArena {
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
         slot.text_read_projection.borrow_mut().take();
-        slot.component_graph_order.set(None);
-        drop(slot.component_graph.take());
+        slot.retire_component_graph_member();
         slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
@@ -733,13 +739,6 @@ impl CoreHandle {
     pub(crate) fn slot_address(&self) -> usize {
         Rc::as_ptr(&self.identity.slot.retirement) as usize
     }
-    /// This handle's occurrence is still the slot's current generation.
-    #[inline]
-    pub(crate) fn is_current_generation(&self) -> bool {
-        let slot = &self.identity.slot;
-        slot.generation.get() == slot.identity_generation
-    }
-
     pub(crate) fn bind_component_graph(
         &self,
         graph: Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,

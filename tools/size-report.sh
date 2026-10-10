@@ -256,19 +256,19 @@ build_full_link() { # profile variant features
   fi
 
   echo "Building ${profile} full SDK closure (${variant//-/ }, features=${features})..."
-  if ! "$CARGO_BIN" build --locked -p nux-capi --no-default-features \
+  if ! python3 tools/bazel/runtime.py build --locked -p nux-capi --no-default-features \
       --features "$features" "${cargo_profile_args[@]}" >"$build_log" 2>&1; then
     sed -n '1,240p' "$build_log" >&2
     return 1
   fi
-  if ! "$CARGO_BIN" build --locked -p nuxie-size-report-roots \
+  if ! python3 tools/bazel/runtime.py build --locked -p nuxie-size-report-roots \
       "${cargo_profile_args[@]}" >>"$build_log" 2>&1; then
     sed -n '1,240p' "$build_log" >&2
     return 1
   fi
 
   if [[ ! -f "$archive" || ! -f "$renderer_roots_archive" || ! -f "$cargo_dylib" ]]; then
-    echo "cargo did not produce the expected C ABI and renderer-root artifacts for ${profile}" >&2
+    echo "Bazel did not produce the expected C ABI and renderer-root artifacts for ${profile}" >&2
     return 1
   fi
 
@@ -409,7 +409,7 @@ ON_ROOTS="$LAST_RENDERER_ROOTS"
 # Restore the renderer-on/scripting-off Cargo output as the canonical
 # release-size artifact. The measured closure above is already copied aside.
 RESTORE_LOG="${REPORT_DIR}/restore-release-size-off.log"
-if ! "$CARGO_BIN" build --locked -p nux-capi --no-default-features \
+if ! python3 tools/bazel/runtime.py build --locked -p nux-capi --no-default-features \
     --features nuxie/renderer --profile release-size >"$RESTORE_LOG" 2>&1; then
   sed -n '1,240p' "$RESTORE_LOG" >&2
   exit 1

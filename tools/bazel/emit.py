@@ -100,6 +100,8 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
         'package(default_visibility = ["//visibility:public"])',
     ]
     source_repo = source_owner.split("//", 1)[0] if source_owner else ""
+    if package.name == "nuxie-script-signature":
+        lines[2] = 'load(' + quoted(source_repo + '//bazel:script-signature-build.bzl') + ', "cargo_build_script")'
     provenance = package.name in ("nux-capi", "nux-apple-product-extension")
     helpers = ', "provenance_env_file"' if provenance else ''
     lines.insert(-1, 'load(' + quoted(source_repo + '//bazel:source-path.bzl') + ', "source_path"' + helpers + ')')

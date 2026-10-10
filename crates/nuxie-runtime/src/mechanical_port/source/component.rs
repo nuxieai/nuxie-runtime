@@ -907,19 +907,22 @@ struct GraphDirt {
 /// graph's node.
 pub(crate) struct SharedDirt {
     inline: Cell<ComponentDirt>,
-    graph: RefCell<Option<GraphDirt>>,
+    // Set once, when the component's Artboard builds its graph.
+    graph: std::cell::OnceCell<GraphDirt>,
 }
 
 impl SharedDirt {
+    #[inline]
     pub(crate) fn get(&self) -> ComponentDirt {
-        match &*self.graph.borrow() {
+        match self.graph.get() {
             Some(binding) => binding.dirt.get(),
             None => self.inline.get(),
         }
     }
 
+    #[inline]
     fn set(&self, value: ComponentDirt) {
-        match &*self.graph.borrow() {
+        match self.graph.get() {
             Some(binding) => binding.dirt.set(value),
             None => self.inline.set(value),
         }
@@ -931,10 +934,11 @@ impl SharedDirt {
         index: u32,
     ) {
         graph.set_dirt(index, self.get());
-        *self.graph.borrow_mut() = Some(GraphDirt {
+        let bound = self.graph.set(GraphDirt {
             dirt: graph.dirt_binding(index),
             graph,
         });
+        assert!(bound.is_ok(), "a component joins one ComponentGraph");
     }
 
     pub(crate) fn graph_binding(
@@ -944,8 +948,7 @@ impl SharedDirt {
         u32,
     )> {
         self.graph
-            .borrow()
-            .as_ref()
+            .get()
             .map(|binding| (Rc::clone(&binding.graph), binding.dirt.index()))
     }
 
@@ -956,8 +959,7 @@ impl SharedDirt {
         use_graph: impl FnOnce(&crate::mechanical_port::source::component_graph::ComponentGraph, u32) -> R,
     ) -> Option<R> {
         self.graph
-            .borrow()
-            .as_ref()
+            .get()
             .map(|binding| use_graph(&binding.graph, binding.dirt.index()))
     }
 }
@@ -1089,7 +1091,7 @@ impl Component {
         };
         let shared = Rc::new(SharedDirt {
             inline: Cell::new(dirt),
-            graph: RefCell::new(None),
+            graph: std::cell::OnceCell::new(),
         });
         self.dirt = ComponentDirtStorage::Shared(Rc::clone(&shared));
         shared

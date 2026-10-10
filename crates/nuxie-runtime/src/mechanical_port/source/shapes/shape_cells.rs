@@ -12,13 +12,26 @@ use crate::mechanical_port::source::{
     component::{ComponentOccurrenceHandle, SharedDirt},
     component_dirt::ComponentDirt,
     core::CoreHandle,
-    shapes::{path_flags::PathFlags, shape::Shape, shape_paint_container::ContainerCells},
+    shapes::{
+        path_cells::PathCells, path_flags::PathFlags, shape::Shape,
+        shape_paint_container::ContainerCells,
+    },
     world_transform_component::TransformCells,
 };
+
+/// One of a shape's paths: its handle (for liveness and the rare borrowing
+/// reads) and its cells.
+#[derive(Clone)]
+pub(crate) struct ShapePath {
+    pub(crate) handle: CoreHandle,
+    pub(crate) cells: Rc<PathCells>,
+}
 
 pub(crate) struct ShapeCells {
     // The installed Shape; pathChanged's rarer steps still borrow it.
     shape: RefCell<Option<CoreHandle>>,
+    // The shape's paths, in order. Replaced, never edited, when one is added.
+    paths: RefCell<Rc<[ShapePath]>>,
     transform: Rc<TransformCells>,
     paints: Rc<ContainerCells>,
     // The PathComposer's Component dirt and occurrence, and its gates: whether
@@ -43,6 +56,7 @@ impl ShapeCells {
     ) -> Self {
         Self {
             shape: RefCell::new(None),
+            paths: RefCell::new(Rc::new([])),
             transform,
             paints,
             composer_dirt,
@@ -62,6 +76,26 @@ impl ShapeCells {
 
     pub(crate) fn bind_shape(&self, shape: CoreHandle) {
         *self.shape.borrow_mut() = Some(shape);
+    }
+
+    pub(crate) fn paths(&self) -> Rc<[ShapePath]> {
+        Rc::clone(&self.paths.borrow())
+    }
+
+    pub(crate) fn add_path(&self, handle: CoreHandle, cells: Rc<PathCells>) {
+        let paths: Rc<[ShapePath]> = self
+            .paths
+            .borrow()
+            .iter()
+            .cloned()
+            .chain(std::iter::once(ShapePath { handle, cells }))
+            .collect();
+        *self.paths.borrow_mut() = paths;
+    }
+
+    /// The shape's world transform.
+    pub(crate) fn world(&self) -> crate::mechanical_port::source::math::mat2d::Mat2D {
+        self.transform.world()
     }
 
     pub(crate) fn is_flagged(&self, flags: PathFlags) -> bool {

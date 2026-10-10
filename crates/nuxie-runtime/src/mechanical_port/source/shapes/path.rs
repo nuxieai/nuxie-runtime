@@ -216,34 +216,26 @@ impl Path {
 
 pub struct Path {
     pub base: PathBase,
-    // Shared with the dirt cascade (see PathCells): the shape link, the
-    // notification and deferral gates and the runtime flags live there.
-    cells: Rc<PathCells>,
+    // The shape link, notification and deferral gates, flags, built raw path
+    // and geometry version live in the base's PathCells.
     vertices: Vec<PathVertexOccurrence>,
-    raw_path: RawPath,
-    geometry_version: u32,
 }
 
 impl Default for Path {
     fn default() -> Self {
-        let mut base = PathBase::default();
-        let cells = Rc::new(PathCells::new(base.share_dirt()));
         Self {
-            base,
-            cells,
+            base: PathBase::default(),
             vertices: Vec::new(),
-            raw_path: RawPath::default(),
-            geometry_version: 0,
         }
     }
 }
 
 impl Path {
     pub(crate) fn cells(&self) -> &Rc<PathCells> {
-        &self.cells
+        self.base.cells()
     }
     pub fn geometry_version(&self) -> u32 {
-        self.geometry_version
+        self.cells().geometry_version()
     }
     pub fn compute_ideal_control_point_distance(
         to_prev: Vec2D,
@@ -287,9 +279,9 @@ impl Path {
             ) {
                 current.with_mut(|shape| {
                     if let Some(shape) = shape.as_shape_mut() {
-                        self.cells
+                        self.cells()
                             .bind_shape(current.clone(), Rc::clone(shape.cells()));
-                        shape.add_path_with_skin(this, has_skin);
+                        shape.add_path_with_skin(this, has_skin, Rc::clone(self.cells()));
                     }
                 });
                 return StatusCode::Ok;
@@ -325,16 +317,16 @@ impl Path {
         self.vertices.pop();
     }
     pub fn add_flags(&mut self, flags: PathFlags) {
-        self.cells.add_flags(flags);
+        self.cells().add_flags(flags);
     }
     pub fn is_flagged(&self, flags: PathFlags) -> bool {
-        self.cells.is_flagged(flags)
+        self.cells().is_flagged(flags)
     }
     pub fn can_defer_path_update(&self, _active_points_path_has_skin: Option<bool>) -> bool {
-        self.cells.can_defer_path_update()
+        self.cells().can_defer_path_update()
     }
     pub fn shape_handle(&self) -> Option<CoreHandle> {
-        self.cells.shape_handle()
+        self.cells().shape_handle()
     }
     pub fn path_transform(&self) -> Mat2D {
         self.base.world_transform()
@@ -352,13 +344,13 @@ impl Path {
         }
     }
     pub fn local_bounds(&self) -> Aabb {
-        self.raw_path.precise_bounds()
+        self.cells().raw_path().precise_bounds()
     }
-    pub fn raw_path(&self) -> &RawPath {
-        &self.raw_path
+    pub fn raw_path(&self) -> std::cell::Ref<'_, RawPath> {
+        self.cells().raw_path()
     }
     pub fn needs_path_build(&self) -> bool {
-        self.base.has_dirt(ComponentDirt::PATH) || self.cells.deferred()
+        self.base.has_dirt(ComponentDirt::PATH) || self.cells().deferred()
     }
     pub fn try_property_bounds(&self, _result: &mut Aabb) -> bool {
         false
@@ -399,7 +391,7 @@ impl Path {
         }
     }
     pub fn is_hidden(&self) -> bool {
-        self.base.path_flags() & 1 == 1
+        self.cells().is_hidden()
     }
 
     fn render_vertex(vertex: &PathVertexOccurrence) -> Option<RenderVertex> {
@@ -688,7 +680,7 @@ impl Path {
     }
 
     fn deformer(&self) -> Option<CoreHandle> {
-        self.cells
+        self.cells()
             .shape()
             .filter(|shape| shape.handle.is_occupied())
             .and_then(|shape| shape.cells.deformer())
@@ -728,7 +720,7 @@ impl Path {
 
     fn cells_of(owner: &CoreHandle) -> Option<Rc<PathCells>> {
         owner
-            .with(|object| object.as_path().map(|path| Rc::clone(&path.cells)))
+            .with(|object| object.as_path().map(|path| Rc::clone(path.cells())))
             .flatten()
     }
 
@@ -803,7 +795,7 @@ impl Path {
         }
     }
     fn shape_path_changed(&mut self) {
-        if let Some(shape) = self.cells.take_shape_notification() {
+        if let Some(shape) = self.cells().take_shape_notification() {
             shape.cells.path_changed(&shape.handle);
         }
     }
@@ -814,7 +806,7 @@ impl Path {
         ) {
             self.shape_path_changed();
         }
-        if self.cells.deferred() {
+        if self.cells().deferred() {
             self.base.add_dirt(ComponentDirt::PATH, false);
         }
     }
@@ -840,7 +832,7 @@ impl Path {
         }
     }
     pub(crate) fn update_before_transform_super(&mut self) {
-        self.cells.reset_shape_notification();
+        self.cells().reset_shape_notification();
     }
     pub(crate) fn update_after_transform_super(
         &mut self,
@@ -853,15 +845,15 @@ impl Path {
         let deformer_changed = has_dirt(value, ComponentDirt::N_SLICER);
         if changed || deformer_changed || (self.deformer().is_some() && world_changed) {
             if self.can_defer_path_update(active_points_path_has_skin) {
-                self.cells.set_deferred(true);
+                self.cells().set_deferred(true);
                 return;
             }
-            self.cells.set_deferred(false);
-            let mut path = std::mem::take(&mut self.raw_path);
+            self.cells().set_deferred(false);
+            let mut path = self.cells().take_raw_path();
             path.rewind();
             self.build_path(&mut path, closed, active_points_path_has_skin == Some(true));
-            self.raw_path = path;
-            self.geometry_version = self.geometry_version.wrapping_add(1);
+            self.cells().put_raw_path(path);
+            self.cells().bump_geometry_version();
         }
     }
     pub fn is_hole_changed(&mut self) {
@@ -876,7 +868,7 @@ impl Path {
     }
 
     pub(crate) fn collapse_after_super(&mut self) {
-        if let Some(shape) = self.cells.shape_handle() {
+        if let Some(shape) = self.cells().shape_handle() {
             shape.with_mut(|shape| {
                 if let Some(shape) = shape.as_shape_mut() {
                     shape.path_collapse_changed();

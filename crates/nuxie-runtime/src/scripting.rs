@@ -749,7 +749,7 @@ impl ScriptNode {
                 .with(|object| {
                     object.as_path().map(|path| {
                         crate::mechanical_port::source::renderer::to_render_raw_path(
-                            path.raw_path(),
+                            &path.raw_path(),
                         )
                     })
                 })

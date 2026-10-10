@@ -69,6 +69,11 @@ impl SkinnableBehavior for PointsPath {
     fn mark_skin_dirty(&mut self) {
         self.base.base.base.mark_path_dirty(true);
     }
+
+    fn set_skin(&mut self, skin: crate::mechanical_port::source::core::CoreHandle) {
+        self.skinnable.set_skin(skin);
+        self.base.base.base.cells().set_skinned();
+    }
 }
 
 impl PointsPath {

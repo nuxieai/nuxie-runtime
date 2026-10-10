@@ -1,10 +1,11 @@
-//! The state of a Path that the dirt cascade and its update share: its shape
-//! link, the once-per-update shape notification, its deferred rebuild and its
-//! runtime flags. Held outside the Path so Path::onDirty and markPathDirty run
-//! without borrowing it.
+//! The state of a Path that the dirt cascade, its update and its shape's
+//! PathComposer share: its shape link, the once-per-update shape notification,
+//! its deferred rebuild, its flags, its built geometry and its transform. Held
+//! outside the Path so Path::onDirty, markPathDirty and the composer's
+//! per-path reads run without borrowing it.
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, Ref, RefCell},
     rc::Rc,
 };
 
@@ -12,12 +13,16 @@ use crate::mechanical_port::source::{
     component::{ComponentOccurrenceHandle, SharedDirt, has_dirt},
     component_dirt::ComponentDirt,
     core::CoreHandle,
+    math::{mat2d::Mat2D, raw_path::RawPath},
     shapes::{path_flags::PathFlags, shape_cells::ShapeCells},
+    world_transform_component::TransformCells,
 };
 
 pub(crate) struct PathCells {
     // The path's own Component dirt.
     dirt: Rc<SharedDirt>,
+    // The path's own transform; its world is the path transform unless skinned.
+    transform: Rc<TransformCells>,
     shape: RefCell<Option<PathShape>>,
     // Whether this update cycle already told the shape its path changed.
     shape_notified: Cell<bool>,
@@ -25,6 +30,13 @@ pub(crate) struct PathCells {
     deferred: Cell<bool>,
     // Runtime flags (followPath, clipping), separate from the authored ones.
     flags: Cell<PathFlags>,
+    // The authored pathFlags property; bit 0 hides the path.
+    authored_flags: Cell<u32>,
+    // A skinned PointsPath's vertices are already in world space.
+    skinned: Cell<bool>,
+    // Bumped by each rebuild of raw_path.
+    geometry_version: Cell<u32>,
+    raw_path: RefCell<RawPath>,
 }
 
 #[derive(Clone)]
@@ -34,14 +46,75 @@ pub(crate) struct PathShape {
 }
 
 impl PathCells {
-    pub(crate) fn new(dirt: Rc<SharedDirt>) -> Self {
+    pub(crate) fn new(dirt: Rc<SharedDirt>, transform: Rc<TransformCells>) -> Self {
         Self {
             dirt,
+            transform,
             shape: RefCell::new(None),
             shape_notified: Cell::new(false),
             deferred: Cell::new(false),
             flags: Cell::new(PathFlags::NONE),
+            authored_flags: Cell::new(0),
+            skinned: Cell::new(false),
+            geometry_version: Cell::new(0),
+            raw_path: RefCell::new(RawPath::default()),
         }
+    }
+
+    pub(crate) fn authored_flags(&self) -> u32 {
+        self.authored_flags.get()
+    }
+
+    pub(crate) fn set_authored_flags(&self, flags: u32) {
+        self.authored_flags.set(flags);
+    }
+
+    /// Path::isHidden(): the authored hidden bit.
+    #[inline]
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.authored_flags.get() & 1 == 1
+    }
+
+    /// Component::isCollapsed() for this path.
+    #[inline]
+    pub(crate) fn is_collapsed(&self) -> bool {
+        self.dirt.get().contains(ComponentDirt::COLLAPSED)
+    }
+
+    pub(crate) fn set_skinned(&self) {
+        self.skinned.set(true);
+    }
+
+    /// Path::pathTransform(): identity for a skinned PointsPath, else world.
+    #[inline]
+    pub(crate) fn path_transform(&self) -> Mat2D {
+        if self.skinned.get() {
+            Mat2D::identity()
+        } else {
+            self.transform.world()
+        }
+    }
+
+    pub(crate) fn geometry_version(&self) -> u32 {
+        self.geometry_version.get()
+    }
+
+    pub(crate) fn bump_geometry_version(&self) {
+        self.geometry_version
+            .set(self.geometry_version.get().wrapping_add(1));
+    }
+
+    pub(crate) fn raw_path(&self) -> Ref<'_, RawPath> {
+        self.raw_path.borrow()
+    }
+
+    /// Take the built path out for a rebuild; `put_raw_path` returns it.
+    pub(crate) fn take_raw_path(&self) -> RawPath {
+        self.raw_path.take()
+    }
+
+    pub(crate) fn put_raw_path(&self, path: RawPath) {
+        *self.raw_path.borrow_mut() = path;
     }
 
     pub(crate) fn shape(&self) -> Option<PathShape> {

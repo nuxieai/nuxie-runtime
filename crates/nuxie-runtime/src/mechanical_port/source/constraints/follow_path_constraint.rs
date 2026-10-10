@@ -272,7 +272,7 @@ impl FollowPathConstraint {
                 path.with(|owner| {
                     let path = owner.as_path().expect("Shape paths remain Path-derived");
                     self.raw_path
-                        .add_path(path.raw_path(), Some(&Path::path_transform_for(owner)));
+                        .add_path(&path.raw_path(), Some(&Path::path_transform_for(owner)));
                 })
                 .expect("Shape retains live paths");
             }

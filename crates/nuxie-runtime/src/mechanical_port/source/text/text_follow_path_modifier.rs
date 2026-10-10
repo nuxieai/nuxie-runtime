@@ -76,13 +76,13 @@ impl TextFollowPathModifier {
                         path.with(|owner| {
                             if let Some(path) = owner.as_path() {
                                 let transform = crate::mechanical_port::source::shapes::path::Path::path_transform_for(owner);
-                                self.world_path.add_path(path.raw_path(), Some(&transform));
+                                self.world_path.add_path(&path.raw_path(), Some(&transform));
                             }
                         });
                     }
                 } else if let Some(path) = target.as_path() {
                     let transform = crate::mechanical_port::source::shapes::path::Path::path_transform_for(target);
-                    self.world_path.add_path(path.raw_path(), Some(&transform));
+                    self.world_path.add_path(&path.raw_path(), Some(&transform));
                 }
             });
         }

@@ -286,7 +286,9 @@ pub struct Artboard {
             Rc<crate::source::scripted::scripted_interpolator::StatefulScriptedInterpolator>,
         >,
     >,
-    advancing_components: Vec<AdvancingComponentHandle>,
+    // Replaced, never edited, as initialization adds components; advance
+    // iterates one snapshot.
+    advancing_components: Rc<[AdvancingComponentHandle]>,
     instance_value_binds_source: Option<CoreHandle>,
     instance_value_binds_pending: bool,
     pub(crate) data_bind_container: DataBindContainer,
@@ -383,7 +385,7 @@ impl Default for Artboard {
             bitmap_cache: None,
             scripted_objects: Vec::new(),
             scripted_interpolators: RefCell::new(HashMap::new()),
-            advancing_components: Vec::new(),
+            advancing_components: Rc::new([]),
             instance_value_binds_source: None,
             instance_value_binds_pending: false,
             data_bind_container: DataBindContainer::default(),
@@ -1219,7 +1221,12 @@ impl Artboard {
             {
                 let advancing_component = AdvancingComponentHandle::classified(&object);
                 root.with_downcast_mut::<Artboard, _>(|artboard| {
-                    artboard.advancing_components.push(advancing_component)
+                    artboard.advancing_components = artboard
+                        .advancing_components
+                        .iter()
+                        .cloned()
+                        .chain(std::iter::once(advancing_component))
+                        .collect()
                 });
             }
         }
@@ -2437,7 +2444,7 @@ impl Artboard {
             return QuietState::Busy;
         }
         let mut state = QuietState::Quiet;
-        for advancing in &self.advancing_components {
+        for advancing in self.advancing_components.iter() {
             match advancing.quiet_state() {
                 QuietState::Never => return QuietState::Never,
                 QuietState::Busy => state = QuietState::Busy,
@@ -3214,17 +3221,14 @@ impl Artboard {
         elapsed_seconds: f32,
         flags: AdvanceFlags,
     ) -> bool {
-        let advancing_count = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.advancing_components.len())
+        // The advancing component array is fixed once the artboard
+        // initializes, so one snapshot serves the whole pass.
+        let advancing = root
+            .with_downcast::<Artboard, _>(|artboard| Rc::clone(&artboard.advancing_components))
             .expect("live Artboard advance");
         let mut did_update = false;
-        for index in 0..advancing_count {
-            let mut component = root
-                .with_downcast::<Artboard, _>(|artboard| {
-                    artboard.advancing_components.get(index).cloned()
-                })
-                .flatten()
-                .expect("advancing component array remains stable during advance");
+        for component in advancing.iter() {
+            let mut component = component.clone();
             did_update |= component.advance_component(elapsed_seconds, flags);
         }
         did_update | Self::advance_data_binds_handle(root, elapsed_seconds)

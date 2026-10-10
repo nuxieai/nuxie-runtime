@@ -871,6 +871,130 @@ mod tests {
     }
 
     #[test]
+    fn disabled_semantic_activation_is_not_found_then_admitted_when_enabled() {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(root)
+                .join("tests/unit_tests/assets/semantic/data_binding_lists.riv"),
+        )
+        .unwrap();
+        let mut file = ptr::null_mut();
+        let mut instance = ptr::null_mut();
+        let mut model = ptr::null_mut();
+        let mut player = ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_view_model_instance_new_default(instance, &mut model),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_bind_view_model(instance, model),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_new_default(instance, &mut player), NuxStatus::Ok);
+            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+            let capture = || {
+                for _ in 0..10 {
+                    let step = NuxPlayerStep {
+                        struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                        elapsed_seconds: 0.1,
+                        ..Default::default()
+                    };
+                    let mut result = ptr::null_mut();
+                    assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                    let mut scheduling = NuxPlayerSchedulingInfo {
+                        struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                        ..Default::default()
+                    };
+                    assert_eq!(
+                        nux_player_step_result_scheduling(result, &mut scheduling),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(
+                        nux_player_acknowledge_presented(player, scheduling.render_revision),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                }
+                let mut snapshot = ptr::null_mut();
+                assert_eq!(
+                    nux_player_semantic_snapshot(player, &mut snapshot),
+                    NuxStatus::Ok
+                );
+                snapshot
+            };
+            let initial = capture();
+            let button_id = (&(*initial).nodes)
+                .iter()
+                .find(|node| node.label == "Select a fandom")
+                .unwrap()
+                .id;
+            assert_eq!(nux_semantic_snapshot_free(initial), NuxStatus::Ok);
+            let native = (&(*player).artboard).instance.borrow().native_handle();
+            let manager = native
+                .with_artboard(|artboard| artboard.semantic_manager())
+                .unwrap();
+            let node = manager
+                .with_semantic_manager(|manager| manager.node_by_id(button_id))
+                .unwrap();
+            let data = node.borrow().semantic_data.clone().unwrap();
+            assert!(
+                data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                    .unwrap()
+            );
+            data.with_downcast_mut::<SemanticData, _>(|data| data.set_is_disabled(true))
+                .unwrap();
+            let disabled = capture();
+            assert_eq!(
+                nux_player_queue_semantic_action(player, disabled, button_id, 0),
+                NuxStatus::NotFound
+            );
+            assert_eq!(nux_semantic_snapshot_free(disabled), NuxStatus::Ok);
+            let still_disabled = capture();
+            assert!(
+                data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                    .unwrap(),
+                "refusal must not enqueue the closing action"
+            );
+            assert_eq!(nux_semantic_snapshot_free(still_disabled), NuxStatus::Ok);
+            data.with_downcast_mut::<SemanticData, _>(|data| data.set_is_disabled(false))
+                .unwrap();
+            let enabled = capture();
+            assert_eq!(
+                nux_player_queue_semantic_action(player, enabled, button_id, 0),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_semantic_snapshot_free(enabled), NuxStatus::Ok);
+            let closed = capture();
+            assert!(
+                !data
+                    .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                    .unwrap(),
+                "accepted action closes the dropdown"
+            );
+            assert_eq!(nux_semantic_snapshot_free(closed), NuxStatus::Ok);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_view_model_instance_free(model), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
+    #[test]
     fn field_string_edits_are_local_to_repeated_occurrences() {
         check_repeated_field_edits(fixture::repeated_nonvisual_fields(), None, false, 1);
     }

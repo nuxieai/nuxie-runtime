@@ -286,7 +286,7 @@ impl ShapePaint {
     }
 
     pub fn render_paint_handle(&self) -> Option<RuntimeRenderPaintHandle> {
-        self.cells.render_paint()
+        self.cells.render_paint().cloned()
     }
 
     pub fn inherits_blend_mode(&self) -> bool {

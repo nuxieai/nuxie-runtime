@@ -3,7 +3,7 @@
 //! so those readers never borrow the paint's core object.
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, OnceCell, RefCell},
     rc::{Rc, Weak},
 };
 
@@ -37,7 +37,8 @@ pub(crate) struct PaintCells {
     effect_paths: RefCell<Vec<(CoreHandle, EffectPaths)>>,
     has_other_effects: Cell<bool>,
     has_feather: Cell<bool>,
-    render_paint: RefCell<Option<RuntimeRenderPaintHandle>>,
+    // Created once, when the paint mutator first initializes the paint.
+    render_paint: OnceCell<RuntimeRenderPaintHandle>,
     // The paint's own Component dirt.
     dirt: Rc<SharedDirt>,
     // The container whose flag union includes this paint's flags.
@@ -52,7 +53,7 @@ impl PaintCells {
             effect_paths: RefCell::new(Vec::new()),
             has_other_effects: Cell::new(false),
             has_feather: Cell::new(false),
-            render_paint: RefCell::new(None),
+            render_paint: OnceCell::new(),
             dirt,
             container: RefCell::new(Weak::new()),
         }
@@ -121,12 +122,17 @@ impl PaintCells {
         self.has_feather.set(true);
     }
 
-    pub(crate) fn render_paint(&self) -> Option<RuntimeRenderPaintHandle> {
-        self.render_paint.borrow().clone()
+    #[inline]
+    pub(crate) fn render_paint(&self) -> Option<&RuntimeRenderPaintHandle> {
+        self.render_paint.get()
     }
 
+    /// Install the render paint; a paint is initialized at most once.
     pub(crate) fn set_render_paint(&self, paint: RuntimeRenderPaintHandle) {
-        *self.render_paint.borrow_mut() = Some(paint);
+        assert!(
+            self.render_paint.set(paint).is_ok(),
+            "a ShapePaint initializes its render paint once"
+        );
     }
 
     /// ShapePaint::invalidateEffects() as pathChanged runs it on each of the
@@ -149,7 +155,7 @@ impl PaintCells {
         }
         let invalidation = match self.paint_type {
             ShapePaintType::Fill => ShapePaintRenderingInvalidation::Base,
-            ShapePaintType::Stroke => ShapePaintRenderingInvalidation::stroke(self.render_paint()),
+            ShapePaintType::Stroke => ShapePaintRenderingInvalidation::stroke(self.render_paint().cloned()),
         };
         if !invalidation.before_dirt() {
             return;

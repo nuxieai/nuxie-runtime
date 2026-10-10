@@ -87,6 +87,17 @@ class RuntimeBuildTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be absolute"):
                 runtime.bazel_command()
 
+    def test_shared_cache_override_preserves_default_output_isolation(self):
+        executable = self.root / "bazel"
+        executable.touch()
+        with patch.dict(os.environ, {"NUXIE_BAZEL_BIN": str(executable),
+                                     "NUXIE_BAZEL_CACHE_DIR": str(self.root / "shared cache")}, clear=True):
+            command = runtime.bazel_command()
+        self.assertEqual(command, [str(executable), "--nosystem_rc", "--nohome_rc",
+                                   "--bazelrc=" + str(self.root / ".bazel-cache.local.bazelrc")])
+        self.assertIn(str(self.root / "shared cache/actions"),
+                      (self.root / ".bazel-cache.local.bazelrc").read_text())
+
     def test_failed_build_keeps_previously_published_artifact(self):
         core = self.package("core", library=False)
         destination = self.root / "target/debug/core"

@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tomllib
 
+from bazel_cache import startup_options
+
 BAZEL_VERSION = "9.3.0"
 RUST_VERSION = "1.94.1"
 ANDROID_LABEL = "//crates/nux-capi:nux-capi__android__cdylib"
@@ -57,7 +59,7 @@ class BazelRuntime:
                                 if item and Path(item).is_file()), None)
         if self.executable is None:
             raise ValueError("Bazelisk is required; it reads the pinned .bazelversion")
-        self.startup = ["--nosystem_rc", "--nohome_rc"]
+        self.startup = ["--nosystem_rc", "--nohome_rc", *startup_options(self.root)]
         output_root = os.environ.get("NUXIE_BAZEL_OUTPUT_USER_ROOT")
         if output_root:
             if not Path(output_root).is_absolute():

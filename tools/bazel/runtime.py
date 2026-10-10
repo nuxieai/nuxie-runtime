@@ -21,6 +21,7 @@ from runtime_features import uses_native_tools
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 from bazel_runtime_build import BazelRuntime, PROVENANCE_KEYS
+from bazel_cache import startup_options
 
 
 def packages_from_workspace():
@@ -202,7 +203,7 @@ def bazel_command():
     executable = next((item for item in candidates if item and (Path(item).is_file() or shutil.which(item))), None)
     if executable is None:
         raise ValueError("Bazelisk is required; install it or set NUXIE_BAZEL_BIN")
-    startup = ["--nosystem_rc", "--nohome_rc"]
+    startup = ["--nosystem_rc", "--nohome_rc", *startup_options(ROOT)]
     for variable, flag in (("NUXIE_BAZEL_OUTPUT_USER_ROOT", "--output_user_root"), ("NUXIE_BAZEL_OUTPUT_BASE", "--output_base")):
         value = os.environ.get(variable)
         if value:

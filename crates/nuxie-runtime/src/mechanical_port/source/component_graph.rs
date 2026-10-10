@@ -275,22 +275,27 @@ impl ComponentGraph {
         #[cfg(feature = "tools")]
         trace::event(self, 'A', index, value, recurse);
         let i = index as usize;
-        if self.nodes[i].kind == Kind::Outside {
+        let node = &self.nodes[i];
+        if node.kind == Kind::Outside {
             return self.occurrences[i].add_dirt(value, recurse);
         }
-        if !self.mark(i, value) {
+        // The duplicate-bit return. A retired member returns false too, and
+        // neither return has side effects, so this check may go first.
+        if node.dirt.get().contains(value) || !self.mark(i, value) {
             return false;
         }
-        if recurse {
+        if recurse && node.dependents_start != node.dependents_end {
             self.cascade(index, value);
         }
         true
     }
 
-    /// Component::addDirt's own work for member `i`: the duplicate-bit return,
-    /// the dirt write, onDirty and the Artboard notification. Returns whether
-    /// it added dirt (so the caller continues into its dependents).
-    #[inline]
+    /// Component::addDirt's own work for member `i` once its duplicate-bit
+    /// check has passed: the liveness check, the dirt write, onDirty and the
+    /// Artboard notification. Returns whether it added dirt (so the caller
+    /// continues into its dependents). Kept out of line so the cascade loop
+    /// stays small; only members that gain dirt get here.
+    #[inline(never)]
     fn mark(&self, i: usize, value: ComponentDirt) -> bool {
         let node = &self.nodes[i];
         let live = match node.kind {
@@ -301,11 +306,7 @@ impl ComponentGraph {
         if !live {
             return false;
         }
-        let dirt = node.dirt.get();
-        if dirt.contains(value) {
-            return false;
-        }
-        let dirt = dirt | value;
+        let dirt = node.dirt.get() | value;
         node.dirt.set(dirt);
         match node.kind {
             Kind::Noop => {}
@@ -358,27 +359,32 @@ impl ComponentGraph {
 
     fn cascade(&self, index: u32, value: ComponentDirt) {
         let node = &self.nodes[index as usize];
-        for position in node.dependents_start..node.dependents_end {
-            let dependent = self.dependents[position as usize];
-            if dependent & OUTSIDE_DEPENDENT != 0 {
-                self.outside[(dependent & !OUTSIDE_DEPENDENT) as usize].add_dirt(value, true);
+        let dependents = &self.dependents[node.dependents_start as usize..node.dependents_end as usize];
+        for &dependent in dependents {
+            // An outside dependent's index has OUTSIDE_DEPENDENT set, so it is
+            // never a member index. Members here are never Kind::Outside:
+            // build routes those through `outside`.
+            let Some(child) = self.nodes.get(dependent as usize) else {
+                self.add_dirt_outside(dependent, value);
                 continue;
-            }
-            let member = dependent as usize;
-            if self.nodes[member].kind == Kind::Outside {
-                self.occurrences[member].add_dirt(value, true);
-                continue;
-            }
-            if !self.mark(member, value) {
+            };
+            debug_assert!(child.kind != Kind::Outside);
+            if child.dirt.get().contains(value) || !self.mark(dependent as usize, value) {
                 continue;
             }
             // Each dependent's whole cascade finishes before its next sibling,
             // as upstream's recursion orders it.
-            let child = &self.nodes[member];
             if child.dependents_start != child.dependents_end {
-                self.cascade(member as u32, value);
+                self.cascade(dependent, value);
             }
         }
+    }
+
+    /// Component::addDirt(value, true) on a dependent outside the graph.
+    #[cold]
+    #[inline(never)]
+    fn add_dirt_outside(&self, dependent: u32, value: ComponentDirt) {
+        self.outside[(dependent & !OUTSIDE_DEPENDENT) as usize].add_dirt(value, true);
     }
 
     /// Artboard::updateComponents over the graph. `depth` and the root's

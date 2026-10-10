@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
     shapes::{
         image::Image,
         mesh_drawable::{MeshDrawable, MeshDrawableState, RuntimeRenderBufferHandle},
+        mesh_host::MeshHost,
         mesh_vertex::MeshVertex,
         vertex::VertexBehavior,
     },
@@ -83,11 +84,18 @@ impl Mesh {
     /// Skinned positions already contain their world deformation.
     pub(crate) fn rendered_triangles(&self) -> Option<Vec<[Vec2D; 3]>> {
         let transform = if self.skin().is_none() {
-            self.base.parent_handle()?.with(|parent| {
-                parent
-                    .as_world_transform_component()
-                    .map(|parent| *parent.world_transform())
-            })??
+            let parent = self.base.parent_handle()?;
+            MeshHost::from_handle(Some(parent.clone()))
+                .map(|host| host.world_transform())
+                .or_else(|| {
+                    parent
+                        .with(|parent| {
+                            parent
+                                .as_world_transform_component()
+                                .map(|parent| *parent.world_transform())
+                        })
+                        .flatten()
+                })?
         } else {
             Mat2D::identity()
         };
@@ -162,17 +170,10 @@ impl Mesh {
         let (Some(image), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
-        let installed = image
-            .with_downcast_mut::<Image, _>(|image| image.set_mesh(Some(this.clone())))
-            .is_some()
-            || image
-                .with_downcast_mut::<crate::video::Video, _>(|video| {
-                    video.set_mesh(Some(this));
-                })
-                .is_some();
-        if !installed {
+        let Some(host) = MeshHost::from_handle(Some(image)) else {
             return StatusCode::MissingObject;
-        }
+        };
+        host.set_mesh(Some(this));
         StatusCode::Ok
     }
 
@@ -230,6 +231,19 @@ impl Mesh {
                     self.vertices.len() * std::mem::size_of::<Vec2D>(),
                 )
             }))));
+        self.build_uv_and_index_buffers(uv_transform);
+    }
+
+    pub fn uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D) {
+        self.build_uv_and_index_buffers(transform);
+    }
+
+    fn build_uv_and_index_buffers(&mut self, uv_transform: nuxie_render_api::Mat2D) {
+        let factory = self
+            .base
+            .with_artboard(|a| a.factory())
+            .flatten()
+            .expect("Mesh factory");
         self.mesh.uv_render_buffer =
             Some(Rc::new(RefCell::new(factory.with_factory_mut(|factory| {
                 factory.make_render_buffer(
@@ -366,13 +380,17 @@ impl Mesh {
         }
         if self.skin().is_none() {
             if let Some(parent) = self.base.parent_handle() {
-                let transform = parent
-                    .with(|parent| {
-                        parent.as_world_transform_component().map(|parent| {
-                            nuxie_render_api::Mat2D(*parent.world_transform().values())
-                        })
-                    })
-                    .flatten();
+                let transform = MeshHost::from_handle(Some(parent.clone()))
+                    .map(|host| nuxie_render_api::Mat2D(*host.world_transform().values()))
+                    .or_else(|| {
+                        parent
+                            .with(|parent| {
+                                parent.as_world_transform_component().map(|parent| {
+                                    nuxie_render_api::Mat2D(*parent.world_transform().values())
+                                })
+                            })
+                            .flatten()
+                    });
                 if let Some(transform) = transform {
                     renderer.transform(transform);
                 }
@@ -409,6 +427,9 @@ impl Mesh {
 }
 
 impl MeshDrawable for Mesh {
+    fn uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D) {
+        Mesh::uv_transform_changed(self, transform);
+    }
     fn mesh_state(&mut self) -> &mut MeshDrawableState {
         &mut self.mesh
     }

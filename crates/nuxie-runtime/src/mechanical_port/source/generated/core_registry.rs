@@ -4838,6 +4838,7 @@ pub trait CoreCapabilities: Any {
     ) -> bool {
         false
     }
+    fn mesh_drawable_uv_transform_changed(&mut self, _transform: nuxie_render_api::Mat2D) {}
     fn mesh_drawable_draw(
         &mut self,
         _renderer: &mut dyn nuxie_render_api::Renderer,
@@ -66590,6 +66591,11 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
         self.slice_mesh().on_asset_loaded(Some(image));
         true
     }
+    fn mesh_drawable_uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D) {
+        crate::mechanical_port::source::layout::n_slicer::NSlicer::uv_transform_changed(
+            self, transform,
+        );
+    }
     fn mesh_drawable_draw(
         &mut self,
         renderer: &mut dyn nuxie_render_api::Renderer,
@@ -71488,6 +71494,9 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
     fn mesh_drawable_on_asset_loaded(&mut self, image: &dyn nuxie_render_api::RenderImage) -> bool {
         self.on_asset_loaded(Some(image));
         true
+    }
+    fn mesh_drawable_uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D) {
+        crate::mechanical_port::source::shapes::mesh::Mesh::uv_transform_changed(self, transform);
     }
     fn mesh_drawable_draw(
         &mut self,
@@ -84743,13 +84752,13 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::artboard::Artboard {
     fn rotation_changed(&mut self) {
-        CoreCapabilities::transform_mark_dirty(self);
+        crate::mechanical_port::source::artboard::Artboard::self_transform_changed(self);
     }
     fn scale_x_changed(&mut self) {
-        CoreCapabilities::transform_mark_dirty(self);
+        crate::mechanical_port::source::artboard::Artboard::self_transform_changed(self);
     }
     fn scale_y_changed(&mut self) {
-        CoreCapabilities::transform_mark_dirty(self);
+        crate::mechanical_port::source::artboard::Artboard::self_transform_changed(self);
     }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)

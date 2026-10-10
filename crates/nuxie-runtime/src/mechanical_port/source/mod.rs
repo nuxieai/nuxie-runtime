@@ -84,6 +84,7 @@ pub mod nested_artboard;
 pub mod nested_artboard_host_flags;
 pub mod nested_artboard_layout;
 pub mod nested_artboard_leaf;
+pub mod nested_artboard_mesh_host;
 pub mod node;
 pub mod object_stream;
 pub mod offscreen_raster;

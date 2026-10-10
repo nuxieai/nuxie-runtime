@@ -1,33 +1,26 @@
 //! Translation of include/rive/bitmap_cache.hpp and src/bitmap_cache.cpp at
 //! upstream a4dbc3ff.
 
+use super::offscreen_raster::CachedRaster;
 use crate::mechanical_port::source::generated::{
     bitmap_cache_base::{BitmapCacheBase, BitmapCacheBaseCallbacks},
     component_base::ComponentBaseCallbacks,
 };
-use nuxie_render_api::RenderCanvasHandle;
+use std::{cell::RefCell, rc::Rc};
 
 /// The offscreen render state an Artboard caches itself into. Upstream makes
 /// Artboard a friend so it reads and writes these fields directly; here they
 /// are crate-visible for the same owner.
 pub struct BitmapCache {
     pub base: BitmapCacheBase,
-    pub(crate) canvas: Option<RenderCanvasHandle>,
-    pub(crate) width_px: u32,
-    pub(crate) height_px: u32,
-    pub(crate) raster_scale: f32,
-    pub(crate) dirty: bool,
+    pub(crate) raster: Rc<RefCell<CachedRaster>>,
 }
 
 impl Default for BitmapCache {
     fn default() -> Self {
         Self {
             base: BitmapCacheBase::default(),
-            canvas: None,
-            width_px: 0,
-            height_px: 0,
-            raster_scale: 1.0,
-            dirty: true,
+            raster: Rc::new(RefCell::new(CachedRaster::default())),
         }
     }
 }
@@ -46,7 +39,7 @@ impl BitmapCache {
     pub(crate) fn invalidate(&mut self) {
         // The cached raster is no longer trustworthy; rebuild it on the next
         // draw.
-        self.dirty = true;
+        self.raster.borrow_mut().dirty = true;
         // ...but only if there *is* a next draw. `dirty` is private to this
         // object, so nothing outside it can tell the artboard changed -- and a
         // host that skips rendering while Artboard::did_change() is false
@@ -75,9 +68,7 @@ impl BitmapCache {
             // Freeing the texture is the point of a disable switch. Safe to
             // drop ours mid-frame: the canvas is reference counted and a frame
             // being replayed holds its own reference.
-            self.canvas = None;
-            self.width_px = 0;
-            self.height_px = 0;
+            self.raster.borrow_mut().release();
         }
     }
 }

@@ -378,6 +378,12 @@ impl Image {
         self.update_image_scale();
     }
 
+    pub fn mesh_host_uv_transform(&self) -> nuxie_render_api::Mat2D {
+        self.render_image()
+            .map(|image| image.uv_transform())
+            .unwrap_or(nuxie_render_api::Mat2D::IDENTITY)
+    }
+
     pub fn width(&self) -> f32 {
         if let Some((width, _)) = self.runtime_size {
             return width;

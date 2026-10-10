@@ -76,6 +76,11 @@ pub struct NestedArtboard {
     pub artboard_referencer: ArtboardReferencer,
     pub data_bind_path_referencer: DataBindPathReferencer,
     instance: Option<RuntimeArtboardInstanceHandle>,
+    mesh_host: Option<
+        std::rc::Rc<
+            std::cell::RefCell<crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost>,
+        >,
+    >,
     bound_nested_state_machine: Option<CoreHandle>,
     nested_animations: Vec<CoreHandle>,
     file: RuntimeFileWeakHandle,
@@ -101,6 +106,7 @@ impl Default for NestedArtboard {
             artboard_referencer: ArtboardReferencer::default(),
             data_bind_path_referencer: DataBindPathReferencer::default(),
             instance: None,
+            mesh_host: None,
             bound_nested_state_machine: None,
             nested_animations: Vec::new(),
             file: RuntimeFileWeakHandle::default(),
@@ -172,6 +178,9 @@ impl NestedArtboard {
         &mut self,
         out: &mut crate::mechanical_port::source::math::aabb::Aabb,
     ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        if self.hosted_mesh().is_some() {
+            return crate::source::drawable::BoundsFidelity::None;
+        }
         let Some(nested) = self.artboard_instance_default() else {
             return crate::mechanical_port::source::drawable::BoundsFidelity::None;
         };
@@ -370,11 +379,22 @@ impl NestedArtboard {
             let volume = instance.volume();
             instance.set_volume(volume);
         });
+        self.instance = None;
+        self.reset_mesh_raster();
         self.instance = Some(instance.clone());
         let inactive_change_sequence = self.inactive_change_sequence.clone();
-        instance.with_artboard_mut(|instance| {
-            instance.set_host_with_parent(host, parent, Some(inactive_change_sequence))
+        let layout_parent = instance.with_artboard_mut(|instance| {
+            instance.set_host_state(host, parent, Some(inactive_change_sequence))
         });
+        if let Some(parent) = layout_parent {
+            // The source synchronously enumerates this layout provider after
+            // installing its instance. Pass the active owner instead of
+            // reborrowing its arena slot; release the child mutation first.
+            Artboard::mark_layout_dirty_occurrence(&parent, instance.core_handle(), None);
+            crate::source::layout_component::LayoutComponent::sync_layout_children_from_nested(
+                &parent, self,
+            );
+        }
         self.apply_origin_override();
     }
 
@@ -415,6 +435,7 @@ impl NestedArtboard {
         let parent = owner
             .with_mut(|owner| {
                 let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.reset_mesh_raster();
                 nested.instance = Some(instance.clone());
                 nested.parent_artboard_handle()
             })
@@ -632,6 +653,7 @@ impl NestedArtboard {
             self.artboard_referencer.set_referenced_artboard(None);
             self.instance = None;
             self.mounted_bindable = None;
+            self.reset_mesh_raster();
             self.set_active_view_model_instance(None, false);
             return None;
         }
@@ -854,6 +876,30 @@ impl NestedArtboard {
     }
 
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        let mesh_host = owner
+            .with_downcast::<NestedArtboard, _>(|n| {
+                let visitor = n
+                    .artboard_handle()
+                    .and_then(|a| a.with_downcast::<Artboard, _>(Artboard::has_draw_visitor))
+                    .unwrap_or(false);
+                if n.hosted_mesh().is_some() && !visitor {
+                    n.mesh_host_if_any()
+                } else {
+                    None
+                }
+            })
+            .flatten();
+        let mut bypass_cache = false;
+        if let Some(mesh_host) = mesh_host {
+            bypass_cache = mesh_host.borrow().composite_drops_clip();
+            if !bypass_cache
+                && crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost::draw(
+                    &mesh_host, renderer,
+                )
+            {
+                return;
+            }
+        }
         let read = |callback: fn(&NestedArtboard) -> bool| {
             owner
                 .with(|object| callback(object.as_nested_artboard().expect("nested artboard")))
@@ -884,32 +930,48 @@ impl NestedArtboard {
             })
             .expect("live nested artboard");
         if let Some((host, hosted)) = hosted {
-            Artboard::draw_hosted_handle(&host, &hosted, renderer);
+            Artboard::draw_hosted_handle(&host, &hosted, renderer, bypass_cache);
         }
         if read(|this| this.needs_save_operation()) {
             renderer.restore();
         }
     }
 
-    pub fn draw(&mut self, renderer: &mut Renderer) {
-        if self.needs_save_operation() {
-            renderer.save();
-        }
-        renderer.transform(nuxie_render_api::Mat2D(*self.world_transform().values()));
-        if let Some(instance) = &self.instance {
-            Artboard::draw_hosted_handle(
-                &self.artboard_handle().expect("nested artboard owner"),
-                &instance.core_handle(),
-                renderer,
-            );
-        }
-        if self.needs_save_operation() {
-            renderer.restore();
-        }
-    }
-
     pub fn will_draw(&self) -> bool {
         self.base.base.will_draw() && self.artboard_referencer.referenced_artboard().is_some()
+    }
+
+    pub fn mesh_host(
+        &mut self,
+    ) -> std::rc::Rc<
+        std::cell::RefCell<crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost>,
+    > {
+        if self.mesh_host.is_none() {
+            let owner = self.base.handle().expect("mesh host identity");
+            self.mesh_host = Some(std::rc::Rc::new(std::cell::RefCell::new(
+                crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost::new(owner),
+            )));
+        }
+        self.mesh_host.as_ref().unwrap().clone()
+    }
+    pub fn mesh_host_if_any(
+        &self,
+    ) -> Option<
+        std::rc::Rc<
+            std::cell::RefCell<crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost>,
+        >,
+    > {
+        self.mesh_host.clone()
+    }
+    pub fn hosted_mesh(&self) -> Option<CoreHandle> {
+        self.mesh_host
+            .as_ref()
+            .and_then(|h| h.borrow().hosted_mesh())
+    }
+    fn reset_mesh_raster(&mut self) {
+        if let Some(h) = &self.mesh_host {
+            h.borrow_mut().reset_raster();
+        }
     }
 
     pub fn hit_test(&mut self, hit_info: &mut HitInfo, transform: &Mat2D) -> Option<CoreHandle> {

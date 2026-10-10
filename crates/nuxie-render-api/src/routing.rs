@@ -48,6 +48,10 @@ pub fn canvas_texture_owner(
 /// The scripting owner invalidates its Lua renderer before ending the content
 /// bracket, exactly as it does for an immediate canvas frame.
 pub trait DeferredCanvasHost {
+    /// Whether the renderer used for composites starts without inherited clips.
+    fn composite_drops_clips(&self) -> bool {
+        false
+    }
     /// Capability of the canvas this host hands out, not merely its factory.
     fn supports_layer_mask(&self) -> bool {
         false

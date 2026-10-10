@@ -90,6 +90,7 @@ struct ArtboardDirtyState {
     depth: Cell<u32>,
     dirt: Cell<ComponentDirt>,
     did_change: Cell<bool>,
+    content_revision: Cell<u64>,
     host: RefCell<Option<ArtboardHostAttachment>>,
     quiet_host_row: Cell<u32>,
 }
@@ -114,6 +115,7 @@ impl Default for RuntimeArtboardDirtyHandle {
             depth: Cell::new(0),
             dirt: Cell::new(ComponentDirt::FILTHY),
             did_change: Cell::new(true),
+            content_revision: Cell::new(1),
             host: RefCell::new(None),
             quiet_host_row: Cell::new(u32::MAX),
         }))
@@ -144,6 +146,13 @@ impl RuntimeArtboardDirtyHandle {
         }
     }
     pub fn changed(&self) {
+        self.0
+            .content_revision
+            .set(self.0.content_revision.get().wrapping_add(1));
+        self.notify_changed();
+    }
+
+    fn notify_changed(&self) {
         // Artboard::changed: guard, set, then notify the actual parent. Neither
         // the geometry root nor its host needs to be borrowed for this callback.
         if self.0.did_change.replace(true) {
@@ -167,6 +176,9 @@ impl RuntimeArtboardDirtyHandle {
         DIRT_NOTIFICATIONS.with(|count| count.set(count.get() + 1));
         self.wake_if_quiet_row();
         self.0.did_change.set(true);
+        self.0
+            .content_revision
+            .set(self.0.content_revision.get().wrapping_add(1));
         self.mark_components_dirty();
         if graph_order < self.0.depth.get() {
             self.0.depth.set(graph_order);
@@ -280,6 +292,7 @@ pub struct Artboard {
     audio_engine: Option<AudioEngineRef>,
     volume: f32,
     host_opacity: f32,
+    skip_self_transform: bool,
     #[cfg(feature = "tools")]
     layout_changed_callback: Option<ArtboardCallback>,
     #[cfg(feature = "tools")]
@@ -367,6 +380,7 @@ impl Default for Artboard {
             audio_engine: None,
             volume: 1.0,
             host_opacity: 1.0,
+            skip_self_transform: false,
             #[cfg(feature = "tools")]
             layout_changed_callback: None,
             #[cfg(feature = "tools")]
@@ -2223,6 +2237,44 @@ impl Artboard {
         self.on_component_dirty_at(component.graph_order());
     }
 
+    pub fn self_transform_changed(&mut self) {
+        self.host_transform_marked_dirty = false;
+        self.mark_host_transform_dirty();
+        self.mark_semantic_boundary_transform_dirty();
+        self.dirty_state.notify_changed();
+    }
+
+    pub fn has_draw_visitor(&self) -> bool {
+        self.draw_visitor.is_some()
+    }
+
+    pub fn composite_self_transform(&self) -> Mat2D {
+        if !self.frame_origin {
+            return self.self_transform();
+        }
+        let x = self.layout_width() * self.origin_x();
+        let y = self.layout_height() * self.origin_y();
+        Mat2D::from_translate(x, y) * self.self_transform() * Mat2D::from_translate(-x, -y)
+    }
+
+    pub fn draw_content_untransformed_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        let previous = root
+            .with_downcast_mut::<Artboard, _>(|a| {
+                std::mem::replace(&mut a.skip_self_transform, true)
+            })
+            .unwrap();
+        Self::draw_content_handle(root, renderer);
+        root.with_downcast_mut::<Artboard, _>(|a| a.skip_self_transform = previous);
+    }
+
+    pub fn consume_invisible_change(&self) -> bool {
+        if self.child_opacity() != 0.0 {
+            return false;
+        }
+        self.dirty_state.0.did_change.set(false);
+        true
+    }
+
     pub fn on_component_dirty_at(&mut self, graph_order: u32) {
         self.dirty_state.on_component_dirty_at(graph_order);
     }
@@ -2402,7 +2454,7 @@ impl Artboard {
         Self::sync_layout_after_host_attachment(this, parent);
     }
 
-    fn set_host_state(
+    pub(crate) fn set_host_state(
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
@@ -3221,7 +3273,12 @@ impl Artboard {
         .flatten()
     }
 
-    pub fn draw_hosted_handle(host: &CoreHandle, hosted: &CoreHandle, renderer: &mut Renderer) {
+    pub fn draw_hosted_handle(
+        host: &CoreHandle,
+        hosted: &CoreHandle,
+        renderer: &mut Renderer,
+        bypass_cache: bool,
+    ) {
         let mut visitor = host
             .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
             .flatten();
@@ -3240,7 +3297,11 @@ impl Artboard {
                 a.draw_visitor_file = file.as_ref().map(RuntimeFileHandle::downgrade)
             });
         }
-        Self::draw_internal_with_visitor_handle(hosted, renderer, visitor, None);
+        if bypass_cache {
+            Self::draw_content_with_visitor_handle(hosted, renderer, visitor);
+        } else {
+            Self::draw_internal_with_visitor_handle(hosted, renderer, visitor, None);
+        }
     }
 
     pub fn draw_modulated_handle(
@@ -3353,7 +3414,7 @@ impl Artboard {
             previous,
         };
         let Some((has_self, save)) = root.with_downcast::<Artboard, _>(|artboard| {
-            let has_self = artboard.has_self_transform();
+            let has_self = artboard.has_self_transform() && !artboard.skip_self_transform;
             (
                 has_self,
                 artboard.clip() || artboard.frame_origin || has_self,
@@ -3941,192 +4002,169 @@ impl Artboard {
     /// host, zero size, or allocation failure), so the caller falls back to
     /// draw_content.
     pub fn draw_cached_as_bitmap_handle(root: &CoreHandle, renderer: &mut Renderer) -> bool {
-        // Only reached when bitmap_cache is Some (guarded in draw_internal).
+        use super::offscreen_raster as offscreen;
         let Some(cache) = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.bitmap_cache.clone())
+            .with_downcast::<Artboard, _>(|a| a.bitmap_cache.clone())
             .flatten()
         else {
             return false;
         };
-
         if !cache
-            .with_downcast::<BitmapCache, _>(|cache| cache.cache_enabled())
+            .with_downcast::<BitmapCache, _>(BitmapCache::cache_enabled)
             .unwrap_or(false)
         {
-            // Authored off (or animated/bound off): behave as though the
-            // artboard had no BitmapCache at all. The texture is released by
-            // BitmapCache::cache_flags_changed when the bit clears.
             return false;
         }
-
-        if root
-            .with_downcast::<Artboard, _>(|artboard| artboard.child_opacity())
-            .unwrap_or(1.0)
-            == 0.0
-        {
-            // Fully transparent: nothing to draw, and no need to
-            // (re)rasterize. The pending change still has to be consumed the
-            // way draw_content would have on the vector path -- a host that
-            // gates frame submission on did_change() otherwise resubmits this
-            // invisible artboard every frame, forever. Fold it into the cache
-            // rather than dropping it, so content that moved while it was
-            // transparent still re-rasterizes when it becomes visible again.
-            let changed = root
-                .with_downcast::<Artboard, _>(|artboard| {
-                    let changed = artboard.did_change();
-                    artboard.dirty_state.0.did_change.set(false);
-                    changed
-                })
-                .unwrap_or(false);
-            cache.with_downcast_mut::<BitmapCache, _>(|cache| cache.dirty = cache.dirty || changed);
+        if root.with_downcast::<Artboard, _>(Artboard::consume_invisible_change) == Some(true) {
             return true;
         }
-
-        // canvas_content_host, not deferred_canvas_host: this only needs
-        // somewhere to rasterize into, and an immediate renderer can provide
-        // that without claiming its content is being recorded. The host also
-        // allocates the canvas, so nothing here has to go looking for a device.
-        let factory = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.factory())
-            .flatten();
-        // No host means nobody can give us an offscreen frame (a plain non-GPU
-        // or test factory), so fall back to a normal vector draw.
-        let Some(deferred_host) = factory
-            .and_then(|factory| factory.with_factory_mut(|factory| factory.canvas_content_host()))
-        else {
-            return false;
-        };
-
-        // The artboard's own box, which is not [0,0,width,height] in general:
-        // with frame_origin off, bounds() is offset by the origin -- and
-        // NestedArtboard turns frame_origin off on everything it hosts, which
-        // is the only way to reach this path. bounds() also tracks the resolved
-        // layout size rather than the authored width/height.
-        let Some((bx, has_self_transform)) = root.with_downcast::<Artboard, _>(|artboard| {
-            (artboard.bounds(), artboard.has_self_transform())
-        }) else {
-            return false;
-        };
-        let w = bx.width();
-        let h = bx.height();
-        if w <= 0.0 || h <= 0.0 {
-            return false;
-        }
-
-        // draw_content applies the artboard's own rotation/scale, so a self
-        // transform ends up baked into the raster -- while the target and the
-        // composite below are both sized and placed from the untransformed
-        // box. Until the target is sized from the transformed bounds, these
-        // artboards draw as vectors.
-        if has_self_transform {
-            return false;
-        }
-
-        use crate::mechanical_port::source::offscreen_raster as offscreen;
-        let resolution = cache
-            .with_downcast::<BitmapCache, _>(|c| c.resolution())
+        let has_self = root
+            .with_downcast::<Artboard, _>(Artboard::has_self_transform)
             .unwrap();
-        let mut plan = offscreen::RasterPlan::default();
-        if !offscreen::plan_raster(renderer, &bx, resolution, &mut plan) {
-            return false;
+        if has_self {
+            renderer.save();
+            let transform = root
+                .with_downcast::<Artboard, _>(Artboard::composite_self_transform)
+                .unwrap();
+            renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
         }
-        let (width_px, height_px, raster_scale) =
-            (plan.width_px, plan.height_px, plan.raster_scale);
-
-        // Rebuild when there is no cache, it was explicitly invalidated
-        // (resolution changed), the target size or raster scale changed
-        // (artboard resized, or viewed at a different zoom), or the content
-        // changed this frame.
-        let did_change = root
-            .with_downcast::<Artboard, _>(Artboard::did_change)
-            .unwrap_or(false);
-        let needs_render = cache
-            .with_downcast::<BitmapCache, _>(|cache| {
-                let geom_changed = width_px != cache.width_px
-                    || height_px != cache.height_px
-                    || raster_scale != cache.raster_scale;
-                cache.canvas.is_none() || cache.dirty || geom_changed || did_change
-            })
-            .unwrap_or(false);
-        if needs_render {
-            Self::render_into_canvas_handle(root, &cache, &deferred_host, &plan);
+        // C++ SelfScope starts after the initial transform callback.
+        struct SelfScope<'a, 'r> {
+            renderer: &'a mut Renderer<'r>,
+            active: bool,
         }
-        let Some(canvas) = cache
-            .with_downcast::<BitmapCache, _>(|cache| cache.canvas.clone())
-            .flatten()
-        else {
-            return false; // allocation failed; fall back to vector draw.
+        impl Drop for SelfScope<'_, '_> {
+            fn drop(&mut self) {
+                if self.active {
+                    self.renderer.restore();
+                }
+            }
+        }
+        let scope = SelfScope {
+            renderer,
+            active: has_self,
         };
-
-        // Composite the cached texture in place of the vector content. The
-        // renderer's CTM already includes the mount transform; draw_image()
-        // spans (width_px, height_px), so undoing the raster's fit -- scale
-        // back to the box, then move it to the box's corner -- maps a local
-        // point to CTM * point, pixel-exact with the vector path. The
-        // artboard's own opacity is already baked into the raster, so the only
-        // opacity left to apply is an enclosing modulate_opacity() scope --
-        // and only on the fresh-renderer path, which does not inherit it.
-        let Some(image) = deferred_host.borrow_mut().content_canvas_image(&canvas) else {
-            return false;
-        };
-        let cache_raster_scale = cache
-            .with_downcast::<BitmapCache, _>(|cache| cache.raster_scale)
+        let (raster, resolution) = cache
+            .with_downcast::<BitmapCache, _>(|c| (c.raster.clone(), c.resolution()))
             .unwrap();
-        let mut placement =
-            offscreen::begin_composite(renderer, Some(&deferred_host), &plan, cache_raster_scale);
-        let opacity = placement.opacity;
-        placement.renderer().draw_image(
-            Some(image.as_ref()),
-            nuxie_render_api::ImageSampler::LINEAR_CLAMP,
-            nuxie_render_api::BlendMode::SrcOver,
-            opacity,
-        );
-        offscreen::end_composite(placement);
-        true
+        let result = Self::raster_image_handle(root, scope.renderer, &raster, resolution, false);
+        let (scale, bounds) = {
+            let raster = raster.borrow();
+            (raster.raster_scale, raster.bounds)
+        };
+        if let Some((image, plan, host)) = result {
+            let mut placement = offscreen::begin_composite_for_box(
+                scope.renderer,
+                Some(&host),
+                &plan,
+                scale,
+                &bounds,
+            );
+            let opacity = placement.opacity;
+            placement.renderer().draw_image(
+                Some(image.as_ref()),
+                nuxie_render_api::ImageSampler::LINEAR_CLAMP,
+                nuxie_render_api::BlendMode::SrcOver,
+                opacity,
+            );
+            offscreen::end_composite(placement);
+            true
+        } else {
+            false
+        }
     }
 
-    fn render_into_canvas_handle(
+    pub fn raster_image_handle(
         root: &CoreHandle,
-        cache: &CoreHandle,
-        deferred_host: &nuxie_render_api::DeferredCanvasHostHandle,
-        plan: &crate::mechanical_port::source::offscreen_raster::RasterPlan,
+        renderer: &mut Renderer,
+        raster: &Rc<RefCell<super::offscreen_raster::CachedRaster>>,
+        resolution: f32,
+        fixed_size: bool,
+    ) -> Option<(
+        Rc<dyn nuxie_render_api::RenderImage>,
+        super::offscreen_raster::RasterPlan,
+        nuxie_render_api::DeferredCanvasHostHandle,
+    )> {
+        use super::offscreen_raster as offscreen;
+        let factory = root
+            .with_downcast::<Artboard, _>(Artboard::factory)
+            .flatten()?;
+        let host = factory.with_factory_mut(|factory| factory.canvas_content_host())?;
+        let bounds = root.with_downcast::<Artboard, _>(Artboard::bounds)?;
+        let mut plan = offscreen::RasterPlan::default();
+        let planned = if fixed_size {
+            offscreen::plan_fixed_raster(renderer, &bounds, resolution, &mut plan)
+        } else {
+            offscreen::plan_raster(renderer, &bounds, resolution, &mut plan)
+        };
+        if !planned {
+            return None;
+        }
+        let geometry_changed = {
+            let raster = raster.borrow();
+            plan.width_px != raster.width_px
+                || plan.height_px != raster.height_px
+                || plan.raster_scale != raster.raster_scale
+        };
+        let revision = root.with_downcast::<Artboard, _>(|a| {
+            a.dirty_state.0.did_change.set(false);
+            a.dirty_state.0.content_revision.get()
+        })?;
+        let needs_render = {
+            let raster = raster.borrow();
+            raster.canvas.is_none()
+                || raster.dirty
+                || geometry_changed
+                || raster.content_revision != revision
+        };
+        if needs_render {
+            Self::render_into_canvas_handle(root, &host, &plan, raster);
+        }
+        let canvas = raster.borrow().canvas.clone()?;
+        let image = host.borrow_mut().content_canvas_image(&canvas)?;
+        Some((image, plan, host))
+    }
+
+    pub fn render_into_canvas_handle(
+        root: &CoreHandle,
+        host: &nuxie_render_api::DeferredCanvasHostHandle,
+        plan: &super::offscreen_raster::RasterPlan,
+        raster: &Rc<RefCell<super::offscreen_raster::CachedRaster>>,
     ) {
-        use crate::mechanical_port::source::offscreen_raster::CanvasContentScope;
-        let reuse = cache
-            .with_downcast::<BitmapCache, _>(|c| {
-                c.canvas.is_some() && c.width_px == plan.width_px && c.height_px == plan.height_px
-            })
-            .unwrap_or(false);
-        if !reuse {
-            let canvas = deferred_host
+        use super::offscreen_raster::CanvasContentScope;
+        let allocate = {
+            let raster = raster.borrow();
+            raster.canvas.is_none()
+                || raster.width_px != plan.width_px
+                || raster.height_px != plan.height_px
+        };
+        if allocate {
+            let canvas = host
                 .borrow_mut()
                 .make_content_canvas(plan.width_px, plan.height_px);
-            cache.with_downcast_mut::<BitmapCache, _>(|c| c.canvas = canvas);
+            raster.borrow_mut().canvas = canvas;
         }
-        let Some(canvas) = cache
-            .with_downcast::<BitmapCache, _>(|c| c.canvas.clone())
-            .flatten()
-        else {
+        let Some(canvas) = raster.borrow().canvas.clone() else {
             return;
         };
-        let mut scope = CanvasContentScope::new(Some(deferred_host), Some(&canvas), plan, 0);
-        let Some(r) = scope.renderer() else {
-            cache.with_downcast_mut::<BitmapCache, _>(|c| {
-                c.canvas = None;
-                c.width_px = 0;
-                c.height_px = 0;
-                c.dirty = true;
-            });
+        let mut scope = CanvasContentScope::new(Some(host), Some(&canvas), plan, 0);
+        let Some(renderer) = scope.renderer() else {
+            drop(scope);
+            raster.borrow_mut().release();
             return;
         };
-        Self::draw_content_handle(root, r);
+        let revision = root
+            .with_downcast::<Artboard, _>(|a| a.dirty_state.0.content_revision.get())
+            .unwrap();
+        Self::draw_content_untransformed_handle(root, renderer);
         drop(scope);
-        cache.with_downcast_mut::<BitmapCache, _>(|c| {
-            c.width_px = plan.width_px;
-            c.height_px = plan.height_px;
-            c.raster_scale = plan.raster_scale;
-            c.dirty = false;
-        });
+        let mut raster = raster.borrow_mut();
+        raster.width_px = plan.width_px;
+        raster.height_px = plan.height_px;
+        raster.raster_scale = plan.raster_scale;
+        raster.bounds = plan.bounds;
+        raster.content_revision = revision;
+        raster.dirty = false;
     }
 
     pub fn add_to_render_path(&mut self, path: &mut RenderPath, transform: &Mat2D) {

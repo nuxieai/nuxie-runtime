@@ -1,4 +1,4 @@
-//! tests/unit_tests/runtime/artboard_bitmap_cache_test.cpp at a4dbc3ff.
+//! tests/unit_tests/runtime/artboard_bitmap_cache_test.cpp through 1b9b7381.
 //!
 //! Cache-as-bitmap validation for an artboard carrying a BitmapCache child.
 //! The feature only engages on the deferred/recording path (a factory that
@@ -13,8 +13,7 @@
 //! reads the same facts off the recorded frame: its content canvases (one per
 //! offscreen bracket) and its canvas segments (the bracket's stream bytes).
 //!
-//! All 24 upstream cases are represented, including the opt-in serializing
-//! factory path that became available at the ordered a4dbc3ff checkpoint.
+//! Includes the upstream serializing-factory and transformed-raster cases.
 use super::super::{
     command_stream::CommandReader,
     deferred_replayer::*,
@@ -79,6 +78,110 @@ fn set_node_x(node: &CoreHandle, value: f32) {
 const MIN_RES: f32 = 0.01;
 const MAX_RES: f32 = 8.0;
 const MAX_DIM: u32 = 2048;
+
+#[test]
+fn max_dim_caps_a_fixed_size_raster_uniformly() {
+    let _guard = super::artboard_mesh_test::DISPLAY_SCALE_TESTS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    use nuxie_runtime::source::{
+        math::aabb::Aabb,
+        offscreen_raster::{plan_fixed_raster_size, RasterPlan},
+    };
+    let mut plan = RasterPlan::default();
+    assert!(plan_fixed_raster_size(
+        &Aabb::new(0.0, 0.0, 1600.0, 900.0),
+        2.0,
+        &mut plan
+    ));
+    assert_eq!(plan.width_px, MAX_DIM);
+    assert_eq!(plan.height_px, 1152);
+    assert!(
+        (plan.raster_scale - 2048.0 / 1600.0).abs() <= 100.0 * f32::EPSILON * (2048.0 / 1600.0)
+    );
+    assert!(plan_fixed_raster_size(
+        &Aabb::new(-10.0, -5.0, 90.0, 45.0),
+        2.0,
+        &mut plan
+    ));
+    assert_eq!((plan.width_px, plan.height_px), (200, 100));
+    assert_eq!(plan.raster_scale, 2.0);
+}
+
+#[test]
+fn animating_rotation_composites_the_same_raster() {
+    let mut h = Harness::new();
+    h.set_resolution(1.0);
+    h.artboard.with_artboard_mut(|a| a.set_frame_origin(false));
+    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.1);
+    h.frame(0.0);
+    let rasters = h.raster_count();
+    for i in 0..5 {
+        h.set_artboard_double(
+            TransformComponentBase::ROTATION_PROPERTY_KEY,
+            0.2 + 0.1 * i as f32,
+        );
+        assert_eq!(h.frame(0.0).draw_images(), 1);
+        assert!(!h.did_change());
+    }
+    assert_eq!(h.raster_count(), rasters);
+    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 1.0);
+    h.set_artboard_double(nuxie_runtime::source::generated::world_transform_component_base::WorldTransformComponentBase::OPACITY_PROPERTY_KEY, 0.5);
+    h.frame(0.0);
+    assert_eq!(h.raster_count(), rasters + 1);
+}
+
+#[test]
+fn child_dirt_in_the_same_frame_as_a_self_rotation_rerasterizes() {
+    let mut h = Harness::new();
+    h.set_resolution(1.0);
+    h.artboard.with_artboard_mut(|a| a.set_frame_origin(false));
+    h.frame(0.0);
+    h.frame(0.0);
+    let node = h
+        .artboard
+        .with_artboard(|a| {
+            a.objects()
+                .iter()
+                .flatten()
+                .find(|o| o.is_type_of(NodeBase::TYPE_KEY) && !o.is_type_of(ArtboardBase::TYPE_KEY))
+                .cloned()
+        })
+        .unwrap();
+    let mark = || {
+        node.with_mut(|o| {
+            o.as_world_transform_component_mut()
+                .unwrap()
+                .mark_world_transform_dirty()
+        });
+    };
+    let n = h.raster_count();
+    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.3);
+    mark();
+    h.frame(0.0);
+    assert_eq!(h.raster_count(), n + 1);
+    let n = h.raster_count();
+    mark();
+    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.7);
+    h.frame(0.0);
+    assert_eq!(h.raster_count(), n + 1);
+}
+
+#[test]
+fn rotating_at_a_noninteger_view_scale_keeps_one_raster_size() {
+    let mut h = Harness::new();
+    h.set_resolution(1.0);
+    h.artboard.with_artboard_mut(|a| a.set_frame_origin(false));
+    let view = M::from_scale(1.5, 1.5);
+    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.1);
+    h.frame_under(0.0, Some(view));
+    let rasters = h.raster_count();
+    for rotation in [0.3, 0.1, 0.7, 1.1, 0.3] {
+        h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, rotation);
+        h.frame_under(0.0, Some(view));
+    }
+    assert_eq!(h.raster_count(), rasters);
+}
 
 // std::min/std::max argument order, so a NaN behaves as it does upstream.
 fn cpp_min(a: f32, b: f32) -> f32 {
@@ -566,51 +669,61 @@ fn cache_enabled_off_falls_back_to_a_vector_draw() {
 }
 
 #[test]
-fn a_rotated_or_scaled_artboard_falls_back_to_a_vector_draw() {
+fn a_rotated_or_scaled_artboard_stays_cached_under_its_transform() {
     let mut h = Harness::new();
     h.set_resolution(1.0);
-    // Baseline: an identity self transform caches as usual.
+    h.artboard.with_artboard_mut(|a| a.set_frame_origin(false));
     assert_eq!(h.frame(0.0).canvas_opens(), 1);
-    assert_eq!(h.raster_count(), 1);
-
+    let identity_raster = h.last_raster();
     h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.4);
-    assert!(h.has_self_transform());
-    let rotated = h.frame(0.0);
-    assert_eq!(h.raster_count(), 1); // no new raster
-    assert_eq!(rotated.canvas_opens(), 0);
-    assert_eq!(rotated.draw_images(), 0);
-    assert!(rotated.draw_paths() > 0);
-
-    // Scale on its own is enough; rotation is not the only way in.
-    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.0);
     h.set_artboard_double(TransformComponentBase::SCALE_X_PROPERTY_KEY, 2.0);
     assert!(h.has_self_transform());
-    let scaled = h.frame(0.0);
-    assert_eq!(h.raster_count(), 1);
-    assert_eq!(scaled.canvas_opens(), 0);
-    assert_eq!(scaled.draw_images(), 0);
-    assert!(scaled.draw_paths() > 0);
-
-    // The same artboard drawn uncached records the same vector content.
-    let mut uncached = Harness::with_cache(false);
-    uncached.set_artboard_double(TransformComponentBase::SCALE_X_PROPERTY_KEY, 2.0);
-    assert_eq!(scaled.draw_paths(), uncached.frame(0.0).draw_paths());
-
-    // Back at identity the cache engages again, rasterizing afresh because
-    // changing the transform marks the artboard changed.
-    h.set_artboard_double(TransformComponentBase::SCALE_X_PROPERTY_KEY, 1.0);
-    assert!(!h.has_self_transform());
-    let identity = h.frame(0.0);
-    assert_eq!(h.raster_count(), 2);
-    assert_eq!(identity.canvas_opens(), 1);
-    assert!(identity.draw_images() >= 1);
-
-    // ...and once it settles, back to one composite and no vector content.
+    let transformed = h.frame(0.0);
+    assert_eq!(transformed.canvas_opens(), 1);
+    assert_eq!(transformed.draw_images(), 1);
+    let raster = h.last_raster();
+    assert_eq!(raster.width, 2 * identity_raster.width);
+    let ctm = composite_transform(&h.last_frame).unwrap();
+    let own = h.artboard.with_artboard(|a| {
+        assert_eq!(a.composite_self_transform(), a.self_transform());
+        a.composite_self_transform()
+    });
+    let bounds = h.artboard.with_artboard(|a| a.bounds());
+    let got = ctm * Vec2D::new(0.0, 0.0);
+    let want = own * Vec2D::new(bounds.left(), bounds.top());
+    assert!(approx(got.x, want.x, 0.01));
+    assert!(approx(got.y, want.y, 0.01));
+    let got = ctm * Vec2D::new(raster.width as f32, raster.height as f32);
+    let want = own * Vec2D::new(bounds.right(), bounds.bottom());
+    assert!(approx(got.x, want.x, 1.0));
+    assert!(approx(got.y, want.y, 1.0));
+    let rasters = h.raster_count();
     let settled = h.frame(0.0);
-    assert_eq!(h.raster_count(), 2);
+    assert_eq!(h.raster_count(), rasters);
     assert_eq!(settled.canvas_opens(), 0);
     assert_eq!(settled.draw_paths(), 0);
     assert_eq!(settled.draw_ops(), 1);
+}
+
+#[test]
+fn a_transformed_artboard_with_frame_origin_on_pivots_on_its_origin() {
+    let mut h = Harness::new();
+    h.set_resolution(1.0);
+    assert!(h.artboard.with_artboard(|a| a.frame_origin()));
+    h.set_artboard_double(ArtboardBase::ORIGIN_X_PROPERTY_KEY, 0.5);
+    h.set_artboard_double(ArtboardBase::ORIGIN_Y_PROPERTY_KEY, 0.25);
+    h.set_artboard_double(TransformComponentBase::ROTATION_PROPERTY_KEY, 0.3);
+    h.set_artboard_double(TransformComponentBase::SCALE_Y_PROPERTY_KEY, 1.5);
+    h.frame(0.0);
+    let ctm = composite_transform(&h.last_frame).unwrap();
+    let (w, height, own) = h
+        .artboard
+        .with_artboard(|a| (a.layout_width(), a.layout_height(), a.self_transform()));
+    let to_origin = M::from_translate(w * 0.5, height * 0.25);
+    let want = to_origin * own * Vec2D::new(-w * 0.5, -height * 0.25);
+    let got = ctm * Vec2D::new(0.0, 0.0);
+    assert!(approx(got.x, want.x, 0.01));
+    assert!(approx(got.y, want.y, 0.01));
 }
 
 #[test]

@@ -7,18 +7,39 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3f67b2f86d5c62e5767f3f5b93edfb4b26f68853`
+- LAST_SYNCED_SHA: `1b9b7381fd92e2de41f9c936f2073d1e0d984717`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 221 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (243 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 222 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (244 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `1b9b7381`, integrated atop downstream `bc67d2413b`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including shared raster invalidation across callbacks, unwind-safe
+  self-transform restoration, and synchronous nested-layout attachment without
+  reborrowing the active owner. All 29 public mesh cases plus two callback
+  regression tests are live; the scoped renderer run passes 64 tests and seven
+  runtime targets pass 45 tests. The renderer's test-only runtime dependency
+  enables tools so the upstream editor-host callback test actually executes.
+  Runtime and both browser renderer products compile for wasm32-unknown-unknown.
+  Source/pipeline tests pass 12, manifest tests pass 27, and formatting,
+  generated-file and diff checks pass.
+  Ordinary Golden passes all 364 eligible comparisons with unchanged settings
+  (1,182 stream segments and 1,174 side-channel segments). Scripted Golden
+  passes 362 comparisons and verifies the two unchanged divergence signatures
+  (1,176 stream segments and 1,168 side-channel segments). Both C++ runners
+  were rebuilt at this exact upstream revision; both Rust release runners
+  were rebuilt and provenance-verified from the frozen corrected source.
+  Final Silver retains 85 byte-exact, 121 existing-epsilon, eight recorded
+  divergent and 17 unsupported cases, with no pending runtime cases.
+  No tolerance or assertion was weakened. No browser-pixel or new Android
+  hardware coverage is claimed; guest execution remains parked.
 - Validation at `3f67b2f8`, integrated atop downstream `de0cace647`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Both complete live skinned-rig regressions and all eight existing
@@ -664,6 +685,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1b9b7381fd92e2de41f9c936f2073d1e0d984717` | Translate MeshHost and lazily allocated Node-mode NestedArtboard mesh/N-slice state, fixed display-scaled mesh rasters, draw-time UV refresh, clipping/visitor vector paths, and immediate raster release on source swaps. Bitmap Cache retains on-screen sizing; self transforms move to compositing and independent content revisions prevent stale multi-path caches. Translate public renderer-host capability, all mesh/cache regression cases and hosted semantic-rotation coverage. Private editor/agent/WebGL changes described only in commit prose are not claimed imported. | — |
 | `3f67b2f86d5c62e5767f3f5b93edfb4b26f68853` | Translate runtime cubic-vertex missing-weight guard and Weight::fitsVertex registration rule, rejecting base Weight for cubic vertices. Port both complete live skinned-rig regressions. Private editor parent-change and agent add_vertices work described in the message is absent from the public delta and is not claimed imported. | — |
 | `1e55b86a79b97d57065e892ac8fc3b219596e768` | Guard script artboard-input instancing with a thread-local stack of source-artboard identities, leaving only repeated inputs unset and removing the guard on unwind. Translate the public Host/Holder cycle regression with the exact upstream fixture. Shared runtime/Luau behavior is in scope; guest execution remains parked and private .rive_head changes are not claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `439ffe0c1c79c6c20b7c9e553f8f0586bbd9e2f6` | Claim artboard slots before object import and retain empty slots on failure; match script inputs to their owner's parent ID, including unreadable owners. Translate the immutable binary reader counterpart, initial-valid orphan pruning, and failed-super view-model import return. Component-list null-row iteration/pooling is already represented by non-null Rust map entries; preserve it and port both upstream regressions alongside all new malformed-import cases. No private .rive_head/editor changes are claimed. | — |

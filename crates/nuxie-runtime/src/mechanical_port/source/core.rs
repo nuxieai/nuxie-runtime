@@ -845,6 +845,15 @@ impl CoreHandle {
             .then(|| self.identity.slot.lease())
     }
 
+    /// Whether an authored object still occupies this handle's slot: what
+    /// `with` checks before lending it. Unlike `is_alive`, it does not consult
+    /// a runtime Artboard root's owner.
+    #[inline]
+    pub(crate) fn is_occupied(&self) -> bool {
+        let slot = &self.identity.slot;
+        slot.generation.get() == slot.hot.identity_generation && slot.occupied.get()
+    }
+
     pub fn is_alive(&self) -> bool {
         self.slot().is_some_and(|slot| {
             slot.occupied.get()

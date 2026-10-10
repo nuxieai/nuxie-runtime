@@ -140,12 +140,12 @@ impl ShapeCells {
     /// Shape::pathChanged() for a caller that holds no Shape borrow: a path,
     /// a path's skin or the composer.
     pub(crate) fn path_changed(&self, shape: &CoreHandle) {
-        if !shape.is_alive() {
+        if !shape.is_occupied() {
             return;
         }
         self.add_composer_dirt(ComponentDirt::PATH, true);
         // The composer's dependents may retire the shape.
-        if !shape.is_alive() {
+        if !shape.is_occupied() {
             return;
         }
         self.world_length.set(-1.0);
@@ -165,7 +165,7 @@ impl ShapeCells {
                 index += 1;
             }
         }
-        if shape.is_alive() {
+        if shape.is_occupied() {
             self.paints.invalidate_stroke_effects();
         }
     }

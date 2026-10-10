@@ -708,7 +708,9 @@ impl ShapePaint {
         effect: &mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect,
     ) {
         effect.add_path_provider(&self.path_provider);
-        self.effects_container.add_stroke_effect(identity);
+        let paths = effect.shared_effect_paths();
+        self.effects_container
+            .add_stroke_effect_with_paths(identity, paths);
     }
 
     pub fn render_opacity(&self) -> f32 {

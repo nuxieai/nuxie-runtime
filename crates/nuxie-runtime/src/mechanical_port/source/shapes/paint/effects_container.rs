@@ -39,9 +39,19 @@ impl EffectsContainerState {
     }
 
     pub fn add_stroke_effect(&mut self, effect: CoreHandle) {
+        self.add_stroke_effect_with_paths(effect, None);
+    }
+
+    /// Add an effect, sharing its paths with a paint's cells when its
+    /// invalidation only rewinds them.
+    pub(crate) fn add_stroke_effect_with_paths(
+        &mut self,
+        effect: CoreHandle,
+        paths: Option<crate::mechanical_port::source::shapes::paint::stroke_effect::EffectPaths>,
+    ) {
         self.effects.push(effect);
         if let Some(paint) = &self.paint {
-            paint.set_has_effects();
+            paint.add_effect(paths);
         }
     }
     pub fn invalidate_effects(&mut self, invalidating: Option<&CoreHandle>) {

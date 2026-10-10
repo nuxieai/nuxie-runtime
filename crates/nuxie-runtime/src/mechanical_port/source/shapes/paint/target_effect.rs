@@ -75,19 +75,14 @@ impl TargetEffect {
                 let proxies = if let Some(provider) = provider {
                     target
                         .stroke
-                        .effect_paths
-                        .get_mut(&provider.identity())
-                        .and_then(|path| path.as_target_mut())
-                        .map(|path| vec![*path.path_provider_proxy()])
+                        .with_path_mut(&provider, |path| {
+                            path.as_target_mut().map(|path| *path.path_provider_proxy())
+                        })
+                        .flatten()
+                        .map(|proxy| vec![proxy])
                         .unwrap_or_default()
                 } else {
-                    target
-                        .stroke
-                        .effect_paths
-                        .values_mut()
-                        .filter_map(|path| path.as_target_mut())
-                        .map(|path| *path.path_provider_proxy())
-                        .collect()
+                    target.proxies()
                 };
                 (group, proxies)
             })
@@ -141,10 +136,11 @@ impl TargetEffect {
             return StatusCode::MissingObject;
         };
         self.group_effect = Some(group.clone());
+        let proxies = self.proxies();
         group.with_downcast_mut::<GroupEffect, _>(|group| {
             group.add_target_effect(this);
-            for path in self.stroke.effect_paths.values_mut() {
-                group.add_path_provider(path.as_target_mut().unwrap().path_provider_proxy());
+            for proxy in &proxies {
+                group.add_path_provider(proxy);
             }
         });
         StatusCode::Ok
@@ -158,13 +154,9 @@ impl TargetEffect {
         let Some(group) = self.group_effect() else {
             return;
         };
-        if let Some(path) = self.stroke.effect_paths.get_mut(&provider.identity()) {
+        if let Some(proxy) = self.proxy(provider) {
             group.with_downcast_mut::<GroupEffect, _>(|group| {
-                group.update_effect(
-                    path.as_target_mut().unwrap().path_provider_proxy(),
-                    source,
-                    paint,
-                );
+                group.update_effect(&proxy, source, paint);
             });
         }
     }
@@ -173,24 +165,41 @@ impl TargetEffect {
         provider: &PathProvider,
     ) -> Option<std::rc::Rc<std::cell::RefCell<ShapePaintPath>>> {
         let group = self.group_effect()?;
-        let path = self.stroke.effect_paths.get_mut(&provider.identity())?;
+        let proxy = self.proxy(provider)?;
         group
-            .with_downcast_mut::<GroupEffect, _>(|group| {
-                group.last_effect_path(path.as_target_mut().unwrap().path_provider_proxy())
-            })
+            .with_downcast_mut::<GroupEffect, _>(|group| group.last_effect_path(&proxy))
             .flatten()
     }
     pub fn add_path_provider(&mut self, provider: &PathProvider) {
         let path = self.create_effect_path();
         self.stroke.add_path_provider(provider, path);
         let group = self.group_effect();
-        if let Some(path) = self.stroke.effect_paths.get_mut(&provider.identity()) {
+        if let Some(proxy) = self.proxy(provider) {
             if let Some(group) = group {
                 group.with_downcast_mut::<GroupEffect, _>(|group| {
-                    group.add_path_provider(path.as_target_mut().unwrap().path_provider_proxy());
+                    group.add_path_provider(&proxy);
                 });
             }
         }
+    }
+    /// The group-side provider standing in for one of this target's providers.
+    fn proxy(&self, provider: &PathProvider) -> Option<PathProvider> {
+        self.stroke
+            .with_path_mut(provider, |path| {
+                *path
+                    .as_target_mut()
+                    .expect("a TargetEffect's paths are TargetEffectPaths")
+                    .path_provider_proxy()
+            })
+    }
+    /// Every provider proxy, in the paths' iteration order.
+    fn proxies(&self) -> Vec<PathProvider> {
+        self.stroke
+            .effect_paths()
+            .borrow_mut()
+            .values_mut()
+            .filter_map(|path| path.as_target_mut().map(|path| *path.path_provider_proxy()))
+            .collect()
     }
     pub fn create_effect_path_direct(&mut self) -> Box<dyn EffectPath> {
         Box::new(TargetEffectPath::new())
@@ -200,19 +209,15 @@ impl TargetEffect {
             return;
         };
         if let Some(provider) = provider {
-            if let Some(path) = self.stroke.effect_paths.get_mut(&provider.identity()) {
+            if let Some(proxy) = self.proxy(provider) {
                 group.with_downcast_mut::<GroupEffect, _>(|group| {
-                    group.invalidate_effect(Some(
-                        path.as_target_mut().unwrap().path_provider_proxy(),
-                    ));
+                    group.invalidate_effect(Some(&proxy));
                 });
             }
         } else {
-            for path in self.stroke.effect_paths.values_mut() {
+            for proxy in self.proxies() {
                 group.with_downcast_mut::<GroupEffect, _>(|group| {
-                    group.invalidate_effect(Some(
-                        path.as_target_mut().unwrap().path_provider_proxy(),
-                    ));
+                    group.invalidate_effect(Some(&proxy));
                 });
             }
         }

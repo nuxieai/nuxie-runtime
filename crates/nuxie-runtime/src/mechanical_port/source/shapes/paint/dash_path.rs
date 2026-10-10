@@ -182,9 +182,9 @@ impl DashPath {
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
-        let Some(effect) = self
-            .stroke
-            .effect_paths
+        let paths = std::rc::Rc::clone(self.stroke.effect_paths());
+        let mut paths = paths.borrow_mut();
+        let Some(effect) = paths
             .get_mut(&provider.identity())
             .and_then(|path| path.as_dash_mut())
         else {
@@ -236,5 +236,10 @@ impl StrokeEffect for DashPath {
     }
     fn create_effect_path(&mut self) -> Box<dyn EffectPath> {
         Box::new(DashEffectPath::new())
+    }
+    fn shared_effect_paths(
+        &mut self,
+    ) -> Option<crate::mechanical_port::source::shapes::paint::stroke_effect::EffectPaths> {
+        Some(std::rc::Rc::clone(self.stroke.effect_paths()))
     }
 }

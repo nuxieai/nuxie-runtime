@@ -14,6 +14,7 @@ use crate::mechanical_port::source::{
     shapes::{
         paint::{
             effects_container,
+            stroke_effect::{EffectPaths, invalidate_effect_paths},
             shape_paint::{
                 RuntimeRenderPaintHandle, ShapePaintRenderingInvalidation, ShapePaintType,
             },
@@ -28,9 +29,11 @@ pub(crate) struct PaintCells {
     // local when transformAffectsStroke, world otherwise. The owning
     // property's storage writes it.
     path_flags: Cell<PathFlags>,
-    // Stroke effects or a feather give invalidateEffects work beyond
-    // invalidateRendering.
-    has_effects: Cell<bool>,
+    // The paths of effects whose invalidateEffect only rewinds them, in
+    // effect order. Any other effect, or a feather, sends invalidateEffects
+    // through the general path.
+    effect_paths: RefCell<Vec<EffectPaths>>,
+    has_other_effects: Cell<bool>,
     has_feather: Cell<bool>,
     render_paint: RefCell<Option<RuntimeRenderPaintHandle>>,
     // The paint's own Component dirt.
@@ -42,7 +45,8 @@ impl PaintCells {
         Self {
             paint_type,
             path_flags: Cell::new(PathFlags::NONE),
-            has_effects: Cell::new(false),
+            effect_paths: RefCell::new(Vec::new()),
+            has_other_effects: Cell::new(false),
             has_feather: Cell::new(false),
             render_paint: RefCell::new(None),
             dirt,
@@ -58,8 +62,13 @@ impl PaintCells {
         self.path_flags.set(flags);
     }
 
-    pub(crate) fn set_has_effects(&self) {
-        self.has_effects.set(true);
+    /// Record an added stroke effect, with its paths when invalidating it
+    /// only rewinds them.
+    pub(crate) fn add_effect(&self, paths: Option<EffectPaths>) {
+        match paths {
+            Some(paths) => self.effect_paths.borrow_mut().push(paths),
+            None => self.has_other_effects.set(true),
+        }
     }
 
     pub(crate) fn set_has_feather(&self) {
@@ -75,20 +84,23 @@ impl PaintCells {
     }
 
     /// ShapePaint::invalidateEffects() as pathChanged runs it on each of the
-    /// container's paints. Without effects or a feather it is only
-    /// invalidateRendering, which these cells carry out on their own.
+    /// container's paints: rewind the effects' paths, then invalidateRendering.
+    /// A feather or an effect with its own invalidation takes the general path.
     pub(crate) fn invalidate_effects(&self, paint: &CoreHandle) {
-        if self.has_effects.get() || self.has_feather.get() {
+        if self.has_other_effects.get() || self.has_feather.get() {
             effects_container::invalidate_effects_handle(paint, None);
             return;
         }
         let graph = self.dirt.graph_binding();
         let live = match &graph {
             Some((graph, index)) => graph.is_live(*index),
-            None => paint.is_alive(),
+            None => paint.is_occupied(),
         };
         if !live {
             return;
+        }
+        for paths in self.effect_paths.borrow().iter() {
+            invalidate_effect_paths(paths, None);
         }
         let invalidation = match self.paint_type {
             ShapePaintType::Fill => ShapePaintRenderingInvalidation::Base,

@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
 
 fn dirty_after_set(key: i32) -> ComponentDirt {
     let mut path = PointsPath::default();
-    path.as_path_mut().unwrap().deferred_path_dirt = true;
+    path.as_path_mut().unwrap().cells().set_deferred(true);
     path.as_component_mut()
         .unwrap()
         .set_dirt(ComponentDirt::NONE);
@@ -36,7 +36,7 @@ fn every_native_path_retains_derived_dirty_behavior_for_both_aliases() {
         for (canonical, alias) in [(13, 9), (14, 10)] {
             let run = |key| {
                 let mut path = T::default();
-                path.as_path_mut().unwrap().deferred_path_dirt = true;
+                path.as_path_mut().unwrap().cells().set_deferred(true);
                 path.as_component_mut()
                     .unwrap()
                     .set_dirt(ComponentDirt::NONE);
@@ -127,7 +127,7 @@ fn alias_completion_notifies_canonical_key_after_derived_dirty_work() {
         let canonical = arena.insert(DataBind::new(0, canonical_key, 0));
         let alias = arena.insert(DataBind::new(0, alias_key, 0));
         owner.with_mut(|object| {
-            object.as_path_mut().unwrap().deferred_path_dirt = true;
+            object.as_path_mut().unwrap().cells().set_deferred(true);
             object
                 .as_component_mut()
                 .unwrap()
@@ -170,7 +170,7 @@ fn alias_completion_notifies_canonical_key_after_derived_dirty_work() {
 #[test]
 fn alias_preserves_nan_and_signed_zero_equality_behavior() {
     let mut path = PointsPath::default();
-    path.as_path_mut().unwrap().deferred_path_dirt = true;
+    path.as_path_mut().unwrap().cells().set_deferred(true);
     path.as_component_mut()
         .unwrap()
         .set_dirt(ComponentDirt::NONE);

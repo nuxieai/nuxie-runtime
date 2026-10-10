@@ -1,3 +1,5 @@
+use std::{cell::Cell, rc::Rc};
+
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::CoreHandle,
@@ -14,9 +16,31 @@ use crate::mechanical_port::source::{
 pub struct TransformComponent {
     pub base: TransformComponentBase,
     transform: Mat2D,
-    render_opacity: Option<f32>,
+    // Shared with the path pipeline's cells (see TransformCells).
+    cells: Rc<TransformCells>,
     parent_transform_component: Option<CoreHandle>,
     constraints: Vec<CoreHandle>,
+}
+
+/// The part of a TransformComponent that the path pipeline reads from cells
+/// (ShapeCells) instead of borrowing the component.
+#[derive(Default)]
+pub(crate) struct TransformCells {
+    // None until the first RenderOpacity update.
+    render_opacity: Cell<Option<f32>>,
+    has_constraints: Cell<bool>,
+}
+
+impl TransformCells {
+    #[inline]
+    pub(crate) fn render_opacity(&self) -> f32 {
+        self.render_opacity.get().unwrap_or(0.0)
+    }
+
+    #[inline]
+    pub(crate) fn has_constraints(&self) -> bool {
+        self.has_constraints.get()
+    }
 }
 
 /// Source virtual dispatch with the Rust occurrence lifetime made explicit.
@@ -199,7 +223,7 @@ impl Default for TransformComponent {
         Self {
             base: TransformComponentBase::default(),
             transform: Mat2D::default(),
-            render_opacity: None,
+            cells: Rc::default(),
             parent_transform_component: None,
             constraints: Vec::new(),
         }
@@ -449,7 +473,7 @@ impl TransformComponent {
         if let Some(parent_child_opacity) = parent_child_opacity {
             opacity *= parent_child_opacity;
         }
-        self.render_opacity = Some(opacity);
+        self.cells.render_opacity.set(Some(opacity));
     }
 
     pub fn child_opacity(&self) -> f32 {
@@ -457,11 +481,15 @@ impl TransformComponent {
     }
 
     pub fn render_opacity(&self) -> f32 {
-        self.render_opacity.unwrap_or(0.0)
+        self.cells.render_opacity()
     }
 
     pub(crate) fn has_computed_render_opacity(&self) -> bool {
-        self.render_opacity.is_some()
+        self.cells.render_opacity.get().is_some()
+    }
+
+    pub(crate) fn cells(&self) -> &Rc<TransformCells> {
+        &self.cells
     }
 
     pub fn transform(&self) -> &Mat2D {
@@ -497,6 +525,7 @@ impl TransformComponent {
 
     pub fn add_constraint(&mut self, constraint: CoreHandle) {
         self.constraints.push(constraint);
+        self.cells.has_constraints.set(true);
     }
 
     pub fn constraint_bounds(&self) -> Aabb {

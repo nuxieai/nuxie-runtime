@@ -25,23 +25,25 @@ use crate::mechanical_port::source::{
         path::Path,
         path_composer::RuntimePathComposerHandle,
         path_flags::PathFlags,
+        shape_cells::ShapeCells,
         shape_paint_container::ShapePaintContainer,
     },
     status_code::StatusCode,
 };
+use std::rc::Rc;
 
 pub struct Shape {
     pub base: ShapeBase,
     pub paint_container: ShapePaintContainer,
     path_composer: RuntimePathComposerHandle,
+    // Shared with the composer and the paths (see ShapeCells): the length and
+    // local-bounds caches, the deformer and whether a layout participant
+    // exists live there.
+    cells: Rc<ShapeCells>,
     paths: Vec<CoreHandle>,
     world_bounds: Aabb,
     local_bounds: std::cell::Cell<Aabb>,
-    local_bounds_clean: std::cell::Cell<bool>,
-    world_length: f32,
     want_difference_path: bool,
-    has_layout_participant: bool,
-    deformer: Option<CoreHandle>,
 }
 
 crate::mechanical_port::source::transform_component::impl_transform_update!(
@@ -93,19 +95,27 @@ impl Shape {
         self.base.world_transform()
     }
     pub fn new() -> Self {
+        let base = ShapeBase::default();
+        let paint_container = ShapePaintContainer::default();
+        let path_composer = RuntimePathComposerHandle::for_shape(
+            Rc::clone(base.cells()),
+            Rc::clone(paint_container.cells()),
+        );
+        let cells = path_composer.cells();
         Self {
-            base: ShapeBase::default(),
-            paint_container: ShapePaintContainer::default(),
-            path_composer: RuntimePathComposerHandle::new(),
+            base,
+            paint_container,
+            path_composer,
+            cells,
             paths: Vec::new(),
             world_bounds: Aabb::default(),
             local_bounds: std::cell::Cell::new(Aabb::default()),
-            local_bounds_clean: std::cell::Cell::new(false),
-            world_length: -1.0,
             want_difference_path: false,
-            has_layout_participant: false,
-            deformer: None,
         }
+    }
+
+    pub(crate) fn cells(&self) -> &Rc<ShapeCells> {
+        &self.cells
     }
 
     pub fn add_path(&mut self, path: CoreHandle) {
@@ -141,12 +151,11 @@ impl Shape {
         self.want_difference_path
     }
     pub fn deformer(&self) -> Option<CoreHandle> {
-        self.deformer.clone()
+        self.cells.deformer()
     }
 
     pub fn can_defer_path_update(&self) -> bool {
-        self.base.render_opacity() == 0.0
-            && !self.is_flagged(PathFlags::CLIPPING | PathFlags::NEVER_DEFER_UPDATE)
+        self.cells.can_defer_path_update()
     }
     pub(crate) fn can_defer_path_update_with_active_path(
         &self,
@@ -203,7 +212,7 @@ impl Shape {
     }
 
     pub fn length(&mut self) -> f32 {
-        if self.world_length < 0.0 {
+        if self.cells.world_length() < 0.0 {
             let mut length = 0.0;
             for path in self.paths() {
                 path.with(|object| {
@@ -234,9 +243,9 @@ impl Shape {
                     }
                 });
             }
-            self.world_length = length;
+            self.cells.set_world_length(length);
         }
-        self.world_length
+        self.cells.world_length()
     }
 
     pub fn set_length(&mut self, _value: f32) {}
@@ -245,10 +254,10 @@ impl Shape {
         self.path_composer
             .clone()
             .add_dirt_from_shape(self, ComponentDirt::PATH, true);
-        self.world_length = -1.0;
+        self.cells.set_world_length(-1.0);
         // Geometry and path transforms invalidate this even when a transparent
         // shape defers the composer update and therefore mark_bounds_dirty.
-        self.local_bounds_clean.set(false);
+        self.cells.set_local_bounds_clean(false);
         self.invalidate_intrinsic_bounds();
         for constraint in self.base.constraints().to_vec() {
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
@@ -260,9 +269,9 @@ impl Shape {
     }
 
     pub(crate) fn path_changed_occurrence(owner: &CoreHandle) {
-        Self::path_changed_with(owner, |occurrence, dirt, recurse| {
-            occurrence.add_dirt(dirt, recurse);
-        });
+        if let Some(cells) = owner.with_downcast::<Self, _>(|shape| Rc::clone(&shape.cells)) {
+            cells.path_changed(owner);
+        }
     }
 
     pub(crate) fn path_changed_from_layout_occurrence(
@@ -287,8 +296,8 @@ impl Shape {
         add_dirt(&composer, ComponentDirt::PATH, true);
         if owner
             .with_downcast_mut::<Self, _>(|shape| {
-                shape.world_length = -1.0;
-                shape.local_bounds_clean.set(false);
+                shape.cells.set_world_length(-1.0);
+                shape.cells.set_local_bounds_clean(false);
                 shape.invalidate_intrinsic_bounds();
             })
             .is_none()
@@ -518,14 +527,14 @@ impl Shape {
         if code != StatusCode::Ok {
             return code;
         }
-        self.deformer = None;
+        self.cells.set_deformer(None);
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
             if current
                 .with(|current| render_path_deformer_from(current).is_some())
                 .unwrap_or(false)
             {
-                self.deformer = Some(current);
+                self.cells.set_deformer(Some(current));
                 return StatusCode::Ok;
             }
             parent = current
@@ -547,7 +556,7 @@ impl Shape {
         self.base.will_draw() && self.base.render_opacity() != 0.0
     }
     pub fn path_collapse_changed(&mut self) {
-        self.local_bounds_clean.set(false);
+        self.cells.set_local_bounds_clean(false);
         let helper = self.path_composer.occurrence();
         self.path_composer
             .clone()
@@ -581,7 +590,7 @@ impl Shape {
         mut add_dirt: impl FnMut(&ComponentOccurrenceHandle, ComponentDirt, bool),
     ) {
         let composer = owner.with_downcast_mut::<Self, _>(|shape| {
-            shape.local_bounds_clean.set(false);
+            shape.cells.set_local_bounds_clean(false);
             shape.path_composer.occurrence()
         });
         if let Some(composer) = composer {
@@ -608,7 +617,7 @@ impl Shape {
     }
     pub fn mark_bounds_dirty(&mut self) {
         self.mark_world_bounds_dirty();
-        self.local_bounds_clean.set(false);
+        self.cells.set_local_bounds_clean(false);
         if let Some(participant) = self.layout_participant() {
             participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
                 participant.mark_layout_node_dirty_from_host(self, false)
@@ -619,7 +628,7 @@ impl Shape {
     /// geometry measured by a layout participant's slot.
     pub fn mark_world_bounds_dirty(&mut self) {
         self.set_drawable_flags(self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0);
-        self.world_length = -1.0;
+        self.cells.set_world_length(-1.0);
     }
 
     /// Combined path control-point hulls in world space. The optional transform
@@ -652,8 +661,8 @@ impl Shape {
         self.compute_world_bounds(Some(self.base.world_transform().invert_or_identity()))
     }
     pub fn local_bounds(&self) -> Aabb {
-        if !self.local_bounds_clean.get() {
-            self.local_bounds_clean.set(true);
+        if !self.cells.local_bounds_clean() {
+            self.cells.set_local_bounds_clean(true);
             self.local_bounds.set(self.compute_local_bounds());
         }
         self.local_bounds.get()
@@ -729,7 +738,7 @@ impl Shape {
         bounds
     }
 
-    fn invalidate_intrinsic_bounds(&mut self) {
+    pub(crate) fn invalidate_intrinsic_bounds(&mut self) {
         if let Some(participant) = self.layout_participant() {
             participant.with_downcast_mut::<LayoutParticipant, _>(
                 LayoutParticipant::invalidate_host_bounds,
@@ -864,13 +873,13 @@ impl Shape {
     pub fn add_child(&mut self, child: CoreHandle) {
         self.base.add_child(child.clone());
         if child.is_type_of(LayoutParticipant::TYPE_KEY) {
-            self.has_layout_participant = true;
+            self.cells.set_has_layout_participant();
         }
     }
     pub fn layout_participant(&self) -> Option<CoreHandle> {
         // Runtime children are fixed; WITH_RIVE_EDITOR's rescan is not a
         // tools-build behavior.
-        if !self.has_layout_participant {
+        if !self.cells.has_layout_participant() {
             return None;
         }
         self.base
@@ -898,7 +907,7 @@ impl Shape {
     pub fn has_layout_participant(&self) -> bool {
         // Runtime children are fixed; the upstream editor-only rescan is not
         // enabled by this runtime's tools configuration.
-        self.has_layout_participant
+        self.cells.has_layout_participant()
     }
     pub fn layout_base_translation(&self, participant: &CoreHandle) -> Option<Vec2D> {
         // Intrinsic measurement may update this participant's cached bounds;
@@ -1035,7 +1044,7 @@ mod path_deformer_virtual_tests {
             assert!(!path.is_path_closed());
             let path = arena.insert(path);
             let mut shape = Shape::new();
-            shape.deformer = Some(deformer);
+            shape.cells.set_deformer(Some(deformer));
             shape.add_path(path);
             let length = shape.length();
             let expected_points = if skinned {

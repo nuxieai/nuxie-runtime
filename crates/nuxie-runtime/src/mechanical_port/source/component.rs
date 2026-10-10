@@ -184,13 +184,11 @@ impl ComponentOccurrenceHandle {
         // Release the composer borrow before Shape::pathChanged recursively
         // marks this helper; its retained dirt bit must already be set.
         if let Self::PathComposer(handle) = self {
-            let shape = handle
+            let cells = handle
                 .upgrade()
-                .and_then(|owner| owner.borrow_mut().dirty_shape());
-            if let Some(shape) = shape {
-                crate::mechanical_port::source::shapes::shape::Shape::path_changed_occurrence(
-                    &shape,
-                );
+                .map(|owner| Rc::clone(owner.borrow().cells_ref()));
+            if let Some(cells) = cells {
+                cells.composer_on_dirty();
             }
         }
     }

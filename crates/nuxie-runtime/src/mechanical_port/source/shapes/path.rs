@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
     math::{aabb::Aabb, mat2d::Mat2D, math_types::PI, raw_path::RawPath, vec2d::Vec2D},
     shapes::{
         cubic_detached_vertex::CubicDetachedVertex, cubic_vertex::CubicVertexBehavior,
-        path_flags::PathFlags, path_vertex::PathVertex, shape::Shape,
+        path_cells::PathCells, path_flags::PathFlags, path_vertex::PathVertex, shape::Shape,
         straight_vertex::StraightVertex, vertex::VertexBehavior,
     },
     status_code::StatusCode,
@@ -185,19 +185,34 @@ impl Path {
     pub const TYPE_KEY: u16 = PathBase::TYPE_KEY;
 }
 
-#[derive(Default)]
 pub struct Path {
     pub base: PathBase,
-    shape: Option<CoreHandle>,
+    // Shared with the dirt cascade (see PathCells): the shape link, the
+    // notification and deferral gates and the runtime flags live there.
+    cells: Rc<PathCells>,
     vertices: Vec<PathVertexOccurrence>,
-    deferred_path_dirt: bool,
-    shape_notified: bool,
-    path_flags: PathFlags,
     raw_path: RawPath,
     geometry_version: u32,
 }
 
+impl Default for Path {
+    fn default() -> Self {
+        let mut base = PathBase::default();
+        let cells = Rc::new(PathCells::new(base.share_dirt()));
+        Self {
+            base,
+            cells,
+            vertices: Vec::new(),
+            raw_path: RawPath::default(),
+            geometry_version: 0,
+        }
+    }
+}
+
 impl Path {
+    pub(crate) fn cells(&self) -> &Rc<PathCells> {
+        &self.cells
+    }
     pub fn geometry_version(&self) -> u32 {
         self.geometry_version
     }
@@ -241,9 +256,10 @@ impl Path {
             if current.is_type_of(
                 crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY,
             ) {
-                self.shape = Some(current.clone());
                 current.with_mut(|shape| {
                     if let Some(shape) = shape.as_shape_mut() {
+                        self.cells
+                            .bind_shape(current.clone(), Rc::clone(shape.cells()));
                         shape.add_path_with_skin(this, has_skin);
                     }
                 });
@@ -280,29 +296,16 @@ impl Path {
         self.vertices.pop();
     }
     pub fn add_flags(&mut self, flags: PathFlags) {
-        self.path_flags |= flags;
+        self.cells.add_flags(flags);
     }
     pub fn is_flagged(&self, flags: PathFlags) -> bool {
-        !(self.path_flags & flags).is_empty()
+        self.cells.is_flagged(flags)
     }
-    pub fn can_defer_path_update(&self, active_points_path_has_skin: Option<bool>) -> bool {
-        let active_handle = self.base.handle();
-        self.shape
-            .as_ref()
-            .and_then(|shape| {
-                shape.with(|shape| {
-                    shape.as_shape().is_some_and(|shape| {
-                        shape.can_defer_path_update_with_active_path(
-                            active_handle.as_ref().zip(active_points_path_has_skin),
-                        ) && !shape.is_flagged(PathFlags::FOLLOW_PATH)
-                            && !self.is_flagged(PathFlags::FOLLOW_PATH | PathFlags::CLIPPING)
-                    })
-                })
-            })
-            .unwrap_or(false)
+    pub fn can_defer_path_update(&self, _active_points_path_has_skin: Option<bool>) -> bool {
+        self.cells.can_defer_path_update()
     }
     pub fn shape_handle(&self) -> Option<CoreHandle> {
-        self.shape.clone()
+        self.cells.shape_handle()
     }
     pub fn path_transform(&self) -> Mat2D {
         *self.base.world_transform()
@@ -326,7 +329,7 @@ impl Path {
         &self.raw_path
     }
     pub fn needs_path_build(&self) -> bool {
-        self.base.has_dirt(ComponentDirt::PATH) || self.deferred_path_dirt
+        self.base.has_dirt(ComponentDirt::PATH) || self.cells.deferred()
     }
     pub fn try_property_bounds(&self, _result: &mut Aabb) -> bool {
         false
@@ -656,10 +659,10 @@ impl Path {
     }
 
     fn deformer(&self) -> Option<CoreHandle> {
-        self.shape
-            .as_ref()
-            .and_then(|shape| shape.with(|shape| shape.as_shape().and_then(Shape::deformer)))
-            .flatten()
+        self.cells
+            .shape()
+            .filter(|shape| shape.handle.is_alive())
+            .and_then(|shape| shape.cells.deformer())
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
         self.base.add_dirt(ComponentDirt::PATH, false);
@@ -689,11 +692,15 @@ impl Path {
     }
 
     pub(crate) fn mark_path_dirty_base_occurrence(owner: &CoreHandle) {
-        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-            owner.clone(),
-        )
-        .add_dirt(ComponentDirt::PATH, false);
-        Self::send_shape_notification_occurrence(owner);
+        if let Some(cells) = Self::cells_of(owner) {
+            cells.mark_path_dirty(owner);
+        }
+    }
+
+    fn cells_of(owner: &CoreHandle) -> Option<Rc<PathCells>> {
+        owner
+            .with(|object| object.as_path().map(|path| Rc::clone(&path.cells)))
+            .flatten()
     }
 
     pub(crate) fn mark_path_dirty_base_from_shape(owner: &CoreHandle, active_shape: &mut Shape) {
@@ -728,9 +735,7 @@ impl Path {
         ) {
             Self::send_shape_notification_from_layout(owner, active, active_handle);
         }
-        let deferred = owner
-            .with(|object| object.as_path().expect("Path").deferred_path_dirt)
-            .unwrap_or(false);
+        let deferred = Self::cells_of(owner).is_some_and(|cells| cells.deferred());
         if deferred {
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
                 owner.clone(),
@@ -740,42 +745,14 @@ impl Path {
     }
 
     pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
-        if has_dirt(
-            dirt,
-            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
-        ) {
-            Self::send_shape_notification_occurrence(owner);
-        }
-        // pathChanged may enter a renderer and mutate or retire this Path.
-        // Read deferred dirt only after that call returns, with no old guard.
-        let deferred = owner
-            .with(|object| object.as_path().expect("Path").deferred_path_dirt)
-            .unwrap_or(false);
-        if deferred {
-            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-                owner.clone(),
-            )
-            .add_dirt(ComponentDirt::PATH, false);
-        }
-    }
-
-    fn send_shape_notification_occurrence(owner: &CoreHandle) {
-        let shape = owner
-            .with_mut(|object| {
-                object
-                    .as_path_mut()
-                    .expect("Path")
-                    .take_shape_notification()
-            })
-            .flatten();
-        if let Some(shape) = shape {
-            Shape::path_changed_occurrence(&shape);
+        if let Some(cells) = Self::cells_of(owner) {
+            cells.on_dirty(owner, dirt);
         }
     }
     fn send_shape_notification_from_shape(owner: &CoreHandle, active_shape: &mut Shape) {
-        let shape = owner
-            .with_mut(|object| object.as_path_mut().and_then(Path::take_shape_notification))
-            .flatten();
+        let shape = Self::cells_of(owner)
+            .and_then(|cells| cells.take_shape_notification())
+            .map(|shape| shape.handle);
         if let Some(shape) = shape {
             if active_shape.base.handle().as_ref() == Some(&shape) {
                 active_shape.path_changed();
@@ -789,28 +766,16 @@ impl Path {
         active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
         active_handle: &CoreHandle,
     ) {
-        let shape = owner
-            .with_mut(|object| object.as_path_mut().and_then(Path::take_shape_notification))
-            .flatten();
+        let shape = Self::cells_of(owner)
+            .and_then(|cells| cells.take_shape_notification())
+            .map(|shape| shape.handle);
         if let Some(shape) = shape {
             Shape::path_changed_from_layout_occurrence(&shape, active, active_handle);
         }
     }
-    fn take_shape_notification(&mut self) -> Option<CoreHandle> {
-        if self.shape_notified {
-            return None;
-        }
-        let shape = self.shape.clone()?;
-        self.shape_notified = true;
-        Some(shape)
-    }
     fn shape_path_changed(&mut self) {
-        if let Some(shape) = self.take_shape_notification() {
-            shape.with_mut(|shape| {
-                if let Some(shape) = shape.as_shape_mut() {
-                    shape.path_changed();
-                }
-            });
+        if let Some(shape) = self.cells.take_shape_notification() {
+            shape.cells.path_changed(&shape.handle);
         }
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
@@ -820,7 +785,7 @@ impl Path {
         ) {
             self.shape_path_changed();
         }
-        if self.deferred_path_dirt {
+        if self.cells.deferred() {
             self.base.add_dirt(ComponentDirt::PATH, false);
         }
     }
@@ -835,14 +800,7 @@ impl Path {
         ) {
             Self::send_shape_notification_from_shape(owner, active_shape);
         }
-        let deferred = owner
-            .with(|owner| {
-                owner
-                    .as_path()
-                    .expect("Path onDirty occurrence")
-                    .deferred_path_dirt
-            })
-            .unwrap_or(false);
+        let deferred = Self::cells_of(owner).is_some_and(|cells| cells.deferred());
         if deferred {
             // Source addDirt runs synchronously after pathChanged, including
             // the recursive onDirty call if this adds the Path dirt bit.
@@ -853,7 +811,7 @@ impl Path {
         }
     }
     pub(crate) fn update_before_transform_super(&mut self) {
-        self.shape_notified = false;
+        self.cells.reset_shape_notification();
     }
     pub(crate) fn update_after_transform_super(
         &mut self,
@@ -866,10 +824,10 @@ impl Path {
         let deformer_changed = has_dirt(value, ComponentDirt::N_SLICER);
         if changed || deformer_changed || (self.deformer().is_some() && world_changed) {
             if self.can_defer_path_update(active_points_path_has_skin) {
-                self.deferred_path_dirt = true;
+                self.cells.set_deferred(true);
                 return;
             }
-            self.deferred_path_dirt = false;
+            self.cells.set_deferred(false);
             let mut path = std::mem::take(&mut self.raw_path);
             path.rewind();
             self.build_path(&mut path, closed, active_points_path_has_skin == Some(true));
@@ -889,7 +847,7 @@ impl Path {
     }
 
     pub(crate) fn collapse_after_super(&mut self) {
-        if let Some(shape) = self.shape.as_ref() {
+        if let Some(shape) = self.cells.shape_handle() {
             shape.with_mut(|shape| {
                 if let Some(shape) = shape.as_shape_mut() {
                     shape.path_collapse_changed();

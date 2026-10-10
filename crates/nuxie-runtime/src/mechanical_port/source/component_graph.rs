@@ -16,8 +16,11 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::mechanical_port::source::{
-    artboard::RuntimeArtboardDirtyHandle, component::ComponentOccurrenceHandle,
-    component_dirt::ComponentDirt, core::CoreHandle,
+    artboard::RuntimeArtboardDirtyHandle,
+    component::ComponentOccurrenceHandle,
+    component_dirt::ComponentDirt,
+    core::CoreHandle,
+    shapes::{path_cells::PathCells, shape_cells::ShapeCells},
 };
 
 type UpdateHandler = fn(&CoreHandle, ComponentDirt) -> bool;
@@ -34,8 +37,18 @@ enum Kind {
     Handler,
     /// An authored Component whose onDirty runs inside the payload borrow.
     Receiver,
+    /// An authored Component whose onDirty runs on its shared cells.
+    Cells,
     /// Runtime helpers (PathComposer, TextVariationHelper).
     Helper,
+}
+
+/// The shared cells a member's onDirty runs on, for types whose dirt-phase
+/// state lives outside the component.
+enum NodeCells {
+    Path(Rc<PathCells>),
+    // A PathComposer, through the cells it shares with its Shape.
+    Composer(Rc<ShapeCells>),
 }
 
 /// Everything a cascade step reads, packed so one load fetches it.
@@ -59,6 +72,7 @@ pub(crate) struct ComponentGraph {
     dependents: Box<[u32]>,
     // Cold, per member: only real onDirty/update work and fallbacks read these.
     on_dirty: Box<[Option<DirtyHandler>]>,
+    cells: Box<[Option<NodeCells>]>,
     update: Box<[Option<UpdateHandler>]>,
     occurrences: Box<[ComponentOccurrenceHandle]>,
     outside: Box<[ComponentOccurrenceHandle]>,
@@ -75,29 +89,45 @@ impl ComponentGraph {
     ) -> Rc<Self> {
         let mut kinds = Vec::with_capacity(order.len());
         let mut on_dirty = Vec::with_capacity(order.len());
+        let mut cells = Vec::with_capacity(order.len());
         let mut update = Vec::with_capacity(order.len());
         let mut dirt = Vec::with_capacity(order.len());
         for occurrence in order {
-            let (kind, handler, update_handler) = match occurrence {
+            let (kind, handler, node_cells, update_handler) = match occurrence {
                 ComponentOccurrenceHandle::Authored(handle) if handle == root => {
-                    (Kind::Outside, None, None)
+                    (Kind::Outside, None, None, None)
                 }
                 ComponentOccurrenceHandle::Authored(handle) => handle
                     .with(|object| {
                         let update_handler = object.component_update_handler();
-                        if let Some(handler) = object.component_on_dirty_handler() {
-                            (Kind::Handler, Some(handler), update_handler)
+                        if let Some(path) = object.as_path() {
+                            // Every Path type runs Path::onDirty.
+                            let cells = NodeCells::Path(Rc::clone(path.cells()));
+                            (Kind::Cells, None, Some(cells), update_handler)
+                        } else if let Some(handler) = object.component_on_dirty_handler() {
+                            (Kind::Handler, Some(handler), None, update_handler)
                         } else if object.component_on_dirty_is_noop() {
-                            (Kind::Noop, None, update_handler)
+                            (Kind::Noop, None, None, update_handler)
                         } else {
-                            (Kind::Receiver, None, update_handler)
+                            (Kind::Receiver, None, None, update_handler)
                         }
                     })
-                    .unwrap_or((Kind::Outside, None, None)),
-                _ => (Kind::Helper, None, None),
+                    .unwrap_or((Kind::Outside, None, None, None)),
+                ComponentOccurrenceHandle::PathComposer(composer) => (
+                    Kind::Helper,
+                    None,
+                    composer
+                        .upgrade()
+                        .map(|composer| NodeCells::Composer(Rc::clone(composer.borrow().cells_ref()))),
+                    None,
+                ),
+                ComponentOccurrenceHandle::TextVariationHelper(_) => {
+                    (Kind::Helper, None, None, None)
+                }
             };
             kinds.push(kind);
             on_dirty.push(handler);
+            cells.push(node_cells);
             update.push(update_handler);
             dirt.push(
                 occurrence
@@ -144,6 +174,7 @@ impl ComponentGraph {
             nodes: Rc::from(nodes),
             dependents: dependents.into_boxed_slice(),
             on_dirty: on_dirty.into_boxed_slice(),
+            cells: cells.into_boxed_slice(),
             update: update.into_boxed_slice(),
             occurrences: order.to_vec().into_boxed_slice(),
             outside: outside.into_boxed_slice(),
@@ -242,7 +273,14 @@ impl ComponentGraph {
                     object.component_on_dirty(dirt);
                 });
             }
-            Kind::Helper => self.occurrences[i].on_dirty_helper(dirt),
+            Kind::Cells => match &self.cells[i] {
+                Some(NodeCells::Path(path)) => path.on_dirty(self.authored(i), dirt),
+                _ => unreachable!("cells kind records its cells"),
+            },
+            Kind::Helper => match &self.cells[i] {
+                Some(NodeCells::Composer(shape)) => shape.composer_on_dirty(),
+                _ => self.occurrences[i].on_dirty_helper(dirt),
+            },
             Kind::Outside => unreachable!("outside occurrences keep their own path"),
         }
         self.notify_artboard(i as u32);
@@ -337,7 +375,7 @@ impl ComponentGraph {
                 self.occurrences[i].update_helper(dirt);
                 return true;
             }
-            Kind::Noop | Kind::Handler | Kind::Receiver => {}
+            Kind::Noop | Kind::Handler | Kind::Receiver | Kind::Cells => {}
         }
         assert!(node.alive.get(), "live component in dependency graph");
         let dirt = node.dirt.get();
@@ -493,7 +531,8 @@ pub mod trace {
                     let kind = match node.kind {
                         Kind::Outside => 0,
                         Kind::Noop => 1,
-                        Kind::Handler => 2,
+                        // Replays treat cells dispatch as a handler call.
+                        Kind::Handler | Kind::Cells => 2,
                         Kind::Receiver => 3,
                         Kind::Helper => 4,
                     };

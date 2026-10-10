@@ -247,17 +247,29 @@ impl VertexCells {
     /// Skin::deform for one straight or cubic path vertex: Vertex::deform,
     /// then for a cubic vertex its control points, in that order.
     pub(crate) fn deform(&self, owner: &CoreHandle, world: &Mat2D, bones: &[f32]) {
-        let Some(weight) = self.weight() else {
-            return;
-        };
-        weight.deform(self.position(), world, bones);
-        if self.kind.get() == VertexKind::Cubic {
+        let weight = {
+            let held = self.weight.borrow();
+            let Some(weight) = held.as_ref() else {
+                return;
+            };
+            weight.deform(self.position(), world, bones);
+            if self.kind.get() != VertexKind::Cubic {
+                return;
+            }
+            if self.in_valid.get() && self.out_valid.get() {
+                // Both control points are cached, so no callback runs while
+                // the weight is borrowed.
+                weight.deform_in(self.in_point.get(), world, bones);
+                weight.deform_out(self.out_point.get(), world, bones);
+                return;
+            }
             // Hold the weight selected before the control point callbacks.
-            let in_point = self.in_point_of(owner);
-            weight.deform_in(in_point, world, bones);
-            let out_point = self.out_point_of(owner);
-            weight.deform_out(out_point, world, bones);
-        }
+            Rc::clone(weight)
+        };
+        let in_point = self.in_point_of(owner);
+        weight.deform_in(in_point, world, bones);
+        let out_point = self.out_point_of(owner);
+        weight.deform_out(out_point, world, bones);
     }
 }
 

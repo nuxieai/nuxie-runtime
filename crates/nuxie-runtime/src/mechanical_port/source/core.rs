@@ -864,7 +864,28 @@ impl CoreHandle {
             .then(|| slot.core_type.get())
     }
 
+    #[inline]
     pub fn is_alive(&self) -> bool {
+        let slot = &self.identity.slot;
+        if slot.generation.get() != slot.hot.identity_generation {
+            return false;
+        }
+        // A lease's release runs a pending retirement; with none pending the
+        // lease is unobservable, so the common case reads without one.
+        if slot.retirement_pending.get() {
+            return self.is_alive_leased();
+        }
+        slot.occupied.get()
+            && slot
+                .runtime_artboard
+                .borrow()
+                .as_ref()
+                .is_none_or(|root| root.strong_count() > 0)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn is_alive_leased(&self) -> bool {
         self.slot().is_some_and(|slot| {
             slot.occupied.get()
                 && slot

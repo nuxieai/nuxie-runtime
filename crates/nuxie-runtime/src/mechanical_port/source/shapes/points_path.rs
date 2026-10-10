@@ -46,10 +46,11 @@ impl std::ops::DerefMut for PointsPath {
 crate::mechanical_port::source::transform_component::impl_transform_update!(
     PointsPath,
     |owner, dirt| {
-        if has_dirt(dirt, ComponentDirt::PATH) {
-            owner.with_downcast_mut::<Self, _>(|object| object.update_before_path_super(dirt));
-        }
-        crate::mechanical_port::source::shapes::path::Path::update_occurrence::<Self>(owner, dirt);
+        crate::mechanical_port::source::shapes::path::Path::update_occurrence_after::<Self>(
+            owner,
+            dirt,
+            Self::update_before_path_super,
+        );
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,

@@ -332,7 +332,7 @@ fn raw_upstream_dispatch_stays_available_when_host_dispatch_refuses() {
 }
 
 #[test]
-fn unavailable_actions_are_refused_and_zero_opacity_is_not_disabled() {
+fn unavailable_actions_and_zero_opacity_ancestors_are_refused() {
     use nuxie_runtime::source::generated::{
         core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
     };
@@ -361,7 +361,7 @@ fn unavailable_actions_are_refused_and_zero_opacity_is_not_disabled() {
         0.0
     ));
     assert!(
-        fixture
+        !fixture
             .machine
             .fire_semantic_action_checked(fixture.button_id, 0)
     );
@@ -369,8 +369,7 @@ fn unavailable_actions_are_refused_and_zero_opacity_is_not_disabled() {
         fixture.machine.advance_and_apply(0.1);
     }
     assert!(
-        !data
-            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+        data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
             .unwrap()
     );
 }

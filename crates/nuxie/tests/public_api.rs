@@ -215,9 +215,11 @@ impl Factory for FailFirstImageDecodeFactory {
 }
 
 fn repo_fixture(relative: &str) -> Vec<u8> {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(relative);
+    let path = PathBuf::from(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../..")
+    .join(relative);
     std::fs::read(&path).expect("read repo fixture")
 }
 

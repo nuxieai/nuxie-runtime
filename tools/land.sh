@@ -1,13 +1,14 @@
 #!/bin/bash
 # Parallel landing gate with per-gate memoization.
-# - All gates run concurrently as background jobs (cargo-based gates serialize
-#   naturally on cargo's own target-dir lock; C++ and python gates overlap).
+# - All gates run concurrently as background jobs (Bazel gates serialize
+#   naturally on Bazel's own server lock; C++ and python gates overlap).
 # - NOT fail-fast: every gate runs to completion and all failures report at
 #   once, with per-gate logs under .land-cache/.
 # - Memoized: a gate that passed for this exact tree (git tree hash) is
 #   skipped on retry, so a single red gate never costs a full re-run.
 # Usage: tools/land.sh <branch> <pr-title-file> [extra-gate ...]
 set -uo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
 branch="$1"; body="$2"; shift 2
 [[ -f "$body" ]] || { echo "land.sh: body file $body missing" >&2; exit 1; }
 if ! git diff --quiet || ! git diff --cached --quiet; then
@@ -51,13 +52,14 @@ run_gate() {
         # The workspace run unifies tools (silver-corpus, rust-golden-runner)
         # and testing (nuxie-renderer) into nuxie-runtime; a bare -p build
         # skipped every test needing those seams, which rotted unseen.
-        cargo-test-runtime)  cargo test -p nuxie-runtime --features tools,testing > "$cache/$g.log" 2>&1; rc=$? ;;
-        cargo-test-scripting) cargo test -p nuxie --features scripting > "$cache/$g.log" 2>&1; rc=$? ;;
+        cargo-test-runtime)  "$repo_root/tools/bazel/runtime.py" test -p nuxie-runtime --features tools,testing > "$cache/$g.log" 2>&1; rc=$? ;;
+        cargo-test-scripting) "$repo_root/tools/bazel/runtime.py" test -p nuxie --features scripting > "$cache/$g.log" 2>&1; rc=$? ;;
+
         # The gate above exercises the nuxie crate's scripting feature, not
         # the nuxie-scripting crate's own tests — those went red invisibly
         # twice (context_init_tests via 58a077bb, gpu_canvas_tools via PR
         # #236) before this gate existed.
-        cargo-test-scripting-crate) cargo test -p nuxie-scripting > "$cache/$g.log" 2>&1; rc=$? ;;
+        cargo-test-scripting-crate) "$repo_root/tools/bazel/runtime.py" test -p nuxie-scripting > "$cache/$g.log" 2>&1; rc=$? ;;
         *)                   make "$g" > "$cache/$g.log" 2>&1; rc=$? ;;
     esac
     if [[ $rc -eq 0 ]]; then

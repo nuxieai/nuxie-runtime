@@ -1,6 +1,6 @@
 use crate::records::ast_array::AstArray;
-use crate::records::ast_local::AstLocal;
 use crate::records::ast_expr::AstExpr;
+use crate::records::ast_local::AstLocal;
 use crate::records::ast_stat::AstStat;
 use crate::type_aliases::ast_class_member::AstClassMember;
 

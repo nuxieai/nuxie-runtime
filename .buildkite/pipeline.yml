@@ -14,6 +14,7 @@ steps:
     if: "build.pull_request.id != null"
     command: |
       set -euo pipefail
+      tools/bazel/install.sh
       rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
       git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git "$RIVE_RUNTIME_DIR"
@@ -37,6 +38,12 @@ steps:
     if: "build.pull_request.id != null"
     if_changed:
       - Cargo.{toml,lock}
+      - MODULE.bazel*
+      - .bazelrc
+      - .bazelversion
+      - bazel/**
+      - tools/bazel/**
+      - tools/bazel_runtime*
       - Makefile
       - crates/**
       - tools/pure-runtime-boundary/**
@@ -46,6 +53,7 @@ steps:
       - fixtures/**
     command: |
       set -euo pipefail
+      tools/bazel/install.sh
       sudo apt-get update -qq
       sudo apt-get install --no-install-recommends -y zlib1g-dev
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
@@ -69,6 +77,12 @@ steps:
     if_changed:
       - .buildkite/pipeline.yml
       - Cargo.{toml,lock}
+      - MODULE.bazel*
+      - .bazelrc
+      - .bazelversion
+      - bazel/**
+      - tools/bazel/**
+      - tools/bazel_runtime*
       - Makefile
       - crates/nux-capi/**
       - crates/nuxie/**
@@ -77,6 +91,7 @@ steps:
       - tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-exports.sh,check-nux-capi-layout.py,check-nux-capi-surface.py,publish-nux-capi-release.sh,report-all.sh,test_apple_runtime_contract.py,test_apple_runtime_input_digest.py,test_nux_capi_distribution.py,test_slim_runtime_distribution.py,verify-nux-capi-xcframeworks.sh}
     command: |
       set -euo pipefail
+      tools/bazel/install.sh
       RIVE_RUNTIME_DIR="" make nux-capi-pr-gate
     agents:
       queue: nuxie-pr
@@ -93,11 +108,18 @@ steps:
     if: "build.pull_request.id != null"
     if_changed:
       - Cargo.{toml,lock}
+      - MODULE.bazel*
+      - .bazelrc
+      - .bazelversion
+      - bazel/**
+      - tools/bazel/**
+      - tools/bazel_runtime*
       - Makefile
       - crates/{nux-capi,nuxie,nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer,nuxie-scripting}/**
       - tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-apple.sh,check-nux-capi-surface.py,verify-nux-capi-xcframeworks.sh}
     command: |
       set -euo pipefail
+      tools/bazel/install.sh
       rustup toolchain install stable --profile minimal --no-self-update
       rustup target add --toolchain stable \
         aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios \
@@ -123,6 +145,7 @@ steps:
     if: 'build.source == "schedule"'
     command: |
       set -euo pipefail
+      tools/bazel/install.sh
       sudo apt-get update -qq
       sudo apt-get install --no-install-recommends -y zlib1g-dev
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
@@ -140,7 +163,7 @@ steps:
       )
       export PATH="$RIVE_RUNTIME_DIR/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release:$PATH"
       make cpp-probe cpp-probe-scripted
-      cargo test --workspace --exclude nuxie-renderer
+      tools/bazel/runtime.py test --workspace --exclude nuxie-renderer
     agents:
       queue: nuxie-pr
       nuxie-platform: linux
@@ -154,6 +177,7 @@ steps:
     if: 'build.source == "schedule"'
     command: |
       set -euo pipefail
+      tools/bazel/install.sh
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
       git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
       git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
@@ -163,7 +187,7 @@ steps:
       make microbench-gate
       make capi-smoke
       make feature-compile-gate-apple
-      cargo test -p nuxie-renderer
+      tools/bazel/runtime.py test -p nuxie-renderer
       make crate-seams-browser-check
     agents:
       queue: nuxie-pr

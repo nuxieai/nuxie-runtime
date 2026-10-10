@@ -1,0 +1,27 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "symphonia-format-riff"
+version = "0.5.5"
+edition = "2018"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+name = "symphonia_format_riff"
+
+[features]
+"aiff" = []
+"__bazel_dependency_default" = ["aiff", "wav", "metadata"]
+"metadata" = ["dep:symphonia-metadata"]
+"wav" = []
+"default" = []
+
+[dependencies]
+"extended" = { "version" = "0.1.0" }
+"log" = { "version" = "0.4" }
+"symphonia-core" = { "version" = "0.5.5" }
+"symphonia-metadata" = { "version" = "0.5.5", "optional" = true }

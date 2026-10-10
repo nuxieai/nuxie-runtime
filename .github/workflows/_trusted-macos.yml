@@ -60,6 +60,9 @@ jobs:
           ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
 
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
+
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
 
@@ -124,6 +127,9 @@ jobs:
           repository: rive-app/rive-runtime
           ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
+
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
 
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
@@ -190,6 +196,9 @@ jobs:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
 
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
+
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --no-self-update
 
@@ -202,7 +211,7 @@ jobs:
           MTL_SHADER_VALIDATION: '1'
           NUXIE_REQUIRE_LIVE_METAL_TESTS: '1'
         run: >-
-          cargo test --locked -p nux-capi --no-default-features
+          tools/bazel/runtime.py test --locked -p nux-capi --no-default-features
           --features apple-metal --test apple_metal
           solid_fill_renders_authored_pixels_on_metal -- --nocapture --test-threads=1
 

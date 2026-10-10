@@ -61,8 +61,10 @@ fn mangled_module_errors_attribute_to_the_library_in_traces() {
 
 #[test]
 fn exported_file_resolves_statically_linked_library_requires() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/scope_probe.riv");
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/scope_probe.riv");
     let bytes = std::fs::read(path).unwrap();
     let file = read_runtime_file_with_scripting(&bytes).unwrap();
     let scripts = file

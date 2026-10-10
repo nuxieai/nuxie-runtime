@@ -118,8 +118,10 @@ fn selection_path_rewinds_between_updates() {
 
 #[test]
 fn editor_exported_text_style_background_renders_at_runtime() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/text_style_background.riv");
+    let fixture = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/text_style_background.riv");
     let bytes = std::fs::read(&fixture).unwrap_or_else(|error| {
         panic!(
             "read pinned fixture {} (run make fixtures): {error}",
@@ -180,8 +182,10 @@ fn editor_exported_text_style_background_renders_at_runtime() {
 
 #[test]
 fn text_style_background_sorts_into_the_dependency_graph() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/text_style_background.riv");
+    let fixture = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/text_style_background.riv");
     let bytes = std::fs::read(&fixture).expect("pinned background fixture");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");

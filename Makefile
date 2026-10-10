@@ -144,6 +144,7 @@ RENDERER_COUNTER_JSON ?= $(CURDIR)/target/renderer-work-counters.json
 RENDERER_COUNTER_MARKDOWN ?= $(CURDIR)/target/renderer-work-counters.md
 CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
 CC ?= cc
+RUST_BUILD ?= python3 "$(CURDIR)/tools/bazel/runtime.py"
 
 fixtures:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/fetch-test-assets.sh
@@ -155,12 +156,12 @@ SCHEMA_RECONCILIATION_DIR ?= $(CURDIR)/defs/upstream-reconciliation
 
 schema:
 	@test "$$(git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEAD)" = "$(RIVE_RUNTIME_REF)" || { echo "schema requires the pinned RIVE_RUNTIME_REF checkout" >&2; exit 1; }
-	cargo run -p nuxie-codegen -- changed-callbacks --headers "$(RIVE_RUNTIME_DIR)/include/rive/generated" --out crates/nuxie-schema/src/generated/changed_callbacks.rs
+	$(RUST_BUILD) run -p nuxie-codegen -- changed-callbacks --headers "$(RIVE_RUNTIME_DIR)/include/rive/generated" --out crates/nuxie-schema/src/generated/changed_callbacks.rs
 	@defs="$$(mktemp -d)"; \
 	cp -R "$(DEFS_DIR)/." "$$defs/" && \
 	cp -R "$(SCHEMA_RECONCILIATION_DIR)/." "$$defs/" && \
 	cp -R "$(SCHEMA_OVERLAY_DIR)/." "$$defs/" && \
-	cargo run -p nuxie-codegen -- --defs "$$defs" --out crates/nuxie-schema/src/generated/schema.rs; \
+	$(RUST_BUILD) run -p nuxie-codegen -- --defs "$$defs" --out crates/nuxie-schema/src/generated/schema.rs; \
 	status=$$?; rm -rf "$$defs"; exit $$status
 	cargo fmt --all
 
@@ -174,28 +175,28 @@ fmt-check:
 	cargo fmt --all -- --check
 
 check:
-	cargo check --workspace
+	$(RUST_BUILD) check --workspace
 
 # Independently selectable runtime package cuts. The Apple target compiles the
 # actual five-slice nux-capi distribution root instead of a host-only cfg shell.
 crate-seams-baseline-check:
-	cargo check -p nuxie-runtime --no-default-features --lib
+	$(RUST_BUILD) check -p nuxie-runtime --no-default-features --lib
 
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \
-		"$$(rustup which --toolchain stable cargo)" check --locked \
+		$(RUST_BUILD) check --locked \
 		-p webgpu-renderer-replay -p webgl2-renderer-replay \
 		--target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
 	tools/check-nux-capi-apple.sh
-	cargo check --locked -p nuxie-renderer --no-default-features --features renderer-metal
+	$(RUST_BUILD) check --locked -p nuxie-renderer --no-default-features --features renderer-metal
 
 crate-seams-full-check:
-	cargo check --workspace
+	$(RUST_BUILD) check --workspace
 
 test: fixtures
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test --workspace
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) test --workspace
 
 # --- Tool-check gates: the tool's unit tests and the check it performs are
 # independent verdicts, so neither is allowed to hide the other -------------
@@ -208,13 +209,13 @@ test: fixtures
 .PHONY: pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
 
 renderer-native-metal-v3:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --lib -- --skip deferred::gm::image_paint::image_paint --test-threads=1
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 $(RUST_BUILD) test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --lib -- --skip deferred::gm::image_paint::image_paint --test-threads=1
 	# Shader validation instruments Metal execution and perturbs image_paint by one
 	# channel value. Run its exact oracle under the C++ capture environment instead.
-	env -u MTL_SHADER_VALIDATION RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" MTL_DEBUG_LAYER=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental deferred::gm::image_paint::image_paint --lib -- --exact --test-threads=1
-	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --test native_metal_resource_shaders -- --test-threads=1
-	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features metal-backend -- --test-threads=1
-	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features tools,metal-backend -- --test-threads=1
+	env -u MTL_SHADER_VALIDATION RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" MTL_DEBUG_LAYER=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 $(RUST_BUILD) test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental deferred::gm::image_paint::image_paint --lib -- --exact --test-threads=1
+	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 $(RUST_BUILD) test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --test native_metal_resource_shaders -- --test-threads=1
+	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 $(RUST_BUILD) test --locked -p nuxie-ore-metal --no-default-features --features metal-backend -- --test-threads=1
+	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 $(RUST_BUILD) test --locked -p nuxie-ore-metal --no-default-features --features tools,metal-backend -- --test-threads=1
 
 runtime-source-correspondence-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_runtime_source_correspondence.py tools/test_buildkite_pipeline.py
@@ -237,7 +238,7 @@ ore-metal-authenticated-gpu-canvas:
 	tools/check-ore-metal-authenticated-gpu-canvas.sh
 
 renderer-native-metal-replay:
-	MACOSX_DEPLOYMENT_TARGET=12.0 CARGO_TARGET_DIR="$(RENDERER_METAL_CANDIDATE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features native-metal --bin renderer-replay
+	MACOSX_DEPLOYMENT_TARGET=12.0 CARGO_TARGET_DIR="$(RENDERER_METAL_CANDIDATE_BUILD_DIR)" $(RUST_BUILD) build --quiet --locked --release -p renderer-replay --no-default-features --features native-metal --bin renderer-replay
 
 pure-runtime-boundary-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/pure-runtime-boundary -p 'test_*.py' -v
@@ -280,7 +281,7 @@ microbench-extract:
 #   regressions are visible in review. Move a crate into the deny list (and
 #   switch its lints table to the deny form) once its counts reach zero.
 # Library targets only (src/); deliberately NOT tests and NOT tools/ or
-# nuxie-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
+# nuxie-scripting. NOTE: `$(RUST_BUILD) clippy -- -D lint` is not used because trailing
 # flags leak to dependency crates; the per-crate lints tables scope correctly.
 LINT_GATE_DENY_CRATES = nuxie nuxie-schema
 LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-ore-metal nux-capi
@@ -290,10 +291,10 @@ lint-gate:
 	@set -e; \
 	for crate in $(LINT_GATE_DENY_CRATES); do \
 		echo "== lint-gate (deny): $$crate =="; \
-		cargo clippy -p $$crate --lib --quiet; \
+		$(RUST_BUILD) clippy -p $$crate --lib --quiet; \
 	done; \
 	for crate in $(LINT_GATE_WARN_CRATES); do \
-		count=$$(cargo clippy -p $$crate --lib --quiet 2>&1 \
+		count=$$($(RUST_BUILD) clippy -p $$crate --lib --quiet 2>&1 \
 			| grep -c -- "--> crates/$$crate/src" || true); \
 		echo "== lint-gate (warn): $$crate -- $$count own-src warning sites =="; \
 	done
@@ -302,7 +303,7 @@ lint-gate:
 # Code behind a Cargo feature that no CI job builds does not compile in CI, and
 # a `#[cfg(feature = ...)]` module that nothing compiles rots silently.
 #
-# This gate type-checks -- `cargo check`, no linking, no fixtures beyond the
+# This gate compiles each feature cut through Bazel, using no fixtures beyond the
 # pinned assets -- every first-party feature that no other CI job builds. New
 # feature declarations belong here unless some existing job already compiles
 # them; `git grep -- --features Makefile .github` shows what does.
@@ -316,25 +317,26 @@ lint-gate:
 .PHONY: feature-compile-gate feature-compile-gate-portable feature-compile-gate-apple
 feature-compile-gate-portable:
 	@tools/report-all.sh "feature-compile-gate (portable)" \
-		"nuxie-runtime --features editor" "cargo test -p nuxie-runtime --features editor --lib --test editor_stroke_invalidation" \
-		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
-		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --tests" \
-		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \
-		"nuxie-renderer --features with-rive-path-query tests" "cargo test -p nuxie-renderer --no-default-features --features with-rive-path-query --lib" \
-		"nuxie-renderer exact Vulkan" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
-		"nuxie-renderer exact WebGPU" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
-		"nux-capi Android authored WGSL" "cargo check --locked -p nux-capi --no-default-features --features android-vulkan,scripting,android-authored-wgsl" \
-		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
-		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
-		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
-		"riv-inspect --features inspect" "cargo check -p nuxie-binary --features inspect --bin riv-inspect"
+		"nuxie-runtime --features editor" "$(RUST_BUILD) test -p nuxie-runtime --features editor --lib --test editor_stroke_invalidation" \
+		"nuxie-runtime --features threading" "$(RUST_BUILD) check -p nuxie-runtime --features threading --lib --test work_pool" \
+		"nuxie-runtime --features tools" "$(RUST_BUILD) check -p nuxie-runtime --features tools --lib --tests" \
+		"nuxie-ore-metal --features tools" "$(RUST_BUILD) test -p nuxie-ore-metal --features tools --lib" \
+		"nuxie-renderer --features with-rive-path-query tests" "$(RUST_BUILD) test -p nuxie-renderer --no-default-features --features with-rive-path-query --lib" \
+		"nuxie-renderer exact Vulkan" "$(RUST_BUILD) check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
+		"nuxie-renderer exact WebGPU" "$(RUST_BUILD) check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
+		"nux-capi Android authored WGSL" "$(RUST_BUILD) check --locked -p nux-capi --no-default-features --features android-vulkan,scripting,android-authored-wgsl" \
+		"rust-golden-runner --features coverage-trace" "$(RUST_BUILD) check -p rust-golden-runner --features coverage-trace --all-targets" \
+		"nuxie-scripting --no-default-features" "$(RUST_BUILD) check -p nuxie-scripting --no-default-features --lib" \
+		"nuxie --no-default-features" "$(RUST_BUILD) check -p nuxie --no-default-features --lib" \
+		"riv-inspect --features inspect" "$(RUST_BUILD) check -p nuxie-binary --features inspect --bin riv-inspect"
+
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
-		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
-		"nuxie --features renderer-metal" "cargo check --locked -p nuxie --no-default-features --features renderer-metal --lib" \
-		"nuxie-renderer --features renderer-metal" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-metal --lib" \
-		"nux-capi --features apple-metal" "cargo check --locked -p nux-capi --no-default-features --features apple-metal" \
+		"nuxie-audio --features audio-device" "$(RUST_BUILD) check -p nuxie-audio --features audio-device --all-targets" \
+		"nuxie --features renderer-metal" "$(RUST_BUILD) check --locked -p nuxie --no-default-features --features renderer-metal --lib" \
+		"nuxie-renderer --features renderer-metal" "$(RUST_BUILD) check --locked -p nuxie-renderer --no-default-features --features renderer-metal --lib" \
+		"nux-capi --features apple-metal" "$(RUST_BUILD) check --locked -p nux-capi --no-default-features --features apple-metal" \
 		"Darwin renderer measurement seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 
 feature-compile-gate:
@@ -343,7 +345,7 @@ feature-compile-gate:
 		"apple tier" "$(MAKE) --no-print-directory feature-compile-gate-apple"
 
 inspect:
-	@cargo run --quiet -p nuxie-binary --features inspect --bin riv-inspect -- fixtures/graph/dependency_test.riv
+	@$(RUST_BUILD) run --quiet -p nuxie-binary --features inspect --bin riv-inspect -- fixtures/graph/dependency_test.riv
 
 cpp-probe:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/cpp-probe/build.sh "$(CPP_CONFIG)"
@@ -355,10 +357,10 @@ cpp-probe-scripted:
 # Live three-way ABI conformance check: C entry point and direct Rust facade
 # against the provenance-checked pinned C++ Scene oracle.
 capi-player-step-oracle: cpp-probe
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nux-capi --test player_step live_pinned_cpp_player_step_oracle_matches_c_and_rust -- --exact
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_CPP_PROBE="$(CPP_PROBE)" $(RUST_BUILD) test -p nux-capi --test player_step live_pinned_cpp_player_step_oracle_matches_c_and_rust -- --exact
 
 blob-differential: cpp-probe-scripted
-	NUXIE_CPP_BLOB_ORACLE="$(SCRIPTED_CPP_PROBE)" cargo test -p nuxie-scripting vm::view_model::tests::context_blob_positive_lookup_matches_live_cpp_oracle --lib -- --ignored --exact
+	NUXIE_CPP_BLOB_ORACLE="$(SCRIPTED_CPP_PROBE)" $(RUST_BUILD) test -p nuxie-scripting vm::view_model::tests::context_blob_positive_lookup_matches_live_cpp_oracle --lib -- --ignored --exact
 
 .PHONY: promise-oracle promise-differential
 
@@ -366,7 +368,7 @@ promise-oracle:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" bash tools/promise-oracle/build.sh release
 
 promise-differential: promise-oracle
-	NUXIE_CPP_PROMISE_ORACLE="$(PROMISE_CPP_ORACLE)" cargo test -p nuxie-scripting --test promise_scenarios promise_scenarios_match_live_cpp_oracle -- --ignored --exact
+	NUXIE_CPP_PROMISE_ORACLE="$(PROMISE_CPP_ORACLE)" $(RUST_BUILD) test -p nuxie-scripting --test promise_scenarios promise_scenarios_match_live_cpp_oracle -- --ignored --exact
 
 cpp-atlas-mask-oracle-preflight:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/cpp-atlas-mask-oracle/build.sh --preflight
@@ -382,7 +384,7 @@ scripted-golden-runner:
 
 # The Rust runners are built through the content-provenance guard: cargo's
 # mtime-based freshness cannot see a source rewritten without a newer mtime
-# (e.g. regenerated schema.rs racing a concurrent cargo build), so the guard
+# (e.g. regenerated schema.rs racing a concurrent $(RUST_BUILD) build), so the guard
 # hashes workspace sources, invalidates poisoned members, and binds the gate
 # binaries to the verified content. See tools/golden-runner/rust_runner_provenance.py.
 rust-golden-runner:
@@ -400,7 +402,7 @@ rust-runner-provenance-test:
 golden-compare: fixtures golden-runner rust-golden-runner
 	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
 	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/golden-ordinary.log"; \
-	set +e; GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-divergent-rust --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	set +e; GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-divergent-rust --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
 	cat "$$log"; report_rc=0; \
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" golden --manifest corpus.toml --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --mode ordinary --cpp-ref "$(RIVE_RUNTIME_REF)" --rust-commit "$$(git rev-parse HEAD)" --runner "cpp=$(GOLDEN_RUNNER)" --runner "rust=$(RUST_GOLDEN_RUNNER)" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/golden-ordinary.json" || report_rc=$$?; \
 	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
@@ -409,7 +411,7 @@ scripted-golden-compare: CPP_CONFIG=release
 scripted-golden-compare: fixtures scripted-golden-runner scripted-rust-golden-runner
 	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
 	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/golden-scripted.log"; \
-	set +e; RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	set +e; RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
 	cat "$$log"; report_rc=0; \
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" golden --manifest corpus.toml --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --mode scripted --cpp-ref "$(RIVE_RUNTIME_REF)" --rust-commit "$$(git rev-parse HEAD)" --runner "cpp=$(SCRIPTED_GOLDEN_RUNNER)" --runner "rust=$(SCRIPTED_RUST_GOLDEN_RUNNER)" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/golden-scripted.json" || report_rc=$$?; \
 	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
@@ -417,10 +419,10 @@ scripted-golden-compare: fixtures scripted-golden-runner scripted-rust-golden-ru
 e2e-composed-compare: CPP_CONFIG=release
 e2e-composed-compare: RUST_PROFILE=release
 e2e-composed-compare: fixtures scripted-golden-runner scripted-rust-golden-runner
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus "$(E2E_COMPOSED_CORPUS)" --side-channel --require-composed-session --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p golden-compare --bin golden-compare -- --corpus "$(E2E_COMPOSED_CORPUS)" --side-channel --require-composed-session --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 silver-corpus-test:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test -p silver-corpus
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) test -p silver-corpus
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/silver-corpus -p 'test_*.py' -v
 
 runtime-differential-report-test:
@@ -430,8 +432,8 @@ runtime-differential-report-test:
 # recorded as diverging because the default lane mirrors production
 # contraction, and covered here, must still replay exactly under strict-fp.
 silver-corpus-strict-fp:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test -p silver-corpus --features strict-fp --test wave_b1
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test -p nuxie-runtime --features tools,strict-fp --test upstream_wave_b_expected_red wave_b_data_binding_test_025
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) test -p silver-corpus --features strict-fp --test wave_b1
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) test -p nuxie-runtime --features tools,strict-fp --test upstream_wave_b_expected_red wave_b_data_binding_test_025
 
 silver-corpus-manifest-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(SILVER_CORPUS_GENERATOR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --output "$(SILVER_CORPUS_MANIFEST)" --check
@@ -443,7 +445,7 @@ silver-corpus-manifest-check:
 silver-corpus-validate: silver-corpus-manifest-check
 	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
 	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/silver.log"; \
-	set +e; cargo run --quiet -p silver-corpus -- validate --manifest "$(SILVER_CORPUS_MANIFEST)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --lane runtime >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	set +e; $(RUST_BUILD) run --quiet -p silver-corpus -- validate --manifest "$(SILVER_CORPUS_MANIFEST)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --lane runtime >"$$log" 2>&1; gate_rc=$$?; set -e; \
 	cat "$$log"; report_rc=0; \
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" silver --manifest "$(SILVER_CORPUS_MANIFEST)" --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --rust-commit "$$(git rev-parse HEAD)" --runner "validator=$(CURDIR)/target/debug/silver-corpus" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/silver.json" || report_rc=$$?; \
 	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
@@ -458,21 +460,21 @@ cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe cpp-probe-scripted
 	@test -x "$(GOLDEN_RUNNER)" || { echo "missing executable pinned C++ golden runner: $(GOLDEN_RUNNER)" >&2; exit 2; }
 	@test -x "$(CPP_PROBE)" || { echo "missing executable pinned C++ probe: $(CPP_PROBE)" >&2; exit 2; }
 	@test -x "$(SCRIPTED_CPP_PROBE)" || { echo "missing executable pinned scripted C++ probe: $(SCRIPTED_CPP_PROBE)" >&2; exit 2; }
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_PROBE_SCRIPTED="$(SCRIPTED_CPP_PROBE)" cargo test --workspace
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_PROBE_SCRIPTED="$(SCRIPTED_CPP_PROBE)" $(RUST_BUILD) test --workspace
 
 renderer-replay:
-	cargo build --quiet -p renderer-replay
+	$(RUST_BUILD) build --quiet -p renderer-replay
 
 renderer-references:
-	CARGO_TARGET_DIR="$(CURDIR)/target/renderer-ffi" cargo build --quiet -p renderer-replay --features ffi
-	CARGO_TARGET_DIR="$(CURDIR)/target/renderer-ffi" cargo run --quiet -p pixel-compare --bin capture-corpus-r-references -- --replay "$(CURDIR)/target/renderer-ffi/debug/renderer-replay"
+	CARGO_TARGET_DIR="$(CURDIR)/target/renderer-ffi" $(RUST_BUILD) build --quiet -p renderer-replay --features ffi
+	CARGO_TARGET_DIR="$(CURDIR)/target/renderer-ffi" $(RUST_BUILD) run --quiet -p pixel-compare --bin capture-corpus-r-references -- --replay "$(CURDIR)/target/renderer-ffi/debug/renderer-replay"
 
 renderer-shaders-check:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-shaders.sh
 
 renderer-decoder-oracle:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-decoder-provenance.sh
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_INCREMENTAL=0 cargo test -p nuxie-renderer-ffi --features decode-oracle --test decode_oracle -- --nocapture
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_INCREMENTAL=0 $(RUST_BUILD) test -p nuxie-renderer-ffi --features decode-oracle --test decode_oracle -- --nocapture
 
 # The same-runner gate deliberately keeps the live reference and candidate
 # builds separate. CI may restore only RENDERER_DAWN_LIVE_REFERENCE_REPLAY from
@@ -480,7 +482,7 @@ renderer-decoder-oracle:
 # from HEAD. The historical RENDERER_DAWN_REFERENCE_REPLAY remains isolated for
 # the immutable renderer-port pixel oracle and is never relabeled as current-runtime output.
 renderer-rust-replay-release:
-	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features native-webgpu-exact --bin renderer-replay
+	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" $(RUST_BUILD) build --quiet --locked --release -p renderer-replay --no-default-features --features native-webgpu-exact --bin renderer-replay
 
 # Build the upstream archives and bind them to the exact source revision. The
 # stamp prevents a checkout change from silently reusing ABI-incompatible
@@ -499,7 +501,7 @@ renderer-metal-reference-bootstrap:
 renderer-metal-reference-replay:
 	@test -f "$(RENDERER_METAL_UPSTREAM_STAMP)" || { echo "missing pinned upstream Metal archive stamp; run make renderer-metal-reference-bootstrap" >&2; exit 2; }
 	@test "$$(cat "$(RENDERER_METAL_UPSTREAM_STAMP)")" = "$(RIVE_RUNTIME_REF)" || { echo "stale upstream Metal archives; run make renderer-metal-reference-bootstrap" >&2; exit 2; }
-	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_METAL_REFERENCE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features ffi --bin renderer-replay
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_METAL_REFERENCE_BUILD_DIR)" $(RUST_BUILD) build --quiet --locked --release -p renderer-replay --no-default-features --features ffi --bin renderer-replay
 	mkdir -p "$(RENDERER_METAL_REFERENCE_DIR)"
 	cp "$(RENDERER_METAL_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_METAL_REFERENCE_REPLAY)"
 	chmod 0755 "$(RENDERER_METAL_REFERENCE_REPLAY)"
@@ -518,13 +520,13 @@ renderer-metal-reference-check:
 # Compare the actual Rust Metal candidate against pinned C++ Metal, then run
 # the same candidate and stream against the exact WebGPU port as a diagnostic only.
 renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay-release renderer-metal-reference-check
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 
 # Purpose-built UNIV-2088 lane. Keep the established `rust-metal` corpus on
 # capability-driven selection; only these bounded tracers force generic atomics.
 renderer-metal-atomic-oracle-tracer: renderer-native-metal-replay renderer-metal-reference-check
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_ATOMIC_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/generic-atomic" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ATOMIC_ORACLE_ENTRIES)
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_ATOMIC_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/generic-atomic" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ATOMIC_ORACLE_ENTRIES)
 
 # Complete authoritative product-output differential against the pinned
 # upstream C++ Metal renderer. The derived manifest contains every
@@ -533,14 +535,14 @@ renderer-metal-atomic-oracle-tracer: renderer-native-metal-replay renderer-metal
 # them. Run serially because both replay processes share one physical adapter.
 renderer-metal-cpp-parity: renderer-native-metal-replay renderer-metal-reference-check
 	python3 tools/renderer-tracers/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_CPP_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_CPP_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 # Secondary backend differential. This never overrules the pinned C++ Metal
 # oracle: completed WebGPU pixel differences are reported as diagnostics, while
 # replay crashes, timeouts, and malformed outputs still fail the command.
 renderer-metal-wgpu-diagnostic: renderer-native-metal-replay renderer-rust-replay-release
 	python3 tools/renderer-tracers/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --report-divergences
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --report-divergences
 
 # Compatibility spelling retained for existing local scripts. This target is
 # diagnostic; `renderer-metal-cpp-parity` is the authoritative gate.
@@ -571,7 +573,7 @@ renderer-dawn-reference-bootstrap:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_ATLAS_MASK_JOBS="$(RENDERER_JOBS)" tools/renderer-dawn-reference-bootstrap.sh
 
 renderer-dawn-reference-replay:
-	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_DAWN_REFERENCE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features perf-dawn --bin renderer-replay
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_DAWN_REFERENCE_BUILD_DIR)" $(RUST_BUILD) build --quiet --locked --release -p renderer-replay --no-default-features --features perf-dawn --bin renderer-replay
 	mkdir -p "$(RENDERER_DAWN_REFERENCE_DIR)"
 	cp "$(RENDERER_DAWN_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_DAWN_REFERENCE_REPLAY)"
 	chmod 0755 "$(RENDERER_DAWN_REFERENCE_REPLAY)"
@@ -584,7 +586,7 @@ renderer-dawn-live-reference-bootstrap:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_DAWN_LIVE_JOBS="$(RENDERER_JOBS)" tools/renderer-dawn-live-reference-bootstrap.sh
 
 renderer-dawn-live-reference-replay:
-	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_DAWN_LIVE_REFERENCE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features perf-dawn --bin renderer-replay
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_DAWN_LIVE_REFERENCE_BUILD_DIR)" $(RUST_BUILD) build --quiet --locked --release -p renderer-replay --no-default-features --features perf-dawn --bin renderer-replay
 	mkdir -p "$(RENDERER_DAWN_LIVE_REFERENCE_DIR)"
 	cp "$(RENDERER_DAWN_LIVE_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)"
 	chmod 0755 "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)"
@@ -595,20 +597,20 @@ renderer-dawn-live-reference-check:
 
 renderer-golden-same-runner: renderer-rust-replay-release renderer-dawn-live-reference-check
 	@actual_rows=$$(awk '$$0 == "[[entry]]" { count++ } END { print count + 0 }' "$(RENDERER_CORPUS_MANIFEST)"); test "$$actual_rows" = "$(RENDERER_CORPUS_EXPECTED_ROWS)" || { echo "renderer corpus row count drifted: expected $(RENDERER_CORPUS_EXPECTED_ROWS), got $$actual_rows" >&2; exit 2; }
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-webgpu-exact --reference-replay "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_SAME_RUNNER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-webgpu-exact --reference-replay "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_SAME_RUNNER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 renderer-stub-baseline: renderer-replay
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --expect-all-fail
+	$(RUST_BUILD) run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --expect-all-fail
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release
 perf-compare: golden-runner rust-golden-runner
-	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)"
+	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)"
 
 perf-corpus: CPP_CONFIG=release
 perf-corpus: RUST_PROFILE=release
 perf-corpus: golden-runner rust-golden-runner
-	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" $(PERF_CORPUS_SELECTION) --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --max-ratio "$(PERF_MAX_RATIO)"
+	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" $(PERF_CORPUS_SELECTION) --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --max-ratio "$(PERF_MAX_RATIO)"
 
 perf-corpus-check:
 	python3 "$(PERF_GATE_TOOL)" check-manifest --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
@@ -629,12 +631,12 @@ perf-runtime-ref-check:
 perf-hot-loop: CPP_CONFIG=release
 perf-hot-loop: RUST_PROFILE=release
 perf-hot-loop: perf-runtime-ref-check golden-runner rust-golden-runner
-	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" $(PERF_CORPUS_SELECTION) --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --max-ratio "$(PERF_MAX_RATIO)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
+	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" $(PERF_CORPUS_SELECTION) --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --max-ratio "$(PERF_MAX_RATIO)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
 
 perf-json: CPP_CONFIG=release
 perf-json: RUST_PROFILE=release
 perf-json: golden-runner rust-golden-runner
-	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
+	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
 	@echo "perf-json wrote $(PERF_JSON_OUT)"
 
 perf-gate-measure: CPP_CONFIG=release
@@ -642,7 +644,7 @@ perf-gate-measure: RUST_PROFILE=release
 perf-gate-measure: perf-runtime-ref-check perf-corpus-check scripted-golden-runner scripted-rust-golden-runner
 	@set -e; \
 	tools/perf-gate/wait-for-quiet.sh; \
-	cargo build --quiet --release -p perf-compare --bin perf-compare; \
+	$(RUST_BUILD) build --quiet --release -p perf-compare --bin perf-compare; \
 	ids=$$(python3 "$(PERF_GATE_TOOL)" ids --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"); \
 	mkdir -p "$(dir $(PERF_GATE_REPORT))"; \
 	"$(PERF_GATE_PINNER)" "$(PERF_GATE_COMPARE)" --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-ids "$$ids" --iterations "$(PERF_GATE_ITERATIONS)" --warmups "$(PERF_GATE_WARMUPS)" --aggregate median --runner-order cpp-first --runner-benchmark --benchmark-frames "$(PERF_GATE_FRAMES)" --benchmark-hz "$(PERF_GATE_HZ)" --rust-execute-scripts --json "$(PERF_GATE_REPORT)" $(PERF_JSON_META)
@@ -657,7 +659,7 @@ perf-gate-tighten:
 	python3 "$(PERF_GATE_TOOL)" tighten --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --report "$(PERF_GATE_REPORT)" --report "$(PERF_GATE_TIGHTEN_REPORT_2)" --report "$(PERF_GATE_TIGHTEN_REPORT_3)"
 
 capi-smoke: fixtures
-	cargo build --quiet -p nux-capi
+	$(RUST_BUILD) build --quiet -p nux-capi
 	mkdir -p target/capi-smoke
 	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include -o target/capi-smoke/capi_smoke crates/nux-capi/smoke/capi_smoke.c -Ltarget/debug -lnux_capi
 	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
@@ -720,11 +722,11 @@ nux-capi-android:
 	tools/build-nux-capi-android.sh
 
 cpp-binary-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --test profiler_cpp_probe -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 $(RUST_BUILD) test -p nuxie-binary --test cpp_import -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" $(RUST_BUILD) test -p nuxie-runtime --test profiler_cpp_probe -- --nocapture
 
 cpp-runtime-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --features tools --tests -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" $(RUST_BUILD) test -p nuxie-runtime --features tools --tests -- --nocapture
 
 cpp-compare: cpp-binary-compare cpp-runtime-compare
 

@@ -49,10 +49,7 @@ impl Parser {
                     let mut arg_comma_positions = TempVector::new(&mut self.scratch_position_2);
                     let mut close_paren_position = Position::missing();
                     let (args, args_location, _) = if self.options.store_cst_data {
-                        self.parse_call_list(
-                            &mut arg_comma_positions,
-                            &mut close_paren_position,
-                        )
+                        self.parse_call_list(&mut arg_comma_positions, &mut close_paren_position)
                     } else {
                         self.parse_call_list(core::ptr::null_mut(), core::ptr::null_mut())
                     };
@@ -61,19 +58,16 @@ impl Parser {
                         if !is_constant_literal(*arg) && !is_literal_table(*arg) {
                             self.report(
                                 args_location,
-                                format_args!("Only literals can be passed as arguments for attributes"),
+                                format_args!(
+                                    "Only literals can be passed as arguments for attributes"
+                                ),
                             );
                         }
                     }
 
                     let attr_name_str =
                         unsafe { core::ffi::CStr::from_ptr(attr_name).to_string_lossy() };
-                    let ty = self.validate_attribute(
-                        name_loc,
-                        &attr_name_str,
-                        attributes,
-                        &args,
-                    );
+                    let ty = self.validate_attribute(name_loc, &attr_name_str, attributes, &args);
                     let node = unsafe {
                         (*self.allocator).alloc(
                             AstAttr::ast_attr_location_type_item_ast_array_ast_expr_ast_name(
@@ -101,12 +95,7 @@ impl Parser {
                 } else {
                     let attr_name_str =
                         unsafe { core::ffi::CStr::from_ptr(attr_name).to_string_lossy() };
-                    let ty = self.validate_attribute(
-                        name_loc,
-                        &attr_name_str,
-                        attributes,
-                        &empty,
-                    );
+                    let ty = self.validate_attribute(name_loc, &attr_name_str, attributes, &empty);
                     let node = unsafe {
                         (*self.allocator).alloc(
                             AstAttr::ast_attr_location_type_item_ast_array_ast_expr_ast_name(

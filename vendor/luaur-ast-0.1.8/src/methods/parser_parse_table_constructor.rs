@@ -184,8 +184,7 @@ impl Parser {
             let current_type = self.lexer.current().r#type;
             if current_type == Type(b',' as i32) || current_type == Type(b';' as i32) {
                 self.next_lexeme();
-            } else if (current_type == Type(b'[' as i32) || current_type == Type::Name)
-            {
+            } else if (current_type == Type(b'[' as i32) || current_type == Type::Name) {
                 self.report(
                     self.lexer.current().location,
                     format_args!("Expected ',' after table constructor element"),

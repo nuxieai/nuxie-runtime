@@ -18,7 +18,7 @@ impl Drop for TestingRandom {
 }
 
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
         .parent()
         .and_then(Path::parent)
         .expect("workspace root")

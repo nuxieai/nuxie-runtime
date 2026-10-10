@@ -17,9 +17,11 @@ pub(super) use std::{cell::RefCell, rc::Rc};
 
 pub(super) const SIZE: u32 = 256;
 pub(super) fn fixture(relative: &str) -> Vec<u8> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures")
-        .join(relative);
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures")
+    .join(relative);
     std::fs::read(&path)
         .unwrap_or_else(|e| panic!("{}: {e}; run tools/fetch-test-assets.sh", path.display()))
 }
@@ -60,7 +62,10 @@ pub(super) fn assert_cpp_gm_pixels(name: &str, pixels: Vec<u8>) {
 
 pub(super) fn assert_cpp_gm_pixels_with_size(name: &str, width: u32, height: u32, pixels: Vec<u8>) {
     let actual = pixel_compare::RgbaImage::new(width, height, pixels).expect("GM dimensions");
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join(format!(
         "../../fixtures/renderer/reference/metal/gm/{name}.png"
     ));
     let expected = pixel_compare::RgbaImage::read_png(path).expect("pinned C++ GM capture");

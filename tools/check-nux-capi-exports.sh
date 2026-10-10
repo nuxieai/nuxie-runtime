@@ -51,7 +51,7 @@ grep -Ev "$android_surface_extension" "$expected" > "$work_dir/expected-host.txt
 expected="$work_dir/expected-host.txt"
 
 # shellcheck disable=SC2086 # an empty or one-feature Cargo argument pair
-cargo build --quiet --manifest-path "$repo_dir/Cargo.toml" -p nux-capi $feature_args
+"$repo_dir/tools/bazel/runtime.py" build --quiet --manifest-path "$repo_dir/Cargo.toml" -p nux-capi $feature_args
 
 case "$(uname -s)" in
     Darwin)

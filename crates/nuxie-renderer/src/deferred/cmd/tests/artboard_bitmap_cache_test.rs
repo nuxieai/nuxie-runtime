@@ -34,8 +34,10 @@ use nuxie_runtime::mechanical_port::source::{
 use nuxie_runtime::{CoreHandle, RuntimeArtboardInstanceHandle};
 
 fn fixture() -> Vec<u8> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/cache_as_bitmap_test.riv");
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/cache_as_bitmap_test.riv");
     std::fs::read(&path).unwrap_or_else(|_| panic!("run `make fixtures`: {}", path.display()))
 }
 

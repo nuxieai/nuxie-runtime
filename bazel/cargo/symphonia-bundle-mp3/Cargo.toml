@@ -1,0 +1,26 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "symphonia-bundle-mp3"
+version = "0.5.5"
+edition = "2018"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+name = "symphonia_bundle_mp3"
+
+[features]
+"__bazel_dependency_default" = ["mp1", "mp2", "mp3"]
+"mp1" = []
+"mp2" = []
+"mp3" = []
+"default" = []
+
+[dependencies]
+"lazy_static" = { "version" = "1.4.0" }
+"log" = { "version" = "0.4" }
+"symphonia-core" = { "version" = "0.5.5" }

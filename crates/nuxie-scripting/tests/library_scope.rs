@@ -102,8 +102,10 @@ fn prelinked_bytecode_registration_retries_dependency_chain() {
 
 #[test]
 fn failed_candidate_modules_do_not_poison_the_parent_vm_stack() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/scope_probe.riv");
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/scope_probe.riv");
     let bytes = std::fs::read(&path).expect("vendored scope probe fixture");
     let file = read_runtime_file_with_scripting(&bytes).expect("fixture imports");
     let scripts = file

@@ -1,0 +1,37 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-renderer-ffi"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+
+[features]
+"default" = []
+"native" = []
+"dawn" = ["native"]
+"vulkan" = ["native"]
+"webgl2" = ["native"]
+"perf-counters" = ["dawn"]
+"decode-oracle" = ["native"]
+
+[dependencies]
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+
+[dev-dependencies]
+"anyhow" = { "version" = "1" }
+"nuxie-binary" = { "path" = "../nuxie-binary" }
+"nuxie-image-codec" = { "path" = "../nuxie-image-codec" }
+"nuxie-renderer" = { "path" = "../nuxie-renderer" }
+"nuxie-runtime" = { "path" = "../nuxie-runtime" }
+"nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
+"sha2" = { "version" = "0.10" }
+
+[build-dependencies]
+"cc" = { "version" = "1" }

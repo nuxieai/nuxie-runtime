@@ -28,7 +28,7 @@ if grep -Eiq '(^|[[:space:]│├└─])(wgpu($|[-_ @v])|naga($|[ @v])|nuxie-re
   exit 1
 fi
 
-MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 cargo test --locked \
+MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 "$repo_root/tools/bazel/runtime.py" test --locked \
   -p nuxie-ore-metal --test ore_binding_witness --target "$host_target" --no-run \
   --message-format=json-render-diagnostics >"$artifacts_file"
 artifact="$({

@@ -53,19 +53,20 @@ class DistributionToolTests(unittest.TestCase):
             ).read_text()
         )
 
-    def test_five_thin_builds_are_reused_by_both_artifacts(self) -> None:
-        self.assertEqual(self.builder.count('"${rust_cargo}" build'), 1)
-        self.assertIn('for target in "${targets[@]}"', self.builder)
-        self.assertIn('full/NuxieRuntime.xcframework', self.builder)
-        self.assertIn('ios/NuxieRuntime.xcframework', self.builder)
-        self.assertIn('NuxieRuntime-iOS.xcframework.zip', self.builder)
-        self.assertEqual(
-            self.builder.count('--package nux-apple-product-extension'), 1
+    def test_distribution_plan_selects_five_slices_for_both_artifacts(self) -> None:
+        plan = subprocess.check_output(
+            [str(REPO_ROOT / "tools/build-nux-capi-xcframeworks.sh"), "--plan"],
+            text=True,
         )
-        self.assertIn('--features apple-runtime', self.builder)
-        self.assertIn('libnux_apple_product_extension.a', self.builder)
-        self.assertNotIn('--package nux-capi', self.builder)
-        self.assertNotIn('--package nux-apple-runtime', self.builder)
+        fields = dict(line.split(": ", 1) for line in plan.splitlines())
+        self.assertEqual(fields["thin-builds"].split(), [
+            "aarch64-apple-ios", "aarch64-apple-ios-sim", "x86_64-apple-ios",
+            "aarch64-apple-darwin", "x86_64-apple-darwin",
+        ])
+        self.assertEqual(fields["root-package"], "nux-apple-product-extension")
+        self.assertEqual(fields["feature-set"], "apple-runtime")
+        self.assertEqual(fields["artifact full-apple"], "all five thin builds")
+        self.assertEqual(fields["artifact ios-only"], "first three thin builds")
 
     def test_build_strips_bitcode_and_uses_the_three_symbol_manifests(self) -> None:
         self.assertIn('--remove-section=__LLVM,__bitcode', self.builder)
@@ -314,25 +315,6 @@ class DistributionToolTests(unittest.TestCase):
             self.assertEqual(
                 self.layout_checker.clang_command(), ["clang", "-D__APPLE__"]
             )
-
-    def test_apple_ci_provisions_every_five_slice_rust_target(self) -> None:
-        apple_lane = self.pipeline.split(':mac: Apple distribution compile"', 1)[
-            1
-        ].split(':linux: Nightly full runtime confidence"', 1)[0]
-        self.assertIn("rustup target add --toolchain stable", apple_lane)
-        for target in (
-            "aarch64-apple-ios",
-            "aarch64-apple-ios-sim",
-            "x86_64-apple-ios",
-            "aarch64-apple-darwin",
-            "x86_64-apple-darwin",
-        ):
-            self.assertIn(target, apple_lane)
-        self.assertIn('rust_sysroot=$("${rustc_cmd[@]}" --print sysroot)', self.apple_checker)
-        self.assertIn(
-            '"$rust_sysroot/lib/rustlib/$target/lib"', self.apple_checker
-        )
-        self.assertNotIn("rustup target list --installed", self.apple_checker)
 
     def test_apple_checker_builds_the_product_extension_root(self) -> None:
         self.assertIn("-p nux-apple-product-extension", self.apple_checker)

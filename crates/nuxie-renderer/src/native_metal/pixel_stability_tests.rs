@@ -94,7 +94,7 @@ fn render_published_text(mode: ShaderCompilationMode) -> Vec<u8> {
                 .unwrap_or(false)
         }
     }
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let root = std::path::Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
         .join("tests/fixtures/published-font-metrics");
     let bytes = std::fs::read(root.join("screen.riv")).unwrap();
     let font = std::fs::read(

@@ -156,7 +156,8 @@ impl Parser {
                 };
 
                 if self.options.store_cst_data {
-                    let cst = if luaur_common::FFlag::LuauFunctionReturnTypePackLessTypeGroups.get() {
+                    let cst = if luaur_common::FFlag::LuauFunctionReturnTypePackLessTypeGroups.get()
+                    {
                         let commas = self.copy_temp_vector_t(&comma_positions);
                         CstTypePackExplicit::cst_type_pack_explicit_position_position_ast_array_position(
                             location.begin,

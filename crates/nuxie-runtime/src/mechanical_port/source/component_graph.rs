@@ -58,12 +58,26 @@ enum NodeCells {
     Composer(Rc<ShapeCells>),
 }
 
+/// How an authored member updates, so the update walk reads only the column
+/// that member needs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum Update {
+    // The transform cells kernel (`transforms`).
+    Transform,
+    // A registered handler (`update`).
+    Handler,
+    // The receiver's own component_update.
+    Receiver,
+}
+
 /// Everything a cascade step reads, packed so one load fetches it.
 struct Node {
     dirt: Cell<ComponentDirt>,
     // Cleared when an authored member's occurrence retires.
     alive: Cell<bool>,
     kind: Kind,
+    update: Update,
     dependents_start: u32,
     dependents_end: u32,
 }
@@ -189,6 +203,13 @@ impl ComponentGraph {
                 dirt: Cell::new(dirt[index]),
                 alive: Cell::new(true),
                 kind: kinds[index],
+                update: if transforms[index].is_some() {
+                    Update::Transform
+                } else if update[index].is_some() {
+                    Update::Handler
+                } else {
+                    Update::Receiver
+                },
                 dependents_start: start,
                 dependents_end: dependents.len() as u32,
             });
@@ -414,15 +435,20 @@ impl ComponentGraph {
             return false;
         }
         node.dirt.set(ComponentDirt::NONE);
-        if let Some(transform) = &self.transforms[i] {
-            transform.update(self.authored(i), dirt);
-            return true;
-        }
         let handle = self.authored(i);
-        if let Some(update) = self.update[i] {
-            update(handle, dirt);
-        } else {
-            handle.with_mut(|object| object.component_update(dirt));
+        match node.update {
+            Update::Transform => {
+                self.transforms[i]
+                    .as_ref()
+                    .expect("transform members record their kernel")
+                    .update(handle, dirt);
+            }
+            Update::Handler => {
+                (self.update[i].expect("handler members record their handler"))(handle, dirt);
+            }
+            Update::Receiver => {
+                handle.with_mut(|object| object.component_update(dirt));
+            }
         }
         true
     }

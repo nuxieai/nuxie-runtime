@@ -47,8 +47,8 @@ tools/bazel/runtime.py run -p nuxie-codegen -- --help
 ```
 
 The runtime shares Bazel action, dependency-download, and fetched repository
-caches with other Nuxie Bazel workspaces under `~/.cache/nuxie/bazel`. Each Git worktree retains its own
-Bazel output base and `target/` products. Set an absolute `NUXIE_BAZEL_CACHE_DIR`
+caches with other Nuxie Bazel workspaces under `~/.cache/nuxie/bazel`. Each Git
+worktree retains its own Bazel output base and `target/` products. Set an absolute `NUXIE_BAZEL_CACHE_DIR`
 when using the package or distribution frontends to relocate the reusable
 caches; leave the output base at its checkout-specific default. Test the cache
 override with `python3 -B -m unittest discover -s tools -p 'test_bazel_cache.py'`.

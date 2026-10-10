@@ -1,5 +1,7 @@
 import copy
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +15,10 @@ LABEL = "//crates/shipping:shipping__android__cdylib"
 
 
 class CacheFrontendTests(unittest.TestCase):
+    def test_distribution_frontend_imports_without_path_overrides(self):
+        subprocess.run([sys.executable, "-B", "-E", "-c", "import tools.bazel_runtime_build"],
+                       cwd=Path(__file__).resolve().parents[1], check=True)
+
     def test_distribution_frontend_shares_cache_with_separate_worktree_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

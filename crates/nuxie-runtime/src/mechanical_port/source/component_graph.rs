@@ -163,6 +163,12 @@ impl ComponentGraph {
         graph
     }
 
+    /// Whether member `index` is still live (not retired).
+    #[inline]
+    pub(crate) fn is_live(&self, index: u32) -> bool {
+        self.nodes[index as usize].alive.get()
+    }
+
     pub(crate) fn mark_retired(&self, index: u32) {
         if let Some(node) = self.nodes.get(index as usize) {
             node.alive.set(false);

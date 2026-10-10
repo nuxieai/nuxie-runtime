@@ -43,11 +43,7 @@ pub struct Stroke {
 
 impl Stroke {
     pub fn path_flags(&self) -> PathFlags {
-        if self.base.transform_affects_stroke() {
-            PathFlags::LOCAL
-        } else {
-            PathFlags::WORLD
-        }
+        transform_affects_stroke_path_flags(self.base.transform_affects_stroke())
     }
 
     pub fn init_render_paint(
@@ -241,5 +237,14 @@ impl EffectsContainer for Stroke {
         effect: &mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect,
     ) {
         self.base.base.add_stroke_effect(identity, effect);
+    }
+}
+
+/// Stroke::pathFlags() for a transformAffectsStroke value.
+pub(crate) fn transform_affects_stroke_path_flags(transform_affects_stroke: bool) -> PathFlags {
+    if transform_affects_stroke {
+        PathFlags::LOCAL
+    } else {
+        PathFlags::WORLD
     }
 }

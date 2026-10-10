@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     rc::{Rc, Weak},
 };
 
@@ -279,11 +279,7 @@ impl ComponentOccurrenceHandle {
             }
             Self::PathComposer(_) | Self::TextVariationHelper(_) => {
                 if let Some((graph, index)) = self
-                    .with_component(|component| {
-                        component
-                            .graph_binding()
-                            .map(|(graph, index)| (std::rc::Rc::clone(graph), index))
-                    })
+                    .with_component(Component::graph_binding)
                     .flatten()
                 {
                     return graph.add_dirt(index, value, recurse);
@@ -896,6 +892,8 @@ enum ComponentDirtStorage {
     // A member of its initialized Artboard's ComponentGraph: the graph's dirt
     // column at this graph order is the only copy.
     Graph(GraphDirt),
+    // Shared with the type's hot cells (see SharedDirt).
+    Shared(Rc<SharedDirt>),
 }
 
 /// A graph member's dirt: its slot in the graph's shared node array (read
@@ -903,6 +901,55 @@ enum ComponentDirtStorage {
 struct GraphDirt {
     dirt: crate::mechanical_port::source::component_graph::DirtBinding,
     graph: std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+}
+
+/// Dirt a Component shares with its type's hot cells (PaintCells), so the
+/// dirt cascade can read and add it without borrowing the component. It holds
+/// the bits itself until the component joins a graph, then forwards to the
+/// graph's node.
+pub(crate) struct SharedDirt {
+    inline: Cell<ComponentDirt>,
+    graph: RefCell<Option<GraphDirt>>,
+}
+
+impl SharedDirt {
+    pub(crate) fn get(&self) -> ComponentDirt {
+        match &*self.graph.borrow() {
+            Some(binding) => binding.dirt.get(),
+            None => self.inline.get(),
+        }
+    }
+
+    fn set(&self, value: ComponentDirt) {
+        match &*self.graph.borrow() {
+            Some(binding) => binding.dirt.set(value),
+            None => self.inline.set(value),
+        }
+    }
+
+    fn bind_graph(
+        &self,
+        graph: Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        index: u32,
+    ) {
+        graph.set_dirt(index, self.get());
+        *self.graph.borrow_mut() = Some(GraphDirt {
+            dirt: graph.dirt_binding(index),
+            graph,
+        });
+    }
+
+    pub(crate) fn graph_binding(
+        &self,
+    ) -> Option<(
+        Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        u32,
+    )> {
+        self.graph
+            .borrow()
+            .as_ref()
+            .map(|binding| (Rc::clone(&binding.graph), binding.dirt.index()))
+    }
 }
 
 // A separate Background can read TextStylePaint's actual parent while a
@@ -994,8 +1041,10 @@ impl Component {
         graph: std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
         index: u32,
     ) {
-        if let ComponentDirtStorage::Artboard(_) = self.dirt {
-            return;
+        match &self.dirt {
+            ComponentDirtStorage::Artboard(_) => return,
+            ComponentDirtStorage::Shared(shared) => return shared.bind_graph(graph, index),
+            ComponentDirtStorage::Inline(_) | ComponentDirtStorage::Graph(_) => {}
         }
         graph.set_dirt(index, self.dirt());
         self.dirt = ComponentDirtStorage::Graph(GraphDirt {
@@ -1007,13 +1056,33 @@ impl Component {
     pub(crate) fn graph_binding(
         &self,
     ) -> Option<(
-        &std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+        std::rc::Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
         u32,
     )> {
         match &self.dirt {
-            ComponentDirtStorage::Graph(binding) => Some((&binding.graph, binding.dirt.index())),
+            ComponentDirtStorage::Graph(binding) => {
+                Some((Rc::clone(&binding.graph), binding.dirt.index()))
+            }
+            ComponentDirtStorage::Shared(shared) => shared.graph_binding(),
             _ => None,
         }
+    }
+
+    /// Share this component's dirt with its hot cells. Called while the
+    /// component is still unbound, before it can join a graph.
+    pub(crate) fn share_dirt(&mut self) -> Rc<SharedDirt> {
+        if let ComponentDirtStorage::Shared(shared) = &self.dirt {
+            return Rc::clone(shared);
+        }
+        let ComponentDirtStorage::Inline(dirt) = self.dirt else {
+            unreachable!("dirt is shared before the component is bound");
+        };
+        let shared = Rc::new(SharedDirt {
+            inline: Cell::new(dirt),
+            graph: RefCell::new(None),
+        });
+        self.dirt = ComponentDirtStorage::Shared(Rc::clone(&shared));
+        shared
     }
 
     pub(crate) fn bind_artboard_dirt(&mut self, dirty: RuntimeArtboardDirtyHandle) {
@@ -1061,9 +1130,16 @@ impl Component {
     }
 
     pub(crate) fn notify_artboard(&self) {
-        if let ComponentDirtStorage::Graph(binding) = &self.dirt {
-            binding.graph.notify_artboard(binding.dirt.index());
-            return;
+        match &self.dirt {
+            ComponentDirtStorage::Graph(binding) => {
+                return binding.graph.notify_artboard(binding.dirt.index());
+            }
+            ComponentDirtStorage::Shared(shared) => {
+                if let Some((graph, index)) = shared.graph_binding() {
+                    return graph.notify_artboard(index);
+                }
+            }
+            ComponentDirtStorage::Inline(_) | ComponentDirtStorage::Artboard(_) => {}
         }
         if let Some(dirty) = self
             .artboard
@@ -1242,6 +1318,7 @@ impl Component {
         match &self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt,
             ComponentDirtStorage::Graph(binding) => binding.dirt.get(),
+            ComponentDirtStorage::Shared(shared) => shared.get(),
             ComponentDirtStorage::Artboard(dirty) => Self::artboard_dirt(dirty),
         }
     }
@@ -1257,6 +1334,7 @@ impl Component {
         match &mut self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt = value,
             ComponentDirtStorage::Graph(binding) => binding.dirt.set(value),
+            ComponentDirtStorage::Shared(shared) => shared.set(value),
             ComponentDirtStorage::Artboard(dirty) => dirty.set_component_dirt(value),
         }
     }

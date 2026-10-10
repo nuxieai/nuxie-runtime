@@ -71,11 +71,7 @@ impl Fill {
         self.base.base.update_with_path_kind(value, kind, None);
     }
     pub fn path_flags(&self) -> PathFlags {
-        if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u8 {
-            PathFlags::LOCAL_CLOCKWISE
-        } else {
-            PathFlags::LOCAL
-        }
+        fill_rule_path_flags(self.base.fill_rule())
     }
 
     pub fn init_render_paint(
@@ -105,7 +101,7 @@ impl Fill {
     }
 
     pub fn build_dependencies(&mut self) {
-        if self.base.effects_container.effects.is_empty() {
+        if self.base.effects_container.effects().is_empty() {
             return;
         }
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
@@ -162,5 +158,14 @@ impl ShapePaintBehavior for Fill {
 
     fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32) {
         Fill::apply_to(self, paint, opacity);
+    }
+}
+
+/// Fill::pathFlags() for a fill rule value.
+pub(crate) fn fill_rule_path_flags(fill_rule: u8) -> PathFlags {
+    if fill_rule == nuxie_render_api::FillRule::Clockwise as u8 {
+        PathFlags::LOCAL_CLOCKWISE
+    } else {
+        PathFlags::LOCAL
     }
 }

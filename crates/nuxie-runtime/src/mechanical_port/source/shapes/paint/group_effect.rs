@@ -53,7 +53,7 @@ impl GroupEffect {
         let effects = handle
             .with_downcast_mut::<GroupEffect, _>(|group| {
                 group.stroke.invalidate_effect(provider.as_ref());
-                group.effects.effects.clone()
+                group.effects.effects().to_vec()
             })
             .unwrap_or_default();
         for effect in effects {
@@ -68,7 +68,7 @@ impl GroupEffect {
         paint: &ShapePaint,
     ) {
         let mut current: Option<std::rc::Rc<std::cell::RefCell<ShapePaintPath>>> = None;
-        for effect in self.effects.effects.iter().cloned() {
+        for effect in self.effects.effects().iter().cloned() {
             effect.with_mut(|effect| {
                 let Some(effect) = effect.as_stroke_effect_mut() else {
                     return;
@@ -98,7 +98,7 @@ impl GroupEffect {
     pub fn add_path_provider(&mut self, provider: &PathProvider) {
         let path = self.create_effect_path();
         self.stroke.add_path_provider(provider, path);
-        for effect in self.effects.effects.iter() {
+        for effect in self.effects.effects().iter() {
             effect.with_mut(|effect| {
                 if let Some(effect) = effect.as_stroke_effect_mut() {
                     effect.add_path_provider(provider);
@@ -115,7 +115,7 @@ impl GroupEffect {
     }
     pub fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
         self.stroke.invalidate_effect(provider);
-        for effect in self.effects.effects.iter() {
+        for effect in self.effects.effects().iter() {
             effect.with_mut(|effect| {
                 if let Some(effect) = effect.as_stroke_effect_mut() {
                     effect.invalidate_effect(provider);

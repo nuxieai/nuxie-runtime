@@ -5556,9 +5556,7 @@ fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_b
             // onDirty may have rewired the root or this dependent list. Read
             // both at their C++ sites, retaining only the traversal backing.
             let self_handle = component.base.base.handle();
-            let graph = component
-                .graph_binding()
-                .map(|(graph, index)| (std::rc::Rc::clone(graph), index));
+            let graph = component.graph_binding();
             let dependents = component.dependents_snapshot();
             if let Some(shape) = self.as_shape_mut() {
                 for dependent in dependents.iter() {

@@ -18,10 +18,12 @@ pub struct FillBase {
 
 impl Default for FillBase {
     fn default() -> Self {
-        Self {
+        let mut fill = Self {
             base: ShapePaint::new(ShapePaintType::Fill),
             fill_rule: 0,
-        }
+        };
+        fill.store_fill_rule(0);
+        fill
     }
 }
 
@@ -54,8 +56,15 @@ impl FillBase {
         if self.fill_rule == value {
             return false;
         }
-        self.fill_rule = value;
+        self.store_fill_rule(value);
         true
+    }
+    // Every write of the fill rule keeps the paint's path flags current.
+    fn store_fill_rule(&mut self, value: u8) {
+        self.fill_rule = value;
+        self.base
+            .cells()
+            .set_path_flags(crate::mechanical_port::source::shapes::paint::fill::fill_rule_path_flags(value));
     }
     pub fn clone_into(&self, callbacks: &mut impl FillBaseCallbacks) -> Fill {
         let mut cloned = Fill::default();
@@ -63,7 +72,7 @@ impl FillBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl FillBaseCallbacks) {
-        self.fill_rule = object.fill_rule;
+        self.store_fill_rule(object.fill_rule);
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -74,7 +83,7 @@ impl FillBase {
     ) -> bool {
         match property_key {
             Self::FILL_RULE_PROPERTY_KEY => {
-                self.fill_rule = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.store_fill_rule(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8);
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

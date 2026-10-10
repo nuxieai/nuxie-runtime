@@ -49,8 +49,9 @@ fn add_callback_paint(arena: &CoreArena, shape: &CoreHandle, callback: impl FnMu
     assert!(stroke.base.base.init_render_paint(shape.clone(), &factory));
     *stroke.base.base.render_paint_handle().unwrap().borrow_mut() =
         Box::new(InvalidationPaint(Box::new(callback)));
+    let cells = std::rc::Rc::clone(stroke.base.base.cells());
     let stroke = arena.insert(stroke);
-    shape.with_downcast_mut::<Shape, _>(|shape| shape.paint_container.add_paint(stroke));
+    shape.with_downcast_mut::<Shape, _>(|shape| shape.paint_container.add_paint(stroke, cells));
 }
 
 fn clean_node(arena: &CoreArena) -> CoreHandle {

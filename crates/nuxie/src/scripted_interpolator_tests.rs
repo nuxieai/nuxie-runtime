@@ -134,8 +134,9 @@ fn scripted_interpolator_file(protocol: &[u8]) -> Vec<u8> {
     push_object(&mut bytes, "ScriptedInterpolator", |bytes| {
         push_uint(bytes, "ScriptedInterpolator", "scriptAssetId", 0);
     });
+    // The exporter gives a non-Component scripted owner's inputs parent 0.
     push_object(&mut bytes, "ScriptInputNumber", |bytes| {
-        push_uint(bytes, "Component", "parentId", 5);
+        push_uint(bytes, "Component", "parentId", 0);
         push_string(bytes, "ScriptInputNumber", "name", "scale");
         push_f32(bytes, "ScriptInputNumber", "propertyValue", 1.0);
     });
@@ -257,8 +258,9 @@ fn data_bound_scripted_interpolator_file_with_converter(
     push_object(&mut bytes, "ScriptedInterpolator", |bytes| {
         push_uint(bytes, "ScriptedInterpolator", "scriptAssetId", 0);
     });
+    // The exporter gives a non-Component scripted owner's inputs parent 0.
     push_object(&mut bytes, "ScriptInputNumber", |bytes| {
-        push_uint(bytes, "Component", "parentId", 2);
+        push_uint(bytes, "Component", "parentId", 0);
         push_string(bytes, "ScriptInputNumber", "name", "scale");
         push_f32(bytes, "ScriptInputNumber", "propertyValue", 1.0);
     });

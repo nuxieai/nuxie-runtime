@@ -1,4 +1,5 @@
 import copy
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,22 @@ from tools.bazel_runtime_build import BazelRuntime, canonical, digest
 
 TARGET = "aarch64-linux-android"
 LABEL = "//crates/shipping:shipping__android__cdylib"
+
+
+class CacheFrontendTests(unittest.TestCase):
+    def test_distribution_frontend_shares_cache_with_separate_worktree_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            executable = root / "bazel"
+            executable.touch()
+            with patch.dict(os.environ, {"NUXIE_BAZEL_BIN": str(executable),
+                                         "NUXIE_BAZEL_CACHE_DIR": str(root / "shared cache")}, clear=True), \
+                    patch.object(BazelRuntime, "run", side_effect=["release 9.3.0", str(root), str(root), str(root)]):
+                selected = BazelRuntime(root)
+            self.assertEqual(selected.startup, ["--nosystem_rc", "--nohome_rc",
+                                               "--bazelrc=" + str(root / ".bazel-cache.local.bazelrc")])
+            self.assertIn(str(root / "shared cache/actions"),
+                          (root / ".bazel-cache.local.bazelrc").read_text())
 
 
 class EvidenceTests(unittest.TestCase):

@@ -1,3 +1,4 @@
+import %workspace%/.bazel-cache.bazelrc
 build --incompatible_enable_cc_toolchain_resolution
 build --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=unwind
 build --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=1

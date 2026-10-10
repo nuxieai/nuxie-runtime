@@ -103,6 +103,39 @@ class CargoGraphTest(unittest.TestCase):
                 self.assertTrue(rendered.endswith("\n"))
                 self.assertFalse(rendered.endswith("\n\n"))
 
+    def test_cpp_probe_sources_are_run_time_data_for_fingerprinting_tests_only(self):
+        # Probe differentials hash the probe's build inputs when they run; the
+        # inputs must reach the test runfiles without becoming compile inputs.
+        for name in ("nuxie-runtime", "ordinary"):
+            manifest = self.package(name, "")
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src/lib.rs").write_text("")
+            (manifest.parent / "tests").mkdir()
+            (manifest.parent / "tests/probe.rs").write_text("")
+            package = collect_packages([manifest])[name]
+            graph = resolve_features({name: package}, {name: []}, include_dev=True)
+            for owner, label in ((None, "//:cpp_probe_sources"), ("@source//crates/" + name, "@source//:cpp_probe_sources")):
+                rendered = render_package(package, {"test": graph}, lambda name, _: "//root:" + name,
+                                          fixture_labels=["//:fixtures"], source_owner=owner)
+                libraries, tests = [], []
+                def ignore(*args, **kwargs):
+                    pass
+                class StarlarkDict(dict):
+                    def items(self):
+                        return list(super().items())
+                scope = {"load": ignore, "package": ignore, "exports_files": ignore, "dict": StarlarkDict,
+                         "filegroup": ignore, "glob": lambda *args, **kwargs: [],
+                         "source_path": lambda *args: "crates/" + name,
+                         "all_crate_deps": lambda **kwargs: [], "crate_deps": lambda *args, **kwargs: [],
+                         "rust_library": lambda **kwargs: libraries.append(kwargs),
+                         "rust_test": lambda **kwargs: tests.append(kwargs)}
+                exec(rendered, scope)
+                self.assertEqual(len(tests), 2)
+                for test in tests:
+                    self.assertEqual(label in test["data"], name == "nuxie-runtime")
+                for target in libraries + tests:
+                    self.assertNotIn(label, target.get("compile_data", []))
+
     def test_target_features_do_not_cross_host_and_wasm(self):
         manifests = [
             self.package("root", '[target.\'cfg(target_arch = "wasm32")\'.dependencies]\ndep = { path = "../dep", features = ["browser"], default-features = false }\n[target.\'cfg(not(target_arch = "wasm32"))\'.dependencies]\ndep = { path = "../dep", features = ["native"], default-features = false }\n'),

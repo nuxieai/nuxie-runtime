@@ -26,6 +26,12 @@ CONDITIONS = {
 # depend on a derive macro. Cargo-deps helpers expose them separately.
 PROC_MACROS = {"luaur-rt-derive", "serde_derive", "thiserror-impl", "bytemuck_derive", "enum_dispatch", "zerocopy-derive"}
 
+# Source-repository root inputs that a package's tests read at run time but
+# never compile. Tests that spawn the pinned C++ probe hash its build inputs to
+# reject stale binaries, so editing the probe reruns these tests without
+# recompiling; a new package spawning the probe must be listed here.
+TEST_DATA = {name: ["//:cpp_probe_sources"] for name in ("nuxie", "nuxie-binary", "nuxie-runtime")}
+
 
 def quoted(value):
     return json.dumps(value, sort_keys=True)
@@ -262,18 +268,20 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
         if variant != "test":
             continue
         test_deps = dependency_expression(graph.dependencies(package.name, ("dev-dependencies",)), variant, label_for, registry_prefix, package.name, registry_repo, conditions_repo)
+        test_data = [source_repo + label for label in TEST_DATA.get(package.name, [])]
+        unit_data = '_compile_data + ' + quoted(test_data) if test_data else '_compile_data'
         if unit_tests and has_lib:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
                 f'    crate_features = {compiler_features},',
-                f'    deps = {test_deps},', '    data = _compile_data,',
+                f'    deps = {test_deps},', f'    data = {unit_data},',
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         elif unit_tests and package.name in binaries:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
                 f'    crate_features = {compiler_features},',
-                f'    deps = {test_deps},', '    data = _compile_data,',
+                f'    deps = {test_deps},', f'    data = {unit_data},',
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         if integration_tests:
@@ -298,7 +306,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                     f'    crate_name = {quoted(test_name.replace("-", "_"))},',
                     f'    crate_root = {quoted(source(file.relative_to(package.directory).as_posix()))},',
                     '    srcs = _test_sources,', '    compile_data = _compile_data,',
-                    '    data = _compile_data + ' + quoted(list(binary_products.values())) + ',',
+                    '    data = _compile_data + ' + quoted([*binary_products.values(), *test_data]) + ',',
                     f'    edition = {quoted(package.edition)},', f'    version = {quoted(package.version)},',
                     f'    crate_features = {compiler_features},',
                     f'    deps = {integration_deps},',

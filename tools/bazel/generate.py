@@ -99,6 +99,9 @@ def main():
         'package(default_visibility = ["//visibility:public"])',
         'exports_files(["Cargo.toml", "Cargo.lock"])',
         'filegroup(name = "fixtures", srcs = glob(["fixtures/**", "defs/**", "silver-corpus.toml", "tools/renderer-timing-gate.sh"], allow_empty = True) + [package_label("crates/nuxie-schema:src/generated/schema.rs")])',
+        # The fingerprint inputs tools/cpp-probe/build.sh embeds in the probe.
+        'filegroup(name = "cpp_probe_sources", srcs = ' + json.dumps(["tools/cpp-probe/" + path for path in (
+            "main.cpp", "testing_random_provider.cpp", "build/premake5.lua", "build.sh")]) + ')',
         'filegroup(name = "workspace", srcs = [package_label(label) for label in ' + json.dumps(sorted(label_for(name, "")[2:] for name in workspace_names)) + '])',
         'test_suite(name = "unit_tests", tests = [package_label(label) for label in ' + json.dumps(sorted(
             f"{package.directory.relative_to(ROOT).as_posix()}:{package.name}__unit_test"

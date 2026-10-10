@@ -8,7 +8,7 @@ import os
 import shutil
 from unittest.mock import patch
 
-from cargo_graph import collect_packages, resolve_features, resolve_native_features, write_registry_workspace
+from cargo_graph import collect_packages, resolve_features, resolve_native_features, cfg_matches, write_registry_workspace
 from emit import dependency_expression, feature_expression, render_package
 
 
@@ -94,6 +94,11 @@ class CargoGraphTest(unittest.TestCase):
         packages = collect_packages(manifests)
         self.assertEqual(resolve_features(packages, {"root": []}, platform="wasm").features["dep"], {"browser"})
         self.assertEqual(resolve_features(packages, {"root": []}, platform="native").features["dep"], {"native"})
+
+    def test_native_windows_predicates_match_the_msvc_host_triple(self):
+        with patch("cargo_graph.sys.platform", "win32"), patch("cargo_graph.host_platform.machine", return_value="AMD64"):
+            self.assertTrue(cfg_matches('cfg(all(target_arch = "x86_64", target_vendor = "pc", target_os = "windows", target_env = "msvc"))', "native"))
+            self.assertFalse(cfg_matches("cfg(unix)", "native"))
 
     def test_strong_dependency_feature_enables_implicit_local_feature(self):
         manifests = [

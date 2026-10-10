@@ -1,0 +1,35 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "video-qualification"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[features]
+"webgpu" = ["nuxie-renderer/renderer-webgpu"]
+
+[dependencies]
+"nuxie-video-host" = { "path" = "../nuxie-video-host" }
+"nuxie-runtime" = { "path" = "../nuxie-runtime" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+"nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
+
+[target."cfg(any(target_os = \"macos\", target_os = \"ios\"))".dependencies]
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "features" = ["renderer-metal"] }
+
+[target."cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))".dependencies]
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "features" = ["renderer-webgl2"] }
+"js-sys" = { "version" = "0.3" }
+"wasm-bindgen" = { "version" = "0.2" }
+"web-sys" = { "version" = "0.3", "features" = ["CanvasRenderingContext2d", "Document", "Element", "HtmlCanvasElement", "ImageData", "Window", "Performance"] }
+
+[target."cfg(target_os = \"android\")".dependencies]
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "features" = ["renderer-vulkan"] }
+"jni" = { "version" = "0.21.1" }

@@ -1,0 +1,20 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "webgl2-renderer-replay"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
+"png" = { "version" = "0.18.1" }
+"wasm-bindgen" = { "version" = "0.2" }
+"web-sys" = { "version" = "0.3", "features" = ["HtmlCanvasElement"] }
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "default-features" = false, "features" = ["renderer-webgl2", "rive-decoders", "webgl2-test-support"] }

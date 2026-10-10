@@ -1,0 +1,20 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-render-api"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"bytemuck" = { "version" = "1.24", "features" = ["derive"] }
+"harfrust" = { "version" = "0.12" }
+"nuxie-audio" = { "path" = "../nuxie-audio" }
+"nuxie-binary" = { "path" = "../nuxie-binary" }
+"nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false }

@@ -1,0 +1,41 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "renderer-replay"
+version = "0.1.0"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[features]
+"default" = ["native-metal", "native-ore-metal"]
+"native-metal" = ["dep:nuxie-render-api", "dep:nuxie-renderer", "dep:objc2", "dep:objc2-core-foundation", "dep:objc2-metal", "dep:objc2-quartz-core", "nuxie-renderer/renderer-metal", "nuxie-renderer/rive-decoders"]
+"native-ore-metal" = ["native-metal", "nuxie-renderer/native-ore-metal-experimental"]
+"native-vulkan-exact" = ["dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan", "nuxie-renderer/native-ore-vulkan-experimental", "nuxie-renderer/rive-decoders"]
+"native-webgpu-exact" = ["webgpu-exact", "dep:nuxie-renderer-ffi", "nuxie-renderer-ffi/dawn"]
+"webgpu-exact" = ["dep:nuxie-renderer", "nuxie-renderer/renderer-webgpu", "nuxie-renderer/rive-decoders"]
+"browser-webgpu-exact" = ["webgpu-exact"]
+"ffi" = ["dep:nuxie-renderer-ffi"]
+"perf-dawn" = ["ffi", "nuxie-renderer-ffi/dawn"]
+"ffi-vulkan" = ["ffi", "nuxie-renderer-ffi/vulkan"]
+"ffi-webgl2" = ["ffi", "nuxie-renderer-ffi/webgl2"]
+
+[dependencies]
+"nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api", "optional" = true }
+"nuxie-renderer" = { "path" = "../nuxie-renderer", "optional" = true, "default-features" = false }
+"nuxie-renderer-ffi" = { "path" = "../nuxie-renderer-ffi", "features" = ["native"], "optional" = true }
+"perf-compare" = { "path" = "../perf-compare" }
+"pixel-compare" = { "path" = "../pixel-compare" }
+"serde_json" = { "version" = "1" }
+
+[target."cfg(any(target_os = \"ios\", target_os = \"macos\"))".dependencies]
+"objc2" = { "version" = "0.6.4", "optional" = true }
+"objc2-core-foundation" = { "version" = "0.3.2", "default-features" = false, "features" = ["CFCGTypes", "objc2"], "optional" = true }
+"objc2-metal" = { "version" = "0.3.2", "default-features" = false, "features" = ["MTLDevice", "MTLPixelFormat"], "optional" = true }
+"objc2-quartz-core" = { "version" = "0.3.2", "default-features" = false, "features" = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"], "optional" = true }

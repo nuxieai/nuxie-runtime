@@ -1,0 +1,32 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "luaur-common"
+version = "0.1.8"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+name = "luaur_common"
+
+[features]
+"cli" = ["native"]
+"__bazel_dependency_default" = ["std"]
+"native" = ["std"]
+"native-codegen" = ["native"]
+"std" = []
+"wasm" = ["dep:wasm-bindgen"]
+"default" = []
+
+[dependencies]
+"wasm-bindgen" = { "version" = "0.2", "optional" = true }
+
+[target."cfg(unix)".dependencies]
+"libc" = { "version" = "0.2" }
+
+[target."cfg(windows)".dependencies]
+"windows-sys" = { "version" = "0.52", "features" = ["Win32_Foundation", "Win32_System_Performance"] }

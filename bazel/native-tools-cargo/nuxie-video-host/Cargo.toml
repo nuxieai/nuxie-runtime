@@ -1,0 +1,33 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-video-host"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"nuxie-runtime" = { "path" = "../nuxie-runtime" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+
+[dev-dependencies]
+"nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
+"nuxie-schema" = { "path" = "../nuxie-schema" }
+
+[build-dependencies]
+"cc" = { "version" = "1" }
+
+[target."cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))".dependencies]
+"wasm-bindgen" = { "version" = "0.2.126" }
+"wasm-bindgen-futures" = { "version" = "0.4" }
+"js-sys" = { "version" = "0.3" }
+"web-sys" = { "version" = "0.3", "features" = ["Performance", "Window", "Document", "Element", "HtmlVideoElement", "HtmlMediaElement", "HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData", "MediaError", "Blob", "BlobPropertyBag", "Url"] }
+
+[target."cfg(target_os = \"android\")".dependencies]
+"jni" = { "version" = "0.21.1" }

@@ -16,6 +16,7 @@ import tomllib
 
 from cargo_graph import collect_packages, resolve_features
 from emit import render_package
+from runtime_features import uses_native_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -109,6 +110,8 @@ def materialize(options, packages):
     platform = target_configuration(target) if target else "native"
     testing = options["command"] == "test" or options["all_targets"] or options["selection"] in ("--test", "--example")
     graph = resolve_features(packages, roots, include_dev=testing, platform=platform)
+    registry_prefix = "bazel/native-tools-cargo" if uses_native_tools(graph) else "bazel/cargo"
+    registry_repo = "@runtime_native_tools_crates" if uses_native_tools(graph) else "@runtime_crates"
     signature = hashlib.sha256(json.dumps({"roots": roots, "platform": platform, "testing": testing}, sort_keys=True).encode()).hexdigest()[:16]
     directory = ROOT / "build/bazel-config" / signature
     variant = "test" if testing else ""
@@ -133,6 +136,7 @@ def materialize(options, packages):
         destination.mkdir(parents=True, exist_ok=True)
         authored = package.directory.relative_to(ROOT).parts[0] != "vendor"
         (destination / "BUILD.bazel").write_text(render_package(package, {variant: graph}, label_for,
+            registry_prefix=registry_prefix, registry_repo=registry_repo,
             fixture_labels=["//:fixtures"], source_owner=owner, examples=authored,
             unit_tests=authored, integration_tests=authored))
     labels = []

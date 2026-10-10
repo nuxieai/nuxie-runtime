@@ -2,7 +2,7 @@ load("@bazel_skylib//lib:selects.bzl", "selects")
 load(":provenance-env.bzl", "provenance_env")
 
 package(default_visibility = ["//visibility:public"])
-exports_files(["source-path.bzl"])
+exports_files(["source-path.bzl", "script-signature-build.bzl", "wasm-c-tools.bzl", "wasm-c-tools.BUILD.bazel"])
 provenance_env(name = "provenance_env")
 
 config_setting(name = "wasm", constraint_values = ["@platforms//cpu:wasm32"])

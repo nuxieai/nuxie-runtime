@@ -55,7 +55,7 @@ fn shapes(artboard: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
 }
 
 fn paths(shape: &CoreHandle) -> Vec<CoreHandle> {
-    shape.with_downcast::<Shape, _>(Shape::paths).unwrap()
+    shape.with_downcast::<Shape, _>(Shape::paths).unwrap().to_vec()
 }
 
 fn local_path(shape: &CoreHandle) -> RawPath {

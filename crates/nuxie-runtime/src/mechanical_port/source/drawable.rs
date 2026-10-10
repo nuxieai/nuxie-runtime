@@ -487,7 +487,7 @@ impl RuntimeDrawableOccurrence {
         has_pending_clips: bool,
     ) -> DrawRangePrelude {
         if let Self::Authored(handle) = self
-            && handle.core_type().is_some_and(|key| {
+            && handle.occupied_core_type().is_some_and(|key| {
                 key == DrawableBase::TYPE_KEY
                     || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
                         key,

@@ -854,6 +854,16 @@ impl CoreHandle {
         slot.generation.get() == slot.hot.identity_generation && slot.occupied.get()
     }
 
+    /// The occupying object's concrete type key, read without a lease (so
+    /// without the deferred-retirement check a lease's release runs). For hot
+    /// classification that runs nothing while it reads.
+    #[inline]
+    pub(crate) fn occupied_core_type(&self) -> Option<CoreTypeKey> {
+        let slot = &self.identity.slot;
+        (slot.generation.get() == slot.hot.identity_generation && slot.occupied.get())
+            .then(|| slot.core_type.get())
+    }
+
     pub fn is_alive(&self) -> bool {
         self.slot().is_some_and(|slot| {
             slot.occupied.get()

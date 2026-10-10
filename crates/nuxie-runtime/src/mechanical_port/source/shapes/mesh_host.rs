@@ -28,7 +28,9 @@ impl MeshHost {
     fn with_image<T>(&self, read: impl FnOnce(&Image) -> T) -> Option<T> {
         match self.0.core_type()? {
             Image::TYPE_KEY => self.0.with_downcast(read),
-            Video::TYPE_KEY => self.0.with_downcast::<Video, _>(|video| read(video.image())),
+            Video::TYPE_KEY => self
+                .0
+                .with_downcast::<Video, _>(|video| read(video.image())),
             _ => None,
         }
     }
@@ -36,7 +38,8 @@ impl MeshHost {
         if self.0.core_type() == Some(Image::TYPE_KEY) {
             self.0.with_downcast_mut::<Image, _>(|i| i.set_mesh(mesh));
         } else if self.0.core_type() == Some(Video::TYPE_KEY) {
-            self.0.with_downcast_mut::<Video, _>(|video| video.set_mesh(mesh));
+            self.0
+                .with_downcast_mut::<Video, _>(|video| video.set_mesh(mesh));
         } else {
             let state = self
                 .0
@@ -46,12 +49,11 @@ impl MeshHost {
         }
     }
     pub fn hosted_mesh(&self) -> Option<CoreHandle> {
-        self.with_image(Image::mesh)
-            .unwrap_or_else(|| {
-                self.0
-                    .with_downcast::<NestedArtboard, _>(NestedArtboard::hosted_mesh)
-                    .flatten()
-            })
+        self.with_image(Image::mesh).unwrap_or_else(|| {
+            self.0
+                .with_downcast::<NestedArtboard, _>(NestedArtboard::hosted_mesh)
+                .flatten()
+        })
     }
     fn image_or<T>(
         &self,

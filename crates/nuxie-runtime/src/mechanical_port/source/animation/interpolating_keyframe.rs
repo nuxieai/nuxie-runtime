@@ -61,19 +61,27 @@ impl InterpolatingKeyFrame {
         factor: f32,
     ) -> Option<f32> {
         let shared = self.interpolator.as_ref()?;
-        let scripted = shared
-            .with(|interpolator| interpolator.keyframe_interpolator_is_scripted())
-            .flatten()
-            .unwrap_or(false);
-        if scripted {
-            if let Some(value) = self.base.handle().and_then(|keyframe| {
-                context.and_then(|context| {
-                    context
-                        .stateful_interpolator_transform_value(&keyframe, shared, from, to, factor)
-                })
-            }) {
-                return Some(value);
+        // A built-in interpolator answers under the same loan that classified
+        // it; only a scripted one consults the context in between.
+        let built_in = shared.with_mut(|interpolator| {
+            if interpolator
+                .keyframe_interpolator_is_scripted()
+                .unwrap_or(false)
+            {
+                None
+            } else {
+                Some(interpolator.keyframe_interpolator_transform_value(from, to, factor))
             }
+        })?;
+        if let Some(value) = built_in {
+            return value;
+        }
+        if let Some(value) = self.base.handle().and_then(|keyframe| {
+            context.and_then(|context| {
+                context.stateful_interpolator_transform_value(&keyframe, shared, from, to, factor)
+            })
+        }) {
+            return Some(value);
         }
         shared
             .with_mut(|interpolator| {
@@ -88,18 +96,23 @@ impl InterpolatingKeyFrame {
         factor: f32,
     ) -> Option<f32> {
         let shared = self.interpolator.as_ref()?;
-        let scripted = shared
-            .with(|interpolator| interpolator.keyframe_interpolator_is_scripted())
-            .flatten()
-            .unwrap_or(false);
-        if scripted {
-            if let Some(value) = self.base.handle().and_then(|keyframe| {
-                context.and_then(|context| {
-                    context.stateful_interpolator_transform(&keyframe, shared, factor)
-                })
-            }) {
-                return Some(value);
+        let built_in = shared.with_mut(|interpolator| {
+            if interpolator
+                .keyframe_interpolator_is_scripted()
+                .unwrap_or(false)
+            {
+                None
+            } else {
+                Some(interpolator.keyframe_interpolator_transform(factor))
             }
+        })?;
+        if let Some(value) = built_in {
+            return value;
+        }
+        if let Some(value) = self.base.handle().and_then(|keyframe| {
+            context.and_then(|context| context.stateful_interpolator_transform(&keyframe, shared, factor))
+        }) {
+            return Some(value);
         }
         shared
             .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(factor))

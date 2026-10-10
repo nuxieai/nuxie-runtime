@@ -34,7 +34,7 @@ impl VertexKind {
             cubic_detached_vertex::CubicDetachedVertex,
             cubic_mirrored_vertex::CubicMirroredVertex, straight_vertex::StraightVertex,
         };
-        match vertex.core_type() {
+        match vertex.occupied_core_type() {
             Some(StraightVertex::TYPE_KEY) => Self::Straight,
             Some(
                 CubicMirroredVertex::TYPE_KEY

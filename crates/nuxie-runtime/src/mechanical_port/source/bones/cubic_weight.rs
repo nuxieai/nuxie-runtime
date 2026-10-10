@@ -4,18 +4,14 @@ use crate::mechanical_port::source::{
 
 pub struct CubicWeight {
     pub base: CubicWeightBase,
-    in_translation: Vec2D,
-    out_translation: Vec2D,
 }
 
 impl Default for CubicWeight {
     fn default() -> Self {
+        // Valid source lifecycle writes the cached deformation results
+        // before reading them; the weight's cells initialize them eagerly.
         Self {
             base: CubicWeightBase::default(),
-            // Valid source lifecycle writes these cached deformation results
-            // before reading them; Rust initializes the storage eagerly.
-            in_translation: Vec2D::new(0.0, 0.0),
-            out_translation: Vec2D::new(0.0, 0.0),
         }
     }
 }
@@ -73,11 +69,11 @@ impl CubicWeight {
         }
     }
 
-    pub fn in_translation(&mut self) -> &mut Vec2D {
-        &mut self.in_translation
+    pub fn in_translation(&self) -> Vec2D {
+        self.base.base.cells().in_translation()
     }
 
-    pub fn out_translation(&mut self) -> &mut Vec2D {
-        &mut self.out_translation
+    pub fn out_translation(&self) -> Vec2D {
+        self.base.base.cells().out_translation()
     }
 }

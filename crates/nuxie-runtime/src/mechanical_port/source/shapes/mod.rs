@@ -32,3 +32,4 @@ pub mod star;
 pub mod straight_vertex;
 pub mod triangle;
 pub mod vertex;
+pub mod vertex_cells;

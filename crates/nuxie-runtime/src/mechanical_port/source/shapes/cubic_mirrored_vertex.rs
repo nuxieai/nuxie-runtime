@@ -65,19 +65,19 @@ impl CubicMirroredVertex {
         )
     }
     pub fn compute_in(&mut self) {
-        self.base.base.state.in_point = self.point() - self.vector();
+        self.base.base.cells().store_in_point(self.point() - self.vector());
     }
     pub fn compute_out(&mut self) {
-        self.base.base.state.out_point = self.point() + self.vector();
+        self.base.base.cells().store_out_point(self.point() + self.vector());
     }
     pub fn rotation_changed(&mut self) {
-        self.base.base.state.in_valid = false;
-        self.base.base.state.out_valid = false;
+        self.base.base.cells().set_in_valid(false);
+        self.base.base.cells().set_out_valid(false);
         self.base.mark_geometry_dirty();
     }
     pub fn distance_changed(&mut self) {
-        self.base.base.state.in_valid = false;
-        self.base.base.state.out_valid = false;
+        self.base.base.cells().set_in_valid(false);
+        self.base.base.cells().set_out_valid(false);
         self.base.mark_geometry_dirty();
     }
 }

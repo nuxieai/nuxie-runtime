@@ -338,6 +338,31 @@ impl Skin {
         }
     }
 
+    /// Skin::deform over a PointsPath's vertices: authored straight and cubic
+    /// vertices deform through their cells, any other through its object.
+    pub(crate) fn deform_path_vertices(
+        &self,
+        vertices: &[crate::mechanical_port::source::shapes::path::PathVertexOccurrence],
+    ) {
+        use crate::mechanical_port::source::shapes::{
+            path::PathVertexOccurrence, vertex_cells::VertexKind,
+        };
+        let bone_transforms = self
+            .bone_transforms
+            .as_deref()
+            .expect("buildDependencies initializes the bone transform buffer");
+        for vertex in vertices {
+            let PathVertexOccurrence::Authored(handle, cells) = vertex else {
+                continue;
+            };
+            if cells.kind() == VertexKind::Other {
+                self.deform_borrowed_vertices(std::iter::once(handle));
+            } else {
+                cells.deform(handle, &self.world_transform, bone_transforms);
+            }
+        }
+    }
+
     pub fn on_dirty(&mut self, dirt: ComponentDirt) {
         // Opacity cannot move bones. Collapsed is retained state, not work.
         if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {

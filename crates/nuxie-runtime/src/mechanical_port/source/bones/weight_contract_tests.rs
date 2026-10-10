@@ -50,7 +50,11 @@ impl<const SOURCE_VERTEX: bool> VertexBehavior for VertexParent<SOURCE_VERTEX> {
         self.vertex.vertex_mut()
     }
     fn mark_geometry_dirty(&mut self) {}
-    fn set_weight(&mut self, _weight: CoreHandle) {
+    fn set_weight(
+        &mut self,
+        _weight: CoreHandle,
+        _cells: std::rc::Rc<crate::mechanical_port::source::shapes::vertex_cells::WeightCells>,
+    ) {
         panic!("Weight::onAddedDirty must call the nonvirtual Vertex setter");
     }
 }

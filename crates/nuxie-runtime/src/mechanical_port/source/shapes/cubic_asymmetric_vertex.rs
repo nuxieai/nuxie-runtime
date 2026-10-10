@@ -71,22 +71,22 @@ impl CubicAsymmetricVertex {
         )
     }
     pub fn compute_in(&mut self) {
-        self.base.base.state.in_point = self.point() - self.in_vector();
+        self.base.base.cells().store_in_point(self.point() - self.in_vector());
     }
     pub fn compute_out(&mut self) {
-        self.base.base.state.out_point = self.point() + self.out_vector();
+        self.base.base.cells().store_out_point(self.point() + self.out_vector());
     }
     pub fn rotation_changed(&mut self) {
-        self.base.base.state.in_valid = false;
-        self.base.base.state.out_valid = false;
+        self.base.base.cells().set_in_valid(false);
+        self.base.base.cells().set_out_valid(false);
         self.base.mark_geometry_dirty();
     }
     pub fn in_distance_changed(&mut self) {
-        self.base.base.state.in_valid = false;
+        self.base.base.cells().set_in_valid(false);
         self.base.mark_geometry_dirty();
     }
     pub fn out_distance_changed(&mut self) {
-        self.base.base.state.out_valid = false;
+        self.base.base.cells().set_out_valid(false);
         self.base.mark_geometry_dirty();
     }
 }

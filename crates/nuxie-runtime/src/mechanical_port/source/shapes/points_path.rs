@@ -117,16 +117,8 @@ impl PointsPath {
     pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
             if let Some(skin) = self.skin() {
-                let vertices = self
-                    .base
-                    .vertices()
-                    .iter()
-                    .filter_map(|vertex| match vertex {
-                        PathVertexOccurrence::Authored(vertex) => Some(vertex),
-                        PathVertexOccurrence::RuntimeStraight(_)
-                        | PathVertexOccurrence::RuntimeCubicDetached(_) => None,
-                    });
-                skin.with_downcast::<Skin, _>(|skin| skin.deform_borrowed_vertices(vertices));
+                let vertices = self.base.vertices();
+                skin.with_downcast::<Skin, _>(|skin| skin.deform_path_vertices(vertices));
             }
         }
     }
@@ -249,7 +241,7 @@ impl PointsPath {
 // query must not also read the discarded deformed position of the from vertex.
 fn winding_translation(vertex: &PathVertexOccurrence, deformed: bool) -> Vec2D {
     match vertex {
-        PathVertexOccurrence::Authored(vertex) => vertex
+        PathVertexOccurrence::Authored(vertex, _) => vertex
             .with(|object| {
                 let vertex = object.as_vertex_behavior().expect("path vertex");
                 if deformed {
@@ -294,7 +286,7 @@ fn winding_cubic_point(
         }
     }
     match vertex {
-        PathVertexOccurrence::Authored(vertex) => vertex
+        PathVertexOccurrence::Authored(vertex, _) => vertex
             .with_mut(|vertex| {
                 vertex
                     .as_cubic_vertex_behavior_mut()

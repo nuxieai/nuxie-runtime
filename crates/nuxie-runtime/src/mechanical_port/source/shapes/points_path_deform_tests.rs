@@ -110,6 +110,14 @@ impl CoreObject for DeformProbe {
     }
 }
 
+fn vertex_cells(
+    vertex: &CoreHandle,
+) -> Rc<crate::mechanical_port::source::shapes::vertex_cells::VertexCells> {
+    vertex
+        .with_mut(|object| Rc::clone(object.as_vertex_behavior_mut().unwrap().vertex().cells()))
+        .unwrap()
+}
+
 fn initialized_skin(arena: &CoreArena) -> CoreHandle {
     let skin = arena.insert(Skin::default());
     skin.with_downcast_mut::<Skin, _>(|owner| owner.build_dependencies(skin.clone()))
@@ -142,11 +150,11 @@ fn borrowed_deform_preserves_authored_order_helpers_and_virtual_hooks() {
     let cubic = Rc::new(RefCell::new(CubicDetachedVertex::default()));
     let mut path = PointsPath::default();
     path.set_skin(skin);
-    path.base.add_vertex(first.clone());
+    path.base.add_vertex(first.clone(), vertex_cells(&first));
     path.base.add_runtime_straight_vertex(straight.clone());
-    path.base.add_vertex(second);
+    path.base.add_vertex(second.clone(), vertex_cells(&second));
     path.base.add_runtime_cubic_vertex(cubic.clone());
-    path.base.add_vertex(first);
+    path.base.add_vertex(first.clone(), vertex_cells(&first));
     // Both helper resources remain borrowed exclusively. The source PointsPath
     // deform adapter must filter them without trying to inspect their contents.
     let _straight_loan = straight.borrow_mut();
@@ -209,7 +217,7 @@ fn borrowed_deform_keeps_stale_vertex_generation_failure() {
     });
     let mut path = PointsPath::default();
     path.set_skin(skin.clone());
-    path.base.add_vertex(stale.clone());
+    path.base.add_vertex(stale.clone(), vertex_cells(&stale));
     drop(arena.remove(&stale));
     let replacement = arena.insert(DeformProbe {
         base: Default::default(),

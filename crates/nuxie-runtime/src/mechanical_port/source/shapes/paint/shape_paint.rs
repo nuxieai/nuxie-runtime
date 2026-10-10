@@ -494,27 +494,26 @@ impl ShapePaint {
         }
 
         let provider = self.path_provider;
-        let path_effect = EffectsContainer::last_effect_path(self, &provider);
+        let path_effect = match self.cells.last_effect_path(&provider) {
+            Some(path) => path,
+            None => EffectsContainer::last_effect_path(self, &provider),
+        };
         let mut inner_path = None;
         if let Some(feather) = self.feather.as_ref() {
-            if feather
-                .with_downcast::<Feather, _>(Feather::is_inner)
-                .unwrap_or(false)
-            {
+            // isInner, innerPath and effectPathDirty are adjacent reads with no
+            // callback between them: one receiver loan answers all three.
+            let inner = feather
+                .with_downcast::<Feather, _>(|feather| {
+                    feather
+                        .is_inner()
+                        .then(|| (feather.inner_path(), feather.effect_path_dirty()))
+                })
+                .flatten();
+            if let Some((path, effect_path_dirty)) = inner {
                 // Upstream's nonvirtual innerPath() returns its value member's
-                // address, represented by this non-null, stable Rc. Retiring
-                // the Rust occurrence must still leave our save balanced.
-                let Some(path) = feather.with_downcast::<Feather, _>(Feather::inner_path) else {
-                    if saved && needs_save_operation {
-                        renderer.restore();
-                    }
-                    return;
-                };
+                // address, represented by this non-null, stable Rc.
                 if let Some(effect) = path_effect.as_ref() {
-                    if feather
-                        .with_downcast::<Feather, _>(Feather::effect_path_dirty)
-                        .unwrap_or(false)
-                    {
+                    if effect_path_dirty {
                         let container_transform = active_container_transform
                             .map(|read_transform| read_transform())
                             .or_else(|| {

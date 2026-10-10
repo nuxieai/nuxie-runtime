@@ -14,7 +14,8 @@ use crate::mechanical_port::source::{
     shapes::{
         paint::{
             effects_container,
-            stroke_effect::{EffectPaths, invalidate_effect_paths},
+            shape_paint_path::ShapePaintPath,
+            stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
             shape_paint::{
                 RuntimeRenderPaintHandle, ShapePaintRenderingInvalidation, ShapePaintType,
             },
@@ -33,7 +34,7 @@ pub(crate) struct PaintCells {
     // The paths of effects whose invalidateEffect only rewinds them, in
     // effect order. Any other effect, or a feather, sends invalidateEffects
     // through the general path.
-    effect_paths: RefCell<Vec<EffectPaths>>,
+    effect_paths: RefCell<Vec<(CoreHandle, EffectPaths)>>,
     has_other_effects: Cell<bool>,
     has_feather: Cell<bool>,
     render_paint: RefCell<Option<RuntimeRenderPaintHandle>>,
@@ -76,11 +77,35 @@ impl PaintCells {
 
     /// Record an added stroke effect, with its paths when invalidating it
     /// only rewinds them.
-    pub(crate) fn add_effect(&self, paths: Option<EffectPaths>) {
+    pub(crate) fn add_effect(&self, effect: CoreHandle, paths: Option<EffectPaths>) {
         match paths {
-            Some(paths) => self.effect_paths.borrow_mut().push(paths),
+            Some(paths) => self.effect_paths.borrow_mut().push((effect, paths)),
             None => self.has_other_effects.set(true),
         }
+    }
+
+    /// EffectsContainer::lastEffectPath(provider) when every effect keeps its
+    /// paths here; None when another kind of effect must answer for itself.
+    pub(crate) fn last_effect_path(
+        &self,
+        provider: &PathProvider,
+    ) -> Option<Option<Rc<RefCell<ShapePaintPath>>>> {
+        if self.has_other_effects.get() {
+            return None;
+        }
+        Some(
+            self.effect_paths
+                .borrow()
+                .iter()
+                .rev()
+                .filter(|(effect, _)| effect.is_occupied())
+                .find_map(|(_, paths)| {
+                    paths
+                        .borrow_mut()
+                        .get_mut(&provider.identity())
+                        .and_then(|path| path.path())
+                }),
+        )
     }
 
     pub(crate) fn paint_type(&self) -> ShapePaintType {
@@ -119,7 +144,7 @@ impl PaintCells {
         if !live {
             return;
         }
-        for paths in self.effect_paths.borrow().iter() {
+        for (_, paths) in self.effect_paths.borrow().iter() {
             invalidate_effect_paths(paths, None);
         }
         let invalidation = match self.paint_type {

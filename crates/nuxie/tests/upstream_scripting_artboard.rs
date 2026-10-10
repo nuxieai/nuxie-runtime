@@ -280,3 +280,45 @@ fn view_model_source_cache_is_cleared_when_instance_changes() {
     fixture.draw();
     compare_silver("scripted_viewmodel_cache", &fixture.silver.borrow().bytes());
 }
+
+#[test]
+fn an_artboard_input_that_leads_back_to_its_own_artboard_instances() {
+    use nuxie_runtime::source::artboard::Artboard;
+
+    // Host's script takes Holder as an input; Holder nests Host. Only the
+    // repeated input is left unset, not Host's first Holder instance.
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let file = import_unsigned_scripted(
+        &pinned("assets/script_input_artboard_cycle.riv"),
+        &mut factory,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("cyclic script artboard input fixture imports");
+    let holder_source = file
+        .native_file()
+        .with_file(|file| file.artboard_named_source("Holder"))
+        .expect("Holder source");
+    assert_eq!(
+        holder_source.with_downcast::<Artboard, _>(Artboard::has_live_instances),
+        Some(false)
+    );
+    let host = file
+        .native_file()
+        .with_file(|file| file.artboard_named("Host"))
+        .expect("Host instances");
+    assert_eq!(
+        holder_source.with_downcast::<Artboard, _>(Artboard::has_live_instances),
+        Some(true)
+    );
+    let holder = file
+        .native_file()
+        .with_file(|file| file.artboard_named("Holder"))
+        .expect("Holder instances");
+    let mut renderer = factory.borrow().make_renderer();
+    for artboard in [&host, &holder] {
+        artboard.advance_default(0.016);
+        artboard.draw(&mut renderer);
+    }
+}

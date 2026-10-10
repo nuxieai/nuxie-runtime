@@ -713,6 +713,31 @@ impl ScriptedObject {
         let Some((instance, asset, parent)) = state else {
             return;
         };
+        // Initializing an input instance hydrates its own scripts, including
+        // nested artboards. Leave the input unset where its source repeats.
+        thread_local! {
+            static INSTANCING: RefCell<Vec<CoreHandle>> = const { RefCell::new(Vec::new()) };
+        }
+        let artboard_source = source
+            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(
+                crate::mechanical_port::source::artboard::Artboard::artboard_source_handle,
+            )
+            .flatten()
+            .expect("script artboard input has a live source artboard");
+        if INSTANCING.with(|instancing| instancing.borrow().contains(&artboard_source)) {
+            return;
+        }
+        // Pop on unwind as well: Luau errors can unwind through instancing.
+        struct Instancing;
+        impl Drop for Instancing {
+            fn drop(&mut self) {
+                INSTANCING.with(|instancing| {
+                    instancing.borrow_mut().pop();
+                });
+            }
+        }
+        INSTANCING.with(|instancing| instancing.borrow_mut().push(artboard_source));
+        let _scope = Instancing;
         let file = asset
             .with_downcast::<ScriptAsset, _>(ScriptAsset::file)
             .flatten()

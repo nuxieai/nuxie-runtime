@@ -39,7 +39,7 @@ fi
 env \
     CARGO_TARGET_DIR="$out/rust" \
     RUSTFLAGS="-Cinstrument-coverage" \
-    cargo build --release --quiet --manifest-path "$repo_root/Cargo.toml" \
+    python3 "$repo_root/tools/bazel/runtime.py" build --release --quiet --manifest-path "$repo_root/Cargo.toml" \
         -p rust-golden-runner --features scripting,coverage-trace
 
 rust_runner="$out/rust/release/rust-golden-runner"

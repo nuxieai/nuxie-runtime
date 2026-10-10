@@ -170,6 +170,30 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIn("build", calls[0])
 
+    def test_coverage_build_preserves_instrumentation_and_isolated_products(self):
+        manifest = self.package("rust-golden-runner", '[features]\nscripting = []\ncoverage-trace = []\n', library=False)
+        executable = self.root / "bazel-out/rust-golden-runner"
+        executable.parent.mkdir()
+        executable.write_bytes(b"instrumented runner")
+        isolated = self.root / "target/callcount/rust"
+        with patch.dict(os.environ, {"RUSTFLAGS": "-Cinstrument-coverage", "CARGO_TARGET_DIR": str(isolated)}, clear=True), \
+             patch.object(runtime, "packages_from_workspace", return_value=collect_packages([manifest])), \
+             patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+             patch.object(runtime.subprocess, "check_output", return_value="bazel-out/rust-golden-runner"), \
+             patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+             patch("sys.argv", ["runtime.py", "build", "--release", "--quiet", "--manifest-path", str(self.root / "Cargo.toml"),
+                                "-p", "rust-golden-runner", "--features", "scripting,coverage-trace"]):
+            self.assertEqual(runtime.main(), 0)
+        arguments = run.call_args.args[0]
+        self.assertIn("--config=release", arguments)
+        self.assertIn("--@rules_rust//rust/settings:extra_rustc_flag=-Cinstrument-coverage", arguments)
+        label = next(argument for argument in arguments if argument.startswith("//build/bazel-config/"))
+        build = (self.root / label[2:].split(":")[0] / "BUILD.bazel").read_text()
+        features = json.loads(next(line.split(" = ", 1)[1].rstrip(",") for line in build.splitlines() if "crate_features = " in line))
+        self.assertTrue({"coverage-trace", "scripting"}.issubset(features))
+        self.assertEqual((isolated / "release/rust-golden-runner").read_bytes(), executable.read_bytes())
+        self.assertFalse((self.root / "target/release/rust-golden-runner").exists())
+
     def test_frontend_scopes_provenance_without_changing_other_environment_inputs(self):
         with patch.dict(os.environ, {"NUX_RUNTIME_SOURCE_REVISION": "revision with spaces=one",
                                      "NUX_RUNTIME_RIVE_ORACLE": "fixture", "RIVE_RUNTIME_DIR": "rive"}, clear=True), \

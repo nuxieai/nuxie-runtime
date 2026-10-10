@@ -1,0 +1,24 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "jpeg-decoder"
+version = "0.3.2"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+name = "jpeg_decoder"
+
+[features]
+"__bazel_dependency_default" = ["rayon"]
+"nightly_aarch64_neon" = []
+"platform_independent" = []
+"rive_v9f" = []
+"default" = []
+
+[dependencies]
+"rayon" = { "version" = "1.5.1", "optional" = true }

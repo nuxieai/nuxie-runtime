@@ -1,0 +1,25 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "symphonia-bundle-flac"
+version = "0.5.5"
+edition = "2018"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+name = "symphonia_bundle_flac"
+
+[features]
+"__bazel_dependency_default" = ["metadata"]
+"metadata" = ["dep:symphonia-metadata", "symphonia-utils-xiph/metadata"]
+"default" = []
+
+[dependencies]
+"log" = { "version" = "0.4" }
+"symphonia-core" = { "version" = "0.5.5" }
+"symphonia-metadata" = { "version" = "0.5.5", "optional" = true }
+"symphonia-utils-xiph" = { "version" = "0.5.5", "path" = "../symphonia-utils-xiph", "default-features" = false }

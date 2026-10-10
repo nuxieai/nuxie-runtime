@@ -1,0 +1,30 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "rust-golden-runner"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[features]
+"default" = []
+"scripting" = ["dep:nuxie-scripting"]
+"coverage-trace" = []
+
+[dependencies]
+"anyhow" = { "version" = "1" }
+"nuxie-binary" = { "path" = "../nuxie-binary" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "features" = ["tools"] }
+"nuxie-schema" = { "path" = "../nuxie-schema" }
+"nuxie-scripting" = { "path" = "../nuxie-scripting", "optional" = true }
+"sha2" = { "version" = "0.10" }
+
+[dev-dependencies]
+"nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }

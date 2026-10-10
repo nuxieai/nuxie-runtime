@@ -55,6 +55,12 @@ workspace. Dependency changes require repinning `bazel/cargo/Cargo.Bazel.lock`;
 `--reset-lock` seeds its Cargo input from the authored lockfile. Cargo also remains
 available for formatting and the mandatory compatibility tests.
 
+The `audio-device`, native Metal replay, and `scriptnet` tool cuts resolve through
+`bazel/native-tools-cargo` and `runtime_native_tools_crates`. Their optional
+external features stay separate from the SDK shipping dependency pins. Repin
+each changed registry independently with `CARGO_BAZEL_REPIN_ONLY` set to its
+repository name.
+
 `make golden-compare` compares deterministic render-call streams from the Rust
 runtime and the upstream C++ reference. The C++ runtime is a development and CI
 dependency only; it is not linked into or shipped with the Nuxie SDK.

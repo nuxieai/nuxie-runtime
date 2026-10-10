@@ -1,0 +1,31 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "silver-corpus"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[features]
+"strict-fp" = ["nuxie-runtime/strict-fp"]
+
+[dependencies]
+"anyhow" = { "version" = "1" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "features" = ["tools"] }
+"nuxie-scripting" = { "path" = "../nuxie-scripting", "features" = ["upstream-test-seams"] }
+"nuxie-sriv" = { "path" = "../nuxie-sriv" }
+"serde" = { "version" = "1", "features" = ["derive"] }
+"toml" = { "version" = "0.9" }
+
+[dev-dependencies]
+"luaur-rt" = { "version" = "=0.1.8", "path" = "../luaur-rt", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-vm" = { "version" = "=0.1.8", "path" = "../luaur-vm", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }

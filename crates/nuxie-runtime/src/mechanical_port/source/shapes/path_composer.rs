@@ -232,7 +232,7 @@ impl PathComposer {
         let inverse_translation = source_max(inverse[4].abs(), inverse[5].abs());
         self.scratch_inputs.clear();
         self.scratch_inputs.reserve(paths.len());
-        for handle in &paths {
+        for handle in paths.iter() {
             let input = handle
                 .with(|object| {
                     let path = object.as_path().expect("Shape path");
@@ -336,7 +336,7 @@ impl PathComposer {
         if local && rebuild_local {
             self.local_path.rewind();
             let inverse = transform.invert_or_identity();
-            for handle in &paths {
+            for handle in paths.iter() {
                 handle.with(|object| {
                     let path = object.as_path().expect("Shape path");
                     if !path.is_hidden() && !path.is_collapsed() {
@@ -353,7 +353,7 @@ impl PathComposer {
         if clockwise && rebuild_local {
             self.local_clockwise_path.rewind();
             let inverse = transform.invert_or_identity();
-            for handle in &paths {
+            for handle in paths.iter() {
                 handle.with_mut(|object| {
                     let path = object.as_path().expect("Shape path");
                     if path.is_hidden() || path.is_collapsed() {
@@ -380,7 +380,7 @@ impl PathComposer {
         }
         if world {
             self.world_path.rewind();
-            for handle in &paths {
+            for handle in paths.iter() {
                 handle.with(|object| {
                     let path = object.as_path().expect("Shape path");
                     if !path.is_hidden() && !path.is_collapsed() {

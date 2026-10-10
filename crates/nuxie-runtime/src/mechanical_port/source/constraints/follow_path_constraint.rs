@@ -260,15 +260,15 @@ impl FollowPathConstraint {
                 if let Some(shape) = target.as_shape() {
                     shape.paths()
                 } else if target.as_path().is_some() {
-                    vec![self.base.target().expect("target remains assigned")]
+                    std::rc::Rc::from([self.base.target().expect("target remains assigned")])
                 } else {
-                    Vec::new()
+                    std::rc::Rc::from([])
                 }
             })
             .expect("FollowPathConstraint retains a live target");
         if !paths.is_empty() {
             self.raw_path.rewind();
-            for path in paths {
+            for path in paths.iter() {
                 path.with(|owner| {
                     let path = owner.as_path().expect("Shape paths remain Path-derived");
                     self.raw_path

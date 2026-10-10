@@ -9,7 +9,8 @@ use crate::mechanical_port::source::{
 };
 
 pub struct ShapePaintContainer {
-    shape_paints: Vec<CoreHandle>,
+    // Replaced, never edited, when a paint is added.
+    shape_paints: Rc<[CoreHandle]>,
     cells: Rc<ContainerCells>,
 }
 
@@ -64,7 +65,7 @@ impl ContainerCells {
 impl Default for ShapePaintContainer {
     fn default() -> Self {
         Self {
-            shape_paints: Vec::new(),
+            shape_paints: Rc::new([]),
             cells: Rc::default(),
         }
     }
@@ -88,7 +89,12 @@ impl ShapePaintContainer {
     }
 
     pub(crate) fn add_paint(&mut self, paint: CoreHandle, cells: Rc<PaintCells>) {
-        self.shape_paints.push(paint.clone());
+        self.shape_paints = self
+            .shape_paints
+            .iter()
+            .cloned()
+            .chain(std::iter::once(paint.clone()))
+            .collect();
         let paints: Rc<[ContainerPaint]> = self
             .cells
             .paints
@@ -139,5 +145,10 @@ impl ShapePaintContainer {
 
     pub fn shape_paints(&self) -> &[CoreHandle] {
         &self.shape_paints
+    }
+
+    /// The paints, as a list that outlives a borrow of this container.
+    pub fn shape_paint_list(&self) -> Rc<[CoreHandle]> {
+        Rc::clone(&self.shape_paints)
     }
 }

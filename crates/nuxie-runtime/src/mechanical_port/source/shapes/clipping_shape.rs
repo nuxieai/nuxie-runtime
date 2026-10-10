@@ -319,7 +319,7 @@ impl ClippingShape {
             .with(|shape| {
                 let shape = shape.as_shape()?;
                 Some((
-                    shape.paint_container.shape_paints().to_vec(),
+                    shape.paint_container.shape_paint_list(),
                     shape.base.world_transform(),
                 ))
             })
@@ -329,7 +329,7 @@ impl ClippingShape {
         };
         let mut added_effected = false;
         let mut needs_raw_path = false;
-        for paint in paints {
+        for paint in paints.iter() {
             // Stroke effect outputs are centerlines, not filled clip geometry.
             let Some(effected) = paint.with_downcast_mut::<Fill, _>(|fill| {
                 let paint = &mut fill.base.base;

@@ -40,7 +40,9 @@ pub struct Shape {
     // local-bounds caches, the deformer and whether a layout participant
     // exists live there.
     cells: Rc<ShapeCells>,
-    paths: Vec<CoreHandle>,
+    // Replaced, never edited, when a path is added: callers iterate a cheap
+    // clone across path callbacks.
+    paths: Rc<[CoreHandle]>,
     world_bounds: Aabb,
     local_bounds: std::cell::Cell<Aabb>,
     want_difference_path: bool,
@@ -107,7 +109,7 @@ impl Shape {
             paint_container,
             path_composer,
             cells,
-            paths: Vec::new(),
+            paths: Rc::new([]),
             world_bounds: Aabb::default(),
             local_bounds: std::cell::Cell::new(Aabb::default()),
             want_difference_path: false,
@@ -132,14 +134,14 @@ impl Shape {
     /// The caller supplies its current skin state before entering this Shape.
     pub(crate) fn add_path_with_skin(&mut self, path: CoreHandle, has_skin: bool) {
         assert!(!self.paths.contains(&path));
-        self.paths.push(path);
+        self.paths = self.paths.iter().cloned().chain(std::iter::once(path)).collect();
         if has_skin {
             self.add_flags(PathFlags::NEVER_DEFER_UPDATE);
         }
         self.invalidate_intrinsic_bounds();
     }
-    pub fn paths(&self) -> Vec<CoreHandle> {
-        self.paths.clone()
+    pub fn paths(&self) -> Rc<[CoreHandle]> {
+        Rc::clone(&self.paths)
     }
     pub fn add_flags(&mut self, flags: PathFlags) {
         self.paint_container.add_path_flags(flags);
@@ -214,7 +216,7 @@ impl Shape {
     pub fn length(&mut self) -> f32 {
         if self.cells.world_length() < 0.0 {
             let mut length = 0.0;
-            for path in self.paths() {
+            for path in self.paths().iter() {
                 path.with(|object| {
                     let Some(path) = object.as_path() else {
                         return;
@@ -401,7 +403,7 @@ impl Shape {
         )
         .round();
         let mut tester = HitTestCommandPath::new(area);
-        for path in self.paths() {
+        for path in self.paths().iter() {
             path.with(|object| {
                 if let Some(path) = object.as_path()
                     && !path.base.is_collapsed()
@@ -442,7 +444,7 @@ impl Shape {
                 xform
             };
             let mut tester = HitTestCommandPath::new(hinfo.area);
-            for path in self.paths() {
+            for path in self.paths().iter() {
                 path.with(|object| {
                     let Some(path) = object.as_path() else {
                         return;
@@ -636,7 +638,7 @@ impl Shape {
     pub fn compute_world_bounds(&self, xform: Option<Mat2D>) -> Aabb {
         let mut result = Aabb::for_expansion();
         let mut first = true;
-        for path in self.paths() {
+        for path in self.paths().iter() {
             path.with(|object| {
                 let Some(path) = object.as_path() else {
                     return;
@@ -685,7 +687,7 @@ impl Shape {
         let mut result = Aabb::for_expansion();
         let mut pending = RawPath::default();
         let mut used_pending = false;
-        for path in self.paths() {
+        for path in self.paths().iter() {
             path.with(|object| {
                 let Some(path) = object.as_path() else {
                     return;

@@ -72,7 +72,7 @@ impl TextFollowPathModifier {
         if let Some(target) = self.base.target() {
             target.with(|target| {
                 if let Some(shape) = target.as_shape() {
-                    for path in shape.paths() {
+                    for path in shape.paths().iter() {
                         path.with(|owner| {
                             if let Some(path) = owner.as_path() {
                                 let transform = crate::mechanical_port::source::shapes::path::Path::path_transform_for(owner);

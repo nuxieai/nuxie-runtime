@@ -278,4 +278,3 @@ rust_binary(
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-stream"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-stream"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
-

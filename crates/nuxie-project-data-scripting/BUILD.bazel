@@ -167,4 +167,3 @@ rust_library(
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-project-data-scripting"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
     lint_config = ":cargo_lints",
 )
-

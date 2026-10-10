@@ -155,6 +155,56 @@ class AndroidConfigurationTests(unittest.TestCase):
             self.assertIn("--@rules_rust//rust/settings:extra_rustc_flag=-Clink-arg=-Wl,-z,max-page-size=16384", options)
 
 
+class ProvenanceConfigurationTests(unittest.TestCase):
+    def test_only_explicit_provenance_keys_are_defined_and_values_are_preserved(self):
+        with patch.dict("os.environ", {
+            "NUX_RUNTIME_SOURCE_REVISION": "revision",
+            "NUX_RUNTIME_RUSTC_VERSION": "rustc 1.94.1 (commit) host=macOS",
+            "NUX_RUNTIME_BUILD_PROFILE": "",
+            "UNRELATED": "not a build input",
+        }, clear=True):
+            self.assertEqual(BazelRuntime.provenance_options(), [
+                "--define=NUX_RUNTIME_SOURCE_REVISION=revision",
+                "--define=NUX_RUNTIME_BUILD_PROFILE=",
+                "--define=NUX_RUNTIME_RUSTC_VERSION=rustc 1.94.1 (commit) host=macOS",
+            ])
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(BazelRuntime.provenance_options(), [])
+
+    def test_env_file_record_injection_and_continuation_are_rejected(self):
+        for value in ("first\nSECOND=injected", "first\rSECOND=injected", "first\0second", "continued\\", "prefix${pwd}suffix"):
+            with self.subTest(value=value), patch("tools.bazel_runtime_build.os.environ", {
+                "NUX_RUNTIME_RUSTC_VERSION": value,
+            }):
+                with self.assertRaisesRegex(ValueError, "NUX_RUNTIME_RUSTC_VERSION.*one env-file line"):
+                    BazelRuntime.provenance_options()
+
+    def test_build_and_output_query_share_scoped_flags_and_copy_the_selected_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = object.__new__(BazelRuntime)
+            runtime.execroot = Path(directory)
+            source = runtime.execroot / "bazel-out/shipping/libshipping.so"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"independently selected artifact")
+            calls = []
+
+            def run(command, *arguments):
+                calls.append((command, arguments))
+                return "" if command == "build" else "bazel-out/shipping/libshipping.so\n"
+
+            runtime.run = run
+            destination = runtime.execroot / "published/libshipping.so"
+            with patch.dict("os.environ", {"NUX_RUNTIME_SOURCE_REVISION": "revision"}, clear=True), patch.object(
+                BazelRuntime, "options", return_value=["--platforms=selected"]
+            ):
+                runtime.build(LABEL, TARGET, destination)
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
+            self.assertEqual(calls, [
+                ("build", (LABEL, "--platforms=selected", "--define=NUX_RUNTIME_SOURCE_REVISION=revision")),
+                ("cquery", (LABEL, "--platforms=selected", "--define=NUX_RUNTIME_SOURCE_REVISION=revision", "--output=files")),
+            ])
+
+
 class AppleConfigurationTests(unittest.TestCase):
     def test_device_simulator_and_macos_actions_use_matching_sdk_and_xcode(self):
         for target, sdk, triple in (

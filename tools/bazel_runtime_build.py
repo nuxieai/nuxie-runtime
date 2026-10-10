@@ -86,6 +86,19 @@ class BazelRuntime:
         return result.stdout
 
     @staticmethod
+    def provenance_options():
+        flags = []
+        for key in PROVENANCE_KEYS:
+            if key not in os.environ:
+                continue
+            value = os.environ[key]
+            if (any(character in value for character in ("\0", "\n", "\r"))
+                    or value.endswith("\\") or "${pwd}" in value):
+                raise ValueError(f"{key} must be one env-file line without a trailing backslash or reserved ${{pwd}} marker")
+            flags.append(f"--define={key}={value}")
+        return flags
+
+    @staticmethod
     def options(target, *, ios="15.0", macos="12.0"):
         flags = ["--config=release",
                  "--@rules_rust//rust/settings:lto=fat",
@@ -241,7 +254,7 @@ class BazelRuntime:
 
     def build(self, label, target, output, **versions):
         flags = self.options(target, **versions)
-        flags.extend(f"--action_env={key}={os.environ[key]}" for key in PROVENANCE_KEYS if key in os.environ)
+        flags.extend(self.provenance_options())
         self.run("build", label, *flags)
         files = self.run("cquery", label, *flags, "--output=files").strip().splitlines()
         extension = ".so" if target.endswith("linux-android") else ".a"

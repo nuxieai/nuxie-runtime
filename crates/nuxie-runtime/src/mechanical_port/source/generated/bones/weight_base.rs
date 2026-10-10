@@ -1,5 +1,8 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     bones::weight::Weight,
+    shapes::vertex_cells::WeightCells,
     component::Component,
     core::{binary_reader::BinaryReader, field_types::core_uint_type::CoreUintType},
 };
@@ -14,16 +17,15 @@ pub trait WeightBaseCallbacks:
 
 pub struct WeightBase {
     pub base: Component,
-    values: u32,
-    indices: u32,
+    // values and indices, shared with the weighted vertex's cells.
+    cells: Rc<WeightCells>,
 }
 
 impl Default for WeightBase {
     fn default() -> Self {
         Self {
             base: Component::default(),
-            values: 255,
-            indices: 1,
+            cells: Rc::default(),
         }
     }
 }
@@ -44,11 +46,14 @@ impl WeightBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(&self) -> &Rc<WeightCells> {
+        &self.cells
+    }
     pub fn values(&self) -> u32 {
-        self.values
+        self.cells.values()
     }
     pub fn indices(&self) -> u32 {
-        self.indices
+        self.cells.indices()
     }
 
     pub fn set_values<C: WeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
@@ -60,10 +65,10 @@ impl WeightBase {
     }
 
     pub(crate) fn set_values_value(&mut self, value: u32) -> bool {
-        if self.values == value {
+        if self.cells.values() == value {
             return false;
         }
-        self.values = value;
+        self.cells.set_values(value);
         true
     }
 
@@ -76,10 +81,10 @@ impl WeightBase {
     }
 
     pub(crate) fn set_indices_value(&mut self, value: u32) -> bool {
-        if self.indices == value {
+        if self.cells.indices() == value {
             return false;
         }
-        self.indices = value;
+        self.cells.set_indices(value);
         true
     }
 
@@ -90,8 +95,8 @@ impl WeightBase {
     }
 
     pub fn copy<C: WeightBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
-        self.values = object.values;
-        self.indices = object.indices;
+        self.cells.set_values(object.values());
+        self.cells.set_indices(object.indices());
         self.base.copy(&object.base, callbacks);
     }
 
@@ -103,11 +108,11 @@ impl WeightBase {
     ) -> bool {
         match property_key {
             Self::VALUES_PROPERTY_KEY => {
-                self.values = CoreUintType::deserialize(reader);
+                self.cells.set_values(CoreUintType::deserialize(reader));
                 true
             }
             Self::INDICES_PROPERTY_KEY => {
-                self.indices = CoreUintType::deserialize(reader);
+                self.cells.set_indices(CoreUintType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

@@ -8,16 +8,14 @@ use crate::mechanical_port::source::{
 
 pub struct Weight {
     pub base: WeightBase,
-    translation: Vec2D,
 }
 
 impl Default for Weight {
     fn default() -> Self {
+        // Valid source lifecycle writes the deformation cache before it is
+        // read; its cells initialize the storage eagerly.
         Self {
             base: WeightBase::default(),
-            // Valid source lifecycle writes this deformation cache before it
-            // is read; Rust initializes the storage eagerly.
-            translation: Vec2D::new(0.0, 0.0),
         }
     }
 }
@@ -49,8 +47,16 @@ impl Weight {
         }
     }
 
-    pub fn translation(&mut self) -> &mut Vec2D {
-        &mut self.translation
+    pub(crate) fn cells(&self) -> &std::rc::Rc<crate::mechanical_port::source::shapes::vertex_cells::WeightCells> {
+        self.base.cells()
+    }
+
+    pub fn translation(&self) -> Vec2D {
+        self.cells().translation()
+    }
+
+    pub fn set_translation(&self, value: Vec2D) {
+        self.cells().set_translation(value);
     }
 
     /// A cubic vertex reads its weight as a CubicWeight, so a base Weight
@@ -95,6 +101,7 @@ impl Weight {
                 crate::mechanical_port::source::shapes::vertex::VertexBehavior::set_weight(
                     vertex.vertex_mut(),
                     this,
+                    std::rc::Rc::clone(self.cells()),
                 );
                 StatusCode::Ok
             })

@@ -10,13 +10,15 @@ use crate::mechanical_port::source::{
         cubic_detached_vertex::CubicDetachedVertex, cubic_vertex::CubicVertexBehavior,
         path_cells::PathCells, path_flags::PathFlags, path_vertex::PathVertex, shape::Shape,
         straight_vertex::StraightVertex, vertex::VertexBehavior,
+        vertex_cells::{VertexCells, VertexKind},
     },
     status_code::StatusCode,
 };
 
 #[derive(Clone)]
 pub enum PathVertexOccurrence {
-    Authored(CoreHandle),
+    // An authored vertex and the cells skin deform and buildPath read.
+    Authored(CoreHandle, Rc<VertexCells>),
     RuntimeStraight(Rc<RefCell<StraightVertex>>),
     RuntimeCubicDetached(Rc<RefCell<CubicDetachedVertex>>),
 }
@@ -24,7 +26,7 @@ pub enum PathVertexOccurrence {
 impl PathVertexOccurrence {
     pub fn authored_handle(&self) -> Option<CoreHandle> {
         match self {
-            Self::Authored(handle) => Some(handle.clone()),
+            Self::Authored(handle, _) => Some(handle.clone()),
             Self::RuntimeStraight(_) | Self::RuntimeCubicDetached(_) => None,
         }
     }
@@ -67,6 +69,38 @@ fn read_cubic(vertex: &mut dyn CubicVertexBehavior, read: VertexRead) -> RenderV
         }
         VertexRead::Incoming => in_point = vertex.render_in(),
         VertexRead::Outgoing => out_point = vertex.render_out(),
+    }
+    RenderVertex::Cubic {
+        translation,
+        in_point,
+        out_point,
+    }
+}
+
+/// read_cubic, or a straight vertex's read, from an authored straight or
+/// cubic vertex's cells.
+fn read_vertex_cells(owner: &CoreHandle, cells: &VertexCells, read: VertexRead) -> RenderVertex {
+    if cells.kind() == VertexKind::Straight {
+        return RenderVertex::Straight {
+            translation: cells.render_translation(),
+            radius: cells.radius(),
+        };
+    }
+    let mut translation = Vec2D::default();
+    let mut in_point = Vec2D::default();
+    let mut out_point = Vec2D::default();
+    match read {
+        VertexRead::First => {
+            in_point = cells.render_in_of(owner);
+            out_point = cells.render_out_of(owner);
+            translation = cells.render_translation();
+        }
+        VertexRead::Body => {
+            in_point = cells.render_in_of(owner);
+            translation = cells.render_translation();
+        }
+        VertexRead::Incoming => in_point = cells.render_in_of(owner),
+        VertexRead::Outgoing => out_point = cells.render_out_of(owner),
     }
     RenderVertex::Cubic {
         translation,
@@ -296,8 +330,9 @@ impl Path {
     pub fn build_dependencies(&mut self) {
         self.base.build_dependencies();
     }
-    pub fn add_vertex(&mut self, vertex: CoreHandle) {
-        self.vertices.push(PathVertexOccurrence::Authored(vertex));
+    pub fn add_vertex(&mut self, vertex: CoreHandle, cells: Rc<VertexCells>) {
+        cells.set_kind(VertexKind::of(&vertex));
+        self.vertices.push(PathVertexOccurrence::Authored(vertex, cells));
     }
     pub fn add_runtime_straight_vertex(&mut self, vertex: Rc<RefCell<StraightVertex>>) {
         self.vertices
@@ -400,7 +435,10 @@ impl Path {
 
     fn read_vertex(vertex: &PathVertexOccurrence, read: VertexRead) -> Option<RenderVertex> {
         match vertex {
-            PathVertexOccurrence::Authored(vertex) => vertex
+            PathVertexOccurrence::Authored(vertex, cells) if cells.kind() != VertexKind::Other => {
+                Some(read_vertex_cells(vertex, cells, read))
+            }
+            PathVertexOccurrence::Authored(vertex, _) => vertex
                 .with_mut(|vertex| {
                     if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
                         return Some(read_cubic(cubic, read));
@@ -954,10 +992,10 @@ impl DisplayCubicVertex {
         let mut vertex = Self {
             base: Default::default(),
         };
-        vertex.base.state.in_point = in_point;
-        vertex.base.state.out_point = out_point;
-        vertex.base.state.in_valid = true;
-        vertex.base.state.out_valid = true;
+        vertex.base.cells().store_in_point(in_point);
+        vertex.base.cells().store_out_point(out_point);
+        vertex.base.cells().set_in_valid(true);
+        vertex.base.cells().set_out_valid(true);
         if vertex.vertex_mut().base.set_x_value(translation.x) {
             CubicVertexBehavior::x_changed(&mut vertex);
             vertex.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::X_PROPERTY_KEY);
@@ -1203,13 +1241,13 @@ mod path_owner_tests {
     fn neighbour_read_does_not_compute_unused_cubic_control() {
         let vertex = Rc::new(RefCell::new(CubicDetachedVertex::default()));
         let occurrence = PathVertexOccurrence::RuntimeCubicDetached(vertex.clone());
-        assert!(!vertex.borrow().cubic_vertex().state.in_valid);
-        assert!(!vertex.borrow().cubic_vertex().state.out_valid);
+        assert!(!vertex.borrow().cubic_vertex().cells().in_valid());
+        assert!(!vertex.borrow().cubic_vertex().cells().out_valid());
         Path::read_vertex(&occurrence, VertexRead::Incoming).unwrap();
-        assert!(vertex.borrow().cubic_vertex().state.in_valid);
-        assert!(!vertex.borrow().cubic_vertex().state.out_valid);
+        assert!(vertex.borrow().cubic_vertex().cells().in_valid());
+        assert!(!vertex.borrow().cubic_vertex().cells().out_valid());
         Path::read_vertex(&occurrence, VertexRead::Outgoing).unwrap();
-        assert!(vertex.borrow().cubic_vertex().state.out_valid);
+        assert!(vertex.borrow().cubic_vertex().cells().out_valid());
     }
 
     #[test]

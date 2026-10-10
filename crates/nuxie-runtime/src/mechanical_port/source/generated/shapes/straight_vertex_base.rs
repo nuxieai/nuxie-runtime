@@ -12,14 +12,12 @@ pub trait StraightVertexBaseCallbacks:
 
 pub struct StraightVertexBase {
     pub base: PathVertex,
-    radius: f32,
 }
 
 impl Default for StraightVertexBase {
     fn default() -> Self {
         Self {
             base: PathVertex::default(),
-            radius: 0.0,
         }
     }
 }
@@ -39,7 +37,7 @@ impl StraightVertexBase {
         Self::TYPE_KEY
     }
     pub fn radius(&self) -> f32 {
-        self.radius
+        self.base.vertex_cells().radius()
     }
     pub fn set_radius(&mut self, value: f32, callbacks: &mut impl StraightVertexBaseCallbacks) {
         if !self.set_radius_value(value) {
@@ -50,10 +48,10 @@ impl StraightVertexBase {
     }
 
     pub(crate) fn set_radius_value(&mut self, value: f32) -> bool {
-        if self.radius == value {
+        if self.base.vertex_cells().radius() == value {
             return false;
         }
-        self.radius = value;
+        self.base.vertex_cells().set_radius(value);
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl StraightVertexBaseCallbacks) -> StraightVertex {
@@ -62,7 +60,7 @@ impl StraightVertexBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl StraightVertexBaseCallbacks) {
-        self.radius = object.radius;
+        self.base.vertex_cells().set_radius(object.radius());
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -73,7 +71,7 @@ impl StraightVertexBase {
     ) -> bool {
         match property_key {
             Self::RADIUS_PROPERTY_KEY => {
-                self.radius = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.base.vertex_cells().set_radius(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

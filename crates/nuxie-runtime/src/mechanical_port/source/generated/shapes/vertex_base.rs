@@ -1,5 +1,8 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
+    shapes::vertex_cells::VertexCells,
 };
 
 pub trait VertexBaseCallbacks:
@@ -12,16 +15,15 @@ pub trait VertexBaseCallbacks:
 
 pub struct VertexBase {
     pub base: ContainerComponent,
-    x: f32,
-    y: f32,
+    // x and y, shared with skin deformation and the owning path's build.
+    cells: Rc<VertexCells>,
 }
 
 impl Default for VertexBase {
     fn default() -> Self {
         Self {
             base: ContainerComponent::default(),
-            x: 0.0,
-            y: 0.0,
+            cells: Rc::default(),
         }
     }
 }
@@ -41,8 +43,11 @@ impl VertexBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(&self) -> &Rc<VertexCells> {
+        &self.cells
+    }
     pub fn x(&self) -> f32 {
-        self.x
+        self.cells.x()
     }
     pub fn set_x(&mut self, value: f32, callbacks: &mut impl VertexBaseCallbacks) {
         if !self.set_x_value(value) {
@@ -53,14 +58,14 @@ impl VertexBase {
     }
 
     pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
-        if self.x == value {
+        if self.cells.x() == value {
             return false;
         }
-        self.x = value;
+        self.cells.set_x(value);
         true
     }
     pub fn y(&self) -> f32 {
-        self.y
+        self.cells.y()
     }
     pub fn set_y(&mut self, value: f32, callbacks: &mut impl VertexBaseCallbacks) {
         if !self.set_y_value(value) {
@@ -71,15 +76,15 @@ impl VertexBase {
     }
 
     pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
-        if self.y == value {
+        if self.cells.y() == value {
             return false;
         }
-        self.y = value;
+        self.cells.set_y(value);
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl VertexBaseCallbacks) {
-        self.x = object.x;
-        self.y = object.y;
+        self.cells.set_x(object.x());
+        self.cells.set_y(object.y());
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -90,11 +95,11 @@ impl VertexBase {
     ) -> bool {
         match property_key {
             Self::X_PROPERTY_KEY => {
-                self.x = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.cells.set_x(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::Y_PROPERTY_KEY => {
-                self.y = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.cells.set_y(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

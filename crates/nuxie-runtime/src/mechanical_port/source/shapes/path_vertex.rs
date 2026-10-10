@@ -1,8 +1,13 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
     generated::shapes::path_vertex_base::PathVertexBase,
     shapes::path::Path,
-    shapes::vertex::{Vertex, VertexBehavior},
+    shapes::{
+        vertex::{Vertex, VertexBehavior},
+        vertex_cells::VertexCells,
+    },
 };
 impl std::ops::Deref for PathVertex {
     type Target = PathVertexBase;
@@ -41,6 +46,10 @@ impl VertexBehavior for PathVertex {
 }
 
 impl PathVertex {
+    pub(crate) fn vertex_cells(&self) -> &Rc<VertexCells> {
+        self.base.base.cells()
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
@@ -49,8 +58,9 @@ impl PathVertex {
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
+        let cells = Rc::clone(self.vertex_cells());
         let added = parent
-            .with_mut(|parent| parent.as_path_mut().map(|parent| parent.add_vertex(this)))
+            .with_mut(|parent| parent.as_path_mut().map(|parent| parent.add_vertex(this, cells)))
             .flatten()
             .is_some();
         if !added {

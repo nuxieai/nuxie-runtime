@@ -13,20 +13,12 @@ pub trait CubicWeightBaseCallbacks: WeightBaseCallbacks {
 
 pub struct CubicWeightBase {
     pub base: Weight,
-    in_values: u32,
-    in_indices: u32,
-    out_values: u32,
-    out_indices: u32,
 }
 
 impl Default for CubicWeightBase {
     fn default() -> Self {
         Self {
             base: Weight::default(),
-            in_values: 255,
-            in_indices: 1,
-            out_values: 255,
-            out_indices: 1,
         }
     }
 }
@@ -48,16 +40,16 @@ impl CubicWeightBase {
         Self::TYPE_KEY
     }
     pub fn in_values(&self) -> u32 {
-        self.in_values
+        self.base.base.cells().in_values()
     }
     pub fn in_indices(&self) -> u32 {
-        self.in_indices
+        self.base.base.cells().in_indices()
     }
     pub fn out_values(&self) -> u32 {
-        self.out_values
+        self.base.base.cells().out_values()
     }
     pub fn out_indices(&self) -> u32 {
-        self.out_indices
+        self.base.base.cells().out_indices()
     }
 
     pub fn set_in_values<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
@@ -69,10 +61,10 @@ impl CubicWeightBase {
     }
 
     pub(crate) fn set_in_values_value(&mut self, value: u32) -> bool {
-        if self.in_values == value {
+        if self.base.base.cells().in_values() == value {
             return false;
         }
-        self.in_values = value;
+        self.base.base.cells().set_in_values(value);
         true
     }
     pub fn set_in_indices<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
@@ -84,10 +76,10 @@ impl CubicWeightBase {
     }
 
     pub(crate) fn set_in_indices_value(&mut self, value: u32) -> bool {
-        if self.in_indices == value {
+        if self.base.base.cells().in_indices() == value {
             return false;
         }
-        self.in_indices = value;
+        self.base.base.cells().set_in_indices(value);
         true
     }
     pub fn set_out_values<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
@@ -99,10 +91,10 @@ impl CubicWeightBase {
     }
 
     pub(crate) fn set_out_values_value(&mut self, value: u32) -> bool {
-        if self.out_values == value {
+        if self.base.base.cells().out_values() == value {
             return false;
         }
-        self.out_values = value;
+        self.base.base.cells().set_out_values(value);
         true
     }
     pub fn set_out_indices<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
@@ -114,10 +106,10 @@ impl CubicWeightBase {
     }
 
     pub(crate) fn set_out_indices_value(&mut self, value: u32) -> bool {
-        if self.out_indices == value {
+        if self.base.base.cells().out_indices() == value {
             return false;
         }
-        self.out_indices = value;
+        self.base.base.cells().set_out_indices(value);
         true
     }
 
@@ -127,10 +119,10 @@ impl CubicWeightBase {
         cloned
     }
     pub fn copy<C: CubicWeightBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
-        self.in_values = object.in_values;
-        self.in_indices = object.in_indices;
-        self.out_values = object.out_values;
-        self.out_indices = object.out_indices;
+        self.base.base.cells().set_in_values(object.in_values());
+        self.base.base.cells().set_in_indices(object.in_indices());
+        self.base.base.cells().set_out_values(object.out_values());
+        self.base.base.cells().set_out_indices(object.out_indices());
         self.base.base.copy(&object.base.base, callbacks);
     }
     pub fn deserialize<C: CubicWeightBaseCallbacks>(
@@ -141,19 +133,19 @@ impl CubicWeightBase {
     ) -> bool {
         match property_key {
             Self::IN_VALUES_PROPERTY_KEY => {
-                self.in_values = CoreUintType::deserialize(reader);
+                self.base.base.cells().set_in_values(CoreUintType::deserialize(reader));
                 true
             }
             Self::IN_INDICES_PROPERTY_KEY => {
-                self.in_indices = CoreUintType::deserialize(reader);
+                self.base.base.cells().set_in_indices(CoreUintType::deserialize(reader));
                 true
             }
             Self::OUT_VALUES_PROPERTY_KEY => {
-                self.out_values = CoreUintType::deserialize(reader);
+                self.base.base.cells().set_out_values(CoreUintType::deserialize(reader));
                 true
             }
             Self::OUT_INDICES_PROPERTY_KEY => {
-                self.out_indices = CoreUintType::deserialize(reader);
+                self.base.base.cells().set_out_indices(CoreUintType::deserialize(reader));
                 true
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),

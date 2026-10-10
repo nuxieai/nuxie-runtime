@@ -1120,11 +1120,7 @@ impl ArtboardComponentList {
                 QuietState::Busy
             };
         };
-        if machine.is_some_and(|machine| {
-            !machine
-                .with_instance(|machine| machine.artboard())
-                .ptr_eq(&artboard.downgrade())
-        }) {
+        if machine.is_some_and(|machine| !machine.with_instance(|machine| machine.drives(artboard))) {
             return QuietState::Busy;
         }
         let state = artboard.with_artboard(|artboard| artboard.row_quiet_state());

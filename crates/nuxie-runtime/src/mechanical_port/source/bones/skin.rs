@@ -503,6 +503,24 @@ impl Skin {
         }
     }
 
+    /// The PointsPath this skin deforms and its cells, when it skins a path
+    /// (not a Mesh).
+    pub(crate) fn skinned_path_cells(
+        &self,
+    ) -> Option<(
+        CoreHandle,
+        std::rc::Rc<crate::mechanical_port::source::shapes::path_cells::PathCells>,
+    )> {
+        let skinnable = self.skinnable.clone()?;
+        let cells = skinnable
+            .with(|object| {
+                object.as_points_path()?;
+                object.as_path().map(|path| std::rc::Rc::clone(path.cells()))
+            })
+            .flatten()?;
+        Some((skinnable, cells))
+    }
+
     #[cfg(test)]
     pub fn tendons_mut(&mut self) -> &mut Vec<CoreHandle> {
         &mut self.tendons

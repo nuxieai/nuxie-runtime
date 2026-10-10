@@ -122,32 +122,42 @@ impl Path {
         dirt: ComponentDirt,
     ) {
         // Every registered Path owner inherits Node's world-update prefix.
-        // Keep the actual native receiver through the adjacent pure local work,
-        // and release it before constraints or opacity can revisit this path.
+        // Keep the actual native receiver through the adjacent pure local work.
+        // Without constraints nothing else runs before the rebuild, so the
+        // render opacity (from the parent's cells) and the rebuild share that
+        // receiver too; constraints release it, as they can revisit this path.
         // A custom owner can project T from as_any_mut; preserve that owner's
         // original projection calls and released update sequence below.
-        let native_prefix = owner
+        let prefix = owner
             .with_mut(|object| {
-                if dirt.contains(ComponentDirt::TRANSFORM)
-                    || dirt.contains(ComponentDirt::WORLD_TRANSFORM)
-                {
-                    if let Some(object) = (object as &mut dyn std::any::Any).downcast_mut::<T>() {
-                        object
-                            .as_path_mut()
-                            .expect("Path receiver")
-                            .update_before_transform_super();
-                        if dirt.contains(ComponentDirt::TRANSFORM) {
-                            T::update_transform(object);
-                        }
-                        if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
-                            object
-                                .as_node_mut()
-                                .expect("Path inherits Node")
-                                .update_world_transform_before_super();
-                            T::compose_world_transform(object);
-                        }
-                        return true;
+                if let Some(object) = (object as &mut dyn std::any::Any).downcast_mut::<T>() {
+                    object
+                        .as_path_mut()
+                        .expect("Path receiver")
+                        .update_before_transform_super();
+                    if dirt.contains(ComponentDirt::TRANSFORM) {
+                        T::update_transform(object);
                     }
+                    if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
+                        object
+                            .as_node_mut()
+                            .expect("Path inherits Node")
+                            .update_world_transform_before_super();
+                        T::compose_world_transform(object);
+                    }
+                    let transform = object
+                        .as_transform_component_mut()
+                        .expect("Path inherits TransformComponent");
+                    let unconstrained = !(dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                        && transform.cells().has_constraints());
+                    if unconstrained
+                        && (!dirt.contains(ComponentDirt::RENDER_OPACITY)
+                            || transform.update_render_opacity_from_cells())
+                    {
+                        Self::update_tail(object, dirt);
+                        return Prefix::Done;
+                    }
+                    return Prefix::Native;
                 }
                 if let Some(object) = object.as_any_mut().downcast_mut::<T>() {
                     object
@@ -155,9 +165,22 @@ impl Path {
                         .expect("Path receiver")
                         .update_before_transform_super();
                 }
-                false
+                Prefix::Projected
             })
-            .unwrap_or(false);
+            .unwrap_or(Prefix::Projected);
+        enum Prefix {
+            Done,
+            Native,
+            Projected,
+        }
+        let native_prefix = match prefix {
+            Prefix::Done => return,
+            Prefix::Native => {
+                dirt.contains(ComponentDirt::TRANSFORM)
+                    || dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+            }
+            Prefix::Projected => false,
+        };
         if native_prefix {
             if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
                 T::update_constraints(owner);
@@ -170,17 +193,23 @@ impl Path {
                 owner, dirt,
             );
         }
-        owner.with_downcast_mut::<T, _>(|object| {
-            let closed = Self::is_path_closed_for(object);
-            let skin = object.as_points_path().map(|path| {
-                crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(path)
-                    .is_some()
-            });
-            object
-                .as_path_mut()
-                .expect("Path receiver")
-                .update_after_transform_super(dirt, closed, skin);
+        owner.with_downcast_mut::<T, _>(|object| Self::update_tail(object, dirt));
+    }
+
+    /// Path::update after TransformComponent::update: the rebuild.
+    fn update_tail<T: crate::mechanical_port::source::transform_component::TransformUpdate>(
+        object: &mut T,
+        dirt: ComponentDirt,
+    ) {
+        let closed = Self::is_path_closed_for(object);
+        let skin = object.as_points_path().map(|path| {
+            crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(path)
+                .is_some()
         });
+        object
+            .as_path_mut()
+            .expect("Path receiver")
+            .update_after_transform_super(dirt, closed, skin);
     }
     pub const TYPE_KEY: u16 = PathBase::TYPE_KEY;
 }

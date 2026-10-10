@@ -91,11 +91,10 @@ impl PaintCells {
             effects_container::invalidate_effects_handle(paint, None);
             return;
         }
-        let graph = self.dirt.graph_binding();
-        let live = match &graph {
-            Some((graph, index)) => graph.is_live(*index),
-            None => paint.is_occupied(),
-        };
+        let live = self
+            .dirt
+            .with_graph(|graph, index| graph.is_live(index))
+            .unwrap_or_else(|| paint.is_occupied());
         if !live {
             return;
         }
@@ -110,9 +109,10 @@ impl PaintCells {
             return;
         }
         // ShapePaint::invalidateRendering's addDirt(Path, true).
-        if let Some((graph, index)) = graph {
-            graph.add_dirt(index, ComponentDirt::PATH, true);
-        } else if !self.dirt.get().contains(ComponentDirt::PATH) {
+        let added = self
+            .dirt
+            .with_graph(|graph, index| graph.add_dirt(index, ComponentDirt::PATH, true));
+        if added.is_none() && !self.dirt.get().contains(ComponentDirt::PATH) {
             effects_container::add_native_path_dirt(paint, self.paint_type);
         }
     }

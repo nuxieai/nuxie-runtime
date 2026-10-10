@@ -473,6 +473,10 @@ pub mod trace {
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::fmt::Write as _;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    // Checked before the thread-local, so an unrecorded run pays one load.
+    static RECORDING: AtomicBool = AtomicBool::new(false);
 
     struct Recorder {
         out: String,
@@ -484,6 +488,7 @@ pub mod trace {
     }
 
     pub fn start() {
+        RECORDING.store(true, Ordering::Relaxed);
         RECORDER.with(|recorder| {
             *recorder.borrow_mut() = Some(Recorder {
                 out: String::new(),
@@ -502,9 +507,11 @@ pub mod trace {
 
     pub fn finish(path: &std::path::Path) -> std::io::Result<()> {
         let out = RECORDER.with(|recorder| recorder.borrow_mut().take().map(|r| r.out));
+        RECORDING.store(false, Ordering::Relaxed);
         std::fs::write(path, out.unwrap_or_default())
     }
 
+    #[inline]
     pub(super) fn event(
         graph: &ComponentGraph,
         kind: char,
@@ -512,6 +519,14 @@ pub mod trace {
         value: ComponentDirt,
         recurse: bool,
     ) {
+        if RECORDING.load(Ordering::Relaxed) {
+            record(graph, kind, index, value, recurse);
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn record(graph: &ComponentGraph, kind: char, index: u32, value: ComponentDirt, recurse: bool) {
         RECORDER.with(|recorder| {
             let mut recorder = recorder.borrow_mut();
             let Some(recorder) = recorder.as_mut() else {

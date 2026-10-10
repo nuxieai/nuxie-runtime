@@ -240,9 +240,9 @@ impl TrimPath {
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
-        let Some(effect) = self
-            .stroke
-            .effect_paths
+        let paths = std::rc::Rc::clone(self.stroke.effect_paths());
+        let mut paths = paths.borrow_mut();
+        let Some(effect) = paths
             .get_mut(&provider.identity())
             .and_then(|path| path.as_trim_mut())
         else {
@@ -279,5 +279,10 @@ impl StrokeEffect for TrimPath {
     }
     fn create_effect_path(&mut self) -> Box<dyn EffectPath> {
         Box::new(TrimEffectPath::new())
+    }
+    fn shared_effect_paths(
+        &mut self,
+    ) -> Option<crate::mechanical_port::source::shapes::paint::stroke_effect::EffectPaths> {
+        Some(Rc::clone(self.stroke.effect_paths()))
     }
 }

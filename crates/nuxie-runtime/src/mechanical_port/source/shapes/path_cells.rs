@@ -88,8 +88,8 @@ impl PathCells {
 
     /// Path::canDeferPathUpdate().
     pub(crate) fn can_defer_path_update(&self) -> bool {
-        self.shape().is_some_and(|shape| {
-            shape.handle.is_alive()
+        self.shape.borrow().as_ref().is_some_and(|shape| {
+            shape.handle.is_occupied()
                 && shape.cells.can_defer_path_update()
                 && !shape.cells.is_flagged(PathFlags::FOLLOW_PATH)
                 && !self.is_flagged(PathFlags::FOLLOW_PATH | PathFlags::CLIPPING)
@@ -114,7 +114,7 @@ impl PathCells {
     /// Path::markPathDirty's own part: addDirt(Path), then shapePathChanged.
     pub(crate) fn mark_path_dirty(&self, owner: &CoreHandle) {
         self.add_dirt(owner, ComponentDirt::PATH);
-        if owner.is_alive() {
+        if owner.is_occupied() {
             self.notify_shape();
         }
     }

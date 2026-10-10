@@ -661,7 +661,7 @@ impl Path {
     fn deformer(&self) -> Option<CoreHandle> {
         self.cells
             .shape()
-            .filter(|shape| shape.handle.is_alive())
+            .filter(|shape| shape.handle.is_occupied())
             .and_then(|shape| shape.cells.deformer())
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {

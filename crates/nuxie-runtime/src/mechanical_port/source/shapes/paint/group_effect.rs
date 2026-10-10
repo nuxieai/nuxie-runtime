@@ -108,7 +108,7 @@ impl GroupEffect {
     }
     pub fn add_stroke_effect(&mut self, identity: CoreHandle, effect: &mut dyn StrokeEffect) {
         self.effects.add_stroke_effect(identity);
-        for provider in self.stroke.effect_paths.keys().copied() {
+        for provider in self.stroke.provider_identities() {
             let provider = PathProvider::with_identity(provider);
             effect.add_path_provider(&provider);
         }

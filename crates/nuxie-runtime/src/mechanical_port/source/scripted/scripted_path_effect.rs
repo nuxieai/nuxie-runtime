@@ -194,6 +194,11 @@ impl StrokeEffect for ScriptedPathEffect {
     fn create_effect_path(&mut self) -> Box<dyn EffectPath> {
         Box::new(ScriptedEffectPath::default())
     }
+    fn shared_effect_paths(
+        &mut self,
+    ) -> Option<crate::mechanical_port::source::shapes::paint::stroke_effect::EffectPaths> {
+        Some(Rc::clone(self.effects.effect_paths()))
+    }
     fn update_effect(
         &mut self,
         provider: &PathProvider,

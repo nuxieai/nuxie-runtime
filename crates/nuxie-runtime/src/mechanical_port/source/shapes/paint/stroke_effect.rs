@@ -53,24 +53,56 @@ pub trait EffectPath {
 }
 pub struct EmptyEffectPath;
 impl EffectPath for EmptyEffectPath {}
+
+/// An effect's paths, one per PathProvider. Shared with the parent paint's
+/// cells for effects whose invalidation only rewinds them.
+pub(crate) type EffectPaths = Rc<RefCell<HashMap<u64, Box<dyn EffectPath>>>>;
+
 #[derive(Default)]
 pub struct StrokeEffectState {
-    pub effect_paths: HashMap<u64, Box<dyn EffectPath>>,
+    effect_paths: EffectPaths,
 }
 impl StrokeEffectState {
     pub fn add_path_provider(&mut self, provider: &PathProvider, path: Box<dyn EffectPath>) {
-        self.effect_paths.insert(provider.identity(), path);
+        self.effect_paths
+            .borrow_mut()
+            .insert(provider.identity(), path);
     }
 
     pub fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
-        if let Some(provider) = provider {
-            if let Some(path) = self.effect_paths.get_mut(&provider.identity()) {
-                path.invalidate_effect();
-            }
-        } else {
-            for path in self.effect_paths.values_mut() {
-                path.invalidate_effect();
-            }
+        invalidate_effect_paths(&self.effect_paths, provider);
+    }
+
+    pub(crate) fn effect_paths(&self) -> &EffectPaths {
+        &self.effect_paths
+    }
+
+    /// The effect path of one provider, if registered.
+    pub fn with_path_mut<R>(
+        &self,
+        provider: &PathProvider,
+        use_path: impl FnOnce(&mut dyn EffectPath) -> R,
+    ) -> Option<R> {
+        self.effect_paths
+            .borrow_mut()
+            .get_mut(&provider.identity())
+            .map(|path| use_path(path.as_mut()))
+    }
+
+    pub fn provider_identities(&self) -> Vec<u64> {
+        self.effect_paths.borrow().keys().copied().collect()
+    }
+}
+
+pub(crate) fn invalidate_effect_paths(paths: &EffectPaths, provider: Option<&PathProvider>) {
+    let mut paths = paths.borrow_mut();
+    if let Some(provider) = provider {
+        if let Some(path) = paths.get_mut(&provider.identity()) {
+            path.invalidate_effect();
+        }
+    } else {
+        for path in paths.values_mut() {
+            path.invalidate_effect();
         }
     }
 }
@@ -97,20 +129,22 @@ pub trait StrokeEffect:
     fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
         self.stroke_effect_state().invalidate_effect(provider);
     }
+    /// The paths a paint can invalidate directly on pathChanged, for effects
+    /// whose invalidateEffect only rewinds their own paths.
+    fn shared_effect_paths(&mut self) -> Option<EffectPaths> {
+        None
+    }
     fn effect_path(&mut self, provider: &PathProvider) -> Option<Rc<RefCell<ShapePaintPath>>> {
         self.stroke_effect_state()
-            .effect_paths
-            .get_mut(&provider.identity())
-            .and_then(|path| path.path())
+            .with_path_mut(provider, |path| path.path())
+            .flatten()
     }
     fn invalidate_effect_from_local(&mut self)
     where
         Self: Sized,
     {
         let invalidating = self.stroke_effect_handle();
-        for path in self.stroke_effect_state().effect_paths.values_mut() {
-            path.invalidate_effect();
-        }
+        self.stroke_effect_state().invalidate_effect(None);
         if let (Some(parent), Some(invalidating)) =
             (self.parent_paint_handle(), invalidating.as_ref())
         {

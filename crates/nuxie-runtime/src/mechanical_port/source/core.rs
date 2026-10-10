@@ -156,6 +156,53 @@ pub trait CoreObject: CoreRegistryObject + Any {
         .unwrap_or_else(|| self.core_mut().import(import_stack))
     }
 
+    /// Virtual slot ownership, evaluated before import can fail.
+    fn claims_artboard_slot(&self, import_stack: &mut ImportStack) -> bool {
+        use crate::mechanical_port::source::generated::{
+            animation::keyframe_interpolator_base::KeyFrameInterpolatorBase,
+            constraints::scrolling::scroll_physics_base::ScrollPhysicsBase,
+            inputs::user_input_base::UserInputBase,
+        };
+        if let Some(artboard) = self.as_artboard() {
+            return artboard.claims_artboard_slot(import_stack);
+        }
+        if CoreObject::is_type_of(self, ScrollPhysicsBase::TYPE_KEY) {
+            return false;
+        }
+        macro_rules! script_input {
+            ($module:ident, $owner:ident) => {
+                if let Some(input) = self
+                    .as_any()
+                    .downcast_ref::<crate::source::$module::$owner>()
+                {
+                    return input.claims_artboard_slot(import_stack);
+                }
+            };
+        }
+        script_input!(script_input_artboard, ScriptInputArtboard);
+        script_input!(script_input_boolean, ScriptInputBoolean);
+        script_input!(script_input_color, ScriptInputColor);
+        script_input!(script_input_number, ScriptInputNumber);
+        script_input!(script_input_string, ScriptInputString);
+        script_input!(script_input_trigger, ScriptInputTrigger);
+        script_input!(
+            script_input_viewmodel_property,
+            ScriptInputViewModelProperty
+        );
+        if let Some(component) = self.as_component() {
+            return component.claims_artboard_slot(import_stack);
+        }
+        if CoreObject::is_type_of(self, KeyFrameInterpolatorBase::TYPE_KEY) {
+            return crate::source::animation::keyframe_interpolator::KeyFrameInterpolator::claims_artboard_slot(import_stack);
+        }
+        if CoreObject::is_type_of(self, UserInputBase::TYPE_KEY) {
+            return crate::source::inputs::user_input::UserInput::claims_artboard_slot(
+                import_stack,
+            );
+        }
+        false
+    }
+
     fn set_core_handle(&mut self, handle: CoreHandle) {
         self.core_mut().set_handle(handle.clone());
         if let Some(artboard) = self.as_artboard_mut() {

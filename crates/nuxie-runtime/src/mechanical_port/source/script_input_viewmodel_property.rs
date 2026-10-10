@@ -4,13 +4,10 @@ use crate::mechanical_port::source::{
     assets::script_asset::{ScriptInput, ScriptInputBehavior},
     core_context::CoreContext,
     data_bind_path_referencer::DataBindPathReferencer,
-    generated::{
-        script_input_viewmodel_property_base::{
-            ScriptInputViewModelPropertyBase, ScriptInputViewModelPropertyBaseCallbacks,
-        },
-        scripted::scripted_drawable_base::ScriptedDrawableBase,
+    generated::script_input_viewmodel_property_base::{
+        ScriptInputViewModelPropertyBase, ScriptInputViewModelPropertyBaseCallbacks,
     },
-    importers::{import_stack::ImportStack, scripted_object_importer::ScriptedObjectImporter},
+    importers::import_stack::ImportStack,
     status_code::StatusCode,
     viewmodel::viewmodel_instance_value::ViewModelInstanceValue,
 };
@@ -35,6 +32,10 @@ impl Default for ScriptInputViewModelProperty {
 }
 
 impl ScriptInputViewModelProperty {
+    pub fn claims_artboard_slot(&self, _import_stack: &mut ImportStack) -> bool {
+        ScriptInput::takes_artboard_slot(&self.base)
+    }
+
     fn name(&self) -> &str {
         self.base.base.base.base.base.name()
     }
@@ -151,9 +152,7 @@ impl ScriptInputViewModelProperty {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         self.data_bind_path_referencer
             .import_data_bind_path(import_stack);
-        let Some(importer) =
-            import_stack.latest::<ScriptedObjectImporter>(ScriptedDrawableBase::TYPE_KEY)
-        else {
+        let Some(importer) = ScriptInput::owner_importer(import_stack, &self.base) else {
             return StatusCode::MissingObject;
         };
         let Some(this) = self.base.handle() else {

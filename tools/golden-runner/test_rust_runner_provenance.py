@@ -10,6 +10,7 @@ the current content.
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -82,6 +83,80 @@ class MemberDigestTest(unittest.TestCase):
             (root / "crate" / "target").mkdir()
             (root / "crate" / "target" / "artifact").write_text("junk")
             self.assertEqual(guard.member_digest(root, Path("crate")), before)
+
+
+class ReadOnlyRunnerPublicationTest(unittest.TestCase):
+    """Exercise publication and verified restoration with Bazel-style modes."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.target = self.root / "target"
+        (self.target / "debug").mkdir(parents=True)
+        self.uplift = self.target / "debug" / guard.RUNNER_PACKAGE
+        self.artifact = self.target / "debug" / "rust-golden-runner-ordinary"
+        self.stamp_path = self.target / "golden-gate/ordinary-debug.json"
+        self.payload = b"first executable"
+        state = {
+            "schema": guard.DIGEST_SCHEMA,
+            "rustc": "test toolchain",
+            "workspace": "fixed",
+            "members": {},
+        }
+        for name, value in (
+            ("workspace_members", {}),
+            ("cargo_target_directory", self.target),
+            ("current_digest_state", state),
+        ):
+            patcher = mock.patch.object(guard, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        def build(command, cwd, capture=False):
+            self.assertIn("build", command)
+            self.uplift.write_bytes(self.payload)
+            self.uplift.chmod(0o555)
+
+        patcher = mock.patch.object(guard, "run", side_effect=build)
+        self.build = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def ensure(self):
+        guard.ensure_runner(self.root, "ordinary", "debug")
+
+    def assert_published(self):
+        for path in (self.uplift, self.artifact):
+            self.assertEqual(path.read_bytes(), self.payload)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o555)
+        self.assertEqual(
+            guard.load_json(self.stamp_path)["binary_sha256"],
+            guard.sha256_path(self.artifact),
+        )
+        self.assertEqual(
+            sorted(path.name for path in self.uplift.parent.iterdir()),
+            sorted([self.uplift.name, self.artifact.name]),
+        )
+
+    def test_rebuild_replaces_read_only_artifact(self):
+        self.ensure()
+        self.assert_published()
+        self.payload = b"replacement executable"
+        self.stamp_path.unlink()  # Missing provenance requires a fresh build.
+        self.ensure()
+        self.assertEqual(self.build.call_count, 2)
+        self.assert_published()
+
+    def test_verified_copy_restores_read_only_uplift(self):
+        self.ensure()
+        stamp = self.stamp_path.read_bytes()
+        self.uplift.unlink()
+        self.uplift.write_bytes(b"another variant")
+        self.uplift.chmod(0o555)
+        self.ensure()
+        self.assertEqual(self.build.call_count, 1)
+        self.assertEqual(self.stamp_path.read_bytes(), stamp)
+        self.assert_published()
 
 
 @unittest.skipUnless(shutil.which("cargo"), "requires a cargo toolchain")

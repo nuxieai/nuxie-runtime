@@ -4,9 +4,8 @@ use crate::mechanical_port::source::{
     generated::{
         custom_property_color_base::CustomPropertyColorBaseCallbacks,
         script_input_color_base::ScriptInputColorBase,
-        scripted::scripted_drawable_base::ScriptedDrawableBase,
     },
-    importers::{import_stack::ImportStack, scripted_object_importer::ScriptedObjectImporter},
+    importers::import_stack::ImportStack,
     status_code::StatusCode,
 };
 
@@ -25,6 +24,10 @@ impl Default for ScriptInputColor {
 }
 
 impl ScriptInputColor {
+    pub fn claims_artboard_slot(&self, _import_stack: &mut ImportStack) -> bool {
+        ScriptInput::takes_artboard_slot(&self.base)
+    }
+
     fn name(&self) -> &str {
         self.base.base.base.base.base.base.base.name()
     }
@@ -49,9 +52,7 @@ impl ScriptInputColor {
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
-        let Some(importer) =
-            import_stack.latest::<ScriptedObjectImporter>(ScriptedDrawableBase::TYPE_KEY)
-        else {
+        let Some(importer) = ScriptInput::owner_importer(import_stack, &self.base) else {
             return StatusCode::MissingObject;
         };
         let Some(this) = self.base.handle() else {

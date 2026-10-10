@@ -10,13 +10,23 @@ use super::import_stack::ImportStackObject;
 
 pub struct ScriptedObjectImporter {
     scripted_object: CoreHandle,
+    input_parent_id: u32,
 }
 
 impl ScriptedObjectImporter {
-    pub fn new(object: CoreHandle) -> Self {
+    pub fn new(object: CoreHandle, input_parent_id: u32) -> Self {
         Self {
             scripted_object: object,
+            input_parent_id,
         }
+    }
+
+    pub fn scripted_object(&self) -> CoreHandle {
+        self.scripted_object.clone()
+    }
+
+    pub fn input_parent_id(&self) -> u32 {
+        self.input_parent_id
     }
 
     pub fn add_input(&mut self, value: CoreHandle, type_key: CoreTypeKey, input: &mut ScriptInput) {

@@ -6,6 +6,7 @@ pub(crate) struct ImportContext {
     pub(crate) latest_layer_state_accepts_blend_animation: bool,
     pub(crate) state_machine_inputs: Vec<Option<StateMachineInputKind>>,
     pub(crate) artboard_local_nested_inputs: Vec<Option<StateMachineInputKind>>,
+    pub(crate) scripted_input_parent_id: Option<u64>,
 }
 
 #[derive(Default)]
@@ -73,6 +74,20 @@ impl ImportContext {
         self.import_stack.make_latest(key);
     }
 
+    /// File::readObjects claims the exported slot before invoking import.
+    pub(crate) fn claim_artboard_slot(&mut self, object: &RuntimeObject) -> Option<usize> {
+        if !self.latest(ImportStackKey::Artboard)
+            || object.type_name == "Artboard"
+            || !runtime_object_is_cpp_artboard_local(object)
+        {
+            return None;
+        }
+        let slot = self.artboard_local_nested_inputs.len();
+        self.artboard_local_nested_inputs
+            .push(definition_by_type_key(object.type_key).and_then(nested_input_kind));
+        Some(slot)
+    }
+
     pub(crate) fn read_null_object(&mut self) {
         match self.import_stack.latest_null_object_consumer() {
             Some(NullObjectConsumer::Artboard) => {
@@ -89,12 +104,6 @@ impl ImportContext {
                 debug_assert!(consumed);
             }
             _ => {}
-        }
-    }
-
-    pub(crate) fn read_dropped_object(&mut self, definition: &'static Definition) {
-        if definition_is_cpp_artboard_local(definition) {
-            self.artboard_local_nested_inputs.push(None);
         }
     }
 }
@@ -195,8 +204,13 @@ pub(crate) fn compute_import_statuses(
                 return RuntimeImportStatus::NullObject;
             };
 
+            // File::readObjects reserves the exported index before import,
+            // preserving an empty slot if import fails.
+            let slot = context.claim_artboard_slot(object);
             if let Some(reason) = object_import_failure_reason(object, definition, &context) {
-                context.read_dropped_object(definition);
+                if let Some(slot) = slot {
+                    context.artboard_local_nested_inputs[slot] = None;
+                }
                 return RuntimeImportStatus::Dropped { reason };
             }
 
@@ -489,10 +503,8 @@ pub(crate) fn update_import_context(
     layer_state_importer::dispatch_update_context(definition, context);
     state_machine_listener_importer::dispatch_update_context(definition, context);
     state_machine_importer::dispatch_update_input_context(definition, context);
-    if definition_is_cpp_artboard_local(definition) {
-        context
-            .artboard_local_nested_inputs
-            .push(nested_input_kind(definition));
+    if definition.name == "Artboard" {
+        context.artboard_local_nested_inputs.push(None);
     }
     transition_viewmodel_condition_importer::dispatch_update_context(definition, context);
     if definition.is_a("BindableProperty") {

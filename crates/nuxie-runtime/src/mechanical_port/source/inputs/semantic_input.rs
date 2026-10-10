@@ -53,12 +53,11 @@ impl SemanticInput {
         }
 
         {
-            let Some(artboard_importer) =
+            let Some(_artboard_importer) =
                 import_stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
             else {
                 return StatusCode::MissingObject;
             };
-            artboard_importer.add_component(Some(this));
         }
 
         crate::mechanical_port::source::core::CoreObject::core_mut(self).import(import_stack)

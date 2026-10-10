@@ -167,6 +167,10 @@ impl ScrollPhysics {
         self.speed = Vec2D::default();
     }
 
+    pub fn claims_artboard_slot(&self, _import_stack: &mut ImportStack) -> bool {
+        false
+    }
+
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = import_stack.latest_backboard_importer() else {
             return StatusCode::MissingObject;

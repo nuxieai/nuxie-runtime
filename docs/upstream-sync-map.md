@@ -7,18 +7,42 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `671423924df5b251d0f9b3c9f929062bbd27eef6`
+- LAST_SYNCED_SHA: `439ffe0c1c79c6c20b7c9e553f8f0586bbd9e2f6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Six upstream commits remain after this checkpoint at the fetched target.
-  All 218 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (240 after `5892bb05`); this
+  Five upstream commits remain after this checkpoint at the fetched target.
+  All 219 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (241 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `439ffe0c`, integrated atop downstream `a8acdb89de`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including binary secondary-import slot accounting and trait-dispatch
+  corrections. All ten translated upstream regressions, 44 binary unit tests
+  and 384 runtime unit tests pass (two existing runtime tests ignored).
+  Runtime compilation passes for wasm32-unknown-unknown. Source/pipeline tests
+  pass 12, manifest tests pass 27, and generated-file/correspondence checks pass.
+  Ordinary Golden passes all 364 eligible cases under existing verification
+  settings (1,182 stream segments and 1,174 side-channel segments).
+  The obsolete `db_health_tracker` divergence is promoted after both reviews;
+  its existing 0.0011 tolerance is unchanged. This establishes current
+  tolerance-equivalence, not byte equality or causation by this upstream delta.
+  Scripted Golden passes 362 comparisons and verifies the two unchanged
+  divergence signatures (`collapse_data_binds`, `editor_scripted_vector_v7`),
+  with 1,176 stream segments and 1,168 side-channel segments. Both C++ runners
+  were rebuilt from this exact upstream revision and Rust runner provenance
+  verified against the frozen source.
+  Silver executes 214 of 231 cases: 85 byte-exact, 121 within existing epsilon,
+  eight existing recorded divergences and 17 unsupported cases; none pending.
+  The eighth divergence was already recorded on main before this sync, not
+  introduced or waived here. Runner publication now atomically replaces
+  read-only Bazel outputs without changing their modes or provenance checks;
+  both reviews and all 16 provenance harness tests pass. No browser-pixel or
+  new hardware execution is claimed. Guest execution remains parked.
 - Validation at `67142392`, integrated atop downstream `d425a708c4`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean, including exact source-count assertion corrections. Both browser
@@ -624,6 +648,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `439ffe0c1c79c6c20b7c9e553f8f0586bbd9e2f6` | Claim artboard slots before object import and retain empty slots on failure; match script inputs to their owner's parent ID, including unreadable owners. Translate the immutable binary reader counterpart, initial-valid orphan pruning, and failed-super view-model import return. Component-list null-row iteration/pooling is already represented by non-null Rust map entries; preserve it and port both upstream regressions alongside all new malformed-import cases. No private .rive_head/editor changes are claimed. | — |
 | `671423924df5b251d0f9b3c9f929062bbd27eef6` | Translate the shipped WebGL branch's removal of per-pass finish/liveness probes and exact successful-framebuffer attachment-key caching; the upstream native-GL branch is unshipped. Add shared target-exposure capability (base false, deferred true with pre-init setter), gate Luau gpuTarget, and preserve unresolved canvas/backend wrapping diagnostics. Translate the new upstream host-never-exposes-target case. Guest Wasm target gating remains deferred; private .rive_head contents are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `acbb030b2966249cd15a34a7d5b72abf86f0b391` | Retain the browser WebGPU render target across frames, creating it only when absent and invalidating on actual resize; assert acquired surface dimensions and continue refreshing each frame's target view. Native offscreen targets already retain this lifetime. Upstream testing-window overflow handling has no corresponding canvas-product path; private .rive_head contents are not claimed imported. | — |
 | `6f3510dcc545bc8b2a78f1004a06929d17cd022b` | Public delta only adds WasmScriptingVM callDraw save accounting and restoration before renderer-handle release, preserving outer visit state. This guest-execution fix remains deferred; it does not change the Luau or browser-renderer Wasm lanes. The commit message describes private Dart/Flutter frameBoundary integration and a test absent from the public delta; those are not claimed imported. Advance active source/oracle pins and inventory without relabeling unchanged shader artifacts or historical evidence. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

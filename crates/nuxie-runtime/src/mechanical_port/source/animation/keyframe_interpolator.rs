@@ -21,6 +21,10 @@ pub struct KeyFrameInterpolator {
     scripted: bool,
 }
 impl KeyFrameInterpolator {
+    pub fn claims_artboard_slot(_import_stack: &mut ImportStack) -> bool {
+        true
+    }
+
     pub fn is_scripted(&self) -> bool {
         self.scripted
     }
@@ -36,19 +40,19 @@ impl KeyFrameInterpolator {
             .then_some(component)
     }
     pub fn import(owner: &mut dyn CoreObject, stack: &mut ImportStack) -> StatusCode {
-        let Some(handle) = owner.core().handle() else {
-            return StatusCode::MissingObject;
-        };
-        if let Some(importer) = stack.latest::<ArtboardImporter>(
-            crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
-        ) {
-            importer.add_component(Some(handle));
-        } else if let Some(importer) = stack.latest::<BackboardImporter>(
-            crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
-        ) {
-            importer.add_interpolator(owner);
-        } else {
-            return StatusCode::MissingObject;
+        if stack
+            .latest::<ArtboardImporter>(
+                crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
+            )
+            .is_none()
+        {
+            if let Some(importer) = stack.latest::<BackboardImporter>(
+                crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
+            ) {
+                importer.add_interpolator(owner);
+            } else {
+                return StatusCode::MissingObject;
+            }
         }
         owner.core_mut().import(stack)
     }

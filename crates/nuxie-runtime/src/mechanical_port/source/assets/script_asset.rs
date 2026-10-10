@@ -59,6 +59,24 @@ impl Drop for ScriptInput {
 }
 
 impl ScriptInput {
+    pub fn takes_artboard_slot(input: &crate::source::component::Component) -> bool {
+        input.parent_id() != 0
+    }
+
+    pub fn owner_importer<'a>(
+        import_stack: &'a mut crate::source::importers::import_stack::ImportStack,
+        input: &crate::source::component::Component,
+    ) -> Option<&'a mut crate::source::importers::scripted_object_importer::ScriptedObjectImporter>
+    {
+        use crate::source::{
+            generated::scripted::scripted_drawable_base::ScriptedDrawableBase,
+            importers::scripted_object_importer::ScriptedObjectImporter,
+        };
+        let importer =
+            import_stack.latest::<ScriptedObjectImporter>(ScriptedDrawableBase::TYPE_KEY)?;
+        (input.parent_id() == importer.input_parent_id()).then_some(importer)
+    }
+
     pub fn from(component: CoreHandle, type_key: CoreTypeKey) -> Option<CoreHandle> {
         match type_key {
             621 | 631 | 626 | 611 | 627 | 618 | 612 => Some(component),

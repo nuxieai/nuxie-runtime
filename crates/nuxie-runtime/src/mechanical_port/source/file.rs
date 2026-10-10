@@ -587,6 +587,19 @@ impl File {
                 });
             }
 
+            // Claim the stream-ordered id before import can fail. A failed
+            // object leaves an empty slot rather than shifting later ids.
+            let slot = if object
+                .with(|object| object.claims_artboard_slot(import_stack))
+                .unwrap_or(false)
+            {
+                import_stack
+                    .latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
+                    .map(|importer| importer.add_component(Some(object.clone())))
+            } else {
+                None
+            };
+
             let import_result = if object
                 .with(|object| object.as_data_bind().is_some())
                 .unwrap_or(false)
@@ -683,6 +696,12 @@ impl File {
                     last_bindable_object = None;
                 }
                 eprintln!("Failed to import object of type {}", object_type);
+                if let Some(slot) = slot {
+                    import_stack
+                        .latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
+                        .expect("import preserves the open artboard importer")
+                        .release_slot(slot);
+                }
                 discarded.0.push(object);
                 continue;
             }
@@ -873,7 +892,15 @@ impl File {
                 | crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::scripted_transition_condition_base::ScriptedTransitionConditionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(ScriptedObjectImporter::new(object.clone())));
+                    let input_parent_id = if object
+                        .with(|owner| owner.as_component().is_some())
+                        .unwrap_or(false)
+                    {
+                        slot.unwrap_or(0) as u32
+                    } else {
+                        0
+                    };
+                    stack_object = Some(Box::new(ScriptedObjectImporter::new(object.clone(), input_parent_id)));
                     stack_type = crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY;
                     object.with_downcast_mut::<crate::source::scripted::scripted_transition::ScriptedTransition,_>(|transition| transition.set_file(self.self_handle.clone()));
                 }

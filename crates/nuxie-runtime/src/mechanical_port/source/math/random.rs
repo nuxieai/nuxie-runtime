@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 pub struct RandomProvider;
@@ -9,14 +11,23 @@ struct TestingRandomState {
     results: VecDeque<f32>,
 }
 
+// Emscripten's generator state; native draws use the platform generator.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 #[derive(Default)]
 struct RandomState {
-    testing: Option<TestingRandomState>,
     wasm_seed: u64,
 }
 
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 static RANDOM_STATE: LazyLock<Mutex<RandomState>> =
     LazyLock::new(|| Mutex::new(RandomState::default()));
+
+thread_local! {
+    // The pinned TESTING FIFO is a test adaptation; keeping it per thread
+    // means a test's queued draws are consumed only by the runtime work that
+    // test runs, never by a test running concurrently on another thread.
+    static TESTING: RefCell<Option<TestingRandomState>> = const { RefCell::new(None) };
+}
 
 /// Set the process-wide deterministic flag owned by pinned `File`.
 ///
@@ -34,21 +45,22 @@ pub(crate) fn runtime_deterministic_mode() -> bool {
 impl RandomProvider {
     /// Enter the pinned `TESTING` FIFO mode and append a deterministic draw.
     pub fn add_random_value(value: f32) {
-        random_state()
-            .testing
-            .get_or_insert_with(TestingRandomState::default)
-            .results
-            .push_back(value);
+        TESTING.with_borrow_mut(|testing| {
+            testing
+                .get_or_insert_with(TestingRandomState::default)
+                .results
+                .push_back(value);
+        });
     }
 
     /// Match pinned `clearRandoms`: remain in test mode with an empty FIFO.
     pub fn clear_randoms() {
-        random_state().testing = Some(TestingRandomState::default());
+        TESTING.set(Some(TestingRandomState::default()));
     }
 
     /// Leave the downstream runtime test adaptation and resume platform draws.
     pub fn clear_testing_mode() {
-        random_state().testing = None;
+        TESTING.set(None);
     }
 
     /// Seed the same process-global generator used by `generate_random_float`.
@@ -72,35 +84,34 @@ impl RandomProvider {
     }
 
     pub fn generate_random_float() -> f32 {
-        let mut state = random_state();
-        if let Some(testing) = &mut state.testing {
-            testing.calls += 1;
-            return testing.results.pop_front().unwrap_or(0.0);
+        let testing = TESTING.with_borrow_mut(|testing| {
+            testing.as_mut().map(|testing| {
+                testing.calls += 1;
+                testing.results.pop_front().unwrap_or(0.0)
+            })
+        });
+        if let Some(value) = testing {
+            return value;
         }
-
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
+            let mut state = random_state();
             state.wasm_seed = 6_364_136_223_846_793_005_u64
                 .wrapping_mul(state.wasm_seed)
                 .wrapping_add(1);
-            return (state.wasm_seed >> 33) as u32 as f32 / 2_147_483_647.0;
+            (state.wasm_seed >> 33) as u32 as f32 / 2_147_483_647.0
         }
 
         #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        {
-            drop(state);
-            native_draw()
-        }
+        native_draw()
     }
 
     pub fn total_calls() -> i32 {
-        random_state()
-            .testing
-            .as_ref()
-            .map_or(0, |testing| testing.calls)
+        TESTING.with_borrow(|testing| testing.as_ref().map_or(0, |testing| testing.calls))
     }
 }
 
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 fn random_state() -> MutexGuard<'static, RandomState> {
     RANDOM_STATE
         .lock()

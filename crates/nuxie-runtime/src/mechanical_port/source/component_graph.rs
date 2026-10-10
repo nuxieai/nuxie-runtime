@@ -347,9 +347,9 @@ impl ComponentGraph {
         }
     }
 
-    /// DependencyHelper::addDirtToDependents over the static edges, as an
-    /// explicit depth-first walk: each dependent's whole cascade finishes
-    /// before its next sibling, exactly as upstream's recursion orders it.
+    /// DependencyHelper::addDirtToDependents over the static edges, recursing
+    /// like upstream: each dependent's whole cascade finishes before its next
+    /// sibling.
     pub(crate) fn add_dirt_to_dependents(&self, index: u32, value: ComponentDirt) {
         #[cfg(feature = "tools")]
         trace::event(self, 'P', index, value, true);
@@ -358,18 +358,8 @@ impl ComponentGraph {
 
     fn cascade(&self, index: u32, value: ComponentDirt) {
         let node = &self.nodes[index as usize];
-        let (mut position, mut end) = (node.dependents_start, node.dependents_end);
-        let mut stack = CascadeStack::new();
-        loop {
-            if position == end {
-                let Some((resume, resume_end)) = stack.pop() else {
-                    return;
-                };
-                (position, end) = (resume, resume_end);
-                continue;
-            }
+        for position in node.dependents_start..node.dependents_end {
             let dependent = self.dependents[position as usize];
-            position += 1;
             if dependent & OUTSIDE_DEPENDENT != 0 {
                 self.outside[(dependent & !OUTSIDE_DEPENDENT) as usize].add_dirt(value, true);
                 continue;
@@ -382,10 +372,11 @@ impl ComponentGraph {
             if !self.mark(member, value) {
                 continue;
             }
+            // Each dependent's whole cascade finishes before its next sibling,
+            // as upstream's recursion orders it.
             let child = &self.nodes[member];
             if child.dependents_start != child.dependents_end {
-                stack.push((position, end));
-                (position, end) = (child.dependents_start, child.dependents_end);
+                self.cascade(member as u32, value);
             }
         }
     }
@@ -520,46 +511,6 @@ fn needs_update(dirt: ComponentDirt) -> bool {
     dirt != ComponentDirt::NONE && !dirt.contains(ComponentDirt::COLLAPSED)
 }
 
-/// Resume points for add_dirt_to_dependents: inline for typical depths,
-/// spilling to the heap only for unusually deep dependency chains.
-struct CascadeStack {
-    inline: [(u32, u32); 32],
-    len: usize,
-    spill: Vec<(u32, u32)>,
-}
-
-impl CascadeStack {
-    #[inline]
-    fn new() -> Self {
-        Self {
-            inline: [(0, 0); 32],
-            len: 0,
-            spill: Vec::new(),
-        }
-    }
-
-    #[inline]
-    fn push(&mut self, entry: (u32, u32)) {
-        if self.len < self.inline.len() {
-            self.inline[self.len] = entry;
-            self.len += 1;
-        } else {
-            self.spill.push(entry);
-        }
-    }
-
-    #[inline]
-    fn pop(&mut self) -> Option<(u32, u32)> {
-        if let Some(entry) = self.spill.pop() {
-            return Some(entry);
-        }
-        if self.len == 0 {
-            return None;
-        }
-        self.len -= 1;
-        Some(self.inline[self.len])
-    }
-}
 
 /// One member's dirt in its graph's node array. The graph order doubles as the
 /// index; edges and order are fixed once the graph is built.

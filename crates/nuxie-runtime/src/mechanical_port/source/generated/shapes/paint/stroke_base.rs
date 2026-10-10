@@ -25,14 +25,16 @@ pub struct StrokeBase {
 
 impl Default for StrokeBase {
     fn default() -> Self {
-        Self {
+        let mut stroke = Self {
             base: ShapePaint::new(ShapePaintType::Stroke),
             thickness: 1.0,
             cap: 0,
             join: 0,
             transform_affects_stroke: true,
             position: 1,
-        }
+        };
+        stroke.store_transform_affects_stroke(true);
+        stroke
     }
 }
 
@@ -129,8 +131,16 @@ impl StrokeBase {
         if self.transform_affects_stroke == value {
             return false;
         }
-        self.transform_affects_stroke = value;
+        self.store_transform_affects_stroke(value);
         true
+    }
+    // Every write of transformAffectsStroke keeps the paint's path flags
+    // current.
+    fn store_transform_affects_stroke(&mut self, value: bool) {
+        self.transform_affects_stroke = value;
+        self.base.cells().set_path_flags(
+            crate::mechanical_port::source::shapes::paint::stroke::transform_affects_stroke_path_flags(value),
+        );
     }
     pub fn position(&self) -> u8 {
         self.position
@@ -158,7 +168,7 @@ impl StrokeBase {
         self.thickness = object.thickness;
         self.cap = object.cap;
         self.join = object.join;
-        self.transform_affects_stroke = object.transform_affects_stroke;
+        self.store_transform_affects_stroke(object.transform_affects_stroke);
         self.position = object.position;
         self.base.copy(&object.base, callbacks);
     }
@@ -182,7 +192,7 @@ impl StrokeBase {
                 true
             }
             Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY => {
-                self.transform_affects_stroke = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.store_transform_affects_stroke(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
                 true
             }
             Self::POSITION_PROPERTY_KEY => {

@@ -10,6 +10,7 @@ use crate::mechanical_port::source::{
         paint::{
             effects_container::{EffectsContainer, EffectsContainerState},
             feather::Feather,
+            paint_cells::PaintCells,
             shape_paint_mutator::ShapePaintMutator,
             stroke_effect::{PathProvider, StrokeEffect},
         },
@@ -110,7 +111,8 @@ pub struct ShapePaint {
     // not copied or deserialized with the authored ShapePaintBase properties.
     paint_type: ShapePaintType,
     path_provider: PathProvider,
-    render_paint: Option<RuntimeRenderPaintHandle>,
+    // Shared with the container (see PaintCells); holds the render paint.
+    cells: Rc<PaintCells>,
     paint_mutator: Option<CoreHandle>,
     // update skipped measuring the effects while fully transparent. Showing
     // this paint again owes them a run.
@@ -124,12 +126,14 @@ pub struct ShapePaint {
 
 impl ShapePaint {
     pub(crate) fn new(paint_type: ShapePaintType) -> Self {
+        let mut base = ShapePaintBase::default();
+        let cells = Rc::new(PaintCells::new(paint_type, base.share_dirt()));
         Self {
-            base: ShapePaintBase::default(),
-            effects_container: EffectsContainerState::default(),
+            base,
+            effects_container: EffectsContainerState::for_paint(Rc::clone(&cells)),
             paint_type,
             path_provider: PathProvider::default(),
-            render_paint: None,
+            cells,
             paint_mutator: None,
             effects_deferred: false,
             feather: None,
@@ -151,6 +155,10 @@ impl ShapePaint {
         self.paint_type
     }
 
+    pub(crate) fn cells(&self) -> &Rc<PaintCells> {
+        &self.cells
+    }
+
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         self.has_paint_image = self.base.children().iter().any(|child| {
             child.is_type_of(
@@ -170,7 +178,7 @@ impl ShapePaint {
                     return StatusCode::MissingObject;
                 };
                 if self.paint_mutator.is_some() {
-                    container.add_paint(this);
+                    container.add_paint(this, Rc::clone(&self.cells));
                 }
                 StatusCode::Ok
             })
@@ -190,7 +198,7 @@ impl ShapePaint {
         kind: ShapePaintPathKind,
         stroke: Option<(f32, u32, u32)>,
     ) {
-        if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects.is_empty() {
+        if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects().is_empty() {
             let parent = self.base.parent_handle().expect("ShapePaint container");
             // Hidden paints are invalidated again when shown (see
             // set_render_opacity). Clip sources still consume their effect
@@ -201,16 +209,7 @@ impl ShapePaint {
                         let flags = container
                             .as_shape_paint_container()
                             .expect("ShapePaint container")
-                            .path_flags_with_active_paint(
-                                &self.base.handle().expect("installed ShapePaint"),
-                                match kind {
-                                    ShapePaintPathKind::Local => PathFlags::LOCAL,
-                                    ShapePaintPathKind::World => PathFlags::WORLD,
-                                    ShapePaintPathKind::LocalClockwise => {
-                                        PathFlags::LOCAL_CLOCKWISE
-                                    }
-                                },
-                            );
+                            .path_flags();
                         (flags & PathFlags::CLIPPING).is_empty()
                     })
                     .expect("live ShapePaint container")
@@ -239,7 +238,7 @@ impl ShapePaint {
                 self, stroke,
             )));
             let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
-            for handle in self.effects_container.effects.iter().cloned() {
+            for handle in self.effects_container.effects().iter().cloned() {
                 handle.with_mut(|effect| {
                     let Some(effect) = effect.as_stroke_effect_mut() else {
                         return;
@@ -263,7 +262,7 @@ impl ShapePaint {
         mutator: CoreHandle,
         factory: &RuntimeFactoryHandle,
     ) -> bool {
-        if self.render_paint.is_some() {
+        if self.cells.render_paint().is_some() {
             return false;
         }
         // Upstream uses mutator->component()->artboard()->factory(), not this
@@ -271,7 +270,7 @@ impl ShapePaint {
         // The caller snapshots that same factory without reborrowing the active
         // mutator occurrence while the parent Fill/Stroke is borrowed.
         self.paint_mutator = Some(mutator);
-        self.render_paint = Some(Rc::new(RefCell::new(
+        self.cells.set_render_paint(Rc::new(RefCell::new(
             factory.with_factory_mut(|factory| factory.make_render_paint()),
         )));
         true
@@ -281,13 +280,13 @@ impl ShapePaint {
         &mut self,
         use_paint: impl FnOnce(&mut dyn RenderPaint) -> R,
     ) -> Option<R> {
-        self.render_paint
-            .as_ref()
+        self.cells
+            .render_paint()
             .map(|paint| use_paint(paint.borrow_mut().as_mut()))
     }
 
     pub fn render_paint_handle(&self) -> Option<RuntimeRenderPaintHandle> {
-        self.render_paint.clone()
+        self.cells.render_paint()
     }
 
     pub fn inherits_blend_mode(&self) -> bool {
@@ -327,20 +326,20 @@ impl ShapePaint {
         } else {
             self.base.additive_amount()
         };
-        let mut render_paint = self
-            .render_paint
-            .as_ref()
-            .expect("initialized paint")
-            .borrow_mut();
+        let render_paint = self.cells.render_paint().expect("initialized paint");
+        let mut render_paint = render_paint.borrow_mut();
         render_paint.blend_mode(mode);
         render_paint.additiveness(super::blend_mode::additiveness_for(mode, amount));
     }
     pub fn additive_amount_changed(&mut self) {
-        if self.render_paint.is_none() || self.inherits_blend_mode() {
+        let Some(render_paint) = self.cells.render_paint() else {
+            return;
+        };
+        if self.inherits_blend_mode() {
             return;
         }
         let mode = self.authored_blend_mode();
-        let mut render_paint = self.render_paint.as_ref().unwrap().borrow_mut();
+        let mut render_paint = render_paint.borrow_mut();
         render_paint.blend_mode(mode);
         render_paint.additiveness(super::blend_mode::additiveness_for(
             mode,
@@ -350,6 +349,7 @@ impl ShapePaint {
 
     pub fn set_feather(&mut self, feather: CoreHandle) {
         self.feather = Some(feather);
+        self.cells.set_has_feather();
     }
 
     pub fn feather(&self) -> Option<CoreHandle> {
@@ -591,7 +591,7 @@ impl ShapePaint {
             let render_path = path.existing_render_path();
             if let Some(paint) = override_paint.as_deref() {
                 renderer.draw_path(render_path, paint);
-            } else if let Some(paint) = self.render_paint.as_ref() {
+            } else if let Some(paint) = self.cells.render_paint() {
                 renderer.draw_path(render_path, paint.borrow().as_ref());
             }
         };

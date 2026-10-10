@@ -80,7 +80,7 @@ fn trim_points(artboard: &CoreHandle, shape_name: &str) -> Vec<Vec2D> {
     let (effect, provider) = stroke
         .with_downcast::<Stroke, _>(|stroke| {
             (
-                stroke.base.base.effects_container.effects.last().cloned(),
+                stroke.base.base.effects_container.effects().last().cloned(),
                 *stroke.base.base.path_provider(),
             )
         })
@@ -177,7 +177,7 @@ fn test_raw_path(artboard: &CoreHandle, shape_name: &str, verbs: &[PathVerb]) {
     let (effect, provider) = stroke
         .with_downcast::<Stroke, _>(|stroke| {
             (
-                stroke.base.base.effects_container.effects.last().cloned(),
+                stroke.base.base.effects_container.effects().last().cloned(),
                 *stroke.base.base.path_provider(),
             )
         })

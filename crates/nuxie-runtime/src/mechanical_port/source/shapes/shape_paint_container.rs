@@ -1,11 +1,21 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     core::{CoreHandle, CoreObject},
-    shapes::path_flags::PathFlags,
+    shapes::{paint::paint_cells::PaintCells, path_flags::PathFlags},
 };
 
 pub struct ShapePaintContainer {
     path_flags: PathFlags,
     shape_paints: Vec<CoreHandle>,
+    // The same paints with their cells. Replaced, never edited, when a paint
+    // is added, so a pathChanged pass can hold it across paint callbacks.
+    paints: Rc<[ContainerPaint]>,
+}
+
+struct ContainerPaint {
+    handle: CoreHandle,
+    cells: Rc<PaintCells>,
 }
 
 impl Default for ShapePaintContainer {
@@ -13,6 +23,7 @@ impl Default for ShapePaintContainer {
         Self {
             path_flags: PathFlags::NONE,
             shape_paints: Vec::new(),
+            paints: Rc::new([]),
         }
     }
 }
@@ -30,68 +41,50 @@ impl ShapePaintContainer {
         component.as_shape_paint_container_mut()
     }
 
-    pub fn add_paint(&mut self, paint: CoreHandle) {
-        self.shape_paints.push(paint);
-    }
-
-    pub fn path_flags(&self) -> PathFlags {
-        self.path_flags_with_active(None)
-    }
-
-    /// Read the same aggregate while one paint is already borrowed for update.
-    pub(crate) fn path_flags_with_active_paint(
-        &self,
-        active: &CoreHandle,
-        flags: PathFlags,
-    ) -> PathFlags {
-        self.path_flags_with_active(Some((active, flags)))
-    }
-
-    fn path_flags_with_active(&self, active: Option<(&CoreHandle, PathFlags)>) -> PathFlags {
-        self.shape_paints
+    pub(crate) fn add_paint(&mut self, paint: CoreHandle, cells: Rc<PaintCells>) {
+        self.shape_paints.push(paint.clone());
+        self.paints = self
+            .paints
             .iter()
-            .fold(self.path_flags, |flags, paint| {
-                if let Some((active, active_flags)) = active {
-                    if paint == active {
-                        return flags | active_flags;
-                    }
-                }
-                flags
-                    | paint
-                        .with(|paint| {
-                            paint
-                                .as_shape_paint_behavior()
-                                .map(|paint| paint.path_flags())
-                        })
-                        .flatten()
-                        .unwrap_or(PathFlags::NONE)
+            .map(|entry| ContainerPaint {
+                handle: entry.handle.clone(),
+                cells: Rc::clone(&entry.cells),
             })
+            .chain(std::iter::once(ContainerPaint {
+                handle: paint,
+                cells,
+            }))
+            .collect();
+    }
+
+    /// ShapePaintContainer::pathFlags(): the container's own flags and every
+    /// paint's.
+    pub fn path_flags(&self) -> PathFlags {
+        self.paints
+            .iter()
+            .fold(self.path_flags, |flags, paint| flags | paint.cells.path_flags())
     }
 
     pub fn invalidate_stroke_effects(&mut self) {
-        for paint in self.shape_paints.iter().cloned() {
-            crate::mechanical_port::source::shapes::paint::effects_container::invalidate_effects_handle(
-                &paint, None,
-            );
-        }
+        Self::invalidate_paint_effects(&self.paints);
     }
 
     pub(crate) fn invalidate_stroke_effects_occurrence(owner: &CoreHandle) {
-        let mut index = 0;
-        while let Some(paint) = owner
+        let paints = owner
             .with(|object| {
                 object
-                    .as_shape_paint_container()?
-                    .shape_paints
-                    .get(index)
-                    .cloned()
+                    .as_shape_paint_container()
+                    .map(|container| Rc::clone(&container.paints))
             })
-            .flatten()
-        {
-            crate::mechanical_port::source::shapes::paint::effects_container::invalidate_effects_handle(
-                &paint, None,
-            );
-            index += 1;
+            .flatten();
+        if let Some(paints) = paints {
+            Self::invalidate_paint_effects(&paints);
+        }
+    }
+
+    fn invalidate_paint_effects(paints: &[ContainerPaint]) {
+        for paint in paints {
+            paint.cells.invalidate_effects(&paint.handle);
         }
     }
 

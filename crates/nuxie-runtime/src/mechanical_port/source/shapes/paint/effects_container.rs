@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     component::{Component, ComponentOccurrenceHandle},
     component_dirt::ComponentDirt,
@@ -6,6 +8,8 @@ use crate::mechanical_port::source::{
         feather::Feather,
         fill::Fill,
         group_effect::GroupEffect,
+        paint_cells::PaintCells,
+        shape_paint::ShapePaintType,
         shape_paint_path::ShapePaintPath,
         stroke::Stroke,
         stroke_effect::{PathProvider, StrokeEffect},
@@ -14,15 +18,31 @@ use crate::mechanical_port::source::{
 };
 #[derive(Default)]
 pub struct EffectsContainerState {
-    pub effects: Vec<CoreHandle>,
+    effects: Vec<CoreHandle>,
+    // A Fill or Stroke's cells, which record that it has effects.
+    paint: Option<Rc<PaintCells>>,
 }
 impl EffectsContainerState {
+    pub(crate) fn for_paint(paint: Rc<PaintCells>) -> Self {
+        Self {
+            effects: Vec::new(),
+            paint: Some(paint),
+        }
+    }
+
     pub fn has_effects(&self) -> bool {
         !self.effects.is_empty()
     }
 
+    pub fn effects(&self) -> &[CoreHandle] {
+        &self.effects
+    }
+
     pub fn add_stroke_effect(&mut self, effect: CoreHandle) {
         self.effects.push(effect);
+        if let Some(paint) = &self.paint {
+            paint.set_has_effects();
+        }
     }
     pub fn invalidate_effects(&mut self, invalidating: Option<&CoreHandle>) {
         let mut found = invalidating.is_none();
@@ -89,6 +109,16 @@ fn add_dirt_with_active(
 enum NativePaint {
     Fill,
     Stroke,
+}
+
+/// ShapePaint::invalidateRendering's addDirt(Path, true) for a concrete Fill
+/// or Stroke outside a component graph.
+pub(crate) fn add_native_path_dirt(paint: &CoreHandle, paint_type: ShapePaintType) {
+    match paint_type {
+        ShapePaintType::Fill => NativePaint::Fill,
+        ShapePaintType::Stroke => NativePaint::Stroke,
+    }
+    .add_path_dirt(paint);
 }
 
 impl NativePaint {
@@ -205,7 +235,7 @@ pub(crate) fn invalidate_effects_handle_with_active(
             } else {
                 return None;
             };
-            if paint.effects_container.effects.is_empty() && paint.feather_handle().is_none() {
+            if paint.effects_container.effects().is_empty() && paint.feather_handle().is_none() {
                 Some((paint.prepare_rendering_invalidation(), native))
             } else {
                 None
@@ -241,7 +271,7 @@ pub(crate) fn invalidate_effects_handle_with_active(
         .with_mut(|container| {
             container
                 .as_effects_container_mut()
-                .map(|container| container.effects_state().effects.clone())
+                .map(|container| container.effects_state().effects().to_vec())
                 .unwrap_or_default()
         })
         .unwrap_or_default();
@@ -292,7 +322,7 @@ pub trait EffectsContainer {
         &mut self,
         provider: &PathProvider,
     ) -> Option<std::rc::Rc<std::cell::RefCell<ShapePaintPath>>> {
-        for effect in self.effects_state().effects.iter().rev() {
+        for effect in self.effects_state().effects().iter().rev() {
             if let Some(path) = effect
                 .with_mut(|effect| {
                     effect

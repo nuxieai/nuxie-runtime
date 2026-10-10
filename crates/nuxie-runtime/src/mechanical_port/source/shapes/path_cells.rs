@@ -89,9 +89,14 @@ impl PathCells {
     /// Path::canDeferPathUpdate().
     pub(crate) fn can_defer_path_update(&self) -> bool {
         self.shape.borrow().as_ref().is_some_and(|shape| {
-            shape.handle.is_occupied()
-                && shape.cells.can_defer_path_update()
-                && !shape.cells.is_flagged(PathFlags::FOLLOW_PATH)
+            if !shape.handle.is_occupied() || shape.cells.render_opacity() != 0.0 {
+                return false;
+            }
+            // Shape::canDeferPathUpdate's flags and its followPath check read
+            // the same aggregate; fold the paints once.
+            let flags = shape.cells.path_flags();
+            (flags & (PathFlags::CLIPPING | PathFlags::NEVER_DEFER_UPDATE | PathFlags::FOLLOW_PATH))
+                .is_empty()
                 && !self.is_flagged(PathFlags::FOLLOW_PATH | PathFlags::CLIPPING)
         })
     }
@@ -127,13 +132,12 @@ impl PathCells {
     }
 
     fn add_dirt(&self, owner: &CoreHandle, value: ComponentDirt) {
-        match self.dirt.graph_binding() {
-            Some((graph, index)) => {
-                graph.add_dirt(index, value, false);
-            }
-            None => {
-                ComponentOccurrenceHandle::Authored(owner.clone()).add_dirt(value, false);
-            }
+        if self
+            .dirt
+            .with_graph(|graph, index| graph.add_dirt(index, value, false))
+            .is_none()
+        {
+            ComponentOccurrenceHandle::Authored(owner.clone()).add_dirt(value, false);
         }
     }
 }

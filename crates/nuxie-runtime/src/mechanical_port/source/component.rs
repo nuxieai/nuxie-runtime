@@ -948,6 +948,18 @@ impl SharedDirt {
             .as_ref()
             .map(|binding| (Rc::clone(&binding.graph), binding.dirt.index()))
     }
+
+    /// Run `use_graph` with the bound graph and this member's index. The
+    /// binding only changes when a graph is built, never during its cascades.
+    pub(crate) fn with_graph<R>(
+        &self,
+        use_graph: impl FnOnce(&crate::mechanical_port::source::component_graph::ComponentGraph, u32) -> R,
+    ) -> Option<R> {
+        self.graph
+            .borrow()
+            .as_ref()
+            .map(|binding| use_graph(&binding.graph, binding.dirt.index()))
+    }
 }
 
 // A separate Background can read TextStylePaint's actual parent while a

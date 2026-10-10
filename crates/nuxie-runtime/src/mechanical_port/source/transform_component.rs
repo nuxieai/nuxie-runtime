@@ -19,6 +19,8 @@ pub struct TransformComponent {
     parent_transform_component: Option<CoreHandle>,
     // The parent's cells, for its world transform and child opacity.
     parent_cells: Option<Rc<TransformCells>>,
+    // The parent is a TransformComponent, whose childOpacity its cells hold.
+    parent_is_transform: bool,
     constraints: Vec<CoreHandle>,
 }
 
@@ -203,6 +205,7 @@ impl Default for TransformComponent {
             base: TransformComponentBase::default(),
             parent_transform_component: None,
             parent_cells: None,
+            parent_is_transform: false,
             constraints: Vec::new(),
         }
     }
@@ -235,18 +238,20 @@ impl TransformComponent {
 
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         let parent = self.base.base.base.base.base.parent_handle();
-        let parent_cells = parent
+        let (parent_cells, parent_is_transform) = parent
             .as_ref()
             .and_then(|parent| {
                 parent.with(|parent| {
-                    parent
+                    let cells = parent
                         .as_world_transform_component()
-                        .map(|parent| Rc::clone(parent.cells()))
+                        .map(|parent| Rc::clone(parent.cells()));
+                    (cells, parent.as_transform_component().is_some())
                 })
             })
-            .flatten();
+            .unwrap_or((None, false));
         self.parent_transform_component = parent.filter(|_| parent_cells.is_some());
         self.parent_cells = parent_cells;
+        self.parent_is_transform = parent_is_transform;
         StatusCode::Ok
     }
 
@@ -450,6 +455,21 @@ impl TransformComponent {
                 constraint.constraint_apply(component.clone());
             });
         }
+    }
+
+    /// update_render_opacity_super's work, when the parent's child opacity is
+    /// in its cells (no parent, or a TransformComponent parent). Returns false
+    /// when the caller must read the parent through its handle instead.
+    pub(crate) fn update_render_opacity_from_cells(&mut self) -> bool {
+        let parent_child_opacity = match (&self.parent_transform_component, &self.parent_cells) {
+            (None, _) => None,
+            (Some(parent), Some(cells)) if self.parent_is_transform => {
+                parent.is_occupied().then(|| cells.child_opacity())
+            }
+            _ => return false,
+        };
+        self.update_render_opacity_state(parent_child_opacity);
+        true
     }
 
     pub fn update_render_opacity_state(&mut self, parent_child_opacity: Option<f32>) {

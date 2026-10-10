@@ -20,7 +20,7 @@ use crate::mechanical_port::source::{
     component::ComponentOccurrenceHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
-    bones::{bone::Bone, root_bone::RootBone},
+    bones::{bone::Bone, root_bone::RootBone, skin::Skin},
     core::CoreObject,
     node::Node as NodeObject,
     shapes::{path_cells::PathCells, shape_cells::ShapeCells},
@@ -52,6 +52,8 @@ enum Kind {
 /// state lives outside the component.
 enum NodeCells {
     Path(Rc<PathCells>),
+    // A Skin of a PointsPath: Skin::onDirty marks that path dirty.
+    SkinnedPath(CoreHandle, Rc<PathCells>),
     // A PathComposer, through the cells it shares with its Shape.
     Composer(Rc<ShapeCells>),
 }
@@ -114,9 +116,16 @@ impl ComponentGraph {
                 ComponentOccurrenceHandle::Authored(handle) => handle
                     .with(|object| {
                         let update_handler = object.component_update_handler();
+                        let actual: &dyn Any = object;
                         if let Some(path) = object.as_path() {
                             // Every Path type runs Path::onDirty.
                             let cells = NodeCells::Path(Rc::clone(path.cells()));
+                            (Kind::Cells, None, Some(cells), update_handler)
+                        } else if let Some((path, cells)) = actual
+                            .downcast_ref::<Skin>()
+                            .and_then(Skin::skinned_path_cells)
+                        {
+                            let cells = NodeCells::SkinnedPath(path, cells);
                             (Kind::Cells, None, Some(cells), update_handler)
                         } else if let Some(handler) = object.component_on_dirty_handler() {
                             (Kind::Handler, Some(handler), None, update_handler)
@@ -290,6 +299,13 @@ impl ComponentGraph {
             }
             Kind::Cells => match &self.cells[i] {
                 Some(NodeCells::Path(path)) => path.on_dirty(self.authored(i), dirt),
+                Some(NodeCells::SkinnedPath(path, cells)) => {
+                    // Skin::onDirty: opacity cannot move bones; otherwise
+                    // PointsPath::markSkinDirty, i.e. Path::markPathDirty.
+                    if (dirt & !ComponentDirt::COLLAPSED) != ComponentDirt::RENDER_OPACITY {
+                        cells.mark_path_dirty(path);
+                    }
+                }
                 _ => unreachable!("cells kind records its cells"),
             },
             Kind::Helper => match &self.cells[i] {

@@ -68,6 +68,14 @@ impl ShapeCells {
         self.paints.is_flagged(flags)
     }
 
+    pub(crate) fn path_flags(&self) -> PathFlags {
+        self.paints.path_flags()
+    }
+
+    pub(crate) fn render_opacity(&self) -> f32 {
+        self.transform.render_opacity()
+    }
+
     /// Shape::canDeferPathUpdate().
     pub(crate) fn can_defer_path_update(&self) -> bool {
         self.transform.render_opacity() == 0.0
@@ -171,9 +179,8 @@ impl ShapeCells {
     }
 
     fn add_composer_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {
-        match self.composer_dirt.graph_binding() {
-            Some((graph, index)) => graph.add_dirt(index, value, recurse),
-            None => self.composer.add_dirt(value, recurse),
-        }
+        self.composer_dirt
+            .with_graph(|graph, index| graph.add_dirt(index, value, recurse))
+            .unwrap_or_else(|| self.composer.add_dirt(value, recurse))
     }
 }

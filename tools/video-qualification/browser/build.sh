@@ -9,13 +9,10 @@ case "$video_profile" in
   release) video_profile_dir=release ;;
   *) printf 'Unsupported VIDEO_PROOF_PROFILE: %s\n' "$video_profile" >&2; exit 1 ;;
 esac
-video_cargo=$(rustup which --toolchain stable cargo)
-export RUSTC=$(rustup which --toolchain stable rustc)
-video_bindgen="$repo_dir/target/browser-tools/bin/wasm-bindgen"
-if [[ ! -x "$video_bindgen" ]]; then
-  "$video_cargo" install wasm-bindgen-cli --version 0.2.126 --locked --root "$repo_dir/target/browser-tools"
-fi
-CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 "$video_cargo" build -p video-qualification --lib --target wasm32-unknown-unknown --profile "$video_profile"
+video_bindgen=$(python3 "$repo_dir/tools/bazel/browser-tools.py")
+RUSTFLAGS="${RUSTFLAGS:-} -Cdebuginfo=0" python3 "$repo_dir/tools/bazel/runtime.py" \
+  build -p video-qualification --lib --target wasm32-unknown-unknown \
+  --profile "$video_profile" --target-dir "$repo_dir/target"
 video_output="$repo_dir/target/video-browser-proof"
 mkdir -p "$video_output"
 "$video_bindgen" "$repo_dir/target/wasm32-unknown-unknown/$video_profile_dir/video_qualification.wasm" --out-dir "$video_output" --target web

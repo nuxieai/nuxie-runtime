@@ -1785,7 +1785,7 @@ mod tests {
             // nonzero path that exceeds the semantic computation budget.
             native.with_artboard_mut(|artboard| {
                 let bounds = artboard.bounds();
-                let path = artboard.local_path().unwrap();
+                let mut path = artboard.local_path().unwrap();
                 path.rewind();
                 for _ in 0..5000 {
                     path.add_rect(bounds, PathDirection::Clockwise);
@@ -1802,7 +1802,7 @@ mod tests {
             );
             native.with_artboard_mut(|artboard| {
                 let bounds = artboard.bounds();
-                let path = artboard.local_path().unwrap();
+                let mut path = artboard.local_path().unwrap();
                 path.rewind();
                 path.add_rect(bounds, PathDirection::Clockwise);
             });

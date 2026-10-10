@@ -4,12 +4,12 @@ use crate::records::ast_local::AstLocal;
 use crate::records::ast_name::AstName;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_local::AstStatLocal;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::lexeme::Type;
 use crate::records::location::Location;
 use crate::records::name::Name;
 use crate::records::parser::Parser;
 use crate::records::position::Position;
-use crate::records::cst_attr_list::CstAttrList;
 use crate::records::temp_vector::TempVector;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
@@ -132,13 +132,8 @@ impl Parser {
             );
             return self.export_local_stat_value(stat, local_keyword_location);
         } else if self.lexer.current().r#type == Type::ReservedFunction {
-            let func_stat = self.parse_local(
-                *start,
-                keyword_position,
-                attributes,
-                true,
-                cst_attr_lists,
-            );
+            let func_stat =
+                self.parse_local(*start, keyword_position, attributes, true, cst_attr_lists);
             if !crate::rtti::ast_node_is::<
                 crate::records::ast_stat_local_function::AstStatLocalFunction,
             >(func_stat as *mut crate::records::ast_node::AstNode)

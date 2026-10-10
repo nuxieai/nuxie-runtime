@@ -1,0 +1,70 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nuxie-runtime"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[features]
+"editor" = []
+"policy-pass-counter" = []
+"testing" = []
+"strict-fp" = ["nuxie-scripting/strict-fp"]
+"tools" = []
+"threading" = []
+"scriptnet" = ["dep:objc2", "dep:objc2-foundation", "dep:block2", "dep:dispatch2", "dep:web-time"]
+"test-script-signature" = []
+"js-host-seed" = ["dep:js-sys", "dep:wasm-bindgen"]
+"default" = ["js-host-seed", "policy-pass-counter", "testing", "tools"]
+
+[dependencies]
+"serde" = { "version" = "1", "features" = ["derive"] }
+"serde_json" = { "version" = "1" }
+"anyhow" = { "version" = "1" }
+"bytemuck" = { "version" = "1.24", "features" = ["derive"] }
+"regress" = { "version" = "=0.12.0" }
+"url" = { "version" = "=2.5.8" }
+"harfrust" = { "version" = "0.12" }
+"nuxie-script-signature" = { "path" = "../nuxie-script-signature" }
+"nuxie-audio" = { "path" = "../nuxie-audio" }
+"nuxie-binary" = { "path" = "../nuxie-binary" }
+"nuxie-image-codec" = { "path" = "../nuxie-image-codec" }
+"nuxie-render-api" = { "path" = "../nuxie-render-api" }
+"nuxie-schema" = { "path" = "../nuxie-schema" }
+"skrifa" = { "version" = "0.45.1", "path" = "../skrifa", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"taffy" = { "version" = "=0.12.1", "path" = "../taffy", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"unicode-properties" = { "version" = "0.1.4", "default-features" = false, "features" = ["general-category"] }
+"unicode-bidi" = { "version" = "0.3.18" }
+"unicode-script" = { "version" = "0.5.8" }
+"i_overlay" = { "version" = "=8.1.1", "default-features" = false }
+
+[dev-dependencies]
+"nuxie-scripting" = { "path" = "../nuxie-scripting" }
+"nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
+"nuxie-sriv" = { "path" = "../nuxie-sriv" }
+"png" = { "version" = "0.18" }
+"sha2" = { "version" = "0.10" }
+
+[target."cfg(not(all(target_arch = \"wasm32\", target_os = \"unknown\")))".dependencies]
+"libc" = { "version" = "0.2" }
+
+[target."cfg(windows)".dependencies]
+"windows-sys" = { "version" = "0.52", "features" = ["Win32_Foundation", "Win32_System_Performance"] }
+
+[target."cfg(target_vendor = \"apple\")".dependencies]
+"objc2" = { "version" = "0.6.4", "optional" = true }
+"block2" = { "version" = "0.6.2", "optional" = true }
+"dispatch2" = { "version" = "0.3.1", "optional" = true }
+"objc2-foundation" = { "version" = "0.3.2", "optional" = true, "default-features" = false, "features" = ["NSURLSession", "NSURLRequest", "NSURLResponse", "NSURL", "NSURLAuthenticationChallenge", "NSURLProtectionSpace", "NSURLCredential", "NSHTTPCookieStorage", "NSURLCredentialStorage", "NSURLCache", "NSOperation", "NSData", "NSDate", "NSString", "NSError", "NSDictionary", "NSEnumerator", "NSObjCRuntime", "NSObject", "NSURLError", "NSRange", "block2", "std"] }
+
+[target."cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))".dependencies]
+"web-time" = { "version" = "1.1.0", "optional" = true }
+"js-sys" = { "version" = "0.3", "optional" = true }
+"wasm-bindgen" = { "version" = "0.2", "optional" = true }

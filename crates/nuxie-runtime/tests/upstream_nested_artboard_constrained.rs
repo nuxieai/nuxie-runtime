@@ -19,9 +19,11 @@ use std::path::PathBuf;
 fn load(asset: &str, name: &str) -> (RuntimeFileHandle, RuntimeArtboardInstanceHandle) {
     let path = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
         || {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/sync")
-                .join(asset)
+            PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("../../fixtures/sync")
+            .join(asset)
         },
         |root| {
             PathBuf::from(root)

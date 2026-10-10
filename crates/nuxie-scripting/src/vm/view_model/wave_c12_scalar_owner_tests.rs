@@ -433,8 +433,10 @@ fn wave_c12_scalar_017_scripted_blob_property_reads_and_writes_bytes() {
     // property wrapper is intentionally owner-backed, so use the vendored
     // blob schema only to provide that owner; the value, script, calls, and
     // assertions below remain the exact fixture-free upstream sequence.
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/data_bind_blob_test.riv");
+    let fixture = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/data_bind_blob_test.riv");
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
     let file = native_test_file(&bytes);

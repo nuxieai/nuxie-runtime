@@ -16,6 +16,11 @@ import sys
 import tempfile
 import zipfile
 import zlib
+
+try:
+    from .bazel_runtime_build import ANDROID_LABEL, BAZEL_VERSION, BazelRuntime
+except ImportError:
+    from bazel_runtime_build import ANDROID_LABEL, BAZEL_VERSION, BazelRuntime
 from collections.abc import Sequence
 
 
@@ -27,7 +32,6 @@ SIZE_REPORT_NAME = "NuxieRuntimeAndroid-SIZE_REPORT.json"
 ARTIFACT_VERSION = "0.4.12"
 RELEASE_TAG = f"android-runtime-v{ARTIFACT_VERSION}"
 RUST_TOOLCHAIN = "1.94.1"
-CARGO_NDK_VERSION = "4.1.2"
 ANDROID_NDK_VERSION = "29.0.14206865"
 ANDROID_API_LEVEL = 23
 ANDROID_LOAD_ALIGNMENT = 0x4000
@@ -58,6 +62,13 @@ CONTRACT_INPUTS = (
 DISTRIBUTION_INPUTS = (
     "Cargo.lock",
     "Cargo.toml",
+    ".bazelrc",
+    ".bazelversion",
+    "MODULE.bazel",
+    "MODULE.bazel.lock",
+    "bazel/platforms/BUILD.bazel",
+    "tools/bazel_runtime_build.py",
+    "tools/bazel_runtime_query.bzl",
     "crates/nux-capi/Cargo.toml",
     "crates/nux-capi/build.rs",
     "crates/nux-capi/cbindgen.toml",
@@ -68,8 +79,8 @@ DISTRIBUTION_INPUTS = (
     "tools/publish-nux-capi-android-release.sh",
 )
 TOOL_ROLES = {
-    "cargo",
-    "cargo-ndk",
+    "bazel-launcher",
+    "bazel-server",
     "ndk-aarch64-api23-clang",
     "ndk-clang",
     "ndk-ld.lld",
@@ -201,9 +212,7 @@ def build_input_document(
     source_revision: str,
     runtime_version: str,
     source_date_epoch: int,
-    rustc: pathlib.Path,
-    cargo: pathlib.Path,
-    cargo_ndk: pathlib.Path,
+    bazel: BazelRuntime,
     ndk_root: pathlib.Path,
     ndk_host_tag: str,
 ) -> dict[str, object]:
@@ -229,23 +238,16 @@ def build_input_document(
             f"Android NDK must be {ANDROID_NDK_VERSION}, found {ndk_revision or 'unknown'}"
         )
 
-    rustc_version = command_output([str(rustc), "-vV"]).replace("\n", " ")
-    cargo_version = command_output([str(cargo), "-Vv"]).replace("\n", " ")
-    cargo_ndk_version = command_output([str(cargo), "ndk", "--version"])
-    if not rustc_version.startswith(f"rustc {RUST_TOOLCHAIN} "):
-        raise ContractError(f"rustc must be {RUST_TOOLCHAIN}: {rustc_version}")
-    if not cargo_version.startswith(f"cargo {RUST_TOOLCHAIN} "):
-        raise ContractError(f"cargo must be {RUST_TOOLCHAIN}: {cargo_version}")
-    if cargo_ndk_version != f"cargo-ndk {CARGO_NDK_VERSION}":
-        raise ContractError(
-            f"cargo-ndk must be {CARGO_NDK_VERSION}: {cargo_ndk_version}"
-        )
+    evidence = bazel.evidence(ANDROID_LABEL, TARGETS, DISTRIBUTION_INPUTS)
+    rustc = pathlib.Path(evidence["compiler"])
+    rustc_version = evidence["rustc"]
+    bazel_version = evidence["bazel"]
 
     ndk_version = command_output([str(bin_root / "clang"), "--version"]).splitlines()[0]
     shared_version = ndk_version
     tool_paths = {
-        "cargo": cargo,
-        "cargo-ndk": cargo_ndk,
+        "bazel-launcher": bazel.executable,
+        "bazel-server": bazel.installbase / "A-server.jar",
         "ndk-aarch64-api23-clang": bin_root / "aarch64-linux-android23-clang",
         "ndk-clang": bin_root / "clang",
         "ndk-ld.lld": bin_root / "ld.lld",
@@ -260,8 +262,8 @@ def build_input_document(
     }
     python_identity = f"Python {sys.version.split()[0]}; zlib {zlib.ZLIB_VERSION}"
     tool_versions = {
-        "cargo": cargo_version,
-        "cargo-ndk": cargo_ndk_version,
+        "bazel-launcher": bazel_version,
+        "bazel-server": bazel_version,
         "python": python_identity,
         "rustc": rustc_version,
     }
@@ -270,19 +272,8 @@ def build_input_document(
         for role, path in sorted(tool_paths.items())
     ]
 
-    files: list[dict[str, str]] = []
-    for relative in sorted(set(DISTRIBUTION_INPUTS)):
-        path = repo_root / relative
-        if not path.is_file() or path.is_symlink():
-            raise ContractError(f"distribution input is missing or not regular: {relative}")
-        files.append({"path": relative, "sha256": sha256_file(path)})
-
-    rust_libraries: dict[str, str] = {}
-    for target in TARGETS:
-        target_libdir = pathlib.Path(
-            command_output([str(rustc), "--print", "target-libdir", "--target", target])
-        )
-        rust_libraries[target] = directory_digest(target_libdir)
+    files = [{"path": record["path"], "sha256": record["sha256"]} for record in evidence["files"]]
+    rust_libraries = evidence["rustLibraries"]
 
     ndk_runtime_libraries = {
         abi: sha256_file(sysroot_lib / target / "libc++_shared.so")
@@ -296,8 +287,11 @@ def build_input_document(
             "androidNdkSourcePropertiesSha256": sha256_file(source_properties),
             "buildEnvironment": {},
             "buildProfile": "release",
-            "cargo": cargo_version,
-            "cargoNdk": cargo_ndk_version,
+            "buildSystem": "bazel",
+            "bazel": bazel_version,
+            "bazelTarget": ANDROID_LABEL,
+            "bazelPlatforms": evidence["platforms"],
+            "bazelToolBinaries": evidence["toolBinaries"],
             "python": python_identity,
             "rustToolchain": RUST_TOOLCHAIN,
             "rustc": rustc_version,
@@ -306,10 +300,11 @@ def build_input_document(
         "features": FEATURES,
         "files": files,
         "ndkRuntimeLibraries": ndk_runtime_libraries,
+        "packages": evidence["packages"],
         "rootPackage": ROOT_PACKAGE,
         "runtimeVersion": runtime_version,
         "rustLibraries": rust_libraries,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "sourceRevision": source_revision,
         "targets": TARGETS,
         "tools": tools,
@@ -324,6 +319,7 @@ def validate_build_inputs(document: object, encoded: bytes | None = None) -> dic
             "features",
             "files",
             "ndkRuntimeLibraries",
+            "packages",
             "rootPackage",
             "runtimeVersion",
             "rustLibraries",
@@ -336,7 +332,7 @@ def validate_build_inputs(document: object, encoded: bytes | None = None) -> dic
     )
     if encoded is not None and encoded != canonical_json(value):
         raise ContractError("Android build inputs are not canonical JSON")
-    if value["schemaVersion"] != 1 or value["rootPackage"] != ROOT_PACKAGE:
+    if value["schemaVersion"] != 2 or value["rootPackage"] != ROOT_PACKAGE:
         raise ContractError("Android build inputs have the wrong schema or root package")
     require_source_revision(value["sourceRevision"], "build-input sourceRevision")
     require_semver(value["runtimeVersion"], "build-input runtimeVersion")
@@ -352,8 +348,11 @@ def validate_build_inputs(document: object, encoded: bytes | None = None) -> dic
             "androidNdkSourcePropertiesSha256",
             "buildEnvironment",
             "buildProfile",
-            "cargo",
-            "cargoNdk",
+            "buildSystem",
+            "bazel",
+            "bazelTarget",
+            "bazelPlatforms",
+            "bazelToolBinaries",
             "python",
             "rustToolchain",
             "rustc",
@@ -366,16 +365,20 @@ def validate_build_inputs(document: object, encoded: bytes | None = None) -> dic
         or configuration["androidNdk"] != ANDROID_NDK_VERSION
         or configuration["buildEnvironment"] != {}
         or configuration["buildProfile"] != "release"
-        or configuration["cargoNdk"] != f"cargo-ndk {CARGO_NDK_VERSION}"
+        or configuration["buildSystem"] != "bazel"
+        or configuration["bazel"] != f"bazel {BAZEL_VERSION}"
+        or configuration["bazelTarget"] != ANDROID_LABEL
+        or configuration["bazelPlatforms"] != {target: f"//bazel/platforms:{target}" for target in TARGETS}
         or configuration["rustToolchain"] != RUST_TOOLCHAIN
     ):
         raise ContractError("Android build-input configuration is not the pinned release cut")
     if not isinstance(configuration["sourceDateEpoch"], int) or configuration["sourceDateEpoch"] < 0:
         raise ContractError("sourceDateEpoch must be a non-negative integer")
-    if not isinstance(configuration["cargo"], str) or not configuration["cargo"].startswith(
-        f"cargo {RUST_TOOLCHAIN} "
-    ):
-        raise ContractError("build-input Cargo version is not pinned")
+    binaries = configuration["bazelToolBinaries"]
+    if not isinstance(binaries, dict) or not binaries:
+        raise ContractError("Bazel toolchain binary identities are missing")
+    for role, binary_hash in binaries.items():
+        require_sha256(binary_hash, f"Bazel toolchain binary {role}")
     if not isinstance(configuration["rustc"], str) or not configuration["rustc"].startswith(
         f"rustc {RUST_TOOLCHAIN} "
     ):
@@ -405,6 +408,43 @@ def validate_build_inputs(document: object, encoded: bytes | None = None) -> dic
     if missing_distribution_inputs:
         raise ContractError(f"build inputs omit distribution files: {missing_distribution_inputs}")
 
+    packages = value["packages"]
+    if not isinstance(packages, list) or not packages:
+        raise ContractError("Android build inputs contain no configured dependency closure")
+    roots = []
+    identities = []
+    for package in packages:
+        item = require_exact_keys(package, {
+            "checksum", "lockEntryHash", "manifestPath", "name", "resolvedSourceHash",
+            "source", "targets", "version",
+        }, "build-input package")
+        if not all(isinstance(item[key], str) and item[key] for key in ("name", "version")):
+            raise ContractError("build-input package identity is incomplete")
+        identities.append((item["name"], item["version"], item["source"] or ""))
+        if not isinstance(item["targets"], dict) or not item["targets"] or not set(item["targets"]) <= set(TARGETS):
+            raise ContractError("build-input package has an invalid target closure")
+        for features in item["targets"].values():
+            if not isinstance(features, list) or not all(isinstance(feature, str) for feature in features) or features != sorted(set(features)):
+                raise ContractError("build-input package has invalid configured features")
+        if item["source"] is None:
+            if not isinstance(item["manifestPath"], str) or not item["manifestPath"] or item["manifestPath"].startswith("/") or ".." in pathlib.PurePosixPath(item["manifestPath"]).parts:
+                raise ContractError("local build-input package is missing a safe manifest path")
+            if any(item[key] is not None for key in ("checksum", "lockEntryHash", "resolvedSourceHash")):
+                raise ContractError("local build-input package has external source identity")
+        else:
+            if not isinstance(item["source"], str) or not item["source"] or item["manifestPath"] is not None:
+                raise ContractError("external build-input package source is malformed")
+            for key in ("lockEntryHash", "resolvedSourceHash"):
+                require_sha256(item[key], f"external package {key}")
+            if item["source"].startswith("registry+"):
+                require_sha256(item["checksum"], "registry package checksum")
+        if item["name"] == ROOT_PACKAGE:
+            roots.append(item)
+    if identities != sorted(set(identities)):
+        raise ContractError("build-input packages are not unique and sorted")
+    if len(roots) != 1 or roots[0]["targets"] != {target: FEATURES for target in TARGETS}:
+        raise ContractError("build-input package closure has the wrong shipping root or features")
+
     tools = value["tools"]
     if not isinstance(tools, list):
         raise ContractError("Android build inputs tools must be a list")
@@ -420,10 +460,9 @@ def validate_build_inputs(document: object, encoded: bytes | None = None) -> dic
     if roles != sorted(TOOL_ROLES):
         raise ContractError("build-input tool identity does not cover the exact tool set")
     tools_by_role = {record["role"]: record for record in tools}
-    if tools_by_role["cargo-ndk"]["version"] != configuration["cargoNdk"]:
-        raise ContractError("cargo-ndk tool identity differs from configuration")
-    if tools_by_role["cargo"]["version"] != configuration["cargo"]:
-        raise ContractError("Cargo tool identity differs from configuration")
+    for role in ("bazel-launcher", "bazel-server"):
+        if tools_by_role[role]["version"] != configuration["bazel"]:
+            raise ContractError("Bazel tool identity differs from configuration")
     if tools_by_role["rustc"]["version"] != configuration["rustc"]:
         raise ContractError("rustc tool identity differs from configuration")
     if tools_by_role["python"]["version"] != configuration["python"]:
@@ -1061,19 +1100,16 @@ def verify_current_inputs(
         path = repo_root / record["path"]
         if not path.is_file() or sha256_file(path) != record["sha256"]:
             raise ContractError(f"current source differs from build input {record['path']}")
-    rustc_path = pathlib.Path(
-        command_output(["rustup", "which", "--toolchain", RUST_TOOLCHAIN, "rustc"])
-    )
-    cargo_path = pathlib.Path(
-        command_output(["rustup", "which", "--toolchain", RUST_TOOLCHAIN, "cargo"])
-    )
-    cargo_home = pathlib.Path(os.environ.get("CARGO_HOME", pathlib.Path.home() / ".cargo"))
-    cargo_ndk_path = pathlib.Path(
-        os.environ.get("NUX_ANDROID_CARGO_NDK", cargo_home / "bin/cargo-ndk")
-    )
+    bazel = BazelRuntime(repo_root)
+    evidence = bazel.evidence(ANDROID_LABEL, TARGETS, DISTRIBUTION_INPUTS)
+    if evidence["toolBinaries"] != document["configuration"]["bazelToolBinaries"]:
+        raise ContractError("current Bazel toolchain differs from build inputs")
+    if evidence["packages"] != document["packages"]:
+        raise ContractError("current Bazel dependency closure differs from build inputs")
+    rustc_path = pathlib.Path(evidence["compiler"])
     tool_paths = {
-        "cargo": cargo_path,
-        "cargo-ndk": cargo_ndk_path,
+        "bazel-launcher": bazel.executable,
+        "bazel-server": bazel.installbase / "A-server.jar",
         "ndk-aarch64-api23-clang": prebuilt / "bin/aarch64-linux-android23-clang",
         "ndk-clang": prebuilt / "bin/clang",
         "ndk-ld.lld": prebuilt / "bin/ld.lld",
@@ -1093,14 +1129,8 @@ def verify_current_inputs(
     properties_hash = sha256_file(ndk_root / "source.properties")
     if properties_hash != document["configuration"]["androidNdkSourcePropertiesSha256"]:
         raise ContractError("current Android NDK source.properties differs from build input")
-    for target in TARGETS:
-        target_libdir = pathlib.Path(
-            command_output(
-                [str(rustc_path), "--print", "target-libdir", "--target", target]
-            )
-        )
-        if directory_digest(target_libdir) != document["rustLibraries"][target]:
-            raise ContractError(f"current Rust target libraries differ for {target}")
+    if evidence["rustLibraries"] != document["rustLibraries"]:
+        raise ContractError("current Rust target libraries differ from build inputs")
     sysroot_lib = prebuilt / "sysroot/usr/lib"
     for abi, (target, _) in ABI_TARGETS.items():
         if (
@@ -1326,9 +1356,6 @@ def create_parser() -> argparse.ArgumentParser:
     inputs.add_argument("--source-revision", required=True)
     inputs.add_argument("--runtime-version", required=True)
     inputs.add_argument("--source-date-epoch", required=True, type=int)
-    inputs.add_argument("--rustc", required=True, type=pathlib.Path)
-    inputs.add_argument("--cargo", required=True, type=pathlib.Path)
-    inputs.add_argument("--cargo-ndk", required=True, type=pathlib.Path)
     inputs.add_argument("--ndk-root", required=True, type=pathlib.Path)
     inputs.add_argument("--ndk-host-tag", required=True)
 
@@ -1360,9 +1387,7 @@ def main(arguments: Sequence[str]) -> int:
             source_revision=parsed.source_revision,
             runtime_version=parsed.runtime_version,
             source_date_epoch=parsed.source_date_epoch,
-            rustc=parsed.rustc.resolve(),
-            cargo=parsed.cargo.resolve(),
-            cargo_ndk=parsed.cargo_ndk.resolve(),
+            bazel=BazelRuntime(parsed.repo_root),
             ndk_root=parsed.ndk_root.resolve(),
             ndk_host_tag=parsed.ndk_host_tag,
         )

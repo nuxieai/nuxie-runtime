@@ -137,6 +137,9 @@ jobs:
         with:
           path: rive-rust
 
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
+
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
 
@@ -164,6 +167,9 @@ jobs:
     steps:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
+
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
 
       - name: Install Rust stable with wasm target
         run: |
@@ -195,7 +201,7 @@ jobs:
 
 
       - name: Compile exact WebGPU browser artifact
-        run: cargo check --locked -p webgpu-renderer-replay --target wasm32-unknown-unknown
+        run: tools/bazel/runtime.py check --locked -p webgpu-renderer-replay --target wasm32-unknown-unknown
 
       - name: Require exact WebGPU solid-fill pixel content
         env:
@@ -205,7 +211,7 @@ jobs:
           node tools/backend-port/webgpu-content-probe.cjs
 
       - name: Compile exact WebGL2 browser artifact
-        run: cargo check --locked -p webgl2-renderer-replay --target wasm32-unknown-unknown
+        run: tools/bazel/runtime.py check --locked -p webgl2-renderer-replay --target wasm32-unknown-unknown
 
   # Manual closeout lane for the exact browser ports. The Wasm source and
   # candidate products are built once from their frozen source/toolchain pins,
@@ -371,9 +377,10 @@ jobs:
 
       - name: Install exact Rust corpus runner
         run: |
+          tools/bazel/install.sh
           rustup toolchain install 1.94.1 --profile minimal --no-self-update
           rustup run 1.94.1 cargo fetch --locked
-          rustup run 1.94.1 cargo build --locked -p pixel-compare --bin corpus-r
+          tools/bazel/runtime.py build --locked -p pixel-compare --bin corpus-r
 
       - name: Install pinned real browsers
         run: |
@@ -433,6 +440,9 @@ jobs:
           ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
 
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
+
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --no-self-update
 
@@ -468,6 +478,9 @@ jobs:
     steps:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
+
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
 
       - name: Install Rust nightly + cargo-fuzz
         run: |
@@ -507,6 +520,9 @@ jobs:
     steps:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
+
+      - name: Install Bazelisk
+        run: tools/bazel/install.sh
 
       - name: Install Rust stable + clippy
         run: rustup toolchain install stable --profile minimal --component clippy --no-self-update

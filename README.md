@@ -26,13 +26,34 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 The compatibility oracle uses a separate checkout of the upstream C++ runtime:
 
 ```sh
+tools/bazel/install.sh
 export RIVE_RUNTIME_DIR=/path/to/rive-runtime
 make fixtures
-cargo test --workspace
+make test
 make golden-compare
 make scripted-golden-compare
 make capi-smoke
 ```
+
+Rust compilation uses Bazel 9.3.0 and `rules_rust` with Rust 1.94.1. Each crate,
+build script, test, and executable is a direct Bazel target. The package frontend
+keeps familiar selectors and stages complete artifacts under `target/` for the
+existing native and browser consumers:
+
+```sh
+tools/bazel/runtime.py build -p nux-capi
+tools/bazel/runtime.py test -p nux-capi --lib --test capi
+tools/bazel/runtime.py run -p nuxie-codegen -- --help
+```
+
+Cargo manifests remain the dependency and feature authority. Run
+`python3 tools/bazel/generate.py` after changing them and use `--check` to verify
+checked-in targets. `bazel/cargo` contains dependency-resolution stubs;
+compilation always uses the original sources. Patched dependency defaults apply
+through incoming edges, and their tests and examples stay outside the authored
+workspace. Dependency changes require repinning `bazel/cargo/Cargo.Bazel.lock`;
+`--reset-lock` seeds its Cargo input from the authored lockfile. Cargo also remains
+available for formatting and the mandatory compatibility tests.
 
 `make golden-compare` compares deterministic render-call streams from the Rust
 runtime and the upstream C++ reference. The C++ runtime is a development and CI

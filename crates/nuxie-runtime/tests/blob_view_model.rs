@@ -9,8 +9,10 @@ use nuxie_runtime::{
 use nuxie_runtime::source::viewmodel::runtime::viewmodel_instance_value_runtime::DataType;
 
 fn fixture_file() -> RuntimeFileHandle {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/sync/data_bind_blob_test.riv");
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/sync/data_bind_blob_test.riv");
     let bytes = std::fs::read(path).expect("vendored S4-42 blob fixture");
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     File::import(

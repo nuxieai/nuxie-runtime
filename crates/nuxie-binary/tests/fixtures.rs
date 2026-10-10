@@ -21,7 +21,7 @@ use nuxie_schema::definition_by_name;
 use std::path::{Path, PathBuf};
 
 fn fixture(path: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
         .join("../..")
         .join("fixtures")
         .join(path)

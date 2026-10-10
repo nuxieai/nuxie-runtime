@@ -1,0 +1,14 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
+
+package(default_visibility = ["//visibility:public"])
+exports_files(["source-path.bzl"])
+
+config_setting(name = "wasm", constraint_values = ["@platforms//cpu:wasm32"])
+config_setting(name = "macos", constraint_values = ["@platforms//os:osx"])
+config_setting(name = "ios", constraint_values = ["@platforms//os:ios"])
+config_setting(name = "android", constraint_values = ["@platforms//os:android"])
+config_setting(name = "windows", constraint_values = ["@platforms//os:windows"])
+config_setting(name = "linux", constraint_values = ["@platforms//os:linux"])
+selects.config_setting_group(name = "apple", match_any = [":macos", ":ios"])
+selects.config_setting_group(name = "native", match_any = [":macos", ":ios", ":android", ":windows", ":linux"])
+selects.config_setting_group(name = "unix", match_any = [":macos", ":ios", ":android", ":linux"])

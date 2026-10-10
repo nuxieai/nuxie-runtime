@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 const PROVENANCE: &str = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp";
 
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
         .parent()
         .and_then(Path::parent)
         .expect("workspace root")

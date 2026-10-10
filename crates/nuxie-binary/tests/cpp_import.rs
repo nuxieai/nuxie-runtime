@@ -17,7 +17,8 @@ use std::process::Command;
 const RIVE_CPP_CORPUS_ENV: &str = "RIVE_CPP_CORPUS";
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+        .join("../..")
 }
 
 fn reference_runtime_dir() -> PathBuf {

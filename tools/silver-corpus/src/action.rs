@@ -2020,11 +2020,13 @@ seconds = 0.016
             return;
         };
         let runtime_dir = runtime_dir.as_path();
-        let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .expect("silver-corpus crate is nested under the workspace")
-            .to_owned();
+        let workspace = PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .parent()
+        .and_then(Path::parent)
+        .expect("silver-corpus crate is nested under the workspace")
+        .to_owned();
         let manifest = read_manifest(&workspace.join("silver-corpus.toml")).unwrap();
 
         for id in [
@@ -2098,11 +2100,13 @@ seconds = 0.016
             return;
         };
         let runtime_dir = runtime_dir.as_path();
-        let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .expect("silver-corpus crate is nested under the workspace")
-            .to_owned();
+        let workspace = PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .parent()
+        .and_then(Path::parent)
+        .expect("silver-corpus crate is nested under the workspace")
+        .to_owned();
         let manifest = read_manifest(&workspace.join("silver-corpus.toml")).unwrap();
 
         for id in [

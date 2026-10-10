@@ -39,7 +39,8 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+        .join("../..")
 }
 
 #[test]

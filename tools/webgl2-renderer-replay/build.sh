@@ -17,7 +17,7 @@ if [[ ! -x "$WASM_BINDGEN" ]] ||
     --root "$TOOLS_ROOT"
 fi
 
-"$PINNED_CARGO" build \
+python3 "$ROOT/tools/bazel/runtime.py" build \
   --release \
   --package webgl2-renderer-replay \
   --target wasm32-unknown-unknown

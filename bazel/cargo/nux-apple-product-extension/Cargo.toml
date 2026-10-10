@@ -1,0 +1,26 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "nux-apple-product-extension"
+version = "0.10.14"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+
+[features]
+"default" = ["apple-runtime"]
+"apple-runtime" = ["nux-capi/apple-authored-msl", "nux-capi/apple-metal", "nux-capi/scripting"]
+
+[dependencies]
+"nux-capi" = { "path" = "../nux-capi", "default-features" = false }
+"nuxie-project-data-scripting" = { "path" = "../nuxie-project-data-scripting" }
+
+[dev-dependencies]
+"nuxie-project-data" = { "path" = "../nuxie-project-data" }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false }
+"nuxie-schema" = { "path" = "../nuxie-schema" }

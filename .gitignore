@@ -1,4 +1,9 @@
 /target/
+/bazel-bin
+/bazel-out
+/bazel-testlogs
+/bazel-nuxie-runtime
+/build/bazel-config/
 /vendor/*/target/
 /fixtures/**/*.riv
 /fixtures/sync/listener_input_values.rml

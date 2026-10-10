@@ -14,8 +14,10 @@ use nuxie_runtime::{CoreHandle, File, RuntimeFactoryHandle, RuntimeFileHandle};
 fn import_text_with_minor_version(minor: u8) -> RuntimeFileHandle {
     let path = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
         || {
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/sync/fit_font_size_hug_test.riv")
+            std::path::PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("../../fixtures/sync/fit_font_size_hug_test.riv")
         },
         |root| {
             std::path::PathBuf::from(root)

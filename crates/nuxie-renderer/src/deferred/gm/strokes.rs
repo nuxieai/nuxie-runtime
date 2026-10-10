@@ -39,7 +39,10 @@ pub(super) fn check_position_scene(name: &str, draw: impl Fn(&mut dyn Factory, &
     let deferred = render(true);
     assert_eq!(immediate, deferred, "{name}: immediate/deferred pixels");
     let actual = pixel_compare::RgbaImage::new(DIM, DIM, immediate).expect("GM dimensions");
-    let reference = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+    let reference = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join(format!(
         "../../fixtures/renderer/reference/metal/gm/{name}.png"
     ));
     let expected = pixel_compare::RgbaImage::read_png(reference).expect("pinned C++ GM capture");

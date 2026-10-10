@@ -80,7 +80,9 @@ fn cli_preserves_reports_before_counter_excess_failure() {
     let candidate = write_runner(&directory, "candidate.sh", 2);
     let json = directory.join("report.json");
     let markdown = directory.join("report.md");
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml");
+    let manifest =
+        Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+            .join("renderer-scenes.toml");
 
     let output = Command::new(env!("CARGO_BIN_EXE_perf-counter-compare"))
         .args([

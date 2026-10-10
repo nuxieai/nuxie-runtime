@@ -890,8 +890,10 @@ fn step_accepts_nonzero_timestamps_for_every_pointer_kind() {
 #[test]
 fn portable_player_step_does_not_implicitly_execute_product_data_programs() {
     let bytes = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/univ-1995/seeded_button_pointer_vm.riv"),
+        PathBuf::from(
+            option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+        )
+        .join("../../fixtures/univ-1995/seeded_button_pointer_vm.riv"),
     )
     .expect("read exact generated seeded Button regression fixture");
     for timestamp_seconds in [0.0, 123_456.0] {

@@ -1,0 +1,29 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "luaur-vm"
+version = "0.1.8"
+edition = "2021"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = "build.rs"
+
+[lib]
+path = "lib.rs"
+name = "luaur_vm"
+
+[features]
+"cli" = ["native"]
+"__bazel_dependency_default" = ["std"]
+"native" = ["std"]
+"native-codegen" = ["native"]
+"lua_vector_double" = []
+"luai_gcmetrics" = []
+"std" = []
+"wasm" = ["dep:wasm-bindgen"]
+"default" = []
+
+[dependencies]
+"luaur-common" = { "version" = "0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"wasm-bindgen" = { "version" = "0.2", "optional" = true }

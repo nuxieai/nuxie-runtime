@@ -734,10 +734,7 @@ fn every_extern_c_export_is_panic_firewalled() {
         "ffi_guard_with_handle_result(",
         "ffi_guard_with_player_step_result(",
     ];
-    let source = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
-    )
-    .expect("read nux-capi src/lib.rs");
+    let source = include_str!("../src/lib.rs");
 
     let mut checked = 0usize;
     for (index, _) in source.match_indices("pub unsafe extern \"C\" fn ") {

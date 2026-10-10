@@ -342,7 +342,10 @@ impl FileAssetLoader for MatrixAssetLoader {
 fn the_generated_layout_matrix_conforms() {
     let (dir, assets) = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
         || {
-            let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/sync/layout");
+            let root = PathBuf::from(
+                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+            )
+            .join("../../fixtures/sync/layout");
             (root.join("matrix"), root.join("assets"))
         },
         |root| {

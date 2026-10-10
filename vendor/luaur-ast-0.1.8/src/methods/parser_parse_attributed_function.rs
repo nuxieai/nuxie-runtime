@@ -10,9 +10,8 @@ use crate::records::temp_vector::TempVector;
 
 impl Parser {
     pub fn parse_attributed_function(&mut self, start: Location) -> *mut AstExpr {
-        let mut cst_attr_lists = TempVector::<*mut CstAttrList>::new(
-            &mut self.scratch_cst_attr_list,
-        );
+        let mut cst_attr_lists =
+            TempVector::<*mut CstAttrList>::new(&mut self.scratch_cst_attr_list);
         let cst_attr_lists_ptr = &mut cst_attr_lists as *mut _;
         let attributes: AstArray<*mut AstAttr> = self.parse_attributes(cst_attr_lists_ptr);
 

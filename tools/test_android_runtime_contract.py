@@ -14,7 +14,7 @@ from tools.android_runtime_contract import ABIS
 from tools.android_runtime_contract import ANDROID_API_LEVEL
 from tools.android_runtime_contract import ANDROID_NDK_VERSION
 from tools.android_runtime_contract import ARTIFACT_NAME
-from tools.android_runtime_contract import CARGO_NDK_VERSION
+from tools.bazel_runtime_build import ANDROID_LABEL, BAZEL_VERSION
 from tools.android_runtime_contract import CONTRACT_INPUTS
 from tools.android_runtime_contract import ContractError
 from tools.android_runtime_contract import DISTRIBUTION_INPUTS
@@ -58,8 +58,11 @@ def valid_inputs() -> dict[str, object]:
             "androidNdkSourcePropertiesSha256": "5" * 64,
             "buildEnvironment": {},
             "buildProfile": "release",
-            "cargo": f"cargo {RUST_TOOLCHAIN} (a" + "1" * 40 + ")",
-            "cargoNdk": f"cargo-ndk {CARGO_NDK_VERSION}",
+            "buildSystem": "bazel",
+            "bazel": f"bazel {BAZEL_VERSION}",
+            "bazelTarget": ANDROID_LABEL,
+            "bazelPlatforms": {target: f"//bazel/platforms:{target}" for target in TARGETS},
+            "bazelToolBinaries": {"bazel-launcher": "6" * 64},
             "python": "Python 3.14.0; zlib 1.3.1",
             "rustToolchain": RUST_TOOLCHAIN,
             "rustc": f"rustc {RUST_TOOLCHAIN} (b" + "2" * 39 + ")",
@@ -71,10 +74,16 @@ def valid_inputs() -> dict[str, object]:
             for path in sorted(set(DISTRIBUTION_INPUTS))
         ],
         "ndkRuntimeLibraries": {abi: "2" * 64 for abi in ABIS},
+        "packages": [{
+            "name": "nux-capi", "version": "0.9.0", "source": None,
+            "checksum": None, "lockEntryHash": None, "resolvedSourceHash": None,
+            "manifestPath": "crates/nux-capi/Cargo.toml",
+            "targets": {target: FEATURES for target in TARGETS},
+        }],
         "rootPackage": "nux-capi",
         "runtimeVersion": "0.9.0",
         "rustLibraries": {target: "3" * 64 for target in TARGETS},
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "sourceRevision": "a" * 40,
         "targets": TARGETS,
         "tools": [
@@ -83,10 +92,8 @@ def valid_inputs() -> dict[str, object]:
                 "role": role,
                 "sha256": "4" * 64,
                 "version": (
-                    f"cargo {RUST_TOOLCHAIN} (a" + "1" * 40 + ")"
-                    if role == "cargo"
-                    else f"cargo-ndk {CARGO_NDK_VERSION}"
-                    if role == "cargo-ndk"
+                    f"bazel {BAZEL_VERSION}"
+                    if role in ("bazel-launcher", "bazel-server")
                     else f"rustc {RUST_TOOLCHAIN} (b" + "2" * 39 + ")"
                     if role == "rustc"
                     else "Python 3.14.0; zlib 1.3.1"
@@ -141,7 +148,7 @@ class BuildInputContractTests(unittest.TestCase):
             ("configuration", "androidApiLevel", 24),
             ("configuration", "androidNdk", "27.0.0"),
             ("configuration", "buildProfile", "release-size"),
-            ("configuration", "cargoNdk", "cargo-ndk 4.1.1"),
+            ("configuration", "bazel", "bazel 9.2.0"),
             ("configuration", "rustToolchain", "stable"),
         )
         for _, key, replacement in mutations:
@@ -577,7 +584,8 @@ class PipelineContractTests(unittest.TestCase):
             RELEASE_TAG,
             "Rust".lower(),
             "1.94.1",
-            "4.1.2",
+            "9.3.0",
+            ANDROID_LABEL,
             "29.0.14206865",
             "android-api: 23",
             "arm64-v8a x86_64",
@@ -586,12 +594,6 @@ class PipelineContractTests(unittest.TestCase):
             "DT_NEEDED",
         ):
             self.assertIn(expected, plan.lower() if expected == "rust" else plan)
-
-    def test_builder_invokes_cargo_ndk_as_a_cargo_subcommand(self) -> None:
-        builder = (REPO_ROOT / "tools/build-nux-capi-android.sh").read_text()
-        self.assertIn('"${rust_cargo}" ndk --version', builder)
-        self.assertIn('"${rust_cargo}" ndk \\', builder)
-        self.assertNotIn('"${cargo_ndk}" --version', builder)
 
     def test_release_tag_cli_and_publisher_reject_an_old_cut(self) -> None:
         tag = subprocess.run(

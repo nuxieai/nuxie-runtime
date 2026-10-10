@@ -53,6 +53,20 @@ impl Weight {
         &mut self.translation
     }
 
+    /// A cubic vertex reads its weight as a CubicWeight, so a base Weight
+    /// cannot be used to deform it.
+    pub fn fits_vertex(
+        &self,
+        vertex: &dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> bool {
+        !crate::mechanical_port::source::core::CoreObject::is_type_of(
+            vertex,
+            crate::mechanical_port::source::generated::shapes::cubic_vertex_base::CubicVertexBase::TYPE_KEY,
+        ) || self.base.base.base.base.is_type_of(
+            crate::mechanical_port::source::generated::bones::cubic_weight_base::CubicWeightBase::TYPE_KEY,
+        )
+    }
+
     pub fn on_added_dirty(
         &mut self,
         this: CoreHandle,
@@ -70,7 +84,7 @@ impl Weight {
                 if !crate::mechanical_port::source::core::CoreObject::is_type_of(
                     parent,
                     crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::TYPE_KEY,
-                ) {
+                ) || !self.fits_vertex(parent) {
                     return StatusCode::MissingObject;
                 }
                 let Some(vertex) = parent.as_vertex_behavior_mut() else {

@@ -135,6 +135,10 @@ pub struct DataBind {
     source: Option<CoreHandle>,
     context_value: Option<RuntimeBindContextValue>,
     converter: Option<CoreHandle>,
+    // Whether the converter's type may advance, once asked; a converter that
+    // may not advance answers advance with false and changes nothing.
+    // Cleared whenever the converter changes.
+    converter_may_advance: std::cell::Cell<Option<bool>>,
     container: Option<DataBindContainerOwner>,
     file: RuntimeFileWeakHandle,
     changed_callback: Option<fn()>,
@@ -163,6 +167,7 @@ impl Default for DataBind {
             source: None,
             context_value: None,
             converter: None,
+            converter_may_advance: std::cell::Cell::new(None),
             container: None,
             file: RuntimeFileWeakHandle::default(),
             changed_callback: None,
@@ -469,17 +474,43 @@ impl DataBind {
     }
 
     pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
-        let converter = owner
+        let Some((converter, may_advance)) = owner
             .with(|owner| {
                 let bind = owner.as_data_bind().unwrap();
-                if bind.source.is_some() && !bind.has_flag(COLLAPSED) {
+                if bind.source.is_some()
+                    && !bind.has_flag(COLLAPSED)
+                    && bind.converter_may_advance.get() != Some(false)
+                {
                     bind.converter()
+                        .map(|converter| (converter, bind.converter_may_advance.get()))
                 } else {
                     None
                 }
             })
-            .flatten();
-        converter.is_some_and(|converter| {
+            .flatten()
+        else {
+            return false;
+        };
+        if may_advance.is_none() {
+            let may_advance = converter
+                .with(|converter| {
+                    converter
+                        .as_data_converter_capability()
+                        .map_or(true, |converter| converter.may_advance())
+                })
+                .unwrap_or(true);
+            owner.with(|owner| {
+                owner
+                    .as_data_bind()
+                    .unwrap()
+                    .converter_may_advance
+                    .set(Some(may_advance))
+            });
+            if !may_advance {
+                return false;
+            }
+        }
+        Some(converter).is_some_and(|converter| {
             converter
                 .with_mut(|converter| {
                     converter
@@ -1076,6 +1107,7 @@ impl DataBind {
     }
 
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {
+        self.converter_may_advance.set(None);
         self.converter = value;
     }
 

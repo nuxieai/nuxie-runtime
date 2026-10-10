@@ -155,6 +155,19 @@ impl Path {
         owner: &CoreHandle,
         dirt: ComponentDirt,
     ) {
+        Self::update_occurrence_after::<T>(owner, dirt, |_, _| {});
+    }
+
+    /// Path::update for an owner whose own update runs `before` and then
+    /// Path::update (PointsPath's skin deformation), with both on one loan of
+    /// the receiver.
+    pub(crate) fn update_occurrence_after<
+        T: crate::mechanical_port::source::transform_component::TransformUpdate,
+    >(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        before: fn(&mut T, ComponentDirt),
+    ) {
         // Every registered Path owner inherits Node's world-update prefix.
         // Keep the actual native receiver through the adjacent pure local work.
         // Without constraints nothing else runs before the rebuild, so the
@@ -165,6 +178,7 @@ impl Path {
         let prefix = owner
             .with_mut(|object| {
                 if let Some(object) = (object as &mut dyn std::any::Any).downcast_mut::<T>() {
+                    before(object, dirt);
                     object
                         .as_path_mut()
                         .expect("Path receiver")
@@ -194,6 +208,7 @@ impl Path {
                     return Prefix::Native;
                 }
                 if let Some(object) = object.as_any_mut().downcast_mut::<T>() {
+                    before(object, dirt);
                     object
                         .as_path_mut()
                         .expect("Path receiver")

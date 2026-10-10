@@ -544,6 +544,13 @@ impl RuntimeDrawableOccurrence {
         self.with_proxy(|proxy| proxy.proxy_drawing.layer_mask_marker())
             .flatten()
     }
+    /// The layer mask operation this occurrence marks, if it is a mask proxy.
+    pub(crate) fn layer_mask_op(&self) -> Option<crate::mechanical_port::source::layer_mask::LayerMaskOp> {
+        match self {
+            Self::Authored(_) => None,
+            Self::RuntimeProxy(_) => self.layer_mask_marker().map(|m| m.borrow().op),
+        }
+    }
     pub fn is_mask_start(&self) -> bool {
         self.layer_mask_marker().is_some_and(|m| {
             m.borrow().op == crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskStart

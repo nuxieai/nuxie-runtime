@@ -3748,7 +3748,8 @@ impl Artboard {
                         pending.draw(renderer);
                     }
                 }
-                if current.is_mask_start() {
+                let mask_op = current.layer_mask_op();
+                if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskStart) {
                     let end = current
                         .layer_mask_marker()
                         .unwrap()
@@ -3762,7 +3763,7 @@ impl Artboard {
                     }
                     break 'draw;
                 }
-                if current.is_mask_end() {
+                if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskEnd) {
                     break 'draw;
                 }
                 let visitor = if let Some(receiver) = runtime_receiver.as_ref() {

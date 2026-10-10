@@ -23,7 +23,7 @@ use crate::mechanical_port::source::{
     bones::{bone::Bone, root_bone::RootBone, skin::Skin},
     core::CoreObject,
     node::Node as NodeObject,
-    shapes::{path_cells::PathCells, shape_cells::ShapeCells},
+    shapes::{path_cells::PathCells, shape::Shape, shape_cells::ShapeCells},
     world_transform_component::{PlainTransform, Translation},
 };
 use std::any::Any;
@@ -415,7 +415,7 @@ impl ComponentGraph {
         }
         node.dirt.set(ComponentDirt::NONE);
         if let Some(transform) = &self.transforms[i] {
-            transform.update(dirt);
+            transform.update(self.authored(i), dirt);
             return true;
         }
         let handle = self.authored(i);
@@ -428,17 +428,25 @@ impl ComponentGraph {
     }
 }
 
-/// The cells-only update of a concrete Node, Bone or RootBone that has no
-/// constraints and whose parent, if any, is a TransformComponent (so its child
-/// opacity is TransformComponent::childOpacity).
+/// The cells-only update of a concrete Node, Bone, RootBone or Shape (without
+/// a layout participant) that has no constraints and whose parent, if any, is
+/// a TransformComponent (so its child opacity is
+/// TransformComponent::childOpacity).
 fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
     let actual: &dyn Any = object;
+    let mut after: Option<fn(&CoreHandle, ComponentDirt)> = None;
     let (translation, node) = if actual.is::<NodeObject>() {
         (Translation::Own, true)
     } else if actual.is::<RootBone>() {
         (Translation::Own, false)
     } else if actual.is::<Bone>() {
         (Translation::ParentLength, false)
+    } else if let Some(shape) = actual.downcast_ref::<Shape>() {
+        if shape.has_layout_participant() {
+            return None;
+        }
+        after = Some(shape_after_transform);
+        (Translation::Own, true)
     } else {
         return None;
     };
@@ -470,7 +478,15 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
         parent,
         translation,
         node,
+        after,
     })
+}
+
+/// Shape::update after TransformComponent::update: propagate render opacity.
+fn shape_after_transform(owner: &CoreHandle, dirt: ComponentDirt) {
+    if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+        owner.with_downcast_mut::<Shape, _>(|shape| shape.update_after_transform_super(dirt));
+    }
 }
 
 #[inline]

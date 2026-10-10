@@ -28,3 +28,6 @@ path = "lib.rs"
 
 [dev-dependencies]
 "nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
+
+[target."cfg(target_os = \"macos\")".dependencies]
+"libc" = { "version" = "0.2" }

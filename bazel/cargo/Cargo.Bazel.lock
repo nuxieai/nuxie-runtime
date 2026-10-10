@@ -1,5 +1,5 @@
 {
-  "checksum": "d84fd08757bd5cd8a678c1d7fb68923cc71657ab14c9eb2c80d248cd6255200e",
+  "checksum": "78d1536244dbb1b061f6fb440ba03bea65f9319079c0a81607c5915534a7e7cd",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -165,6 +165,10 @@
       "x86_64-linux-android"
     ],
     "cfg(target_os = \"hermit\")": [],
+    "cfg(target_os = \"macos\")": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin"
+    ],
     "cfg(target_os = \"netbsd\")": [],
     "cfg(target_os = \"solaris\")": [],
     "cfg(target_os = \"vxworks\")": [],
@@ -7694,16 +7698,26 @@
         "crate_features": [
           "default"
         ],
-        "deps": [
-          {
-            "id": "anyhow 1.0.103",
-            "target": "anyhow"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.103",
+              "target": "anyhow"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            }
+          ],
+          "selects": {
+            "cfg(target_os = \"macos\")": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ]
           }
-        ],
+        },
         "edition": "2024"
       },
       "library_target_name": "rust_golden_runner",

@@ -1316,7 +1316,7 @@ impl Component {
         match &self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt,
             ComponentDirtStorage::Graph(binding) => binding.dirt.get(),
-            ComponentDirtStorage::Shared(shared) => shared.get(),
+            ComponentDirtStorage::Shared(shared) => Self::shared_dirt(shared),
             ComponentDirtStorage::Artboard(dirty) => Self::artboard_dirt(dirty),
         }
     }
@@ -1328,13 +1328,24 @@ impl Component {
         dirty.component_dirt()
     }
 
+    // Likewise for dirt shared with hot cells, which those cells mostly read.
+    #[inline(never)]
+    fn shared_dirt(shared: &SharedDirt) -> ComponentDirt {
+        shared.get()
+    }
+
     pub fn set_dirt(&mut self, value: ComponentDirt) {
         match &mut self.dirt {
             ComponentDirtStorage::Inline(dirt) => *dirt = value,
             ComponentDirtStorage::Graph(binding) => binding.dirt.set(value),
-            ComponentDirtStorage::Shared(shared) => shared.set(value),
+            ComponentDirtStorage::Shared(shared) => Self::set_shared_dirt(shared, value),
             ComponentDirtStorage::Artboard(dirty) => dirty.set_component_dirt(value),
         }
+    }
+
+    #[inline(never)]
+    fn set_shared_dirt(shared: &SharedDirt, value: ComponentDirt) {
+        shared.set(value);
     }
 
     /// Mutate only retained dirt state. The central virtual action sequences

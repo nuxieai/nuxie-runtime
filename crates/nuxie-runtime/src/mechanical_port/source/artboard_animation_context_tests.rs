@@ -22,11 +22,12 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
-fn context(root: &RuntimeArtboardInstanceHandle) -> RuntimeArtboardObjectContext {
+fn context(root: &RuntimeArtboardInstanceHandle) -> RuntimeArtboardObjectContext<'static> {
     let handle = root.core_handle();
     RuntimeArtboardObjectContext {
         arena: handle.retain_arena().unwrap(),
         root: handle,
+        instance: None,
     }
 }
 
@@ -280,6 +281,7 @@ fn authored_projection_runs_once_per_lookup_even_with_non_artboard_type_key() {
     let lookup = RuntimeArtboardObjectContext {
         arena,
         root: root.clone(),
+        instance: None,
     };
     calls.set(0);
     assert_eq!(lookup.resolve_handle(0), Some(first));

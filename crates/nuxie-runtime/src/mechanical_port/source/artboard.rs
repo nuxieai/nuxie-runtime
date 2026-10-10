@@ -483,13 +483,9 @@ impl KeyedObjectContext for ArtboardObjectContext {
             .unwrap_or(false)
     }
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
-        object
-            .with_mut(|object| {
-                object
-                    .overrides_keyed_interpolation(key as i32)
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false)
+        crate::mechanical_port::source::animation::keyed_object::interpolator_host_overrides(
+            object, key,
+        )
     }
 }
 impl LinearAnimationArtboard for ArtboardObjectContext {
@@ -512,6 +508,16 @@ impl LinearAnimationArtboard for ArtboardObjectContext {
     ) {
         KeyedObject::apply_occurrence(object, self, time, mix, context);
     }
+    fn apply_keyed_object_cells(
+        &mut self,
+        _object: &CoreHandle,
+        cells: &crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_cells(cells, self, time, mix, context);
+    }
 }
 
 // Runtime callbacks receive the live Artboard in pinned C++. Resolve its
@@ -519,24 +525,34 @@ impl LinearAnimationArtboard for ArtboardObjectContext {
 // The root borrow is released before the resolved occurrence is invoked, so
 // keyed properties and joysticks remain free to synchronously dirty the same
 // Artboard.
-struct RuntimeArtboardObjectContext {
+struct RuntimeArtboardObjectContext<'a> {
     arena: CoreArena,
     root: CoreHandle,
+    // The caller's runtime instance that `root` named when an animation began
+    // applying; borrowed, so the context never prolongs it.
+    instance: Option<&'a RuntimeArtboardInstanceHandle>,
 }
 
-impl CoreContext for RuntimeArtboardObjectContext {
+impl CoreContext for RuntimeArtboardObjectContext<'_> {
     fn core_arena(&self) -> &CoreArena {
         &self.arena
     }
 
     fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+        // While the root still names the instance this context was built
+        // for, read that instance's object table as with_artboard would.
+        if let Some(instance) = &self.instance
+            && self.root.names_runtime_artboard(Rc::as_ptr(&instance.0))
+        {
+            return instance.with_artboard(|artboard| artboard.base.resolve_handle(id));
+        }
         self.root
             .with_artboard(|artboard| artboard.resolve_handle(id))
             .flatten()
     }
 }
 
-impl KeyedObjectContext for RuntimeArtboardObjectContext {
+impl KeyedObjectContext for RuntimeArtboardObjectContext<'_> {
     fn resolves_object(&self, id: u32) -> bool {
         self.resolve_handle(id).is_some()
     }
@@ -554,17 +570,13 @@ impl KeyedObjectContext for RuntimeArtboardObjectContext {
     }
 
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
-        object
-            .with_mut(|object| {
-                object
-                    .overrides_keyed_interpolation(key as i32)
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false)
+        crate::mechanical_port::source::animation::keyed_object::interpolator_host_overrides(
+            object, key,
+        )
     }
 }
 
-impl LinearAnimationArtboard for RuntimeArtboardObjectContext {
+impl LinearAnimationArtboard for RuntimeArtboardObjectContext<'_> {
     fn apply_keyed_object(
         &mut self,
         object: CoreHandle,
@@ -583,6 +595,16 @@ impl LinearAnimationArtboard for RuntimeArtboardObjectContext {
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
         KeyedObject::apply_occurrence(object, self, time, mix, context);
+    }
+    fn apply_keyed_object_cells(
+        &mut self,
+        _object: &CoreHandle,
+        cells: &crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_cells(cells, self, time, mix, context);
     }
 }
 
@@ -1079,6 +1101,7 @@ impl Artboard {
         let mut context = RuntimeArtboardObjectContext {
             arena,
             root: root.clone(),
+            instance: None,
         };
         root.with_downcast_mut::<Artboard, _>(|artboard| {
             artboard
@@ -3192,6 +3215,7 @@ impl Artboard {
                 RuntimeArtboardObjectContext {
                     arena,
                     root: root.clone(),
+                    instance: None,
                 },
             )
         });
@@ -6230,11 +6254,9 @@ impl KeyedObjectContext for Artboard {
     }
 
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
-        object
-            .with_mut(|object| {
-                CoreCapabilities::overrides_keyed_interpolation(object, key as i32).unwrap_or(false)
-            })
-            .unwrap_or(false)
+        crate::mechanical_port::source::animation::keyed_object::interpolator_host_overrides(
+            object, key,
+        )
     }
 }
 
@@ -6608,7 +6630,11 @@ impl RuntimeArtboardInstanceHandle {
         let arena = root
             .retain_arena()
             .expect("live Artboard animation retains its object arena");
-        let mut target = RuntimeArtboardObjectContext { arena, root };
+        let mut target = RuntimeArtboardObjectContext {
+            arena,
+            root,
+            instance: Some(self),
+        };
         animation.apply(&mut target, time, mix, context);
     }
     pub(crate) fn apply_linear_animation_owner(
@@ -6622,7 +6648,11 @@ impl RuntimeArtboardInstanceHandle {
         let arena = root
             .retain_arena()
             .expect("live Artboard animation retains its object arena");
-        let mut target = RuntimeArtboardObjectContext { arena, root };
+        let mut target = RuntimeArtboardObjectContext {
+            arena,
+            root,
+            instance: Some(self),
+        };
         animation.apply(&mut target, time, mix, context);
     }
     pub fn state_machine_instance_handle(
@@ -7465,6 +7495,16 @@ impl LinearAnimationArtboard for Artboard {
     ) {
         KeyedObject::apply_occurrence(object, self, time, mix, context);
     }
+    fn apply_keyed_object_cells(
+        &mut self,
+        _object: &CoreHandle,
+        cells: &crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_cells(cells, self, time, mix, context);
+    }
 }
 
 impl LinearAnimationArtboard for ArtboardInstance {
@@ -7486,6 +7526,16 @@ impl LinearAnimationArtboard for ArtboardInstance {
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
         KeyedObject::apply_occurrence(object, &mut self.base, time, mix, context);
+    }
+    fn apply_keyed_object_cells(
+        &mut self,
+        _object: &CoreHandle,
+        cells: &crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        KeyedObject::apply_cells(cells, &mut self.base, time, mix, context);
     }
 }
 

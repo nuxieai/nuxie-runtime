@@ -3313,10 +3313,14 @@ pub fn drawable_draw_handle(
     let Some((core_type, is_type_of)) = handle.type_metadata() else {
         return false;
     };
-    // The concrete Shape uses the ordinary virtual draw, not an occurrence-
-    // only protocol. Avoid probing unrelated protocols on this common owner.
+    // The concrete Shape, Text and LayoutComponent use the ordinary virtual
+    // draw, not an occurrence-only protocol: none of the predicates below
+    // matches them. Avoid probing unrelated protocols on these common owners.
     if core_type
         == crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY
+        || core_type == crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY
+        || core_type
+            == crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY
     {
         return handle
             .with_mut(|owner| owner.drawable_draw(renderer))

@@ -475,6 +475,33 @@ impl RuntimeDrawableOccurrence {
     /// Keep emptyClipCount's mutable access separate, and end this access before
     /// pending clips or the drawable call the renderer. The virtual predicates
     /// retain their source order and short circuits.
+    /// One draw-range step before drawing: add this drawable's emptyClipCount
+    /// to `empty_clips`, then classify it. A generated Drawable type answers
+    /// emptyClipCount with Drawable's own 0 (only clipping operations and
+    /// proxies count), so its mutable call has nothing to observe and the step
+    /// is the shared-receiver prelude alone. Any other occurrence keeps the
+    /// separate mutable call, in source order.
+    pub(crate) fn draw_range_step(
+        &self,
+        empty_clips: &mut i32,
+        has_pending_clips: bool,
+    ) -> DrawRangePrelude {
+        if let Self::Authored(handle) = self
+            && handle.core_type().is_some_and(|key| {
+                key == DrawableBase::TYPE_KEY
+                    || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                        key,
+                        DrawableBase::TYPE_KEY,
+                    )
+            })
+        {
+            return self.draw_range_prelude(*empty_clips > 0, has_pending_clips);
+        }
+        let previous = *empty_clips;
+        *empty_clips += self.empty_clip_count();
+        self.draw_range_prelude(*empty_clips != previous || *empty_clips > 0, has_pending_clips)
+    }
+
     pub(crate) fn draw_range_prelude(
         &self,
         suppressed_by_empty_clip: bool,

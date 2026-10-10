@@ -6,6 +6,7 @@ import filecmp
 import hashlib
 import json
 import os
+import platform as host_platform
 import re
 import shlex
 import shutil
@@ -122,8 +123,8 @@ def materialize(options, packages):
     def label_for(name, suffix):
         package = packages[name]
         if suffix == "host":
-            return f"//{package.directory.relative_to(ROOT)}:{name}__host"
-        return f"//{directory.relative_to(ROOT)}/{name}:{name}" + ("__" + suffix if suffix else "")
+            return f"//{package.directory.relative_to(ROOT).as_posix()}:{name}__host"
+        return f"//{directory.relative_to(ROOT).as_posix()}/{name}:{name}" + ("__" + suffix if suffix else "")
 
     reachable = set(roots)
     pending = list(roots)
@@ -134,7 +135,7 @@ def materialize(options, packages):
                 pending.append(dep.local)
     for name in sorted(reachable):
         package = packages[name]
-        owner = "//" + str(package.directory.relative_to(ROOT))
+        owner = "//" + package.directory.relative_to(ROOT).as_posix()
         destination = directory / name
         destination.mkdir(parents=True, exist_ok=True)
         authored = package.directory.relative_to(ROOT).parts[0] != "vendor"
@@ -145,7 +146,7 @@ def materialize(options, packages):
     labels = []
     for name in selected:
         package = packages[name]
-        prefix = f"//{directory.relative_to(ROOT)}/{name}:"
+        prefix = f"//{directory.relative_to(ROOT).as_posix()}/{name}:"
         build = (directory / name / "BUILD.bazel").read_text()
         targets = re.findall(r'name = "([^"]+)"', build)
         product = name + ("__test" if testing else "")
@@ -194,10 +195,15 @@ def target_configuration(triple):
 
 def bazel_command():
     configured = os.environ.get("NUXIE_BAZEL_BIN") or os.environ.get("BAZEL")
+    install_roots = [ROOT / "target/bazel-tools", ROOT, ROOT.parent.parent]
+    if sys.platform == "win32":
+        architecture = {"amd64": "amd64", "x86_64": "amd64", "arm64": "arm64", "aarch64": "arm64"}.get(host_platform.machine().lower())
+        # Python cannot execute npm's extensionless Unix shim on Windows.
+        npm_binary = Path("node_modules/@bazel/bazelisk") / f"bazelisk-windows_{architecture}.exe"
+    else:
+        npm_binary = Path("node_modules/.bin/bazelisk")
     candidates = [configured] if configured else [
-        str(ROOT / "target/bazel-tools/node_modules/.bin/bazelisk"),
-        str(ROOT / "node_modules/.bin/bazelisk"),
-        str(ROOT.parent.parent / "node_modules/.bin/bazelisk"),
+        *[str(directory / npm_binary) for directory in install_roots],
         shutil.which("bazelisk"), shutil.which("bazel"),
     ]
     executable = next((item for item in candidates if item and (Path(item).is_file() or shutil.which(item))), None)
@@ -226,6 +232,12 @@ def publish_artifact(source, destination):
         os.replace(scratch, destination)
     finally:
         Path(scratch).unlink(missing_ok=True)
+
+
+def executable_product(path):
+    if sys.platform == "win32":
+        return path.suffix.lower() == ".exe"
+    return os.access(path, os.X_OK) and path.suffix not in (".a", ".so", ".dylib", ".rlib")
 
 
 def main():
@@ -276,9 +288,9 @@ def main():
                 publish_artifact(source, destination)
                 products.append(destination)
                 if options["json"]:
-                    print(json.dumps({"reason": "compiler-artifact", "executable": str(destination) if os.access(destination, os.X_OK) else None, "filenames": [str(destination)], "target": {"name": options["selector"] or destination.name}, "profile": {"test": options["command"] == "test"}}))
+                    print(json.dumps({"reason": "compiler-artifact", "executable": str(destination) if executable_product(destination) else None, "filenames": [str(destination)], "target": {"name": options["selector"] or destination.name}, "profile": {"test": options["command"] == "test"}}))
         if options["command"] == "run":
-            executables = [path for path in products if os.access(path, os.X_OK) and path.suffix not in (".a", ".so", ".dylib", ".rlib")]
+            executables = [path for path in products if executable_product(path)]
             if len(executables) != 1:
                 raise ValueError("run requires exactly one binary or example")
             return subprocess.run([str(executables[0]), *runtime_args], cwd=ROOT).returncode

@@ -83,7 +83,7 @@ def main():
     def label_for(name, variant):
         package = packages[name]
         suffix = "__" + variant if variant else ""
-        return f"//{package.directory.relative_to(ROOT)}:{name}{suffix}"
+        return f"//{package.directory.relative_to(ROOT).as_posix()}:{name}{suffix}"
 
     for package in packages.values():
         content = render_package(
@@ -101,7 +101,7 @@ def main():
         'filegroup(name = "fixtures", srcs = glob(["fixtures/**", "defs/**", "silver-corpus.toml", "tools/renderer-timing-gate.sh"], allow_empty = True) + [package_label("crates/nuxie-schema:src/generated/schema.rs")])',
         'filegroup(name = "workspace", srcs = [package_label(label) for label in ' + json.dumps(sorted(label_for(name, "")[2:] for name in workspace_names)) + '])',
         'test_suite(name = "unit_tests", tests = [package_label(label) for label in ' + json.dumps(sorted(
-            f"{package.directory.relative_to(ROOT)}:{package.name}__unit_test"
+            f"{package.directory.relative_to(ROOT).as_posix()}:{package.name}__unit_test"
             for package in packages.values()
             if package.directory.parent.name == "crates" and (package.directory / package.manifest.get("lib", {}).get("path", "src/lib.rs")).is_file()
         )) + '])',

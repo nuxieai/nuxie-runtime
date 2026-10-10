@@ -62,6 +62,11 @@ workspace. Dependency changes require repinning `bazel/cargo/Cargo.Bazel.lock`;
 `--reset-lock` seeds its Cargo input from the authored lockfile. Cargo also remains
 available for formatting and the mandatory compatibility tests.
 
+The diagnostic `renderer-native-metal-platform-matrix` retains Cargo's nightly
+`build-std` path for tvOS and visionOS. Cargo also builds the frozen historical
+WebGL2 source oracle and drives `cargo-fuzz`; these specialist paths are outside
+the normal local, CI, and shipping artifact Bazel frontends.
+
 The `audio-device`, native Metal replay, and `scriptnet` tool cuts resolve through
 `bazel/native-tools-cargo` and `runtime_native_tools_crates`. Their optional
 external features stay separate from the SDK shipping dependency pins. Repin

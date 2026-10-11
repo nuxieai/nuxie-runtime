@@ -17,6 +17,7 @@ const WATERMARK_BACKDROP_COLOR: u32 = 0xff000000;
 use super::engine_clock::now_micros;
 
 // Preserve the existing Rust entry point for import-free Wasm embedders.
+/// Sets the monotonic clock for the whole engine, including text input and scrolling.
 #[cfg(all(
     target_arch = "wasm32",
     target_os = "unknown",

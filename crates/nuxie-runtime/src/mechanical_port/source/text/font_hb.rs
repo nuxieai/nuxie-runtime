@@ -314,6 +314,9 @@ pub struct HbFont {
     has_png: bool,
     palette_colors: Vec<skrifa::color::Color>,
     color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
+    // Shape plans built for this face, as HarfBuzz caches them per face; a
+    // plan is a function of its segment properties, instance and features.
+    shape_plans: Mutex<Vec<harfrust::ShapePlan>>,
 }
 
 /// A mapped face for nominal coverage, without font metrics or drawing setup.
@@ -537,6 +540,7 @@ impl HbFont {
             has_png,
             palette_colors,
             color_layer_cache: Mutex::new(HashMap::new()),
+            shape_plans: Mutex::new(Vec::new()),
         }
     }
 
@@ -872,12 +876,37 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
             .unwrap_or(harfrust::script::UNKNOWN),
     );
     buffer.guess_segment_properties();
+    // The plan Shaper::shape would build for this buffer, built once per
+    // distinct segment properties.
+    let direction = buffer.direction();
+    let script = Some(buffer.script());
+    let language = buffer.language();
+    let mut plans = font.shape_plans.lock().expect("shape plan cache");
+    let key = harfrust::ShapePlanKey::new(script, direction)
+        .language(language.as_ref())
+        .instance(Some(&font.shaper_instance))
+        .features(&font.features);
+    let plan = match plans.iter().position(|plan| key.matches(plan)) {
+        Some(index) => index,
+        None => {
+            plans.push(harfrust::ShapePlan::new(
+                &shaper,
+                direction,
+                script,
+                language.as_ref(),
+                &font.features,
+            ));
+            plans.len() - 1
+        }
+    };
     let shaped = shaper.shape(
         buffer,
         ShapeOptions::new()
             .scale(Some(STANDARD_SCALE))
-            .features(&font.features),
+            .features(&font.features)
+            .plan(Some(&plans[plan])),
     );
+    drop(plans);
     let infos = shaped.glyph_infos();
     let positions = shaped.glyph_positions();
     let count = infos.len();

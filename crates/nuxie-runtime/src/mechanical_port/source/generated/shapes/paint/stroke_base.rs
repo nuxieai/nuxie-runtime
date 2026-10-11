@@ -34,6 +34,7 @@ impl Default for StrokeBase {
             position: 1,
         };
         stroke.store_transform_affects_stroke(true);
+        stroke.store_thickness(1.0);
         stroke
     }
 }
@@ -71,8 +72,13 @@ impl StrokeBase {
         if self.thickness == value {
             return false;
         }
-        self.thickness = value;
+        self.store_thickness(value);
         true
+    }
+    // Every write of the thickness keeps the paint's cells current.
+    fn store_thickness(&mut self, value: f32) {
+        self.thickness = value;
+        self.base.cells().set_thickness(value);
     }
     pub fn cap(&self) -> u8 {
         self.cap
@@ -138,6 +144,7 @@ impl StrokeBase {
     // current.
     fn store_transform_affects_stroke(&mut self, value: bool) {
         self.transform_affects_stroke = value;
+        self.base.cells().set_transform_affects_stroke(value);
         self.base.cells().set_path_flags(
             crate::mechanical_port::source::shapes::paint::stroke::transform_affects_stroke_path_flags(value),
         );
@@ -165,7 +172,7 @@ impl StrokeBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl StrokeBaseCallbacks) {
-        self.thickness = object.thickness;
+        self.store_thickness(object.thickness);
         self.cap = object.cap;
         self.join = object.join;
         self.store_transform_affects_stroke(object.transform_affects_stroke);
@@ -180,7 +187,7 @@ impl StrokeBase {
     ) -> bool {
         match property_key {
             Self::THICKNESS_PROPERTY_KEY => {
-                self.thickness = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.store_thickness(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::CAP_PROPERTY_KEY => {

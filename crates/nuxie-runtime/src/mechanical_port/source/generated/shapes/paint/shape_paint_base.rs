@@ -12,7 +12,8 @@ pub trait ShapePaintBaseCallbacks:
 
 pub struct ShapePaintBase {
     pub base: ContainerComponent,
-    is_visible: bool,
+    // Shared with the paint's PaintCells, which the draw reads.
+    is_visible: std::rc::Rc<std::cell::Cell<bool>>,
     blend_mode_value: u8,
     additive_amount: u8,
 }
@@ -21,7 +22,7 @@ impl Default for ShapePaintBase {
     fn default() -> Self {
         Self {
             base: ContainerComponent::default(),
-            is_visible: true,
+            is_visible: std::rc::Rc::new(std::cell::Cell::new(true)),
             blend_mode_value: 127,
             additive_amount: 255,
         }
@@ -45,7 +46,11 @@ impl ShapePaintBase {
         Self::TYPE_KEY
     }
     pub fn is_visible(&self) -> bool {
-        self.is_visible
+        self.is_visible.get()
+    }
+    /// The isVisible storage, for the paint's shared cells.
+    pub(crate) fn share_is_visible(&self) -> std::rc::Rc<std::cell::Cell<bool>> {
+        std::rc::Rc::clone(&self.is_visible)
     }
     pub fn set_is_visible(&mut self, value: bool, callbacks: &mut impl ShapePaintBaseCallbacks) {
         if !self.set_is_visible_value(value) {
@@ -56,10 +61,10 @@ impl ShapePaintBase {
     }
 
     pub(crate) fn set_is_visible_value(&mut self, value: bool) -> bool {
-        if self.is_visible == value {
+        if self.is_visible.get() == value {
             return false;
         }
-        self.is_visible = value;
+        self.is_visible.set(value);
         true
     }
     pub fn blend_mode_value(&self) -> u8 {
@@ -107,7 +112,7 @@ impl ShapePaintBase {
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ShapePaintBaseCallbacks) {
-        self.is_visible = object.is_visible;
+        self.is_visible.set(object.is_visible.get());
         self.blend_mode_value = object.blend_mode_value;
         self.additive_amount = object.additive_amount;
         self.base.copy(&object.base, callbacks);
@@ -124,7 +129,7 @@ impl ShapePaintBase {
                 true
             }
             Self::IS_VISIBLE_PROPERTY_KEY => {
-                self.is_visible = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.is_visible.set(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
                 true
             }
             Self::BLEND_MODE_VALUE_PROPERTY_KEY => {

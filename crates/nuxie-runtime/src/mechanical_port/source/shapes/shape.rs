@@ -374,16 +374,20 @@ impl Shape {
         let needs_save =
             self.base.needs_save_operation() || self.paint_container.shape_paints().len() > 1;
         let transform = self.base.world_transform();
-        for paint in self.paint_container.shape_paints() {
-            paint.with_mut(|object| {
+        // The container's paint cells parallel its paints. Visibility, the
+        // path kind and the fill rule are read there, so a hidden paint is
+        // never borrowed.
+        let paints = self.paint_container.cells().paints();
+        for paint in paints.iter() {
+            if !paint.cells.is_visible() {
+                continue;
+            }
+            let kind = paint.cells.path_kind();
+            let fill_rule = paint.cells.fill_rule();
+            paint.handle.with_mut(|object| {
                 let Some(behavior) = object.as_shape_paint_behavior_mut() else {
                     return;
                 };
-                if !behavior.is_visible() {
-                    return;
-                }
-                let kind = behavior.pick_path_kind();
-                let fill_rule = behavior.fill_rule();
                 self.with_path_mut(kind, |path| {
                     behavior.shape_paint_mut().draw_with_active_container(
                         renderer,

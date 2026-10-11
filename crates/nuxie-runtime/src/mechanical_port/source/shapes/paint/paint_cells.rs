@@ -16,7 +16,7 @@ use crate::mechanical_port::source::{
             effects_container,
             shape_paint_path::ShapePaintPath,
             stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
-            shape_paint::{RuntimeRenderPaintHandle, ShapePaintType},
+            shape_paint::{RuntimeRenderPaintHandle, ShapePaintPathKind, ShapePaintType},
         },
         path_flags::PathFlags,
         shape_paint_container::ContainerCells,
@@ -41,10 +41,21 @@ pub(crate) struct PaintCells {
     dirt: Rc<SharedDirt>,
     // The container whose flag union includes this paint's flags.
     container: RefCell<Weak<ContainerCells>>,
+    // ShapePaintBase's isVisible storage.
+    is_visible: Rc<Cell<bool>>,
+    // Stroke's thickness and transformAffectsStroke, Fill's fillRule; their
+    // owning properties' storage writes them.
+    thickness: Cell<f32>,
+    transform_affects_stroke: Cell<bool>,
+    fill_rule: Cell<u8>,
 }
 
 impl PaintCells {
-    pub(crate) fn new(paint_type: ShapePaintType, dirt: Rc<SharedDirt>) -> Self {
+    pub(crate) fn new(
+        paint_type: ShapePaintType,
+        dirt: Rc<SharedDirt>,
+        is_visible: Rc<Cell<bool>>,
+    ) -> Self {
         Self {
             paint_type,
             path_flags: Cell::new(PathFlags::NONE),
@@ -54,6 +65,65 @@ impl PaintCells {
             render_paint: OnceCell::new(),
             dirt,
             container: RefCell::new(Weak::new()),
+            is_visible,
+            thickness: Cell::new(1.0),
+            transform_affects_stroke: Cell::new(true),
+            fill_rule: Cell::new(0),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn set_thickness(&self, value: f32) {
+        self.thickness.set(value);
+    }
+
+    #[inline]
+    pub(crate) fn set_transform_affects_stroke(&self, value: bool) {
+        self.transform_affects_stroke.set(value);
+    }
+
+    #[inline]
+    pub(crate) fn set_fill_rule(&self, value: u8) {
+        self.fill_rule.set(value);
+    }
+
+    /// ShapePaintBehavior::isVisible: Fill's, or Stroke's (visible with a
+    /// positive thickness).
+    #[inline]
+    pub(crate) fn is_visible(&self) -> bool {
+        match self.paint_type {
+            ShapePaintType::Fill => self.is_visible.get(),
+            ShapePaintType::Stroke => self.is_visible.get() && self.thickness.get() > 0.0,
+        }
+    }
+
+    /// ShapePaintBehavior::pickPathKind.
+    #[inline]
+    pub(crate) fn path_kind(&self) -> ShapePaintPathKind {
+        match self.paint_type {
+            ShapePaintType::Fill => {
+                if self.fill_rule.get() == nuxie_render_api::FillRule::Clockwise as u8 {
+                    ShapePaintPathKind::LocalClockwise
+                } else {
+                    ShapePaintPathKind::Local
+                }
+            }
+            ShapePaintType::Stroke => {
+                if self.transform_affects_stroke.get() {
+                    ShapePaintPathKind::Local
+                } else {
+                    ShapePaintPathKind::World
+                }
+            }
+        }
+    }
+
+    /// ShapePaintBehavior::fillRule: a Fill's rule; none for a Stroke.
+    #[inline]
+    pub(crate) fn fill_rule(&self) -> Option<u32> {
+        match self.paint_type {
+            ShapePaintType::Fill => Some(u32::from(self.fill_rule.get())),
+            ShapePaintType::Stroke => None,
         }
     }
 

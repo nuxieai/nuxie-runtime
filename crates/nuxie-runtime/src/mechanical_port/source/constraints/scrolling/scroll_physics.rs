@@ -1,7 +1,4 @@
-use std::{
-    ops::{Deref, DerefMut},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::mechanical_port::source::{
     constraints::draggable_constraint::DraggableConstraintDirection,
@@ -298,8 +295,29 @@ pub fn from_core_mut(object: &mut dyn CoreObject) -> Option<&mut dyn ScrollPhysi
 }
 
 fn high_resolution_clock_micros() -> i64 {
-    let micros = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_micros());
-    i64::try_from(micros).unwrap_or(i64::MAX)
+    crate::mechanical_port::source::engine_clock::now_micros()
+}
+
+#[cfg(test)]
+mod clock_contract_tests {
+    use super::ScrollPhysics;
+    use crate::mechanical_port::source::{engine_clock::with_test_clock, math::vec2d::Vec2D};
+
+    #[test]
+    fn scrolling_measures_motion_and_reset_with_the_engine_clock() {
+        let mut physics = with_test_clock(|| 1_000_000, ScrollPhysics::default);
+        with_test_clock(
+            || 1_500_000,
+            || physics.accumulate(Vec2D::new(10.0, 20.0), 0.0),
+        );
+        // Ten and twenty points over half a second, independent of frame time.
+        assert_eq!(physics.speed(), Vec2D::new(20.0, 40.0));
+        with_test_clock(|| 2_000_000, || physics.reset_base());
+        assert_eq!(physics.speed(), Vec2D::default());
+        with_test_clock(
+            || 2_500_000,
+            || physics.accumulate(Vec2D::new(10.0, 20.0), 0.0),
+        );
+        assert_eq!(physics.speed(), Vec2D::new(20.0, 40.0));
+    }
 }

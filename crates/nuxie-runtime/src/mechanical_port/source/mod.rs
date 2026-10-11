@@ -127,6 +127,7 @@ pub mod static_scene;
 pub mod status_code;
 pub mod text;
 pub use text::text_engine;
+pub mod engine_clock;
 pub mod transform_component;
 pub mod transform_space;
 pub mod trim_type;

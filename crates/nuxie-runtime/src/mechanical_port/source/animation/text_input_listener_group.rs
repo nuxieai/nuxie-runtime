@@ -11,11 +11,7 @@ use crate::mechanical_port::source::{
     math::vec2d::Vec2D,
     process_event_result::ProcessEventResult,
 };
-use std::{
-    cell::Cell,
-    sync::atomic::Ordering,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{cell::Cell, sync::atomic::Ordering};
 
 pub struct TextInputListenerGroup {
     base: ListenerGroup,
@@ -42,10 +38,7 @@ impl TextInputListenerGroup {
         if DETERMINISTIC_MODE.load(Ordering::Relaxed) {
             (timestamp * 1_000_000.0) as i64
         } else {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("the host clock is after the epoch")
-                .as_micros() as i64
+            crate::mechanical_port::source::engine_clock::now_micros()
         }
     }
 }
@@ -206,5 +199,29 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             }
             ProcessEventResult::None
         }
+    }
+}
+
+#[cfg(test)]
+mod clock_contract_tests {
+    use super::TextInputListenerGroup;
+    use crate::mechanical_port::source::engine_clock::with_test_clock;
+
+    #[test]
+    fn text_input_reads_the_shared_monotonic_clock_without_a_frame() {
+        // The embedder clock can move while playback is paused. The same
+        // engine clock boundary supplies performance.now on browser Wasm.
+        with_test_clock(
+            || 1_000_000,
+            || {
+                assert_eq!(TextInputListenerGroup::now_micros(0.0), 1_000_000);
+            },
+        );
+        with_test_clock(
+            || 1_750_000,
+            || {
+                assert_eq!(TextInputListenerGroup::now_micros(0.0), 1_750_000);
+            },
+        );
     }
 }

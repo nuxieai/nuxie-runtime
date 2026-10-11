@@ -39,6 +39,21 @@ rust_library(
     lint_config = ":cargo_lints",
 )
 
+rust_shared_library(
+    name = "text_input_clock_probe",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default", "js-host-seed", "tools"],
+    deps = select({"//bazel:android": ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-image-codec:nuxie-image-codec", "//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-schema:nuxie-schema", "//crates/nuxie-script-signature:nuxie-script-signature", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa", "//vendor/taffy-0.12.1-rive-yoga-order:taffy"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:ios": ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-image-codec:nuxie-image-codec", "//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-schema:nuxie-schema", "//crates/nuxie-script-signature:nuxie-script-signature", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa", "//vendor/taffy-0.12.1-rive-yoga-order:taffy"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:linux": ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-image-codec:nuxie-image-codec", "//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-schema:nuxie-schema", "//crates/nuxie-script-signature:nuxie-script-signature", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa", "//vendor/taffy-0.12.1-rive-yoga-order:taffy"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:macos": ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-image-codec:nuxie-image-codec", "//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-schema:nuxie-schema", "//crates/nuxie-script-signature:nuxie-script-signature", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa", "//vendor/taffy-0.12.1-rive-yoga-order:taffy"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:windows": ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-image-codec:nuxie-image-codec", "//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-schema:nuxie-schema", "//crates/nuxie-script-signature:nuxie-script-signature", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa", "//vendor/taffy-0.12.1-rive-yoga-order:taffy"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url", "windows-sys"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
 rust_library(
     name = "nuxie-runtime__test",
     crate_name = "nuxie_runtime",
@@ -50,6 +65,21 @@ rust_library(
     crate_features = ["default", "js-host-seed", "policy-pass-counter", "testing", "tools"],
     deps = select({"//bazel:android": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:ios": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:linux": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:macos": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:windows": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url", "windows-sys"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
+rust_shared_library(
+    name = "text_input_clock_probe__test",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default", "js-host-seed", "policy-pass-counter", "testing", "tools"],
+    deps = select({"//bazel:android": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "png", "regress", "serde", "serde_json", "sha2", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:ios": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "png", "regress", "serde", "serde_json", "sha2", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:linux": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "png", "regress", "serde", "serde_json", "sha2", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:macos": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "png", "regress", "serde", "serde_json", "sha2", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:windows": ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-script-signature:nuxie-script-signature__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__test", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__test"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "png", "regress", "serde", "serde_json", "sha2", "unicode-bidi", "unicode-properties", "unicode-script", "url", "windows-sys"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__test"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
     lint_config = ":cargo_lints",
 )
@@ -3567,6 +3597,21 @@ rust_library(
     lint_config = ":cargo_lints",
 )
 
+rust_shared_library(
+    name = "text_input_clock_probe__host",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = select({"//bazel:android": ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-image-codec:nuxie-image-codec__host", "//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-schema:nuxie-schema__host", "//crates/nuxie-script-signature:nuxie-script-signature__host", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__host", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__host"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:ios": ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-image-codec:nuxie-image-codec__host", "//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-schema:nuxie-schema__host", "//crates/nuxie-script-signature:nuxie-script-signature__host", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__host", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__host"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:linux": ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-image-codec:nuxie-image-codec__host", "//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-schema:nuxie-schema__host", "//crates/nuxie-script-signature:nuxie-script-signature__host", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__host", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__host"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:macos": ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-image-codec:nuxie-image-codec__host", "//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-schema:nuxie-schema__host", "//crates/nuxie-script-signature:nuxie-script-signature__host", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__host", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__host"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:windows": ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-image-codec:nuxie-image-codec__host", "//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-schema:nuxie-schema__host", "//crates/nuxie-script-signature:nuxie-script-signature__host", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__host", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__host"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url", "windows-sys"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__host"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
 rust_library(
     name = "nuxie-runtime__editor",
     crate_name = "nuxie_runtime",
@@ -3578,6 +3623,21 @@ rust_library(
     crate_features = [],
     deps = select({"//bazel:android": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:ios": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:linux": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:macos": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:windows": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url", "windows-sys"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
+rust_shared_library(
+    name = "text_input_clock_probe__editor",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = select({"//bazel:android": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:ios": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:linux": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:macos": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime"), "//bazel:windows": ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-image-codec:nuxie-image-codec__editor", "//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-schema:nuxie-schema__editor", "//crates/nuxie-script-signature:nuxie-script-signature__editor", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__editor", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__editor"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "libc", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url", "windows-sys"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__editor"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
     lint_config = ":cargo_lints",
 )
@@ -3597,6 +3657,21 @@ rust_library(
     lint_config = ":cargo_lints",
 )
 
+rust_shared_library(
+    name = "text_input_clock_probe__publisher",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-audio:nuxie-audio__publisher", "//crates/nuxie-binary:nuxie-binary__publisher", "//crates/nuxie-image-codec:nuxie-image-codec__publisher", "//crates/nuxie-render-api:nuxie-render-api__publisher", "//crates/nuxie-schema:nuxie-schema__publisher", "//crates/nuxie-script-signature:nuxie-script-signature__publisher", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__publisher", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__publisher"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + [":nuxie-runtime__publisher"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
 rust_library(
     name = "nuxie-runtime__webgpu",
     crate_name = "nuxie_runtime",
@@ -3608,6 +3683,21 @@ rust_library(
     crate_features = ["default", "js-host-seed"],
     deps = ["//crates/nuxie-audio:nuxie-audio__webgpu", "//crates/nuxie-binary:nuxie-binary__webgpu", "//crates/nuxie-image-codec:nuxie-image-codec__webgpu", "//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-schema:nuxie-schema__webgpu", "//crates/nuxie-script-signature:nuxie-script-signature__webgpu", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__webgpu", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__webgpu"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + select({"//bazel:wasm": crate_deps(["js-sys", "wasm-bindgen"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
+rust_shared_library(
+    name = "text_input_clock_probe__webgpu",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default", "js-host-seed"],
+    deps = ["//crates/nuxie-audio:nuxie-audio__webgpu", "//crates/nuxie-binary:nuxie-binary__webgpu", "//crates/nuxie-image-codec:nuxie-image-codec__webgpu", "//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-schema:nuxie-schema__webgpu", "//crates/nuxie-script-signature:nuxie-script-signature__webgpu", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__webgpu", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__webgpu"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + select({"//bazel:wasm": crate_deps(["js-sys", "wasm-bindgen"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__webgpu"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
     lint_config = ":cargo_lints",
 )
@@ -3627,6 +3717,21 @@ rust_library(
     lint_config = ":cargo_lints",
 )
 
+rust_shared_library(
+    name = "text_input_clock_probe__webgl2",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default", "js-host-seed"],
+    deps = ["//crates/nuxie-audio:nuxie-audio__webgl2", "//crates/nuxie-binary:nuxie-binary__webgl2", "//crates/nuxie-image-codec:nuxie-image-codec__webgl2", "//crates/nuxie-render-api:nuxie-render-api__webgl2", "//crates/nuxie-schema:nuxie-schema__webgl2", "//crates/nuxie-script-signature:nuxie-script-signature__webgl2", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__webgl2", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__webgl2"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + select({"//bazel:wasm": crate_deps(["js-sys", "wasm-bindgen"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__webgl2"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
 rust_library(
     name = "nuxie-runtime__apple",
     crate_name = "nuxie_runtime",
@@ -3642,6 +3747,21 @@ rust_library(
     lint_config = ":cargo_lints",
 )
 
+rust_shared_library(
+    name = "text_input_clock_probe__apple",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-audio:nuxie-audio__apple", "//crates/nuxie-binary:nuxie-binary__apple", "//crates/nuxie-image-codec:nuxie-image-codec__apple", "//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-schema:nuxie-schema__apple", "//crates/nuxie-script-signature:nuxie-script-signature__apple", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__apple", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__apple"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + select({"//bazel:native": crate_deps(["libc"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__apple"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
 rust_library(
     name = "nuxie-runtime__android",
     crate_name = "nuxie_runtime",
@@ -3653,6 +3773,21 @@ rust_library(
     crate_features = [],
     deps = ["//crates/nuxie-audio:nuxie-audio__android", "//crates/nuxie-binary:nuxie-binary__android", "//crates/nuxie-image-codec:nuxie-image-codec__android", "//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-schema:nuxie-schema__android", "//crates/nuxie-script-signature:nuxie-script-signature__android", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__android", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__android"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + select({"//bazel:native": crate_deps(["libc"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-runtime"),
+    rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+    lint_config = ":cargo_lints",
+)
+
+rust_shared_library(
+    name = "text_input_clock_probe__android",
+    crate_name = "text_input_clock_probe",
+    crate_root = "examples/text_input_clock_probe.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-audio:nuxie-audio__android", "//crates/nuxie-binary:nuxie-binary__android", "//crates/nuxie-image-codec:nuxie-image-codec__android", "//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-schema:nuxie-schema__android", "//crates/nuxie-script-signature:nuxie-script-signature__android", "//vendor/skrifa-0.45.1-rive-harfbuzz:skrifa__android", "//vendor/taffy-0.12.1-rive-yoga-order:taffy__android"] + crate_deps(["anyhow", "bytemuck", "harfrust", "i_overlay", "regress", "serde", "serde_json", "unicode-bidi", "unicode-properties", "unicode-script", "url"], package_name = "bazel/cargo/nuxie-runtime") + select({"//bazel:native": crate_deps(["libc"], package_name = "bazel/cargo/nuxie-runtime"), "//conditions:default": []}) + [":nuxie-runtime__android"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-runtime"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-runtime"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
     lint_config = ":cargo_lints",
 )

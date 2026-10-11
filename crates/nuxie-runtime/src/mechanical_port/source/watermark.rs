@@ -14,78 +14,15 @@ const WATERMARK_CLOCK_TOLERANCE_SECONDS: f32 = 0.004;
 const WATERMARK_MAX_FRAME_SECONDS: f32 = 0.25;
 const WATERMARK_BACKDROP_COLOR: u32 = 0xff000000;
 
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-fn now_micros() -> i64 {
-    // Only differences are consumed; an arbitrary steady epoch is equivalent
-    // to C++ steady_clock::time_since_epoch().
-    static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    EPOCH
-        .get_or_init(std::time::Instant::now)
-        .elapsed()
-        .as_micros() as i64
-}
+use super::engine_clock::now_micros;
 
-#[cfg(all(
-    target_arch = "wasm32",
-    target_os = "unknown",
-    feature = "js-host-seed"
-))]
-fn now_micros() -> i64 {
-    use wasm_bindgen::{JsCast, JsValue};
-
-    // Same browser/worker host boundary used by the existing random seed,
-    // but retain integer microseconds rather than reducing to a seed.
-    let global = js_sys::global();
-    let performance = js_sys::Reflect::get(&global, &JsValue::from_str("performance"))
-        .unwrap_or_else(|error| wasm_bindgen::throw_val(error));
-    let now = js_sys::Reflect::get(&performance, &JsValue::from_str("now"))
-        .unwrap_or_else(|error| wasm_bindgen::throw_val(error))
-        .dyn_into::<js_sys::Function>()
-        .unwrap_or_else(|error| wasm_bindgen::throw_val(error));
-    let milliseconds = now
-        .call0(&performance)
-        .unwrap_or_else(|error| wasm_bindgen::throw_val(error))
-        .as_f64()
-        .unwrap_or_else(|| wasm_bindgen::throw_str("performance.now() did not return a number"));
-    (milliseconds * 1_000.0) as i64
-}
-
+// Preserve the existing Rust entry point for import-free Wasm embedders.
 #[cfg(all(
     target_arch = "wasm32",
     target_os = "unknown",
     not(feature = "js-host-seed")
 ))]
-thread_local! {
-    static HOST_CLOCK: std::cell::Cell<Option<fn() -> i64>> = const { std::cell::Cell::new(None) };
-}
-
-/// Install the monotonic microsecond clock for an import-free Wasm embedder.
-///
-/// Required before constructing a watermarked artboard, including under
-/// deterministic mode: upstream samples the clock during construction. The
-/// callback must use a consistent monotonic epoch for the entire lifetime of
-/// every watermark. This explicit boundary keeps cold publisher modules free
-/// of JS imports without silently disabling the playback clock budget.
-#[cfg(all(
-    target_arch = "wasm32",
-    target_os = "unknown",
-    not(feature = "js-host-seed")
-))]
-pub fn set_watermark_clock(clock: fn() -> i64) {
-    HOST_CLOCK.with(|host_clock| host_clock.set(Some(clock)));
-}
-
-#[cfg(all(
-    target_arch = "wasm32",
-    target_os = "unknown",
-    not(feature = "js-host-seed")
-))]
-fn now_micros() -> i64 {
-    let clock = HOST_CLOCK.with(std::cell::Cell::get).expect(
-        "import-free Wasm watermark playback requires set_watermark_clock before construction",
-    );
-    clock()
-}
+pub use super::engine_clock::set_clock as set_watermark_clock;
 
 /// A pre-roll that owns each frame until the frame after its final advance.
 /// An instance not driven by a state machine never starts its pre-roll.

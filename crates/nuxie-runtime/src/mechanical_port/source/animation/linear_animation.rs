@@ -5,11 +5,14 @@ use crate::mechanical_port::source::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter,
         keyed_object::{KeyedObject, KeyedObjectContext},
+        keyed_property::KeyedProperty,
         r#loop::Loop,
     },
     core::CoreHandle,
     generated::{
-        animation::linear_animation_base::LinearAnimationBase, artboard_base::ArtboardBase,
+        animation::{keyframe_base::KeyFrameBase, linear_animation_base::LinearAnimationBase},
+        artboard_base::ArtboardBase,
+        core_registry::CoreRegistry,
     },
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
     lazy_vector::LazyVector,
@@ -104,6 +107,10 @@ impl LinearAnimationOwner {
         speed_direction: f32,
         from_pong: bool,
     ) {
+        #[cfg(not(feature = "editor"))]
+        if !self.with(|animation| animation.has_keyed_callbacks) {
+            return;
+        }
         let (starting_time, objects) = self.with(|animation| {
             (
                 animation.start_time_with_multiplier(speed_direction),
@@ -121,12 +128,42 @@ impl LinearAnimationOwner {
     }
 }
 
-#[derive(Default)]
 pub struct LinearAnimation {
     pub base: LinearAnimationBase,
+    has_keyed_callbacks: bool,
+    is_static_pose: bool,
+    first_key_frame: u16,
+    last_key_frame: u16,
     keyed_objects: LazyVector<CoreHandle>,
 }
+impl Default for LinearAnimation {
+    fn default() -> Self {
+        Self {
+            base: LinearAnimationBase::default(),
+            has_keyed_callbacks: true,
+            is_static_pose: false,
+            first_key_frame: 0,
+            last_key_frame: u16::MAX,
+            keyed_objects: LazyVector::default(),
+        }
+    }
+}
 impl LinearAnimation {
+    pub fn set_has_keyed_callbacks(&mut self, value: bool) {
+        self.has_keyed_callbacks = value;
+    }
+
+    pub fn applies_key_frame_values_at(&self, mut seconds: f32) -> bool {
+        if self.is_static_pose {
+            return true;
+        }
+        let fps = self.base.fps() as f32;
+        if self.base.quantize() {
+            seconds = (seconds * fps).floor() / fps;
+        }
+        seconds <= self.first_key_frame as f32 / fps
+            || (self.last_key_frame != u16::MAX && seconds >= self.last_key_frame as f32 / fps)
+    }
     #[cfg(test)]
     pub fn delete_count() -> i32 {
         DELETE_COUNT.load(Ordering::Relaxed)
@@ -167,6 +204,45 @@ impl LinearAnimation {
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
+            }
+        }
+        #[cfg(not(feature = "editor"))]
+        {
+            let mut first = u32::MAX;
+            let mut last = 0;
+            for object in self.keyed_objects.iter() {
+                object
+                    .with_downcast::<KeyedObject, _>(|object| {
+                        for property in object.keyed_properties() {
+                            property
+                                .with_downcast::<KeyedProperty, _>(|property| {
+                                    let frames = property.keyframes();
+                                    if frames.len() < 2 {
+                                        return;
+                                    }
+                                    let frame_number = |frame: &CoreHandle| {
+                                        CoreRegistry::get_uint_handle(
+                                            frame,
+                                            KeyFrameBase::FRAME_PROPERTY_KEY as i32,
+                                        )
+                                        .expect("KeyedProperty retains a KeyFrame occurrence")
+                                    };
+                                    first = first.min(frame_number(&frames[0]));
+                                    last = last.max(frame_number(&frames[frames.len() - 1]));
+                                })
+                                .expect("KeyedObject retains a KeyedProperty occurrence");
+                        }
+                    })
+                    .expect("LinearAnimation retains a KeyedObject occurrence");
+            }
+            self.is_static_pose = self.keyed_objects.size() != 0 && first == u32::MAX;
+            if first != u32::MAX {
+                self.first_key_frame = first.min(u16::MAX as u32) as u16;
+                self.last_key_frame = if last < u16::MAX as u32 {
+                    last as u16
+                } else {
+                    u16::MAX
+                };
             }
         }
         StatusCode::Ok
@@ -268,6 +344,10 @@ impl LinearAnimation {
         speed_direction: f32,
         from_pong: bool,
     ) {
+        #[cfg(not(feature = "editor"))]
+        if !self.has_keyed_callbacks {
+            return;
+        }
         let start = self.start_time_with_multiplier(speed_direction);
         let at_start = start == from;
         if !at_start || !from_pong {
@@ -294,5 +374,138 @@ impl std::ops::Deref for LinearAnimation {
 impl std::ops::DerefMut for LinearAnimation {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::{
+        animation::keyframe_double::KeyFrameDouble,
+        artboard::Artboard,
+        core::CoreArena,
+        generated::animation::{
+            keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
+        },
+        importers::{
+            keyed_object_importer::KeyedObjectImporter,
+            linear_animation_importer::LinearAnimationImporter,
+        },
+    };
+
+    #[test]
+    fn imported_callback_presence_is_rearmed_only_by_callback_properties() {
+        let arena = CoreArena::default();
+        let animation = arena.insert(LinearAnimation::default());
+        assert!(
+            animation
+                .with_downcast::<LinearAnimation, _>(|v| v.has_keyed_callbacks)
+                .unwrap()
+        );
+        let importer = LinearAnimationImporter::new(animation.clone());
+        assert!(
+            !animation
+                .with_downcast::<LinearAnimation, _>(|v| v.has_keyed_callbacks)
+                .unwrap()
+        );
+        let mut stack = ImportStack::default();
+        assert_eq!(
+            stack.make_latest(LinearAnimationBase::TYPE_KEY, Some(Box::new(importer))),
+            StatusCode::Ok
+        );
+        let object = arena.insert(KeyedObject::default());
+        assert_eq!(
+            stack.make_latest(
+                KeyedObjectBase::TYPE_KEY,
+                Some(Box::new(KeyedObjectImporter::new(object)))
+            ),
+            StatusCode::Ok
+        );
+        for (key, expected) in [(13, false), (395, true)] {
+            let property = arena.insert(KeyedProperty::default());
+            CoreRegistry::set_uint_handle(
+                &property,
+                KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY as i32,
+                key,
+            );
+            assert_eq!(
+                property.with_downcast_mut::<KeyedProperty, _>(|v| v.import(&mut stack)),
+                Some(StatusCode::Ok)
+            );
+            assert_eq!(
+                animation.with_downcast::<LinearAnimation, _>(|v| v.has_keyed_callbacks),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn keyframe_value_bounds_keep_default_sentinel_and_quantize_like_apply() {
+        let mut animation = LinearAnimation::default();
+        animation.base.set_fps_value(10);
+        assert!(animation.applies_key_frame_values_at(0.0));
+        assert!(!animation.applies_key_frame_values_at(1.0));
+        assert!(!animation.applies_key_frame_values_at(f32::INFINITY));
+        animation.first_key_frame = 10;
+        animation.last_key_frame = 20;
+        assert!(animation.applies_key_frame_values_at(1.0));
+        assert!(!animation.applies_key_frame_values_at(1.05));
+        assert!(animation.applies_key_frame_values_at(2.0));
+        animation.base.set_quantize_value(true);
+        assert!(animation.applies_key_frame_values_at(1.05));
+        assert!(!animation.applies_key_frame_values_at(1.95));
+        animation.is_static_pose = true;
+        assert!(animation.applies_key_frame_values_at(1.5));
+    }
+
+    #[cfg(not(feature = "editor"))]
+    fn animation_with_frame_ranges(arena: &CoreArena, ranges: &[&[u32]]) -> LinearAnimation {
+        let mut object = KeyedObject::default();
+        for range in ranges {
+            let mut property = KeyedProperty::default();
+            for number in *range {
+                let frame = arena.insert(KeyFrameDouble::default());
+                CoreRegistry::set_uint_handle(
+                    &frame,
+                    KeyFrameBase::FRAME_PROPERTY_KEY as i32,
+                    *number,
+                );
+                property.add_key_frame(frame);
+            }
+            object.add_keyed_property(arena.insert(property));
+        }
+        let mut animation = LinearAnimation::default();
+        animation.add_keyed_object(arena.insert(object));
+        assert_eq!(
+            animation.on_added_clean(&mut Artboard::default()),
+            StatusCode::Ok
+        );
+        animation
+    }
+
+    #[cfg(not(feature = "editor"))]
+    #[test]
+    fn clean_collects_only_multi_frame_bounds_and_preserves_overflow_sentinel() {
+        let arena = CoreArena::default();
+        let animation = animation_with_frame_ranges(&arena, &[&[0], &[12, 24], &[6, 30]]);
+        assert!(!animation.is_static_pose);
+        assert_eq!(
+            (animation.first_key_frame, animation.last_key_frame),
+            (6, 30)
+        );
+        let animation = animation_with_frame_ranges(&arena, &[&[70_000, 80_000]]);
+        assert_eq!(
+            (animation.first_key_frame, animation.last_key_frame),
+            (u16::MAX, u16::MAX)
+        );
+        let animation = animation_with_frame_ranges(&arena, &[&[9], &[90]]);
+        assert!(animation.is_static_pose);
+        assert!(animation.applies_key_frame_values_at(1000.0));
+        let mut empty = LinearAnimation::default();
+        assert_eq!(
+            empty.on_added_clean(&mut Artboard::default()),
+            StatusCode::Ok
+        );
+        assert!(!empty.is_static_pose);
     }
 }

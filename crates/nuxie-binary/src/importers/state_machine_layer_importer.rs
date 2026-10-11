@@ -338,7 +338,9 @@ impl RuntimeFile {
                 let next_state_machine_importer =
                     state_machine_importer::StateMachineImporter::new(state_machines.len() - 1);
                 if let Some(previous_state_machine_importer) = current_state_machine.take() {
-                    previous_state_machine_importer.resolve();
+                    previous_state_machine_importer
+                        .resolve(&state_machines)
+                        .expect("state machine import was validated");
                 }
                 current_state_machine = Some(next_state_machine_importer);
                 continue;
@@ -711,7 +713,9 @@ impl RuntimeFile {
         }
 
         if let Some(state_machine_importer) = current_state_machine {
-            state_machine_importer.resolve();
+            state_machine_importer
+                .resolve(&state_machines)
+                .expect("state machine import was validated");
         }
         if let Some(listener_importer) = current_listener {
             listener_importer.resolve();

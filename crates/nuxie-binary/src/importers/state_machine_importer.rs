@@ -2,6 +2,61 @@
 
 use super::*;
 
+fn validate_layer_count(count: usize) -> Result<()> {
+    if count > u16::MAX as usize {
+        bail!("state machine has more than 65535 layers");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn state_machine_layer_count_matches_upstream_u16_boundary() {
+        assert!(super::validate_layer_count(0).is_ok());
+        assert!(super::validate_layer_count(u16::MAX as usize).is_ok());
+        assert!(super::validate_layer_count(u16::MAX as usize + 1).is_err());
+    }
+}
+
+pub(super) fn validate_cpp_state_machines(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+) -> Result<()> {
+    // The latest StateMachine importer survives Artboard boundaries and is
+    // resolved when another StateMachine replaces it, or the stack resolves.
+    let mut layer_count = None;
+    for (index, object) in objects.iter().enumerate() {
+        if import_statuses.get(index) != Some(&RuntimeImportStatus::Imported) {
+            continue;
+        }
+        let Some(definition) = object
+            .as_ref()
+            .and_then(|object| definition_by_type_key(object.type_key))
+        else {
+            continue;
+        };
+        match definition.name {
+            "StateMachine" => {
+                if let Some(count) = layer_count {
+                    validate_layer_count(count)?;
+                }
+                layer_count = Some(0);
+            }
+            "StateMachineLayer" => {
+                if let Some(count) = layer_count.as_mut() {
+                    *count += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(count) = layer_count {
+        validate_layer_count(count)?;
+    }
+    Ok(())
+}
+
 pub(super) fn dispatch_imports_successfully(
     _object: &RuntimeObject,
     definition: &'static Definition,
@@ -134,6 +189,7 @@ impl StateMachineImporter {
         machine.scripted_objects.len() - 1
     }
 
-    /// Pinned `resolve` always returns `StatusCode::Ok`.
-    pub(super) fn resolve(self) {}
+    pub(super) fn resolve(self, state_machines: &[RuntimeStateMachine<'_>]) -> Result<()> {
+        validate_layer_count(state_machines[self.state_machine_index].layers.len())
+    }
 }

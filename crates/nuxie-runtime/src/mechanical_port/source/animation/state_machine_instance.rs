@@ -150,6 +150,7 @@ pub enum RuntimeComparisonValue {
 thread_local! {
     static SETTLED_LAYER_SKIPS: Cell<u64> = const { Cell::new(0) };
     static FROZEN_LAYER_ADVANCES: Cell<u64> = const { Cell::new(0) };
+    static FROZEN_POSE_ADVANCES: Cell<u64> = const { Cell::new(0) };
 }
 
 #[derive(Default)]
@@ -454,7 +455,7 @@ impl StateMachineLayerInstance {
         }
     }
 
-    fn is_frozen(&self) -> bool {
+    fn is_frozen(&self, machine: &StateMachineInstance, pose_since: u32) -> bool {
         if !self.settled.get()
             || self.mix != 1.0
             || self.animation_reset.is_some()
@@ -492,10 +493,142 @@ impl StateMachineLayerInstance {
             Some(AnimationStateBase::TYPE_KEY) => current
                 .first_animation(|animation| {
                     animation.with_animation(LinearAnimation::num_keyed_objects) == 0
+                        || self.is_pose_in_place(machine, animation, pose_since)
                 })
                 .expect("AnimationState instance"),
             _ => false,
         }
+    }
+
+    fn is_pose_in_place(
+        &self,
+        machine: &StateMachineInstance,
+        instance: &LinearAnimationInstance,
+        pose_since: u32,
+    ) -> bool {
+        if instance.keep_going()
+            || !instance
+                .with_animation(|animation| animation.applies_key_frame_values_at(instance.time()))
+        {
+            return false;
+        }
+        let (serial, source, has_binds) = machine
+            .artboard_instance
+            .with_artboard(|artboard| {
+                (
+                    artboard.change_serial(),
+                    artboard.artboard_source_handle(),
+                    artboard.has_key_frame_source_binds(),
+                )
+            })
+            .expect("a state machine retains its ArtboardInstance");
+        if serial != pose_since {
+            return false;
+        }
+        if source.as_ref().map_or(has_binds, |source| {
+            source
+                .with_downcast::<Artboard, _>(Artboard::has_key_frame_source_binds)
+                .expect("live artboard source")
+        }) {
+            return false;
+        }
+        if let Some(interpolator) = self.transition.as_ref().and_then(|transition| {
+            transition
+                .with(|transition| transition.state_transition_interpolator())
+                .flatten()
+        }) {
+            if interpolator
+                .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(1.0))
+                .flatten()
+                .expect("transition interpolator")
+                != 1.0
+            {
+                return false;
+            }
+        }
+        true
+    }
+
+    #[cfg(feature = "testing")]
+    fn verify_frozen_pose(&self, machine: &StateMachineInstance) {
+        use crate::mechanical_port::source::animation::{
+            keyed_object::KeyedObject, keyed_property::KeyedProperty, keyframe_bool::KeyFrameBool,
+            keyframe_color::KeyFrameColor, keyframe_double::KeyFrameDouble,
+            keyframe_id::KeyFrameId, keyframe_int::KeyFrameInt, keyframe_string::KeyFrameString,
+            keyframe_uint::KeyFrameUint,
+        };
+        use crate::mechanical_port::source::generated::animation::animation_state_base::AnimationStateBase;
+        let Some(current) = &self.current_state else {
+            return;
+        };
+        if current.definition().core_type() != Some(AnimationStateBase::TYPE_KEY) {
+            return;
+        }
+        current.first_animation(|instance| {
+            instance.with_animation(|animation| {
+                if animation.num_keyed_objects() == 0 {
+                    return;
+                }
+                FROZEN_POSE_ADVANCES.with(|count| count.set(count.get().wrapping_add(1)));
+                let mut seconds = instance.time();
+                if animation.base.quantize() {
+                    let fps = animation.base.fps() as f32;
+                    seconds = (seconds * fps).floor() / fps;
+                }
+                for o in 0..animation.num_keyed_objects() {
+                    let keyed_object = animation.get_object(o).expect("keyed object");
+                    let (object_id, properties) = keyed_object.with_downcast::<KeyedObject, _>(|object| {
+                        (object.base.object_id(), object.keyed_properties().to_vec())
+                    }).expect("keyed object");
+                    let Some(object) = machine.resolve_artboard_object(object_id) else {
+                        continue;
+                    };
+                    for property in properties {
+                        let (key, frames) = property.with_downcast::<KeyedProperty, _>(|property| {
+                            (property.base.property_key(), property.keyframes().to_vec())
+                        }).expect("keyed property");
+                        if frames.is_empty() || CoreRegistry::is_callback(key) {
+                            continue;
+                        }
+                        let frame_seconds = |frame: &CoreHandle| frame.with(|frame| frame.keyframe_seconds()).flatten().expect("keyframe seconds");
+                        let frame = if frames.len() == 1 || seconds <= frame_seconds(&frames[0]) {
+                            &frames[0]
+                        } else {
+                            frames.last().unwrap()
+                        };
+                        if frames.len() > 1 && frame == frames.last().unwrap() && seconds < frame_seconds(frame) {
+                            eprintln!("Frozen animation {} is between keyframes of property {} at {}", animation.base.name(), key, seconds);
+                            std::process::abort();
+                        }
+                        let key = key as i32;
+                        let in_place = if let Some(value) = frame.with_downcast::<KeyFrameDouble, _>(|frame| frame.base.value()) {
+                            CoreRegistry::get_double_handle(&object, key) == Some(value)
+                        } else if let Some(value) = frame.with_downcast::<KeyFrameColor, _>(|frame| frame.base.value()) {
+                            CoreRegistry::get_color_handle(&object, key) == Some(value)
+                        } else if let Some(value) = frame.with_downcast::<KeyFrameId, _>(|frame| frame.base.value()) {
+                            CoreRegistry::get_uint_handle(&object, key) == Some(value)
+                        } else if let Some(value) = frame.with_downcast::<KeyFrameUint, _>(|frame| frame.base.value()) {
+                            CoreRegistry::get_uint_handle(&object, key) == Some(value)
+                        } else if let Some(value) = frame.with_downcast::<KeyFrameInt, _>(|frame| frame.base.value()) {
+                            CoreRegistry::get_int_handle(&object, key) == Some(value)
+                        } else if let Some(value) = frame.with_downcast::<KeyFrameBool, _>(|frame| frame.base.value()) {
+                            CoreRegistry::get_bool_handle(&object, key) == Some(value)
+                        } else if let Some(value) = frame.with_downcast::<KeyFrameString, _>(|frame| frame.base.value().to_owned()) {
+                            CoreRegistry::get_string_handle(&object, key) == Some(value)
+                        } else {
+                            eprintln!("Frozen animation {} keys property {} with an unverifiable keyframe type {:?}", animation.base.name(), key, frame.core_type());
+                            std::process::abort();
+                        };
+                        if !in_place {
+                            let layer_name = self.layer.as_ref().and_then(|layer| layer.with(|layer| layer.state_machine_component_name())).flatten().unwrap_or_default();
+                            let artboard_name = machine.artboard_instance.with_artboard(|artboard| artboard.name().to_owned()).unwrap_or_default();
+                            eprintln!("Frozen animation {} in layer {} on artboard {} would have changed property {} of object {}", animation.base.name(), layer_name, artboard_name, key, object_id);
+                            std::process::abort();
+                        }
+                    }
+                }
+            });
+        }).expect("AnimationState instance");
     }
 
     fn advance(
@@ -503,6 +636,7 @@ impl StateMachineLayerInstance {
         machine: &mut StateMachineInstance,
         seconds: f32,
         new_frame: bool,
+        pose_since: u32,
     ) -> bool {
         #[cfg(feature = "tools")]
         let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
@@ -513,9 +647,11 @@ impl StateMachineLayerInstance {
         if new_frame {
             self.state_machine_changed_on_advance = false;
         }
-        if self.is_frozen() {
+        if self.is_frozen(machine, pose_since) {
             #[cfg(feature = "testing")]
             FROZEN_LAYER_ADVANCES.with(|count| count.set(count.get() + 1));
+            #[cfg(feature = "testing")]
+            self.verify_frozen_pose(machine);
             return false;
         }
         if let Some(current) = self.current_state.clone() {
@@ -3102,6 +3238,7 @@ pub struct StateMachineInstance {
     settling: Rc<LayerSettling>,
     input_instances: Vec<Option<InputInstance>>,
     layers: Vec<RuntimeStateMachineLayerInstanceHandle>,
+    advance_change_serial: u32,
     hit_components: Vec<Rc<dyn HitComponent>>,
     // Retain the same hit occurrence across a gesture, including re-sorting.
     // Re-picking on each event would hand a flick's tail to an outer view.
@@ -3203,6 +3340,7 @@ impl StateMachineInstance {
             }),
             input_instances: Vec::new(),
             layers: Vec::new(),
+            advance_change_serial: 0,
             hit_components: Vec::new(),
             scroll_latch: None,
             listener_groups: Vec::new(),
@@ -3258,6 +3396,8 @@ impl StateMachineInstance {
                 .machine
                 .with_downcast::<StateMachine, _>(StateMachine::layer_count)
                 .unwrap_or(0);
+            debug_assert!(layer_count <= u16::MAX as usize);
+            let layer_count = layer_count.min(u16::MAX as usize);
             for index in 0..layer_count {
                 let Some(layer) = instance
                     .machine
@@ -4655,6 +4795,13 @@ impl StateMachineInstance {
             }
             self.needs_advance.set(false);
         }
+        // Compare against the previous advance's start, including writes by
+        // earlier layers in this advance, and capture before applying binds.
+        let pose_since = self.advance_change_serial;
+        self.advance_change_serial = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.change_serial())
+            .expect("a state machine retains its ArtboardInstance");
         self.data_bind_container.update_data_binds(false);
         // Upstream iterates the retained layer array in place. Retain one
         // handle at a time so the Rust owner borrow ends before advance can
@@ -4662,7 +4809,7 @@ impl StateMachineInstance {
         let layer_count = self.layers.len();
         for index in 0..layer_count {
             let layer = self.layers[index].clone();
-            if layer.with_layer_mut(|layer| layer.advance(self, seconds, new_frame)) {
+            if layer.with_layer_mut(|layer| layer.advance(self, seconds, new_frame, pose_since)) {
                 self.needs_advance.set(true);
             }
         }
@@ -4698,6 +4845,16 @@ impl StateMachineInstance {
     pub fn frozen_layer_advances() -> u64 {
         FROZEN_LAYER_ADVANCES.with(Cell::get)
     }
+    #[cfg(feature = "testing")]
+    pub fn frozen_pose_advances() -> u64 {
+        FROZEN_POSE_ADVANCES.with(Cell::get)
+    }
+    #[cfg(feature = "testing")]
+    pub fn is_layer_frozen(&self, index: usize) -> bool {
+        self.layers.get(index).is_some_and(|layer| {
+            layer.with_layer(|layer| layer.is_frozen(self, self.advance_change_serial))
+        })
+    }
 
     pub fn row_quiet_state(
         &self,
@@ -4731,9 +4888,10 @@ impl StateMachineInstance {
             return QuietState::Busy;
         }
         for layer in &self.layers {
-            if layer
-                .with_layer(|layer| !layer.is_frozen() || layer.state_machine_changed_on_advance)
-            {
+            if layer.with_layer(|layer| {
+                !layer.is_frozen(self, self.advance_change_serial)
+                    || layer.state_machine_changed_on_advance
+            }) {
                 return QuietState::Busy;
             }
         }

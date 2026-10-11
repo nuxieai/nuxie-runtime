@@ -136,6 +136,39 @@ class CargoGraphTest(unittest.TestCase):
                 for target in libraries + tests:
                     self.assertNotIn(label, target.get("compile_data", []))
 
+    def test_capi_focus_support_is_only_a_compile_input_of_its_integration_test(self):
+        manifest = self.package("nux-capi", "")
+        (manifest.parent / "src").mkdir()
+        (manifest.parent / "src/lib.rs").write_text("")
+        (manifest.parent / "tests").mkdir()
+        for name in ("focus_input", "ordinary"):
+            (manifest.parent / "tests" / (name + ".rs")).write_text("")
+        package = collect_packages([manifest])["nux-capi"]
+        graph = resolve_features({package.name: package}, {package.name: []}, include_dev=True)
+        for owner, expected in ((None, "//crates/nuxie-runtime:tests/support/focus_input.rs"),
+                                ("//crates/nux-capi", "//crates/nuxie-runtime:tests/support/focus_input.rs"),
+                                ("@source//crates/nux-capi", "@source//crates/nuxie-runtime:tests/support/focus_input.rs")):
+            with self.subTest(owner=owner):
+                targets = []
+                def ignore(*args, **kwargs):
+                    pass
+                class StarlarkDict(dict):
+                    def items(self):
+                        return list(super().items())
+                scope = {"load": ignore, "package": ignore, "exports_files": ignore, "dict": StarlarkDict,
+                         "filegroup": ignore, "glob": lambda *args, **kwargs: [],
+                         "source_path": lambda *args: "crates/nux-capi", "provenance_env_file": ignore,
+                         "all_crate_deps": lambda **kwargs: [], "crate_deps": lambda *args, **kwargs: [],
+                         "rust_library": lambda **kwargs: targets.append(kwargs),
+                         "rust_test": lambda **kwargs: targets.append(kwargs)}
+                exec(render_package(package, {"test": graph}, lambda name, _: "//root:" + name,
+                                    source_owner=owner), scope)
+                self.assertEqual(len(targets), 4)
+                for target in targets:
+                    wanted = target["name"] == "nux-capi__test_focus_input"
+                    self.assertEqual(expected in target.get("compile_data", []), wanted)
+                    self.assertEqual(expected in target.get("data", []), wanted)
+
     def test_target_features_do_not_cross_host_and_wasm(self):
         manifests = [
             self.package("root", '[target.\'cfg(target_arch = "wasm32")\'.dependencies]\ndep = { path = "../dep", features = ["browser"], default-features = false }\n[target.\'cfg(not(target_arch = "wasm32"))\'.dependencies]\ndep = { path = "../dep", features = ["native"], default-features = false }\n'),

@@ -32,6 +32,12 @@ PROC_MACROS = {"luaur-rt-derive", "serde_derive", "thiserror-impl", "bytemuck_de
 # recompiling; a new package spawning the probe must be listed here.
 TEST_DATA = {name: ["//:cpp_probe_sources"] for name in ("nuxie", "nuxie-binary", "nuxie-runtime")}
 
+# Shared Rust modules outside a test's crate must be present in its compilation
+# sandbox. Keep them on the consuming integration test, not shipping libraries.
+INTEGRATION_COMPILE_DATA = {
+    ("nux-capi", "focus_input"): ["//crates/nuxie-runtime:tests/support/focus_input.rs"],
+}
+
 
 def quoted(value):
     return json.dumps(value, sort_keys=True)
@@ -301,12 +307,14 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                 required = explicit.get(test_name, {}).get("required-features", [])
                 if not set(required).issubset(features):
                     continue
+                extra_inputs = [source_repo + label for label in INTEGRATION_COMPILE_DATA.get((package.name, test_name), [])]
+                compile_data = '_compile_data' + (' + ' + quoted(extra_inputs) if extra_inputs else '')
                 lines.extend([
                     'rust_test(', f'    name = {quoted(package.name + "__test_" + test_name)},',
                     f'    crate_name = {quoted(test_name.replace("-", "_"))},',
                     f'    crate_root = {quoted(source(file.relative_to(package.directory).as_posix()))},',
-                    '    srcs = _test_sources,', '    compile_data = _compile_data,',
-                    '    data = _compile_data + ' + quoted([*binary_products.values(), *test_data]) + ',',
+                    '    srcs = _test_sources,', '    compile_data = ' + compile_data + ',',
+                    '    data = _compile_data + ' + quoted([*binary_products.values(), *test_data, *extra_inputs]) + ',',
                     f'    edition = {quoted(package.edition)},', f'    version = {quoted(package.version)},',
                     f'    crate_features = {compiler_features},',
                     f'    deps = {integration_deps},',

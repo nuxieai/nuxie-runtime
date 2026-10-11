@@ -7,18 +7,25 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3ccf0d9d7c2cf8bee0553245acaffe21ae3314b6`
+- LAST_SYNCED_SHA: `2a043c31ccbda27628a2c80fd105c16ea35ed12a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `2a043c31ccbda27628a2c80fd105c16ea35ed12a` (refreshed 2026-10-10 by the daily upstream sync).
+- Current target: `40e52541238037bab60088a675dc29676584bdfd` (refreshed 2026-10-11 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 223 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (245 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 224 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (246 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `2a043c31`: independent source-equivalence and subsequent
+  Rust-integration/accounting reviews are clean. The seven-file public delta
+  is guest-Wasm-only and remains deferred under UNIV-3728; no runtime source
+  changes are imported. Source/pipeline tests pass 12, manifest tests pass 27,
+  and generated-file/manifest/diff checks pass. Existing runtime and renderer
+  results below retain their original source revisions; no fresh runtime,
+  browser-pixel or hardware validation is claimed for this metadata update.
 - Validation at `3ccf0d9d`, integrated atop downstream `0ffd5e5384`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Both canvas-backing regressions and the adapted WebGL2 replay sink
@@ -716,6 +723,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `2a043c31ccbda27628a2c80fd105c16ea35ed12a` | Deferred: the complete public behavior delta releases Wasm guest VMs before file artboards, including Emscripten deferred-script release; its AnimaScript keyboard/artboard-input fixture and tools-only teardown test depend on parked guest execution. Existing Rust Luau cleanup already precedes artboard teardown and is unchanged. Account for all seven public files without claiming guest execution or private .rive_head content. Advance active pins/inventory only, preserving historical shader and validation provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `3ccf0d9d7c2cf8bee0553245acaffe21ae3314b6` | Require every deferred replay sink to supply an explicit render context or explicitly choose none. Preserve replay-time canvas backing and content dropping without a device, add the throttled missing-device warning, and record missing ORE canvas views as a named unregistered/unbacked failure rather than unresolved churn. Translate both canvas-backing regressions and explicit no-device test sinks. Private .rive_head contents are not claimed imported. | — |
 | `1b9b7381fd92e2de41f9c936f2073d1e0d984717` | Translate MeshHost and lazily allocated Node-mode NestedArtboard mesh/N-slice state, fixed display-scaled mesh rasters, draw-time UV refresh, clipping/visitor vector paths, and immediate raster release on source swaps. Bitmap Cache retains on-screen sizing; self transforms move to compositing and independent content revisions prevent stale multi-path caches. Translate public renderer-host capability, all mesh/cache regression cases and hosted semantic-rotation coverage. Private editor/agent/WebGL changes described only in commit prose are not claimed imported. | — |
 | `3f67b2f86d5c62e5767f3f5b93edfb4b26f68853` | Translate runtime cubic-vertex missing-weight guard and Weight::fitsVertex registration rule, rejecting base Weight for cubic vertices. Port both complete live skinned-rig regressions. Private editor parent-change and agent add_vertices work described in the message is absent from the public delta and is not claimed imported. | — |

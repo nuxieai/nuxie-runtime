@@ -88,3 +88,7 @@ wasm-bindgen = { version = "0.2", optional = true }
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]
 workspace = true
+
+[[example]]
+name = "text_input_clock_probe"
+crate-type = ["cdylib"]

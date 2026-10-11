@@ -1818,3 +1818,35 @@ fn upstream_text_input_multiline_cursor_sequence_is_ported() {
     artboard.advance_default(0.0);
     assert_eq!(input_cursor(&text_input), Some((52, 52)));
 }
+
+/// Upstream measures click intervals independently of animation advances.
+#[test]
+fn text_input_delayed_click_without_advancing_places_a_caret() {
+    use nuxie_runtime::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let (_file, artboard, input) = named_input_fixture("text_input_tray.riv", "SingleLine");
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("state machine");
+    CoreRegistry::set_string_handle(
+        &input,
+        i32::from(property_key_for_name("TextInput", "text")),
+        "Hello world".into(),
+    );
+    machine.advance_and_apply(0.0);
+    let click = || {
+        machine.with_instance_mut(|m| {
+            m.pointer_down(Vec2D::new(70.0, 160.0), 0, PointerButton::Primary);
+            m.pointer_up(Vec2D::new(70.0, 160.0), 0, PointerButton::Primary);
+        });
+        input_cursor(&input).expect("focused cursor")
+    };
+    let first = click();
+    assert_eq!(first.0, first.1, "first click places a caret");
+    // No frame, speed-scaled advance or quantized tick occurs between clicks.
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    let delayed = click();
+    assert_eq!(
+        delayed.0, delayed.1,
+        "a click outside upstream's 500 ms window places a caret"
+    );
+}

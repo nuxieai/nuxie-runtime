@@ -1565,7 +1565,68 @@ impl ArtboardInstance {
     }
 }
 
+/// An immutable semantic tree captured from one live runtime occurrence.
+/// Present `nodes()` before using this token to admit a host action. Cloning
+/// the token never extends the lifetime of its native occurrence.
+#[derive(Clone)]
+pub struct RuntimeSemanticActionCapture {
+    manager: crate::source::semantic::semantic_manager::RuntimeSemanticManagerWeakHandle,
+    tree_version: u64,
+    nodes: Vec<crate::source::semantic::semantic_snapshot::SemanticsDiffNode>,
+}
+
+impl RuntimeSemanticActionCapture {
+    pub fn tree_version(&self) -> u64 {
+        self.tree_version
+    }
+
+    pub fn nodes(&self) -> &[crate::source::semantic::semantic_snapshot::SemanticsDiffNode] {
+        &self.nodes
+    }
+}
+
 impl RuntimeStateMachineInstanceHandle {
+    /// Capture the settled native tree for host presentation. This refreshes
+    /// semantics; diff-based hosts must drain pending updates first (PORTING X4).
+    pub fn capture_semantic_actions(&self) -> Option<RuntimeSemanticActionCapture> {
+        let manager = self.with_instance(|machine| machine.semantic_manager())?;
+        let (tree_version, nodes) = manager.with_semantic_manager_mut(|manager| {
+            let nodes = manager.snapshot().to_vec();
+            (manager.version(), nodes)
+        });
+        Some(RuntimeSemanticActionCapture {
+            manager: manager.downgrade(),
+            tree_version,
+            nodes,
+        })
+    }
+
+    /// Admit only an action addressed through the host's presented capture.
+    /// Existing checked and raw calls retain their signatures and behavior.
+    pub fn fire_semantic_action_from_capture(
+        &self,
+        capture: &RuntimeSemanticActionCapture,
+        node_id: u32,
+        action_type: u8,
+    ) -> bool {
+        let Some(manager) = self.with_instance(|machine| machine.semantic_manager()) else {
+            return false;
+        };
+        let Some(captured_manager) = capture.manager.upgrade() else {
+            return false;
+        };
+        if !manager.ptr_eq(&captured_manager)
+            || !capture.nodes.iter().any(|node| node.id == node_id)
+        {
+            return false;
+        }
+        let current = manager.with_semantic_manager_mut(|manager| {
+            manager.snapshot();
+            manager.version() == capture.tree_version
+        });
+        current && self.fire_semantic_action_checked(node_id, action_type)
+    }
+
     /// Opt-in host admission for a semantic action. See `docs/PORTING.md` (X4).
     /// Returns false for an unavailable action or a disabled/hidden target,
     /// semantic ancestor, or invisible source (including zero opacity).

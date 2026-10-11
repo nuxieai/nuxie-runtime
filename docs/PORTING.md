@@ -1484,14 +1484,33 @@ advance, or draw behavior.
 
 ### Checked host semantic actions (X4)
 
-`RuntimeStateMachineInstanceHandle::fire_semantic_action_checked` is an opt-in
-host admission API in `host_semantics.rs`. It uses the same
-`SemanticNode::is_action_eligible` and `SemanticData::supports_semantic_action`
-checks as `nux_player_queue_semantic_action`: the node must belong to a live
-semantic occurrence, its semantic ancestry must be enabled and visible, its
-source must be visible (including opacity, collapse and clipping), and the
-authored action must be supported. Once accepted, an action remains queued even
-if eligibility changes before the next advance.
+`RuntimeStateMachineInstanceHandle::fire_semantic_action_checked` is the existing
+opt-in host admission API in `host_semantics.rs`. Its signature and behavior are
+unchanged: `SemanticNode::is_action_eligible` and
+`SemanticData::supports_semantic_action` require a live attached occurrence,
+enabled and visible semantic ancestry, a visible source (including opacity,
+collapse and clipping), and a supported authored action. This call does not
+require a presented capture, unlike `nux_player_queue_semantic_action`.
+
+The additional `capture_semantic_actions` returns an immutable
+`RuntimeSemanticActionCapture` with the flattened nodes and native tree version
+from one weakly identified occurrence. The host presents those exact `nodes()`.
+`fire_semantic_action_from_capture` refuses a capture from another occurrence, a
+node absent from the captured tree (including an absorbed child), or a native
+tree version that has changed. It then applies the existing checked admission
+policy. Accepted actions stay queued if eligibility changes before advance.
+No existing caller is migrated and no upstream API is replaced. The Rust capture
+fences native semantic membership/version; the host remains responsible for
+presentation ownership. The C API additionally fences its player/render capture.
+
+**Diff-based host ordering:** both checked admission and capture creation call
+`SemanticManager::snapshot`, which refreshes native semantics. A refresh does not
+drain the latest diff, but if it observes a further change it replaces the pending
+diff rather than accumulating earlier undrained updates. Drain/apply pending
+updates after each advance or mutation, before capturing or admitting an action,
+and before a later refresh can replace them. Full-snapshot hosts present a fresh
+capture after a version refusal. This documents existing refresh behavior;
+`fire_semantic_action_checked` and the mechanical manager remain unchanged.
 
 The original `fire_semantic_action`, command-server dispatch and native listener
 delivery remain unchanged. A file run through those upstream APIs has the same
@@ -1499,14 +1518,14 @@ behavior as before. This is additional host policy, not a port correction:
 upstream at recorded pin `6f3510dc`,
 `src/animation/state_machine_instance.cpp:3761-3796` and
 `src/semantic/semantic_data.cpp:550-572`, forwards to registered listeners without
-this admission check. Host consumers must opt into the checked call.
+this admission check. Host consumers opt into either checked host call.
 
-Phones already used the C API admission policy before this addition. This Rust
-entry point shares that policy; it does not change phone behavior. C API tests
-pin NOT_FOUND for a disabled activation, no queued effect, then admission and
-the authored effect after enabling. `tests/host_semantic_actions.rs` pins host
-refusal, readmission, accepted queued messages, opacity refusal, and unchanged
-raw dispatch on the same disabled file node. Tracking:
+Phones already used the C API admission policy. C API tests pin NOT_FOUND for a
+disabled activation, no queued effect, then admission and its authored effect
+after enabling. `tests/host_semantic_actions.rs` pins occurrence/version capture
+fences, an absorbed file-authored child, a disabled file-authored ancestor and
+readmission, accepted queued actions, opacity refusal, and unchanged raw dispatch
+on the same disabled file node. Tracking:
 [UNIV-3928](https://universe.basis.dev/issue/UNIV-3928).
 
 ### Atomic checked host replacements

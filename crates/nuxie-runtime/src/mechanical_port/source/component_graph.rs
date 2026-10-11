@@ -388,7 +388,16 @@ impl ComponentGraph {
                 continue;
             };
             debug_assert!(child.kind != Kind::Outside);
-            if child.dirt.get().contains(value) || !self.mark(dependent as usize, value) {
+            let dirt = child.dirt.get();
+            if dirt.contains(value) {
+                continue;
+            }
+            // A live member with no onDirty work: Component::addDirt's write
+            // and Artboard notification, without a call.
+            if child.kind == Kind::Noop && child.alive.get() {
+                child.dirt.set(dirt | value);
+                self.notify_artboard(dependent);
+            } else if !self.mark(dependent as usize, value) {
                 continue;
             }
             // Each dependent's whole cascade finishes before its next sibling,

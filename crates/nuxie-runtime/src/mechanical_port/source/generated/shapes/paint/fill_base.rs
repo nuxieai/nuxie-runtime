@@ -62,6 +62,7 @@ impl FillBase {
     // Every write of the fill rule keeps the paint's path flags current.
     fn store_fill_rule(&mut self, value: u8) {
         self.fill_rule = value;
+        self.base.cells().set_fill_rule(value);
         self.base
             .cells()
             .set_path_flags(crate::mechanical_port::source::shapes::paint::fill::fill_rule_path_flags(value));

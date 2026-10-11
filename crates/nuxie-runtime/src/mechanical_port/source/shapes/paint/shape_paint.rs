@@ -127,7 +127,11 @@ pub struct ShapePaint {
 impl ShapePaint {
     pub(crate) fn new(paint_type: ShapePaintType) -> Self {
         let mut base = ShapePaintBase::default();
-        let cells = Rc::new(PaintCells::new(paint_type, base.share_dirt()));
+        let cells = Rc::new(PaintCells::new(
+            paint_type,
+            base.share_dirt(),
+            base.share_is_visible(),
+        ));
         Self {
             base,
             effects_container: EffectsContainerState::for_paint(Rc::clone(&cells)),

@@ -42,7 +42,15 @@ impl StateMachineImporter {
 
 impl ImportStackObject for StateMachineImporter {
     fn resolve(&mut self) -> StatusCode {
-        StatusCode::Ok
+        self.state_machine
+            .with_downcast::<StateMachine, _>(|machine| {
+                if machine.layer_count() > u16::MAX as usize {
+                    StatusCode::InvalidObject
+                } else {
+                    StatusCode::Ok
+                }
+            })
+            .expect("StateMachineImporter retains a StateMachine")
     }
     fn read_null_object(&mut self) -> bool {
         self.add_input(None);
@@ -50,5 +58,26 @@ impl ImportStackObject for StateMachineImporter {
     }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::{animation::state_machine_layer::StateMachineLayer, core::CoreArena};
+
+    #[test]
+    fn layer_count_accepts_u16_max_and_rejects_the_next_layer() {
+        let arena = CoreArena::default();
+        let machine = arena.insert(StateMachine::default());
+        let layer = arena.insert(StateMachineLayer::default());
+        let mut importer = StateMachineImporter::new(machine);
+        assert_eq!(importer.resolve(), StatusCode::Ok);
+        for _ in 0..u16::MAX {
+            importer.add_layer(layer.clone());
+        }
+        assert_eq!(importer.resolve(), StatusCode::Ok);
+        importer.add_layer(layer);
+        assert_eq!(importer.resolve(), StatusCode::InvalidObject);
     }
 }

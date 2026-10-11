@@ -4,13 +4,18 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
+        linear_animation::LinearAnimation,
     },
     core::CoreHandle,
     generated::animation::{
         keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
+        linear_animation_base::LinearAnimationBase,
     },
     generated::core_registry::CoreRegistry,
-    importers::{import_stack::ImportStack, keyed_object_importer::KeyedObjectImporter},
+    importers::{
+        import_stack::ImportStack, keyed_object_importer::KeyedObjectImporter,
+        linear_animation_importer::LinearAnimationImporter,
+    },
     status_code::StatusCode,
 };
 #[derive(Default)]
@@ -258,6 +263,18 @@ impl KeyedProperty {
             return StatusCode::MissingObject;
         };
         i.add_keyed_property(this);
+        if CoreRegistry::is_callback(self.base.property_key()) {
+            if let Some(importer) =
+                stack.latest::<LinearAnimationImporter>(LinearAnimationBase::TYPE_KEY)
+            {
+                importer
+                    .animation()
+                    .with_downcast_mut::<LinearAnimation, _>(|animation| {
+                        animation.set_has_keyed_callbacks(true);
+                    })
+                    .expect("LinearAnimationImporter retains a LinearAnimation");
+            }
+        }
         self.base.base.import(stack)
     }
     pub fn first(&self) -> Option<CoreHandle> {

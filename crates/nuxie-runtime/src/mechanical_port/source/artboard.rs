@@ -90,6 +90,7 @@ struct ArtboardDirtyState {
     depth: Cell<u32>,
     dirt: Cell<ComponentDirt>,
     did_change: Cell<bool>,
+    change_serial: Cell<u32>,
     content_revision: Cell<u64>,
     host: RefCell<Option<ArtboardHostAttachment>>,
     quiet_host_row: Cell<u32>,
@@ -115,6 +116,7 @@ impl Default for RuntimeArtboardDirtyHandle {
             depth: Cell::new(0),
             dirt: Cell::new(ComponentDirt::FILTHY),
             did_change: Cell::new(true),
+            change_serial: Cell::new(0),
             content_revision: Cell::new(1),
             host: RefCell::new(None),
             quiet_host_row: Cell::new(u32::MAX),
@@ -122,6 +124,16 @@ impl Default for RuntimeArtboardDirtyHandle {
     }
 }
 impl RuntimeArtboardDirtyHandle {
+    pub fn change_serial(&self) -> u32 {
+        self.0.change_serial.get()
+    }
+
+    fn increment_change_serial(&self) {
+        self.0
+            .change_serial
+            .set(self.0.change_serial.get().wrapping_add(1));
+    }
+
     pub(crate) fn component_dirt(&self) -> ComponentDirt {
         self.0.dirt.get()
     }
@@ -149,6 +161,8 @@ impl RuntimeArtboardDirtyHandle {
         self.0
             .content_revision
             .set(self.0.content_revision.get().wrapping_add(1));
+        self.increment_change_serial();
+        self.wake_if_quiet_row();
         self.notify_changed();
     }
 
@@ -179,6 +193,7 @@ impl RuntimeArtboardDirtyHandle {
         self.0
             .content_revision
             .set(self.0.content_revision.get().wrapping_add(1));
+        self.increment_change_serial();
         self.mark_components_dirty();
         if graph_order < self.0.depth.get() {
             self.0.depth.set(graph_order);
@@ -2238,6 +2253,8 @@ impl Artboard {
     }
 
     pub fn self_transform_changed(&mut self) {
+        self.dirty_state.increment_change_serial();
+        self.wake_if_quiet_row();
         self.host_transform_marked_dirty = false;
         self.mark_host_transform_dirty();
         self.mark_semantic_boundary_transform_dirty();
@@ -4647,6 +4664,10 @@ impl Artboard {
 
     pub fn changed(&mut self) {
         self.dirty_state.changed();
+    }
+
+    pub fn change_serial(&self) -> u32 {
+        self.dirty_state.change_serial()
     }
 
     fn has_parent_focus_data(focus_data: &CoreHandle) -> bool {

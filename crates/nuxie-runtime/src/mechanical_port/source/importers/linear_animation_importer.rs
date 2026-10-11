@@ -12,6 +12,11 @@ pub struct LinearAnimationImporter {
 
 impl LinearAnimationImporter {
     pub fn new(animation: CoreHandle) -> Self {
+        animation
+            .with_downcast_mut::<LinearAnimation, _>(|animation| {
+                animation.set_has_keyed_callbacks(false);
+            })
+            .expect("LinearAnimationImporter retains a LinearAnimation");
         Self { animation }
     }
 

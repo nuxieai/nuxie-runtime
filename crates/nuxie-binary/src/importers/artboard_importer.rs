@@ -54,6 +54,7 @@ pub(crate) fn validate_cpp_import_resolution(
     objects: &[Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
 ) -> Result<()> {
+    state_machine_importer::validate_cpp_state_machines(objects, import_statuses)?;
     state_machine_layer_importer::validate_cpp_state_machine_layers(objects, import_statuses)?;
     for range in runtime_artboard_ranges(objects, import_statuses) {
         let mut slots = runtime_artboard_local_slots(objects, import_statuses, range);

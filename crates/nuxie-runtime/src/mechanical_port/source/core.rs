@@ -866,73 +866,63 @@ impl CoreHandle {
 
     #[inline]
     pub fn is_alive(&self) -> bool {
+        self.read_slot(|slot| Some(Self::slot_is_alive(slot)))
+            .unwrap_or(false)
+    }
+
+    pub fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
+        // The predicate runs under a lease: one that removes or reuses this
+        // slot leaves it pinned until the predicate returns.
+        let Some(slot) = self.slot() else {
+            return false;
+        };
+        Self::slot_is_alive(&slot)
+            && slot
+                .type_predicate
+                .get()
+                .is_some_and(|predicate| predicate(type_key))
+    }
+
+    /// Existing immutable registration metadata, checked for this generation
+    /// and a live owner without borrowing the object's mutable contents.
+    #[inline]
+    pub(crate) fn type_metadata(&self) -> Option<(CoreTypeKey, fn(CoreTypeKey) -> bool)> {
+        self.read_slot(|slot| {
+            if !Self::slot_is_alive(slot) {
+                return None;
+            }
+            Some((slot.core_type.get(), slot.type_predicate.get()?))
+        })
+    }
+
+    pub fn core_type(&self) -> Option<CoreTypeKey> {
+        self.read_slot(|slot| slot.occupied.get().then(|| slot.core_type.get()))
+    }
+
+    /// Read this handle's live slot. A lease's release runs a pending
+    /// retirement; with none pending the lease is unobservable, so the read
+    /// takes one only then, and still reads under it.
+    #[inline]
+    fn read_slot<R>(&self, read: impl FnOnce(&CoreArenaSlot) -> Option<R>) -> Option<R> {
         let slot = &self.identity.slot;
         if slot.generation.get() != slot.hot.identity_generation {
-            return false;
+            return None;
         }
-        // A lease's release runs a pending retirement; with none pending the
-        // lease is unobservable, so the common case reads without one.
         if slot.retirement_pending.get() {
-            return self.is_alive_leased();
+            let lease = self.slot()?;
+            return read(&lease);
         }
+        read(slot)
+    }
+
+    #[inline]
+    fn slot_is_alive(slot: &CoreArenaSlot) -> bool {
         slot.occupied.get()
             && slot
                 .runtime_artboard
                 .borrow()
                 .as_ref()
                 .is_none_or(|root| root.strong_count() > 0)
-    }
-
-    #[cold]
-    #[inline(never)]
-    fn is_alive_leased(&self) -> bool {
-        self.slot().is_some_and(|slot| {
-            slot.occupied.get()
-                && slot
-                    .runtime_artboard
-                    .borrow()
-                    .as_ref()
-                    .is_none_or(|root| root.strong_count() > 0)
-        })
-    }
-
-    pub fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
-        let Some(slot) = self.slot() else {
-            return false;
-        };
-        let is_alive = slot.occupied.get()
-            && slot
-                .runtime_artboard
-                .borrow()
-                .as_ref()
-                .is_none_or(|root| root.strong_count() > 0);
-        if !is_alive {
-            return false;
-        }
-        slot.type_predicate
-            .get()
-            .is_some_and(|predicate| predicate(type_key))
-    }
-
-    /// Existing immutable registration metadata, checked for this generation
-    /// and a live owner without borrowing the object's mutable contents.
-    pub(crate) fn type_metadata(&self) -> Option<(CoreTypeKey, fn(CoreTypeKey) -> bool)> {
-        let slot = self.slot()?;
-        let is_alive = slot.occupied.get()
-            && slot
-                .runtime_artboard
-                .borrow()
-                .as_ref()
-                .is_none_or(|root| root.strong_count() > 0);
-        if !is_alive {
-            return None;
-        }
-        Some((slot.core_type.get(), slot.type_predicate.get()?))
-    }
-
-    pub fn core_type(&self) -> Option<CoreTypeKey> {
-        let slot = self.slot()?;
-        slot.occupied.get().then(|| slot.core_type.get())
     }
 
     /// Retain the existing artboard occurrence represented by this arena slot.

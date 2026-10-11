@@ -271,17 +271,30 @@ impl ComponentGraph {
     }
 
     /// Component::addDirt for a member reached without a held payload borrow.
+    /// The duplicate-bit return is inline; most adds from onDirty handlers
+    /// find their bits already set.
+    #[inline]
     pub(crate) fn add_dirt(&self, index: u32, value: ComponentDirt, recurse: bool) -> bool {
         #[cfg(feature = "tools")]
         trace::event(self, 'A', index, value, recurse);
+        let node = &self.nodes[index as usize];
+        // A retired member returns false too, and neither return has side
+        // effects, so this check may go first. An outside member's dirt lives
+        // with its occurrence, not here.
+        if node.kind != Kind::Outside && node.dirt.get().contains(value) {
+            return false;
+        }
+        self.add_new_dirt(index, value, recurse)
+    }
+
+    #[inline(never)]
+    fn add_new_dirt(&self, index: u32, value: ComponentDirt, recurse: bool) -> bool {
         let i = index as usize;
         let node = &self.nodes[i];
         if node.kind == Kind::Outside {
             return self.occurrences[i].add_dirt(value, recurse);
         }
-        // The duplicate-bit return. A retired member returns false too, and
-        // neither return has side effects, so this check may go first.
-        if node.dirt.get().contains(value) || !self.mark(i, value) {
+        if !self.mark(i, value) {
             return false;
         }
         if recurse && node.dependents_start != node.dependents_end {

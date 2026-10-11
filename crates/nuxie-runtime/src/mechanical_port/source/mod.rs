@@ -130,6 +130,7 @@ pub mod status_code;
 pub mod text;
 pub use text::text_engine;
 pub mod transform_component;
+pub(crate) mod type_tables;
 pub mod transform_space;
 pub mod trim_type;
 pub mod typed_children;

@@ -16,9 +16,7 @@ use crate::mechanical_port::source::{
             effects_container,
             shape_paint_path::ShapePaintPath,
             stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
-            shape_paint::{
-                RuntimeRenderPaintHandle, ShapePaintRenderingInvalidation, ShapePaintType,
-            },
+            shape_paint::{RuntimeRenderPaintHandle, ShapePaintType},
         },
         path_flags::PathFlags,
         shape_paint_container::ContainerCells,
@@ -153,12 +151,16 @@ impl PaintCells {
         for (_, paths) in self.effect_paths.borrow().iter() {
             invalidate_effect_paths(paths, None);
         }
-        let invalidation = match self.paint_type {
-            ShapePaintType::Fill => ShapePaintRenderingInvalidation::Base,
-            ShapePaintType::Stroke => ShapePaintRenderingInvalidation::stroke(self.render_paint().cloned()),
-        };
-        if !invalidation.before_dirt() {
-            return;
+        // Stroke::invalidateRendering's prefix, through the installed paint
+        // (ShapePaintRenderingInvalidation::stroke, without retaining it).
+        if self.paint_type == ShapePaintType::Stroke {
+            match self.render_paint() {
+                Some(paint) => paint.borrow_mut().invalidate_stroke(),
+                #[cfg(feature = "editor")]
+                None => return,
+                #[cfg(not(feature = "editor"))]
+                None => panic!("initialized Stroke render paint"),
+            }
         }
         // ShapePaint::invalidateRendering's addDirt(Path, true).
         let added = self

@@ -286,6 +286,9 @@ struct CoreArenaSlot {
         Cell<Option<Rc<crate::mechanical_port::source::component_graph::ComponentGraph>>>,
     runtime_artboard:
         RefCell<Option<Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>>>,
+    // Whether `runtime_artboard` is set, so liveness reads of every other
+    // slot skip its borrow.
+    hosts_runtime_artboard: Cell<bool>,
 }
 
 impl std::ops::Deref for CoreArenaSlot {
@@ -317,6 +320,7 @@ impl CoreArenaSlot {
             },
             component_graph: Cell::new(None),
             runtime_artboard: RefCell::new(None),
+            hosts_runtime_artboard: Cell::new(false),
         }
     }
     /// Mark this occurrence retired in its Artboard graph (so cascades and the
@@ -381,7 +385,10 @@ impl CoreArenaSlot {
             _artboard_dirty: self.artboard_dirty.take(),
             _data_bind_container: self.data_bind_container.take(),
             _object: object.take(),
-            _runtime_artboard: self.runtime_artboard.take(),
+            _runtime_artboard: {
+                self.hosts_runtime_artboard.set(false);
+                self.runtime_artboard.take()
+            },
         };
         drop(object);
         drop(retired);
@@ -535,6 +542,7 @@ impl CoreArena {
             *slot.artboard_dirty.borrow_mut() = Some(root.base.dirty_handle());
         }
         *slot.runtime_artboard.borrow_mut() = Some(artboard);
+        slot.hosts_runtime_artboard.set(true);
         inner.slots.push(CoreSlotOwner(Rc::clone(&identity)));
         CoreHandle { identity }
     }
@@ -652,7 +660,9 @@ impl CoreArena {
         let Some(slot) = handle.slot() else {
             return;
         };
-        if slot.runtime_artboard.borrow_mut().take().is_none() {
+        let hosted = slot.runtime_artboard.borrow_mut().take();
+        slot.hosts_runtime_artboard.set(false);
+        if hosted.is_none() {
             return;
         }
         slot.data_bind_container.borrow_mut().take();
@@ -928,11 +938,12 @@ impl CoreHandle {
     #[inline]
     fn slot_is_alive(slot: &CoreArenaSlot) -> bool {
         slot.occupied.get()
-            && slot
-                .runtime_artboard
-                .borrow()
-                .as_ref()
-                .is_none_or(|root| root.strong_count() > 0)
+            && (!slot.hosts_runtime_artboard.get()
+                || slot
+                    .runtime_artboard
+                    .borrow()
+                    .as_ref()
+                    .is_none_or(|root| root.strong_count() > 0))
     }
 
     /// Retain the existing artboard occurrence represented by this arena slot.

@@ -31,7 +31,7 @@ use crate::mechanical_port::source::{
         },
     },
     scene::{Scene, SceneBehavior},
-    scripted::scripted_interpolator::ScriptedInterpolator,
+    scripted::scripted_interpolator::{ScriptedInterpolator, StatefulScriptedInterpolator},
 };
 use std::{
     cell::{RefCell, RefMut},
@@ -360,23 +360,6 @@ impl LinearAnimationInstance {
             .insert(key.clone(), clone);
         Some(holder)
     }
-    pub fn cache_scripted_interpolator(
-        &mut self,
-        key: CoreHandle,
-        value: CoreHandle,
-        binds: Vec<CoreHandle>,
-    ) {
-        let container = self
-            .scene
-            .artboard_instance_ref()
-            .with_artboard(|artboard| artboard.base.data_bind_container.downgrade());
-        let mut extras = self.ensure_binding_extras();
-        extras.scripted_interpolators.insert(key, value);
-        extras.cloned_artboard_data_binds.extend(binds);
-        if let Some(container) = container {
-            extras.bind_container = container;
-        }
-    }
     fn ensure_binding_extras(&self) -> RefMut<'_, LAIBindingExtras> {
         RefMut::map(self.binding_extras.borrow_mut(), |extras| {
             extras
@@ -393,54 +376,24 @@ impl LinearAnimationInstance {
             .ensure_binding_extras()
             .scripted_interpolators
             .get(&keyframe)
-            .cloned();
+            .and_then(StatefulScriptedInterpolator::get);
         if let Some(cached) = cached {
             return Some(cached);
         }
-        use crate::mechanical_port::source::scripted::scripted_object::{
-            ScriptUpdateRequestHost, ScriptedObject,
-        };
-        let owner = ScriptedInterpolator::clone_scripted_occurrence(&shared, |bind| {
+        let (container, context) =
             self.scene
                 .artboard_instance_ref()
-                .with_artboard_mut(|artboard| artboard.add_data_bind(bind))
-                .expect("the animation retains its artboard while cloning an interpolator");
-        })?;
-        let context = self
-            .scene
-            .artboard_instance_ref()
-            .with_artboard(|artboard| artboard.data_context())?;
-        self.ensure_binding_extras().bind_container = self
-            .scene
-            .artboard_instance_ref()
-            .with_artboard(|artboard| artboard.base.data_bind_container.downgrade())?;
-        let (properties, needs_init) =
-            owner.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
-                clone.scripted.set_data_context(context);
-                (
-                    clone.properties.clone(),
-                    clone.scripted.script_asset().is_some() && !clone.scripted.user_lua_init_done(),
-                )
-            })?;
-        // The input backlink is installed after addDataBind by cloneProperties.
-        // Discover the same binds as the pinned owner, preserving their order.
-        for property in &properties {
-            if let Some(bind) = property
-                .with(|property| property.script_input_data_bind())
-                .flatten()
-            {
-                self.ensure_binding_extras()
-                    .cloned_artboard_data_binds
-                    .push(bind);
-            }
-        }
-        if needs_init {
-            let mut host = ScriptUpdateRequestHost::default();
-            ScriptedObject::reinit_occurrence(&owner, &properties, &mut host);
-        }
+                .with_artboard(|artboard| {
+                    (
+                        artboard.base.data_bind_container.clone(),
+                        artboard.data_context(),
+                    )
+                })?;
+        let stateful = StatefulScriptedInterpolator::new(Some(&shared), Some(&container), context);
+        let owner = stateful.get()?;
         self.ensure_binding_extras()
             .scripted_interpolators
-            .insert(keyframe, owner.clone());
+            .insert(keyframe, stateful);
         Some(owner)
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
@@ -770,11 +723,8 @@ impl Drop for LinearAnimationInstance {
         let Some(mut extras) = self.binding_extras.get_mut().take() else {
             return;
         };
-        for bind in extras
-            .cloned_artboard_data_binds
-            .drain(..)
-            .chain(extras.keyframe_value_binds.drain().map(|(_, bind)| bind))
-        {
+        extras.scripted_interpolators.clear();
+        for (_, bind) in extras.keyframe_value_binds.drain() {
             if let Some(container) = extras.bind_container.upgrade() {
                 container.remove_data_bind(bind.clone());
             }
@@ -782,9 +732,6 @@ impl Drop for LinearAnimationInstance {
         }
         for (_, holder) in extras.keyframe_value_holders.drain() {
             holder.remove_occurrence();
-        }
-        for (_, interpolator) in extras.scripted_interpolators.drain() {
-            interpolator.remove_occurrence();
         }
     }
 }

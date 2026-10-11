@@ -1,11 +1,15 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     core::CoreHandle,
+    data_bind::data_context::RuntimeDataContextHandle,
     data_bind::data_values::{
         data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
     },
     generated::data_bind::converters::data_converter_range_mapper_base::{
         DataConverterRangeMapperBase, DataConverterRangeMapperBaseCallbacks,
     },
+    scripted::scripted_interpolator::{ScriptedInterpolator, StatefulScriptedInterpolator},
 };
 pub const CLAMP_LOWER: u32 = 1;
 pub const CLAMP_UPPER: u32 = 2;
@@ -14,6 +18,7 @@ pub const REVERSE: u32 = 8;
 pub struct DataConverterRangeMapper {
     pub base: DataConverterRangeMapperBase,
     interpolator: Option<CoreHandle>,
+    scripted_interpolator: Option<Rc<StatefulScriptedInterpolator>>,
     output: DataValueNumber,
 }
 
@@ -22,12 +27,78 @@ impl Default for DataConverterRangeMapper {
         Self {
             base: DataConverterRangeMapperBase::default(),
             interpolator: None,
+            scripted_interpolator: None,
             output: DataValueNumber::default(),
         }
     }
 }
 
 impl DataConverterRangeMapper {
+    fn active_interpolator(&self) -> Option<CoreHandle> {
+        self.scripted_interpolator
+            .as_ref()
+            .and_then(|holder| holder.get())
+            .or_else(|| self.interpolator.clone())
+    }
+
+    pub fn bind_from_context_handle(
+        owner: &CoreHandle,
+        context: RuntimeDataContextHandle,
+        data_bind: Option<CoreHandle>,
+    ) {
+        super::data_converter::DataConverter::bind_from_context_handle(
+            owner,
+            context.clone(),
+            data_bind,
+        );
+        let (source, holder) = owner
+            .with_downcast::<Self, _>(|converter| {
+                (
+                    converter.interpolator.clone(),
+                    converter.scripted_interpolator.clone(),
+                )
+            })
+            .expect("live range mapper converter");
+        if !source.as_ref().is_some_and(|source| {
+            source
+                .with_downcast::<ScriptedInterpolator, _>(|_| ())
+                .is_some()
+        }) {
+            return;
+        }
+        let holder = holder.unwrap_or_else(|| {
+            let holder = Rc::new(StatefulScriptedInterpolator::new_owned(
+                source.as_ref(),
+                Some(context.clone()),
+            ));
+            owner.with_downcast_mut::<Self, _>(|converter| {
+                converter.scripted_interpolator = Some(holder.clone())
+            });
+            holder
+        });
+        holder.bind_from_context(Some(context));
+    }
+
+    pub fn unbind_handle(owner: &CoreHandle) {
+        let _retained = owner.retain_arena();
+        super::data_converter::DataConverter::unbind_base_handle(owner);
+        let holder = owner
+            .with_downcast::<Self, _>(|converter| converter.scripted_interpolator.clone())
+            .flatten();
+        if let Some(holder) = holder {
+            holder.unbind();
+        }
+    }
+
+    pub fn update_handle(owner: &CoreHandle) {
+        super::data_converter::DataConverter::update_base_handle(owner);
+        let holder = owner
+            .with_downcast::<Self, _>(|converter| converter.scripted_interpolator.clone())
+            .flatten();
+        if let Some(holder) = holder {
+            holder.update_data_binds();
+        }
+    }
     pub fn new(
         min_input: f32,
         max_input: f32,
@@ -110,11 +181,8 @@ impl DataConverterRangeMapper {
                 if self.base.flags() & REVERSE == REVERSE {
                     percentage = 1.0 - percentage;
                 }
-                if let Some(interpolator) = self
-                    .interpolator
-                    .as_ref()
-                    .filter(|_| percentage > 0.0 && percentage < 1.0)
-                {
+                if self.interpolator.is_some() && percentage > 0.0 && percentage < 1.0 {
+                    let interpolator = self.active_interpolator().expect("authored interpolator");
                     percentage = interpolator
                         .with_mut(|interpolator| {
                             interpolator.keyframe_interpolator_transform(percentage)
@@ -205,4 +273,56 @@ impl DataConverterRangeMapperBaseCallbacks for DataConverterRangeMapper {
     }
 }
 
-crate::impl_data_converter_capability_bidi!(DataConverterRangeMapper, base.base);
+impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
+    for DataConverterRangeMapper
+{
+    fn convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::convert(self, input));
+    }
+    fn reverse_convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::reverse_convert(self, input));
+    }
+    fn output_type(&self) -> DataType {
+        Self::output_type(self)
+    }
+    fn bind_context_handler(&self) -> super::data_converter::ConverterBindContextHandler {
+        Self::bind_from_context_handle
+    }
+    fn unbind_handler(&self) -> super::data_converter::ConverterUnbindHandler {
+        Self::unbind_handle
+    }
+    fn unbind(&mut self) {
+        self.base.base.unbind();
+        if let Some(holder) = &self.scripted_interpolator {
+            holder.unbind();
+        }
+    }
+    fn update(&mut self) {
+        self.base.base.update();
+        if let Some(holder) = &self.scripted_interpolator {
+            holder.update_data_binds();
+        }
+    }
+    fn reset(&mut self) {
+        self.base.base.reset();
+    }
+    fn advance(&mut self, elapsed: f32) -> bool {
+        self.base.base.advance(elapsed)
+    }
+}
+
+impl Drop for DataConverterRangeMapper {
+    fn drop(&mut self) {
+        self.scripted_interpolator = None;
+    }
+}

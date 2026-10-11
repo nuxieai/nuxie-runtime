@@ -24,6 +24,7 @@ pub use super::data_bind::{BINDINGS, BINDINGS_TARGET, DEPENDENTS};
 pub enum DataBindContainerOwner {
     Authored(CoreHandle),
     StateMachine(RuntimeStateMachineInstanceWeakHandle),
+    Standalone(DataBindContainerWeak),
 }
 
 impl DataBindContainerOwner {
@@ -35,6 +36,7 @@ impl DataBindContainerOwner {
                 }
             }
             Self::StateMachine(owner) => owner.data_context_changed(),
+            Self::Standalone(_) => {}
         }
     }
     pub fn main_view_model_instance_changed(&self) {
@@ -45,12 +47,13 @@ impl DataBindContainerOwner {
                 }
             }
             Self::StateMachine(owner) => owner.main_view_model_instance_changed(),
+            Self::Standalone(_) => {}
         }
     }
 
     pub fn drop_instance_value_binds_targeting(&self, target: &CoreHandle) {
         match self {
-            Self::Authored(_) => {
+            Self::Authored(_) | Self::Standalone(_) => {
                 if let Some(container) = self.container() {
                     container.drop_instance_value_binds_targeting(target);
                 }
@@ -73,6 +76,7 @@ impl DataBindContainerOwner {
         match self {
             Self::Authored(owner) => owner.data_bind_container(),
             Self::StateMachine(owner) => owner.data_bind_container(),
+            Self::Standalone(container) => container.upgrade(),
         }
     }
 
@@ -193,6 +197,9 @@ impl DataBindContainerOwner {
                 .with(|owner| owner.as_artboard().and_then(|owner| owner.data_context()))
                 .flatten(),
             Self::StateMachine(owner) => owner.data_context_handle(),
+            Self::Standalone(container) => container
+                .upgrade()
+                .and_then(|container| container.data_bind_context()),
         };
         DataBindContext::bind_from_context_handle(&bind, context);
     }
@@ -205,7 +212,7 @@ impl DataBindContainerOwner {
 pub struct DataBindContainer(Rc<RefCell<DataBindContainerState>>);
 
 #[derive(Clone, Default)]
-pub(crate) struct DataBindContainerWeak(Weak<RefCell<DataBindContainerState>>);
+pub struct DataBindContainerWeak(Weak<RefCell<DataBindContainerState>>);
 
 impl DataBindContainerWeak {
     pub(crate) fn upgrade(&self) -> Option<DataBindContainer> {
@@ -238,6 +245,15 @@ struct DataBindQueues {
 }
 
 impl DataBindContainer {
+    /// Source-shaped standalone container (no Artboard/converter callbacks),
+    /// retaining only a weak backlink from each owned bind's notifications.
+    pub(crate) fn new_standalone() -> Self {
+        let container = Self::default();
+        container.0.borrow_mut().owner =
+            Some(DataBindContainerOwner::Standalone(container.downgrade()));
+        container
+    }
+
     pub fn is_processing_data_binds(&self) -> bool {
         self.0.borrow().is_processing
     }

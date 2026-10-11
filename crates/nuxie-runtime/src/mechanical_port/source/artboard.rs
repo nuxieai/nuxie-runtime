@@ -259,6 +259,12 @@ pub struct Artboard {
     // artboard has one; the object itself owns the offscreen render state.
     bitmap_cache: Option<CoreHandle>,
     scripted_objects: Vec<CoreHandle>,
+    scripted_interpolators: RefCell<
+        HashMap<
+            CoreHandle,
+            Rc<crate::source::scripted::scripted_interpolator::StatefulScriptedInterpolator>,
+        >,
+    >,
     advancing_components: Vec<AdvancingComponentHandle>,
     instance_value_binds_source: Option<CoreHandle>,
     instance_value_binds_pending: bool,
@@ -355,6 +361,7 @@ impl Default for Artboard {
             joysticks: Vec::new(),
             bitmap_cache: None,
             scripted_objects: Vec::new(),
+            scripted_interpolators: RefCell::new(HashMap::new()),
             advancing_components: Vec::new(),
             instance_value_binds_source: None,
             instance_value_binds_pending: false,
@@ -883,6 +890,47 @@ impl Artboard {
         } else {
             crate::mechanical_port::source::core::CoreObject::core(self).handle()
         }
+    }
+
+    pub fn stateful_interpolator_handle(
+        root: &CoreHandle,
+        source: &CoreHandle,
+    ) -> Option<CoreHandle> {
+        let (existing, container, context) = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard.is_instance.then(|| {
+                    (
+                        artboard
+                            .scripted_interpolators
+                            .borrow()
+                            .get(source)
+                            .cloned(),
+                        artboard.data_bind_container.clone(),
+                        artboard.data_context(),
+                    )
+                })
+            })
+            .flatten()?;
+        if let Some(existing) = existing {
+            return existing.get();
+        }
+        // Retain failed clones too, exactly as upstream, to avoid retrying
+        // every frame in runtimes without scripting.
+        let stateful = Rc::new(
+            crate::source::scripted::scripted_interpolator::StatefulScriptedInterpolator::new(
+                Some(source),
+                Some(&container),
+                context,
+            ),
+        );
+        let clone = stateful.get();
+        root.with_downcast::<Artboard, _>(|artboard| {
+            artboard
+                .scripted_interpolators
+                .borrow_mut()
+                .insert(source.clone(), stateful);
+        });
+        clone
     }
 
     pub fn runtime_weak_handle(&self) -> RuntimeArtboardInstanceWeakHandle {
@@ -2657,11 +2705,13 @@ impl Artboard {
             }
         });
         if value.contains(ComponentDirt::LAYOUT_STYLE) {
-            let (interpolation, interpolator, time, direction) = root
+            let interpolation = root
+                .with_downcast::<Artboard, _>(|artboard| artboard.base.base.interpolation())
+                .expect("live Artboard layout tail");
+            let interpolator = LayoutComponent::interpolator_occurrence(root);
+            let (time, direction) = root
                 .with_downcast::<Artboard, _>(|artboard| {
                     (
-                        artboard.base.base.interpolation(),
-                        artboard.base.base.interpolator(),
                         artboard.base.base.interpolation_time(),
                         artboard.base.base.actual_direction(),
                     )
@@ -5363,6 +5413,19 @@ impl Artboard {
             });
         }
         Self::init_scripted_objects_handle(root);
+        let interpolators = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard
+                    .scripted_interpolators
+                    .borrow()
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .expect("live Artboard");
+        for interpolator in interpolators {
+            interpolator.set_data_context(Some(value.clone()));
+        }
     }
 
     pub fn bind_handle(root: &CoreHandle) {
@@ -5402,6 +5465,23 @@ impl Artboard {
         }
         for object in objects {
             object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.reset_lua_init();
+                }
+            });
+        }
+        let interpolators = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard
+                    .scripted_interpolators
+                    .borrow()
+                    .values()
+                    .filter_map(|interpolator| interpolator.get())
+                    .collect::<Vec<_>>()
+            })
+            .expect("live Artboard");
+        for interpolator in interpolators {
+            interpolator.with_mut(|object| {
                 if let Some(object) = object.as_scripted_object_mut() {
                     object.reset_lua_init();
                 }
@@ -6109,6 +6189,8 @@ impl Drop for Artboard {
         ) {
             engine.stop_artboard(identity);
         }
+        // Clones remove their input binds while our bind list is still live.
+        self.scripted_interpolators.get_mut().clear();
         self.unbind_for_drop();
 
         // Pre-delete pass: an adopted manager may still have live focus. Clear

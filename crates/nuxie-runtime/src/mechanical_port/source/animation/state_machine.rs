@@ -187,7 +187,7 @@ impl StateMachine {
                 }
             });
         }
-        for layer in &self.layers {
+        for layer in self.layers.clone() {
             let states = layer.with_downcast::<crate::mechanical_port::source::animation::state_machine_layer::StateMachineLayer, _>(|layer| {
                 (0..layer.state_count()).filter_map(|i| layer.state(i)).collect::<Vec<_>>()
             }).expect("StateMachineLayer");
@@ -199,9 +199,31 @@ impl StateMachine {
                     }).unwrap_or(false))
                 }).unwrap_or(false);
                 state.with_mut(|state| state.set_layer_state_settle_flags(safe, ignore_time));
+                self.add_scripted_interpolators(&state);
             }
         }
         StatusCode::Ok
+    }
+    fn add_scripted_interpolators(&mut self, state: &CoreHandle) {
+        let transitions = state
+            .with(|state| {
+                (0..state.layer_state_transition_count().unwrap_or(0))
+                    .filter_map(|i| state.layer_state_transition(i))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for transition in transitions {
+            let Some(interpolator) = transition
+                .with(|transition| transition.state_transition_interpolator())
+                .flatten()
+            else {
+                continue;
+            };
+            if interpolator.is_type_of(crate::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY)
+                && !self.scripted_objects.contains(&interpolator) {
+                self.add_scripted_object(interpolator);
+            }
+        }
     }
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY) else {

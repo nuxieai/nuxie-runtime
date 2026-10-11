@@ -3162,18 +3162,17 @@ impl LayoutComponent {
             owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
             updated = true;
         }
-        let (interpolation, interpolator, time, direction) = owner
-            .with(|object| {
-                let layout = object.as_layout_component().unwrap();
-                (
-                    layout.interpolation(),
-                    layout.interpolator(),
-                    layout.interpolation_time(),
-                    layout.actual_direction(),
-                )
-            })
-            .unwrap();
         for (_, provider) in Self::layout_providers_occurrence(owner) {
+            let interpolation = owner
+                .with(|object| object.as_layout_component().unwrap().interpolation())
+                .unwrap();
+            let interpolator = Self::interpolator_occurrence(owner);
+            let (time, direction) = owner
+                .with(|object| {
+                    let layout = object.as_layout_component().unwrap();
+                    (layout.interpolation_time(), layout.actual_direction())
+                })
+                .unwrap();
             if provider
                 .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
             {
@@ -3229,7 +3228,7 @@ impl LayoutComponent {
     }
 
     pub fn apply_interpolation_occurrence(owner: &CoreHandle, elapsed: f32, animate: bool) -> bool {
-        let Some((time, interpolation, interpolator, smoothing, data_a)) = owner
+        let Some(()) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 let target = layout.layout;
@@ -3237,25 +3236,36 @@ impl LayoutComponent {
                 if !animate || !layout.animates() || layout.style.is_none() || data.to == target {
                     return None;
                 }
-                Some((
-                    layout.interpolation_time(),
-                    layout.interpolation(),
-                    layout.interpolator(),
-                    layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation),
-                    layout.animation.as_mut().unwrap().a,
-                ))
+                Some(())
             })
             .flatten()
         else {
             return false;
         };
+        let (smoothing, data_a) = owner
+            .with(|object| {
+                let layout = object.as_layout_component().unwrap();
+                (
+                    layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation),
+                    layout.animation.as_ref().unwrap().a,
+                )
+            })
+            .unwrap();
         let factor = |seconds: f32| {
+            let time = owner
+                .with(|object| object.as_layout_component().unwrap().interpolation_time())
+                .unwrap();
             let factor = 1.0_f32.min(if time > 0.0 { seconds / time } else { 1.0 });
+            let interpolation = owner
+                .with(|object| object.as_layout_component().unwrap().interpolation())
+                .unwrap();
             if interpolation == LayoutStyleInterpolation::Linear {
                 return factor;
             }
-            interpolator
-                .as_ref()
+            if Self::interpolator_occurrence(owner).is_none() {
+                return factor;
+            }
+            Self::interpolator_occurrence(owner)
                 .and_then(|interpolator| {
                     interpolator
                         .with_mut(|object| object.keyframe_interpolator_transform(factor))
@@ -3283,7 +3293,11 @@ impl LayoutComponent {
                 (*layout.current_animation_data().unwrap(), layout.layout)
             })
             .unwrap();
-        if data.elapsed_seconds >= time {
+        if data.elapsed_seconds
+            >= owner
+                .with(|object| object.as_layout_component().unwrap().interpolation_time())
+                .unwrap()
+        {
             if old.width() != data.to.width() || old.height() != data.to.height() {
                 owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
             }
@@ -3365,16 +3379,64 @@ impl LayoutComponent {
             .unwrap_or(LayoutAnimationStyle::None)
     }
     pub fn interpolator(&self) -> Option<CoreHandle> {
-        self.with_style(|style| match style.animation_style() {
-            LayoutAnimationStyle::Inherit => self
-                .animation
-                .as_ref()
-                .and_then(|animation| animation.inherited_interpolator.clone())
-                .or_else(|| style.interpolator()),
-            LayoutAnimationStyle::Custom => style.interpolator(),
-            _ => None,
-        })
-        .flatten()
+        Self::resolve_interpolator_request(self.interpolator_request())
+    }
+    pub fn interpolator_occurrence(owner: &CoreHandle) -> Option<CoreHandle> {
+        // Script clone initialization can call back into the owner. Snapshot
+        // the requested identity before resolving it, with no owner borrow.
+        let request =
+            owner.with(|object| object.as_layout_component().unwrap().interpolator_request())?;
+        Self::resolve_interpolator_request(request)
+    }
+    fn interpolator_request(&self) -> (Option<CoreHandle>, Option<(CoreHandle, u32)>) {
+        match self.animation_style() {
+            LayoutAnimationStyle::Inherit => {
+                if let Some(inherited) = self
+                    .animation
+                    .as_ref()
+                    .and_then(|animation| animation.inherited_interpolator.clone())
+                {
+                    (Some(inherited), None)
+                } else {
+                    self.style_interpolator_request()
+                }
+            }
+            LayoutAnimationStyle::Custom => self.style_interpolator_request(),
+            _ => (None, None),
+        }
+    }
+    fn style_interpolator_request(&self) -> (Option<CoreHandle>, Option<(CoreHandle, u32)>) {
+        let Some((interpolator, id)) =
+            self.with_style(|style| (style.interpolator(), style.base.interpolator_id()))
+        else {
+            return (None, None);
+        };
+        let owner = self.artboard_handle().map(|artboard| (artboard, id));
+        (interpolator, owner)
+    }
+    fn resolve_interpolator_request(
+        (interpolator, owner): (Option<CoreHandle>, Option<(CoreHandle, u32)>),
+    ) -> Option<CoreHandle> {
+        let interpolator = interpolator?;
+        let scripted_type = crate::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY;
+        if !interpolator.is_type_of(scripted_type) {
+            return Some(interpolator);
+        }
+        let Some((artboard, id)) = owner else {
+            return Some(interpolator);
+        };
+        let source = artboard
+            .with_downcast::<Artboard, _>(Artboard::artboard_source_handle)
+            .flatten()
+            .and_then(|source| {
+                source
+                    .with_downcast::<Artboard, _>(|source| source.resolve_handle(id))
+                    .flatten()
+            });
+        let Some(source) = source.filter(|source| source.is_type_of(scripted_type)) else {
+            return Some(interpolator);
+        };
+        Artboard::stateful_interpolator_handle(&artboard, &source).or(Some(interpolator))
     }
     pub fn interpolation(&self) -> LayoutStyleInterpolation {
         self.with_style(|style| match style.animation_style() {
@@ -3433,15 +3495,17 @@ impl LayoutComponent {
         if !animate || !self.animates() || self.style.is_none() || data.to == target {
             return false;
         }
-        let time = self.interpolation_time();
-        let transform_factor = |seconds: f32,
-                                interpolation: LayoutStyleInterpolation,
-                                interpolator: Option<CoreHandle>| {
+        let transform_factor = |layout: &Self, seconds: f32| {
+            let time = layout.interpolation_time();
             let factor = 1.0_f32.min(if time > 0.0 { seconds / time } else { 1.0 });
-            if interpolation == LayoutStyleInterpolation::Linear {
+            if layout.interpolation() == LayoutStyleInterpolation::Linear {
                 return factor;
             }
-            interpolator
+            if layout.interpolator().is_none() {
+                return factor;
+            }
+            layout
+                .interpolator()
                 .and_then(|interpolator| {
                     interpolator
                         .with_mut(|object| object.keyframe_interpolator_transform(factor))
@@ -3450,11 +3514,7 @@ impl LayoutComponent {
                 .unwrap_or(factor)
         };
         if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-            let factor = transform_factor(
-                self.animation.as_mut().unwrap().a.elapsed_seconds,
-                self.interpolation(),
-                self.interpolator(),
-            );
+            let factor = transform_factor(self, self.animation.as_ref().unwrap().a.elapsed_seconds);
             self.animation.as_mut().unwrap().b.from =
                 self.animation.as_mut().unwrap().a.interpolate(factor);
             if factor == 1.0 {
@@ -3465,7 +3525,7 @@ impl LayoutComponent {
             }
         }
         let data = *self.current_animation_data().unwrap();
-        if data.elapsed_seconds >= time {
+        if data.elapsed_seconds >= self.interpolation_time() {
             if self.layout.width() != data.to.width() || self.layout.height() != data.to.height() {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
@@ -3480,11 +3540,7 @@ impl LayoutComponent {
             CoreCapabilities::world_transform_mark_dirty(self);
             return false;
         }
-        let factor = transform_factor(
-            data.elapsed_seconds,
-            self.interpolation(),
-            self.interpolator(),
-        );
+        let factor = transform_factor(self, data.elapsed_seconds);
         let current = self.current_animation_data().unwrap().interpolate(factor);
         if self.layout != current {
             let resized =
@@ -3632,13 +3688,13 @@ impl LayoutComponent {
             CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             updated = true;
         }
-        let (interpolation, interpolator, time, direction) = (
-            self.interpolation(),
-            self.interpolator(),
-            self.interpolation_time(),
-            self.actual_direction(),
-        );
         for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
+            let (interpolation, interpolator, time, direction) = (
+                self.interpolation(),
+                self.interpolator(),
+                self.interpolation_time(),
+                self.actual_direction(),
+            );
             if provider
                 .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
             {

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::{
@@ -10,6 +12,7 @@ use crate::mechanical_port::source::{
     generated::data_bind::converters::data_converter_interpolator_base::{
         DataConverterInterpolatorBase, DataConverterInterpolatorBaseCallbacks,
     },
+    scripted::scripted_interpolator::{ScriptedInterpolator, StatefulScriptedInterpolator},
 };
 fn new_like(value: &dyn DataValue) -> Option<Box<dyn DataValue>> {
     if value.as_any().is::<DataValueNumber>() {
@@ -138,6 +141,7 @@ impl InterpolatorAdvancer {
 pub struct DataConverterInterpolator {
     pub base: DataConverterInterpolatorBase,
     interpolator: Option<CoreHandle>,
+    scripted_interpolator: Option<Rc<StatefulScriptedInterpolator>>,
     output: Option<Box<dyn DataValue>>,
     advance_count: u8,
     advancer: InterpolatorAdvancer,
@@ -148,6 +152,7 @@ impl Default for DataConverterInterpolator {
         Self {
             base: DataConverterInterpolatorBase::default(),
             interpolator: None,
+            scripted_interpolator: None,
             output: None,
             advance_count: 0,
             advancer: InterpolatorAdvancer::default(),
@@ -156,6 +161,75 @@ impl Default for DataConverterInterpolator {
 }
 
 impl DataConverterInterpolator {
+    pub fn interpolator(&self) -> Option<CoreHandle> {
+        self.interpolator.clone()
+    }
+
+    pub fn active_interpolator(&self) -> Option<CoreHandle> {
+        self.scripted_interpolator
+            .as_ref()
+            .and_then(|holder| holder.get())
+            .or_else(|| self.interpolator.clone())
+    }
+
+    pub fn bind_from_context_handle(
+        owner: &CoreHandle,
+        context: RuntimeDataContextHandle,
+        data_bind: Option<CoreHandle>,
+    ) {
+        super::data_converter::DataConverter::bind_from_context_handle(
+            owner,
+            context.clone(),
+            data_bind,
+        );
+        let (source, holder) = owner
+            .with_downcast::<Self, _>(|converter| {
+                (
+                    converter.interpolator.clone(),
+                    converter.scripted_interpolator.clone(),
+                )
+            })
+            .expect("live interpolator converter");
+        if !source.as_ref().is_some_and(|source| {
+            source
+                .with_downcast::<ScriptedInterpolator, _>(|_| ())
+                .is_some()
+        }) {
+            return;
+        }
+        let holder = holder.unwrap_or_else(|| {
+            let holder = Rc::new(StatefulScriptedInterpolator::new_owned(
+                source.as_ref(),
+                Some(context.clone()),
+            ));
+            owner.with_downcast_mut::<Self, _>(|converter| {
+                converter.scripted_interpolator = Some(holder.clone())
+            });
+            holder
+        });
+        holder.bind_from_context(Some(context));
+    }
+
+    pub fn unbind_handle(owner: &CoreHandle) {
+        let _retained = owner.retain_arena();
+        super::data_converter::DataConverter::unbind_base_handle(owner);
+        let holder = owner
+            .with_downcast::<Self, _>(|converter| converter.scripted_interpolator.clone())
+            .flatten();
+        if let Some(holder) = holder {
+            holder.unbind();
+        }
+    }
+
+    pub fn update_handle(owner: &CoreHandle) {
+        super::data_converter::DataConverter::update_base_handle(owner);
+        let holder = owner
+            .with_downcast::<Self, _>(|converter| converter.scripted_interpolator.clone())
+            .flatten();
+        if let Some(holder) = holder {
+            holder.update_data_binds();
+        }
+    }
     pub fn new(duration: f32) -> Self {
         let mut converter = Self::default();
         if converter.base.set_duration_value(duration) {
@@ -228,7 +302,7 @@ impl DataConverterInterpolator {
                 1.0
             })
             .min(1.0);
-            f = Self::transform_factor(self.interpolator.as_ref(), f);
+            f = Self::transform_factor(self.active_interpolator().as_ref(), f);
             self.advancer
                 .animation_a
                 .interpolate(f, self.advancer.animation_b.from.as_deref_mut().unwrap());
@@ -271,7 +345,12 @@ impl DataConverterInterpolator {
             1.0
         })
         .min(1.0);
-        f = Self::transform_factor(self.interpolator.as_ref(), f);
+        f = Self::transform_factor(self.active_interpolator().as_ref(), f);
+        let current = if use_animation_b {
+            &self.advancer.animation_b
+        } else {
+            &self.advancer.animation_a
+        };
         current.interpolate(f, self.advancer.current_value.as_deref_mut().unwrap());
     }
     pub fn convert<'a>(&'a mut self, input: &'a dyn DataValue) -> &'a dyn DataValue {
@@ -358,19 +437,25 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     }
 
     fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
-        super::data_converter::DataConverter::bind_from_context_handle
+        Self::bind_from_context_handle
     }
 
     fn unbind_handler(&self) -> super::data_converter::ConverterUnbindHandler {
-        super::data_converter::DataConverter::unbind_base_handle
+        Self::unbind_handle
     }
 
     fn unbind(&mut self) {
         self.base.base.unbind();
+        if let Some(holder) = &self.scripted_interpolator {
+            holder.unbind();
+        }
     }
 
     fn update(&mut self) {
         self.base.base.update();
+        if let Some(holder) = &self.scripted_interpolator {
+            holder.update_data_binds();
+        }
     }
 
     fn reset(&mut self) {
@@ -382,5 +467,13 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     }
     fn may_advance(&self) -> bool {
         true
+    }
+}
+
+impl Drop for DataConverterInterpolator {
+    fn drop(&mut self) {
+        self.output = None;
+        self.advancer.reset();
+        self.scripted_interpolator = None;
     }
 }

@@ -336,7 +336,19 @@ impl DataConverter {
     }
     pub fn update_handle(owner: &CoreHandle) {
         use super::data_converter_group::DataConverterGroup;
-        if let Some(items) =
+        use super::data_converter_interpolator::DataConverterInterpolator;
+        use super::data_converter_range_mapper::DataConverterRangeMapper;
+        if owner
+            .with_downcast::<DataConverterInterpolator, _>(|_| ())
+            .is_some()
+        {
+            DataConverterInterpolator::update_handle(owner);
+        } else if owner
+            .with_downcast::<DataConverterRangeMapper, _>(|_| ())
+            .is_some()
+        {
+            DataConverterRangeMapper::update_handle(owner);
+        } else if let Some(items) =
             owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
         {
             for item in items {
@@ -348,8 +360,12 @@ impl DataConverter {
                 }
             }
         } else {
-            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).update_data_binds(false);
+            Self::update_base_handle(owner);
         }
+    }
+
+    pub fn update_base_handle(owner: &CoreHandle) {
+        crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).update_data_binds(false);
     }
 
     /// Select this converter's virtual operation before releasing its receiver.

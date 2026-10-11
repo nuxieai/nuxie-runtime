@@ -82,6 +82,12 @@ impl KeyedPropertyCells {
         std::rc::Rc::clone(&self.frames.borrow())
     }
 
+    /// Read the current keyframes for work that runs no callback.
+    #[inline]
+    pub(crate) fn with_frames<R>(&self, read: impl FnOnce(&[KeyFrameEntry]) -> R) -> R {
+        read(&self.frames.borrow())
+    }
+
     pub(crate) fn push_frame(&self, frame: KeyFrameEntry) {
         let frames: std::rc::Rc<[KeyFrameEntry]> = self
             .frames

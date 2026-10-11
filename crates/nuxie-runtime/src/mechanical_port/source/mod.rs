@@ -48,6 +48,7 @@ pub mod draw_rules;
 pub mod draw_target;
 pub mod draw_target_placement;
 pub mod drawable;
+pub(crate) mod draw_list;
 pub mod drawable_flag;
 pub(crate) mod engine_clock;
 pub mod enums;

@@ -906,15 +906,6 @@ unsafe fn release_image_mesh(draw: *mut Draw) {
     owner.draw.instances = None;
 }
 
-unsafe fn count_one_subpass(draw: *mut Draw, _: &gpu::PlatformFeatures) {
-    unsafe {
-        (*draw).prepass_count = 0;
-        (*draw).subpass_count = 1;
-        // Clip resets and image draws push the contents of their one pass.
-        (*draw).pass_draw_contents[0] = (*draw).combined_draw_contents;
-    }
-}
-
 unsafe fn allocate_plain_draw(_: *mut Draw, _: *mut LogicalFlush) -> bool {
     true
 }
@@ -1580,7 +1571,7 @@ fn base_draw(
 ) -> Draw {
     let mut draw = Draw::new();
     draw.release_refs = release_plain_draw;
-    draw.count_subpasses = count_one_subpass;
+    // Image and clip-reset draws keep Draw's default countSubpasses, as upstream.
     draw.allocate_resources = allocate_plain_draw;
     draw.draw_type = draw_type;
     draw.pixel_bounds = pixel_bounds;
@@ -1953,6 +1944,54 @@ mod transformed_area_consumer_tests {
                 pushed,
             );
             assert_eq!(info.stencilType, stencil_type);
+        }
+
+        // Image rects and image meshes count through the same default.
+        use super::{BlendMode, make_image_mesh_draw, make_image_rect_draw};
+        use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
+        let contents = gpu::DrawContents::opaquePaint;
+        let mut rect = unsafe {
+            make_image_rect_draw(
+                bounds,
+                Mat2D::IDENTITY,
+                BlendMode::SrcOver,
+                1.0,
+                0xffffffff,
+                rcp::new(),
+                rcp::new(),
+                ImageSampler::LinearClamp(),
+                contents,
+                0,
+                None,
+                Mat2D::IDENTITY,
+                Mat2D::IDENTITY,
+                Mat2D::IDENTITY,
+            )
+        };
+        let mut mesh = unsafe {
+            make_image_mesh_draw(
+                bounds,
+                Mat2D::IDENTITY,
+                BlendMode::SrcOver,
+                1.0,
+                0xffffffff,
+                rcp::new(),
+                ImageSampler::LinearClamp(),
+                contents,
+                0,
+                None,
+                rcp::new(),
+                rcp::new(),
+                rcp::new(),
+                0,
+            )
+        };
+        for draw in [&mut rect.draw.base, &mut mesh.draw.base] {
+            unsafe { draw.countSubpasses(&features) };
+            assert_eq!(draw.prepassCount(), 0);
+            assert_eq!(draw.subpassCount(), 1);
+            assert_eq!(draw.combinedDrawContents(), contents);
+            assert_eq!(draw.subpassDrawContents(0), contents);
         }
     }
 

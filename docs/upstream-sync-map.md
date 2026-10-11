@@ -99,6 +99,22 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   and pixel tolerances remain unchanged. No new Vulkan/Android device coverage,
   browser pixels, broad runtime Golden/Silver or upstream-only retrofit GM
   execution is claimed; Metal still rejects unsupported depth/stencil modes.
+- Follow-up correction at `c73593c3`: the translation added upstream's
+  default `Draw::countSubpasses` pass-contents copy to `default_count_subpasses`,
+  but `base_draw` replaced that slot with a separate single-pass counter that
+  never filled pass 0. Image rect, image mesh and clip-reset draws therefore
+  pushed and sorted with empty pass contents, and in depthStencil every nested
+  clip's reset cleared the outer clip instead of intersecting it. Those draws
+  now keep the default slot, as upstream's inherit the default; the separate
+  counter is removed. A focused regression covers both clip-reset stencil
+  choices and image rect and mesh counting. Three sites still choose
+  differently from upstream: the depthStencil nested clip-update draw type and
+  clockwiseAtomic nestedClipUpdateOnly read combined contents where upstream
+  reads the pass's, and the non-depthStencil tessellation pushes pass the pass's
+  contents where upstream passes combined. All three are equivalent: pass
+  contents differ from combined only by opaquePaint on the depthStencil hairline
+  pass, which is never a clip update. Work:
+  [UNIV-4202](https://universe.basis.dev/issue/UNIV-4202).
 - Validation at `c4d2c6cb`, integrated atop downstream `2045e6af85`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Tools-enabled artboard replacement tests pass 12, including both new

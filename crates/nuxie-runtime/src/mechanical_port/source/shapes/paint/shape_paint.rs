@@ -127,16 +127,18 @@ pub struct ShapePaint {
 impl ShapePaint {
     pub(crate) fn new(paint_type: ShapePaintType) -> Self {
         let mut base = ShapePaintBase::default();
+        let path_provider = PathProvider::default();
         let cells = Rc::new(PaintCells::new(
             paint_type,
             base.share_dirt(),
             base.share_is_visible(),
+            path_provider,
         ));
         Self {
             base,
             effects_container: EffectsContainerState::for_paint(Rc::clone(&cells)),
             paint_type,
-            path_provider: PathProvider::default(),
+            path_provider,
             cells,
             paint_mutator: None,
             effects_deferred: false,
@@ -169,10 +171,12 @@ impl ShapePaint {
                 crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY,
             )
         });
+        self.cells.set_has_paint_image(self.has_paint_image);
         self.is_fill = self.base.handle().is_some_and(|handle| {
             handle
                 .is_type_of(crate::source::generated::shapes::paint::fill_base::FillBase::TYPE_KEY)
         });
+        self.cells.set_is_fill(self.is_fill);
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
@@ -690,6 +694,7 @@ impl ShapePaint {
                 .unwrap_or(false);
             if applied {
                 self.has_modulated_image = true;
+                self.cells.set_has_modulated_image(true);
                 return;
             }
         }
@@ -702,6 +707,7 @@ impl ShapePaint {
                 )
             });
             self.has_modulated_image = false;
+            self.cells.set_has_modulated_image(false);
         }
     }
 

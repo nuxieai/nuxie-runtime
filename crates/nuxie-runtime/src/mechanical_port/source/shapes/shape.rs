@@ -384,6 +384,24 @@ impl Shape {
             }
             let kind = paint.cells.path_kind();
             let fill_rule = paint.cells.fill_rule();
+            if paint.cells.is_plain() && paint.handle.is_occupied_settled() {
+                self.with_path_mut(kind, |path| {
+                    paint.cells.draw_plain(
+                        renderer,
+                        path,
+                        transform,
+                        needs_save,
+                        fill_rule,
+                        &|| {
+                            self.base
+                                .with_artboard(|artboard| artboard.factory())
+                                .flatten()
+                                .expect("a drawing ShapePaint has its imported Artboard factory")
+                        },
+                    );
+                });
+                continue;
+            }
             paint.handle.with_mut(|object| {
                 let Some(behavior) = object.as_shape_paint_behavior_mut() else {
                     return;

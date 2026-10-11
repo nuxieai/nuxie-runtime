@@ -93,11 +93,17 @@ pub(crate) struct ShapeDraw {
 }
 
 impl DrawEntry {
-    /// The occurrence the link walk reaches at this entry; None where that
-    /// walk's link upgrade fails.
+    /// The occurrence the link walk reaches at this entry, as
+    /// Drawable::prev_drawable_for_draw_range yields it: an authored link's
+    /// handle as is, a proxy's upgraded (None where that upgrade fails).
     #[inline]
     pub(crate) fn occurrence(&self) -> Option<RuntimeDrawableOccurrence> {
-        self.occurrence.upgrade()
+        match &self.occurrence {
+            RuntimeDrawableWeakOccurrence::Authored(handle) => {
+                Some(RuntimeDrawableOccurrence::Authored(handle.clone()))
+            }
+            proxy @ RuntimeDrawableWeakOccurrence::RuntimeProxy(_) => proxy.upgrade(),
+        }
     }
 
     fn of(drawable: &RuntimeDrawableOccurrence) -> Self {

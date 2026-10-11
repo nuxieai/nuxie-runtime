@@ -144,18 +144,24 @@ impl LinearAnimationOwner {
         if !self.with(|animation| animation.has_keyed_callbacks) {
             return;
         }
-        let (starting_time, objects) = self.with(|animation| {
+        let (starting_time, objects, cells) = self.with(|animation| {
             (
                 animation.start_time_with_multiplier(speed_direction),
                 animation.keyed_objects.snapshot(),
+                animation.keyed_object_cells.snapshot(),
             )
         });
         let at_start = starting_time == from;
         if !at_start || !from_pong {
-            for object in objects.iter() {
-                KeyedObject::report_keyed_callbacks_occurrence(
-                    object, reporter, from, to, at_start,
-                );
+            for (object, cells) in objects.iter().zip(cells.iter()) {
+                match cells {
+                    Some(cells) => KeyedObject::report_keyed_callbacks_cells(
+                        cells, reporter, from, to, at_start,
+                    ),
+                    None => KeyedObject::report_keyed_callbacks_occurrence(
+                        object, reporter, from, to, at_start,
+                    ),
+                }
             }
         }
     }
@@ -398,8 +404,15 @@ impl LinearAnimation {
         let start = self.start_time_with_multiplier(speed_direction);
         let at_start = start == from;
         if !at_start || !from_pong {
-            for object in self.keyed_objects.iter() {
-                KeyedObject::report_keyed_callbacks_occurrence(object, r, from, to, at_start);
+            for (object, cells) in self.keyed_objects.iter().zip(self.keyed_object_cells.iter()) {
+                match cells {
+                    Some(cells) => {
+                        KeyedObject::report_keyed_callbacks_cells(cells, r, from, to, at_start)
+                    }
+                    None => {
+                        KeyedObject::report_keyed_callbacks_occurrence(object, r, from, to, at_start)
+                    }
+                }
             }
         }
     }

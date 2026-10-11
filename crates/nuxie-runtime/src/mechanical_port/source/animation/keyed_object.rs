@@ -12,7 +12,8 @@ use crate::mechanical_port::source::{
     generated::animation::{
         keyed_object_base::KeyedObjectBase, linear_animation_base::LinearAnimationBase,
     },
-    generated::{core_type_tree::PARENT_TYPE_KEYS, layout_component_base::LayoutComponentBase},
+    generated::layout_component_base::LayoutComponentBase,
+    type_tables::{DescendantTable, contains, descendant_table},
     importers::{import_stack::ImportStack, linear_animation_importer::LinearAnimationImporter},
     lazy_vector::LazyVector,
     status_code::StatusCode,
@@ -26,37 +27,15 @@ pub trait KeyedObjectContext: CoreContext {
 
 /// Whether each type key is a LayoutComponent, the only InterpolatorHost:
 /// InterpolatorHost::from's cast, computed from the type tree at compile time.
-const INTERPOLATOR_HOSTS: [bool; PARENT_TYPE_KEYS.len()] = {
-    let mut hosts = [false; PARENT_TYPE_KEYS.len()];
-    let mut key = 0;
-    while key < hosts.len() {
-        let mut current = key;
-        loop {
-            if current == LayoutComponentBase::TYPE_KEY as usize {
-                hosts[key] = true;
-                break;
-            }
-            let parent = PARENT_TYPE_KEYS[current] as usize;
-            if parent == 0 {
-                break;
-            }
-            current = parent;
-        }
-        key += 1;
-    }
-    hosts
-};
+const INTERPOLATOR_HOSTS: DescendantTable = descendant_table(LayoutComponentBase::TYPE_KEY);
 
 /// KeyedProperty::apply's InterpolatorHost::from(object) followed by
 /// overridesKeyedInterpolation(propertyKey). A target that is not a
 /// LayoutComponent answers from its type key, without a loan.
 pub(crate) fn interpolator_host_overrides(object: &CoreHandle, key: u32) -> bool {
-    let is_host = object.occupied_core_type().is_some_and(|type_key| {
-        INTERPOLATOR_HOSTS
-            .get(usize::from(type_key))
-            .copied()
-            .unwrap_or(false)
-    });
+    let is_host = object
+        .occupied_core_type()
+        .is_some_and(|type_key| contains(&INTERPOLATOR_HOSTS, type_key));
     is_host
         && object
             .with_mut(|object| {

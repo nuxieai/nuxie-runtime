@@ -470,6 +470,10 @@ pub(crate) enum DrawRangePrelude {
     Draw,
 }
 
+/// Generated Drawable types (and Drawable itself), from the type tree.
+const DRAWABLES: crate::mechanical_port::source::type_tables::DescendantTable =
+    crate::mechanical_port::source::type_tables::descendant_table(DrawableBase::TYPE_KEY);
+
 impl RuntimeDrawableOccurrence {
     /// The callback-free shared-receiver part of Artboard::drawDrawableRange.
     /// Keep emptyClipCount's mutable access separate, and end this access before
@@ -487,13 +491,9 @@ impl RuntimeDrawableOccurrence {
         has_pending_clips: bool,
     ) -> DrawRangePrelude {
         if let Self::Authored(handle) = self
-            && handle.occupied_core_type().is_some_and(|key| {
-                key == DrawableBase::TYPE_KEY
-                    || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
-                        key,
-                        DrawableBase::TYPE_KEY,
-                    )
-            })
+            && handle
+                .occupied_core_type()
+                .is_some_and(|key| crate::mechanical_port::source::type_tables::contains(&DRAWABLES, key))
         {
             return self.draw_range_prelude(*empty_clips > 0, has_pending_clips);
         }

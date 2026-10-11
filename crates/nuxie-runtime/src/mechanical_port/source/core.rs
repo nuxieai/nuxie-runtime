@@ -854,6 +854,16 @@ impl CoreHandle {
         slot.generation.get() == slot.hot.identity_generation && slot.occupied.get()
     }
 
+    /// Whether an authored object occupies this slot with no retirement
+    /// pending: a loan of it would succeed and its release would run nothing.
+    #[inline]
+    pub(crate) fn is_occupied_settled(&self) -> bool {
+        let slot = &self.identity.slot;
+        slot.generation.get() == slot.hot.identity_generation
+            && slot.occupied.get()
+            && !slot.retirement_pending.get()
+    }
+
     /// The occupying object's concrete type key, read without a lease (so
     /// without the deferred-retirement check a lease's release runs). For hot
     /// classification that runs nothing while it reads.

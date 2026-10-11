@@ -11,6 +11,8 @@ use crate::mechanical_port::source::{
     component::SharedDirt,
     component_dirt::ComponentDirt,
     core::CoreHandle,
+    factory::RuntimeFactoryHandle,
+    math::mat2d::Mat2D,
     shapes::{
         paint::{
             effects_container,
@@ -48,6 +50,13 @@ pub(crate) struct PaintCells {
     thickness: Cell<f32>,
     transform_affects_stroke: Cell<bool>,
     fill_rule: Cell<u8>,
+    // The paint's PathProvider identity, fixed at construction.
+    provider: PathProvider,
+    // ShapePaint's isFill, hasPaintImage and hasModulatedImage, written where
+    // the paint writes them.
+    is_fill: Cell<bool>,
+    has_paint_image: Cell<bool>,
+    has_modulated_image: Cell<bool>,
 }
 
 impl PaintCells {
@@ -55,6 +64,7 @@ impl PaintCells {
         paint_type: ShapePaintType,
         dirt: Rc<SharedDirt>,
         is_visible: Rc<Cell<bool>>,
+        provider: PathProvider,
     ) -> Self {
         Self {
             paint_type,
@@ -69,6 +79,84 @@ impl PaintCells {
             thickness: Cell::new(1.0),
             transform_affects_stroke: Cell::new(true),
             fill_rule: Cell::new(0),
+            provider,
+            is_fill: Cell::new(false),
+            has_paint_image: Cell::new(false),
+            has_modulated_image: Cell::new(false),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn set_is_fill(&self, value: bool) {
+        self.is_fill.set(value);
+    }
+
+    #[inline]
+    pub(crate) fn set_has_paint_image(&self, value: bool) {
+        self.has_paint_image.set(value);
+    }
+
+    #[inline]
+    pub(crate) fn set_has_modulated_image(&self, value: bool) {
+        self.has_modulated_image.set(value);
+    }
+
+    /// A paint with no feather, no effect beyond those that only rewind their
+    /// path, and no image: ShapePaint::draw needs nothing but these cells.
+    #[inline]
+    pub(crate) fn is_plain(&self) -> bool {
+        !self.has_feather.get()
+            && !self.has_other_effects.get()
+            && !self.has_paint_image.get()
+            && !self.has_modulated_image.get()
+    }
+
+    /// ShapePaint::draw for a plain paint as a Shape draws it (its own fill
+    /// rule, no override paint): the same renderer calls, from these cells.
+    pub(crate) fn draw_plain(
+        &self,
+        renderer: &mut dyn nuxie_render_api::Renderer,
+        shape_paint_path: &mut ShapePaintPath,
+        transform: Mat2D,
+        needs_save_operation: bool,
+        fill_rule: Option<u32>,
+        factory: &dyn Fn() -> RuntimeFactoryHandle,
+    ) {
+        let mut saved = !needs_save_operation;
+        if shape_paint_path.is_local() {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
+        }
+        let path_effect = self
+            .last_effect_path(&self.provider)
+            .expect("a plain paint has only rewinding effects");
+        let mut draw_path = |path: &mut ShapePaintPath| {
+            let render_path = path.render_path_with_deferred_factory(factory);
+            if self.is_fill.get() {
+                if let Some(fill_rule) = fill_rule {
+                    match fill_rule {
+                        0 => render_path.fill_rule(nuxie_render_api::FillRule::NonZero),
+                        1 => render_path.fill_rule(nuxie_render_api::FillRule::EvenOdd),
+                        2 => render_path.fill_rule(nuxie_render_api::FillRule::Clockwise),
+                        _ => {}
+                    }
+                }
+            }
+            let render_path = path.existing_render_path();
+            if let Some(paint) = self.render_paint() {
+                renderer.draw_path(render_path, paint.borrow().as_ref());
+            }
+        };
+        if let Some(effect) = path_effect {
+            draw_path(&mut effect.borrow_mut());
+        } else {
+            draw_path(shape_paint_path);
+        }
+        if saved && needs_save_operation {
+            renderer.restore();
         }
     }
 

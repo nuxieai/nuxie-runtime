@@ -3814,6 +3814,7 @@ impl Artboard {
 
     /// One iteration of drawDrawableRange's loop body. Drawing a masked
     /// range moves `current` to the range's end; returns whether it did.
+    #[inline]
     fn draw_range_entry(
         root: &CoreHandle,
         renderer: &mut Renderer,

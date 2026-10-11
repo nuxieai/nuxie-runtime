@@ -257,6 +257,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                 rule = "rust_shared_library" if "cdylib" in example.get("crate-type", []) else "rust_binary"
                 lines.extend([
                     rule + '(', f'    name = {quoted(example_name + suffix)},',
+                    *(['    tags = ["manual"],'] if package.name == "nuxie-runtime" and example_name == "text_input_clock_probe" else []),
                     f'    crate_name = {quoted(example_name.replace("-", "_"))},',
                     f'    crate_root = {quoted(source(example_path))},',
                     '    srcs = _example_sources,', '    compile_data = _compile_data,',

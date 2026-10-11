@@ -129,6 +129,19 @@ jobs:
           ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
 
+      - name: Restore shared Bazel caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/nuxie/bazel
+            ~/.cache/nuxie-tools/bazelisk
+            ~/.cache/bazelisk
+            ~/Library/Caches/bazelisk
+          key: ${{ runner.os }}-${{ runner.arch }}-bazel-${{ hashFiles('rive-rust/.bazelversion', 'rive-rust/MODULE.bazel', 'rive-rust/MODULE.bazel.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-bazel-${{ hashFiles('rive-rust/.bazelversion', 'rive-rust/MODULE.bazel', 'rive-rust/MODULE.bazel.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-bazel-
+
       - name: Install Bazelisk
         working-directory: ${{ github.workspace }}/rive-rust
         run: tools/bazel/install.sh

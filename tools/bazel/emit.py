@@ -301,11 +301,16 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                 required = explicit.get(test_name, {}).get("required-features", [])
                 if not set(required).issubset(features):
                     continue
+                # This test shares the runtime's fixture builder via #[path].
+                # Keep the source in its sandbox without adding it to production builds.
+                support_sources = ([source_repo + "//crates/nuxie-runtime:tests/support/focus_input.rs"]
+                                   if package.name == "nux-capi" and test_name == "focus_input" else [])
+                compile_inputs = "_compile_data" + (" + " + quoted(support_sources) if support_sources else "")
                 lines.extend([
                     'rust_test(', f'    name = {quoted(package.name + "__test_" + test_name)},',
                     f'    crate_name = {quoted(test_name.replace("-", "_"))},',
                     f'    crate_root = {quoted(source(file.relative_to(package.directory).as_posix()))},',
-                    '    srcs = _test_sources,', '    compile_data = _compile_data,',
+                    '    srcs = _test_sources,', f'    compile_data = {compile_inputs},',
                     '    data = _compile_data + ' + quoted([*binary_products.values(), *test_data]) + ',',
                     f'    edition = {quoted(package.edition)},', f'    version = {quoted(package.version)},',
                     f'    crate_features = {compiler_features},',

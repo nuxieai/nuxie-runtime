@@ -243,7 +243,7 @@ rust_test(
     crate_name = "focus_input",
     crate_root = "tests/focus_input.rs",
     srcs = _test_sources,
-    compile_data = _compile_data,
+    compile_data = _compile_data + ["//crates/nuxie-runtime:tests/support/focus_input.rs"],
     data = _compile_data + [],
     edition = "2024",
     version = "0.10.14",

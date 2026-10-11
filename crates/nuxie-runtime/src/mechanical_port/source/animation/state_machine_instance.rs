@@ -1304,6 +1304,12 @@ impl StateMachineLayerInstance {
             transition
                 .with(|transition| transition.state_transition_interpolator())
                 .flatten()
+        }).map(|interpolator| {
+            if interpolator.is_type_of(crate::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY) {
+                machine.scripted_object(&interpolator).unwrap_or(interpolator)
+            } else {
+                interpolator
+            }
         });
         if let Some(state_from) = self.state_from.clone().filter(|_| self.mix < 1.0) {
             let mix = interpolator
@@ -3954,6 +3960,8 @@ impl StateMachineInstance {
             let mut host = ScriptUpdateRequestHost::default();
             let clone = if source.is_type_of(crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::TYPE_KEY) {
                 crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction::clone_scripted_occurrence(&source, &mut self.data_bind_container, &mut host)
+            } else if source.is_type_of(crate::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY) {
+                crate::source::scripted::scripted_interpolator::ScriptedInterpolator::clone_scripted_occurrence(&source, |bind| self.data_bind_container.add_data_bind(bind))
             } else {
                 crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition::clone_scripted_occurrence(&source, &mut self.data_bind_container, &mut host)
             }.expect("a state-machine scripted definition has a concrete clone owner");
@@ -5987,6 +5995,7 @@ impl StateMachineInstance {
         {
             let properties = object.with_downcast::<crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction, _>(|object| object.properties.clone())
                 .or_else(|| object.with_downcast::<crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition, _>(|object| object.properties.clone()))
+                .or_else(|| object.with_downcast::<crate::source::scripted::scripted_interpolator::ScriptedInterpolator, _>(|object| object.properties.clone()))
                 .expect("a state-machine scripted occurrence retains its concrete owner");
             let mut host = ScriptUpdateRequestHost::default();
             ScriptedObject::reinit_occurrence(&object, &properties, &mut host);

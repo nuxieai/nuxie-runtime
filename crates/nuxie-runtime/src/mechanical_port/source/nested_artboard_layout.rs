@@ -172,14 +172,13 @@ impl NestedArtboardLayout {
         direction: LayoutDirection,
     ) -> bool {
         if let Some(instance) = self.base.base.artboard_instance_handle(0) {
-            instance.with_artboard_mut(|instance| {
-                instance.cascade_layout_style(
-                    inherited_interpolation,
-                    inherited_interpolator,
-                    inherited_interpolation_time,
-                    direction,
-                )
-            });
+            crate::source::layout_component::LayoutComponent::cascade_layout_style_occurrence(
+                &instance.core_handle(),
+                inherited_interpolation,
+                inherited_interpolator,
+                inherited_interpolation_time,
+                direction,
+            );
         }
         false
     }

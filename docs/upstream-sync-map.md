@@ -7,18 +7,35 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `be93c2ced22636f2e1db2186630c3bc5d61cfeb3`
+- LAST_SYNCED_SHA: `ac0c03ae4d5cdd5d5e84b18ddafd6738b26e629e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `40e52541238037bab60088a675dc29676584bdfd` (refreshed 2026-10-11 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 225 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (247 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 226 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (248 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `ac0c03ae`, integrated atop downstream `8ce94f1aa4`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including rereviews of released root-layout callbacks, exact lazy
+  scripted initialization, converter borrow boundaries and complete SMI
+  interpolator clone/init dispatch. All six new upstream interpolator cases
+  and 12 related scripting cases pass with unchanged assertions. Default-feature
+  runtime unit tests pass 384 with two existing ignores. Native editor/testing/tools
+  and wasm32-unknown-unknown runtime compilation pass. Source/pipeline tests
+  pass 12, manifest tests pass 27, and formatting/generated-file/diff checks pass.
+  Both exact-revision C++ oracles and provenance-bound Rust release runners
+  were rebuilt. Ordinary Golden passes 364 comparisons (1,182 stream and
+  1,174 side-channel segments); scripted Golden passes 362 and verifies the
+  two existing divergence signatures (1,176 stream and 1,168 side-channel
+  segments). Silver retains 85 byte-exact, 121 existing-epsilon, eight recorded
+  divergent and 17 unsupported cases, with none pending in the runtime lane.
+  No tolerances changed. No new device or browser-pixel coverage is claimed;
+  parked guest execution remains outside this validation.
 - Validation at `be93c2ce`, integrated atop downstream `50c3a8dc9d`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All six direct frozen-pose cases and nine existing quiet-row,
@@ -739,6 +756,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ac0c03ae4d5cdd5d5e84b18ddafd6738b26e629e` | Translate stateful scripted-interpolator holders with ordered input-bind teardown; per-keyframe, per-artboard style, per-state-machine transition and per-converter ownership. Layout inheritance borrows the defining artboard's clone; bound converters keep input binds private and apply them before reinitialization on every bind. Add scripted layout interpolation and all six public regression cases against exact upstream fixtures. Private editor UI/exporter/docs/dispose changes mentioned only in commit prose and private .rive_head contents are not claimed imported. | — |
 | `be93c2ced22636f2e1db2186630c3bc5d61cfeb3` | Translate callback-presence import tracking, static-pose/keyframe endpoint bounds, serial-based held-pose freezing and exact testing verification. Preserve quiet-row wake ordering for component, color and self-transform changes, keyframe-bind and transition-interpolator exclusions, and per-advance serial capture. Runtime and binary import reject machines above 65535 layers. Translate all six frozen-pose tests against the two exact upstream fixtures. Private .rive_head contents are not claimed imported. | — |
 | `2a043c31ccbda27628a2c80fd105c16ea35ed12a` | Deferred: the complete public behavior delta releases Wasm guest VMs before file artboards, including Emscripten deferred-script release; its AnimaScript keyboard/artboard-input fixture and tools-only teardown test depend on parked guest execution. Existing Rust Luau cleanup already precedes artboard teardown and is unchanged. Account for all seven public files without claiming guest execution or private .rive_head content. Advance active pins/inventory only, preserving historical shader and validation provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `3ccf0d9d7c2cf8bee0553245acaffe21ae3314b6` | Require every deferred replay sink to supply an explicit render context or explicitly choose none. Preserve replay-time canvas backing and content dropping without a device, add the throttled missing-device warning, and record missing ORE canvas views as a named unregistered/unbacked failure rather than unresolved churn. Translate both canvas-backing regressions and explicit no-device test sinks. Private .rive_head contents are not claimed imported. | — |

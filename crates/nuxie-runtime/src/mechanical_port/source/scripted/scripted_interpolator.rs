@@ -1,11 +1,169 @@
 use crate::mechanical_port::source::{
     core::{CoreHandle, CoreObject},
+    data_bind::{
+        data_bind_container::{DataBindContainer, DataBindContainerWeak},
+        data_context::RuntimeDataContextHandle,
+    },
     generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase,
     importers::import_stack::ImportStack,
     scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost, ScriptedObject},
     status_code::StatusCode,
 };
 use crate::scripting::ScriptInterpolatorMethod;
+
+/// One live clone per runtime owner and authored interpolator. Input binds
+/// leave their container before the clone owning their targets is retired.
+pub struct StatefulScriptedInterpolator {
+    owned_container: Option<DataBindContainer>,
+    container: DataBindContainerWeak,
+    data_binds: Vec<CoreHandle>,
+    clone: Option<CoreHandle>,
+}
+
+impl StatefulScriptedInterpolator {
+    pub fn new(
+        source: Option<&CoreHandle>,
+        container: Option<&DataBindContainer>,
+        data_context: Option<RuntimeDataContextHandle>,
+    ) -> Self {
+        let mut holder = Self {
+            owned_container: None,
+            container: container
+                .map(DataBindContainer::downgrade)
+                .unwrap_or_default(),
+            data_binds: Vec::new(),
+            clone: None,
+        };
+        holder.clone_from(source, data_context);
+        holder
+    }
+
+    pub fn new_owned(
+        source: Option<&CoreHandle>,
+        data_context: Option<RuntimeDataContextHandle>,
+    ) -> Self {
+        let container = DataBindContainer::new_standalone();
+        let mut holder = Self {
+            container: container.downgrade(),
+            owned_container: Some(container),
+            data_binds: Vec::new(),
+            clone: None,
+        };
+        holder.clone_from(source, data_context);
+        holder
+    }
+
+    fn clone_from(
+        &mut self,
+        source: Option<&CoreHandle>,
+        context: Option<RuntimeDataContextHandle>,
+    ) {
+        let (Some(source), Some(container)) = (source, self.container.upgrade()) else {
+            return;
+        };
+        let Some(clone) = ScriptedInterpolator::clone_scripted_occurrence(source, |bind| {
+            container.add_data_bind(bind);
+        }) else {
+            return;
+        };
+        self.clone = Some(clone.clone());
+        let (properties, needs_init) = clone
+            .with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
+                clone.scripted.set_data_context(context);
+                (
+                    clone.properties.clone(),
+                    clone.scripted.script_asset().is_some() && !clone.scripted.user_lua_init_done(),
+                )
+            })
+            .expect("live scripted interpolator clone");
+        for property in &properties {
+            if let Some(bind) = property
+                .with(|property| property.script_input_data_bind())
+                .flatten()
+            {
+                self.data_binds.push(bind);
+            }
+        }
+        if needs_init {
+            self.initialize();
+        }
+    }
+
+    pub fn get(&self) -> Option<CoreHandle> {
+        self.clone.clone()
+    }
+
+    pub fn set_data_context(&self, context: Option<RuntimeDataContextHandle>) {
+        let Some(clone) = &self.clone else {
+            return;
+        };
+        clone.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
+            clone.scripted.set_data_context(context)
+        });
+        self.initialize();
+    }
+
+    pub fn bind_from_context(&self, context: Option<RuntimeDataContextHandle>) {
+        let (Some(container), Some(clone)) = (&self.owned_container, &self.clone) else {
+            return;
+        };
+        container.set_data_bind_context(context.clone());
+        container.bind_data_binds_from_current_context();
+        container.update_data_binds(false);
+        clone.with_downcast_mut::<ScriptedInterpolator, _>(|clone| clone.scripted.reset_lua_init());
+        self.set_data_context(context);
+    }
+
+    pub fn unbind(&self) {
+        if let Some(container) = &self.owned_container {
+            container.unbind_data_binds();
+        }
+    }
+
+    pub fn update_data_binds(&self) {
+        if let Some(container) = &self.owned_container {
+            container.update_data_binds(false);
+        }
+    }
+
+    pub fn initialize(&self) {
+        let Some(clone) = &self.clone else {
+            return;
+        };
+        let Some((properties, needs_init)) = clone
+            .with_downcast::<ScriptedInterpolator, _>(|clone| {
+                clone.scripted.script_asset().map(|_| {
+                    (
+                        clone.properties.clone(),
+                        !clone.scripted.user_lua_init_done(),
+                    )
+                })
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        if needs_init {
+            ScriptedObject::initialize_occurrence(clone, &properties, &mut host);
+        }
+        ScriptedObject::hydrate_occurrence(clone, &properties, &mut host);
+    }
+}
+
+impl Drop for StatefulScriptedInterpolator {
+    fn drop(&mut self) {
+        for bind in self.data_binds.drain(..) {
+            if let Some(container) = self.container.upgrade() {
+                container.remove_data_bind(bind.clone());
+            }
+            bind.remove_occurrence();
+        }
+        if let Some(clone) = self.clone.take() {
+            clone.remove_occurrence();
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct ScriptedInterpolator {

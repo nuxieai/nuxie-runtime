@@ -29,6 +29,7 @@ pub enum LayoutStyleInterpolation {
     Linear,
     Cubic,
     Elastic,
+    Scripted,
 }
 
 impl From<u8> for LayoutStyleInterpolation {
@@ -44,6 +45,7 @@ impl From<u32> for LayoutStyleInterpolation {
             1 => Self::Linear,
             2 => Self::Cubic,
             3 => Self::Elastic,
+            4 => Self::Scripted,
             _ => panic!("invalid LayoutStyleInterpolation value: {value}"),
         }
     }

@@ -20,6 +20,31 @@ pub enum BoundsFidelity {
     Exact,
 }
 
+/// A Drawable's drawableFlags and runtime flags, shared with the drawable.
+#[derive(Clone)]
+pub(crate) struct DrawableCells {
+    flags: Rc<Cell<u16>>,
+    runtime_flags: Rc<Cell<u8>>,
+}
+
+impl DrawableCells {
+    /// Drawable::isHidden's flag half; the collapsed half is the caller's.
+    #[inline]
+    pub(crate) fn is_flagged_hidden(&self) -> bool {
+        self.flags.get() & DrawableFlag::HIDDEN.0 == DrawableFlag::HIDDEN.0
+    }
+
+    #[inline]
+    pub(crate) fn needs_save_operation(&self) -> bool {
+        self.runtime_flags.get() & 1 != 0
+    }
+
+    #[inline]
+    pub(crate) fn has_custom_properties(&self) -> bool {
+        self.runtime_flags.get() & 2 != 0
+    }
+}
+
 pub struct Drawable {
     pub base: DrawableBase,
     clipping_shapes: Vec<CoreHandle>,
@@ -28,7 +53,9 @@ pub struct Drawable {
     pub(crate) flattened_draw_rules: Option<CoreHandle>,
     pub(crate) prev: Option<RuntimeDrawableWeakOccurrence>,
     pub(crate) next: Option<RuntimeDrawableWeakOccurrence>,
-    runtime_flags: u8,
+    // needsSaveOperation (bit 0) and hasCustomProperties (bit 1); shared with
+    // this drawable's DrawableCells.
+    runtime_flags: Rc<Cell<u8>>,
 }
 
 impl Default for Drawable {
@@ -41,7 +68,7 @@ impl Default for Drawable {
             flattened_draw_rules: None,
             prev: None,
             next: None,
-            runtime_flags: 1,
+            runtime_flags: Rc::new(Cell::new(1)),
         }
     }
 }
@@ -316,21 +343,27 @@ impl Drawable {
         !self.is_hidden()
     }
     pub fn set_needs_save_operation(&mut self, value: bool) {
-        self.runtime_flags = if value {
-            self.runtime_flags | 1
-        } else {
-            self.runtime_flags & !1
-        };
+        let flags = self.runtime_flags.get();
+        self.runtime_flags.set(if value { flags | 1 } else { flags & !1 });
     }
     pub fn needs_save_operation(&self) -> bool {
-        self.runtime_flags & 1 != 0
+        self.runtime_flags.get() & 1 != 0
     }
 
     pub fn has_custom_properties(&self) -> bool {
-        self.runtime_flags & 2 != 0
+        self.runtime_flags.get() & 2 != 0
     }
     pub fn mark_has_custom_properties(&mut self) {
-        self.runtime_flags |= 2;
+        self.runtime_flags.set(self.runtime_flags.get() | 2);
+    }
+
+    /// This drawable's draw-loop state, shared so the artboard's draw list
+    /// reads it without borrowing the drawable.
+    pub(crate) fn draw_cells(&self) -> DrawableCells {
+        DrawableCells {
+            flags: self.base.share_drawable_flags(),
+            runtime_flags: Rc::clone(&self.runtime_flags),
+        }
     }
 
     pub fn custom_property(&self, name_id: u32) -> Option<CoreHandle> {
@@ -789,6 +822,17 @@ impl RuntimeDrawableOccurrence {
         }
     }
 
+    /// Whether reading this drawable's link (`with`) runs nothing a later
+    /// read would not: an authored drawable's loan succeeds with no retirement
+    /// pending for its release.
+    #[inline]
+    pub(crate) fn link_read_is_settled(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle.is_occupied_settled(),
+            Self::RuntimeProxy(_) => true,
+        }
+    }
+
     pub fn with<R>(&self, use_drawable: impl FnOnce(&Drawable) -> R) -> Option<R> {
         match self {
             Self::Authored(handle) => {
@@ -978,7 +1022,7 @@ impl std::ops::DerefMut for DrawableProxy {
     }
 }
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::{Cell, Ref, RefCell, RefMut},
     rc::{Rc, Weak},
 };
 

@@ -371,56 +371,13 @@ impl Shape {
     }
 
     pub fn draw(&mut self, renderer: &mut Renderer) {
-        let needs_save =
-            self.base.needs_save_operation() || self.paint_container.shape_paints().len() > 1;
-        let transform = self.base.world_transform();
-        // The container's paint cells parallel its paints. Visibility, the
-        // path kind and the fill rule are read there, so a hidden paint is
-        // never borrowed.
-        let paints = self.paint_container.cells().paints();
-        for paint in paints.iter() {
-            if !paint.cells.is_visible() {
-                continue;
-            }
-            let kind = paint.cells.path_kind();
-            let fill_rule = paint.cells.fill_rule();
-            if paint.cells.is_plain() && paint.handle.is_occupied_settled() {
-                self.with_path_mut(kind, |path| {
-                    paint.cells.draw_plain(
-                        renderer,
-                        path,
-                        transform,
-                        needs_save,
-                        fill_rule,
-                        &|| {
-                            self.base
-                                .with_artboard(|artboard| artboard.factory())
-                                .flatten()
-                                .expect("a drawing ShapePaint has its imported Artboard factory")
-                        },
-                    );
-                });
-                continue;
-            }
-            paint.handle.with_mut(|object| {
-                let Some(behavior) = object.as_shape_paint_behavior_mut() else {
-                    return;
-                };
-                self.with_path_mut(kind, |path| {
-                    behavior.shape_paint_mut().draw_with_active_container(
-                        renderer,
-                        path,
-                        transform,
-                        false,
-                        None,
-                        needs_save,
-                        fill_rule,
-                        &|| transform,
-                        None,
-                    );
-                });
-            });
-        }
+        let cells = Rc::clone(&self.cells);
+        cells.draw(self.base.needs_save_operation(), renderer, &|| {
+            self.base
+                .with_artboard(|artboard| artboard.factory())
+                .flatten()
+                .expect("a drawing ShapePaint has its imported Artboard factory")
+        });
     }
 
     pub fn hit_test_aabb(&mut self, position: Vec2D) -> bool {

@@ -11,7 +11,8 @@ pub struct DrawableBase {
     pub base: Node,
     blend_mode_value: u8,
     additive_amount: u8,
-    drawable_flags: u16,
+    // Shared with the drawable's DrawableCells, which the draw list reads.
+    drawable_flags: std::rc::Rc<std::cell::Cell<u16>>,
 }
 
 impl Default for DrawableBase {
@@ -20,7 +21,7 @@ impl Default for DrawableBase {
             base: Node::default(),
             blend_mode_value: 3,
             additive_amount: 255,
-            drawable_flags: 0,
+            drawable_flags: std::rc::Rc::new(std::cell::Cell::new(0)),
         }
     }
 }
@@ -62,7 +63,11 @@ impl DrawableBase {
         true
     }
     pub fn drawable_flags(&self) -> u16 {
-        self.drawable_flags
+        self.drawable_flags.get()
+    }
+    /// The drawableFlags storage, for the drawable's shared cells.
+    pub(crate) fn share_drawable_flags(&self) -> std::rc::Rc<std::cell::Cell<u16>> {
+        std::rc::Rc::clone(&self.drawable_flags)
     }
     pub fn additive_amount(&self) -> u8 {
         self.additive_amount
@@ -95,16 +100,16 @@ impl DrawableBase {
     }
 
     pub(crate) fn set_drawable_flags_value(&mut self, value: u16) -> bool {
-        if self.drawable_flags == value {
+        if self.drawable_flags.get() == value {
             return false;
         }
-        self.drawable_flags = value;
+        self.drawable_flags.set(value);
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DrawableBaseCallbacks) {
         self.blend_mode_value = object.blend_mode_value;
         self.additive_amount = object.additive_amount;
-        self.drawable_flags = object.drawable_flags;
+        self.drawable_flags.set(object.drawable_flags.get());
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -123,7 +128,7 @@ impl DrawableBase {
                 true
             }
             Self::DRAWABLE_FLAGS_PROPERTY_KEY => {
-                self.drawable_flags = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u16;
+                self.drawable_flags.set(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u16);
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

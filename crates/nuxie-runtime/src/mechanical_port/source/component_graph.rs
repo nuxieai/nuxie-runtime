@@ -259,6 +259,12 @@ impl ComponentGraph {
         }
     }
 
+    /// Member `index`'s Component dirt.
+    #[inline]
+    pub(crate) fn node_dirt(&self, index: u32) -> ComponentDirt {
+        self.nodes[index as usize].dirt.get()
+    }
+
     #[inline]
     pub(crate) fn set_dirt(&self, index: u32, value: ComponentDirt) {
         self.nodes[index as usize].dirt.set(value);

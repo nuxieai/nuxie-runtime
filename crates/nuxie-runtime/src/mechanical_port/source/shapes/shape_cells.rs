@@ -109,6 +109,72 @@ impl ShapeCells {
         self.paints.paints()
     }
 
+    /// Run `use_path` on the composer's path of `kind`, as
+    /// Shape::with_path_mut does through the Shape's strong composer handle.
+    fn with_path_mut<R>(
+        &self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        use_path: impl FnOnce(&mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath) -> R,
+    ) -> R {
+        use crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind;
+        let ComponentOccurrenceHandle::PathComposer(composer) = &self.composer else {
+            unreachable!("a shape's composer occurrence is a PathComposer");
+        };
+        let composer = composer
+            .upgrade()
+            .expect("a drawing shape keeps its composer");
+        let mut composer = composer.borrow_mut();
+        use_path(match kind {
+            ShapePaintPathKind::Local => composer.local_path(),
+            ShapePaintPathKind::LocalClockwise => composer.local_clockwise_path(),
+            ShapePaintPathKind::World => composer.world_path(),
+        })
+    }
+
+    /// Shape::draw: each visible paint over its path. A plain paint draws
+    /// from its cells; any other is borrowed and drawn by its ShapePaint.
+    pub(crate) fn draw(
+        &self,
+        needs_save_operation: bool,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
+        factory: &dyn Fn() -> crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) {
+        let paints = self.paints.paints();
+        let needs_save = needs_save_operation || paints.len() > 1;
+        let transform = self.transform.world();
+        for paint in paints.iter() {
+            if !paint.cells.is_visible() {
+                continue;
+            }
+            let kind = paint.cells.path_kind();
+            let fill_rule = paint.cells.fill_rule();
+            if paint.cells.is_plain() && paint.handle.is_occupied_settled() {
+                self.with_path_mut(kind, |path| {
+                    paint.cells.draw_plain(renderer, path, transform, needs_save, fill_rule, factory);
+                });
+                continue;
+            }
+            paint.handle.with_mut(|object| {
+                let Some(behavior) = object.as_shape_paint_behavior_mut() else {
+                    return;
+                };
+                self.with_path_mut(kind, |path| {
+                    behavior.shape_paint_mut().draw_with_active_container(
+                        renderer,
+                        path,
+                        transform,
+                        false,
+                        None,
+                        needs_save,
+                        fill_rule,
+                        &|| transform,
+                        None,
+                    );
+                });
+            });
+        }
+    }
+
     /// Run `use_path` on the composer's world path, if the composer lives.
     pub(crate) fn with_world_path<R>(
         &self,

@@ -261,6 +261,27 @@ impl Drop for DrawVisitorScope {
     }
 }
 
+/// drawDrawableRange's loop-carried state.
+struct DrawRangeState {
+    // Like the C++ method's live `this`, retain the existing runtime root for
+    // the range, including its final focus cleanup. Every visitor read is
+    // still fresh, and no root borrow crosses a draw call. Source artboards
+    // stay on the generation-checked arena access path.
+    runtime_receiver: Option<RuntimeArtboardInstanceHandle>,
+    empty_clips: i32,
+    pending_clip_operations: Vec<RuntimeDrawableOccurrence>,
+}
+
+impl DrawRangeState {
+    fn new(root: &CoreHandle) -> Self {
+        Self {
+            runtime_receiver: root.runtime_artboard_instance(),
+            empty_clips: 0,
+            pending_clip_operations: Vec::new(),
+        }
+    }
+}
+
 pub struct Artboard {
     pub base: ArtboardBase,
     core_arena: CoreArena,
@@ -311,6 +332,8 @@ pub struct Artboard {
     dirty_state: RuntimeArtboardDirtyHandle,
     factory: Option<RuntimeFactoryHandle>,
     first_drawable: Option<RuntimeDrawableOccurrence>,
+    // The drawables' order as a flat list, rebuilt after they are relinked.
+    draw_links: Rc<crate::mechanical_port::source::draw_list::DrawLinks>,
     is_instance: bool,
     frame_origin: bool,
     dirty_layout: HashSet<CoreHandle>,
@@ -406,6 +429,7 @@ impl Default for Artboard {
             dirty_state,
             factory: None,
             first_drawable: None,
+            draw_links: Rc::default(),
             is_instance: false,
             frame_origin: true,
             dirty_layout: HashSet::new(),
@@ -1522,6 +1546,7 @@ impl Artboard {
     }
 
     fn sort_draw_order(&mut self) {
+        let _relinking = self.draw_links.relinking();
         self.draw_order_change_counter = if self.draw_order_change_counter == u8::MAX {
             0
         } else {
@@ -1786,6 +1811,7 @@ impl Artboard {
         start_op: crate::mechanical_port::source::layer_mask::LayerMaskOp,
         end_op: crate::mechanical_port::source::layer_mask::LayerMaskOp,
     ) -> Option<RuntimeDrawableOccurrence> {
+        let _relinking = self.draw_links.relinking();
         use crate::mechanical_port::source::layer_mask::LayerMask;
         if members.is_empty() {
             return None;
@@ -1925,6 +1951,7 @@ impl Artboard {
     }
 
     fn interleave_layer_masks(&mut self) {
+        let _relinking = self.draw_links.relinking();
         use crate::mechanical_port::source::layer_mask::{LayerMask, LayerMaskOp};
         for mask in &self.layer_masks {
             mask.with_downcast_mut::<LayerMask, _>(LayerMask::reset_drawables);
@@ -3739,10 +3766,15 @@ impl Artboard {
                 );
             });
         }
-        let first_drawable = root
-            .with_downcast::<Artboard, _>(Artboard::first_drawable)
-            .flatten();
-        Self::draw_drawable_range_handle(root, renderer, first_drawable, None);
+        let (first_drawable, links) = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
+            })
+            .map_or((None, None), |(first, links)| (first, Some(links)));
+        match links {
+            Some(links) => Self::draw_listed_handle(root, renderer, first_drawable, &links),
+            None => Self::draw_drawable_range_handle(root, renderer, first_drawable, None),
+        }
         if save {
             renderer.restore();
         }
@@ -3754,78 +3786,23 @@ impl Artboard {
         first_drawable: Option<RuntimeDrawableOccurrence>,
         stop: Option<RuntimeDrawableOccurrence>,
     ) {
-        // Like the C++ method's live `this`, retain the existing runtime root
-        // for this range, including its final focus cleanup. Every visitor
-        // read below is still fresh, and no root borrow crosses a draw call.
-        // Source artboards stay on the generation-checked arena access path.
-        let runtime_receiver = root.runtime_artboard_instance();
-        let mut empty_clips = 0;
-        let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();
-        let mut drawable = first_drawable;
+        let mut state = DrawRangeState::new(root);
+        Self::draw_range_from(root, renderer, first_drawable, stop.as_ref(), &mut state);
+    }
+
+    /// drawDrawableRange's loop from `drawable`, following the links.
+    fn draw_range_from(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        mut drawable: Option<RuntimeDrawableOccurrence>,
+        stop: Option<&RuntimeDrawableOccurrence>,
+        state: &mut DrawRangeState,
+    ) {
         while let Some(mut current) = drawable {
-            if stop.as_ref() == Some(&current) {
+            if stop == Some(&current) {
                 break;
             }
-            'draw: {
-                match current.draw_range_step(&mut empty_clips, !pending_clip_operations.is_empty())
-                {
-                    DrawRangePrelude::Skip => {
-                        break 'draw;
-                    }
-                    DrawRangePrelude::ClipStart => {
-                        pending_clip_operations.push(current.clone());
-                        break 'draw;
-                    }
-                    DrawRangePrelude::ClipEnd => {
-                        pending_clip_operations.pop();
-                        break 'draw;
-                    }
-                    DrawRangePrelude::Draw => {}
-                }
-                if !pending_clip_operations.is_empty() {
-                    for pending in pending_clip_operations.drain(..) {
-                        pending.draw(renderer);
-                    }
-                }
-                let mask_op = current.layer_mask_op();
-                if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskStart) {
-                    let end = current
-                        .layer_mask_marker()
-                        .unwrap()
-                        .borrow()
-                        .paired_end
-                        .as_ref()
-                        .and_then(|p| p.upgrade())
-                        .expect("paired mask end");
-                    if Self::draw_masked_handle(root, renderer, &current, &end) {
-                        current = end;
-                    }
-                    break 'draw;
-                }
-                if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskEnd) {
-                    break 'draw;
-                }
-                let visitor = if let Some(receiver) = runtime_receiver.as_ref() {
-                    receiver.with_artboard(|instance| instance.draw_visitor.clone())
-                } else {
-                    root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
-                        .flatten()
-                };
-                if let Some(visitor) = visitor.as_ref() {
-                    if current
-                        .with(Drawable::has_custom_properties)
-                        .unwrap_or(false)
-                    {
-                        if let Some(handle) = current.authored_handle() {
-                            renderer.save();
-                            visitor(&handle, renderer);
-                            renderer.restore();
-                            break 'draw;
-                        }
-                    }
-                }
-                current.draw(renderer);
-            }
+            Self::draw_range_entry(root, renderer, &mut current, state);
             // Match C++'s for-loop increment: callbacks may relink the list.
             // The next iteration's receiver access checks authored liveness;
             // avoid checking the same slot again while reading this link.
@@ -3833,6 +3810,170 @@ impl Artboard {
                 .with(Drawable::prev_drawable_for_draw_range)
                 .flatten();
         }
+    }
+
+    /// One iteration of drawDrawableRange's loop body. Drawing a masked
+    /// range moves `current` to the range's end; returns whether it did.
+    fn draw_range_entry(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        current: &mut RuntimeDrawableOccurrence,
+        state: &mut DrawRangeState,
+    ) -> bool {
+        let mut moved = false;
+        'draw: {
+            match current.draw_range_step(&mut state.empty_clips, !state.pending_clip_operations.is_empty())
+            {
+                DrawRangePrelude::Skip => {
+                    break 'draw;
+                }
+                DrawRangePrelude::ClipStart => {
+                    state.pending_clip_operations.push(current.clone());
+                    break 'draw;
+                }
+                DrawRangePrelude::ClipEnd => {
+                    state.pending_clip_operations.pop();
+                    break 'draw;
+                }
+                DrawRangePrelude::Draw => {}
+            }
+            if !state.pending_clip_operations.is_empty() {
+                for pending in state.pending_clip_operations.drain(..) {
+                    pending.draw(renderer);
+                }
+            }
+            let mask_op = current.layer_mask_op();
+            if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskStart) {
+                let end = current
+                    .layer_mask_marker()
+                    .unwrap()
+                    .borrow()
+                    .paired_end
+                    .as_ref()
+                    .and_then(|p| p.upgrade())
+                    .expect("paired mask end");
+                if Self::draw_masked_handle(root, renderer, current, &end) {
+                    *current = end;
+                    moved = true;
+                }
+                break 'draw;
+            }
+            if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskEnd) {
+                break 'draw;
+            }
+            let visitor = if let Some(receiver) = state.runtime_receiver.as_ref() {
+                receiver.with_artboard(|instance| instance.draw_visitor.clone())
+            } else {
+                root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+                    .flatten()
+            };
+            if let Some(visitor) = visitor.as_ref() {
+                if current
+                    .with(Drawable::has_custom_properties)
+                    .unwrap_or(false)
+                {
+                    if let Some(handle) = current.authored_handle() {
+                        renderer.save();
+                        visitor(&handle, renderer);
+                        renderer.restore();
+                        break 'draw;
+                    }
+                }
+            }
+            current.draw(renderer);
+        }
+        moved
+    }
+
+    /// drawContent's range (the whole draw order) through the flat list of
+    /// the current links. A listed Shape whose step needs nothing a borrow
+    /// observes is drawn from its cells; every other drawable takes the
+    /// range step above. When the links change during the draw, or the next
+    /// link is not read borrow-free, the rest of the range follows the links.
+    fn draw_listed_handle(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        first_drawable: Option<RuntimeDrawableOccurrence>,
+        links: &crate::mechanical_port::source::draw_list::DrawLinks,
+    ) {
+        let mut state = DrawRangeState::new(root);
+        let Some(list) = first_drawable
+            .as_ref()
+            .and_then(|first| links.list_from(first))
+        else {
+            return Self::draw_range_from(root, renderer, first_drawable, None, &mut state);
+        };
+        let mut index = 0;
+        while let Some(entry) = list.entries.get(index) {
+            // Where the link walk's upgrade of this link fails, it ends.
+            let Some(mut current) = entry.occurrence() else {
+                return;
+            };
+            let listed_shape = state.pending_clip_operations.is_empty()
+                && entry.shape.as_ref().is_some_and(|shape| {
+                    Self::draw_listed_shape(root, renderer, &current, shape, &state)
+                });
+            let moved = !listed_shape && Self::draw_range_entry(root, renderer, &mut current, &mut state);
+            if moved || links.version() != list.version || !current.link_read_is_settled() {
+                let next = current
+                    .with(Drawable::prev_drawable_for_draw_range)
+                    .flatten();
+                return Self::draw_range_from(root, renderer, next, None, &mut state);
+            }
+            index += 1;
+        }
+    }
+
+    /// The range step for a listed Shape, from its cells: the prelude, the
+    /// visitor check and Shape::draw. Returns false, having done nothing, when
+    /// the step must borrow the shape.
+    fn draw_listed_shape(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        current: &RuntimeDrawableOccurrence,
+        shape: &crate::mechanical_port::source::draw_list::ShapeDraw,
+        state: &DrawRangeState,
+    ) -> bool {
+        let RuntimeDrawableOccurrence::Authored(handle) = current else {
+            return false;
+        };
+        // A loan of the shape would succeed and its release would run nothing.
+        if !handle.is_occupied_settled() {
+            return false;
+        }
+        let Some(dirt) = handle.graph_dirt() else {
+            return false;
+        };
+        // A generated Drawable's prelude: Shape is neither a clip start nor a
+        // clip end, and no clip operation is pending. Shape::willDraw is
+        // !isHidden() && renderOpacity() != 0.
+        let hidden = shape.drawable.is_flagged_hidden()
+            || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
+        if hidden || shape.cells.render_opacity() == 0.0 || state.empty_clips > 0 {
+            return true;
+        }
+        // An authored drawable has no layer mask operation.
+        let visitor = if let Some(receiver) = state.runtime_receiver.as_ref() {
+            receiver.with_artboard(|instance| instance.draw_visitor.clone())
+        } else {
+            root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+                .flatten()
+        };
+        if visitor.is_some() && shape.drawable.has_custom_properties() {
+            return false;
+        }
+        shape.cells.draw(shape.drawable.needs_save_operation(), renderer, &|| {
+            handle
+                .with(|object| {
+                    object
+                        .as_component()
+                        .and_then(|component| component.with_artboard(|artboard| artboard.factory()))
+                        .flatten()
+                })
+                .flatten()
+                .expect("a drawing ShapePaint has its imported Artboard factory")
+        });
+        true
     }
 
     pub fn range_draw_bounds(

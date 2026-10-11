@@ -160,6 +160,18 @@ impl KeyedObject {
         let cells = owner
             .with_downcast::<Self, _>(|object| std::rc::Rc::clone(object.base.cells()))
             .expect("callback traversal retains its KeyedObject");
+        Self::report_keyed_callbacks_cells(&cells, reporter, from, to, at_start);
+    }
+
+    /// report_keyed_callbacks_occurrence for a keyed object entered through
+    /// the shared cells its animation recorded at import.
+    pub(crate) fn report_keyed_callbacks_cells(
+        cells: &KeyedObjectCells,
+        reporter: &mut dyn KeyedCallbackReporter,
+        from: f32,
+        to: f32,
+        at_start: bool,
+    ) {
         let properties = cells.properties();
         for property in properties.iter() {
             if !crate::mechanical_port::source::generated::core_registry::CoreRegistry::is_callback(

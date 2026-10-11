@@ -19,6 +19,10 @@ use crate::mechanical_port::source::{
 pub(crate) struct DrawLinks {
     version: Cell<u64>,
     list: RefCell<Option<Rc<DrawList>>>,
+    // The version the last draw without a list saw. A list is built only
+    // once the links have held across a draw, so a draw order rewritten
+    // every frame keeps the plain link walk.
+    unlisted: Cell<Option<u64>>,
 }
 
 impl DrawLinks {
@@ -41,8 +45,9 @@ impl DrawLinks {
     }
 
     /// The list from `first` under the current links, building it when the
-    /// links changed since the last build. None when a callback relinked the
-    /// drawables while it was being built.
+    /// links changed since the last build and have held across a draw. None
+    /// for the first draw under new links, or when a callback relinked the
+    /// drawables while the list was being built.
     pub(crate) fn list_from(&self, first: &RuntimeDrawableOccurrence) -> Option<Rc<DrawList>> {
         if let Some(list) = self.list.borrow().as_ref()
             && list.version == self.version.get()
@@ -51,6 +56,9 @@ impl DrawLinks {
             return Some(Rc::clone(list));
         }
         let version = self.version.get();
+        if self.unlisted.replace(Some(version)) != Some(version) {
+            return None;
+        }
         let list = Rc::new(DrawList::build(first, version));
         if self.version.get() != version {
             return None;

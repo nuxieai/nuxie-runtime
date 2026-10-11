@@ -223,15 +223,14 @@ impl KeyedProperty {
         artboard: &dyn KeyedObjectContext,
         interpolator_host: Option<&CoreHandle>,
     ) {
-        let (frame_count, index, override_key) = {
-            let frames = property.frames();
+        let (frame_count, index, override_key) = property.with_frames(|frames| {
             assert!(!frames.is_empty());
             (
                 frames.len(),
-                closest_frame_index(&frames, seconds, 0),
+                closest_frame_index(frames, seconds, 0),
                 property.property_key(),
             )
-        };
+        });
         let mix = if interpolator_host
             .is_some_and(|host| artboard.overrides_keyed_interpolation(host, override_key))
         {
@@ -239,8 +238,7 @@ impl KeyedProperty {
         } else {
             mix
         };
-        let selection = {
-            let frames = property.frames();
+        let selection = property.with_frames(|frames| {
             let property_key = property.property_key() as i32;
             if index == 0 {
                 (property_key, frames[0].handle.clone(), None)
@@ -257,7 +255,7 @@ impl KeyedProperty {
             } else {
                 (property_key, frames[index as usize - 1].handle.clone(), None)
             }
-        };
+        });
         Self::apply_selected(selection, object, seconds, mix, context);
     }
 

@@ -546,6 +546,14 @@ impl CoreContext for RuntimeArtboardObjectContext<'_> {
         {
             return instance.with_artboard(|artboard| artboard.base.resolve_handle(id));
         }
+        self.resolve_through_root(id)
+    }
+}
+
+impl RuntimeArtboardObjectContext<'_> {
+    #[cold]
+    #[inline(never)]
+    fn resolve_through_root(&self, id: u32) -> Option<CoreHandle> {
         self.root
             .with_artboard(|artboard| artboard.resolve_handle(id))
             .flatten()

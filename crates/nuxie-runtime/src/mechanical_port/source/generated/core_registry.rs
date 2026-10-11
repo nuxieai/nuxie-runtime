@@ -8514,6 +8514,54 @@ fn double_field(property_key: i32) -> Option<CoreField> {
     }
 }
 
+/// Double property keys with a dedicated path in set_double_handle or
+/// prepare_layout_participant_double, by key.
+const SPECIAL_DOUBLE_SETTERS: [bool; 2048] = {
+    use crate::mechanical_port::source::generated::{
+        constraints::{
+            constraint_base::ConstraintBase, follow_path_constraint_base::FollowPathConstraintBase,
+            list_follow_path_constraint_base::ListFollowPathConstraintBase,
+        },
+        layout::{
+            layout_node_style_base::LayoutNodeStyleBase,
+            layout_sizing_style_base::LayoutSizingStyleBase,
+        },
+        layout_component_base::LayoutComponentBase,
+        text::text_style_base::TextStyleBase,
+    };
+    let keys = [
+        761,
+        762,
+        763,
+        575,
+        ConstraintBase::STRENGTH_PROPERTY_KEY,
+        FollowPathConstraintBase::DISTANCE_PROPERTY_KEY,
+        ListFollowPathConstraintBase::DISTANCE_END_PROPERTY_KEY,
+        ListFollowPathConstraintBase::DISTANCE_OFFSET_PROPERTY_KEY,
+        LayoutComponentBase::WIDTH_PROPERTY_KEY,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY,
+        TextStyleBase::FONT_SIZE_PROPERTY_KEY,
+        TextStyleBase::LINE_HEIGHT_PROPERTY_KEY,
+        TextStyleBase::LETTER_SPACING_PROPERTY_KEY,
+        LayoutSizingStyleBase::MIN_WIDTH_PROPERTY_KEY,
+        LayoutSizingStyleBase::MAX_WIDTH_PROPERTY_KEY,
+        LayoutSizingStyleBase::MIN_HEIGHT_PROPERTY_KEY,
+        LayoutSizingStyleBase::MAX_HEIGHT_PROPERTY_KEY,
+        LayoutNodeStyleBase::WIDTH_PROPERTY_KEY,
+        LayoutNodeStyleBase::HEIGHT_PROPERTY_KEY,
+        LayoutNodeStyleBase::FRACTIONAL_WIDTH_PROPERTY_KEY,
+        LayoutNodeStyleBase::FRACTIONAL_HEIGHT_PROPERTY_KEY,
+    ];
+    let mut table = [false; 2048];
+    let mut i = 0;
+    while i < keys.len() {
+        assert!((keys[i] as usize) < table.len());
+        table[keys[i] as usize] = true;
+        i += 1;
+    }
+    table
+};
+
 fn prepare_layout_participant_double(
     object: &mut dyn crate::source::core::CoreObject,
     owner: &CoreHandle,
@@ -10325,6 +10373,22 @@ impl CoreRegistry {
     }
 
     pub fn set_double_handle(handle: &CoreHandle, property_key: i32, value: f32) -> bool {
+        // Every dedicated path below, and the layout participant's, begins
+        // with its property key; other keys go straight to the plain setter.
+        if !SPECIAL_DOUBLE_SETTERS
+            .get(property_key as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            let mut completion = crate::source::core::PropertySetterCompletion::default();
+            let written = handle
+                .with_mut(|object| {
+                    Self::set_double_with_completion(object, property_key, value, &mut completion)
+                })
+                .is_some();
+            completion.finish_in_place();
+            return written;
+        }
         use crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase;
         if matches!(property_key, 761 | 762 | 763)
             && handle.is_type_of(ScrollConstraintBase::TYPE_KEY)

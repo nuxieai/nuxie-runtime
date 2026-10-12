@@ -416,10 +416,12 @@ impl crate::mechanical_port::source::animation::keyed_object::KeyedObjectContext
 }
 fn apply_hook_case(change_property: bool, owned_application: Option<bool>) {
     use crate::mechanical_port::source::{
-        animation::keyframe_double::KeyFrameDouble, generated::node_base::NodeBase, node::Node,
+        animation::keyframe_double::KeyFrameDouble, generated::node_base::NodeBase,
+        layout_component::LayoutComponent,
     };
     let arena = CoreArena::default();
-    let target = arena.insert(Node::default());
+    // InterpolatorHost::from recognizes LayoutComponent, not a plain Node.
+    let target = arena.insert(LayoutComponent::default());
     let mut first = KeyFrameDouble::default();
     first.base.base.base.compute_seconds(60);
     let mut last = KeyFrameDouble::default();

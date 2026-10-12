@@ -34,7 +34,7 @@ use crate::mechanical_port::source::{
     scripted::scripted_interpolator::{ScriptedInterpolator, StatefulScriptedInterpolator},
 };
 use std::{
-    cell::{RefCell, RefMut},
+    cell::{Cell, RefCell, RefMut},
     rc::Rc,
 };
 
@@ -42,6 +42,11 @@ enum AdvanceReporter<'a> {
     None,
     External(&'a mut dyn KeyedCallbackReporter),
     Instance,
+}
+
+#[cfg(feature = "testing")]
+thread_local! {
+    static KEYFRAME_HOLDER_RESOLVES: Cell<u64> = const { Cell::new(0) };
 }
 
 pub struct LinearAnimationInstance {
@@ -56,6 +61,7 @@ pub struct LinearAnimationInstance {
     spilled_time: f32,
     direction: f32,
     did_loop: bool,
+    no_keyframe_binds: Cell<bool>,
     loop_value: i32,
     // Common instances pay only for a nullable cold-cluster pointer and the
     // borrow flag; copies deliberately start with no allocated cluster.
@@ -110,6 +116,7 @@ impl LinearAnimationInstance {
             spilled_time: 0.0,
             direction: 1.0,
             did_loop: false,
+            no_keyframe_binds: Cell::new(false),
             loop_value: -1,
             binding_extras: RefCell::new(None),
         }
@@ -251,7 +258,22 @@ impl LinearAnimationInstance {
             }
         })
     }
+    #[inline]
     pub fn keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
+        if self.no_keyframe_binds.get() {
+            return None;
+        }
+        self.resolve_keyframe_value_holder(key)
+    }
+
+    #[cfg(feature = "testing")]
+    pub fn keyframe_holder_resolves() -> u64 {
+        KEYFRAME_HOLDER_RESOLVES.with(Cell::get)
+    }
+
+    fn resolve_keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
+        #[cfg(feature = "testing")]
+        KEYFRAME_HOLDER_RESOLVES.with(|count| count.set(count.get().wrapping_add(1)));
         let holder = self
             .binding_extras
             .borrow()
@@ -278,16 +300,20 @@ impl LinearAnimationInstance {
         let source = self
             .scene
             .artboard_instance_ref()
-            .with_artboard(|artboard| artboard.base.artboard_source_handle())
-            .flatten()?;
+            .with_artboard(|artboard| artboard.base.artboard_source_handle())?;
+        let has_binds = source.as_ref().is_some_and(|source| {
+            source
+                .with_downcast::<Artboard, _>(Artboard::has_key_frame_source_binds)
+                .unwrap_or(false)
+        });
+        if !has_binds {
+            #[cfg(not(feature = "editor"))]
+            self.no_keyframe_binds.set(true);
+            return None;
+        }
+        let source = source.expect("an artboard with keyframe binds has a source");
         let bind = source
-            .with_downcast::<Artboard, _>(|source| {
-                if source.has_key_frame_source_binds() {
-                    source.key_frame_source_bind(key)
-                } else {
-                    None
-                }
-            })
+            .with_downcast::<Artboard, _>(|source| source.key_frame_source_bind(key))
             .flatten()?;
         self.build_keyframe_value_holder(key, &bind)
     }
@@ -713,6 +739,7 @@ impl Clone for LinearAnimationInstance {
             spilled_time: self.spilled_time,
             direction: self.direction,
             did_loop: self.did_loop,
+            no_keyframe_binds: Cell::new(self.no_keyframe_binds.get()),
             loop_value: self.loop_value,
             binding_extras: RefCell::new(None),
         }

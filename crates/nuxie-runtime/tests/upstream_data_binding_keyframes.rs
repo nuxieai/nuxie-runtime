@@ -1,5 +1,5 @@
-//! Direct ports of all five cases in pinned
-//! tests/unit_tests/runtime/data_binding_keyframes_test.cpp at afda7a16.
+//! Direct ports of tests/unit_tests/runtime/data_binding_keyframes_test.cpp,
+//! including the lookup-counter case added at 40e52541.
 //! The new joystick Silver case is in silver-corpus's backfill tests.
 use nuxie_render_api::{PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
@@ -247,4 +247,91 @@ fn standalone_animation_instance_resolves_keyframe_value_binds() {
         node.with(|node| catch_approx_eq(node.as_node().expect("Node").base.x(), 424_242.0))
             .expect("live Node")
     }));
+}
+
+#[cfg(feature = "testing")]
+#[test]
+fn only_artboards_that_bind_keyframe_values_look_them_up() {
+    use nuxie_runtime::source::{
+        animation::{
+            keyed_object::KeyedObject, keyed_property::KeyedProperty,
+            linear_animation::LinearAnimation, linear_animation_instance::LinearAnimationInstance,
+        },
+        artboard::Artboard,
+    };
+    let root = std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned upstream fixture directory");
+    let read_file = |name: &str| {
+        let bytes = std::fs::read(
+            PathBuf::from(&root)
+                .join("tests/unit_tests/assets")
+                .join(name),
+        )
+        .unwrap();
+        let mut factory = PersistentFactory::new(SerializingFactory::new());
+        File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+    };
+    let plain_file = read_file("frozen_pose.riv");
+    let plain_source = plain_file.with_file(File::artboard).unwrap();
+    let plain_artboard = Artboard::instance_from_handle(&plain_source).unwrap();
+    let plain = plain_artboard.animation_at(0).unwrap();
+    let authored = plain_artboard
+        .with_artboard(|a| a.animation_handle_at(0))
+        .unwrap();
+    let object = authored
+        .with_downcast::<LinearAnimation, _>(|a| a.get_object(0))
+        .flatten()
+        .unwrap();
+    let property = object
+        .with_downcast::<KeyedObject, _>(|o| o.get_property(0))
+        .flatten()
+        .unwrap();
+    let keyframe = property
+        .with_downcast::<KeyedProperty, _>(|p| p.get_key_frame(0))
+        .flatten()
+        .unwrap();
+    let resolves = LinearAnimationInstance::keyframe_holder_resolves();
+    assert!(plain.keyframe_value_holder(&keyframe).is_none());
+    assert_eq!(
+        LinearAnimationInstance::keyframe_holder_resolves(),
+        resolves + 1
+    );
+    assert!(plain.keyframe_value_holder(&keyframe).is_none());
+    assert_eq!(
+        LinearAnimationInstance::keyframe_holder_resolves(),
+        resolves + 1
+    );
+
+    let file = read_file("data_bind_keyframes_test.riv");
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .unwrap();
+    set_start_x(&view_model, 10.0);
+    artboard.bind_view_model_instance(Some(view_model.clone()));
+    let mut animation = artboard.animation_at(0).unwrap();
+    let any_x = |expected| {
+        artboard
+            .with_artboard(|a| a.find_all_handles::<Node>())
+            .iter()
+            .any(|node| {
+                node.with(|node| catch_approx_eq(node.as_node().unwrap().base.x(), expected))
+                    .unwrap()
+            })
+    };
+    animation.advance_and_apply(0.0);
+    assert!(any_x(10.0));
+    let resolves = LinearAnimationInstance::keyframe_holder_resolves();
+    set_start_x(&view_model, 987.0);
+    animation.advance_and_apply(0.0);
+    assert!(LinearAnimationInstance::keyframe_holder_resolves() > resolves);
+    assert!(any_x(987.0));
 }

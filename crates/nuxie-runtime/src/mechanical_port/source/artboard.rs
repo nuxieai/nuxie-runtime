@@ -15,6 +15,9 @@ thread_local! {
 #[cfg(any(test, feature = "testing"))]
 thread_local! { static DIRT_NOTIFICATIONS: Cell<u64> = const { Cell::new(0) }; }
 
+#[cfg(any(test, feature = "testing"))]
+thread_local! { static COLLAPSED_RUN_SKIPS: Cell<u64> = const { Cell::new(0) }; }
+
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::{AdvancingComponent, AdvancingComponentHandle, QuietState},
@@ -87,6 +90,7 @@ pub type IsAncestorCallback = fn(*mut (), u16) -> u8;
 pub type RootTransformCallback = fn(*mut (), f32, f32, bool) -> f32;
 
 struct ArtboardDirtyState {
+    collapsed_runs_dirty: Cell<bool>,
     depth: Cell<u32>,
     dirt: Cell<ComponentDirt>,
     did_change: Cell<bool>,
@@ -113,6 +117,7 @@ pub struct RuntimeArtboardDirtyHandle(Rc<ArtboardDirtyState>);
 impl Default for RuntimeArtboardDirtyHandle {
     fn default() -> Self {
         Self(Rc::new(ArtboardDirtyState {
+            collapsed_runs_dirty: Cell::new(true),
             depth: Cell::new(0),
             dirt: Cell::new(ComponentDirt::FILTHY),
             did_change: Cell::new(true),
@@ -124,6 +129,9 @@ impl Default for RuntimeArtboardDirtyHandle {
     }
 }
 impl RuntimeArtboardDirtyHandle {
+    pub fn collapse_changed(&self) {
+        self.0.collapsed_runs_dirty.set(true);
+    }
     pub fn change_serial(&self) -> u32 {
         self.0.change_serial.get()
     }
@@ -2128,6 +2136,7 @@ impl Artboard {
         }
         self.dependency_order_recipe.get_mut().clear();
         self.recipe_state.set(RecipeState::Unbuilt);
+        self.dirty_state.collapse_changed();
         self.dirty_state.mark_components_dirty();
     }
 
@@ -2371,6 +2380,13 @@ impl Artboard {
     #[cfg(any(test, feature = "testing"))]
     pub fn dirt_notifications() -> u64 {
         DIRT_NOTIFICATIONS.with(Cell::get)
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn collapsed_run_skips() -> u64 {
+        COLLAPSED_RUN_SKIPS.with(Cell::get)
+    }
+    pub fn collapse_changed(&self) {
+        self.dirty_state.collapse_changed();
     }
     pub fn row_quiet_state(&self) -> QuietState {
         if !self.artboard_hosts.is_empty()
@@ -2770,15 +2786,66 @@ impl Artboard {
         crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone()).advance_data_binds(elapsed)
     }
 
+    fn mark_collapsed_runs_handle(root: &CoreHandle) {
+        let order = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard.dirty_state.0.collapsed_runs_dirty.set(false);
+                artboard.dependency_order.clone()
+            })
+            .expect("live Artboard dependency order");
+        let mut run_end = order.len();
+        for (index, component) in order.iter().enumerate().rev() {
+            // Match updateComponents' dirt bit, not virtual isCollapsed:
+            // display-hidden layouts still participate in updates.
+            let collapsed = component
+                .with_component(|component| component.dirt().contains(ComponentDirt::COLLAPSED))
+                .expect("live dependency Component");
+            if !collapsed {
+                run_end = index;
+                continue;
+            }
+            let skip = (run_end - index).min(u16::MAX as usize) as u16;
+            let previous = component
+                .with_component(|component| component.collapsed_run_skip)
+                .expect("live dependency Component");
+            if previous != skip {
+                component.with_component_mut(|component| component.collapsed_run_skip = skip);
+            }
+        }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    fn verify_collapsed_runs_handle(root: &CoreHandle) {
+        let order = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.dependency_order.clone())
+            .expect("live Artboard dependency order");
+        let mut run_end = order.len();
+        for (index, component) in order.iter().enumerate().rev() {
+            component.with_component(|component| {
+                if !component.dirt().contains(ComponentDirt::COLLAPSED) {
+                    run_end = index;
+                } else {
+                    let expected = (run_end - index).min(u16::MAX as usize) as u16;
+                    if component.collapsed_run_skip != expected {
+                        let artboard_name = root.with(|object| object.as_component().expect("Artboard Component").base.name().to_owned()).expect("live Artboard");
+                        eprintln!("Collapsed '{}' at {} in artboard '{}' skips {}, not {}: a collapse change didn't reach collapseChanged()", component.base.name(), index, artboard_name, component.collapsed_run_skip, expected);
+                        std::process::abort();
+                    }
+                }
+            }).expect("live dependency Component");
+        }
+    }
+
     pub fn update_components_handle(root: &CoreHandle) -> bool {
         // The C++ method requires a live receiver. Retain the Rust runtime
         // handle once (including its final focus cleanup), not a
         // naked Rc, and never retain a RefCell borrow across component updates.
         let runtime_receiver = root.runtime_artboard_instance();
-        let Some((dirty, count)) = root.with_downcast::<Artboard, _>(|artboard| {
+        let Some((dirty, count, dirty_state)) = root.with_downcast::<Artboard, _>(|artboard| {
             (
                 artboard.has_component_dirt(),
                 artboard.dependency_order.len(),
+                artboard.dirty_state.clone(),
             )
         }) else {
             return false;
@@ -2799,7 +2866,14 @@ impl Artboard {
                     .dirt
                     .set(artboard.dirty_state.0.dirt.get() & !ComponentDirt::COMPONENTS)
             });
-            for i in 0..count {
+            if dirty_state.0.collapsed_runs_dirty.get() {
+                Self::mark_collapsed_runs_handle(root);
+            } else {
+                #[cfg(any(test, feature = "testing"))]
+                Self::verify_collapsed_runs_handle(root);
+            }
+            let mut i = 0;
+            while i < count {
                 let component = if let Some(receiver) = runtime_receiver.as_ref() {
                     receiver.with_artboard(|instance| {
                         instance.dirty_state.0.depth.set(i as u32);
@@ -2812,7 +2886,23 @@ impl Artboard {
                     })
                     .expect("live Artboard dependency walk")
                 };
+                let (dirt, skip) = component
+                    .with_component(|component| (component.dirt(), component.collapsed_run_skip))
+                    .expect("live dependency Component");
+                if dirt.contains(ComponentDirt::COLLAPSED) {
+                    // A callback can change collapse state during this pass.
+                    // Until the next pass remarks the runs, step individually.
+                    if !dirty_state.0.collapsed_runs_dirty.get() && skip > 1 {
+                        #[cfg(any(test, feature = "testing"))]
+                        COLLAPSED_RUN_SKIPS.with(|count| count.set(count.get() + 1));
+                        i += usize::from(skip);
+                    } else {
+                        i += 1;
+                    }
+                    continue;
+                }
                 if !component.update_if_dirty() {
+                    i += 1;
                     continue;
                 }
                 // Read fresh dirt depth after the callback, through the same
@@ -2829,6 +2919,7 @@ impl Artboard {
                 if dirtied_earlier {
                     break;
                 }
+                i += 1;
             }
             step += 1;
         }

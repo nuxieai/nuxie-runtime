@@ -5617,6 +5617,7 @@ pub trait CoreCapabilities: Any {
         self.component_on_dirty(dirt);
         let component = self.as_component().expect("Component collapse owner");
         component.notify_artboard();
+        component.notify_collapse_changed();
         self.component_update_collapsables();
         self.component_collapse_post(value);
         true

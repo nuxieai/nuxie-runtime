@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "ac0c03ae4d5cdd5d5e84b18ddafd6738b26e629e"
+upstream_ref = "40e52541238037bab60088a675dc29676584bdfd"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -558,7 +558,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo nested artboards only process data binds when active"
-producer_line = 684
+producer_line = 743
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1042,7 +1042,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_keyframes_test.cpp"
 provenance_test = "Data binding keyframes"
-producer_line = 73
+producer_line = 75
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1284,7 +1284,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bound solos with enums work in both directions"
-producer_line = 453
+producer_line = 512
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2582,7 +2582,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_keyframes_test.cpp"
 provenance_test = "Data binding keyframes animated by joysticks"
-producer_line = 259
+producer_line = 299
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3204,7 +3204,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo children of a layout render for every state"
-producer_line = 595
+producer_line = 654
 note = "Exact comparison contract for solo_test.cpp through 3b2c51e2: the opt-in sibling asserts false and enables every leaf flag first; bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
 
 [[case]]
@@ -3226,7 +3226,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo children of a layout render fitted to the layout parent"
-producer_line = 650
+producer_line = 709
 note = "Exact comparison contract for solo_test.cpp through 3b2c51e2: the opt-in sibling asserts false and enables every leaf flag first; bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5118,7 +5118,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bind by index skipping non hierarchical children"
-producer_line = 547
+producer_line = 606
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5140,7 +5140,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "an opted-in leaf under a Solo fits the layout above it"
-producer_line = 758
+producer_line = 817
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5162,7 +5162,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "a leaf parented by the artboard fits it"
-producer_line = 750
+producer_line = 809
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5184,7 +5184,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "a legacy leaf under a Solo frames its own bounds"
-producer_line = 766
+producer_line = 825
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]

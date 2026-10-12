@@ -33,6 +33,221 @@ fn table() -> RuntimeRuleGroup {
             .into(),
     }
 }
+
+#[test]
+fn removing_the_last_rule_of_a_group_member_is_refused_atomically() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_rules(&[entry(
+            "n",
+            RuntimeValueRuleKind::NumberMinimum(2.0),
+            RuntimeValueRuleMode::Mark,
+            "minimum",
+        )])
+        .unwrap();
+    let mut group = table();
+    group.members.truncate(1);
+    policy.set_groups(&[group]).unwrap();
+
+    policy
+        .set_rules(&[])
+        .expect_err("a group member must retain a rule or marker");
+    run(
+        &policy,
+        &[root.clone()],
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 1.0);
+        },
+        true,
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid"),
+        Some(false),
+        "a refused replacement keeps the previous rule installed"
+    );
+    assert_eq!(errors(&root, "n_errors"), expected(&["minimum"]));
+}
+
+#[test]
+fn an_unruled_group_member_is_named_in_the_refusal() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let mut policy = RuntimeValuePolicy::new(file);
+    let mut group = table();
+    group.members.truncate(1);
+
+    let refusal = policy.set_groups(&[group]).unwrap_err();
+    assert_eq!(
+        refusal,
+        RuntimeValuePolicyError::UnruledGroupMember {
+            model: "Values".into(),
+            member: "n".into(),
+            value: "n".into(),
+        }
+    );
+    assert!(
+        format!("{refusal:?}").contains("Values.n"),
+        "the refusal must identify the group's model and member"
+    );
+    assert!(!policy.has_groups());
+}
+
+fn policy_and_root() -> (RuntimeValuePolicy, RuntimeOwnedViewModelHandle) {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    (RuntimeValuePolicy::new(file), root)
+}
+
+#[test]
+fn removing_a_marker_names_the_declared_member_and_preserves_the_marker() {
+    let (mut policy, root) = policy_and_root();
+    policy
+        .set_markers(&[RuntimeValueMarker {
+            model: "Values".into(),
+            value: "n".into(),
+            marker: "n_set".into(),
+        }])
+        .unwrap();
+    let mut group = table();
+    group.members.truncate(1);
+    group.members[0].property = "n_set".into();
+    policy.set_groups(&[group]).unwrap();
+    let refusal = policy.set_markers(&[]).unwrap_err();
+    assert_eq!(
+        refusal,
+        RuntimeValuePolicyError::UnruledGroupMember {
+            model: "Values".into(),
+            member: "n_set".into(),
+            value: "n".into(),
+        }
+    );
+    let message = format!("{refusal:?}");
+    assert!(message.contains("Values.n_set") && message.contains("Values.n"));
+    run(
+        &policy,
+        &[root.clone()],
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 1.0);
+        },
+        true,
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid"),
+        Some(true)
+    );
+    assert!(errors(&root, "n_errors").is_empty());
+}
+
+#[test]
+fn a_partial_rule_replacement_checks_every_member_atomically() {
+    let (mut policy, root) = policy_and_root();
+    let number_rule = entry(
+        "n",
+        RuntimeValueRuleKind::NumberMinimum(2.0),
+        RuntimeValueRuleMode::Mark,
+        "minimum",
+    );
+    policy
+        .set_rules(&[
+            number_rule.clone(),
+            entry(
+                "text",
+                RuntimeValueRuleKind::Length {
+                    minimum: 3,
+                    maximum: usize::MAX,
+                },
+                RuntimeValueRuleMode::Mark,
+                "length",
+            ),
+        ])
+        .unwrap();
+    policy.set_groups(&[table()]).unwrap();
+    assert_eq!(
+        policy.set_rules(&[number_rule]),
+        Err(RuntimeValuePolicyError::UnruledGroupMember {
+            model: "Values".into(),
+            member: "text".into(),
+            value: "text".into(),
+        })
+    );
+    run(
+        &policy,
+        &[root.clone()],
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 5.0);
+            root.borrow_mut().set_string_by_property_name("text", b"hi");
+        },
+        true,
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid"),
+        Some(false)
+    );
+    assert!(errors(&root, "n_errors").is_empty());
+    assert_eq!(errors(&root, "text_errors"), expected(&["length"]));
+}
+
+#[test]
+fn either_policy_keeps_a_member_covered_and_removing_groups_releases_it() {
+    let (mut policy, _) = policy_and_root();
+    let rule = entry(
+        "n",
+        RuntimeValueRuleKind::NumberMinimum(2.0),
+        RuntimeValueRuleMode::Mark,
+        "minimum",
+    );
+    policy.set_rules(&[rule.clone()]).unwrap();
+    policy
+        .set_markers(&[RuntimeValueMarker {
+            model: "Values".into(),
+            value: "n".into(),
+            marker: "n_set".into(),
+        }])
+        .unwrap();
+    let mut group = table();
+    group.members.truncate(1);
+    policy.set_groups(&[group]).unwrap();
+    policy.set_rules(&[]).unwrap();
+    policy.set_rules(&[rule]).unwrap();
+    policy.set_markers(&[]).unwrap();
+    policy.set_groups(&[]).unwrap();
+    policy.set_rules(&[]).unwrap();
+    assert!(!policy.has_groups() && !policy.has_rules() && !policy.has_markers());
+}
+
 fn errors(root: &RuntimeOwnedViewModelHandle, property: &str) -> Vec<(String, String)> {
     root.list_items_by_property_name_path(property)
         .unwrap()

@@ -25,6 +25,7 @@ pub(crate) struct Group {
 }
 
 struct Member {
+    declared_property: usize,
     property: usize,
     path: Vec<usize>,
     target: (usize, usize),
@@ -56,8 +57,9 @@ fn root_revisions(roots: &[RuntimeOwnedViewModelHandle]) -> Vec<(u64, u64)> {
 
 impl RuntimeValuePolicy {
     /// Replace the whole group table atomically. Install rules and markers
-    /// first. Outputs put latest refusals before kept-value failures, preserving
-    /// installed order within each partition and omitting duplicates.
+    /// first. Every member needs a rule or an empty-value marker. Outputs put
+    /// latest refusals before kept-value failures, preserving installed order
+    /// within each partition and omitting duplicates.
     pub fn set_groups(
         &mut self,
         entries: &[RuntimeRuleGroup],
@@ -93,6 +95,7 @@ impl RuntimeValuePolicy {
                     return Err(RuntimeValuePolicyError::LimitExceeded);
                 }
                 let (_, mut property, _) = self.property(&entry.model, &member.property)?;
+                let declared_property = property;
                 if let Some(marker) = self
                     .markers
                     .iter()
@@ -100,16 +103,7 @@ impl RuntimeValuePolicy {
                 {
                     property = marker.value;
                 }
-                if !values.insert(property)
-                    || !self
-                        .rules
-                        .iter()
-                        .any(|rule| rule.model == model && rule.property == property)
-                        && !self
-                            .markers
-                            .iter()
-                            .any(|pair| pair.model == model && pair.value == property)
-                {
+                if !values.insert(property) {
                     return Err(RuntimeValuePolicyError::InvalidArgument);
                 }
                 let mut path = Vec::new();
@@ -164,6 +158,7 @@ impl RuntimeValuePolicy {
                     return Err(RuntimeValuePolicyError::InvalidArgument);
                 }
                 members.push(Member {
+                    declared_property,
                     property,
                     path,
                     target,
@@ -178,7 +173,7 @@ impl RuntimeValuePolicy {
                 members,
             });
         }
-        validate_inputs(&groups, &self.rules, &self.markers)?;
+        validate_inputs(&self.file, &groups, &self.rules, &self.markers)?;
         self.invalidate();
         self.groups = groups;
         self.group_refusals.borrow_mut().clear();
@@ -190,11 +185,12 @@ impl RuntimeValuePolicy {
         rules: &[Rule],
         markers: &[Marker],
     ) -> Result<(), RuntimeValuePolicyError> {
-        validate_inputs(&self.groups, rules, markers)
+        validate_inputs(&self.file, &self.groups, rules, markers)
     }
 }
 
 fn validate_inputs(
+    file: &RuntimeFileHandle,
     groups: &[Group],
     rules: &[Rule],
     markers: &[Marker],
@@ -203,6 +199,15 @@ fn validate_inputs(
     for group in groups {
         computed.insert((group.model, group.valid));
         for member in &group.members {
+            if !rules
+                .iter()
+                .any(|rule| rule.model == group.model && rule.property == member.property)
+                && !markers
+                    .iter()
+                    .any(|pair| pair.model == group.model && pair.value == member.property)
+            {
+                return Err(unruled_member_error(file, group, member));
+            }
             computed.extend([
                 member.target,
                 (member.item_model, member.code),
@@ -221,6 +226,37 @@ fn validate_inputs(
         return Err(RuntimeValuePolicyError::InvalidArgument);
     }
     Ok(())
+}
+
+fn unruled_member_error(
+    file: &RuntimeFileHandle,
+    group: &Group,
+    member: &Member,
+) -> RuntimeValuePolicyError {
+    file.with_file(|file| {
+        file.view_model(group.model)?
+            .with(|core| {
+                let model = core.as_view_model()?;
+                let name = |index: usize| {
+                    model
+                        .properties()
+                        .get(index)?
+                        .with(|property| {
+                            property
+                                .as_view_model_property()
+                                .map(|property| property.const_name().to_owned())
+                        })
+                        .flatten()
+                };
+                Some(RuntimeValuePolicyError::UnruledGroupMember {
+                    model: model.base.name().to_owned(),
+                    member: name(member.declared_property)?,
+                    value: name(member.property)?,
+                })
+            })
+            .flatten()
+    })
+    .unwrap_or(RuntimeValuePolicyError::NotFound)
 }
 
 impl RuntimeValuePolicyOperation {

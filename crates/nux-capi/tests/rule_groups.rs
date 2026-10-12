@@ -627,3 +627,34 @@ fn group_install_rejects_bad_handles_and_member_arrays_atomically() {
     h.mutate(&[h.number(400.0)]);
     assert!(!Snapshot::new(h.first).errors("trip_days").is_empty());
 }
+
+#[test]
+fn an_unruled_replacement_returns_invalid_argument_and_keeps_the_installed_rules() {
+    let h = Handles::new();
+    h.install(false);
+    unsafe {
+        assert_eq!(
+            nux_file_set_value_rules(h.file, ptr::null(), 0),
+            NuxStatus::InvalidArgument
+        );
+    }
+    h.step();
+    assert_eq!(
+        Snapshot::new(h.first).errors("email"),
+        vec![("pattern".into(), "Digits only".into())]
+    );
+    unsafe {
+        assert_eq!(
+            nux_file_set_rule_groups(h.file, ptr::null(), 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_file_set_value_rules(h.file, ptr::null(), 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_file_set_value_markers(h.file, ptr::null(), 0),
+            NuxStatus::Ok
+        );
+    }
+}

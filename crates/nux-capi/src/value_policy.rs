@@ -14,7 +14,8 @@ pub(super) fn status(error: nuxie::RuntimeValuePolicyError) -> NuxStatus {
     match error {
         nuxie::RuntimeValuePolicyError::NotFound => NuxStatus::NotFound,
         nuxie::RuntimeValuePolicyError::InvalidArgument
-        | nuxie::RuntimeValuePolicyError::InvalidPattern { .. } => NuxStatus::InvalidArgument,
+        | nuxie::RuntimeValuePolicyError::InvalidPattern { .. }
+        | nuxie::RuntimeValuePolicyError::UnruledGroupMember { .. } => NuxStatus::InvalidArgument,
         nuxie::RuntimeValuePolicyError::LimitExceeded => NuxStatus::LimitExceeded,
         nuxie::RuntimeValuePolicyError::BorrowConflict => NuxStatus::ReentrantCall,
     }

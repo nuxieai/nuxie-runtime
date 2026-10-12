@@ -39,16 +39,56 @@ pub struct RuntimeValueMarker {
     pub marker: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum RuntimeValuePolicyError {
     /// The replacement table contains an invalid pattern with this caller code.
     InvalidPattern {
         code: String,
     },
+    /// A group member must retain a rule or an empty-value marker.
+    UnruledGroupMember {
+        model: String,
+        member: String,
+        value: String,
+    },
     NotFound,
     InvalidArgument,
     LimitExceeded,
     BorrowConflict,
+}
+
+impl std::fmt::Debug for RuntimeValuePolicyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnruledGroupMember {
+                model,
+                member,
+                value,
+            } => {
+                let member = format!("{model}.{member}");
+                let value = format!("{model}.{value}");
+                if member == value {
+                    write!(
+                        f,
+                        "Value policy group member {member:?} has no rule or empty value marker. Add a rule or an empty value marker for {value:?}."
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Value policy group member {member:?} points to {value:?}, which has no rule or empty value marker. Add a rule or an empty value marker for {value:?}."
+                    )
+                }
+            }
+            Self::InvalidPattern { code } => f
+                .debug_struct("InvalidPattern")
+                .field("code", code)
+                .finish(),
+            Self::NotFound => f.write_str("NotFound"),
+            Self::InvalidArgument => f.write_str("InvalidArgument"),
+            Self::LimitExceeded => f.write_str("LimitExceeded"),
+            Self::BorrowConflict => f.write_str("BorrowConflict"),
+        }
+    }
 }
 
 struct Marker {
@@ -171,6 +211,8 @@ impl RuntimeValuePolicy {
             .map(|pair| pair.marker)
     }
 
+    /// Group members must retain a rule or marker. Remove their groups first
+    /// when removing their last policy.
     /// Replace the entire ordered rule table atomically. Model/property names
     /// are resolved from this file; no naming convention selects a property.
     pub fn set_rules(
@@ -325,6 +367,8 @@ impl RuntimeValuePolicy {
             && artboard.native_handle().update_pass(true)
     }
 
+    /// Replace markers atomically. Group members must retain a rule or marker.
+    /// Remove their groups first when removing their last policy.
     pub fn set_markers(
         &mut self,
         entries: &[RuntimeValueMarker],

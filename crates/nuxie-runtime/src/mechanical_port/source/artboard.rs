@@ -728,6 +728,12 @@ impl Artboard {
         &self.objects
     }
 
+    /// Every drawable in the artboard, including layout proxies. This is much
+    /// smaller than objects() and preserves relative Text order.
+    pub fn drawables(&self) -> &[RuntimeDrawableOccurrence] {
+        &self.drawables
+    }
+
     /// Tool observation of the actual scheduled owners, including runtime helpers.
     #[cfg(feature = "tools")]
     pub fn dependency_order(

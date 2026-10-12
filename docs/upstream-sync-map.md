@@ -7,18 +7,26 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `785bca185218ef4b8eec3e525199f27a8f23d49f`
+- LAST_SYNCED_SHA: `ca8fad85f2b85e192705606c684c5a44dde3a30a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `daf55385b71fb861b2a1ae2930ae4492832d5db5` (refreshed 2026-10-12 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 229 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (251 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 230 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (252 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `ca8fad85`, integrated atop downstream `c101a4c286`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Existing text-selection, native text-input and raw text-input suites
+  pass all 86 cases. Native editor/testing/tools and wasm32-unknown-unknown
+  builds pass. Source/manifest/pipeline tests pass 42, with generated-file and
+  formatting checks clean. Upstream added no new tests in this delta. No
+  assertions or tolerances changed; no fresh broad differential, hardware,
+  browser-pixel or performance result is claimed.
 - Validation at `785bca18`, integrated atop downstream `0241be30e9`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. The new missing-drawable regression and existing draw-order case pass;
@@ -794,6 +802,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ca8fad85f2b85e192705606c684c5a44dde3a30a` | Traverse the artboard drawable inventory instead of all objects when collecting selectable Text; retain nested/list-artboard recursion and relative Text order. Make the drawable accessor available in runtime builds as well as editor builds. Private .rive_head contents are not claimed imported. | — |
 | `785bca185218ef4b8eec3e525199f27a8f23d49f` | Translate DrawTarget validation: retain superclass validation and require drawableId to resolve to a Drawable before initialization. Translate the public missing-drawable regression with the exact upstream fixture. Private editor export changes described only in commit prose and .rive_head contents are not claimed imported. | — |
 | `10e2138336df07cca4888f6a5246be39aeae67d9` | Pace nonthreaded work by the poll's captured submission boundary and threaded delivery by the initial completed-queue count. Preserve nested polls and callback-submitted work with released internal queue locks and shared pool APIs; update existing scripting callers and translate all four public regressions. Private buffer/GC changes mentioned only in commit prose and .rive_head contents are not claimed imported. | — |
 | `40e52541238037bab60088a675dc29676584bdfd` | Translate collapsed-component run skips from the Collapsed dirt bit, capped u16 distances, stale-run notifications, dependency-order invalidation and exact mid-pass fallback to single steps. Preserve editor clearing notifications and TESTING verification/counters. Resolve keyed-object interpolator hosts once and lazily cache the absence of keyframe binds outside editor builds, preserving clone state. Translate both public keyframe-bind and Solo regressions. Private .rive_head contents are not claimed imported. | — |

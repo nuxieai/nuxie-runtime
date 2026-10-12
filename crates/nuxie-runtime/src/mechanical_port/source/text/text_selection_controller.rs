@@ -158,16 +158,22 @@ fn encode(source: &[u32], result: &mut String) {
 }
 
 fn collect_selectable(root: &CoreHandle, result: &mut Vec<CoreHandle>) {
-    let Some((objects, nested, lists)) = root.with_downcast::<Artboard, _>(|a| {
+    let Some((drawables, nested, lists)) = root.with_downcast::<Artboard, _>(|a| {
         (
-            a.objects().to_vec(),
+            a.drawables().to_vec(),
             a.nested_artboards(),
             a.artboard_component_lists(),
         )
     }) else {
         return;
     };
-    for object in objects.into_iter().flatten() {
+    // Every Text is a Drawable. Layout proxies are not Text, and the drawable
+    // sequence preserves Text's relative object order without scanning vertices,
+    // paints, and other non-drawable components on each synchronization.
+    for object in drawables
+        .iter()
+        .filter_map(|drawable| drawable.authored_handle())
+    {
         if object
             .with_downcast::<Text, _>(|text| text.base.is_selectable())
             .unwrap_or(false)

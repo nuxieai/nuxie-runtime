@@ -89,7 +89,10 @@ impl RuntimePathComposerHandle {
             shape.path_changed();
         }
         self.occurrence().notify_artboard();
-        self.with_mut(|helper| helper.component.update_collapsables());
+        self.with_mut(|helper| {
+            helper.component.notify_collapse_changed();
+            helper.component.update_collapsables();
+        });
         true
     }
 }

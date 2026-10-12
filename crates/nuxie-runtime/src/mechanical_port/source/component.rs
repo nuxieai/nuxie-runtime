@@ -557,6 +557,7 @@ impl ComponentOccurrenceHandle {
                     }
                     object.component_on_dirty(dirt);
                     object.as_component()?.notify_artboard();
+                    object.as_component()?.notify_collapse_changed();
                     Some(DirtyAction::Complete((
                         object.component_is_collapsed(),
                         object.as_component()?.collapsables_snapshot(),
@@ -576,6 +577,7 @@ impl ComponentOccurrenceHandle {
                     let Some(post_dirty) = handle
                         .with(|object| {
                             object.as_component()?.notify_artboard();
+                            object.as_component()?.notify_collapse_changed();
                             Some((
                                 object.component_is_collapsed(),
                                 object.as_component()?.collapsables_snapshot(),
@@ -709,6 +711,7 @@ impl ComponentOccurrenceHandle {
         }
         self.notify_artboard();
         if let Some((collapsed, collapsables)) = self.with_component(|component| {
+            component.notify_collapse_changed();
             (component.is_collapsed(), component.collapsables_snapshot())
         }) {
             for collapsable in collapsables.iter() {
@@ -872,6 +875,9 @@ pub struct Component {
     artboard: Option<CoreHandle>,
     collapsables: LazyVector<CoreHandle>,
     dirt: ComponentDirtStorage,
+    // Distance to the end of this collapsed run, capped at u16::MAX. Valid
+    // only while the owning Artboard's collapsed-runs dirty flag is clear.
+    pub(crate) collapsed_run_skip: u16,
     runtime_occurrence: Option<ComponentOccurrenceHandle>,
 }
 
@@ -886,6 +892,7 @@ impl Default for Component {
             artboard: None,
             collapsables: LazyVector::default(),
             dirt: ComponentDirtStorage::Inline(ComponentDirt::FILTHY),
+            collapsed_run_skip: 0,
             runtime_occurrence: None,
         }
     }
@@ -960,6 +967,25 @@ impl Component {
             .and_then(CoreHandle::artboard_dirty_handle)
         {
             dirty.on_component_dirty_at(self.graph_order());
+        }
+    }
+
+    pub(crate) fn notify_collapse_changed(&self) {
+        if let Some(dirty) = self
+            .artboard
+            .as_ref()
+            .and_then(CoreHandle::artboard_dirty_handle)
+        {
+            dirty.collapse_changed();
+        }
+    }
+
+    #[cfg(feature = "editor")]
+    pub fn clear_dirt_for_editor(&mut self) {
+        let was_collapsed = self.dirt().contains(ComponentDirt::COLLAPSED);
+        self.set_dirt(ComponentDirt::NONE);
+        if was_collapsed {
+            self.notify_collapse_changed();
         }
     }
 

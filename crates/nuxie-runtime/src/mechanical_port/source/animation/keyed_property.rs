@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
-        linear_animation::LinearAnimation,
+        keyframe_interpolator::KeyFrameInterpolator, linear_animation::LinearAnimation,
     },
     core::CoreHandle,
     generated::animation::{
@@ -210,6 +210,29 @@ impl KeyedProperty {
         context: Option<&dyn KeyFrameValueContext>,
         artboard: &dyn KeyedObjectContext,
     ) {
+        let interpolator_host = KeyFrameInterpolator::host_from(object.clone());
+        Self::apply_occurrence_with_interpolator_host(
+            owner,
+            object,
+            seconds,
+            mix,
+            context,
+            artboard,
+            interpolator_host.as_ref(),
+        );
+    }
+
+    /// KeyedObject resolves the host once for all properties of its target.
+    /// Keep the virtual override call per property, outside the property loan.
+    pub(crate) fn apply_occurrence_with_interpolator_host(
+        owner: &CoreHandle,
+        object: CoreHandle,
+        seconds: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+        artboard: &dyn KeyedObjectContext,
+        interpolator_host: Option<&CoreHandle>,
+    ) {
         let (frame_count, index, override_key) = owner
             .with_downcast::<Self, _>(|property| {
                 assert!(!property.keyframes.is_empty());
@@ -220,7 +243,9 @@ impl KeyedProperty {
                 )
             })
             .expect("animation application retains its KeyedProperty");
-        let mix = if artboard.overrides_keyed_interpolation(&object, override_key) {
+        let mix = if interpolator_host
+            .is_some_and(|host| artboard.overrides_keyed_interpolation(host, override_key))
+        {
             1.0
         } else {
             mix

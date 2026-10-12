@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_property::KeyedProperty,
+        keyframe_interpolator::KeyFrameInterpolator,
     },
     core::CoreHandle,
     core_context::CoreContext,
@@ -141,18 +142,20 @@ impl KeyedObject {
         let Some(object) = artboard.resolve_object(self.base.object_id()) else {
             return;
         };
+        let interpolator_host = KeyFrameInterpolator::host_from(object.clone());
         for property in self.keyed_properties.iter() {
             let is_callback = property
                 .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
                 .expect("KeyedObject retains KeyedProperty occurrences");
             if !is_callback {
-                KeyedProperty::apply_occurrence(
+                KeyedProperty::apply_occurrence_with_interpolator_host(
                     property,
                     object.clone(),
                     time,
                     mix,
                     context,
                     artboard,
+                    interpolator_host.as_ref(),
                 );
             }
         }
@@ -173,6 +176,7 @@ impl KeyedObject {
         let Some(object) = artboard.resolve_object(object_id) else {
             return;
         };
+        let interpolator_host = KeyFrameInterpolator::host_from(object.clone());
         let properties = owner
             .with_downcast::<Self, _>(|object| object.keyed_properties.snapshot())
             .expect("animation application retains its KeyedObject");
@@ -181,13 +185,14 @@ impl KeyedObject {
                 .with_downcast::<KeyedProperty, _>(KeyedProperty::is_callback)
                 .expect("KeyedObject retains KeyedProperty occurrences");
             if !is_callback {
-                KeyedProperty::apply_occurrence(
+                KeyedProperty::apply_occurrence_with_interpolator_host(
                     property,
                     object.clone(),
                     time,
                     mix,
                     context,
                     artboard,
+                    interpolator_host.as_ref(),
                 );
             }
         }

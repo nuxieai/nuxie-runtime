@@ -204,6 +204,8 @@ def deployment_version(variable, default):
 
 def bazel_command():
     if os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2":
+        if os.environ.get("NUXIE_BAZEL_OUTPUT_BASE"):
+            raise ValueError("Output isolation is constrained by installed runner policy")
         return ["/bin/bash", str(ROOT / "tools/bazel/bazel.sh")]
     configured = os.environ.get("NUXIE_BAZEL_BIN") or os.environ.get("BAZEL")
     install_roots = [ROOT / "target/bazel-tools", ROOT, ROOT.parent.parent]

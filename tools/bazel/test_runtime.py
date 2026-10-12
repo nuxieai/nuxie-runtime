@@ -34,6 +34,9 @@ class RuntimeBuildTest(unittest.TestCase):
             self.assertEqual(runtime.bazel_command(), ["/bin/bash", str(self.root / "tools/bazel/bazel.sh")])
             with self.assertRaisesRegex(ValueError, "installed runner policy"):
                 runtime.command_options(["check", "--jobs", "100"])
+            with patch.dict(os.environ, {"NUXIE_BAZEL_OUTPUT_BASE": str(self.root / "other-output")}):
+                with self.assertRaisesRegex(ValueError, "Output isolation"):
+                    runtime.bazel_command()
 
     def test_v2_test_environment_does_not_send_cache_credentials_to_test_actions(self):
         with patch.dict(os.environ, {"NUXIE_CI_RUNNER_POLICY_VERSION": "2", "NUXIE_BAZEL_JOBS": "100",

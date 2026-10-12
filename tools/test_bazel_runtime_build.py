@@ -16,6 +16,14 @@ LABEL = "//crates/shipping:shipping__android__cdylib"
 
 
 class CacheFrontendTests(unittest.TestCase):
+    def test_v2_distribution_rejects_a_caller_output_base_before_tool_invocation(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+                "NUXIE_CI_RUNNER_POLICY_VERSION": "2", "NUXIE_BAZEL_OUTPUT_BASE": directory}, clear=True), \
+                patch("tools.bazel_runtime_build.subprocess.run") as run:
+            with self.assertRaisesRegex(ValueError, "Output isolation"):
+                BazelRuntime(Path(directory))
+            run.assert_not_called()
+
     def test_v2_distribution_keeps_binary_identity_and_invokes_its_guarded_frontend(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
                 "NUXIE_CI_RUNNER_POLICY_VERSION": "2"}, clear=True):

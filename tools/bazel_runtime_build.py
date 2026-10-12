@@ -51,6 +51,8 @@ def tree_digest(root):
 class BazelRuntime:
     def __init__(self, repo_root):
         self.root = Path(repo_root).resolve()
+        if os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2" and os.environ.get("NUXIE_BAZEL_OUTPUT_BASE"):
+            raise ValueError("Output isolation is constrained by installed runner policy")
         configured = os.environ.get("NUXIE_BAZEL_BIN")
         candidates = [configured] if configured else [
             str(self.root / "target/bazel-tools/node_modules/.bin/bazelisk"),

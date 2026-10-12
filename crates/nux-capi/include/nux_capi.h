@@ -36,7 +36,8 @@
  * 4. Immutable NuxFont handles are usable across threads. All other handles
  *    are affine to their creation thread. Use or free from another
  *    thread returns WRONG_THREAD without consuming the handle. Concurrent or
- *    callback-time reentrant use returns REENTRANT_CALL without consuming it.
+ *    callback-time reentrant use of affine handles returns REENTRANT_CALL
+ *    without consuming them.
  * 5. NuxViewModelInstance retains its imported file and shared runtime graph.
  *    A handle returned by `_share` has the same stable identity and observes
  *    the same values. Generic file-level instances may bind to a compatible

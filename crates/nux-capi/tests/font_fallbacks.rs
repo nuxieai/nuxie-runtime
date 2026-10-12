@@ -172,6 +172,15 @@ fn view(value: &str) -> NuxStringView {
 }
 
 fn render(primary: &[u8], value: &str, live_value: Option<&str>) -> Recording {
+    render_retiring(primary, value, live_value, ptr::null_mut())
+}
+
+fn render_retiring(
+    primary: &[u8],
+    value: &str,
+    live_value: Option<&str>,
+    retire_font: *mut NuxFont,
+) -> Recording {
     let bytes = scene(primary, value);
     let mut r = Recording::default();
     let callbacks = NuxRenderCallbacks {
@@ -214,12 +223,19 @@ fn render(primary: &[u8], value: &str, live_value: Option<&str>) -> Recording {
                 NuxStatus::Ok
             );
         }
-        // The occurrence retains the installed fonts after the file handle dies.
+        // The occurrence retains its primary font after the file handle dies.
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
         assert_eq!(
             nux_artboard_instance_advance(artboard, 0.0, ptr::null_mut()),
             NuxStatus::Ok
         );
+        if !retire_font.is_null() {
+            assert_eq!(
+                nux_font_set_fallback_proc(None, ptr::null_mut()),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_font_free(retire_font), NuxStatus::Ok);
+        }
         assert_eq!(nux_artboard_instance_draw(artboard), NuxStatus::Ok);
         assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
     }
@@ -319,6 +335,30 @@ fn process_hook_draws_arabic_keeps_latin_and_clear_restores_missing_glyphs() {
     }
     assert!(render(LATIN, "مرحبا", None).drawn.is_empty());
     assert_eq!(render(LATIN, "Ada", None).drawn, latin);
+    // Shape with a mapped font, then retire the handle and hook before drawing.
+    // The shaped runs must retain their font and mapping independently.
+    let path = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("../../fixtures/fonts/ibm-plex-sans-arabic.ttf")
+    .canonicalize()
+    .unwrap();
+    let source = NuxFontSource {
+        immutable_path: view(path.to_str().unwrap()),
+        ..Default::default()
+    };
+    let mut mapped = ptr::null_mut();
+    unsafe {
+        assert_eq!(nux_font_new(&source, &mut mapped), NuxStatus::Ok);
+        assert_eq!(
+            nux_font_set_fallback_proc(Some(pick_font), mapped.cast()),
+            NuxStatus::Ok
+        );
+    }
+    assert_eq!(
+        render_retiring(LATIN, "مرحبا", None, mapped).drawn,
+        covering
+    );
 }
 
 #[test]

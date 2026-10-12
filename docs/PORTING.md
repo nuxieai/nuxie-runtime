@@ -61,12 +61,20 @@ shaped runs. Font handles expose byte decoding, trusted stable file mapping,
 collection faces, nominal coverage probes and weight-axis copies. Platform
 selection and caching belong to the SDK provider.
 
-One Apple difference remains: upstream `HBFont::FromSystem` accepts a CoreText
-font pointer and can retry shaping through CoreText (`font_hb_apple.mm`, pinned
+The Apple `HBFont::FromSystem` boundary remains different. Upstream retains a
+CoreText font pointer, reads its tables through CoreText, and can retry shaping
+through CoreText. Its `CoreTextHBFont::getPath` also recovers an empty HarfBuzz
+outline through CoreText on the first attempt (`font_hb_apple.mm:468-492`, pinned
 `daf55385`). The approved Rust boundary accepts font bytes or a trusted file
-and face number, and uses harfrust/skrifa. The iOS provider therefore ends after
-its first runtime-shaping attempt, with no CoreText shaping retry. This is a
-known parity gap, not a claim of full Apple font fallback equivalence. See
+and face number and uses harfrust/skrifa. It supplies neither that native
+outline recovery nor the later CoreText shaping retry.
+
+This affects device drawing: on the P038 iOS 26.5 published fixture, the selected
+PingFang UI collection loads but its private `hvgl` outlines remain blank.
+Arabic, Hebrew and Hindi draw. Apple emoji loads but its private `emjc` bitmap
+data is not PNG and the row is blank; direct upstream emoji drawing is not yet
+qualified. The default process hook and matching system-font selection do not
+establish full Apple font fallback equivalence. See
 [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
 
 The pre-existing scoped `with_host_fallback_proc` remains for editor hosts

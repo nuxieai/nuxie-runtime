@@ -33,7 +33,8 @@
  * 3. NuxStringView values borrow their documented owner unless their field is
  *    explicitly documented as process-static. Copy the bytes when a longer
  *    lifetime is needed; views are not NUL-terminated.
- * 4. Every handle is affine to its creation thread. Use or free from another
+ * 4. Immutable NuxFont handles are usable across threads. All other handles
+ *    are affine to their creation thread. Use or free from another
  *    thread returns WRONG_THREAD without consuming the handle. Concurrent or
  *    callback-time reentrant use returns REENTRANT_CALL without consuming it.
  * 5. NuxViewModelInstance retains its imported file and shared runtime graph.

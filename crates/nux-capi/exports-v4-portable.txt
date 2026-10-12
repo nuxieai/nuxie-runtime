@@ -30,6 +30,15 @@ nux_file_set_value_markers
 nux_file_set_value_rules
 nux_file_set_value_rules_with_result
 nux_file_view_model_catalog
+nux_font_free
+nux_font_has_glyph
+nux_font_new
+nux_font_probe_file
+nux_font_probe_free
+nux_font_probe_has_glyph
+nux_font_probe_make_font
+nux_font_set_fallback_proc
+nux_font_with_weight
 nux_player_acknowledge_presented
 nux_player_enable_semantics
 nux_player_field_string_copy

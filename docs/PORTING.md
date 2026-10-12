@@ -51,6 +51,28 @@ Use [PARITY_WORKFLOW.md](PARITY_WORKFLOW.md): complete mechanical translation,
 source-equivalence review, Rust-integration review, then existing validation.
 There is no owner-family ledger, test-first gate, or promotion process.
 
+## Native font fallback boundary
+
+The C API's `nux_font_set_fallback_proc` exposes the existing process-wide
+`set_fallback_proc`, the Rust counterpart of `Font::gFallbackProc`. The SDK
+provider receives the missing character, retry index and asking font's weight,
+then returns a borrowed font handle. The engine retains the font through its
+shaped runs. Font handles expose byte decoding, trusted stable file mapping,
+collection faces, nominal coverage probes and weight-axis copies. Platform
+selection and caching belong to the SDK provider.
+
+One Apple difference remains: upstream `HBFont::FromSystem` accepts a CoreText
+font pointer and can retry shaping through CoreText (`font_hb_apple.mm`, pinned
+`daf55385`). The approved Rust boundary accepts font bytes or a trusted file
+and face number, and uses harfrust/skrifa. The iOS provider therefore ends after
+its first runtime-shaping attempt, with no CoreText shaping retry. This is a
+known parity gap, not a claim of full Apple font fallback equivalence. See
+[UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
+
+The pre-existing scoped `with_host_fallback_proc` remains for editor hosts
+that supply font bytes, corresponding to app-supplied web fallback. The native
+SDK default uses the process hook without a file-level provider.
+
 ## 1. Ownership & Type Mappings
 
 ### 1.1 `rcp<T>` / reference counting → `CoreArena` ownership

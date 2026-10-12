@@ -7,6 +7,19 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_completion`, `set_double_with_completion`, `get_bool`, `get_double`, `property_field_id` and `object_supports_property` route keys 60004 through 60020 to Video.
 
+## Known Apple font boundary gap
+
+At the `daf55385` pin, `include/rive/text/font_hb.hpp:118` and
+`src/text/font_hb_apple.mm:121-157,333-492` implement `HBFont::FromSystem`:
+a CoreText font pointer and an optional CoreText shaping retry. The Rust host
+boundary accepts bytes or a trusted stable file plus collection face instead,
+using harfrust/skrifa. The iOS system provider returns at index 0 and stops
+after that first attempt; it cannot supply the second CoreText-shaped attempt.
+The source-coverage inventory excludes `.mm`, so its completed C++ inventory
+does not establish parity for this Apple path. Track the difference in
+[UNIV-3375](https://universe.basis.dev/issue/UNIV-3375) and
+[PORTING.md](PORTING.md#native-font-fallback-boundary).
+
 ## Current checkpoint
 
 - LAST_SYNCED_SHA: `30454306ffcd0f360a122af1afa6e2295182abc5`

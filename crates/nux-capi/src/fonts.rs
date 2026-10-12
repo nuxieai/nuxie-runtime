@@ -1,7 +1,7 @@
 //! C access to the engine's fonts and process-wide fallback hook.
 use super::*;
 use nuxie::runtime::text::font_hb::{FileProbe, HbFont};
-use nuxie::runtime::text::text_engine::{Coord, Font, FontRef};
+use nuxie::runtime::text::text_engine::{Coord, Font, FontRef, set_fallback_proc};
 
 pub const NUX_FONT_MAX_BYTES: usize = 256 * 1024 * 1024;
 
@@ -367,6 +367,31 @@ pub type NuxFontFallbackProc = Option<
     ) -> *const NuxFont,
 >;
 
+struct FallbackRegistration {
+    callback: unsafe extern "C" fn(*mut c_void, u32, u32, u16) -> *const NuxFont,
+    context: usize,
+}
+
+static C_FALLBACK: std::sync::RwLock<Option<FallbackRegistration>> = std::sync::RwLock::new(None);
+
+fn c_fallback(missing: u32, index: u32, asking_font: &dyn Font) -> Option<FontRef> {
+    // Hold the read lease through callback invocation and answer retention.
+    // Replacement may then safely release the previous foreign context.
+    let registration = C_FALLBACK
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let registration = registration.as_ref()?;
+    let handle = unsafe {
+        (registration.callback)(
+            registration.context as *mut c_void,
+            missing,
+            index,
+            asking_font.get_weight(),
+        )
+    };
+    clone_font(handle).ok()
+}
+
 /// Set the engine's process-wide fallback hook; NULL clears it. Applies to all
 /// files, including files already open when next reshaped. Callback and context
 /// must remain valid until replacement completes. Do not replace the hook from
@@ -376,5 +401,19 @@ pub unsafe extern "C" fn nux_font_set_fallback_proc(
     _callback: NuxFontFallbackProc,
     _user_data: *mut c_void,
 ) -> NuxStatus {
-    NuxStatus::Ok
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let mut registration = C_FALLBACK
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *registration = _callback.map(|callback| FallbackRegistration {
+            callback,
+            context: _user_data as usize,
+        });
+        set_fallback_proc(if _callback.is_some() {
+            Some(c_fallback)
+        } else {
+            None
+        });
+        NuxStatus::Ok
+    })
 }

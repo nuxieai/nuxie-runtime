@@ -222,7 +222,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
         Ok(())
     })?;
     lua_promise::set_on_cancel(lua, promise.clone(), on_cancel)?;
-    lock_unpoisoned(get_global_work_pool()).submit(Some(Box::new(task)));
+    get_global_work_pool().submit(Some(Box::new(task)));
     Ok(promise)
 }
 
@@ -237,7 +237,7 @@ pub(super) fn has_pending_work(lua: &Lua) -> bool {
         return true;
     }
     nuxie_runtime::get_global_work_pool_if_exists()
-        .is_some_and(|pool| lock_unpoisoned(pool).has_pending_work_for_owner(owner.0.owner_id))
+        .is_some_and(|pool| pool.has_pending_work_for_owner(owner.0.owner_id))
 }
 
 #[cfg(feature = "upstream-test-seams")]
@@ -343,7 +343,7 @@ mod tests {
     fn poll_work_until(mut complete: impl FnMut() -> bool) {
         let start = Instant::now();
         loop {
-            lock_unpoisoned(get_global_work_pool()).poll_completed_work(16);
+            get_global_work_pool().poll_completed_work(16);
             if complete() {
                 return;
             }

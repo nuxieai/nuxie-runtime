@@ -1,9 +1,10 @@
-//! Direct ports of the 15 pool cases in
+//! Direct ports of the 19 pool cases in
 //! pinned `tests/unit_tests/runtime/work_pool_test.cpp`.
 //!
 //! Native WorkTask owns task state and is boxed directly into WorkPool. Shared
 //! test records observe only callbacks; barriers make worker ordering explicit
-//! without sleeps or a substitute task state machine.
+//! without a substitute task state machine. The chained threaded delivery case
+//! retains upstream's deadlines and worker-queue delay.
 
 #[cfg(feature = "threading")]
 use nuxie_runtime::WorkStatus;
@@ -11,7 +12,7 @@ use nuxie_runtime::{WorkCallbacks, WorkPool, WorkTask};
 #[cfg(feature = "threading")]
 use std::sync::Condvar;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
@@ -157,6 +158,180 @@ fn unblock_all(blockers: &[Arc<BlockingTask>]) {
     for blocker in blockers {
         blocker.unblock();
     }
+}
+
+#[cfg(not(feature = "threading"))]
+struct ChainTask {
+    callbacks: TestCallbacks,
+    pool: Weak<WorkPool>,
+    next: Option<Box<WorkTask<TestCallbacks>>>,
+}
+
+#[cfg(not(feature = "threading"))]
+impl WorkCallbacks for ChainTask {
+    fn execute(&mut self, error_message: &mut String) -> bool {
+        self.callbacks.execute(error_message)
+    }
+
+    fn on_complete(&mut self) {
+        self.callbacks.on_complete();
+        self.pool
+            .upgrade()
+            .expect("test pool remains alive during delivery")
+            .submit(self.next.take().map(|task| task as Box<_>));
+    }
+}
+
+#[cfg(not(feature = "threading"))]
+struct NestedPollTask {
+    callbacks: TestCallbacks,
+    pool: Weak<WorkPool>,
+    nested: Arc<AtomicUsize>,
+}
+
+#[cfg(not(feature = "threading"))]
+impl WorkCallbacks for NestedPollTask {
+    fn execute(&mut self, error_message: &mut String) -> bool {
+        self.callbacks.execute(error_message)
+    }
+
+    fn on_complete(&mut self) {
+        self.callbacks.on_complete();
+        let nested = self
+            .pool
+            .upgrade()
+            .expect("test pool remains alive during delivery")
+            .poll_completed_work(16);
+        self.nested.store(nested as usize, Ordering::Release);
+    }
+}
+
+#[cfg(not(feature = "threading"))]
+#[test]
+fn work_submitted_during_delivery_waits_for_the_next_poll() {
+    let pool = Arc::new(WorkPool::default());
+    let second = Arc::new(TestTask::new());
+    let first = Arc::new(TestTask::new());
+    pool.submit(Some(Box::new(WorkTask::new(ChainTask {
+        callbacks: TestCallbacks(first.clone()),
+        pool: Arc::downgrade(&pool),
+        next: Some(Box::new(WorkTask::new(TestCallbacks(second.clone())))),
+    }))));
+
+    assert_eq!(pool.poll_completed_work(16), 1);
+    assert!(first.completed.load(Ordering::Acquire));
+    assert!(!second.executed.load(Ordering::Acquire));
+    assert!(pool.has_pending_work());
+
+    assert_eq!(pool.poll_completed_work(16), 1);
+    assert!(second.completed.load(Ordering::Acquire));
+    assert!(!pool.has_pending_work());
+}
+
+#[cfg(not(feature = "threading"))]
+#[test]
+fn a_poll_nested_in_a_completion_leaves_the_outer_poll_consistent() {
+    let pool = Arc::new(WorkPool::default());
+    let first = Arc::new(TestTask::new());
+    let nested = Arc::new(AtomicUsize::new(0));
+    let second = Arc::new(TestTask::new());
+    pool.submit(Some(Box::new(WorkTask::new(NestedPollTask {
+        callbacks: TestCallbacks(first.clone()),
+        pool: Arc::downgrade(&pool),
+        nested: nested.clone(),
+    }))));
+    pool.submit(Some(Box::new(WorkTask::new(TestCallbacks(second.clone())))));
+
+    // The nested poll delivers the second task; the outer one stops at the
+    // emptied queue rather than reading past it.
+    assert_eq!(pool.poll_completed_work(16), 1);
+    assert_eq!(nested.load(Ordering::Acquire), 1);
+    assert!(first.completed.load(Ordering::Acquire));
+    assert!(second.completed.load(Ordering::Acquire));
+    assert!(!pool.has_pending_work());
+}
+
+#[cfg(not(feature = "threading"))]
+#[test]
+fn work_submitted_during_a_nested_poll_waits_for_a_later_poll() {
+    let pool = Arc::new(WorkPool::default());
+    let first = Arc::new(TestTask::new());
+    let second = Arc::new(TestTask::new());
+    let third = Arc::new(TestTask::new());
+    pool.submit(Some(Box::new(WorkTask::new(NestedPollTask {
+        callbacks: TestCallbacks(first),
+        pool: Arc::downgrade(&pool),
+        nested: Arc::new(AtomicUsize::new(0)),
+    }))));
+    pool.submit(Some(Box::new(WorkTask::new(ChainTask {
+        callbacks: TestCallbacks(second.clone()),
+        pool: Arc::downgrade(&pool),
+        next: Some(Box::new(WorkTask::new(TestCallbacks(third.clone())))),
+    }))));
+
+    // The nested poll delivers the second task, which submits the third;
+    // neither poll that was running then may run it.
+    assert_eq!(pool.poll_completed_work(16), 1);
+    assert!(second.completed.load(Ordering::Acquire));
+    assert!(!third.executed.load(Ordering::Acquire));
+    assert_eq!(pool.poll_completed_work(16), 1);
+    assert!(third.completed.load(Ordering::Acquire));
+}
+
+#[cfg(feature = "threading")]
+struct ChainWaitTask {
+    callbacks: TestCallbacks,
+    pool: Weak<WorkPool>,
+    next: Option<Box<WorkTask<TestCallbacks>>>,
+}
+
+#[cfg(feature = "threading")]
+impl WorkCallbacks for ChainWaitTask {
+    fn execute(&mut self, error_message: &mut String) -> bool {
+        self.callbacks.execute(error_message)
+    }
+
+    fn on_complete(&mut self) {
+        self.callbacks.on_complete();
+        let next = self.next.take().expect("chain task completes once");
+        let status = next.status_handle();
+        self.pool
+            .upgrade()
+            .expect("test pool remains alive during delivery")
+            .submit(Some(next));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while status.status() != WorkStatus::Completed && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        // The worker queues it right after setting its status.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[cfg(feature = "threading")]
+#[test]
+fn work_completing_during_delivery_waits_for_the_next_poll() {
+    let pool = Arc::new(WorkPool::default());
+    let second = Arc::new(TestTask::new());
+    let first = Arc::new(TestTask::new());
+    pool.submit(Some(Box::new(WorkTask::new(ChainWaitTask {
+        callbacks: TestCallbacks(first.clone()),
+        pool: Arc::downgrade(&pool),
+        next: Some(Box::new(WorkTask::new(TestCallbacks(second.clone())))),
+    }))));
+
+    let mut delivered = 0;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while delivered == 0 && std::time::Instant::now() < deadline {
+        delivered = pool.poll_completed_work(16);
+    }
+    assert_eq!(delivered, 1);
+    assert!(first.completed.load(Ordering::Acquire));
+    assert!(second.executed.load(Ordering::Acquire));
+    assert!(!second.completed.load(Ordering::Acquire));
+
+    assert_eq!(pool.poll_completed_work(16), 1);
+    assert!(second.completed.load(Ordering::Acquire));
 }
 
 #[test]

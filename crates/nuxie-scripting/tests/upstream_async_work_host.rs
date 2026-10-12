@@ -101,10 +101,7 @@ fn submit_tasks(owner: u64, count: usize) -> Vec<Arc<AtomicBool>> {
             let completed = Arc::new(AtomicBool::new(false));
             let mut task = WorkTask::new(TestTask(Arc::clone(&completed)));
             task.set_owner_id(owner);
-            get_global_work_pool()
-                .lock()
-                .unwrap()
-                .submit(Some(Box::new(task)));
+            get_global_work_pool().submit(Some(Box::new(task)));
             completed
         })
         .collect()

@@ -7,18 +7,29 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `40e52541238037bab60088a675dc29676584bdfd`
+- LAST_SYNCED_SHA: `10e2138336df07cca4888f6a5246be39aeae67d9`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `daf55385b71fb861b2a1ae2930ae4492832d5db5` (refreshed 2026-10-12 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Four upstream commits remain after this checkpoint at the fetched target.
-  All 227 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (249 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 228 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (250 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `10e21383`, integrated atop downstream `45842a8ec1`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Work-pool tests pass 16 in each of synchronous and threaded modes,
+  including all four new upstream cases. Six async-host and eight image-decode
+  integration tests pass; wasm32-unknown-unknown compilation passes. Source,
+  manifest and pipeline checks pass 42, with generated-file and formatting
+  checks clean. The manifest test initially selected another local upstream
+  checkout and passed when rerun with the exact pinned RIVE_RUNTIME_DIR.
+  No assertions or tolerances changed. Broad Golden/Silver results remain
+  recorded at their actual earlier revision below; no new hardware or browser
+  pixel coverage, private GC implementation, or parked guest execution is claimed.
 - Validation at `40e52541`, integrated atop downstream `dbe4d0b403`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Both new regressions and six existing keyframe-binding cases pass;
@@ -775,6 +786,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `10e2138336df07cca4888f6a5246be39aeae67d9` | Pace nonthreaded work by the poll's captured submission boundary and threaded delivery by the initial completed-queue count. Preserve nested polls and callback-submitted work with released internal queue locks and shared pool APIs; update existing scripting callers and translate all four public regressions. Private buffer/GC changes mentioned only in commit prose and .rive_head contents are not claimed imported. | — |
 | `40e52541238037bab60088a675dc29676584bdfd` | Translate collapsed-component run skips from the Collapsed dirt bit, capped u16 distances, stale-run notifications, dependency-order invalidation and exact mid-pass fallback to single steps. Preserve editor clearing notifications and TESTING verification/counters. Resolve keyed-object interpolator hosts once and lazily cache the absence of keyframe binds outside editor builds, preserving clone state. Translate both public keyframe-bind and Solo regressions. Private .rive_head contents are not claimed imported. | — |
 | `ac0c03ae4d5cdd5d5e84b18ddafd6738b26e629e` | Translate stateful scripted-interpolator holders with ordered input-bind teardown; per-keyframe, per-artboard style, per-state-machine transition and per-converter ownership. Layout inheritance borrows the defining artboard's clone; bound converters keep input binds private and apply them before reinitialization on every bind. Add scripted layout interpolation and all six public regression cases against exact upstream fixtures. Private editor UI/exporter/docs/dispose changes mentioned only in commit prose and private .rive_head contents are not claimed imported. | — |
 | `be93c2ced22636f2e1db2186630c3bc5d61cfeb3` | Translate callback-presence import tracking, static-pose/keyframe endpoint bounds, serial-based held-pose freezing and exact testing verification. Preserve quiet-row wake ordering for component, color and self-transform changes, keyframe-bind and transition-interpolator exclusions, and per-advance serial capture. Runtime and binary import reject machines above 65535 layers. Translate all six frozen-pose tests against the two exact upstream fixtures. Private .rive_head contents are not claimed imported. | — |
@@ -1222,7 +1234,7 @@ identity checks. Rebuild affected reference/generated products as needed.
 Current pin locations to inspect together:
 
 - `Makefile`: `RIVE_RUNTIME_REF` and `PERF_EXPECTED_RIVE_RUNTIME_REF`.
-- `.github/workflows/{ci,_trusted-macos}.yml` and `.buildkite/pipeline.yml`:
+- `.github/workflows/{ci,_trusted-macos}.yml` and `.buildkite/lanes.json`:
   `RIVE_RUNTIME_REF`.
 - `tools/fetch-test-assets.sh`: default revision, not fixed asset provenance.
 - `tools/{check-renderer-decoder-provenance,generate-renderer-shaders,renderer-dawn-live-reference-bootstrap}.sh`.

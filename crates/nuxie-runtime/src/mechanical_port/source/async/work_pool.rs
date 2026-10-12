@@ -14,6 +14,11 @@ static NEXT_OWNER_ID: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(not(feature = "threading"))]
 pub struct WorkPool {
+    queue: Mutex<QueueState>,
+}
+
+#[cfg(not(feature = "threading"))]
+struct QueueState {
     work_queue: VecDeque<Box<dyn DynWorkTask>>,
     next_handle: u64,
 }
@@ -22,8 +27,10 @@ pub struct WorkPool {
 impl Default for WorkPool {
     fn default() -> Self {
         Self {
-            work_queue: VecDeque::new(),
-            next_handle: 1,
+            queue: Mutex::new(QueueState {
+                work_queue: VecDeque::new(),
+                next_handle: 1,
+            }),
         }
     }
 }
@@ -34,19 +41,36 @@ impl WorkPool {
         NEXT_OWNER_ID.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub fn submit(&mut self, task: Option<Box<dyn DynWorkTask>>) -> u64 {
+    pub fn submit(&self, task: Option<Box<dyn DynWorkTask>>) -> u64 {
         let Some(mut task) = task else { return 0 };
+        let mut queue = self.queue.lock().unwrap();
         task.set_status(WorkStatus::Pending);
-        self.work_queue.push_back(task);
-        let handle = self.next_handle;
-        self.next_handle += 1;
+        task.set_submit_generation(queue.next_handle);
+        queue.work_queue.push_back(task);
+        let handle = queue.next_handle;
+        queue.next_handle = queue.next_handle.wrapping_add(1);
         handle
     }
 
-    pub fn poll_completed_work(&mut self, max_callbacks: u32) -> u32 {
+    pub fn poll_completed_work(&self, max_callbacks: u32) -> u32 {
         let mut processed = 0;
-        while processed < max_callbacks && !self.work_queue.is_empty() {
-            let mut task = self.work_queue.pop_front().unwrap();
+        // A nested poll may drain earlier work and submit more. The outer poll
+        // still stops at its original submit-order boundary.
+        let submitted_before = self.queue.lock().unwrap().next_handle;
+        while processed < max_callbacks {
+            let mut task = {
+                let mut queue = self.queue.lock().unwrap();
+                if !queue
+                    .work_queue
+                    .front()
+                    .is_some_and(|task| task.submit_generation() < submitted_before)
+                {
+                    break;
+                }
+                queue.work_queue.pop_front().unwrap()
+            };
+            // Execution and callbacks may submit or recursively poll this pool.
+            // No queue guard or exclusive pool borrow crosses that boundary.
             if task.is_cancelled() {
                 task.set_status(WorkStatus::Cancelled);
                 task.on_cancel();
@@ -71,19 +95,22 @@ impl WorkPool {
     }
 
     pub fn has_pending_work(&self) -> bool {
-        !self.work_queue.is_empty()
+        !self.queue.lock().unwrap().work_queue.is_empty()
     }
 
     pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {
         // Tasks leave this queue as they are delivered.
-        self.work_queue
+        self.queue
+            .lock()
+            .unwrap()
+            .work_queue
             .iter()
             .any(|task| task.owner_id() == owner_id)
     }
 
-    pub fn cancel_all_for_owner(&mut self, owner_id: u64) {
+    pub fn cancel_all_for_owner(&self, owner_id: u64) {
         // Polling delivers the single cancellation callback.
-        for task in &self.work_queue {
+        for task in &self.queue.lock().unwrap().work_queue {
             if task.owner_id() == owner_id {
                 task.cancel();
             }
@@ -95,7 +122,7 @@ impl WorkPool {
 impl Drop for WorkPool {
     fn drop(&mut self) {
         // Only tasks already marked cancelled receive destruction callbacks.
-        for mut task in self.work_queue.drain(..) {
+        for mut task in self.queue.get_mut().unwrap().work_queue.drain(..) {
             if task.is_cancelled() {
                 task.set_status(WorkStatus::Cancelled);
                 task.on_cancel();
@@ -111,6 +138,7 @@ struct QueueState {
     // Submitted but not yet delivered, including tasks running on a worker.
     undelivered_by_owner: HashMap<u64, u32>,
     cancel_generation: u64,
+    next_handle: u64,
     shutdown: bool,
 }
 
@@ -126,7 +154,6 @@ struct ThreadedState {
 pub struct WorkPool {
     state: Arc<ThreadedState>,
     threads: Vec<JoinHandle<()>>,
-    next_handle: u64,
 }
 
 #[cfg(feature = "threading")]
@@ -138,6 +165,7 @@ impl Default for WorkPool {
                 cancelled_owners: HashMap::new(),
                 undelivered_by_owner: HashMap::new(),
                 cancel_generation: 0,
+                next_handle: 1,
                 shutdown: false,
             }),
             completed_queue: Mutex::new(VecDeque::new()),
@@ -154,11 +182,7 @@ impl Default for WorkPool {
             let worker_state = Arc::clone(&state);
             threads.push(thread::spawn(move || worker_loop(worker_state)));
         }
-        Self {
-            state,
-            threads,
-            next_handle: 1,
-        }
+        Self { state, threads }
     }
 }
 
@@ -209,15 +233,15 @@ impl WorkPool {
         NEXT_OWNER_ID.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub fn submit(&mut self, task: Option<Box<dyn DynWorkTask>>) -> u64 {
+    pub fn submit(&self, task: Option<Box<dyn DynWorkTask>>) -> u64 {
         let Some(mut task) = task else { return 0 };
         let handle;
         {
             let mut queue = self.state.queue.lock().unwrap();
             task.set_status(WorkStatus::Pending);
             task.set_submit_generation(queue.cancel_generation);
-            handle = self.next_handle;
-            self.next_handle += 1;
+            handle = queue.next_handle;
+            queue.next_handle = queue.next_handle.wrapping_add(1);
             let undelivered = queue
                 .undelivered_by_owner
                 .entry(task.owner_id())
@@ -229,10 +253,15 @@ impl WorkPool {
         handle
     }
 
-    pub fn poll_completed_work(&mut self, max_callbacks: u32) -> u32 {
+    pub fn poll_completed_work(&self, max_callbacks: u32) -> u32 {
         let mut processed = 0;
-        while processed < max_callbacks {
-            let Some(mut task) = self.state.completed_queue.lock().unwrap().pop_front() else {
+        // Snapshot the completion count, not the queue itself: nested polls may
+        // consume entries. Upstream notes that threaded decode delivery still
+        // needs a decoded-byte budget before a production build enables it.
+        let completed = self.state.completed_queue.lock().unwrap().len();
+        while processed < max_callbacks && (processed as usize) < completed {
+            let task = { self.state.completed_queue.lock().unwrap().pop_front() };
+            let Some(mut task) = task else {
                 break;
             };
             let owner_cancelled = {
@@ -285,10 +314,10 @@ impl WorkPool {
             .contains_key(&owner_id)
     }
 
-    pub fn cancel_all_for_owner(&mut self, owner_id: u64) {
+    pub fn cancel_all_for_owner(&self, owner_id: u64) {
         {
             let mut queue = self.state.queue.lock().unwrap();
-            queue.cancel_generation += 1;
+            queue.cancel_generation = queue.cancel_generation.wrapping_add(1);
             let generation = queue.cancel_generation;
             queue.cancelled_owners.insert(owner_id, generation);
             for task in &queue.work_queue {
@@ -334,13 +363,13 @@ impl Drop for WorkPool {
     }
 }
 
-static GLOBAL_WORK_POOL: OnceLock<Arc<Mutex<WorkPool>>> = OnceLock::new();
+static GLOBAL_WORK_POOL: OnceLock<Arc<WorkPool>> = OnceLock::new();
 
-pub fn get_global_work_pool() -> &'static Arc<Mutex<WorkPool>> {
-    GLOBAL_WORK_POOL.get_or_init(|| Arc::new(Mutex::new(WorkPool::default())))
+pub fn get_global_work_pool() -> &'static Arc<WorkPool> {
+    GLOBAL_WORK_POOL.get_or_init(|| Arc::new(WorkPool::default()))
 }
 
-pub fn get_global_work_pool_if_exists() -> Option<&'static Arc<Mutex<WorkPool>>> {
+pub fn get_global_work_pool_if_exists() -> Option<&'static Arc<WorkPool>> {
     GLOBAL_WORK_POOL.get()
 }
 
@@ -351,7 +380,6 @@ pub fn rive_poll_async_work(max_callbacks: u32) -> u32 {
     #[cfg(not(feature = "scriptnet"))]
     let mut processed = 0;
     if let Some(pool) = get_global_work_pool_if_exists() {
-        let mut pool = pool.lock().unwrap();
         if pool.has_pending_work() {
             processed += pool.poll_completed_work(max_callbacks - processed);
         }
@@ -361,7 +389,7 @@ pub fn rive_poll_async_work(max_callbacks: u32) -> u32 {
 
 pub fn rive_has_pending_async_work() -> bool {
     if let Some(pool) = get_global_work_pool_if_exists() {
-        if pool.lock().unwrap().has_pending_work() {
+        if pool.has_pending_work() {
             return true;
         }
     }

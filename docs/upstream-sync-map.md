@@ -7,18 +7,26 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `10e2138336df07cca4888f6a5246be39aeae67d9`
+- LAST_SYNCED_SHA: `785bca185218ef4b8eec3e525199f27a8f23d49f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `daf55385b71fb861b2a1ae2930ae4492832d5db5` (refreshed 2026-10-12 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 228 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (250 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 229 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (251 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `785bca18`, integrated atop downstream `0241be30e9`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. The new missing-drawable regression and existing draw-order case pass;
+  runtime units pass 384 with two existing ignores. Browser
+  wasm32-unknown-unknown compilation passes. Source/manifest/pipeline tests pass
+  42 and generated-file/formatting checks pass. Assertions and tolerances are
+  unchanged. No new broad differential, hardware or browser-pixel result is
+  claimed; earlier broad results retain their exact revisions below.
 - Validation at `10e21383`, integrated atop downstream `45842a8ec1`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Work-pool tests pass 16 in each of synchronous and threaded modes,
@@ -786,6 +794,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `785bca185218ef4b8eec3e525199f27a8f23d49f` | Translate DrawTarget validation: retain superclass validation and require drawableId to resolve to a Drawable before initialization. Translate the public missing-drawable regression with the exact upstream fixture. Private editor export changes described only in commit prose and .rive_head contents are not claimed imported. | — |
 | `10e2138336df07cca4888f6a5246be39aeae67d9` | Pace nonthreaded work by the poll's captured submission boundary and threaded delivery by the initial completed-queue count. Preserve nested polls and callback-submitted work with released internal queue locks and shared pool APIs; update existing scripting callers and translate all four public regressions. Private buffer/GC changes mentioned only in commit prose and .rive_head contents are not claimed imported. | — |
 | `40e52541238037bab60088a675dc29676584bdfd` | Translate collapsed-component run skips from the Collapsed dirt bit, capped u16 distances, stale-run notifications, dependency-order invalidation and exact mid-pass fallback to single steps. Preserve editor clearing notifications and TESTING verification/counters. Resolve keyed-object interpolator hosts once and lazily cache the absence of keyframe binds outside editor builds, preserving clone state. Translate both public keyframe-bind and Solo regressions. Private .rive_head contents are not claimed imported. | — |
 | `ac0c03ae4d5cdd5d5e84b18ddafd6738b26e629e` | Translate stateful scripted-interpolator holders with ordered input-bind teardown; per-keyframe, per-artboard style, per-state-machine transition and per-converter ownership. Layout inheritance borrows the defining artboard's clone; bound converters keep input binds private and apply them before reinitialization on every bind. Add scripted layout interpolation and all six public regression cases against exact upstream fixtures. Private editor UI/exporter/docs/dispose changes mentioned only in commit prose and private .rive_head contents are not claimed imported. | — |

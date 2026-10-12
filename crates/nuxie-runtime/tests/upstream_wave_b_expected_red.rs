@@ -2945,6 +2945,37 @@ fn wave_b_draw_order_test_001_direct_port_expected_red() {
 }
 
 #[test]
+fn draw_targets_without_a_drawable_are_dropped_on_load() {
+    use nuxie_runtime::source::{draw_rules::DrawRules, draw_target::DrawTarget};
+
+    // Upstream's draw_rule_cycle fixture with every DrawTarget drawableId
+    // stripped, as when a rule targets a drawable pruned during export.
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = binding_file("draw_target_missing_drawable.riv", &mut factory);
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    assert!(
+        artboard.with_artboard(|artboard| { artboard.find_all_handles::<DrawTarget>().is_empty() })
+    );
+    let rules = artboard.with_artboard(|artboard| artboard.find_all_handles::<DrawRules>());
+    assert!(!rules.is_empty());
+    for rule in rules {
+        assert!(
+            rule.with_downcast::<DrawRules, _>(|rule| rule.active_target().is_none())
+                .expect("DrawRules")
+        );
+    }
+
+    let mut animation = artboard.animation_at(0).expect("animation 0");
+    for _ in 0..10 {
+        animation.advance_and_apply(1.0);
+        let mut renderer = factory.borrow().make_renderer();
+        artboard.draw(&mut renderer);
+    }
+}
+
+#[test]
 fn wave_b_elastic_easing_test_001_direct_port_expected_red() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = binding_file("test_elastic.riv", &mut factory);

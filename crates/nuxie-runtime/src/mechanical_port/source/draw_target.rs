@@ -4,7 +4,10 @@ use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
     draw_target_placement::DrawTargetPlacement,
     drawable::RuntimeDrawableOccurrence,
-    generated::draw_target_base::{DrawTargetBase, DrawTargetBaseCallbacks},
+    generated::{
+        draw_target_base::{DrawTargetBase, DrawTargetBaseCallbacks},
+        drawable_base::DrawableBase,
+    },
 };
 
 #[derive(Default)]
@@ -32,6 +35,17 @@ impl DrawTargetBaseCallbacks for DrawTarget {
 impl DrawTarget {
     pub fn drawable(&self) -> Option<CoreHandle> {
         self.drawable.clone()
+    }
+
+    pub fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
+        if !self.base.validate(context) {
+            return false;
+        }
+        // Initialization and draw-order sorting require a resolved drawable,
+        // including after invalid objects have been culled from the context.
+        context
+            .resolve(self.base.drawable_id())
+            .is_some_and(|object| object.is_type_of(DrawableBase::TYPE_KEY))
     }
 
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {

@@ -7,18 +7,26 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ca8fad85f2b85e192705606c684c5a44dde3a30a`
+- LAST_SYNCED_SHA: `daf55385b71fb861b2a1ae2930ae4492832d5db5`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `daf55385b71fb861b2a1ae2930ae4492832d5db5` (refreshed 2026-10-12 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 230 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (252 after `5892bb05`); this
+  No upstream commits remain after this checkpoint at the fetched target.
+  All 231 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (253 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `daf55385`, integrated atop downstream `269117ce9c`:
+  independent source-accounting and subsequent Rust-integration reviews confirm
+  the complete public behavioral delta is guest-Wasm-only and deferred under
+  UNIV-3728. No runtime source or fixture bytes change. Source/manifest/pipeline
+  tests pass 42; generated inventory/build files and diff hygiene are clean.
+  Earlier runtime, editor and browser results below remain at their actual
+  tested revisions; this metadata update does not claim fresh execution or
+  hardware coverage.
 - Validation at `ca8fad85`, integrated atop downstream `c101a4c286`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Existing text-selection, native text-input and raw text-input suites
@@ -802,6 +810,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `daf55385b71fb861b2a1ae2930ae4492832d5db5` | Deferred: the complete public behavior delta adds WasmScriptingVM frameRelease export detection and calls __riveFrameRelease after frame-minor collection/debug verification. This depends solely on parked guest execution, not Luau or browser renderer Wasm. Private module queue/pre-collect-hook implementation described in prose and .rive_head contents are not claimed imported. Advance source/oracle pins and inventory only, retaining historical validation provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ca8fad85f2b85e192705606c684c5a44dde3a30a` | Traverse the artboard drawable inventory instead of all objects when collecting selectable Text; retain nested/list-artboard recursion and relative Text order. Make the drawable accessor available in runtime builds as well as editor builds. Private .rive_head contents are not claimed imported. | — |
 | `785bca185218ef4b8eec3e525199f27a8f23d49f` | Translate DrawTarget validation: retain superclass validation and require drawableId to resolve to a Drawable before initialization. Translate the public missing-drawable regression with the exact upstream fixture. Private editor export changes described only in commit prose and .rive_head contents are not claimed imported. | — |
 | `10e2138336df07cca4888f6a5246be39aeae67d9` | Pace nonthreaded work by the poll's captured submission boundary and threaded delivery by the initial completed-queue count. Preserve nested polls and callback-submitted work with released internal queue locks and shared pool APIs; update existing scripting callers and translate all four public regressions. Private buffer/GC changes mentioned only in commit prose and .rive_head contents are not claimed imported. | — |

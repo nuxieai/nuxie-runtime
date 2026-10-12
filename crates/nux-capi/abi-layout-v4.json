@@ -271,6 +271,52 @@
       ]
     },
     {
+      "name": "NuxFontAxisCoord",
+      "size": 8,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "axis",
+          "offset": 0
+        },
+        {
+          "name": "value",
+          "offset": 4
+        }
+      ]
+    },
+    {
+      "name": "NuxFontSource",
+      "size": 64,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "bytes",
+          "offset": 8
+        },
+        {
+          "name": "immutable_path",
+          "offset": 24
+        },
+        {
+          "name": "face_index",
+          "offset": 40
+        },
+        {
+          "name": "coords",
+          "offset": 48
+        },
+        {
+          "name": "coord_count",
+          "offset": 56
+        }
+      ]
+    },
+    {
       "name": "NuxHostCommandImportConfig",
       "size": 96,
       "alignment": 8,

@@ -939,6 +939,8 @@ fn require_same_artboard(left: &Arc<()>, right: &Arc<()>) -> Result<(), NuxStatu
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum HandleKind {
+    Font,
+    FontFileProbe,
     File,
     Artboard,
     StateMachine,
@@ -1047,7 +1049,7 @@ fn enter_handle<T>(handle: *const T, kind: HandleKind) -> Result<HandleCallGuard
     if record.kind != kind {
         return Err(NuxStatus::HandleMismatch);
     }
-    if record.owner_thread != thread::current().id() {
+    if kind != HandleKind::Font && record.owner_thread != thread::current().id() {
         return Err(NuxStatus::WrongThread);
     }
     if record.active {
@@ -1072,7 +1074,7 @@ fn remove_handle<T>(handle: *mut T, kind: HandleKind) -> Result<(), NuxStatus> {
     if record.kind != kind {
         return Err(NuxStatus::HandleMismatch);
     }
-    if record.owner_thread != thread::current().id() {
+    if kind != HandleKind::Font && record.owner_thread != thread::current().id() {
         return Err(NuxStatus::WrongThread);
     }
     if record.active {
@@ -1091,6 +1093,8 @@ macro_rules! enter_status_handle {
     };
 }
 
+mod fonts;
+pub use fonts::*;
 mod data_binding;
 mod text_geometry;
 pub use text_geometry::*;

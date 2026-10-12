@@ -18,7 +18,7 @@ class RunnerTests(unittest.TestCase):
         self.root = Path(self.temporary.name).resolve()
         self.checkout = self.root / 'checkout'
         (self.checkout / 'tools/bazel').mkdir(parents=True)
-        
+
         for name in ('bazel.sh', 'remote-cache.sh', 'remote-cache.py', 'cache-tls-pin.py'):
             shutil.copyfile(ROOT / 'tools/bazel' / name, self.checkout / 'tools/bazel' / name)
         shutil.copyfile(ROOT / 'tools/bazel_cache.py', self.checkout / 'tools/bazel_cache.py')

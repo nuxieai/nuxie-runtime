@@ -6,10 +6,32 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from bazel_cache import startup_options
+from bazel_cache import guarded_environment, startup_options
 
 
 class CacheTest(unittest.TestCase):
+    def test_v2_cache_configuration_uses_the_verified_installed_environment(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+                "NUXIE_CI_RUNNER_POLICY_VERSION": "2", "NUXIE_BAZEL_CACHE_DIR": "/untrusted/cache",
+            }, clear=True), patch("bazel_cache.subprocess.check_output", return_value=(
+                "export NUXIE_BAZEL_CACHE_DIR='" + temporary + "/installed cache'\n"
+                "export NUXIE_BAZEL_JOBS=3\n"
+            )) as command:
+            startup_options(Path(temporary))
+            self.assertIn(str(Path(temporary) / "installed cache/actions"),
+                          (Path(temporary) / ".bazel-cache.local.bazelrc").read_text())
+            self.assertEqual(os.environ["NUXIE_BAZEL_JOBS"], "3")
+            self.assertEqual(command.call_args.args[0][:3], ["/bin/bash", "-eu", "-c"])
+            self.assertIn("nuxie_runner_policy_verify", command.call_args.args[0][3])
+
+    def test_invalid_installed_environment_cannot_change_process_settings(self):
+        for output in ("export HOME=/other\n", "export NUXIE_BAZEL_JOBS=100; exit 0\n", "garbage\n"):
+            with self.subTest(output=output), patch.dict(os.environ, {"NUXIE_CI_RUNNER_POLICY_VERSION": "2"}, clear=True), \
+                    patch("bazel_cache.subprocess.check_output", return_value=output):
+                with self.assertRaises(ValueError):
+                    guarded_environment()
+                self.assertEqual(dict(os.environ), {"NUXIE_CI_RUNNER_POLICY_VERSION": "2"})
+
     def test_default_keeps_bazel_output_base_and_repository_configuration(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
             self.assertEqual(startup_options(Path(directory)), [])

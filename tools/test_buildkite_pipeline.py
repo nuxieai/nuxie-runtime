@@ -2,6 +2,7 @@ import unittest
 import re
 import shlex
 from pathlib import Path
+from tools.bazel.pipeline import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -34,9 +35,10 @@ class BuildkitePipelineContractTests(unittest.TestCase):
         targets = set()
         for match in re.finditer(r"^([A-Za-z0-9_. -]+):(?!=)", makefile, re.MULTILINE):
             targets.update(match.group(1).split())
-        pipeline = (REPO_ROOT / ".buildkite/pipeline.yml").read_text()
+        commands = [step["command"] for step in pipeline({})["steps"]]
+        pipeline_text = "\n".join(commands)
         called = set()
-        for line in pipeline.splitlines():
+        for line in pipeline_text.splitlines():
             if not line.strip().startswith("make "):
                 continue
             words = shlex.split(line.strip(), comments=True)
@@ -48,15 +50,13 @@ class BuildkitePipelineContractTests(unittest.TestCase):
 
     @staticmethod
     def fast_checks_command() -> str:
-        pipeline = (REPO_ROOT / ".buildkite" / "pipeline.yml").read_text()
-        fast_checks = pipeline.split('label: ":linux: Runtime fast checks"', 1)[1]
-        return fast_checks.split("\n  - label:", 1)[0]
+        return next(step['command'] for step in pipeline({})['steps']
+                    if step['label'] == ':linux: Runtime fast checks')
 
     @staticmethod
     def apple_distribution_compile_command() -> str:
-        pipeline = (REPO_ROOT / ".buildkite" / "pipeline.yml").read_text()
-        apple_compile = pipeline.split('label: ":mac: Apple distribution compile"', 1)[1]
-        return apple_compile.split("\n  - label:", 1)[0]
+        return next(step['command'] for step in pipeline({})['steps']
+                    if step['label'] == ':mac: Apple distribution compile')
 
     def test_fast_checks_prepare_fixtures_before_portable_feature_compile(self) -> None:
         fast_checks = self.fast_checks_command()

@@ -82,8 +82,14 @@ class BazelRuntime:
         self.installbase = Path(self.run("info", "install_base").strip())
 
     def run(self, command, *arguments):
-        result = subprocess.run([str(self.executable), *self.startup, command, *arguments],
-                                cwd=self.root, capture_output=True, text=True, check=False)
+        if os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2":
+            invocation = ["/bin/bash", str(self.root / "tools/bazel/bazel.sh"), command, *arguments]
+            environment = dict(os.environ, NUXIE_BAZEL_BIN=str(self.executable))
+        else:
+            invocation = [str(self.executable), *self.startup, command, *arguments]
+            environment = None
+        result = subprocess.run(invocation, env=environment, cwd=self.root,
+                                capture_output=True, text=True, check=False)
         if result.returncode:
             raise ValueError(f"Bazel {command} failed:\n{result.stderr}")
         if command == "build":
@@ -110,7 +116,7 @@ class BazelRuntime:
                  "--@rules_rust//rust/settings:codegen_units=1",
                  "--@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=0"]
         jobs = os.environ.get("NUXIE_BAZEL_JOBS")
-        if jobs:
+        if jobs and os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") != "2":
             if not jobs.isdecimal() or int(jobs) < 1:
                 raise ValueError("NUXIE_BAZEL_JOBS must be a positive integer")
             flags.append(f"--jobs={jobs}")

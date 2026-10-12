@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +16,19 @@ LABEL = "//crates/shipping:shipping__android__cdylib"
 
 
 class CacheFrontendTests(unittest.TestCase):
+    def test_v2_distribution_keeps_binary_identity_and_invokes_its_guarded_frontend(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+                "NUXIE_CI_RUNNER_POLICY_VERSION": "2"}, clear=True):
+            root = Path(directory)
+            selected = object.__new__(BazelRuntime)
+            selected.root, selected.executable, selected.startup = root, root / "actual-bazel", ["--batch"]
+            with patch("tools.bazel_runtime_build.subprocess.run", return_value=SimpleNamespace(
+                    returncode=0, stdout="completed", stderr="")) as run:
+                self.assertEqual(selected.run("build", "//fixture:product"), "completed")
+            self.assertEqual(run.call_args.args[0], ["/bin/bash", str(root / "tools/bazel/bazel.sh"), "build", "//fixture:product"])
+            self.assertEqual(run.call_args.kwargs['env']['NUXIE_BAZEL_BIN'], str(selected.executable))
+            self.assertEqual(selected.executable, root / "actual-bazel")
+
     def test_distribution_frontend_imports_without_path_overrides(self):
         subprocess.run([sys.executable, "-B", "-E", "-c", "import tools.bazel_runtime_build"],
                        cwd=Path(__file__).resolve().parents[1], check=True)

@@ -63025,12 +63025,7 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_target::DrawTarge
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<bool> {
-        Some(
-            crate::mechanical_port::source::component::Component::validate(
-                &mut self.base.base,
-                context,
-            ),
-        )
+        Some(crate::mechanical_port::source::draw_target::DrawTarget::validate(self, context))
     }
     fn lifecycle_on_added_dirty(
         &mut self,

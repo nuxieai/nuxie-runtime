@@ -11,10 +11,19 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
 
 At the `daf55385` pin, `include/rive/text/font_hb.hpp:118` and
 `src/text/font_hb_apple.mm:121-157,333-492` implement `HBFont::FromSystem`:
-a CoreText font pointer and an optional CoreText shaping retry. The Rust host
-boundary accepts bytes or a trusted stable file plus collection face instead,
-using harfrust/skrifa. The iOS system provider returns at index 0 and stops
-after that first attempt; it cannot supply the second CoreText-shaped attempt.
+a CoreText font pointer, CoreText table access, an optional CoreText shaping
+retry, and native outline recovery. `CoreTextHBFont::getPath` at lines468-492
+asks CoreText for an outline when HarfBuzz returns an empty path even on the
+first, non-system-shaper attempt. The Rust host boundary accepts bytes or a
+trusted stable file plus collection face, using harfrust/skrifa. It has neither
+native outline recovery nor the second CoreText-shaped attempt.
+
+The iOS 26.5 P038 published-screen regression loads the CoreText-selected
+`.PingFangUITextSC-Regular` file successfully, but its `hvgl` outlines do not
+draw through the Rust file backend. Arabic, Hebrew and Hindi draw. The selected
+Apple emoji face also loads but uses `emjc` sbix data rather than PNG, and its
+row remains blank. File selection alone is therefore not Apple drawing parity;
+the emoji upstream drawing behavior still requires direct qualification.
 The source-coverage inventory excludes `.mm`, so its completed C++ inventory
 does not establish parity for this Apple path. Track the difference in
 [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375) and

@@ -29,6 +29,27 @@ class RuntimeBuildTest(unittest.TestCase):
         manifest.write_text(f'[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2024"\n' + extra)
         return manifest
 
+    def test_v2_routes_through_installed_guard_and_rejects_caller_jobs(self):
+        with patch.dict(os.environ, {"NUXIE_CI_RUNNER_POLICY_VERSION": "2"}, clear=True):
+            self.assertEqual(runtime.bazel_command(), ["/bin/bash", str(self.root / "tools/bazel/bazel.sh")])
+            with self.assertRaisesRegex(ValueError, "installed runner policy"):
+                runtime.command_options(["check", "--jobs", "100"])
+
+    def test_v2_test_environment_does_not_send_cache_credentials_to_test_actions(self):
+        with patch.dict(os.environ, {"NUXIE_CI_RUNNER_POLICY_VERSION": "2", "NUXIE_BAZEL_JOBS": "100",
+                                     "NUXIE_BAZEL_REMOTE_CACHE_WRITER_JSON": "private fixture credential",
+                                     "NUXIE_BAZEL_REMOTE_CACHE_CREDENTIAL_FILE": "/private/credential.json",
+                                     "RIVE_FIXTURE": "product input"}, clear=True), \
+                patch.object(runtime, "packages_from_workspace", return_value={}), \
+                patch.object(runtime, "materialize", return_value=["//fixture:test"]), \
+                patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+                patch("sys.argv", ["runtime.py", "test"]):
+            self.assertEqual(runtime.main(), 0)
+        arguments = run.call_args.args[0]
+        self.assertEqual(arguments[:3], ["/bin/bash", str(self.root / "tools/bazel/bazel.sh"), "test"])
+        self.assertFalse(any(argument.startswith("--jobs=") or "REMOTE_CACHE_" in argument for argument in arguments))
+        self.assertIn("--test_env=RIVE_FIXTURE", arguments)
+
     def test_combined_library_and_integration_test_keep_both_gates(self):
         manifest = self.package("core")
         (manifest.parent / "tests").mkdir()

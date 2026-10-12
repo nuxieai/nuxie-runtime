@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.bazel_runtime_build import BazelRuntime
+from tools.bazel.pipeline import pipeline
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,14 +25,7 @@ SNAPSHOT = "import json,os; print(json.dumps({name:os.environ.get(name) for name
 
 
 def pipeline_commands():
-    content = (ROOT / ".buildkite/pipeline.yml").read_text()
-    jobs = re.split(r'(?m)^  - label: "([^"]+)"\n', content)[1:]
-    commands = {}
-    for label, job in zip(jobs[::2], jobs[1::2]):
-        match = re.search(r"(?m)^    command: \|\n((?:      .*\n)+)", job)
-        if match:
-            commands[label] = "\n".join(line[6:] for line in match.group(1).splitlines())
-    return commands
+    return {step['label']: step['command'] for step in pipeline({})['steps']}
 
 
 def workflow_jobs(content):

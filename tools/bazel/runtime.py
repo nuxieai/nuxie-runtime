@@ -83,6 +83,8 @@ def command_options(arguments):
             if manifest != ROOT / "Cargo.toml":
                 options["packages"].append(tomllib.loads(manifest.read_text())["package"]["name"])
         elif arg in ("--jobs", "-j"):
+            if os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2":
+                raise ValueError("Jobs are constrained by installed runner policy")
             options["jobs"] = args.pop(0)
         elif arg.startswith("--message-format"):
             options["json"] = "json" in (arg.split("=", 1)[1] if "=" in arg else args.pop(0))
@@ -201,6 +203,8 @@ def deployment_version(variable, default):
 
 
 def bazel_command():
+    if os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2":
+        return ["/bin/bash", str(ROOT / "tools/bazel/bazel.sh")]
     configured = os.environ.get("NUXIE_BAZEL_BIN") or os.environ.get("BAZEL")
     install_roots = [ROOT / "target/bazel-tools", ROOT, ROOT.parent.parent]
     if sys.platform == "win32":
@@ -260,7 +264,7 @@ def main():
             flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Copt-level=" + os.environ.get("CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL", "z"), "--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=symbols"]
         elif options["profile"] == "release-apple":
             flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=debuginfo"]
-        if options["jobs"]:
+        if options["jobs"] and os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") != "2":
             flags.append("--jobs=" + options["jobs"])
         apple_target = options["target"] and "apple" in options["target"]
         native_apple = not options["target"] and sys.platform == "darwin"
@@ -287,7 +291,10 @@ def main():
             if options["test_filter"]:
                 runtime_args.insert(0, options["test_filter"])
             flags += ["--test_output=all", *["--test_arg=" + arg for arg in runtime_args]]
-            flags += ["--test_env=" + name for name in sorted(os.environ) if name.startswith(("NUXIE_", "RIVE_", "MTL_"))]
+            flags += ["--test_env=" + name for name in sorted(os.environ)
+                      if name.startswith(("NUXIE_", "RIVE_", "MTL_"))
+                      and not name.startswith(("NUXIE_BAZEL_", "NUXIE_CI_"))
+                      and name not in ("NUXIE_BUILDKITE_CACHE_ROOT", "NUXIE_NODE_OPTIONS", "NUXIE_GRADLE_MAX_WORKERS")]
         if options["command"] == "clippy":
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"

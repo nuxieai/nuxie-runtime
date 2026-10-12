@@ -1,0 +1,175 @@
+{
+  "env": {
+    "CI": "1",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "RIVE_RUNTIME_REF": "ac0c03ae4d5cdd5d5e84b18ddafd6738b26e629e",
+    "RIVE_PREMAKE_TAG": "v5.0.0-beta7"
+  },
+  "steps": [
+    {
+      "label": ":linux: Runtime fast checks",
+      "if": "build.pull_request.id != null",
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nrustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update\nexport RIVE_RUNTIME_DIR=\"$(pwd)/rive-runtime\"\ngit clone --filter=blob:none https://github.com/rive-app/rive-runtime.git \"$RIVE_RUNTIME_DIR\"\ngit -C \"$RIVE_RUNTIME_DIR\" checkout \"$RIVE_RUNTIME_REF\"\nmake fixtures\nNUXIE_CI_RUNNER_POLICY_VERSION=1 PYTHONPATH=tools:tools/bazel PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_buildkite_pipeline.py tools/test_bazel_ci_cache.py tools/test_bazel_cache.py tools/test_bazel_runner.py tools/test_buildkite_runner_lanes.py tools/test_bazel_runtime_build.py tools/bazel/test_runtime.py tools/bazel/test_cache_policy.py tools/bazel/test_bootstrap.py -v\nmake fmt-check check lint-gate feature-compile-gate-portable\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "linux"
+      },
+      "timeout_in_minutes": 45,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1,
+            "limit": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": ":linux: Runtime port contracts",
+      "if": "build.pull_request.id != null",
+      "if_changed": [
+        "Cargo.{toml,lock}",
+        "MODULE.bazel*",
+        ".bazelrc",
+        ".bazelversion",
+        "bazel/**",
+        "tools/bazel/**",
+        "tools/bazel_runtime*",
+        "Makefile",
+        "crates/**",
+        "tools/pure-runtime-boundary/**",
+        "tools/check_runtime_source_correspondence.py",
+        "tools/test_runtime_source_correspondence.py",
+        ".buildkite/pipeline.yml",
+        "fixtures/**",
+        ".buildkite/lanes.json",
+        ".buildkite/hooks/**",
+        "tools/bazel/pipeline.py",
+        "tools/bazel_cache.py"
+      ],
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nsudo apt-get update -qq\nsudo apt-get install --no-install-recommends -y zlib1g-dev\nexport RIVE_RUNTIME_DIR=\"$(pwd)/rive-runtime\"\ngit clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime\ngit -C rive-runtime checkout \"$RIVE_RUNTIME_REF\"\nmake fixtures\nmake runtime-source-correspondence-check pure-runtime-boundary-gate\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "linux"
+      },
+      "timeout_in_minutes": 60,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1,
+            "limit": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": ":linux: C ABI smoke",
+      "if": "build.pull_request.id != null",
+      "if_changed": [
+        ".buildkite/pipeline.yml",
+        "Cargo.{toml,lock}",
+        "MODULE.bazel*",
+        ".bazelrc",
+        ".bazelversion",
+        "bazel/**",
+        "tools/bazel/**",
+        "tools/bazel_runtime*",
+        "Makefile",
+        "crates/nux-capi/**",
+        "crates/nuxie/**",
+        "crates/{nuxie-runtime,nuxie-schema,nuxie-binary,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**",
+        "fixtures/**",
+        "tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-exports.sh,check-nux-capi-layout.py,check-nux-capi-surface.py,publish-nux-capi-release.sh,report-all.sh,test_apple_runtime_contract.py,test_apple_runtime_input_digest.py,test_nux_capi_distribution.py,test_slim_runtime_distribution.py,verify-nux-capi-xcframeworks.sh}",
+        ".buildkite/lanes.json",
+        ".buildkite/hooks/**",
+        "tools/bazel/pipeline.py",
+        "tools/bazel_cache.py"
+      ],
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nRIVE_RUNTIME_DIR=\"\" make nux-capi-pr-gate\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "linux"
+      },
+      "timeout_in_minutes": 45,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1,
+            "limit": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": ":mac: Apple distribution compile",
+      "if": "build.pull_request.id != null",
+      "if_changed": [
+        "Cargo.{toml,lock}",
+        "MODULE.bazel*",
+        ".bazelrc",
+        ".bazelversion",
+        "bazel/**",
+        "tools/bazel/**",
+        "tools/bazel_runtime*",
+        "Makefile",
+        "crates/{nux-capi,nuxie,nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer,nuxie-scripting}/**",
+        "tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-apple.sh,check-nux-capi-surface.py,verify-nux-capi-xcframeworks.sh}",
+        ".buildkite/lanes.json",
+        ".buildkite/hooks/**",
+        "tools/bazel/pipeline.py",
+        "tools/bazel_cache.py"
+      ],
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nrustup toolchain install stable --profile minimal --no-self-update\nrustup target add --toolchain stable \\\n  aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios \\\n  aarch64-apple-darwin x86_64-apple-darwin\nexport RIVE_RUNTIME_DIR=\"$(pwd)/rive-runtime\"\ngit clone --filter=blob:none https://github.com/rive-app/rive-runtime.git \"$RIVE_RUNTIME_DIR\"\ngit -C \"$RIVE_RUNTIME_DIR\" checkout \"$RIVE_RUNTIME_REF\"\nmake fixtures\nmake feature-compile-gate-apple\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "macos"
+      },
+      "timeout_in_minutes": 90,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1,
+            "limit": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": ":linux: Nightly full runtime confidence",
+      "if": "build.source == \"schedule\"",
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nsudo apt-get update -qq\nsudo apt-get install --no-install-recommends -y zlib1g-dev\nexport RIVE_RUNTIME_DIR=\"$(pwd)/rive-runtime\"\ngit clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime\ngit -C rive-runtime checkout \"$RIVE_RUNTIME_REF\"\nrustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update\nmake fixtures\nmake fmt-check check\nmake runtime-source-correspondence-check pure-runtime-boundary-gate\nmake lint-gate feature-compile-gate-portable\n(\n  cd \"$RIVE_RUNTIME_DIR\"\n  RIVE_PREMAKE_ARGS=\"--file=premake5_v2.lua --with_rive_text --with_rive_layout\" \\\n    build/build_rive.sh nobuild\n)\nexport PATH=\"$RIVE_RUNTIME_DIR/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release:$PATH\"\nmake cpp-probe cpp-probe-scripted\ntools/bazel/runtime.py test --workspace --exclude nuxie-renderer\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "linux"
+      },
+      "timeout_in_minutes": 180,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1,
+            "limit": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": ":mac: Nightly renderer and Apple confidence",
+      "if": "build.source == \"schedule\"",
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nexport RIVE_RUNTIME_DIR=\"$(pwd)/rive-runtime\"\ngit clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime\ngit -C rive-runtime checkout \"$RIVE_RUNTIME_REF\"\nrustup toolchain install stable --profile minimal --component llvm-tools --no-self-update\nrustup target add --toolchain stable wasm32-unknown-unknown\nmake fixtures\nmake microbench-gate\nmake capi-smoke\nmake feature-compile-gate-apple\ntools/bazel/runtime.py test -p nuxie-renderer\nmake crate-seams-browser-check\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "macos"
+      },
+      "timeout_in_minutes": 120,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1
+          }
+        ]
+      }
+    }
+  ]
+}

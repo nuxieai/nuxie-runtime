@@ -1,4 +1,7 @@
 import importlib.util
+import fnmatch
+import re
+import sys
 import json
 import os
 import subprocess
@@ -6,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+
+from tools.bazel.pipeline import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +30,7 @@ class DistributionToolTests(unittest.TestCase):
         self.apple_checker = (
             REPO_ROOT / "tools/check-nux-capi-apple.sh"
         ).read_text()
-        self.pipeline = (REPO_ROOT / ".buildkite/pipeline.yml").read_text()
+        self.pipeline = pipeline({})
         self.makefile = (REPO_ROOT / "Makefile").read_text()
         layout_checker_path = REPO_ROOT / "tools/check-nux-capi-layout.py"
         layout_spec = importlib.util.spec_from_file_location(
@@ -52,6 +57,47 @@ class DistributionToolTests(unittest.TestCase):
                 / "crates/nux-capi/size-baseline-apple-runtime-v0.4.0.json"
             ).read_text()
         )
+
+    def pipeline_lane(self, label):
+        matches = [step for step in self.pipeline['steps'] if step['label'] == label]
+        self.assertEqual(len(matches), 1)
+        return matches[0]
+
+    def execute_pipeline_lane(self, step):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            (root / 'tools/bazel').mkdir(parents=True)
+            (root / 'tools/bazel/ci-cache.sh').write_text('')
+            (root / 'rive-runtime').mkdir()
+            recorder = root / 'record.py'
+            recorder.write_text(
+                'import json, os, sys\n'
+                'with open(os.environ["CALLS"], "a") as log: '
+                'log.write(json.dumps({"argv": sys.argv[1:], "rive": os.environ.get("RIVE_RUNTIME_DIR")}) + "\\n")\n'
+            )
+            calls = root / 'calls.jsonl'
+            functions = 'record() { "$REAL_PYTHON" "$RECORDER" "$@"; }\n'
+            for tool in ('make', 'rustup', 'git', 'tools/bazel/install.sh'):
+                functions += 'function ' + tool + ' { record ' + tool + ' "$@"; }\n'
+            subprocess.run(['/bin/bash', '-c', functions + step['command']], cwd=root,
+                           env={**os.environ, 'REAL_PYTHON': sys.executable, 'RECORDER': str(recorder),
+                                'CALLS': str(calls), **self.pipeline['env']}, check=True, timeout=10)
+            records = [json.loads(line) for line in calls.read_text().splitlines()]
+            for record in records:
+                record['argv'] = [argument.replace(str(root), '@checkout') for argument in record['argv']]
+                if record['rive'] is not None:
+                    record['rive'] = record['rive'].replace(str(root), '@checkout')
+            return records
+
+    def changed_input_matches(self, path, patterns):
+        def expand(pattern):
+            match = re.search(r'\{([^{}]+)\}', pattern)
+            if match is None:
+                yield pattern
+            else:
+                for choice in match.group(1).split(','):
+                    yield from expand(pattern[:match.start()] + choice + pattern[match.end():])
+        return any(fnmatch.fnmatchcase(path, expanded) for pattern in patterns for expanded in expand(pattern))
 
     def test_distribution_plan_selects_five_slices_for_both_artifacts(self) -> None:
         plan = subprocess.check_output(
@@ -289,10 +335,12 @@ class DistributionToolTests(unittest.TestCase):
         self.assertNotIn("rooted directly in `nux-capi`", release_document)
 
     def test_pr_ci_runs_distribution_contract_tests_when_tooling_changes(self) -> None:
-        c_abi_lane = self.pipeline.split(':linux: C ABI smoke"', 1)[1].split(
-            ':mac: Apple distribution compile"', 1
-        )[0]
-        self.assertIn('RIVE_RUNTIME_DIR="" make nux-capi-pr-gate', c_abi_lane)
+        c_abi_lane = self.pipeline_lane(':linux: C ABI smoke')
+        calls = self.execute_pipeline_lane(c_abi_lane)
+        self.assertEqual([call['argv'] for call in calls], [
+            ['tools/bazel/install.sh'], ['make', 'nux-capi-pr-gate'],
+        ])
+        self.assertEqual(calls[-1]['rive'], '')
         for required_input in (
             "build-nux-capi-xcframeworks.sh",
             "publish-nux-capi-release.sh",
@@ -304,7 +352,10 @@ class DistributionToolTests(unittest.TestCase):
             "test_apple_runtime_input_digest.py",
             "test_slim_runtime_distribution.py",
         ):
-            self.assertIn(required_input, c_abi_lane)
+            with self.subTest(required_input=required_input):
+                self.assertTrue(self.changed_input_matches('tools/' + required_input, c_abi_lane['if_changed']))
+        self.assertTrue(self.changed_input_matches('.buildkite/lanes.json', c_abi_lane['if_changed']))
+        self.assertTrue(self.changed_input_matches('tools/bazel/pipeline.py', c_abi_lane['if_changed']))
 
     def test_layout_checker_uses_a_cross_platform_clang_driver(self) -> None:
         with mock.patch.object(self.layout_checker.sys, "platform", "darwin"):
@@ -353,10 +404,17 @@ class DistributionToolTests(unittest.TestCase):
         self.assertNotIn(
             'fixture="${NUX_RUNTIME_DIR:-/Users/', self.apple_checker
         )
-        apple_lane = self.pipeline.split(':mac: Apple distribution compile"', 1)[
-            1
-        ].split(':linux: Nightly full runtime confidence"', 1)[0]
-        self.assertIn('export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"', apple_lane)
+        apple_lane = self.pipeline_lane(':mac: Apple distribution compile')
+        calls = self.execute_pipeline_lane(apple_lane)
+        make_calls = [call for call in calls if call['argv'][0] == 'make']
+        self.assertEqual([call['argv'] for call in make_calls], [
+            ['make', 'fixtures'], ['make', 'feature-compile-gate-apple'],
+        ])
+        self.assertTrue(all(call['rive'] == '@checkout/rive-runtime' for call in make_calls))
+        self.assertEqual([call['argv'] for call in calls if call['argv'][0] == 'git'], [
+            ['git', 'clone', '--filter=blob:none', 'https://github.com/rive-app/rive-runtime.git', '@checkout/rive-runtime'],
+            ['git', '-C', '@checkout/rive-runtime', 'checkout', self.pipeline['env']['RIVE_RUNTIME_REF']],
+        ])
 
         with tempfile.TemporaryDirectory() as temporary_dir:
             temporary_path = Path(temporary_dir)

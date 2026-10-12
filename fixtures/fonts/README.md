@@ -61,7 +61,7 @@ fixture deliberately does not. The native regression uses this local file,
 without an external upstream checkout or network dependency.
 
 The font metadata identifies Copyright2019 IBM Corp. and SIL OFL1.1.
-The [IBM license](https://raw.githubusercontent.com/IBM/plex/master/LICENSE.txt) is retained in
-`LICENSE-IBM-PLEX.txt` (SHA-256 `7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da`).
+The [IBM license](https://raw.githubusercontent.com/IBM/plex/master/LICENSE.txt) is retained with normalized LF line endings and trailing whitespace in
+`LICENSE-IBM-PLEX.txt` (SHA-256 `d741e57d5f865e294df801f96b7b5161a88b211df65887e4358d271c9fc5fb4f`).
 This public test font is separate from the private platform reference fonts,
 which are never committed or bundled.

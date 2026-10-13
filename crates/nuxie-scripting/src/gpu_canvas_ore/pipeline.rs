@@ -166,7 +166,10 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         // Reject overflow before constructing Rust spans, rather than reproducing an out-of-bounds read.
         if layouts.raw_len() > 8 {
             return Err(Error::runtime(
-                "GPUPipeline.new: vertexLayout exceeds eight vertex buffers",
+                nuxie_ore_metal::script_guards::vertex_layout_count_message(
+                    layouts.raw_len() as u32,
+                    8,
+                ),
             ));
         }
         for index in 1..=layouts.raw_len() {
@@ -179,33 +182,38 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                     VertexStepMode::vertex
                 },
             ));
-            // lua_objlen returns zero for nil/numbers/booleans, but a nonempty
-            // string/buffer/userdata reaches lua_rawgeti and is a type error.
-            let attributes = match layout.get::<Value>("attributes")? {
+            let attributes_value = layout.get::<Value>("attributes")?;
+            // The source reads lua_objlen before checking its fixed array
+            // budget. This includes raw string/buffer/userdata byte lengths,
+            // even though a later lua_rawgeti requires a table.
+            // SAFETY: exec_raw roots argument 1; lua_objlen accepts every Lua
+            // value and the closure pushes exactly one integer result.
+            let attribute_count: i32 = unsafe {
+                lua.exec_raw(attributes_value.clone(), |state| {
+                    let count = luaur_vm::functions::lua_objlen::lua_objlen(state, 1);
+                    luaur_vm::functions::lua_pushinteger::lua_pushinteger(state, count)
+                })?
+            };
+            let attribute_count = attribute_count.max(0) as usize;
+            if total_attributes + attribute_count > 32 {
+                return Err(Error::runtime(
+                    "GPUPipeline.new: more than 32 vertex attributes",
+                ));
+            }
+            let attributes = match attributes_value {
                 Value::Table(attributes) => Some(attributes),
-                Value::String(value) if !value.as_bytes().is_empty() => {
-                    return Err(Error::runtime("vertex attributes must be a table"));
-                }
-                Value::Buffer(value) if value.len() != 0 => {
-                    return Err(Error::runtime("vertex attributes must be a table"));
-                }
-                Value::UserData(_) => {
+                _ if attribute_count > 0 => {
                     return Err(Error::runtime("vertex attributes must be a table"));
                 }
                 _ => None,
             };
             let mut owned = Vec::new();
-            for index in 1..=attributes.as_ref().map_or(0, Table::raw_len) {
+            for index in 1..=attribute_count {
                 let attribute: Table = attributes
                     .as_ref()
                     .expect("attribute table")
                     .raw_get(index)?;
                 total_attributes += 1;
-                if total_attributes > 32 {
-                    return Err(Error::runtime(
-                        "GPUPipeline.new: vertexLayout exceeds 32 attributes",
-                    ));
-                }
                 let mut attr = VertexAttribute::default();
                 if let Some(value) = string(&attribute, "format")? {
                     attr.format = vertex_format(&value)?;
@@ -342,6 +350,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         desc.sampleCount = number(&table, "sampleCount", 1.0)? as u32;
         let mut error = String::new();
         let mut ctx = context.borrow_mut();
+        check_guard(|error| {
+            nuxie_ore_metal::script_guards::validateVertexLayout(Some(&*ctx), &desc, Some(error))
+        })?;
         let resource = ctx.makePipeline(&desc, Some(&mut error)).ok_or_else(|| {
             Error::runtime(if error.is_empty() {
                 "GPUPipeline.new: failed to create pipeline".to_owned()

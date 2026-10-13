@@ -1,5 +1,36 @@
-//! Literal viewmodel_instance_parents_test.cpp at upstream 7aa93402.
-use nuxie_runtime::source::{core::CoreArena, viewmodel::viewmodel_instance::ViewModelInstance};
+//! Literal viewmodel_instance_parents_test.cpp through upstream a9239045.
+use nuxie_runtime::source::{
+    core::CoreArena,
+    viewmodel::{
+        viewmodel_instance::ViewModelInstance, viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_instance_list_item::ViewModelInstanceListItem,
+    },
+};
+
+#[test]
+fn a_list_item_popped_off_loses_the_lists_view_model_as_its_parent() {
+    let arena = CoreArena::default();
+    let owner = arena.insert(ViewModelInstance::default());
+    let mut list = ViewModelInstanceList::default();
+    list.set_parent_view_model_instance(Some(owner.clone()));
+    let child = arena.insert(ViewModelInstance::default());
+    let mut item = ViewModelInstanceListItem::default();
+    item.set_view_model_instance(Some(child.clone()));
+    let item = arena.insert(item);
+    list.add_item(item.clone());
+    assert_eq!(
+        child
+            .with_downcast::<ViewModelInstance, _>(|child| child.parents())
+            .unwrap(),
+        vec![owner]
+    );
+    assert_eq!(list.pop(), Some(item));
+    assert!(
+        !child
+            .with_downcast::<ViewModelInstance, _>(|child| child.has_parents())
+            .unwrap()
+    );
+}
 
 #[test]
 fn view_model_instance_keeps_its_other_parents_when_the_first_goes() {

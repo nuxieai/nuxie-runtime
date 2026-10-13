@@ -291,27 +291,52 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         lua.create_userdata(Texture { resource, desc })
     })?;
     let sampler = lua.create_table();
-    sampler.set("new",lua.create_function(|lua,table:Value| {
-        let context=context(lua)?;let mut desc=SamplerDesc::default();
-        if let Value::Table(table)=table {
-            if let Some(value)=string(&table,"min")? {desc.minFilter=filter(&value)?;}
-            if let Some(value)=string(&table,"mag")? {desc.magFilter=filter(&value)?;}
-            if let Some(value)=string(&table,"mipmap")? {desc.mipmapFilter=filter(&value)?;}
-            if let Some(value)=string(&table,"wrapU")? {desc.wrapU=wrap_mode(&value)?;}
-            if let Some(value)=string(&table,"wrapV")? {desc.wrapV=wrap_mode(&value)?;}
-            if let Some(value)=string(&table,"wrapW")? {desc.wrapW=wrap_mode(&value)?;}
-            if let Some(value)=string(&table,"compare")? {desc.compare=compare(&value)?;}
-            desc.minLod=number(&table,"minLod",0.0)? as f32;desc.maxLod=number(&table,"maxLod",32.0)? as f32;
-            if desc.minLod>desc.maxLod {return Err(Error::runtime(format!("GPUSampler.new: minLod ({}) > maxLod ({})",desc.minLod,desc.maxLod)));}
-            desc.maxAnisotropy=number(&table,"maxAnisotropy",1.0)? as u32;
-            if desc.maxAnisotropy<1 || desc.maxAnisotropy>16 || !desc.maxAnisotropy.is_power_of_two() {return Err(Error::runtime(format!("GPUSampler.new: maxAnisotropy must be a power of two in [1, 16] (got {})",desc.maxAnisotropy)));}
-            let ctx=context.borrow();
-            if desc.maxAnisotropy>1 && ctx.featuresKnown() && !ctx.features().anisotropicFiltering {return Err(Error::runtime(format!("GPUSampler.new: maxAnisotropy={} requires anisotropicFiltering feature, which the active backend does not support",desc.maxAnisotropy)));}
-        }
-        let mut ctx=context.borrow_mut();
-        ctx.clearLastError();let value=ctx.makeSampler(&desc);let resource=resource_result(&*ctx,value,"GPUSampler.new","sampler")?;
-        lua.create_userdata(Sampler {resource})
-    })?)?;
+    sampler.set(
+        "new",
+        lua.create_function(|lua, table: Value| {
+            let context = context(lua)?;
+            let mut desc = SamplerDesc::default();
+            if let Value::Table(table) = table {
+                if let Some(value) = string(&table, "min")? {
+                    desc.minFilter = filter(&value)?;
+                }
+                if let Some(value) = string(&table, "mag")? {
+                    desc.magFilter = filter(&value)?;
+                }
+                if let Some(value) = string(&table, "mipmap")? {
+                    desc.mipmapFilter = filter(&value)?;
+                }
+                if let Some(value) = string(&table, "wrapU")? {
+                    desc.wrapU = wrap_mode(&value)?;
+                }
+                if let Some(value) = string(&table, "wrapV")? {
+                    desc.wrapV = wrap_mode(&value)?;
+                }
+                if let Some(value) = string(&table, "wrapW")? {
+                    desc.wrapW = wrap_mode(&value)?;
+                }
+                if let Some(value) = string(&table, "compare")? {
+                    desc.compare = compare(&value)?;
+                }
+                desc.minLod = number(&table, "minLod", 0.0)? as f32;
+                desc.maxLod = number(&table, "maxLod", 32.0)? as f32;
+                desc.maxAnisotropy = number(&table, "maxAnisotropy", 1.0)? as u32;
+                let ctx = context.borrow();
+                check_guard(|error| {
+                    nuxie_ore_metal::script_guards::validateSamplerDesc(
+                        Some(&*ctx),
+                        &desc,
+                        Some(error),
+                    )
+                })?;
+            }
+            let mut ctx = context.borrow_mut();
+            ctx.clearLastError();
+            let value = ctx.makeSampler(&desc);
+            let resource = resource_result(&*ctx, value, "GPUSampler.new", "sampler")?;
+            lua.create_userdata(Sampler { resource })
+        })?,
+    )?;
     sampler.set_readonly(true);
     lua.globals().set("GPUSampler", sampler)
 }

@@ -3,6 +3,37 @@ use super::*;
 use crate::vm::{RoutedTestFactory, ScriptVm};
 use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
 
+// a9239045: the shared guards also run while the replay device is unknown.
+#[test]
+fn shared_script_guards_preserve_parser_order_and_unknown_device_limits() {
+    let vm = recording_vm();
+    vm.lua().load(r#"
+        local ok, message = pcall(function()
+            GPUPipeline.new {vertex = shader, vertexLayout = table.create(9, {})}
+        end)
+        assert(not ok and string.find(tostring(message), 'GPUPipeline.new: vertexLayout count 9 exceeds maximum of 8', 1, true))
+        ok, message = pcall(function()
+            GPUPipeline.new {vertex = shader, vertexLayout = {{attributes = table.create(33, false)}}}
+        end)
+        assert(not ok and string.find(tostring(message), 'GPUPipeline.new: more than 32 vertex attributes', 1, true))
+        for _, attributes in {string.rep('x', 33), buffer.create(33)} do
+            ok, message = pcall(function()
+                GPUPipeline.new {vertex = shader, vertexLayout = {{attributes = attributes}}}
+            end)
+            assert(not ok and string.find(tostring(message), 'GPUPipeline.new: more than 32 vertex attributes', 1, true))
+        end
+        ok, message = pcall(function()
+            GPUPipeline.new {vertex = shader, vertexLayout = {{attributes = {{slot = 16}}}}}
+        end)
+        assert(not ok and string.find(tostring(message), 'GPUPipeline.new: attribute slot must be 0-15 (got 16)', 1, true))
+        ok, message = pcall(function()
+            GPUSampler.new {minLod = 2, maxLod = 1, maxAnisotropy = 3}
+        end)
+        assert(not ok and string.find(tostring(message), 'GPUSampler.new: minLod (2) > maxLod (1)', 1, true))
+        assert(GPUSampler.new {maxAnisotropy = 16})
+    "#).exec().unwrap();
+}
+
 // scripting_context_test.cpp: closing an enclosing pass expires the nested
 // script wrapper before any subsequent draw validation or recording.
 #[test]

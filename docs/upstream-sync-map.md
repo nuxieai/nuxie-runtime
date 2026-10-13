@@ -7,18 +7,33 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `20e3e88639492e3e80344de4954842898f6c3b35`
+- LAST_SYNCED_SHA: `a92390456361a349705a59105567e7a8271946d3`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `20e3e88639492e3e80344de4954842898f6c3b35` (refreshed 2026-10-13 by the daily upstream sync).
+- Current target: `a92390456361a349705a59105567e7a8271946d3` (refreshed 2026-10-13 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
   No upstream commits remain after this checkpoint at the fetched target.
-  All 234 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (256 after `5892bb05`); this
+  All 235 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (257 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `a9239045`, integrated atop downstream `a1043b58ea`:
+  independent runtime and ORE/Luau source reviews, followed by a separate
+  Rust-integration review, are clean. Source review corrected attribute-count
+  admission to call lua_objlen before type checking, including oversized
+  strings/buffers; the correction was rereviewed. All four new upstream runtime
+  regressions pass within eight focused cases. Existing lifecycle/data-binding
+  suites pass 47; runtime units pass 396 with two existing ignores; ORE units
+  pass 174; scripting GPU/feature cases pass 25. Browser scripting/runtime
+  wasm32-unknown-unknown compilation passes. Source/manifest/pipeline checks
+  pass 39, and generated test registration, formatting and diff hygiene pass.
+  The preexisting direct borrowed setter cannot reborrow its owner inside a
+  callback; the released-handle and transaction-deferred paths preserve the
+  reviewed reentrant behavior. No assertions/tolerances were weakened. No
+  fresh broad Golden/Silver, device or browser-pixel coverage is claimed.
+  The 49 guest-only public files are explicitly deferred, not ported.
 - Validation at `20e3e886`, integrated atop downstream `01dc19cc29`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean after corrections and rereviews. The Rust text adapter now enumerates
@@ -853,6 +868,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `a92390456361a349705a59105567e7a8271946d3` | Translate empty styled-text append suppression, list-pop parent removal, delegate mutation/reentrancy ordering, and the four new public runtime regressions. Share sample-count, sampler and vertex-layout guards with live Luau bindings, including count admission and exact errors. Forty-nine public files remain guest-execution-only and parked: Wasm headers/VMs, WAMR tools/patches, AOT cache/security/tiering, guest renderer/import/browser-runner changes and guest GC/browser fixtures. These browser files are the guest scripting lane, not the wasm32 browser renderer. Private compiler changes behind .rive_head are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `20e3e88639492e3e80344de4954842898f6c3b35` | Add the public Font codepoints API and Rust-native font coverage enumeration: ascending nominal Unicode scalars with glyphs, without fallback. Preserve the approved Rust text backend; upstream's HarfBuzz C build flag removal has no corresponding native dependency here. The font-viewer UI and other private .rive_head contents are absent from the public delta and are not claimed imported. | — |
 | `1d33ee5d92348dc958424bd207ef58ee2510a3b5` | Translate shared WebGPU binding validation, per-stage limits, texture/sampler pairing inference and layout identity salts; record sampler descriptions across shipped backends and deferred recording, remove Vulkan/WebGPU fixed binding-array ceilings, and preserve creation-observer callback ordering. Add live Luau texture-view aspect parsing and the public renderer/scripting regressions. Native D3D11/D3D12 adapters are unshipped. Guest module sampler recording remains parked; private .rive_head contents are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5df52be209e0c0388c484266f7696b8d4d0b7b4a` | Use the animation state's speed when deciding whether an applied pose is finished and can freeze. Translate the exact backwards-state regression and upstream fixture: the reverse state must play from its forward twin's end pose and freeze only after reaching its start. Private .rive_head contents are not claimed imported. | — |

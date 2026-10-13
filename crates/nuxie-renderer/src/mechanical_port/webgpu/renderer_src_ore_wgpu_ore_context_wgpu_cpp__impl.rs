@@ -30,31 +30,30 @@ use super::webgpu_cpp_decl::{
     VertexStepMode as WgpuVertexStepMode,
 };
 use super::webgpu_decl::{
-    WGPUBindGroupLayout, WGPUBlendState, WGPUBufferDescriptor, WGPUChainedStruct,
-    WGPUColorTargetState, WGPUDepthStencilState, WGPUFragmentState, WGPUIndexFormat_Undefined,
-    WGPULoadOp_Clear, WGPULoadOp_Load, WGPUMultisampleState, WGPUOptionalBool_False,
-    WGPUOptionalBool_True, WGPUPipelineLayoutDescriptor, WGPUPrimitiveState,
-    WGPURenderPassColorAttachment, WGPURenderPassDepthStencilAttachment, WGPURenderPassDescriptor,
-    WGPURenderPipelineDescriptor, WGPUSamplerDescriptor, WGPUShaderModuleDescriptor,
-    WGPUShaderSourceWGSL, WGPUStoreOp_Discard, WGPUStoreOp_Store, WGPUStringView,
-    WGPUTextureDescriptor, WGPUTextureViewDescriptor, WGPUVertexAttribute, WGPUVertexBufferLayout,
-    WGPUVertexState, WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE,
+    WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE, WGPUBindGroupLayout, WGPUBlendState, WGPUBufferDescriptor,
+    WGPUChainedStruct, WGPUColorTargetState, WGPUDepthStencilState, WGPUFragmentState,
+    WGPUIndexFormat_Undefined, WGPULoadOp_Clear, WGPULoadOp_Load, WGPUMultisampleState,
+    WGPUOptionalBool_False, WGPUOptionalBool_True, WGPUPipelineLayoutDescriptor,
+    WGPUPrimitiveState, WGPURenderPassColorAttachment, WGPURenderPassDepthStencilAttachment,
+    WGPURenderPassDescriptor, WGPURenderPipelineDescriptor, WGPUSamplerDescriptor,
+    WGPUShaderModuleDescriptor, WGPUShaderSourceWGSL, WGPUStoreOp_Discard, WGPUStoreOp_Store,
+    WGPUStringView, WGPUTextureDescriptor, WGPUTextureViewDescriptor, WGPUVertexAttribute,
+    WGPUVertexBufferLayout, WGPUVertexState,
 };
 use super::webgpu_wagyu_decl::{
     WGPUSType_WagyuShaderModuleDescriptor, WGPUWagyuShaderLanguage, WGPUWagyuShaderLanguage_GLSL,
     WGPUWagyuShaderLanguage_GLSLRAW, WGPUWagyuShaderLanguage_WGSL, WGPUWagyuShaderModuleDescriptor,
 };
-use nuxie_ore_metal::bind_group_layout::{validatePipelineDesc, NativeSlotScope};
+use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
 use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BlendFactor, BlendOp,
-    BufferDesc, BufferUsage, ColorWriteMask, CompareFunction, CullMode, FaceWinding, Features,
-    Filter, IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology, RenderPassDesc, SamplerDesc,
-    ShaderLanguage, ShaderModuleDesc, StencilOp, StoreOp, TextureAspect, TextureDesc,
-    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, VertexFormat,
-    VertexStepMode, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindingKind, BlendFactor, BlendOp, BufferDesc, BufferUsage,
+    ColorWriteMask, CompareFunction, CullMode, FaceWinding, Features, Filter, IndexFormat, LoadOp,
+    PipelineDesc, PrimitiveTopology, RenderPassDesc, SamplerDesc, ShaderLanguage, ShaderModuleDesc,
+    StencilOp, StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
+    TextureViewDimension, VertexFormat, VertexStepMode, WrapMode, kMaxBindGroups,
 };
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -421,7 +420,10 @@ pub(crate) fn makeTexture(
     Some(ResourceHandle::new_texture_in_domain(Some(manager), domain, texture).erase())
 }
 
-pub(crate) fn makeTextureView(context: &mut ContextWGPU, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+pub(crate) fn makeTextureView(
+    context: &mut ContextWGPU,
+    desc: &TextureViewDesc<'_>,
+) -> Option<AnyResourceHandle> {
     ContextApi::makeTextureView(context, desc)
 }
 
@@ -464,6 +466,7 @@ pub(crate) fn makeSampler(
     wDesc.compare = oreCompareFunctionToWGPU(desc.compare).into();
     wDesc.maxAnisotropy = desc.maxAnisotropy.max(1) as u16;
     sampler.setNative(unsafe { context.m_wgpuDevice.CreateSampler(&wDesc) });
+    sampler.recordDesc(desc);
     Some(ResourceHandle::new_in_domain(Some(manager), domain, sampler).erase())
 }
 

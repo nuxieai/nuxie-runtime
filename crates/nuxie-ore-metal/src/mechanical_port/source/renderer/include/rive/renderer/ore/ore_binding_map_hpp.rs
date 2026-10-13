@@ -26,10 +26,21 @@
 // #include <cstring>
 // #include <vector>
 
-// namespace rive::ore
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
+
+/// A texture sampled through a sampler, from the RSTB pair section.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextureSamplerPair {
+    pub textureGroup: u8,
+    pub textureBinding: u8,
+    pub samplerGroup: u8,
+    pub samplerBinding: u8,
+}
+
+// namespace rive::ore
 #[cfg(all(test, feature = "with-rive-tools"))]
 mod tests {
     use super::*;

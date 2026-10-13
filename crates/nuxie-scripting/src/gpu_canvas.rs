@@ -1008,6 +1008,13 @@ enum RegisteredGpuCanvasShaderAssetState {
 }
 
 impl RegisteredGpuCanvasShaderAsset {
+    fn native_handle(&self) -> Option<nuxie_runtime::source::core::CoreHandle> {
+        match &self.asset {
+            RegisteredGpuCanvasShaderAssetState::Native { asset, .. } => Some(asset.clone()),
+            RegisteredGpuCanvasShaderAssetState::Valid(asset) => Some(asset.native_handle()),
+            RegisteredGpuCanvasShaderAssetState::Invalid(_) => None,
+        }
+    }
     fn decoded_payload_identity(&self) -> Option<&[u8]> {
         match &self.asset {
             RegisteredGpuCanvasShaderAssetState::Native {
@@ -1199,7 +1206,14 @@ impl GpuCanvasShaderCatalog {
                 {
                     owner.prepared_module = None;
                 }
+                let asset = owner.native_handle()?;
+                let prepared_module = owner
+                    .prepared_module
+                    .as_ref()
+                    .map(|prepared| prepared.module.clone());
+                drop(owner);
                 let module: Arc<dyn RenderGpuCanvasShader> = if !selected.factory_matches {
+                    crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
                     let anchor: Rc<dyn std::any::Any> = Rc::new(selected.context.clone());
                     Arc::new(
                         ExactGpuCanvasShaderOccurrence::compile(
@@ -1210,15 +1224,17 @@ impl GpuCanvasShaderCatalog {
                         )
                         .ok()?,
                     )
-                } else if let Some(prepared) = owner.prepared_module.as_ref() {
+                } else if let Some(prepared_module) = prepared_module {
+                    crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
                     bindings
                         .with_factory(|factory| {
                             factory
-                                .make_gpu_canvas_shader_occurrence(&prepared.module)
+                                .make_gpu_canvas_shader_occurrence(&prepared_module)
                                 .map_err(|error| Error::runtime(error.to_string()))
                         })
                         .ok()?
                 } else {
+                    crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
                     bindings
                         .with_factory(|factory| {
                             factory
@@ -1302,7 +1318,7 @@ impl GpuCanvasContextBindings {
             if !selected.factory_matches {
                 continue;
             }
-            let (shader, payload_identity) = {
+            let (shader, payload_identity, asset) = {
                 let mut owner = entry.owner.borrow_mut();
                 // Resolve first: a cached device module cannot hide a later
                 // asset refusal or replacement.
@@ -1318,8 +1334,13 @@ impl GpuCanvasContextBindings {
                     continue;
                 }
                 owner.prepared_module = None;
-                (shader, owner.decoded_payload_identity().map(<[u8]>::to_vec))
+                (
+                    shader,
+                    owner.decoded_payload_identity().map(<[u8]>::to_vec),
+                    owner.native_handle().expect("resolved shader asset"),
+                )
             };
+            crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
             let load = bindings
                 .with_factory(|factory| Ok(factory.load_gpu_canvas_shader_artifact(&shader)))?;
             if let Ok(module) = load.resolve().await {

@@ -115,6 +115,14 @@ impl UserData for Texture {
                 desc.mipCount = number(&table, "mipCount", 0.0)? as u32;
                 desc.baseLayer = number(&table, "baseLayer", 0.0)? as u32;
                 desc.layerCount = number(&table, "layerCount", 0.0)? as u32;
+                if let Some(value) = string(&table, "aspect")? {
+                    desc.aspect = match value.as_str() {
+                        "depth-only" => TextureAspect::depthOnly,
+                        "stencil-only" => TextureAspect::stencilOnly,
+                        "all" => TextureAspect::all,
+                        _ => desc.aspect,
+                    };
+                }
             }
             let context = context(lua)?;
             let mut ctx = context.borrow_mut();

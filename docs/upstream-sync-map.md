@@ -7,18 +7,35 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `5df52be209e0c0388c484266f7696b8d4d0b7b4a`
+- LAST_SYNCED_SHA: `1d33ee5d92348dc958424bd207ef58ee2510a3b5`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `20e3e88639492e3e80344de4954842898f6c3b35` (refreshed 2026-10-13 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 232 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (254 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 233 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (255 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `1d33ee5d`, integrated atop downstream `79efdeff3c`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including rereviews of validation corrections. Source review restored
+  creation-observer notification for freshly compiled prepared shader modules.
+  Validation corrected two test descriptor constructors and a test helper's
+  module path. A supplemental Metal test now asserts upstream's new immediate
+  rejection and exact first-binding diagnostic instead of the superseded
+  skip-invalid-entries behavior; production behavior was not changed to fit it.
+  Metal units pass 172; renderer units pass 245 with five existing ignores,
+  including all nine new upstream WebGPU-parity cases; scripting GPU cases pass
+  six, including texture-view aspects. Vulkan and wasm32-unknown-unknown WebGPU
+  and WebGL2 compilation pass. Source/manifest/pipeline checks rerun pass 39;
+  generated files, changed-file formatting and diff hygiene pass. Recursive
+  formatting additionally reports preexisting style differences in three
+  untouched deferred test files, which are left unchanged. No tolerances were
+  weakened. No fresh broad Golden/Silver, browser-pixel, Android or hardware
+  matrix coverage is claimed; parked guest execution remains excluded.
 - Validation at `5df52be2`, integrated atop downstream `42b4fdcd16`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Source review corrected the new test to instantiate once from the
@@ -820,6 +837,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1d33ee5d92348dc958424bd207ef58ee2510a3b5` | Translate shared WebGPU binding validation, per-stage limits, texture/sampler pairing inference and layout identity salts; record sampler descriptions across shipped backends and deferred recording, remove Vulkan/WebGPU fixed binding-array ceilings, and preserve creation-observer callback ordering. Add live Luau texture-view aspect parsing and the public renderer/scripting regressions. Native D3D11/D3D12 adapters are unshipped. Guest module sampler recording remains parked; private .rive_head contents are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5df52be209e0c0388c484266f7696b8d4d0b7b4a` | Use the animation state's speed when deciding whether an applied pose is finished and can freeze. Translate the exact backwards-state regression and upstream fixture: the reverse state must play from its forward twin's end pose and freeze only after reaching its start. Private .rive_head contents are not claimed imported. | — |
 | `daf55385b71fb861b2a1ae2930ae4492832d5db5` | Deferred: the complete public behavior delta adds WasmScriptingVM frameRelease export detection and calls __riveFrameRelease after frame-minor collection/debug verification. This depends solely on parked guest execution, not Luau or browser renderer Wasm. Private module queue/pre-collect-hook implementation described in prose and .rive_head contents are not claimed imported. Advance source/oracle pins and inventory only, retaining historical validation provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ca8fad85f2b85e192705606c684c5a44dde3a30a` | Traverse the artboard drawable inventory instead of all objects when collecting selectable Text; retain nested/list-artboard recursion and relative Text order. Make the drawable accessor available in runtime builds as well as editor builds. Private .rive_head contents are not claimed imported. | — |

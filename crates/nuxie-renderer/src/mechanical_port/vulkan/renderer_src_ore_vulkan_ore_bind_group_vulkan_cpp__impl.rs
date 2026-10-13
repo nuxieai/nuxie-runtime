@@ -43,11 +43,10 @@ impl BindGroupVulkan {
             return vk::DescriptorSet::null();
         }
 
-        const MAX_WRITES: usize = 32;
-        assert!(self.m_uboWrites.len() + self.m_imageWrites.len() <= MAX_WRITES);
-        let mut writes = [vk::WriteDescriptorSet::default(); MAX_WRITES];
-        let mut buffer_infos = [vk::DescriptorBufferInfo::default(); MAX_WRITES];
-        let mut image_infos = [vk::DescriptorImageInfo::default(); MAX_WRITES];
+        let write_count = self.m_uboWrites.len() + self.m_imageWrites.len();
+        let mut writes = vec![vk::WriteDescriptorSet::default(); write_count];
+        let mut buffer_infos = vec![vk::DescriptorBufferInfo::default(); write_count];
+        let mut image_infos = vec![vk::DescriptorImageInfo::default(); write_count];
         let mut write_index = 0usize;
         let mut cached = CachedSet {
             key: Vec::with_capacity(self.m_uboWrites.len()),

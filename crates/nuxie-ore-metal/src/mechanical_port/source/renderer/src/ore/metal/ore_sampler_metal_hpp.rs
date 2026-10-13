@@ -66,6 +66,9 @@ pub struct SamplerMetal {
 unsafe impl Send for SamplerMetal {}
 
 unsafe impl GpuResourcePayload for SamplerMetal {
+    fn sampler_base(&self) -> Option<&Sampler> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base.base
     }

@@ -1780,7 +1780,7 @@ impl ContextMetal {
     // ============================================================================
 
     pub fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
-        self.mtlMakeSampler(desc)
+        crate::sampler::describedSampler(self.mtlMakeSampler(desc), desc)
     }
 
     // ============================================================================
@@ -2633,7 +2633,7 @@ fragment float4 fs_main() { return float4(1.0); }
 
     #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
-    fn bind_group_skips_unresolved_entries_and_last_error_follows_kind_order() {
+    fn bind_group_rejects_undeclared_entries_at_the_first_resource_kind() {
         let Some(mut context) = live_context() else {
             return;
         };
@@ -2681,25 +2681,23 @@ fragment float4 fs_main() { return float4(1.0); }
             slot: 3,
             sampler: Some(&sampler),
         }];
-        let group = context
-            .makeBindGroup(&BindGroupDesc {
-                layout: Some(&layout),
-                ubos: &ubos,
-                uboCount: ubos.len() as u32,
-                textures: &textures,
-                textureCount: textures.len() as u32,
-                samplers: &samplers,
-                samplerCount: samplers.len() as u32,
-                label: None,
-            })
-            .expect("source publishes a group after skipping invalid entries");
-        let group = group.downcast_ref::<BindGroupMetal>().expect("Metal group");
-        assert!(group.m_mtlBuffers.is_empty());
-        assert!(group.m_mtlTextures.is_empty());
-        assert!(group.m_mtlSamplers.is_empty());
+        let group = context.makeBindGroup(&BindGroupDesc {
+            layout: Some(&layout),
+            ubos: &ubos,
+            uboCount: ubos.len() as u32,
+            textures: &textures,
+            textureCount: textures.len() as u32,
+            samplers: &samplers,
+            samplerCount: samplers.len() as u32,
+            label: None,
+        });
+        // Upstream 1d33ee5d validates all entries before constructing the
+        // native group. The first undeclared UBO now rejects the descriptor,
+        // before the later texture and sampler entries can replace its error.
+        assert!(group.is_none());
         assert_eq!(
             context.lastError(),
-            "makeBindGroup: (group=0, binding=3) not declared in BindGroupLayout"
+            "makeBindGroup: @group(0) @binding(1): the layout has no uniform buffer here"
         );
     }
 

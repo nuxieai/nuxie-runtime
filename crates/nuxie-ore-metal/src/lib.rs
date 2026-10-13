@@ -35,7 +35,7 @@ pub mod bind_group_layout {
         bindingMapForStages, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
         populateBindGroupLayoutEntries, populateBindGroupLayoutEntriesFromShader,
         NativeSlotScope, validatePipelineDesc, validateStagesAgree, validateSplitStageSlots,
-        validateBindGroupDesc,
+        validateBindGroupDesc, validateStageLimits,
     };
     #[doc(hidden)]
     pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
@@ -45,6 +45,9 @@ pub mod bind_group_layout {
 }
 pub mod binding_map {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::*;
+    pub use crate::mechanical_port::source::renderer::src::ore::ore_binding_map_cpp::{
+        depthOnlySamplerBindings, unsampledFloatTextureBindings, filteringSamplerConflicts,
+    };
 }
 pub mod buffer {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_buffer_hpp::*;

@@ -15,7 +15,7 @@ use super::ore_sampler_gl_decl::SamplerGL;
 use super::ore_shader_module_gl_decl::ShaderModuleGL;
 use super::ore_texture_gl_decl::{TextureGL, TextureViewGL};
 use super::render_target_gl_decl::{
-    RenderTargetGL, TextureRenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
+    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -29,10 +29,10 @@ use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::shader_module::GLFixupKind;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, PipelineDesc,
-    RenderPassDesc, SamplerDesc, ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc,
-    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
+    CompareFunction, Features, Filter, LoadOp, PipelineDesc, RenderPassDesc, SamplerDesc,
+    ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc, TextureFormat, TextureType,
+    TextureViewDesc, TextureViewDimension, WrapMode, kMaxBindGroups,
 };
 use std::ffi::c_void;
 
@@ -747,6 +747,7 @@ fn makeSamplerCurrent(
             },
         );
     }
+    sampler.recordDesc(desc);
     let domain = nuxie_ore_metal::context_backend_domain(&context.base);
     Some(ResourceHandle::new_in_domain(None, domain, sampler).erase())
 }
@@ -1050,7 +1051,7 @@ fn makePipelineCurrent(
         None => None,
     };
 
-    use nuxie_ore_metal::bind_group_layout::{validatePipelineDesc, NativeSlotScope};
+    use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;
     let layoutHandles = desc
         .bindGroupLayouts
@@ -2368,14 +2369,16 @@ mod tests {
             )
             .expect("sampler")
         });
-        assert!(state
-            .borrow()
-            .commands
-            .contains(&GLCommand::SamplerParameterFloat {
-                sampler: 71,
-                parameter: GL_TEXTURE_MAX_ANISOTROPY_EXT,
-                value: 8.0,
-            }));
+        assert!(
+            state
+                .borrow()
+                .commands
+                .contains(&GLCommand::SamplerParameterFloat {
+                    sampler: 71,
+                    parameter: GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                    value: 8.0,
+                })
+        );
         drop(sampler);
         drop(context);
         domain.shutdown();
@@ -2585,7 +2588,7 @@ mod tests {
     #[test]
     fn deferred_replay_reaches_the_webgl2_state_scrub() {
         use crate::deferred::cmd::{
-            deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
+            deferred_replayer::{DeferredFrameSink, DeferredReplayer, snapshot_frame},
             deferred_session::DeferredSession,
             render_replay::RendererOwner,
         };
@@ -2644,17 +2647,19 @@ mod tests {
             ))),
         };
         let mut session = DeferredSession::with_caps(Default::default());
-        assert!(session
-            .ore_context
-            .borrow_mut()
-            .makeBuffer(&BufferDesc {
-                usage: BufferUsage::uniform,
-                size: 16,
-                data: None,
-                immutable: false,
-                label: Some("WebGL2 scrub probe"),
-            })
-            .is_some());
+        assert!(
+            session
+                .ore_context
+                .borrow_mut()
+                .makeBuffer(&BufferDesc {
+                    usage: BufferUsage::uniform,
+                    size: 16,
+                    data: None,
+                    immutable: false,
+                    label: Some("WebGL2 scrub probe"),
+                })
+                .is_some()
+        );
         let frame = snapshot_frame(&mut session);
         clearTrace(&state);
 
@@ -2687,10 +2692,12 @@ mod tests {
         endFrame(&mut ctx);
         assert_eq!(trace.borrow().objectProbes, 0);
         assert!(trace.borrow().commands.contains(&GLCommand::UseProgram(41)));
-        assert!(trace
-            .borrow()
-            .commands
-            .contains(&GLCommand::BindFramebuffer(GL_FRAMEBUFFER, 45)));
+        assert!(
+            trace
+                .borrow()
+                .commands
+                .contains(&GLCommand::BindFramebuffer(GL_FRAMEBUFFER, 45))
+        );
         drop(ctx);
         domain.shutdown();
     }
@@ -2924,10 +2931,12 @@ mod tests {
 
         drop(bufferOwner);
         domain.withCurrent(|| {});
-        assert!(state
-            .borrow()
-            .commands
-            .contains(&GLCommand::DeleteBuffer(701)));
+        assert!(
+            state
+                .borrow()
+                .commands
+                .contains(&GLCommand::DeleteBuffer(701))
+        );
         drop(context);
         domain.shutdown();
     }
@@ -3010,9 +3019,11 @@ mod tests {
             ..TextureViewDesc::default()
         };
         assert!(makeTextureView(&mut second, &viewDesc).is_none());
-        assert!(second
-            .lastError()
-            .contains("different GL execution generation"));
+        assert!(
+            second
+                .lastError()
+                .contains("different GL execution generation")
+        );
 
         let lifecycle = firstState
             .borrow()
@@ -3056,10 +3067,12 @@ mod tests {
         drop(buffer);
         drop(context);
         domain.shutdown();
-        assert!(!state
-            .borrow()
-            .commands
-            .contains(&GLCommand::DeleteBuffer(31337)));
+        assert!(
+            !state
+                .borrow()
+                .commands
+                .contains(&GLCommand::DeleteBuffer(31337))
+        );
     }
 
     #[test]

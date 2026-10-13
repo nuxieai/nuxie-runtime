@@ -25,6 +25,16 @@ use enums::*;
 use resources::*;
 use shader::*;
 
+#[cfg(test)]
+pub(crate) fn view_aspect(value: AnyUserData) -> Result<i32> {
+    Ok(value
+        .borrow::<TextureView>()?
+        .resource
+        .textureViewBase()
+        .expect("texture view")
+        .aspect() as i32)
+}
+
 // The direct-host plan collector shares the live Lua enum mapping and ORE
 // descriptor validation without manufacturing a backend resource.
 pub(super) fn texture_format_for_host(value: &str) -> Result<TextureFormat> {

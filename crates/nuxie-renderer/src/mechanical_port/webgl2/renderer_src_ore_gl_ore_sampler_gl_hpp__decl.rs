@@ -47,6 +47,9 @@ impl DerefMut for SamplerGL {
 }
 unsafe impl Send for SamplerGL {}
 unsafe impl GpuResourcePayload for SamplerGL {
+    fn sampler_base(&self) -> Option<&Sampler> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

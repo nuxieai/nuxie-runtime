@@ -13,6 +13,7 @@ use nuxie_ore_metal::types::{
 };
 
 pub(crate) const kVkMaxGroups: u32 = kMaxBindGroups;
+// Descriptor-pool budget per group, not a ceiling on layout entries.
 pub(crate) const kVkMaxBindingsPerGroup: u32 = 16;
 
 pub(crate) fn oreBindingKindToVk(kind: BindingKind, dynamic: bool) -> vk::DescriptorType {
@@ -54,9 +55,10 @@ pub(crate) unsafe fn createDSLFromLayoutDesc(
     device: vk::Device,
     desc: &BindGroupLayoutDesc<'_>,
 ) -> vk::DescriptorSetLayout {
-    let mut bindings = [vk::DescriptorSetLayoutBinding::default(); kVkMaxBindingsPerGroup as usize];
+    let count = desc.entryCount as usize;
+    let mut bindings = vec![vk::DescriptorSetLayoutBinding::default(); count];
     let entries = desc.entries.unwrap_or(&[]);
-    let count = entries.len().min(kVkMaxBindingsPerGroup as usize);
+    let entries = &entries[..count];
 
     for (binding, entry) in bindings.iter_mut().zip(entries.iter()).take(count) {
         let dynamic = entry.kind == BindingKind::uniformBuffer && entry.hasDynamicOffset;

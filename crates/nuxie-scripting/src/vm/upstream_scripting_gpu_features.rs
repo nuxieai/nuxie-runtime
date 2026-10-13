@@ -1,4 +1,4 @@
-//! `tests/unit_tests/runtime/scripting/scripting_gpu_features_test.cpp` at e949498e.
+//! `tests/unit_tests/runtime/scripting/scripting_gpu_features_test.cpp` through 1d33ee5d.
 #![allow(non_snake_case)]
 use super::*;
 use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
@@ -162,6 +162,11 @@ fn run_with_ore_context(ore: OreContextHandle, source: &str) -> String {
         .create_function(move |lua, ()| bindings.gpu_features(lua))
         .unwrap();
     vm.lua.globals().set("gpuFeatures", features).unwrap();
+    let view_aspect = vm
+        .lua
+        .create_function(|_, view| crate::gpu_canvas::ore::view_aspect(view))
+        .unwrap();
+    vm.lua.globals().set("viewAspect", view_aspect).unwrap();
     match vm.eval::<()>(source) {
         Ok(()) => String::new(),
         Err(error) => error.to_string(),
@@ -221,6 +226,23 @@ fn texture_view_answers_indexed_reads() {
         "local t = GPUTexture.new({ width = 4, height = 4, format = 'rgba8unorm' })\n\
          local v = t:view()\n\
          assert(v.format == 'rgba8unorm', 'format ' .. tostring(v.format))\n",
+    );
+    assert!(error.is_empty(), "{error}");
+}
+
+#[test]
+fn texture_view_keeps_the_aspect_the_script_asks_for() {
+    // Selecting both aspects cannot be sampled: dropping depth-only would
+    // make every depth-only bind group fail.
+    let device: OreContextHandle =
+        Rc::new(RefCell::new(FakeDeviceContext::new(Features::default())));
+    let recorder = DeferredOreContext::fromReal(Some(device));
+    let error = run_with_ore_context(
+        Rc::new(RefCell::new(recorder)),
+        "local t = GPUTexture.new({ width = 4, height = 4, format = 'depth24plus-stencil8' })\n\
+         assert(viewAspect(t:view({ aspect = 'depth-only' })) == 1)\n\
+         assert(viewAspect(t:view({ aspect = 'stencil-only' })) == 2)\n\
+         assert(viewAspect(t:view()) == 0)\n",
     );
     assert!(error.is_empty(), "{error}");
 }

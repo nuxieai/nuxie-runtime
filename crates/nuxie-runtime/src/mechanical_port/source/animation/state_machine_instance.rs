@@ -493,7 +493,14 @@ impl StateMachineLayerInstance {
             Some(AnimationStateBase::TYPE_KEY) => current
                 .first_animation(|animation| {
                     animation.with_animation(LinearAnimation::num_keyed_objects) == 0
-                        || self.is_pose_in_place(machine, animation, pose_since)
+                        || self.is_pose_in_place(
+                            machine,
+                            animation,
+                            state
+                                .with_downcast::<AnimationState, _>(AnimationState::speed)
+                                .expect("AnimationState definition"),
+                            pose_since,
+                        )
                 })
                 .expect("AnimationState instance"),
             _ => false,
@@ -504,9 +511,12 @@ impl StateMachineLayerInstance {
         &self,
         machine: &StateMachineInstance,
         instance: &LinearAnimationInstance,
+        state_speed: f32,
         pose_since: u32,
     ) -> bool {
-        if instance.keep_going()
+        // Ask in the direction the state plays: a backwards state starts at
+        // the animation's end, where a forward one-shot would already be done.
+        if instance.keep_going_with_multiplier(state_speed)
             || !instance
                 .with_animation(|animation| animation.applies_key_frame_values_at(instance.time()))
         {

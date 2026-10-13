@@ -167,6 +167,177 @@ pub unsafe extern "C" fn nux_font_new(
     })
 }
 
+/// Emit one normalized, y-down path command synchronously. Verbs: 0 move,
+/// 1 line, 2 quadratic, 3 cubic, 4 close. Points has 2/2/4/6/0 floats.
+/// The sink and its context expire when get_path returns.
+pub type NuxFontOutlineSink = unsafe extern "C" fn(*mut c_void, u8, *const f32);
+
+/// Host callbacks are copied at creation. Context ownership transfers only on
+/// success and release runs once after the last retained font/variant dies,
+/// possibly on any thread. get_path may run concurrently; callbacks and context
+/// must be thread-safe, must not unwind, and must not reenter the font API.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NuxFontOutlineCallbacks {
+    pub struct_size: u32,
+    pub user_data: *mut c_void,
+    pub get_path: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            u16,
+            *const NuxFontAxisCoord,
+            usize,
+            NuxFontOutlineSink,
+            *mut c_void,
+        ),
+    >,
+    pub release: Option<unsafe extern "C" fn(*mut c_void)>,
+}
+
+struct HostOutline(NuxFontOutlineCallbacks);
+// The caller accepts the documented concurrent-callback contract.
+unsafe impl Send for HostOutline {}
+unsafe impl Sync for HostOutline {}
+impl Drop for HostOutline {
+    fn drop(&mut self) {
+        if let Some(release) = self.0.release {
+            unsafe { release(self.0.user_data) };
+        }
+    }
+}
+
+struct OutlineBuilder {
+    path: nuxie::runtime::math::raw_path::RawPath,
+    count: usize,
+    valid: bool,
+    started: bool,
+}
+
+unsafe extern "C" fn append_outline(context: *mut c_void, verb: u8, points: *const f32) {
+    let builder = unsafe { &mut *context.cast::<OutlineBuilder>() };
+    builder.count += 1;
+    let count = match verb {
+        0 | 1 => 2,
+        2 => 4,
+        3 => 6,
+        4 => 0,
+        _ => {
+            builder.valid = false;
+            return;
+        }
+    };
+    if !builder.valid
+        || builder.count > 65_536
+        || (count != 0 && points.is_null())
+        || (verb != 0 && !builder.started)
+    {
+        builder.valid = false;
+        return;
+    }
+    let points = if count == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(points, count) }
+    };
+    if points.iter().any(|point| !point.is_finite()) {
+        builder.valid = false;
+        return;
+    }
+    match verb {
+        0 => {
+            builder.path.move_to(points[0], points[1]);
+            builder.started = true;
+        }
+        1 => builder.path.line_to(points[0], points[1]),
+        2 => builder
+            .path
+            .quad_to_cubic(points[0], points[1], points[2], points[3]),
+        3 => builder.path.cubic_to(
+            points[0], points[1], points[2], points[3], points[4], points[5],
+        ),
+        4 => builder.path.close(),
+        _ => unreachable!(),
+    }
+}
+
+impl HostOutline {
+    fn path(&self, glyph: u16, coords: &[Coord]) -> nuxie::runtime::math::raw_path::RawPath {
+        let coords: Vec<_> = coords
+            .iter()
+            .map(|coord| NuxFontAxisCoord {
+                axis: coord.axis,
+                value: coord.value,
+            })
+            .collect();
+        let mut builder = OutlineBuilder {
+            path: Default::default(),
+            count: 0,
+            valid: true,
+            started: false,
+        };
+        unsafe {
+            self.0.get_path.unwrap()(
+                self.0.user_data,
+                glyph,
+                coords.as_ptr(),
+                coords.len(),
+                append_outline,
+                (&mut builder as *mut OutlineBuilder).cast(),
+            );
+        }
+        if builder.valid {
+            builder.path
+        } else {
+            Default::default()
+        }
+    }
+}
+
+/// Decode a host font with empty-outline recovery, mirroring upstream's
+/// first CoreTextHBFont attempt. File shaping, metrics and nonempty outlines
+/// remain unchanged. This does not install a process fallback hook.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_font_new_with_outline(
+    source: *const NuxFontSource,
+    callbacks: *const NuxFontOutlineCallbacks,
+    out_font: *mut *mut NuxFont,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_font.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe {
+            *out_font = ptr::null_mut();
+        }
+        if source.is_null() || callbacks.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let callbacks = unsafe { *callbacks };
+        if callbacks.struct_size as usize != std::mem::size_of::<NuxFontOutlineCallbacks>() {
+            return NuxStatus::InvalidStructSize;
+        }
+        if callbacks.get_path.is_none() {
+            return NuxStatus::InvalidArgument;
+        }
+        let font = match unsafe { decode_face(&*source) } {
+            Ok((font, _)) => font,
+            Err(status) => return status,
+        };
+        let native = font
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .expect("decoded HBFont");
+        let host = std::sync::Arc::new(HostOutline(callbacks));
+        let font = native.with_host_outline(std::sync::Arc::new(move |glyph, coords| {
+            host.path(glyph, coords)
+        }));
+        unsafe {
+            *out_font = publish_font(font);
+        }
+        NuxStatus::Ok
+    })
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_font_free(font: *mut NuxFont) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
@@ -416,4 +587,155 @@ pub unsafe extern "C" fn nux_font_set_fallback_proc(
         });
         NuxStatus::Ok
     })
+}
+
+#[cfg(test)]
+mod outline_tests {
+    use super::*;
+    use nuxie::runtime::text::text_engine::TextRun;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    struct Context {
+        calls: Arc<AtomicUsize>,
+        releases: Arc<AtomicUsize>,
+        invalid: bool,
+    }
+
+    unsafe extern "C" fn outline(
+        context: *mut c_void,
+        _: u16,
+        _: *const NuxFontAxisCoord,
+        _: usize,
+        sink: NuxFontOutlineSink,
+        destination: *mut c_void,
+    ) {
+        let context = unsafe { &*context.cast::<Context>() };
+        context.calls.fetch_add(1, Ordering::SeqCst);
+        unsafe {
+            sink(destination, 0, [0.0, 0.0].as_ptr());
+            sink(destination, 1, [1.0, 0.0].as_ptr());
+            sink(destination, 2, [1.0, -1.0, 0.0, -1.0].as_ptr());
+            if context.invalid {
+                sink(destination, 1, [f32::NAN, 0.0].as_ptr());
+            }
+            sink(destination, 4, ptr::null());
+        }
+    }
+
+    unsafe extern "C" fn release(context: *mut c_void) {
+        let context = unsafe { Box::from_raw(context.cast::<Context>()) };
+        context.releases.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn create(invalid: bool) -> (*mut NuxFont, Arc<AtomicUsize>, Arc<AtomicUsize>) {
+        let bytes = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
+        let source = NuxFontSource {
+            bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            ..Default::default()
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let releases = Arc::new(AtomicUsize::new(0));
+        let context = Box::into_raw(Box::new(Context {
+            calls: calls.clone(),
+            releases: releases.clone(),
+            invalid,
+        }));
+        let callbacks = NuxFontOutlineCallbacks {
+            struct_size: std::mem::size_of::<NuxFontOutlineCallbacks>() as u32,
+            user_data: context.cast(),
+            get_path: Some(outline),
+            release: Some(release),
+        };
+        let mut font = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(&source, &callbacks, &mut font) },
+            NuxStatus::Ok
+        );
+        (font, calls, releases)
+    }
+
+    fn glyph(font: &FontRef, character: char) -> u16 {
+        let run = TextRun {
+            font: Some(font.clone()),
+            size: 32.0,
+            line_height: -1.0,
+            letter_spacing: 0.0,
+            unichar_count: 1,
+            script: u32::from_be_bytes(*b"Latn"),
+            style_id: 0,
+            level: 0,
+        };
+        font.shape_text(&[character as u32], &[run], 0)[0].runs[0].glyphs[0]
+    }
+
+    #[test]
+    fn host_outline_recovers_only_empty_paths_and_retains_context_across_threads() {
+        let (handle, calls, releases) = create(false);
+        let font = clone_font(handle).unwrap();
+        let original =
+            HbFont::decode(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")).unwrap();
+        let a = glyph(&font, 'A');
+        let space = glyph(&font, ' ');
+        assert!(!original.get_path(a).empty());
+        assert!(original.get_path(space).empty());
+        assert_eq!(font.get_path(a).points(), original.get_path(a).points());
+        assert_eq!(font.get_path(a).verbs(), original.get_path(a).verbs());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        let path = font.get_path(space);
+        assert_eq!(path.points().len(), 5); // move, line, converted quadratic
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(font.line_metrics().ascent, original.line_metrics().ascent);
+        let variant = font.with_options(&[], &[]);
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        drop(font);
+        assert_eq!(releases.load(Ordering::SeqCst), 0);
+        std::thread::spawn(move || assert!(!variant.get_path(space).empty()))
+            .join()
+            .unwrap();
+        assert_eq!(releases.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn malformed_host_outline_is_discarded() {
+        let (handle, _, releases) = create(true);
+        let font = clone_font(handle).unwrap();
+        assert!(font.get_path(glyph(&font, ' ')).empty());
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        drop(font);
+        assert_eq!(releases.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn failed_creation_keeps_context_with_caller() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let releases = Arc::new(AtomicUsize::new(0));
+        let context = Box::into_raw(Box::new(Context {
+            calls,
+            releases: releases.clone(),
+            invalid: false,
+        }));
+        let callbacks = NuxFontOutlineCallbacks {
+            struct_size: std::mem::size_of::<NuxFontOutlineCallbacks>() as u32,
+            user_data: context.cast(),
+            get_path: Some(outline),
+            release: Some(release),
+        };
+        let mut font = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(ptr::null(), &callbacks, &mut font) },
+            NuxStatus::NullArgument
+        );
+        assert!(font.is_null());
+        assert_eq!(releases.load(Ordering::SeqCst), 0);
+        unsafe {
+            release(context.cast());
+        }
+        assert_eq!(releases.load(Ordering::SeqCst), 1);
+    }
 }

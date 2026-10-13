@@ -286,6 +286,29 @@
       ]
     },
     {
+      "name": "NuxFontOutlineCallbacks",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "user_data",
+          "offset": 8
+        },
+        {
+          "name": "get_path",
+          "offset": 16
+        },
+        {
+          "name": "release",
+          "offset": 24
+        }
+      ]
+    },
+    {
       "name": "NuxFontSource",
       "size": 64,
       "alignment": 8,

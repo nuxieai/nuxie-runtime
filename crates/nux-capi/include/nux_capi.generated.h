@@ -1078,6 +1078,31 @@ typedef struct NuxFontSource {
 } NuxFontSource;
 
 /**
+ * Emit one normalized, y-down path command synchronously. Verbs: 0 move,
+ * 1 line, 2 quadratic, 3 cubic, 4 close. Points has 2/2/4/6/0 floats.
+ * The sink and its context expire when get_path returns.
+ */
+typedef void (*NuxFontOutlineSink)(void*, uint8_t, const float*);
+
+/**
+ * Host callbacks are copied at creation. Context ownership transfers only on
+ * success and release runs once after the last retained font/variant dies,
+ * possibly on any thread. get_path may run concurrently; callbacks and context
+ * must be thread-safe, must not unwind, and must not reenter the font API.
+ */
+typedef struct NuxFontOutlineCallbacks {
+  uint32_t struct_size;
+  void *user_data;
+  void (*get_path)(void*,
+                   uint16_t,
+                   const struct NuxFontAxisCoord*,
+                   size_t,
+                   NuxFontOutlineSink,
+                   void*);
+  void (*release)(void*);
+} NuxFontOutlineCallbacks;
+
+/**
  * Return a borrowed font handle, or NULL to end the fallback walk. Called on
  * the shaping thread, with the first missing character, zero-based retry index
  * and asking font's weight. The engine retains the returned font. The provider
@@ -2472,6 +2497,15 @@ NuxStatus nux_font_has_glyph(const struct NuxFont *font, uint32_t character, boo
  * and optional axis coordinates. All input views are borrowed for this call.
  */
 NuxStatus nux_font_new(const struct NuxFontSource *source, struct NuxFont **out_font);
+
+/**
+ * Decode a host font with empty-outline recovery, mirroring upstream's
+ * first CoreTextHBFont attempt. File shaping, metrics and nonempty outlines
+ * remain unchanged. This does not install a process fallback hook.
+ */
+NuxStatus nux_font_new_with_outline(const struct NuxFontSource *source,
+                                    const struct NuxFontOutlineCallbacks *callbacks,
+                                    struct NuxFont **out_font);
 
 /**
  * Map a trusted stable font file for nominal coverage. The same immutable

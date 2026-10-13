@@ -33,6 +33,7 @@ nux_file_view_model_catalog
 nux_font_free
 nux_font_has_glyph
 nux_font_new
+nux_font_new_with_outline
 nux_font_probe_file
 nux_font_probe_free
 nux_font_probe_has_glyph

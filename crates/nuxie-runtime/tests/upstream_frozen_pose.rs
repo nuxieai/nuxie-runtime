@@ -1,4 +1,4 @@
-//! Direct translation of frozen_pose_test.cpp at upstream be93c2ce.
+//! Direct translation of frozen_pose_test.cpp through upstream 5df52be2.
 #![cfg(feature = "testing")]
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
@@ -8,7 +8,7 @@ use nuxie_runtime::{
         animation::state_machine_instance::{
             RuntimeStateMachineInstanceHandle, StateMachineInstance,
         },
-        artboard::RuntimeArtboardInstanceHandle,
+        artboard::{Artboard, RuntimeArtboardInstanceHandle},
         artboard_component_list::ArtboardComponentList,
         core::CoreHandle,
         file::{File, RuntimeFileHandle},
@@ -23,6 +23,7 @@ use nuxie_runtime::{
         viewmodel::{
             viewmodel_instance::ViewModelInstance,
             viewmodel_instance_boolean::ViewModelInstanceBoolean,
+            viewmodel_instance_trigger::ViewModelInstanceTrigger,
         },
     },
 };
@@ -253,4 +254,60 @@ fn writes_to_a_quiet_list_row_bring_its_pose_back() {
     rotate(&row, 0.5);
     machine.advance_and_apply(1.0 / 60.0);
     assert_eq!(row.with_artboard(|a| a.rotation()), 0.0);
+}
+
+// reverse_state_freeze.riv: a square, hidden at design time, that one 15-frame
+// one-shot fades in. The layer's any state goes to that animation when the view
+// model's show trigger fires, and to the same animation at speed -1 when hide
+// fires; its entry state goes nowhere.
+#[test]
+fn a_state_playing_backwards_from_its_forward_twins_end_still_plays() {
+    let file = read_file("reverse_state_freeze.riv");
+    let source = file.with_file(File::artboard).unwrap();
+    let artboard = Artboard::instance_from_handle(&source).unwrap();
+    let view_model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(artboard.core_handle()))
+        .unwrap();
+    let machine = artboard.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(view_model.clone()));
+    machine.advance_and_apply(0.0);
+    let advance = |frames| {
+        for _ in 0..frames {
+            machine.advance_and_apply(1.0 / 60.0);
+        }
+    };
+    let fire = |name: &str| {
+        let property = view_model
+            .with_downcast::<ViewModelInstance, _>(|vm| vm.property_value_named(name))
+            .flatten()
+            .unwrap();
+        assert!(
+            property
+                .with_downcast::<ViewModelInstanceTrigger, _>(|_| ())
+                .is_some()
+        );
+        assert!(ViewModelInstanceTrigger::trigger_handle(&property));
+    };
+    let shape = square(&artboard);
+    assert_eq!(opacity(&shape), 0.0);
+
+    fire("show");
+    advance(30);
+    assert_eq!(opacity(&shape), 1.0);
+    assert!(machine.with_instance(|m| m.is_layer_frozen(0)));
+
+    // The backwards state starts at the animation's end, so its first apply
+    // writes the pose the forward state left and nothing on the artboard
+    // changes. It has the whole animation left to play all the same.
+    fire("hide");
+    advance(1);
+    assert!(!machine.with_instance(|m| m.is_layer_frozen(0)));
+    advance(4);
+    assert!(opacity(&shape) < 1.0);
+    assert!(opacity(&shape) > 0.0);
+
+    // Played back to its start, it is a finished one-shot like any other.
+    advance(30);
+    assert_eq!(opacity(&shape), 0.0);
+    assert!(machine.with_instance(|m| m.is_layer_frozen(0)));
 }

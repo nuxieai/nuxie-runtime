@@ -7,18 +7,28 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `daf55385b71fb861b2a1ae2930ae4492832d5db5`
+- LAST_SYNCED_SHA: `5df52be209e0c0388c484266f7696b8d4d0b7b4a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `daf55385b71fb861b2a1ae2930ae4492832d5db5` (refreshed 2026-10-12 by the daily upstream sync).
+- Current target: `20e3e88639492e3e80344de4954842898f6c3b35` (refreshed 2026-10-13 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  No upstream commits remain after this checkpoint at the fetched target.
-  All 231 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (253 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 232 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (254 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `5df52be2`, integrated atop downstream `42b4fdcd16`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Source review corrected the new test to instantiate once from the
+  authored artboard, matching upstream, rather than clone an instance again.
+  Seven frozen-pose and nine related lifecycle/callback cases pass; the callback
+  test was rerun with its required tools feature after the initial gated run.
+  Runtime units pass 384 with two existing ignores; wasm32-unknown-unknown
+  compilation passes. Source/manifest/pipeline checks pass 42, with generated
+  files and formatting clean. No assertions or tolerances changed. No fresh
+  broad differential or device/browser-pixel coverage is claimed.
 - Validation at `daf55385`, integrated atop downstream `269117ce9c`:
   independent source-accounting and subsequent Rust-integration reviews confirm
   the complete public behavioral delta is guest-Wasm-only and deferred under
@@ -810,6 +820,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `5df52be209e0c0388c484266f7696b8d4d0b7b4a` | Use the animation state's speed when deciding whether an applied pose is finished and can freeze. Translate the exact backwards-state regression and upstream fixture: the reverse state must play from its forward twin's end pose and freeze only after reaching its start. Private .rive_head contents are not claimed imported. | — |
 | `daf55385b71fb861b2a1ae2930ae4492832d5db5` | Deferred: the complete public behavior delta adds WasmScriptingVM frameRelease export detection and calls __riveFrameRelease after frame-minor collection/debug verification. This depends solely on parked guest execution, not Luau or browser renderer Wasm. Private module queue/pre-collect-hook implementation described in prose and .rive_head contents are not claimed imported. Advance source/oracle pins and inventory only, retaining historical validation provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ca8fad85f2b85e192705606c684c5a44dde3a30a` | Traverse the artboard drawable inventory instead of all objects when collecting selectable Text; retain nested/list-artboard recursion and relative Text order. Make the drawable accessor available in runtime builds as well as editor builds. Private .rive_head contents are not claimed imported. | — |
 | `785bca185218ef4b8eec3e525199f27a8f23d49f` | Translate DrawTarget validation: retain superclass validation and require drawableId to resolve to a Drawable before initialization. Translate the public missing-drawable regression with the exact upstream fixture. Private editor export changes described only in commit prose and .rive_head contents are not claimed imported. | — |

@@ -9,25 +9,39 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
 
 ## Known Apple font boundary gap
 
-At the `daf55385` pin, `include/rive/text/font_hb.hpp:118` and
-`src/text/font_hb_apple.mm:121-157,333-492` implement `HBFont::FromSystem`:
-a CoreText font pointer, CoreText table access, an optional CoreText shaping
-retry, and native outline recovery. `CoreTextHBFont::getPath` at lines468-492
-asks CoreText for an outline when HarfBuzz returns an empty path even on the
-first, non-system-shaper attempt. The Rust host boundary accepts bytes or a
-trusted stable file plus collection face, using harfrust/skrifa. It has neither
-native outline recovery nor the second CoreText-shaped attempt.
+The host outline addition mirrors the first `CoreTextHBFont::getPath`
+attempt at `daf55385:font_hb_apple.mm:468-492`: read the ordinary outline,
+then ask the host only if it is empty. `nux_font_new_with_outline` adds a
+plain C command sink. The iOS SDK retains its selected CTFont at size2048,
+inverts y and divides by2048, matching upstream `apply_element`. The runtime
+converts quadratics to cubic paths. Ordinary byte/file font creation retains
+its existing behavior. Callback retention, validation, the bounded command
+sink, and C handle safety are our host machinery.
 
-The iOS 26.5 P038 published-screen regression loads the CoreText-selected
-`.PingFangUITextSC-Regular` file successfully, but its `hvgl` outlines do not
-draw through the Rust file backend. Arabic, Hebrew and Hindi draw. The selected
-Apple emoji face also loads but uses `emjc` sbix data rather than PNG, and its
-row remains blank. File selection alone is therefore not Apple drawing parity;
-the emoji upstream drawing behavior still requires direct qualification.
-The source-coverage inventory excludes `.mm`, so its completed C++ inventory
-does not establish parity for this Apple path. Track the difference in
-[UNIV-3375](https://universe.basis.dev/issue/UNIV-3375) and
-[PORTING.md](PORTING.md#native-font-fallback-boundary).
+Upstream also provides CoreText tables and units-per-em at construction, and
+on its second attempt (`useSystemShaper=true`) shapes with CTTypesetter and
+CTRun. Those native answers include glyph IDs, string indices, advances,
+forced bidi embedding level, visual reversal for RTL, and zero offsets. Its
+system-shaped path is asked from CoreText before HarfBuzz. The current host
+outline addition implements the first-attempt outline recovery. The second
+CoreText-shaped attempt is still absent and must not be claimed as parity.
+Metrics, coverage, weights, feature/axis queries and color layers inherit
+HBFont in the pinned native subclass.
+
+For the selected iOS26.5 Apple Color Emoji face, the retained probe establishes
+emjc payloads in every sbix strike and nil CoreText glyph paths. The pinned
+runtime uses rive-app/harfbuzz rive_13.1.1. Its sbix reference_png requests
+png-space, rejects a different graphicType and returns an empty blob.
+HBFont::isColorGlyph then returns false. Text::updateRenderStyles reads
+getPath; both the HarfBuzz outline and CoreText outline are empty. Even if a
+color command were emitted, empty color layers cause drawColorGlyph to return.
+Therefore the source trace predicts no emoji ink upstream in this exact case.
+This is source evidence, not a direct upstream simulator rendering verdict.
+No emjc decoder or new bitmap path was invented. A real fix needs a separately
+scoped Apple rasterization/bitmap boundary and image positioning/scale/color
+qualification, or a compatible upstream decoder.
+
+Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
 
 ## Current checkpoint
 

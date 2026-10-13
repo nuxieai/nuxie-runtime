@@ -53,33 +53,28 @@ There is no owner-family ledger, test-first gate, or promotion process.
 
 ## Native font fallback boundary
 
-The C API's `nux_font_set_fallback_proc` exposes the existing process-wide
-`set_fallback_proc`, the Rust counterpart of `Font::gFallbackProc`. The SDK
-provider receives the missing character, retry index and asking font's weight,
-then returns a borrowed font handle. The engine retains the font through its
-shaped runs. Font handles expose byte decoding, trusted stable file mapping,
-collection faces, nominal coverage probes and weight-axis copies. Platform
-selection and caching belong to the SDK provider.
+`nux_font_set_fallback_proc` exposes the existing process hook. The SDK
+selects the platform font and returns a borrowed C handle; shaped runs retain
+the native font independently. Ordinary byte and stable-file fonts preserve
+their existing shaping, metrics, color layers and outline behavior.
 
-The Apple `HBFont::FromSystem` boundary remains different. Upstream retains a
-CoreText font pointer, reads its tables through CoreText, and can retry shaping
-through CoreText. Its `CoreTextHBFont::getPath` also recovers an empty HarfBuzz
-outline through CoreText on the first attempt (`font_hb_apple.mm:468-492`, pinned
-`daf55385`). The approved Rust boundary accepts font bytes or a trusted file
-and face number and uses harfrust/skrifa. It supplies neither that native
-outline recovery nor the later CoreText shaping retry.
+`nux_font_new_with_outline` adds the host equivalent of upstream's first
+`CoreTextHBFont::getPath` attempt at `daf55385:font_hb_apple.mm:468-492`.
+It asks a plain C callback for a normalized path only when the ordinary
+outline is empty. The iOS SDK owns CoreText, the selected native font and
+size2048/y-inversion conversion. Callback context retention, the bounded
+command sink and C handle validation are our host safety machinery.
 
-This affects device drawing: on the P038 iOS 26.5 published fixture, the selected
-PingFang UI collection loads but its private `hvgl` outlines remain blank.
-Arabic, Hebrew and Hindi draw. Apple emoji loads but its private `emjc` bitmap
-data is not PNG and the row is blank; direct upstream emoji drawing is not yet
-qualified. The default process hook and matching system-font selection do not
-establish full Apple font fallback equivalence. See
+The second CoreText-shaped attempt remains absent. The source-first list of
+native answers and the emoji source trace are recorded in
+[upstream-sync-map.md](upstream-sync-map.md#known-apple-font-boundary-gap).
+For the selected iOS26.5 emjc Apple emoji, that trace predicts the same blank
+row upstream. It is not a direct upstream simulator rendering verdict.
+Current device qualification belongs to
 [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
 
 The pre-existing scoped `with_host_fallback_proc` remains for editor hosts
-that supply font bytes, corresponding to app-supplied web fallback. The native
-SDK default uses the process hook without a file-level provider.
+that supply font bytes. The native SDK default uses the process hook.
 
 ## 1. Ownership & Type Mappings
 

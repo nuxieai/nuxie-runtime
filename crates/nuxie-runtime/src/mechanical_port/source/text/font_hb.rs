@@ -10,6 +10,7 @@ use harfrust::{
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
+use skrifa::raw::tables::cmap::CmapSubtable;
 use skrifa::setting::VariationSetting;
 use skrifa::{FontRef as OutlineFont, GlyphId as OutlineGlyphId, MetadataProvider};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
@@ -26,6 +27,205 @@ use crate::mechanical_port::source::text_engine::{
 const STANDARD_SCALE: i32 = 2048;
 const INVERSE_SCALE: f32 = 1.0 / STANDARD_SCALE as f32;
 const KERN_TAG: u32 = u32::from_be_bytes(*b"kern");
+
+// The nominal query and coverage enumeration must use the same selected
+// subtable, not the union of mappings. Select the encoding record before
+// parsing its format: an unsupported preferred table must not fall through
+// to a lower-priority Unicode table.
+fn nominal_cmap<'a>(font: &OutlineFont<'a>) -> Option<CmapSubtable<'a>> {
+    let cmap = font.cmap().ok()?;
+    let records = cmap.encoding_records();
+    for (platform, encoding) in [
+        (3, 0),
+        (3, 10),
+        (0, 6),
+        (0, 4),
+        (3, 1),
+        (0, 3),
+        (0, 2),
+        (0, 1),
+        (0, 0),
+        (1, 0),
+        (1, 0xffff),
+    ] {
+        let mut low = 0;
+        let mut high = records.len();
+        while low < high {
+            let mid = (low + high - 1) / 2;
+            let record = &records[mid];
+            let order = (record.platform_id() as u16).cmp(&platform).then_with(|| {
+                if encoding == 0xffff {
+                    std::cmp::Ordering::Equal
+                } else {
+                    record.encoding_id().cmp(&encoding)
+                }
+            });
+            match order {
+                std::cmp::Ordering::Less => low = mid + 1,
+                std::cmp::Ordering::Greater => high = mid,
+                std::cmp::Ordering::Equal => {
+                    if record.subtable_offset().is_null() {
+                        break;
+                    }
+                    let table = record.subtable(cmap.offset_data()).ok()?;
+                    if let CmapSubtable::Format4(table) = &table {
+                        // HarfBuzz sanitizes the four complete segment arrays
+                        // before exposing this cmap. read-fonts validates only
+                        // the fixed header on construction, so reproduce the
+                        // source's `values, 2 + 4 * segCountX2` range check here.
+                        if table.offset_data().len() < 16 + 4 * usize::from(table.seg_count_x2()) {
+                            return None;
+                        }
+                    }
+                    return Some(table);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn cmap_has_glyph(table: &CmapSubtable<'_>, cp: u32) -> bool {
+    // The pinned HB_NO_LEGACY configuration disables both symbol aliases and
+    // Macintosh remapping. Query the selected table's raw nominal mapping.
+    if let CmapSubtable::Format10(table) = table {
+        return table
+            .glyph_id_array()
+            .get(cp.wrapping_sub(table.start_char_code()) as usize)
+            .is_some_and(|glyph| glyph.get() != 0);
+    }
+    table
+        .map_codepoint(cp)
+        .is_some_and(|glyph| glyph.to_u32() != 0)
+}
+
+fn nominal_has_glyph(font: &OutlineFont<'_>, cp: u32) -> bool {
+    nominal_cmap(font).is_some_and(|table| cmap_has_glyph(&table, cp))
+}
+
+fn nominal_codepoints(font: &OutlineFont<'_>) -> Vec<u32> {
+    let Some(table) = nominal_cmap(font) else {
+        return Vec::new();
+    };
+    // Like hb_set_t, union during collection: repeated or overlapping cmap
+    // ranges must not allocate one copy per encoded group before deduplication.
+    let mut coverage = std::collections::BTreeSet::new();
+    match &table {
+        CmapSubtable::Format4(table) => {
+            let seg_count = table.start_code().len();
+            let count = seg_count
+                - usize::from(
+                    table
+                        .start_code()
+                        .last()
+                        .is_some_and(|start| start.get() == 0xffff),
+                );
+            let mut points = std::collections::BTreeSet::new();
+            // Skip the sentinel segment, not the U+FFFF codepoint: an earlier
+            // overlapping segment may legitimately contribute it. Preserve
+            // HarfBuzz's per-segment insertion followed by missing-glyph removal.
+            for i in 0..count {
+                let start = u32::from(table.start_code()[i].get());
+                let end = u32::from(table.end_code()[i].get());
+                let range_offset = usize::from(table.id_range_offsets()[i].get());
+                points.extend(start..=end);
+                for cp in start..=end {
+                    let glyph = if range_offset == 0 {
+                        Some((cp as u16).wrapping_add(table.id_delta()[i].get() as u16))
+                    } else {
+                        (range_offset / 2 + (cp - start) as usize + i)
+                            .checked_sub(seg_count)
+                            .and_then(|index| table.glyph_id_array().get(index))
+                            .map(|glyph| glyph.get())
+                    };
+                    let Some(glyph) = glyph else {
+                        for missing in cp..=end {
+                            points.remove(&missing);
+                        }
+                        break;
+                    };
+                    if glyph == 0 {
+                        points.remove(&cp);
+                    }
+                }
+            }
+            coverage.extend(points);
+        }
+        CmapSubtable::Format0(table) => {
+            coverage.extend(
+                table
+                    .glyph_id_array()
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(cp, &gid)| (gid != 0).then_some(cp as u32)),
+            );
+        }
+        CmapSubtable::Format10(table) => {
+            coverage.extend(
+                table
+                    .glyph_id_array()
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, glyph)| {
+                        (glyph.get() != 0).then_some(table.start_char_code().wrapping_add(i as u32))
+                    }),
+            );
+        }
+        CmapSubtable::Format12(_) | CmapSubtable::Format13(_) => {
+            let num_glyphs = font.maxp().map_or(0, |maxp| u32::from(maxp.num_glyphs()));
+            // Match hb_face_collect_unicodes' format12/13 clipping exactly,
+            // including its inclusive end. Library iterators use a different
+            // (exclusive) glyph-count limit and therefore cannot supply this.
+            let mut collect = |mut start: u32, mut end: u32, mut gid: u32, constant: bool| {
+                end = end.min(0x10ffff);
+                if gid == 0 {
+                    if constant || start > end || end == start {
+                        return;
+                    }
+                    start = start.wrapping_add(1);
+                    gid = gid.wrapping_add(1);
+                }
+                if gid >= num_glyphs {
+                    return;
+                }
+                if gid.wrapping_add(end).wrapping_sub(start) >= num_glyphs {
+                    end = start.wrapping_add(num_glyphs).wrapping_sub(gid);
+                }
+                coverage.extend(start..=end.min(0x10ffff));
+            };
+            match &table {
+                CmapSubtable::Format12(table) => {
+                    for group in table.groups() {
+                        collect(
+                            group.start_char_code(),
+                            group.end_char_code(),
+                            group.start_glyph_id(),
+                            false,
+                        );
+                    }
+                }
+                CmapSubtable::Format13(table) => {
+                    for group in table.groups() {
+                        collect(
+                            group.start_char_code(),
+                            group.end_char_code(),
+                            group.glyph_id(),
+                            true,
+                        );
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        _ => coverage.extend(
+            table
+                .iter()
+                .filter_map(|(cp, gid)| (gid.to_u32() != 0).then_some(cp)),
+        ),
+    }
+    coverage.retain(|&cp| char::from_u32(cp).is_some() && cmap_has_glyph(&table, cp));
+    coverage.into_iter().collect()
+}
 
 #[derive(Clone)]
 enum FontBytes {
@@ -125,11 +325,11 @@ pub struct FileProbe {
 impl FileProbe {
     pub fn has_glyph(&self, codepoint: Unichar) -> bool {
         self.bytes.as_ref().is_some_and(|bytes| {
-            OutlineFont::from_index(bytes, self.face_index)
-                .expect("probe retains its validated face")
-                .charmap()
-                .map(codepoint)
-                .is_some_and(|glyph| glyph.to_u32() != 0)
+            nominal_has_glyph(
+                &OutlineFont::from_index(bytes, self.face_index)
+                    .expect("probe retains its validated face"),
+                codepoint,
+            )
         })
     }
 
@@ -453,10 +653,10 @@ impl Font for HbFont {
         features.into_iter().collect()
     }
     fn has_glyph(&self, value: Unichar) -> bool {
-        self.outline_font()
-            .charmap()
-            .map(value)
-            .is_some_and(|glyph| glyph.to_u32() != 0)
+        nominal_has_glyph(&self.outline_font(), value)
+    }
+    fn codepoints(&self) -> Vec<Unichar> {
+        nominal_codepoints(&self.outline_font())
     }
     fn with_options(&self, coords: &[Coord], features: &[Feature]) -> FontRef {
         let mut axes = self.axis_values.clone();
@@ -1272,6 +1472,228 @@ impl skrifa::color::ColorPainter for PaintState<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Supplemental coverage for the new API; upstream added no test cases.
+    // Reuse the retained tiny font, replacing only its cmap table.
+    fn font_with_cmaps(records: &[(u16, u16, Vec<u8>)]) -> FontRef {
+        let mut bytes = decode_hex(include_str!("testdata/legacy_kern_he.hex"));
+        let mut cmap = Vec::new();
+        cmap.extend_from_slice(&0u16.to_be_bytes());
+        cmap.extend_from_slice(&(records.len() as u16).to_be_bytes());
+        let mut offset = 4 + records.len() * 8;
+        for (platform, encoding, table) in records {
+            cmap.extend_from_slice(&platform.to_be_bytes());
+            cmap.extend_from_slice(&encoding.to_be_bytes());
+            cmap.extend_from_slice(
+                &(if table.is_empty() { 0 } else { offset as u32 }).to_be_bytes(),
+            );
+            offset += table.len();
+        }
+        for (_, _, table) in records {
+            cmap.extend_from_slice(table);
+        }
+        let num_tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+        let row = (0..num_tables)
+            .map(|i| 12 + i * 16)
+            .find(|&offset| &bytes[offset..offset + 4] == b"cmap")
+            .unwrap();
+        let cmap_offset = bytes.len() as u32;
+        bytes[row + 8..row + 12].copy_from_slice(&cmap_offset.to_be_bytes());
+        bytes[row + 12..row + 16].copy_from_slice(&(cmap.len() as u32).to_be_bytes());
+        bytes.extend(cmap);
+        HbFont::decode_owned(bytes).unwrap()
+    }
+
+    fn cmap_long(format: u16, groups: &[(u32, u32, u32)]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&format.to_be_bytes());
+        bytes.extend_from_slice(&0u16.to_be_bytes());
+        bytes.extend_from_slice(&(16 + 12 * groups.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(&0u32.to_be_bytes());
+        bytes.extend_from_slice(&(groups.len() as u32).to_be_bytes());
+        for &(start, end, glyph) in groups {
+            for value in [start, end, glyph] {
+                bytes.extend_from_slice(&value.to_be_bytes());
+            }
+        }
+        bytes
+    }
+
+    #[test]
+    fn nominal_codepoints_are_scalar_sorted_and_without_fallback() {
+        let font = font_with_cmaps(&[(
+            3,
+            10,
+            cmap_long(
+                12,
+                &[
+                    (0x41, 0x41, 1),
+                    (0x42, 0x42, 0),
+                    (0xd800, 0xd800, 1),
+                    (0x1f600, 0x1f600, 2),
+                    (0x10ffff, 0x10ffff, 1),
+                    (0x110000, 0x110000, 1),
+                ],
+            ),
+        )]);
+        fn no_fallback(_: u32, _: u32, _: &dyn Font) -> Option<FontRef> {
+            panic!("nominal coverage must not invoke fallback");
+        }
+        crate::source::text_engine::with_host_fallback_proc(no_fallback, || {
+            assert_eq!(font.codepoints(), [0x41, 0x1f600, 0x10ffff]);
+        });
+        assert_eq!(font.with_options(&[], &[]).codepoints(), font.codepoints());
+    }
+
+    #[test]
+    fn nominal_codepoints_use_symbol_selection_without_synthesizing_aliases() {
+        let font = font_with_cmaps(&[
+            (3, 0, cmap_long(12, &[(0xf041, 0xf041, 1)])),
+            (3, 10, cmap_long(12, &[(0x42, 0x42, 2)])),
+        ]);
+        assert!(!font.has_glyph(0x41));
+        assert!(font.has_glyph(0xf041));
+        assert_eq!(font.codepoints(), [0xf041]);
+        let font = font_with_cmaps(&[
+            (0, 4, cmap_long(12, &[(0x41, 0x41, 1)])),
+            (3, 10, cmap_long(13, &[(0x42, 0x43, 1)])),
+        ]);
+        assert_eq!(font.codepoints(), [0x42, 0x43]);
+    }
+
+    #[test]
+    fn nominal_codepoints_include_legacy_cmap_formats() {
+        let mut format0 = vec![0; 262];
+        format0[2..4].copy_from_slice(&262u16.to_be_bytes());
+        format0[6 + 0x41] = 1;
+        let mut format6 = Vec::new();
+        for value in [6u16, 12, 0, 0x41, 1, 1] {
+            format6.extend_from_slice(&value.to_be_bytes());
+        }
+        let mut format10 = Vec::new();
+        for value in [10u16, 0] {
+            format10.extend_from_slice(&value.to_be_bytes());
+        }
+        for value in [22u32, 0, 0x41, 1] {
+            format10.extend_from_slice(&value.to_be_bytes());
+        }
+        format10.extend_from_slice(&1u16.to_be_bytes());
+        for table in [format0, format6, format10] {
+            let font = font_with_cmaps(&[(3, 10, table)]);
+            assert!(font.has_glyph(0x41));
+            assert_eq!(font.codepoints(), [0x41]);
+        }
+    }
+
+    #[test]
+    fn nominal_codepoints_do_not_remap_macroman_in_no_legacy_build() {
+        let mut table = vec![0; 262];
+        table[2..4].copy_from_slice(&262u16.to_be_bytes());
+        table[6 + 0x41] = 1;
+        table[6 + 0x80] = 2; // MacRoman 0x80 is Unicode U+00c4.
+        let font = font_with_cmaps(&[(1, 0, table)]);
+        assert!(!font.has_glyph(0xc4));
+        assert!(font.has_glyph(0x80));
+        assert_eq!(font.codepoints(), [0x41, 0x80]);
+    }
+
+    #[test]
+    fn nominal_codepoints_do_not_fall_through_an_unsupported_selected_table() {
+        for format in [2u16, 99] {
+            let font = font_with_cmaps(&[
+                (3, 0, format.to_be_bytes().to_vec()),
+                (3, 10, cmap_long(12, &[(0x41, 0x41, 1)])),
+            ]);
+            assert!(!font.has_glyph(0x41));
+            assert!(font.codepoints().is_empty());
+        }
+    }
+
+    #[test]
+    fn nominal_codepoints_skip_a_null_preferred_subtable_offset() {
+        let font = font_with_cmaps(&[
+            (3, 0, Vec::new()),
+            (3, 10, cmap_long(12, &[(0x41, 0x41, 1)])),
+        ]);
+        assert_eq!(font.codepoints(), [0x41]);
+    }
+
+    #[test]
+    fn nominal_codepoints_macintosh_wildcard_uses_binary_search_match() {
+        let font = font_with_cmaps(&[
+            (1, 1, cmap_long(12, &[(0x41, 0x41, 1)])),
+            (1, 2, cmap_long(12, &[(0x42, 0x42, 1)])),
+            (1, 3, cmap_long(12, &[(0x43, 0x43, 1)])),
+        ]);
+        assert_eq!(font.codepoints(), [0x42]);
+    }
+
+    #[test]
+    fn nominal_codepoints_exclude_format4_terminal_sentinel() {
+        let mut table = Vec::new();
+        for value in [
+            4u16, 32, 0, 4, 4, 1, 0, 0x41, 0xffff, 0, 0x41, 0xffff, 0xffc0, 2, 0, 0,
+        ] {
+            table.extend_from_slice(&value.to_be_bytes());
+        }
+        let font = font_with_cmaps(&[(3, 1, table)]);
+        assert!(font.has_glyph(0xffff));
+        assert_eq!(font.codepoints(), [0x41]);
+    }
+
+    #[test]
+    fn nominal_codepoints_keep_ffff_from_a_nonsentinel_segment() {
+        let mut table = Vec::new();
+        for value in [
+            4u16, 32, 0, 4, 4, 1, 0, 0xffff, 0xffff, 0, 0xfffe, 0xffff, 2, 2, 0, 0,
+        ] {
+            table.extend_from_slice(&value.to_be_bytes());
+        }
+        let font = font_with_cmaps(&[(3, 1, table)]);
+        assert!(font.has_glyph(0xffff));
+        assert_eq!(font.codepoints(), [0xffff]);
+    }
+
+    #[test]
+    fn nominal_codepoints_reject_truncated_format4_segment_arrays() {
+        let mut table = Vec::new();
+        for value in [
+            4u16, 32, 0, 4, 4, 1, 0, 0x41, 0xffff, 0, 0x41, 0xffff, 0xffc0, 2, 0, 0,
+        ] {
+            table.extend_from_slice(&value.to_be_bytes());
+        }
+        for length in [16, 20, 24, 28, 30] {
+            let font = font_with_cmaps(&[(3, 1, table[..length].to_vec())]);
+            assert!(!font.has_glyph(0x41));
+            assert!(font.codepoints().is_empty());
+        }
+    }
+
+    #[test]
+    fn nominal_codepoints_format10_wraps_like_unsigned_source_arithmetic() {
+        let mut table = Vec::new();
+        for value in [10u16, 0] {
+            table.extend_from_slice(&value.to_be_bytes());
+        }
+        for value in [24u32, 0, u32::MAX, 2] {
+            table.extend_from_slice(&value.to_be_bytes());
+        }
+        for glyph in [1u16, 2] {
+            table.extend_from_slice(&glyph.to_be_bytes());
+        }
+        let font = font_with_cmaps(&[(3, 10, table)]);
+        assert!(font.has_glyph(0));
+        assert_eq!(font.codepoints(), [0]);
+    }
+
+    #[test]
+    fn nominal_codepoints_union_repeated_groups_during_collection() {
+        for format in [12, 13] {
+            let groups = vec![(0x41, 0x42, 1); 1024];
+            let font = font_with_cmaps(&[(3, 10, cmap_long(format, &groups))]);
+            assert_eq!(font.codepoints(), [0x41, 0x42]);
+        }
+    }
 
     #[test]
     fn recursive_fallback_stays_inside_the_current_subrun() {

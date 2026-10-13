@@ -316,6 +316,10 @@ impl RawTextFont {
     pub fn has_glyph(&self, character: char) -> bool {
         self.native.has_glyph(character as u32)
     }
+    /// Nominal Unicode scalar coverage in ascending order, without fallbacks.
+    pub fn codepoints(&self) -> Vec<u32> {
+        self.native.codepoints()
+    }
     pub fn glyph_path(&self, glyph: u32) -> RawPath {
         to_render_raw_path(&self.native.get_path(glyph as u16))
     }

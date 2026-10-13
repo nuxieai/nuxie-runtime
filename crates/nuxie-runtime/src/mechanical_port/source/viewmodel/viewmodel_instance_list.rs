@@ -155,8 +155,8 @@ impl ViewModelInstanceList {
     }
 
     pub fn pop(&mut self) -> Option<CoreHandle> {
-        let item = self.list_items.pop()?;
-        self.property_value_changed();
+        let item = self.list_items.last()?.clone();
+        self.remove_item_at((self.list_items.len() - 1) as i32);
         Some(item)
     }
 

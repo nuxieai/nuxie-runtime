@@ -19,6 +19,232 @@ use crate::binding_map::{depthOnlySamplerBindings, unsampledFloatTextureBindings
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::AnyResourceHandle;
 use crate::{context::ContextApi, shader_module::ShaderModule};
 
+fn scriptGuardFailed(message: String, outError: Option<&mut String>) -> bool {
+    if let Some(error) = outError {
+        *error = message;
+    }
+    false
+}
+
+#[cfg(test)]
+mod script_guard_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_device_keeps_intrinsic_checks_and_portable_attribute_limit() {
+        let mut error = "unchanged".to_owned();
+        for samples in [0, 1, 2, 64] {
+            assert!(validateSampleCount(None, samples, Some(&mut error)));
+        }
+        assert_eq!(error, "unchanged");
+        assert!(!validateSampleCount(None, 3, Some(&mut error)));
+        assert_eq!(error, "sampleCount must be a power of two (got 3)");
+        let mut sampler = SamplerDesc {
+            maxAnisotropy: 16,
+            ..Default::default()
+        };
+        assert!(validateSamplerDesc(None, &sampler, Some(&mut error)));
+        sampler.maxAnisotropy = 3;
+        sampler.minLod = 2.0;
+        sampler.maxLod = 1.0;
+        assert!(!validateSamplerDesc(None, &sampler, Some(&mut error)));
+        assert_eq!(error, "GPUSampler.new: minLod (2) > maxLod (1)");
+        let attrs = [VertexAttribute {
+            shaderSlot: Features::default().maxVertexAttributes,
+            ..Default::default()
+        }];
+        let buffers = [VertexBufferLayout {
+            attributes: Some(&attrs),
+            attributeCount: 1,
+            ..Default::default()
+        }];
+        let desc = PipelineDesc {
+            vertexBuffers: Some(&buffers),
+            vertexBufferCount: 1,
+            ..Default::default()
+        };
+        assert!(!validateVertexLayout(None, &desc, Some(&mut error)));
+        assert_eq!(
+            error,
+            format!(
+                "GPUPipeline.new: attribute slot must be 0-{} (got {})",
+                Features::default().maxVertexAttributes - 1,
+                Features::default().maxVertexAttributes
+            )
+        );
+    }
+
+    #[test]
+    fn lod_diagnostics_match_default_c_general_precision() {
+        for (value, expected) in [
+            (0.0, "0"),
+            (-0.0, "-0"),
+            (1.2345678, "1.23457"),
+            (1_000_000.0, "1e+06"),
+            (0.00001, "1e-05"),
+            (0.0001, "0.0001"),
+        ] {
+            assert_eq!(scriptGuardGeneral(value), expected);
+        }
+    }
+}
+
+pub fn validateSampleCount(
+    context: Option<&dyn ContextApi>,
+    sampleCount: u32,
+    outError: Option<&mut String>,
+) -> bool {
+    if sampleCount > 1 && !sampleCount.is_power_of_two() {
+        return scriptGuardFailed(
+            format!("sampleCount must be a power of two (got {sampleCount})"),
+            outError,
+        );
+    }
+    if sampleCount > 1 {
+        if let Some(context) = context.filter(|context| context.featuresKnown()) {
+            if sampleCount > context.features().maxSamples {
+                return scriptGuardFailed(
+                    format!(
+                        "sampleCount {sampleCount} exceeds device maximum of {}; query features().maxSamples before creating MSAA textures",
+                        context.features().maxSamples
+                    ),
+                    outError,
+                );
+            }
+        }
+    }
+    true
+}
+
+// C's default %g uses six significant digits, scientific notation outside
+// [-4, 6), and strips trailing fraction zeroes. f32 is promoted to double.
+fn scriptGuardGeneral(value: f32) -> String {
+    if !value.is_finite() {
+        return value.to_string();
+    }
+    let scientific = format!("{:.5e}", f64::from(value));
+    let (mantissa, exponent) = scientific.split_once('e').expect("scientific float");
+    let exponent: i32 = exponent.parse().expect("scientific exponent");
+    if !(-4..6).contains(&exponent) {
+        let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+        return format!("{mantissa}e{exponent:+03}");
+    }
+    let sign = if mantissa.starts_with('-') { "-" } else { "" };
+    let digits = mantissa.trim_start_matches('-').replace('.', "");
+    let point = exponent + 1;
+    let mut result = if point <= 0 {
+        format!("{sign}0.{}{digits}", "0".repeat((-point) as usize))
+    } else if point as usize >= digits.len() {
+        return format!(
+            "{sign}{digits}{}",
+            "0".repeat(point as usize - digits.len())
+        );
+    } else {
+        let (left, right) = digits.split_at(point as usize);
+        format!("{sign}{left}.{right}")
+    };
+    if result.contains('.') {
+        result.truncate(result.trim_end_matches('0').trim_end_matches('.').len());
+    }
+    result
+}
+
+pub fn validateSamplerDesc(
+    context: Option<&dyn ContextApi>,
+    desc: &SamplerDesc<'_>,
+    outError: Option<&mut String>,
+) -> bool {
+    if desc.minLod > desc.maxLod {
+        return scriptGuardFailed(
+            format!(
+                "GPUSampler.new: minLod ({}) > maxLod ({})",
+                scriptGuardGeneral(desc.minLod),
+                scriptGuardGeneral(desc.maxLod)
+            ),
+            outError,
+        );
+    }
+    let a = desc.maxAnisotropy;
+    if a < 1 || a > 16 || !a.is_power_of_two() {
+        return scriptGuardFailed(
+            format!("GPUSampler.new: maxAnisotropy must be a power of two in [1, 16] (got {a})"),
+            outError,
+        );
+    }
+    if a > 1
+        && context.is_some_and(|context| {
+            context.featuresKnown() && !context.features().anisotropicFiltering
+        })
+    {
+        return scriptGuardFailed(
+            format!(
+                "GPUSampler.new: maxAnisotropy={a} requires anisotropicFiltering feature, which the active backend does not support"
+            ),
+            outError,
+        );
+    }
+    true
+}
+
+pub fn validateVertexLayout(
+    context: Option<&dyn ContextApi>,
+    desc: &PipelineDesc<'_>,
+    outError: Option<&mut String>,
+) -> bool {
+    if desc.vertexBufferCount > kMaxVertexBufferSlots {
+        return scriptGuardFailed(
+            crate::script_guards::vertex_layout_count_message(
+                desc.vertexBufferCount,
+                kMaxVertexBufferSlots,
+            ),
+            outError,
+        );
+    }
+    let maxAttributes = context
+        .filter(|context| context.featuresKnown())
+        .map_or_else(
+            || Features::default().maxVertexAttributes,
+            |context| context.features().maxVertexAttributes,
+        );
+    // Guest modules are not built by this runtime. Browser hosts still check
+    // attribute slots exactly like every other non-RIVE_WASM_MODULE host.
+    let Some(buffers) = desc
+        .vertexBuffers
+        .unwrap_or(&[])
+        .get(..desc.vertexBufferCount as usize)
+    else {
+        return scriptGuardFailed(
+            "vertexBufferCount exceeds the supplied vertex buffer layout count".to_owned(),
+            outError,
+        );
+    };
+    for buffer in buffers {
+        let Some(attributes) = buffer
+            .attributes
+            .unwrap_or(&[])
+            .get(..buffer.attributeCount as usize)
+        else {
+            return scriptGuardFailed(
+                "attributeCount exceeds the supplied vertex attribute count".to_owned(),
+                outError,
+            );
+        };
+        for attribute in attributes {
+            if attribute.shaderSlot >= maxAttributes {
+                return scriptGuardFailed(
+                    format!(
+                        "GPUPipeline.new: attribute slot must be 0-{} (got {})",
+                        maxAttributes.wrapping_sub(1),
+                        attribute.shaderSlot
+                    ),
+                    outError,
+                );
+            }
+        }
+    }
+    true
+}
+
 impl BindGroup {
     /// Protected upstream operation exposed to sibling backend crates.
     /// The descriptor's slice counts must first pass `validateBindGroupDesc`.

@@ -119,21 +119,29 @@ fn resource_result(
     })
 }
 fn check_sample_count(ctx: &dyn ContextApi, samples: u32) -> Result<()> {
-    if samples <= 1 {
-        return Ok(());
+    check_guard(|error| {
+        nuxie_ore_metal::script_guards::validateSampleCount(Some(ctx), samples, Some(error))
+    })
+}
+// Rust errors unwind owned strings normally; unlike luaL_error's C longjmp,
+// this boundary does not require a temporary character array for destruction.
+fn check_guard(guard: impl FnOnce(&mut String) -> bool) -> Result<()> {
+    let mut error = String::new();
+    if !guard(&mut error) && !error.is_empty() {
+        // The source carries at most 255 message bytes to luaL_error.
+        let end = error
+            .char_indices()
+            .map(|(index, _)| index)
+            .take_while(|index| *index <= 255)
+            .last()
+            .unwrap_or(0);
+        if error.len() > 255 {
+            error.truncate(end);
+        }
+        Err(Error::runtime(error))
+    } else {
+        Ok(())
     }
-    if !samples.is_power_of_two() {
-        return Err(Error::runtime(format!(
-            "sampleCount must be a power of two (got {samples})"
-        )));
-    }
-    if ctx.featuresKnown() && samples > ctx.features().maxSamples {
-        return Err(Error::runtime(format!(
-            "sampleCount {samples} exceeds device maximum of {} — query context:features().maxSamples before creating MSAA textures",
-            ctx.features().maxSamples
-        )));
-    }
-    Ok(())
 }
 fn constructor(
     lua: &Lua,

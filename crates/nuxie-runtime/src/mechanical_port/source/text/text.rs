@@ -142,6 +142,10 @@ impl StyledText {
         while bytes.first().is_some_and(|byte| *byte != 0) {
             self.value.push(Utf::next_utf8(&mut bytes));
         }
+        // Shaping takes no empty runs.
+        if self.value.len() == start {
+            return;
+        }
         self.runs.push(TextRun {
             font: Some(font),
             size,

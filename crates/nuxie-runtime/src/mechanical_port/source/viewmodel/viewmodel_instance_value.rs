@@ -475,6 +475,14 @@ impl ViewModelInstanceValue {
         self.clear_flag(ValueFlags::Delegating);
     }
 
+    fn should_call_delegate(&self, delegate: &ViewModelInstanceValueDelegateWeakHandle) -> bool {
+        !self.has_flag(ValueFlags::DelegatesChanged)
+            || self
+                .delegates
+                .iter()
+                .any(|candidate| Weak::ptr_eq(candidate, delegate))
+    }
+
     pub fn on_value_changed(&mut self) {
         self.change_sequence = Self::next_change_sequence();
         self.delegates
@@ -482,18 +490,29 @@ impl ViewModelInstanceValue {
         if self.delegates.is_empty() {
             return;
         }
+        if self.has_flag(ValueFlags::Delegating) {
+            return;
+        }
         if self.has_flag(ValueFlags::DelegatesChanged) {
             self.delegates_copy.clone_from(&self.delegates);
             self.clear_flag(ValueFlags::DelegatesChanged);
         }
-        if self.has_flag(ValueFlags::Delegating) {
-            return;
-        }
         let delegates = self.delegates_copy.clone();
         let owner = self.handle();
         if crate::view_model_cell::defer_transaction_notification(move || {
-            let _suppress = owner.map(SuppressDelegation::new);
+            let _suppress = owner.clone().map(SuppressDelegation::new);
             for delegate in delegates {
+                if owner.as_ref().is_some_and(|owner| {
+                    owner
+                        .with(|owner| {
+                            owner
+                                .as_view_model_instance_value()
+                                .is_some_and(|value| !value.should_call_delegate(&delegate))
+                        })
+                        .unwrap_or(false)
+                }) {
+                    continue;
+                }
                 if let Some(delegate) = delegate.upgrade() {
                     delegate.borrow_mut().value_changed();
                 }
@@ -503,6 +522,9 @@ impl ViewModelInstanceValue {
         }
         self.set_flag(ValueFlags::Delegating);
         for delegate in &self.delegates_copy {
+            if !self.should_call_delegate(delegate) {
+                continue;
+            }
             if let Some(delegate) = delegate.upgrade() {
                 delegate.borrow_mut().value_changed();
             }
@@ -521,12 +543,12 @@ impl ViewModelInstanceValue {
                 if value.delegates.is_empty() {
                     return None;
                 }
+                if value.has_flag(ValueFlags::Delegating) {
+                    return None;
+                }
                 if value.has_flag(ValueFlags::DelegatesChanged) {
                     value.delegates_copy.clone_from(&value.delegates);
                     value.clear_flag(ValueFlags::DelegatesChanged);
-                }
-                if value.has_flag(ValueFlags::Delegating) {
-                    return None;
                 }
                 Some(value.delegates_copy.clone())
             })
@@ -536,8 +558,18 @@ impl ViewModelInstanceValue {
         };
         let owner = owner.clone();
         crate::view_model_cell::dispatch_transaction_notification(move || {
-            let _suppress = SuppressDelegation::new(owner);
+            let _suppress = SuppressDelegation::new(owner.clone());
             for delegate in delegates {
+                if owner
+                    .with(|owner| {
+                        owner
+                            .as_view_model_instance_value()
+                            .is_some_and(|value| !value.should_call_delegate(&delegate))
+                    })
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
                 if let Some(delegate) = delegate.upgrade() {
                     delegate.borrow_mut().value_changed();
                 }

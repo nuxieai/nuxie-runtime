@@ -1,4 +1,4 @@
-//! All three raw_text_test.cpp cases at db31ea87714cf6a4cba56dd5de030f941f7e35f8.
+//! Literal raw_text_test.cpp cases through upstream a9239045.
 use nuxie_render_api::{NullFactory, PersistentFactory};
 use nuxie_runtime::source::{
     factory::RuntimeFactoryHandle,
@@ -19,6 +19,22 @@ fn font() -> FontRef {
 fn factory() -> RuntimeFactoryHandle {
     let mut factory = PersistentFactory::new(NullFactory);
     RuntimeFactoryHandle::from_factory(&mut factory).expect("retained no-op factory")
+}
+
+#[test]
+fn raw_text_shapes_around_an_empty_append() {
+    let mut text = RawText::new(factory());
+    let font = font();
+    text.append("abc", None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+    text.append("", None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+    text.append("def", None, font, 16.0, -1.0, 0.0, 0xff000000);
+    assert_eq!(text.line_count(), 1);
+    let mut glyphs = 0;
+    text.for_each_glyph(0, |_, _, _| {
+        glyphs += 1;
+        true
+    });
+    assert_eq!(glyphs, 6);
 }
 
 #[test]

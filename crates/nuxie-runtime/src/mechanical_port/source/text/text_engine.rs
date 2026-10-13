@@ -324,6 +324,8 @@ pub trait Font: Any + Send + Sync {
     fn is_italic(&self) -> bool;
     fn features(&self) -> Vec<u32>;
     fn has_glyph(&self, value: Unichar) -> bool;
+    /// Nominal Unicode scalar coverage in ascending order, without fallback.
+    fn codepoints(&self) -> Vec<Unichar>;
     fn get_feature_value(&self, feature_tag: u32) -> u32;
     fn with_options(&self, variable_axes: &[Coord], features: &[Feature]) -> FontRef;
     fn get_path(&self, glyph: GlyphId) -> RawPath;

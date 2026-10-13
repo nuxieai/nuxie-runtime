@@ -145,22 +145,7 @@ unsafe impl GpuResourcePayload for ShaderModule {
 // They remain source-shaped sibling records because Rust does not permit
 // nested struct/enum declarations in a struct body.
 
-/// Texture-sampler pair from the nested C++ `ShaderModule` declaration.
-///
-/// `repr(C)` preserves the four-byte source value layout. The four fields are
-/// owned values copied from shader reflection and remain in source order.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TextureSamplerPair {
-    // uint8_t textureGroup;
-    pub textureGroup: u8,
-    // uint8_t textureBinding;
-    pub textureBinding: u8,
-    // uint8_t samplerGroup;
-    pub samplerGroup: u8,
-    // uint8_t samplerBinding;
-    pub samplerBinding: u8,
-}
+pub use super::ore_binding_map_hpp::TextureSamplerPair;
 
 // C++ nested `GLFixupEntry::Kind`. A transparent byte retains the
 // static_cast behavior of the pinned parser for unknown forward-compatible

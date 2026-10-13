@@ -2,6 +2,7 @@
 pub mod ore_command_buffer;
 pub mod ore_command_silver;
 pub mod ore_commands;
+pub mod ore_creation_observer;
 pub mod ore_deferred_render_pass;
 pub mod ore_deferred_resource;
 pub mod ore_handle;

@@ -26,7 +26,6 @@ pub(crate) const PINNED_SOURCE: &str =
 
 /// WebGPU-side alias of ORE's single authoritative group-count constant.
 pub(crate) const kWGPUMaxGroups: u32 = kMaxBindGroups;
-pub(crate) const kMaxEntriesPerGroup: usize = 16;
 
 pub(crate) fn toWGPUViewDim(d: TextureViewDim) -> WGPUTextureViewDimension {
     match d.0 {
@@ -175,11 +174,14 @@ pub(crate) fn makeWGPUBGLEntryFromDesc(src: &OreBindGroupLayoutEntry) -> WGPUBin
             e.storageTexture.format = WGPUTextureFormat_RGBA8Unorm;
             e.storageTexture.viewDimension = toWGPUDescViewDim(src.textureViewDim).into();
         }
-        BindingKind::sampler => e.sampler.r#type = if src.samplerNonFiltering {
-            SamplerBindingType::NonFiltering
-        } else {
-            SamplerBindingType::Filtering
-        }.into(),
+        BindingKind::sampler => {
+            e.sampler.r#type = if src.samplerNonFiltering {
+                SamplerBindingType::NonFiltering
+            } else {
+                SamplerBindingType::Filtering
+            }
+            .into()
+        }
         BindingKind::comparisonSampler => {
             e.sampler.r#type = SamplerBindingType::Comparison.into();
         }
@@ -206,11 +208,13 @@ fn labelStringView(label: Option<&str>) -> WGPUStringView {
 
 fn prepareWGPUBindGroupLayoutFromDesc(
     desc: &BindGroupLayoutDesc<'_>,
-) -> ([WGPUBindGroupLayoutEntry; kMaxEntriesPerGroup], usize) {
-    let mut entries = std::array::from_fn(|_| WGPUBindGroupLayoutEntry::default());
+) -> (Vec<WGPUBindGroupLayoutEntry>, usize) {
     let authored = desc.entries.unwrap_or(&[]);
-    let authoredCount = (desc.entryCount as usize).min(authored.len());
-    let n = authoredCount.min(kMaxEntriesPerGroup);
+    let n = desc.entryCount as usize;
+    let authored = &authored[..n];
+    let mut entries: Vec<_> = (0..n)
+        .map(|_| WGPUBindGroupLayoutEntry::default())
+        .collect();
     for (dst, src) in entries.iter_mut().zip(authored.iter()).take(n) {
         *dst = makeWGPUBGLEntryFromDesc(src);
     }
@@ -392,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn descriptor_build_caps_at_sixteen_and_preserves_zero_entry_null_rule() {
+    fn descriptor_build_keeps_all_authored_entries_and_preserves_zero_entry_null_rule() {
         let authored = vec![OreBindGroupLayoutEntry::default(); 18];
         let desc = BindGroupLayoutDesc {
             entries: Some(&authored),
@@ -400,8 +404,9 @@ mod tests {
             ..Default::default()
         };
         let (entries, n) = prepareWGPUBindGroupLayoutFromDesc(&desc);
-        assert_eq!(n, 16);
-        assert_eq!(entries[15].binding, 0);
+        assert_eq!(n, 18);
+        assert_eq!(entries.len(), 18);
+        assert_eq!(entries[17].binding, 0);
 
         let explicitly_short = BindGroupLayoutDesc {
             entries: Some(&authored),

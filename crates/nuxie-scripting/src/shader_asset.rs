@@ -87,6 +87,9 @@ impl std::fmt::Debug for ShaderAsset {
 }
 type NativeShaderAsset = nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset;
 impl ShaderAsset {
+    pub(crate) fn native_handle(&self) -> nuxie_runtime::source::core::CoreHandle {
+        self.asset.clone()
+    }
     pub(crate) fn decode(name: &str, payload: &[u8]) -> Result<Self> {
         use nuxie_runtime::mechanical_port::source::{
             core::CoreArena, factory::RuntimeFactoryHandle,
@@ -455,6 +458,51 @@ impl ShaderAsset {
                     .collect()
             })
             .unwrap_or_default()
+    }
+}
+
+/// The source `visitShaderAssetModules` observer runs after its target's
+/// entry container parses and before the first module is created. Parse the
+/// original variant here, not the host's filtered entry list, so per-entry
+/// targets also report entries that do not produce vertex/fragment modules.
+pub(crate) fn observe_shader_asset_modules(
+    asset: &nuxie_runtime::source::core::CoreHandle,
+    profile: GpuCanvasShaderProfile,
+) {
+    use nuxie_ore_metal::{
+        ore_cmd::ore_creation_observer::creationObserver,
+        rstb_entry_container::{parsePerEntryContainer, parseWholeModuleContainer},
+    };
+    let Some(observer) = creationObserver() else {
+        return;
+    };
+    let target = match profile {
+        GpuCanvasShaderProfile::WebGpu => 0,
+        GpuCanvasShaderProfile::WebGl2 => 1,
+        GpuCanvasShaderProfile::TrustedAppleMetal => 2,
+        GpuCanvasShaderProfile::TrustedVulkanSpirV => 5,
+    };
+    let Some(blob) =
+        asset.with_downcast::<NativeShaderAsset, _>(|asset| asset.find_shader(target).to_vec())
+    else {
+        return;
+    };
+    let mut entries = Vec::new();
+    let valid = if target == 1 {
+        parsePerEntryContainer(Some(&blob), blob.len() as u32, &mut entries)
+    } else {
+        let mut source = None;
+        let mut source_size = 0;
+        parseWholeModuleContainer(
+            Some(&blob),
+            blob.len() as u32,
+            &mut entries,
+            Some(&mut source),
+            Some(&mut source_size),
+        )
+    };
+    if valid {
+        observer.onShaderAsset(asset, &entries);
     }
 }
 

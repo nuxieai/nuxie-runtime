@@ -1061,6 +1061,7 @@ pub(crate) fn makeSampler(
             context.m_vk.m_ashDevice.fp_v1_0().destroy_sampler,
         );
     }
+    sampler.recordDesc(desc);
     Some(ResourceHandle::new_in_domain(Some(manager), domain, sampler).erase())
 }
 

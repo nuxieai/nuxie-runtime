@@ -7,7 +7,8 @@ use nuxie_ore_metal::cmd::{
 };
 use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer::{OreCommandBuffer, SharedIdAllocator, SharedOreCommandBuffer},
-    ore_commands::{packTargetSize, WrapCanvasViewMode},
+    ore_commands::{WrapCanvasViewMode, packTargetSize},
+    ore_creation_observer::creationObserver,
     ore_deferred_resource::*,
     ore_handle::{INVALID_HANDLE, REAL_RESOURCE_FLAG, REAL_RESOURCE_MASK},
     ore_make_recording::*,
@@ -475,12 +476,15 @@ impl ContextApi for DeferredOreContext {
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         let a = self.alloc();
         recordMakeSampler(&mut self.render.borrow_mut(), a.id, a.generation, desc);
-        Some(
-            ResourceHandle::new(
-                None,
-                DeferredSampler::new(a.id, a.generation, Some(&self.render), Some(&self.ids)),
-            )
-            .erase(),
+        nuxie_ore_metal::sampler::describedSampler(
+            Some(
+                ResourceHandle::new(
+                    None,
+                    DeferredSampler::new(a.id, a.generation, Some(&self.render), Some(&self.ids)),
+                )
+                .erase(),
+            ),
+            desc,
         )
     }
     fn makeShaderModule(&mut self, desc: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle> {
@@ -491,30 +495,48 @@ impl ContextApi for DeferredOreContext {
         if desc.bindingMapBytes.is_some() && desc.bindingMapSize > 0 {
             obj.base.applyBindingMapFromDesc(desc);
         }
-        Some(ResourceHandle::new(None, obj).erase())
+        let obj = ResourceHandle::new(None, obj).erase();
+        if let Some(observer) = creationObserver() {
+            observer.onShaderModule(&obj, desc);
+        }
+        Some(obj)
     }
     fn makeBindGroupLayout(&mut self, desc: &BindGroupLayoutDesc<'_>) -> Option<AnyResourceHandle> {
         let a = self.alloc();
         recordMakeBindGroupLayout(&mut self.render.borrow_mut(), a.id, a.generation, desc);
-        Some(
-            ResourceHandle::new(
-                None,
-                DeferredBindGroupLayout::new(
-                    a.id,
-                    a.generation,
-                    Some(&self.render),
-                    Some(&self.ids),
-                    desc,
-                ),
-            )
-            .erase(),
+        let layout = ResourceHandle::new(
+            None,
+            DeferredBindGroupLayout::new(
+                a.id,
+                a.generation,
+                Some(&self.render),
+                Some(&self.ids),
+                desc,
+            ),
         )
+        .erase();
+        if let Some(observer) = creationObserver() {
+            observer.onBindGroupLayout(&layout, desc);
+        }
+        Some(layout)
     }
     fn makePipeline(
         &mut self,
         desc: &PipelineDesc<'_>,
-        _outError: Option<&mut String>,
+        outError: Option<&mut String>,
     ) -> Option<AnyResourceHandle> {
+        let mut error = String::new();
+        if !nuxie_ore_metal::bind_group_layout::validateStageLimits(
+            desc.bindGroupLayouts,
+            desc.bindGroupLayoutCount,
+            Some(&mut error),
+        ) {
+            self.setLastError(&format!("makePipeline: {error}"));
+            if let Some(outError) = outError {
+                *outError = error;
+            }
+            return None;
+        }
         let bgls: Vec<_> = desc.bindGroupLayouts.unwrap_or(&[])
             [..desc.bindGroupLayoutCount as usize]
             .iter()
@@ -532,21 +554,45 @@ impl ContextApi for DeferredOreContext {
             fragment,
             &bgls,
         );
-        Some(
-            ResourceHandle::new(
-                None,
-                DeferredPipeline::new(
-                    a.id,
-                    a.generation,
-                    Some(&self.render),
-                    Some(&self.ids),
-                    desc,
-                )?,
-            )
-            .erase(),
+        let pipeline = ResourceHandle::new(
+            None,
+            DeferredPipeline::new(
+                a.id,
+                a.generation,
+                Some(&self.render),
+                Some(&self.ids),
+                desc,
+            )?,
         )
+        .erase();
+        if let Some(observer) = creationObserver() {
+            observer.onPipeline(&pipeline, desc);
+        }
+        Some(pipeline)
     }
     fn makeBindGroup(&mut self, desc: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
+        // Rust descriptors carry bounded slices rather than unchecked C++
+        // arrays. Keep the existing count admission before inspecting them;
+        // valid descriptors retain upstream's target-view-first error order.
+        if desc.uboCount as usize > desc.ubos.len()
+            || desc.textureCount as usize > desc.textures.len()
+            || desc.samplerCount as usize > desc.samplers.len()
+        {
+            let mut error = String::new();
+            nuxie_ore_metal::bind_group_layout::validateBindGroupDesc(desc, Some(&mut error));
+            self.setLastError(&format!("makeBindGroup: {error}"));
+            return None;
+        }
+        for entry in &desc.textures[..desc.textureCount as usize] {
+            if entry
+                .view
+                .and_then(|view| view.downcast_ref::<DeferredTextureView>())
+                .is_some_and(|view| view.hostTarget)
+            {
+                self.setLastError("makeBindGroup: the target view cannot be sampled");
+                return None;
+            }
+        }
         // Replay cannot reach the script, so the range check runs here.
         let mut error = String::new();
         if !nuxie_ore_metal::bind_group_layout::validateBindGroupDesc(desc, Some(&mut error)) {
@@ -559,14 +605,6 @@ impl ContextApi for DeferredOreContext {
             .collect();
         let mut texs = Vec::with_capacity(desc.textureCount as usize);
         for entry in &desc.textures[..desc.textureCount as usize] {
-            if entry
-                .view
-                .and_then(|view| view.downcast_ref::<DeferredTextureView>())
-                .is_some_and(|view| view.hostTarget)
-            {
-                self.setLastError("makeBindGroup: the target view cannot be sampled");
-                return None;
-            }
             texs.push(self.handleFor(entry.view));
         }
         let samps: Vec<_> = desc.samplers[..desc.samplerCount as usize]
@@ -585,19 +623,21 @@ impl ContextApi for DeferredOreContext {
             &texs,
             &samps,
         );
-        Some(
-            ResourceHandle::new(
-                None,
-                DeferredBindGroup::new(
-                    a.id,
-                    a.generation,
-                    Some(&self.render),
-                    Some(&self.ids),
-                    desc,
-                ),
-            )
-            .erase(),
+        let group = ResourceHandle::new(
+            None,
+            DeferredBindGroup::new(
+                a.id,
+                a.generation,
+                Some(&self.render),
+                Some(&self.ids),
+                desc,
+            ),
         )
+        .erase();
+        if let Some(observer) = creationObserver() {
+            observer.onBindGroup(&group, desc);
+        }
+        Some(group)
     }
     fn beginRenderPass(
         &mut self,

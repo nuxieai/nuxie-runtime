@@ -59,6 +59,9 @@ impl DerefMut for SamplerVulkan {
 }
 
 unsafe impl GpuResourcePayload for SamplerVulkan {
+    fn sampler_base(&self) -> Option<&Sampler> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

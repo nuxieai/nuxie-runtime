@@ -181,7 +181,7 @@ unsafe impl GpuResourcePayload for DeferredTextureView {
         Some(&self.base)
     }
 }
-deferred_owner!(DeferredSampler, Sampler);
+deferred_owner!(DeferredSampler, Sampler, sampler_base);
 deferred_owner!(
     DeferredBindGroupLayout,
     BindGroupLayout,

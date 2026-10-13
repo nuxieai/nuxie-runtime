@@ -28,6 +28,7 @@ use super::ore::ore_bind_group_hpp::BindGroup;
 use super::ore::ore_bind_group_layout_hpp::BindGroupLayout;
 use super::ore::ore_buffer_hpp::{BufferApi, BufferUpdateError};
 use super::ore::ore_pipeline_hpp::Pipeline;
+use super::ore::ore_sampler_hpp::Sampler;
 use super::ore::ore_shader_module_hpp::ShaderModule;
 use super::ore::ore_texture_hpp::{TextureApi, TextureUploadError, TextureView};
 use super::ore::ore_types_hpp::{BufferUsage, TextureDataDesc, TextureFormat, TextureType};
@@ -590,6 +591,9 @@ impl Drop for GPUResource {
 /// and the object must remain valid until the final intrusive release invokes
 /// its registered concrete destructor.
 pub unsafe trait GpuResourcePayload: Any {
+    fn sampler_base(&self) -> Option<&Sampler> {
+        None
+    }
     fn gpu_resource(&self) -> &GPUResource;
     fn gpu_resource_mut(&mut self) -> &mut GPUResource;
 
@@ -648,6 +652,7 @@ type TextureInfoDispatch = unsafe fn(NonNull<GPUResource>) -> TextureInfo;
 type TextureUploadDispatch =
     for<'a> unsafe fn(&ResourcePointer, &TextureDataDesc<'a>) -> Result<(), TextureUploadError>;
 type PipelineBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<Pipeline>>;
+type SamplerBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<Sampler>>;
 type TextureViewBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<TextureView>>;
 type ShaderModuleBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<ShaderModule>>;
 type BindGroupBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroup>>;
@@ -655,6 +660,7 @@ type BindGroupLayoutBaseDispatch =
     unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroupLayout>>;
 #[derive(Clone, Copy)]
 pub(crate) struct ResourceVTable {
+    sampler_base: SamplerBaseDispatch,
     type_id: fn() -> TypeId,
     destroy: DestroyResource,
     buffer_info: Option<BufferInfoDispatch>,
@@ -681,6 +687,15 @@ unsafe fn pipeline_base<T: GpuResourcePayload>(
 ) -> Option<NonNull<Pipeline>> {
     let payload = unsafe { base.cast::<T>().as_ref() };
     payload.pipeline_base().map(NonNull::from)
+}
+
+unsafe fn sampler_base<T: GpuResourcePayload>(
+    base: NonNull<GPUResource>,
+) -> Option<NonNull<Sampler>> {
+    // SAFETY: the concrete resource's registered vtable preserves its type.
+    unsafe { base.cast::<T>().as_ref() }
+        .sampler_base()
+        .map(NonNull::from)
 }
 
 unsafe fn texture_view_base<T: GpuResourcePayload>(
@@ -759,6 +774,7 @@ unsafe fn dispatch_texture_upload<T: GpuResourcePayload + TextureApi>(
 
 fn plain_vtable<T: GpuResourcePayload>() -> ResourceVTable {
     ResourceVTable {
+        sampler_base: sampler_base::<T>,
         type_id: type_id::<T>,
         destroy: destroy_resource::<T>,
         buffer_info: None,
@@ -1081,6 +1097,14 @@ pub struct AnyResourceHandle {
 }
 
 impl AnyResourceHandle {
+    pub fn samplerBase(&self) -> Option<&Sampler> {
+        let pointer = self.pointer();
+        if !pointer.is_recording_thread() {
+            return None;
+        }
+        // SAFETY: the retained concrete owner pins the projected base on its recording thread.
+        unsafe { (pointer.vtable.sampler_base)(pointer.base).map(|base| base.as_ref()) }
+    }
     pub fn bindGroupBase(&self) -> Option<&BindGroup> {
         let pointer = self.pointer();
         if !pointer.is_recording_thread() {

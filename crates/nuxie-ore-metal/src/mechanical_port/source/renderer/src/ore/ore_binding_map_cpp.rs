@@ -14,6 +14,121 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 use super::*;
+use crate::binding_map::TextureSamplerPair;
+
+fn samplerPairsDepthOnly(
+    bm: &BindingMap,
+    pairSets: [Option<&[TextureSamplerPair]>; 2],
+    groupIndex: u32,
+    binding: u32,
+) -> bool {
+    let mut paired = false;
+    for pairs in pairSets.into_iter().flatten() {
+        for p in pairs {
+            if u32::from(p.samplerGroup) != groupIndex || u32::from(p.samplerBinding) != binding {
+                continue;
+            }
+            let tex = bm.lookupEntry(u32::from(p.textureGroup), u32::from(p.textureBinding));
+            if tex.is_none_or(|tex| tex.textureSampleType != TextureSampleType::Depth) {
+                return false;
+            }
+            paired = true;
+        }
+    }
+    paired
+}
+
+pub fn depthOnlySamplerBindings(
+    bm: &BindingMap,
+    vertexPairs: Option<&[TextureSamplerPair]>,
+    fragmentPairs: Option<&[TextureSamplerPair]>,
+    groupIndex: u32,
+) -> Vec<u32> {
+    let mut bindings = Vec::new();
+    for i in 0..bm.size() {
+        let e = bm.at(i);
+        if u32::from(e.group) == groupIndex
+            && e.kind == ResourceKind::Sampler
+            && samplerPairsDepthOnly(
+                bm,
+                [vertexPairs, fragmentPairs],
+                groupIndex,
+                u32::from(e.binding),
+            )
+        {
+            bindings.push(u32::from(e.binding));
+        }
+    }
+    bindings
+}
+
+pub fn unsampledFloatTextureBindings(
+    bm: &BindingMap,
+    vertexPairs: Option<&[TextureSamplerPair]>,
+    fragmentPairs: Option<&[TextureSamplerPair]>,
+    groupIndex: u32,
+) -> Vec<u32> {
+    let mut bindings = Vec::new();
+    if vertexPairs.is_none() && fragmentPairs.is_none() {
+        return bindings;
+    }
+    let sampled = |binding| {
+        [vertexPairs, fragmentPairs]
+            .into_iter()
+            .flatten()
+            .any(|pairs| {
+                pairs.iter().any(|p| {
+                    u32::from(p.textureGroup) == groupIndex
+                        && u32::from(p.textureBinding) == binding
+                })
+            })
+    };
+    for i in 0..bm.size() {
+        let e = bm.at(i);
+        if u32::from(e.group) == groupIndex
+            && e.kind == ResourceKind::SampledTexture
+            && e.textureSampleType == TextureSampleType::Float
+            && !sampled(u32::from(e.binding))
+        {
+            bindings.push(u32::from(e.binding));
+        }
+    }
+    bindings
+}
+
+pub fn filteringSamplerConflicts(
+    bm: &BindingMap,
+    vertexPairs: Option<&[TextureSamplerPair]>,
+    fragmentPairs: Option<&[TextureSamplerPair]>,
+) -> Vec<TextureSamplerPair> {
+    let mut conflicts = Vec::new();
+    let pairSets = [vertexPairs, fragmentPairs];
+    for pairs in pairSets.into_iter().flatten() {
+        for p in pairs {
+            let sampler = bm.lookupEntry(u32::from(p.samplerGroup), u32::from(p.samplerBinding));
+            let tex = bm.lookupEntry(u32::from(p.textureGroup), u32::from(p.textureBinding));
+            let (Some(sampler), Some(tex)) = (sampler, tex) else {
+                continue;
+            };
+            if sampler.kind != ResourceKind::Sampler
+                || (tex.textureSampleType != TextureSampleType::Depth
+                    && tex.textureSampleType != TextureSampleType::UnfilterableFloat)
+                || samplerPairsDepthOnly(
+                    bm,
+                    pairSets,
+                    u32::from(p.samplerGroup),
+                    u32::from(p.samplerBinding),
+                )
+            {
+                continue;
+            }
+            if !conflicts.contains(p) {
+                conflicts.push(*p);
+            }
+        }
+    }
+    conflicts
+}
 
 // BindingMap serialization (toBlob/fromBlob), sort/finalize, and lookup.
 // All construction at runtime goes through `fromBlob` against an RSTB

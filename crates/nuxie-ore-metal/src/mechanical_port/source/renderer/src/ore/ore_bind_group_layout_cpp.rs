@@ -15,6 +15,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 use super::*;
+use crate::binding_map::{depthOnlySamplerBindings, unsampledFloatTextureBindings};
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::AnyResourceHandle;
 use crate::{context::ContextApi, shader_module::ShaderModule};
 
@@ -211,7 +212,7 @@ mod shader_layout_tests {
         ubos[1].size = 160;
         assert!(!check(&sized, &ubos, &mut error));
         assert!(error.contains("160"));
-        ubos[1].offset = 1000;
+        ubos[1].offset = 1024;
         ubos[1].size = 192;
         assert!(!check(&sized, &ubos, &mut error));
         assert!(error.contains("exceeds"));
@@ -469,61 +470,11 @@ pub fn populateBindGroupLayoutEntries(
     n as u32
 }
 
-fn samplerPairsDepthOnly(
-    bm: &BindingMap,
-    vertexPairSource: Option<&ShaderModule>,
-    fragmentPairSource: Option<&ShaderModule>,
-    groupIndex: u32,
-    binding: u32,
-) -> bool {
-    let fragment = fragmentPairSource
-        .filter(|fragment| !vertexPairSource.is_some_and(|vertex| std::ptr::eq(vertex, *fragment)));
-    let mut paired = false;
-    for module in [vertexPairSource, fragment].into_iter().flatten() {
-        for p in &module.m_textureSamplerPairs {
-            if u32::from(p.samplerGroup) != groupIndex || u32::from(p.samplerBinding) != binding {
-                continue;
-            }
-            let tex = bm.lookupEntry(u32::from(p.textureGroup), u32::from(p.textureBinding));
-            if !tex.is_some_and(|tex| tex.textureSampleType == TextureSampleType::Depth) {
-                return false;
-            }
-            paired = true;
-        }
-    }
-    paired
-}
-
-fn collectDepthOnlySamplers(
-    bm: &BindingMap,
-    vertexPairSource: Option<&ShaderModule>,
-    fragmentPairSource: Option<&ShaderModule>,
-    groupIndex: u32,
-) -> Vec<u32> {
-    let mut bindings = Vec::new();
-    for i in 0..bm.size() {
-        let e = bm.at(i);
-        if u32::from(e.group) == groupIndex
-            && e.kind == ResourceKind::Sampler
-            && samplerPairsDepthOnly(
-                bm,
-                vertexPairSource,
-                fragmentPairSource,
-                groupIndex,
-                u32::from(e.binding),
-            )
-        {
-            bindings.push(u32::from(e.binding));
-        }
-    }
-    bindings
-}
-
 const kNonFilteringLayoutIdSalt: u64 = 0x9e3779b97f4a7c15;
-fn saltLayoutId(mut layoutId: u64, nonFiltering: &[u32]) -> u64 {
-    for &binding in nonFiltering {
-        layoutId = (layoutId ^ kNonFilteringLayoutIdSalt.wrapping_add(u64::from(binding)))
-            .wrapping_mul(0x100000001b3);
+const kUnfilterableLayoutIdSalt: u64 = 0xc2b2ae3d27d4eb4f;
+fn saltLayoutId(mut layoutId: u64, bindings: &[u32], salt: u64) -> u64 {
+    for &binding in bindings {
+        layoutId = (layoutId ^ salt.wrapping_add(u64::from(binding))).wrapping_mul(0x100000001b3);
     }
     layoutId
 }
@@ -538,18 +489,19 @@ pub fn makeBindGroupLayoutFromBindingMap(
     vertexPairSource: Option<&ShaderModule>,
     fragmentPairSource: Option<&ShaderModule>,
 ) -> Option<AnyResourceHandle> {
-    let nonFiltering = if vertexPairSource.is_some() || fragmentPairSource.is_some() {
-        collectDepthOnlySamplers(bindingMap, vertexPairSource, fragmentPairSource, groupIndex)
-    } else {
-        Vec::new()
-    };
+    let vertexPairs = vertexPairSource.map(|module| module.m_textureSamplerPairs.as_slice());
+    let fragmentPairs = fragmentPairSource.map(|module| module.m_textureSamplerPairs.as_slice());
+    let nonFiltering = depthOnlySamplerBindings(bindingMap, vertexPairs, fragmentPairs, groupIndex);
+    let unfilterable =
+        unsampledFloatTextureBindings(bindingMap, vertexPairs, fragmentPairs, groupIndex);
     let mut layoutId = if dynamicUBOBindings.is_empty() {
         bindingMap.layoutIdForGroup(groupIndex)
     } else {
         BindingMap::kNoLayoutId
     };
-    if layoutId != BindingMap::kNoLayoutId && !nonFiltering.is_empty() {
-        layoutId = saltLayoutId(layoutId, &nonFiltering);
+    if layoutId != BindingMap::kNoLayoutId {
+        layoutId = saltLayoutId(layoutId, &nonFiltering, kNonFilteringLayoutIdSalt);
+        layoutId = saltLayoutId(layoutId, &unfilterable, kUnfilterableLayoutIdSalt);
     }
     if layoutId != BindingMap::kNoLayoutId {
         if let Some(hit) = ctx.findInternedBindGroupLayout(layoutId) {
@@ -567,10 +519,10 @@ pub fn makeBindGroupLayoutFromBindingMap(
     } else {
         entries.as_mut_slice()
     };
-    if !nonFiltering.is_empty() {
-        for e in entries.iter_mut().take(n as usize) {
-            e.samplerNonFiltering =
-                e.kind == BindingKind::sampler && nonFiltering.contains(&e.binding);
+    for e in entries.iter_mut().take(n as usize) {
+        e.samplerNonFiltering = e.kind == BindingKind::sampler && nonFiltering.contains(&e.binding);
+        if e.kind == BindingKind::sampledTexture && unfilterable.contains(&e.binding) {
+            e.textureSampleType = SampleType::floatUnfilterable;
         }
     }
     let layout = ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
@@ -991,6 +943,125 @@ pub fn validateStagesAgree(
     true
 }
 
+fn validateStageLimitBases(
+    layouts: Option<&[Option<&BindGroupLayout>]>,
+    layoutCount: u32,
+    mut outError: Option<&mut String>,
+) -> bool {
+    let limits = [
+        ("uniform buffers", 12),
+        ("storage buffers", 8),
+        ("sampled textures", 16),
+        ("storage textures", 4),
+        ("samplers", 16),
+    ];
+    let mut fail = |message| {
+        if let Some(error) = outError.as_mut() {
+            **error = message;
+        }
+        false
+    };
+    let entries = || {
+        layouts
+            .into_iter()
+            .flat_map(|layouts| layouts.iter().take(layoutCount as usize))
+            .filter_map(|layout| *layout)
+            .flat_map(|layout| layout.entries())
+    };
+    let dynamicUniformBuffers = entries().filter(|e| e.hasDynamicOffset).count();
+    if dynamicUniformBuffers > 8 {
+        return fail(format!(
+            "the layouts declare {dynamicUniformBuffers} dynamic uniform buffers, and WebGPU allows 8 per pipeline"
+        ));
+    }
+    for stage in [StageVisibility::kVertex, StageVisibility::kFragment] {
+        let mut counts = [0u32; 5];
+        for e in entries() {
+            if e.visibility.mask & stage == 0 {
+                continue;
+            }
+            let index = match e.kind {
+                BindingKind::uniformBuffer => 0,
+                BindingKind::storageBufferRO | BindingKind::storageBufferRW => 1,
+                BindingKind::sampledTexture => 2,
+                BindingKind::storageTexture => 3,
+                BindingKind::sampler | BindingKind::comparisonSampler => 4,
+            };
+            counts[index] += 1;
+        }
+        for (i, (what, max)) in limits.iter().enumerate() {
+            if counts[i] > *max {
+                let stage = if stage == StageVisibility::kVertex {
+                    "vertex"
+                } else {
+                    "fragment"
+                };
+                return fail(format!(
+                    "the layouts give the {stage} stage {} {what}, and WebGPU allows {max} per stage",
+                    counts[i]
+                ));
+            }
+        }
+    }
+    true
+}
+
+pub fn validateStageLimits(
+    layouts: Option<&[Option<&AnyResourceHandle>]>,
+    layoutCount: u32,
+    outError: Option<&mut String>,
+) -> bool {
+    let bases = layouts.map(|layouts| {
+        layouts
+            .iter()
+            .map(|layout| layout.and_then(AnyResourceHandle::bindGroupLayoutBase))
+            .collect::<Vec<_>>()
+    });
+    validateStageLimitBases(bases.as_deref(), layoutCount, outError)
+}
+
+fn validateUnfilterableSampling(
+    vertex: Option<&ShaderModule>,
+    fragment: Option<&ShaderModule>,
+    layouts: Option<&[Option<&BindGroupLayout>]>,
+    layoutCount: u32,
+    mut outError: Option<&mut String>,
+) -> bool {
+    let entryFor = |group: u8, binding: u8| {
+        if u32::from(group) >= layoutCount {
+            return None;
+        }
+        layouts
+            .and_then(|layouts| layouts.get(usize::from(group)))
+            .and_then(|layout| *layout)
+            .and_then(|layout| layout.findEntry(u32::from(binding)))
+    };
+    for module in [vertex, fragment].into_iter().flatten() {
+        for p in &module.m_textureSamplerPairs {
+            let (Some(tex), Some(sampler)) = (
+                entryFor(p.textureGroup, p.textureBinding),
+                entryFor(p.samplerGroup, p.samplerBinding),
+            ) else {
+                continue;
+            };
+            if sampler.kind != BindingKind::sampler
+                || sampler.samplerNonFiltering
+                || tex.textureSampleType != SampleType::floatUnfilterable
+            {
+                continue;
+            }
+            if let Some(error) = outError.as_mut() {
+                **error = format!(
+                    "@group({}) @binding({}): the layout declares this texture unfilterable, but the shader samples it with filtering sampler @binding({}), which WebGPU refuses; derive the layout from this shader",
+                    p.textureGroup, p.textureBinding, p.samplerBinding
+                );
+            }
+            return false;
+        }
+    }
+    true
+}
+
 fn validatePipelineDescWithBases(
     desc: &PipelineDesc<'_>,
     mergedMap: &BindingMap,
@@ -1016,11 +1087,20 @@ fn validatePipelineDescWithBases(
         layouts,
         desc.bindGroupLayoutCount,
         outError.as_deref_mut(),
-    ) && validateColorRequiresFragment(
-        desc.colorCount,
-        desc.fragmentModule.is_some(),
-        outError.as_deref_mut(),
-    ) && validateSplitStageSlots(stages_compiled_apart, mergedMap, scope, outError)
+    ) && validateStageLimitBases(layouts, desc.bindGroupLayoutCount, outError.as_deref_mut())
+        && validateUnfilterableSampling(
+            vertex,
+            fragment,
+            layouts,
+            desc.bindGroupLayoutCount,
+            outError.as_deref_mut(),
+        )
+        && validateColorRequiresFragment(
+            desc.colorCount,
+            desc.fragmentModule.is_some(),
+            outError.as_deref_mut(),
+        )
+        && validateSplitStageSlots(stages_compiled_apart, mergedMap, scope, outError)
 }
 
 pub fn validatePipelineDesc(
@@ -1048,8 +1128,62 @@ pub fn validatePipelineDesc(
     )
 }
 
-/// Validate UBO ranges before a backend touches native objects. Null layouts
-/// and missing bindings/buffers remain the backend's own errors to name.
+fn bindingNoun(kind: BindingKind) -> &'static str {
+    match kind {
+        BindingKind::uniformBuffer => "uniform buffer",
+        BindingKind::storageBufferRO | BindingKind::storageBufferRW => "storage buffer",
+        BindingKind::sampledTexture => "texture",
+        BindingKind::storageTexture => "storage texture",
+        BindingKind::sampler => "sampler",
+        BindingKind::comparisonSampler => "comparison sampler",
+    }
+}
+
+fn sampleTypeName(sample: SampleType) -> &'static str {
+    match sample {
+        SampleType::floatFilterable => "float",
+        SampleType::floatUnfilterable => "unfilterable float",
+        SampleType::depth => "depth",
+        SampleType::sint => "sint",
+        SampleType::uint => "uint",
+    }
+}
+
+fn viewDimensionName(dimension: TextureViewDimension) -> &'static str {
+    match dimension {
+        TextureViewDimension::texture2D => "2d",
+        TextureViewDimension::cube => "cube",
+        TextureViewDimension::texture3D => "3d",
+        TextureViewDimension::array2D => "2d array",
+        TextureViewDimension::cubeArray => "cube array",
+    }
+}
+
+fn viewSupportsSampleType(
+    format: TextureFormat,
+    aspect: TextureAspect,
+    sample: SampleType,
+) -> bool {
+    match format {
+        TextureFormat::depth24plusStencil8 | TextureFormat::depth32floatStencil8 => {
+            if aspect == TextureAspect::stencilOnly {
+                sample == SampleType::uint
+            } else {
+                sample == SampleType::depth || sample == SampleType::floatUnfilterable
+            }
+        }
+        TextureFormat::depth16unorm | TextureFormat::depth32float => {
+            sample == SampleType::depth || sample == SampleType::floatUnfilterable
+        }
+        TextureFormat::rgba32float | TextureFormat::rg32float | TextureFormat::r32float => {
+            sample == SampleType::floatUnfilterable
+        }
+        _ => sample == SampleType::floatFilterable || sample == SampleType::floatUnfilterable,
+    }
+}
+
+/// Every backend validates before touching native objects, matching Dawn's
+/// resource and layout requirements.
 pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut String>) -> bool {
     // Rust's pointer/count adaptation carries a bounded slice. Reject an
     // invalid count before recording dynamic ranges or touching native objects.
@@ -1063,33 +1197,99 @@ pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut
         }
         return false;
     }
+    for (name, count, length) in [
+        ("textureCount", desc.textureCount, desc.textures.len()),
+        ("samplerCount", desc.samplerCount, desc.samplers.len()),
+    ] {
+        if count as usize > length {
+            if let Some(error) = outError.as_mut() {
+                **error = format!("{name} {count} exceeds the supplied entry count {length}");
+            }
+            return false;
+        }
+    }
     let Some(layout) = desc.layout.and_then(AnyResourceHandle::bindGroupLayoutBase) else {
         return true;
     };
-    for ubo in desc.ubos.iter().take(desc.uboCount as usize) {
-        let Some(entry) = layout.findEntry(ubo.slot) else {
-            continue;
-        };
-        if entry.kind != BindingKind::uniformBuffer {
-            continue;
+    let group = layout.groupIndex();
+    let mut fail = |message| {
+        if let Some(error) = outError.as_mut() {
+            **error = message;
         }
+        false
+    };
+    for e in layout.entries() {
+        let n = match e.kind {
+            BindingKind::uniformBuffer
+            | BindingKind::storageBufferRO
+            | BindingKind::storageBufferRW => desc
+                .ubos
+                .iter()
+                .take(desc.uboCount as usize)
+                .filter(|entry| entry.slot == e.binding)
+                .count(),
+            BindingKind::sampledTexture | BindingKind::storageTexture => desc
+                .textures
+                .iter()
+                .take(desc.textureCount as usize)
+                .filter(|entry| entry.slot == e.binding)
+                .count(),
+            _ => desc
+                .samplers
+                .iter()
+                .take(desc.samplerCount as usize)
+                .filter(|entry| entry.slot == e.binding)
+                .count(),
+        };
+        if n != 1 {
+            let noun = bindingNoun(e.kind);
+            let binding = e.binding;
+            return fail(if n == 0 {
+                format!(
+                    "@group({group}) @binding({binding}): the bind group leaves this {noun} empty, and WebGPU requires every entry of the layout"
+                )
+            } else {
+                format!(
+                    "@group({group}) @binding({binding}): the bind group binds this {noun} more than once"
+                )
+            });
+        }
+    }
+    for ubo in desc.ubos.iter().take(desc.uboCount as usize) {
+        let binding = ubo.slot;
+        let Some(entry) = layout
+            .findEntry(binding)
+            .filter(|e| e.kind == BindingKind::uniformBuffer)
+        else {
+            return fail(format!(
+                "@group({group}) @binding({binding}): the layout has no uniform buffer here"
+            ));
+        };
         let Some(bufferSize) = ubo.buffer.and_then(AnyResourceHandle::size).map(u64::from) else {
             continue;
         };
+        if ubo.buffer.and_then(AnyResourceHandle::usage) != Some(BufferUsage::uniform) {
+            return fail(format!(
+                "@group({group}) @binding({binding}): binds a buffer made without uniform usage"
+            ));
+        }
+        if ubo.offset % 256 != 0 {
+            return fail(format!(
+                "@group({group}) @binding({binding}): offset {} is not a multiple of 256, which WebGPU requires of uniform buffers",
+                ubo.offset
+            ));
+        }
         if u64::from(ubo.offset) > bufferSize
             || u64::from(ubo.offset) + u64::from(ubo.size) > bufferSize
         {
-            if let Some(error) = outError.as_mut() {
-                **error = format!(
-                    "@group({}) @binding({}): offset {} + size {} exceeds the {} byte buffer",
-                    layout.groupIndex(),
-                    ubo.slot,
-                    ubo.offset,
-                    ubo.size,
-                    bufferSize
-                );
-            }
-            return false;
+            return fail(format!(
+                "@group({}) @binding({}): offset {} + size {} exceeds the {} byte buffer",
+                layout.groupIndex(),
+                ubo.slot,
+                ubo.offset,
+                ubo.size,
+                bufferSize
+            ));
         }
         let bound = if ubo.size != 0 {
             u64::from(ubo.size)
@@ -1097,16 +1297,105 @@ pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut
             bufferSize - u64::from(ubo.offset)
         };
         if bound < u64::from(entry.minBindingSize) {
-            if let Some(error) = outError.as_mut() {
-                **error = format!(
-                    "@group({}) @binding({}): binds {} bytes but the shader's uniform block needs {}",
-                    layout.groupIndex(),
-                    ubo.slot,
-                    bound,
-                    entry.minBindingSize
-                );
-            }
-            return false;
+            return fail(format!(
+                "@group({}) @binding({}): binds {} bytes but the shader's uniform block needs {}",
+                layout.groupIndex(),
+                ubo.slot,
+                bound,
+                entry.minBindingSize
+            ));
+        }
+    }
+    for tex in desc.textures.iter().take(desc.textureCount as usize) {
+        let binding = tex.slot;
+        let Some(entry) = layout.findEntry(binding).filter(|e| {
+            matches!(
+                e.kind,
+                BindingKind::sampledTexture | BindingKind::storageTexture
+            )
+        }) else {
+            return fail(format!(
+                "@group({group}) @binding({binding}): the layout has no texture here"
+            ));
+        };
+        if entry.kind != BindingKind::sampledTexture {
+            continue;
+        }
+        let Some(view) = tex.view.and_then(AnyResourceHandle::textureViewBase) else {
+            continue;
+        };
+        let Some(texture) = view.textureOption() else {
+            continue;
+        };
+        if view.dimension() != entry.textureViewDim {
+            return fail(format!(
+                "@group({group}) @binding({binding}): binds a {} view where the shader declares a {} texture",
+                viewDimensionName(view.dimension()),
+                viewDimensionName(entry.textureViewDim)
+            ));
+        }
+        if (texture.sampleCount().expect("Texture sample count") > 1) != entry.textureMultisampled {
+            return fail(if entry.textureMultisampled {
+                format!(
+                    "@group({group}) @binding({binding}): the shader declares a multisampled texture but the view has 1 sample"
+                )
+            } else {
+                format!(
+                    "@group({group}) @binding({binding}): binds a multisampled view where the shader declares a single sampled texture"
+                )
+            });
+        }
+        let format = texture.format().expect("Texture format");
+        if matches!(
+            format,
+            TextureFormat::depth24plusStencil8 | TextureFormat::depth32floatStencil8
+        ) && view.aspect() == TextureAspect::all
+        {
+            return fail(format!(
+                "@group({group}) @binding({binding}): the view selects both depth and stencil, and WebGPU binds one aspect; make it depth only"
+            ));
+        }
+        if !viewSupportsSampleType(format, view.aspect(), entry.textureSampleType) {
+            return fail(format!(
+                "@group({group}) @binding({binding}): WebGPU cannot read this view's format as a {} texture",
+                sampleTypeName(entry.textureSampleType)
+            ));
+        }
+    }
+    for samp in desc.samplers.iter().take(desc.samplerCount as usize) {
+        let binding = samp.slot;
+        let Some(entry) = layout.findEntry(binding).filter(|e| {
+            matches!(
+                e.kind,
+                BindingKind::sampler | BindingKind::comparisonSampler
+            )
+        }) else {
+            return fail(format!(
+                "@group({group}) @binding({binding}): the layout has no sampler here"
+            ));
+        };
+        let Some(sampler) = samp.sampler.and_then(AnyResourceHandle::samplerBase) else {
+            continue;
+        };
+        if !sampler.described() {
+            continue;
+        }
+        let wantsComparison = entry.kind == BindingKind::comparisonSampler;
+        if sampler.comparison() != wantsComparison {
+            return fail(if wantsComparison {
+                format!(
+                    "@group({group}) @binding({binding}): the shader declares a sampler_comparison but the sampler has no compare function"
+                )
+            } else {
+                format!(
+                    "@group({group}) @binding({binding}): binds a comparison sampler where the shader declares a plain sampler"
+                )
+            });
+        }
+        if entry.samplerNonFiltering && sampler.filtering() {
+            return fail(format!(
+                "@group({group}) @binding({binding}): this sampler only reads depth textures, so WebGPU needs it non-filtering; give it nearest filters"
+            ));
         }
     }
     true

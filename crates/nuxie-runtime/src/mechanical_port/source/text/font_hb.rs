@@ -296,12 +296,16 @@ fn shaping_features(
     features
 }
 
+/// Host outline recovery for an otherwise ordinary decoded font.
+pub type HostGlyphOutline = Arc<dyn Fn(GlyphId, &[Coord]) -> RawPath + Send + Sync>;
+
 /// The HBFont owner retains Rive's run/fallback/color semantics. Only its
 /// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
 /// and unicode-bidi supplies paragraph levels. No C font or bidi pointer lives
 /// in this owner, and no legacy packed text implementation is consulted.
 pub struct HbFont {
     base: FontBase,
+    host_outline: Option<HostGlyphOutline>,
     bytes: FontBytes,
     face_index: u32,
     // The face's shaping caches and shape plans, shared by every variant
@@ -559,6 +563,7 @@ impl HbFont {
         let features = shaping_features(&feature_values, face.suppress_legacy_kern);
         Self {
             base: FontBase::new(line_metrics),
+            host_outline: None,
             bytes,
             face_index,
             face,
@@ -568,6 +573,19 @@ impl HbFont {
             axis_values,
             color_layer_cache: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Host equivalent of CoreTextHBFont::getPath's empty-HB recovery.
+    /// Ordinary byte/file fonts never install this provider.
+    pub fn with_host_outline(&self, outline: HostGlyphOutline) -> FontRef {
+        let mut font = Self::with_stored_options(
+            self.bytes.clone(),
+            self.face_index,
+            self.axis_values.clone(),
+            self.feature_values.clone(),
+        );
+        font.host_outline = Some(outline);
+        Arc::new(font)
     }
 
     pub fn shape_fallback_run(
@@ -697,18 +715,31 @@ impl Font for HbFont {
         for feature in features {
             values.insert(feature.tag, feature.value);
         }
-        Arc::new(Self::with_face_options(
+        let mut font = Self::with_face_options(
             self.bytes.clone(),
             self.face_index,
             Some(Arc::clone(&self.face)),
             axes,
             values,
-        ))
+        );
+        font.host_outline = self.host_outline.clone();
+        Arc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
         let font = self.outline_font();
         let location = self.location(&font);
-        glyph_path(&font, LocationRef::from(&location), glyph)
+        let path = glyph_path(&font, LocationRef::from(&location), glyph);
+        if path.empty() {
+            if let Some(outline) = &self.host_outline {
+                let coords: Vec<_> = self
+                    .axis_values
+                    .iter()
+                    .map(|(&axis, &value)| Coord { axis, value })
+                    .collect();
+                return outline(glyph, &coords);
+            }
+        }
+        path
     }
     fn has_color_glyphs(&self) -> bool {
         self.face.has_color_layers || self.face.has_color_paint || self.face.has_png

@@ -1,13 +1,15 @@
 //! Direct owner for pinned `src/lua/renderer/lua_image.cpp`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use luaur_rt::{AnyUserData, Error, Lua, Result, UserData, UserDataFields, UserDataMethods};
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap, RenderCanvasHandle, RenderImage};
-use nuxie_runtime::{RuntimeImageAssetOwners, ScriptImage, ScriptImageAssets};
+use nuxie_runtime::{
+    RuntimeImageAssetOwners, ScriptImage, ScriptImageAssets, source::core::CoreHandle,
+};
 
 use super::logging_scripting_context::LoggingScriptingContext;
 
@@ -34,26 +36,30 @@ impl ScriptedImageAssetOwners {
     }
 }
 
-/// One Lua Image wrapper, whether sourced from a File ImageAsset identity or
-/// an already-created render-factory image.
+/// One Lua Image wrapper, whether sourced from a File ImageAsset identity,
+/// an already-created render-factory image, or a video's current frame.
 ///
 pub(crate) struct ScriptedImage {
-    image: Rc<dyn RenderImage>,
+    source: ImageSource,
     // Set when this image is a canvas's backing, so Image:view() imports
     // through the backend's canvas sampling wrap rather than the raw texture.
     source_canvas: Option<RenderCanvasHandle>,
     cached_gpu_view: RefCell<Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle>>,
+    // The frame the cached view was made from, for a video's picture.
+    cached_frame: Cell<Option<usize>>,
+}
+
+enum ImageSource {
+    Fixed(Rc<dyn RenderImage>),
+    /// Always the frame the video shows now, or its poster.
+    Video(CoreHandle),
 }
 
 impl ScriptedImage {
     pub(super) fn from_asset(lua: &Lua, identity: ScriptImage) -> Option<Self> {
         let asset_owners = ScriptedImageAssetOwners::for_lua(lua)?;
         let image = asset_owners.get(identity.asset_global_id())?;
-        Some(Self {
-            image,
-            source_canvas: None,
-            cached_gpu_view: RefCell::new(None),
-        })
+        Some(Self::from_render_image_rc(image))
     }
 
     /// Construction seam used by factory-backed image producers. It does not
@@ -64,23 +70,43 @@ impl ScriptedImage {
 
     pub(crate) fn from_render_image_rc(image: Rc<dyn RenderImage>) -> Self {
         Self {
-            image,
+            source: ImageSource::Fixed(image),
             source_canvas: None,
             cached_gpu_view: RefCell::new(None),
+            cached_frame: Cell::new(None),
         }
     }
 
     pub(crate) fn from_render_canvas(canvas: RenderCanvasHandle) -> Self {
         let image = canvas.borrow().render_image();
         Self {
-            image,
             source_canvas: Some(canvas),
+            ..Self::from_render_image_rc(image)
+        }
+    }
+
+    /// A picture that always shows the video's current frame.
+    pub(crate) fn from_video(video: CoreHandle) -> Self {
+        Self {
+            source: ImageSource::Video(video),
+            source_canvas: None,
             cached_gpu_view: RefCell::new(None),
+            cached_frame: Cell::new(None),
+        }
+    }
+
+    fn current(&self) -> Option<Rc<dyn RenderImage>> {
+        match &self.source {
+            ImageSource::Fixed(image) => Some(Rc::clone(image)),
+            ImageSource::Video(video) => video
+                .with_downcast::<nuxie_runtime::video::Video, _>(|video| video.render_image())
+                .flatten(),
         }
     }
 
     pub(super) fn render_image(&self) -> Result<Rc<dyn RenderImage>> {
-        Ok(Rc::clone(&self.image))
+        self.current()
+            .ok_or_else(|| Error::runtime("the video has no frame to show yet"))
     }
 
     pub(super) fn with_render_image<R>(
@@ -90,22 +116,58 @@ impl ScriptedImage {
         let image = self.render_image()?;
         Ok(callback(image.as_ref()))
     }
+
+    /// The frame on show, for a video's picture.
+    pub(crate) fn frame_identity(&self) -> Option<usize> {
+        match &self.source {
+            ImageSource::Fixed(_) => None,
+            ImageSource::Video(_) => self.current().map(|image| image.image_identity()),
+        }
+    }
+
+    /// A GPU view of the frame on show and that frame, made again when the
+    /// frame moves on. None for a picture that is not a video's.
+    pub(crate) fn video_texture_view(
+        &self,
+        lua: &Lua,
+    ) -> Result<Option<(crate::gpu_canvas::ore::TextureView, usize)>> {
+        if matches!(self.source, ImageSource::Fixed(_)) {
+            return Ok(None);
+        }
+        let image = self.render_image()?;
+        let frame = image.image_identity();
+        if self.cached_frame.get() != Some(frame) {
+            self.cached_gpu_view.replace(None);
+            self.cached_frame.set(Some(frame));
+        }
+        let view =
+            crate::gpu_canvas::ore::image_texture_view(lua, image, None, &self.cached_gpu_view)?;
+        Ok(Some((view, frame)))
+    }
 }
 
 impl UserData for ScriptedImage {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        // A video with no frame yet is a picture with no size.
         fields.add_field_method_get("width", |_, this| {
-            this.with_render_image(RenderImage::width)
+            Ok(this.current().map_or(0, |image| image.width()))
         });
         fields.add_field_method_get("height", |_, this| {
-            this.with_render_image(RenderImage::height)
+            Ok(this.current().map_or(0, |image| image.height()))
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         // Upstream `image_index` returns `riveImageViewImpl` as a function, so
         // scripts call `image:view()`.
-        methods.add_method("view", |lua, this, ()| {
+        methods.add_function("view", |lua, userdata: AnyUserData| {
+            let this = userdata.borrow::<Self>()?;
+            if let Some((mut view, frame)) = this.video_texture_view(lua)? {
+                // The view follows this picture, so a shader set up with it
+                // once keeps sampling the frame on show.
+                view.follows = Some((userdata.clone(), frame));
+                return lua.create_userdata(view);
+            }
             crate::gpu_canvas::ore::image_view(
                 lua,
                 this.render_image()?,
@@ -334,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn video_snapshot_uses_the_existing_gpu_image_view() {
+    fn a_video_picture_view_follows_the_frame_on_show() {
         use nuxie_runtime::video::Video;
         let vm = ScriptVm::new();
         let mut recorder =
@@ -371,17 +433,45 @@ mod tests {
             )
             .unwrap();
         let format: String = lua
-            .load("image = video:image(); return image:view().format")
+            .load("image = video:image(); view = image:view(); return view.format")
             .eval()
             .unwrap();
         assert_eq!(format, "rgba8unorm");
         let image = lua.globals().get::<AnyUserData>("image").unwrap();
-        let image = image.borrow::<ScriptedImage>().unwrap();
-        assert!(Rc::ptr_eq(&frame, &image.render_image().unwrap()));
-        let cached = image.cached_gpu_view.borrow().as_ref().unwrap().clone();
-        let view = cached.textureViewBase().unwrap();
-        assert_eq!(view.texture().width(), Some(7));
-        assert_eq!(view.texture().height(), Some(11));
+        let view = lua.globals().get::<AnyUserData>("view").unwrap();
+        {
+            let image = image.borrow::<ScriptedImage>().unwrap();
+            assert!(Rc::ptr_eq(&frame, &image.render_image().unwrap()));
+            let cached = image.cached_gpu_view.borrow().as_ref().unwrap().clone();
+            let texture = cached.textureViewBase().unwrap();
+            assert_eq!(texture.texture().width(), Some(7));
+            assert_eq!(texture.texture().height(), Some(11));
+        }
+        let retained = |view: &AnyUserData| {
+            view.borrow::<crate::gpu_canvas::ore::TextureView>()
+                .unwrap()
+                .retained_image
+                .clone()
+                .unwrap()
+        };
+        assert!(Rc::ptr_eq(&frame, &retained(&view)));
+        // Nothing moves while the frame stays.
+        assert!(!crate::gpu_canvas::ore::TextureView::follow(lua, &view).unwrap());
+        let next: Rc<dyn RenderImage> = Rc::new(TestImage::default());
+        let video = lua
+            .globals()
+            .get::<AnyUserData>("video")
+            .unwrap()
+            .borrow::<super::super::lua_video::ScriptVideo>()
+            .unwrap()
+            .handle()
+            .clone();
+        video
+            .with_downcast_mut::<Video, _>(|video| assert!(video.present(0, next.clone(), 0.5)))
+            .unwrap();
+        // The view the script holds moves to the new frame.
+        assert!(crate::gpu_canvas::ore::TextureView::follow(lua, &view).unwrap());
+        assert!(Rc::ptr_eq(&next, &retained(&view)));
     }
 
     #[test]

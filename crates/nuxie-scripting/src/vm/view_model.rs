@@ -2567,7 +2567,7 @@ impl UserData for ScriptedContext {
                 let name: String = names.raw_get(index)?;
                 let handle = source
                     .as_ref()
-                    .and_then(|source| source.video_named(&name))
+                    .and_then(|source| source.read_video_named(&name))
                     .ok_or_else(|| {
                         luaur_rt::Error::RuntimeError(format!("video not found: {name}"))
                     })?;
@@ -2585,7 +2585,7 @@ impl UserData for ScriptedContext {
                 .source
                 .borrow()
                 .as_ref()
-                .and_then(|source| source.video_named(&name));
+                .and_then(|source| source.read_video_named(&name));
             match handle {
                 Some(handle) => lua
                     .create_userdata(super::lua_video::ScriptVideo::new(

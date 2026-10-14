@@ -97,7 +97,7 @@ impl UserData for Pass {
         );
         methods.add_method_mut("setBindGroup",|lua,this,(group,data,offsets):(Value,Value,Value)| {
             if !this.validate()? { return Ok(()); }let group=u32::from_lua(group,lua)?;
-            let data=AnyUserData::from_lua(data,lua)?;let bg=data.borrow::<BindGroup>()?;let mut values=Vec::new();
+            let data=AnyUserData::from_lua(data,lua)?;BindGroup::follow(lua,&data)?;let bg=data.borrow::<BindGroup>()?;let mut values=Vec::new();
             if let Value::Table(offsets)=offsets {
                 if offsets.raw_len()>kMaxDynamicOffsets as usize {return Err(Error::runtime(format!("setBindGroup: dynamicOffsets count {} exceeds maximum of {kMaxDynamicOffsets}",offsets.raw_len())));}
                 for index in 0..offsets.raw_len() {let offset=number_value(lua,offsets.raw_get::<Value>(index+1)?,0.0)? as u32;values.push(offset);}

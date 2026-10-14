@@ -98,6 +98,14 @@
       },
       "initialValue": "0",
       "description": "Exclusive loop end in seconds; zero selects source duration."
+    },
+    "drawnByScript": {
+      "type": "bool",
+      "key": {
+        "int": 60021
+      },
+      "initialValue": "false",
+      "description": "True when only the scripts that read this video draw it: it paints nothing itself and is decoded while one of those scripts is on screen. Not settable while live."
     }
   }
 }

@@ -57,7 +57,7 @@ mod lua_path;
 mod lua_renderer;
 mod lua_renderer_library;
 mod lua_transition;
-mod lua_video;
+pub(crate) mod lua_video;
 mod resource_limits;
 mod view_model;
 

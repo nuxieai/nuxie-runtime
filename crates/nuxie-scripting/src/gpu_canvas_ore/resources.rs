@@ -30,11 +30,34 @@ pub(super) struct Texture {
     pub desc: TextureDesc<'static>,
 }
 #[derive(Clone)]
-pub(super) struct TextureView {
+pub(crate) struct TextureView {
     pub resource: AnyResourceHandle,
     pub retained_image: Option<Rc<dyn nuxie_render_api::RenderImage>>,
+    /// A view of a video's picture follows the video: the picture's userdata
+    /// and the frame this view was made from.
+    pub follows: Option<(AnyUserData, usize)>,
 }
 impl TextureView {
+    /// Move a view of a video's picture to the frame on show. True when it moved.
+    pub(crate) fn follow(lua: &Lua, view: &AnyUserData) -> Result<bool> {
+        let Some((image, frame)) = view.borrow::<TextureView>()?.follows.clone() else {
+            return Ok(false);
+        };
+        let image_ref = image.borrow::<crate::vm::lua_image::ScriptedImage>()?;
+        if image_ref.frame_identity() == Some(frame) {
+            return Ok(false);
+        }
+        let Some((fresh, frame)) = image_ref.video_texture_view(lua)? else {
+            return Ok(false);
+        };
+        drop(image_ref);
+        let mut current = view.borrow_mut::<TextureView>()?;
+        current.resource = fresh.resource;
+        current.retained_image = fresh.retained_image;
+        current.follows = Some((image, frame));
+        Ok(true)
+    }
+
     pub fn format(&self) -> TextureFormat {
         self.resource
             .textureViewBase()
@@ -132,6 +155,7 @@ impl UserData for Texture {
             lua.create_userdata(TextureView {
                 resource,
                 retained_image: None,
+                follows: None,
             })
         });
         methods.add_method("upload", |_, this, table: Table| {

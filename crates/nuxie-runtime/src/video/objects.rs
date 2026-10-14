@@ -63,6 +63,9 @@ pub struct Video {
     showing_poster: bool,
     pub(crate) sync_clock: Option<(Option<super::sync::MediaClock>, f64)>,
     pub(crate) sync_groups: Vec<std::rc::Weak<super::sync::RegisteredSynchronizationGroup>>,
+    /// Only the scripts that read this video draw it.
+    pub drawn_by_script: bool,
+    script_readers: Vec<CoreHandle>,
 }
 impl Default for Video {
     fn default() -> Self {
@@ -76,6 +79,8 @@ impl Default for Video {
             showing_poster: true,
             sync_clock: None,
             sync_groups: Vec::new(),
+            drawn_by_script: false,
+            script_readers: Vec::new(),
         }
     }
 }
@@ -85,11 +90,17 @@ impl Video {
         &self.image
     }
     pub(crate) fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
-        owner.with_downcast_mut::<Self, _>(|video| {
-            if video.showing_poster {
-                video.refresh_poster();
-            }
-        });
+        let drawn_by_script = owner
+            .with_downcast_mut::<Self, _>(|video| {
+                if video.showing_poster {
+                    video.refresh_poster();
+                }
+                video.drawn_by_script
+            })
+            .unwrap_or(false);
+        if drawn_by_script {
+            return;
+        }
         // Release the Video borrow before its mesh reads the parent's transform.
         Image::draw_occurrence(owner, renderer);
     }
@@ -162,6 +173,16 @@ impl Video {
             self.image.render_image()
         }
     }
+    /// The drawing scripts that have asked for this video. It is decoded while
+    /// one of them is on screen.
+    pub fn script_readers(&self) -> Vec<CoreHandle> {
+        self.script_readers.clone()
+    }
+    pub fn add_script_reader(&mut self, reader: CoreHandle) {
+        if !self.script_readers.contains(&reader) {
+            self.script_readers.push(reader);
+        }
+    }
     pub fn has_video_frame(&self) -> bool {
         !self.showing_poster
     }
@@ -205,6 +226,9 @@ impl Video {
         self.image.try_compose_world_transform_override()
     }
     fn draw(&mut self, renderer: &mut Renderer) {
+        if self.drawn_by_script {
+            return;
+        }
         if self.showing_poster {
             self.refresh_poster();
         }
@@ -391,6 +415,8 @@ impl CoreObject for Video {
             showing_poster: true,
             sync_clock: None,
             sync_groups: Vec::new(),
+            drawn_by_script: self.drawn_by_script,
+            script_readers: Vec::new(),
         }))
     }
     fn deserialize(&mut self, key: u16, reader: &mut BinaryReader<'_>) -> bool {
@@ -408,6 +434,10 @@ impl CoreObject for Video {
             60012 => settings.reentry = reader.read_var_uint_as::<u32>(),
             60014 => settings.loop_start = f64::from(reader.read_float32()),
             60015 => settings.loop_end = f64::from(reader.read_float32()),
+            60021 => {
+                self.drawn_by_script = reader.read_var_uint_as::<u32>() != 0;
+                return true;
+            }
             60013 => {
                 let text = CoreStringType::deserialize(reader);
                 if text.is_empty() {
@@ -488,11 +518,12 @@ impl CoreCapabilities for Video {
         true
     }
     fn drawable_will_draw(&self) -> bool {
-        (self.image.render_image().is_some()
-            || self.poster.as_ref().is_some_and(|p| {
-                p.with_downcast::<ImageAsset, _>(|a| a.render_image().is_some())
-                    .unwrap_or(false)
-            }))
+        !self.drawn_by_script
+            && (self.image.render_image().is_some()
+                || self.poster.as_ref().is_some_and(|p| {
+                    p.with_downcast::<ImageAsset, _>(|a| a.render_image().is_some())
+                        .unwrap_or(false)
+                }))
             && self.image.base.will_draw()
             && self.image.base.render_opacity() != 0.0
     }
@@ -512,6 +543,9 @@ impl CoreCapabilities for Video {
         info: &mut crate::source::hit_info::HitInfo,
         transform: &crate::source::math::mat2d::Mat2D,
     ) -> Option<CoreHandle> {
+        if self.drawn_by_script {
+            return None;
+        }
         self.image.hit_test(info, *transform).and_then(Core::handle)
     }
     fn as_node(&self) -> Option<&crate::source::node::Node> {

@@ -27,6 +27,10 @@ impl ScriptVideo {
             needs_update,
         }
     }
+    #[cfg(all(test, feature = "compiler"))]
+    pub(super) fn handle(&self) -> &CoreHandle {
+        &self.handle
+    }
     fn with<R>(&self, operation: impl FnOnce(&mut Video) -> R) -> Result<R, Error> {
         if !self.alive.get() {
             return Err(Error::RuntimeError(
@@ -43,6 +47,14 @@ impl ScriptVideo {
         self.needs_update.set(true);
         Ok(())
     }
+}
+/// Give a test script a `video` global for this occurrence.
+#[cfg(all(test, feature = "compiler"))]
+pub(crate) fn install_test_video(lua: &luaur_rt::Lua, video: CoreHandle) {
+    let video = ScriptVideo::new(video, Rc::new(Cell::new(true)), Rc::new(Cell::new(false)));
+    lua.globals()
+        .set("video", lua.create_userdata(video).unwrap())
+        .unwrap();
 }
 pub(super) struct ScriptVideoGroup {
     group: Rc<nuxie_runtime::video::sync::RegisteredSynchronizationGroup>,
@@ -192,14 +204,13 @@ impl UserData for ScriptVideo {
         methods.add_method("setLoopRange", |_, this, (start, end): (f64, f64)| {
             this.command(Command::LoopRange { start, end })
         });
+        // A picture that always shows the frame on show (or the poster), so a
+        // script draws it, or sets up a shader with it, once.
         methods.add_method("image", |lua, this, ()| {
-            this.with(|v| v.render_image())?
-                .map(|image| {
-                    lua.create_userdata(super::lua_image::ScriptedImage::from_render_image_rc(
-                        image,
-                    ))
-                })
-                .transpose()
+            this.with(|_| ())?;
+            lua.create_userdata(super::lua_image::ScriptedImage::from_video(
+                this.handle.clone(),
+            ))
         });
         methods.add_method("caption", |_, this, ()| this.with(|v| v.caption_text()));
         methods.add_method("position", |_, this, ()| {
@@ -257,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn video_images_share_frame_identity_and_keep_snapshots_alive() {
+    fn a_video_picture_always_shows_the_frame_on_show() {
         use super::super::lua_image::ScriptedImage;
         use nuxie_render_api::RenderImage;
         let arena = nuxie_runtime::source::core::CoreArena::default();
@@ -275,60 +286,48 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        lua.load("assert(video:image() == nil)").exec().unwrap();
-        let frame: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
-        let weak = Rc::downgrade(&frame);
+        // One picture, taken before the video has a frame.
+        let picture: luaur_rt::AnyUserData = lua
+            .load("picture = video:image(); assert(picture.width == 0); return picture")
+            .eval()
+            .unwrap();
+        let shown = |picture: &luaur_rt::AnyUserData| {
+            picture
+                .borrow::<ScriptedImage>()
+                .unwrap()
+                .render_image()
+                .ok()
+        };
+        assert!(shown(&picture).is_none());
+        let first: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
+        let first_weak = Rc::downgrade(&first);
         handle
             .with_downcast_mut::<Video, _>(|v| {
                 v.playback.opened(0, 10.0);
-                assert!(v.present(0, frame.clone(), 0.0));
+                assert!(v.present(0, first.clone(), 0.0));
             })
             .unwrap();
-        let snapshot: luaur_rt::AnyUserData = lua.load("return video:image()").eval().unwrap();
-        assert!(Rc::ptr_eq(
-            &frame,
-            &snapshot
-                .borrow::<ScriptedImage>()
-                .unwrap()
-                .render_image()
-                .unwrap()
-        ));
-        lua.load("local image = video:image(); assert(image.width == 7 and image.height == 11)")
+        assert!(Rc::ptr_eq(&first, &shown(&picture).unwrap()));
+        lua.load("assert(picture.width == 7 and picture.height == 11)")
             .exec()
             .unwrap();
+        let second: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
         handle
             .with_downcast_mut::<Video, _>(|v| {
-                let replacement: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
-                assert!(!v.present(99, replacement.clone(), 1.0));
-                assert!(Rc::ptr_eq(&frame, &v.render_image().unwrap()));
-                assert!(v.present(0, replacement.clone(), 1.0));
-                assert!(Rc::ptr_eq(&replacement, &v.render_image().unwrap()));
-                v.clear_frame();
-                assert!(v.render_image().is_none());
+                assert!(!v.present(99, second.clone(), 1.0));
+                assert!(v.present(0, second.clone(), 1.0));
             })
             .unwrap();
-        drop(frame);
-        assert!(
-            weak.upgrade().is_some(),
-            "snapshot must retain its frame after replacement/reclaim"
-        );
+        // The same picture moved on, and holds the old frame no longer.
+        assert!(Rc::ptr_eq(&second, &shown(&picture).unwrap()));
+        drop(first);
+        assert!(first_weak.upgrade().is_none());
+        handle
+            .with_downcast_mut::<Video, _>(|v| v.clear_frame())
+            .unwrap();
+        assert!(shown(&picture).is_none());
         alive.set(false);
         assert!(lua.load("video:image()").exec().is_err());
-        assert_eq!(
-            snapshot
-                .borrow::<ScriptedImage>()
-                .unwrap()
-                .render_image()
-                .unwrap()
-                .width(),
-            7
-        );
-        drop(snapshot);
-        lua.gc_collect().unwrap();
-        assert!(
-            weak.upgrade().is_none(),
-            "last snapshot must release the old frame"
-        );
     }
 
     #[test]

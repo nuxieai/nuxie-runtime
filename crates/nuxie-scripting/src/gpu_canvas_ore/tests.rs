@@ -88,8 +88,12 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
 }
 
 fn recording_vm() -> ScriptVm {
+    recording_vm_with(DeferredOreContext::fromReal(None))
+}
+
+fn recording_vm_with(recorder: DeferredOreContext) -> ScriptVm {
     let vm = ScriptVm::new();
-    let ore: OreContextHandle = Rc::new(RefCell::new(DeferredOreContext::fromReal(None)));
+    let ore: OreContextHandle = Rc::new(RefCell::new(recorder));
     let module = ore
         .borrow_mut()
         .makeShaderModule(&ShaderModuleDesc {
@@ -500,4 +504,132 @@ fn descriptor_metamethods_can_reenter_the_selected_ore_context() {
         )
         .exec()
         .unwrap();
+}
+
+// A shader set up once with a video's picture samples the frame on show.
+#[test]
+fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
+    use nuxie_ore_metal::ore_cmd::{
+        ore_command_buffer::OreCommandBuffer, ore_render_pass_recording::RenderPassRecording,
+    };
+    use nuxie_runtime::video::Video;
+    #[derive(Clone)]
+    struct Frame(Rc<()>);
+    impl nuxie_render_api::RenderImage for Frame {
+        fn retain_image(&self) -> Rc<dyn nuxie_render_api::RenderImage> {
+            Rc::new(self.clone())
+        }
+        fn image_identity(&self) -> usize {
+            Rc::as_ptr(&self.0) as usize
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn width(&self) -> u32 {
+            4
+        }
+        fn height(&self) -> u32 {
+            4
+        }
+    }
+    let mut recorder = DeferredOreContext::fromReal(None);
+    recorder.setCanvasRegistry(Some(Rc::new(RefCell::new(
+        nuxie_renderer::deferred::cmd::foreign_image_registry::ForeignImageRegistry::default(),
+    ))));
+    let vm = recording_vm_with(recorder);
+    let arena = nuxie_runtime::source::core::CoreArena::default();
+    let video = arena.insert(Video::default());
+    video
+        .with_downcast_mut::<Video, _>(|video| {
+            video.playback.opened(0, 1.0);
+            assert!(video.present(0, Rc::new(Frame(Rc::new(()))), 0.0));
+        })
+        .unwrap();
+    crate::vm::lua_video::install_test_video(vm.lua(), video.clone());
+    let ore = context(vm.lua()).unwrap();
+    // A fragment stage that samples one 2D texture at group 0, binding 0.
+    let map = [
+        3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 3, 2, 0, 255, 255, 0, 0, 255, 255, 2, 1, 0,
+    ];
+    let module = ore
+        .borrow_mut()
+        .makeShaderModule(&ShaderModuleDesc {
+            code: Some(b"fragment test module"),
+            codeSize: 20,
+            bindingMapBytes: Some(&map),
+            bindingMapSize: map.len() as u32,
+            ..ShaderModuleDesc::default()
+        })
+        .unwrap();
+    vm.lua()
+        .globals()
+        .set(
+            "fragment",
+            vm.lua()
+                .create_userdata(Shader {
+                    entries: vec![ShaderEntry {
+                        stage: 1,
+                        logical: "fragment".into(),
+                        physical: "fragment".into(),
+                        module,
+                    }],
+                })
+                .unwrap(),
+        )
+        .unwrap();
+    let stream = Rc::new(RefCell::new(OreCommandBuffer::default()));
+    let inner = RenderPassRecording::new(
+        Some(ore.borrow().contextBase()),
+        stream,
+        &RenderPassDesc {
+            colorCount: 0,
+            ..RenderPassDesc::default()
+        },
+    );
+    let rp = vm
+        .lua()
+        .create_userdata(pass::Pass {
+            pass: Some(Box::new(inner)),
+            deferred_bind_groups: None,
+            finished: false,
+            sample_count: 1,
+            pipeline_set: false,
+            draw_call_count: 0,
+            label: String::new(),
+        })
+        .unwrap();
+    vm.lua().globals().set("rp", rp).unwrap();
+    vm.lua()
+        .load(
+            r#"
+        layout = GPUBindGroupLayout.new { shader = shader, fragment = fragment }
+        bg = GPUBindGroup.new { layout = layout, textures = {{ slot = 0, view = video:image():view() }} }
+        pipeline = GPUPipeline.new { vertex = shader, fragment = fragment, vertexLayout = {} }
+        rp:setPipeline(pipeline)
+    "#,
+        )
+        .exec()
+        .unwrap();
+    let group = vm.lua().globals().get::<AnyUserData>("bg").unwrap();
+    let resource = || {
+        group
+            .borrow::<pipeline::BindGroup>()
+            .unwrap()
+            .resource
+            .clone()
+    };
+    let first = resource();
+    vm.lua().load("rp:setBindGroup(0, bg)").exec().unwrap();
+    assert!(first.ptr_eq(&resource()), "the same frame keeps the group");
+    video
+        .with_downcast_mut::<Video, _>(|video| {
+            assert!(video.present(0, Rc::new(Frame(Rc::new(()))), 0.5))
+        })
+        .unwrap();
+    vm.lua().load("rp:setBindGroup(0, bg)").exec().unwrap();
+    assert!(
+        !first.ptr_eq(&resource()),
+        "a new frame makes the group again"
+    );
+    vm.lua().load("rp:finish()").exec().unwrap();
 }

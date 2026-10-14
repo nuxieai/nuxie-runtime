@@ -11,7 +11,7 @@ Upstream has not reserved this band; a future overlap blocks adoption until
 resolved explicitly.
 
 - VideoAsset: type 60000; properties 60000–60002.
-- Video: type 60001; properties 60003–60015.
+- Video: type 60001; properties 60003–60015 and 60021.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.

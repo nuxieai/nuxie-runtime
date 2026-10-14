@@ -2268,6 +2268,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         60013 => Some(CoreRegistryFieldKind::StringOrBytes),
         60014 => Some(CoreRegistryFieldKind::Double),
         60015 => Some(CoreRegistryFieldKind::Double),
+        60021 => Some(CoreRegistryFieldKind::Bool),
         _ => None,
     }
 }
@@ -2956,6 +2957,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         60013 => Some(FieldKind::String),
         60014 => Some(FieldKind::Double),
         60015 => Some(FieldKind::Double),
+        60021 => Some(FieldKind::Bool),
         _ => None,
     }
 }
@@ -3631,6 +3633,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         60013 => Some(FieldKind::String),
         60014 => Some(FieldKind::Double),
         60015 => Some(FieldKind::Double),
+        60021 => Some(FieldKind::Bool),
         _ => None,
     }
 }
@@ -29570,6 +29573,43 @@ static DEF_361_PROPERTIES: &[Property] = &[
         passthrough: false,
         bitmask_passthrough: None,
     },
+    Property {
+        name: "drawnByScript",
+        key: Key {
+            int: 60021,
+            name: "drawnByScript",
+        },
+        alternates: &[],
+        declared_type: "bool",
+        runtime_type: FieldKind::Bool,
+        description: Some(
+            "True when only the scripts that read this video draw it: it paints nothing itself and is decoded while one of those scripts is on screen. Not settable while live.",
+        ),
+        initial_value: Some("false"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
 ];
 
 static MIXIN_0_PROPERTIES: &[Property] = &[
@@ -31942,6 +31982,7 @@ pub fn property_by_key_in_hierarchy(
         (60001, 60013) => Some(("Video", &DEF_361_PROPERTIES[10])),
         (60001, 60014) => Some(("Video", &DEF_361_PROPERTIES[11])),
         (60001, 60015) => Some(("Video", &DEF_361_PROPERTIES[12])),
+        (60001, 60021) => Some(("Video", &DEF_361_PROPERTIES[13])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),

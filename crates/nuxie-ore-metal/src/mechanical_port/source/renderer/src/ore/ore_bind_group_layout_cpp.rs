@@ -1491,6 +1491,11 @@ pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut
                 "@group({group}) @binding({binding}): the layout has no uniform buffer here"
             ));
         };
+        if ubo.buffer.is_none() {
+            return fail(format!(
+                "@group({group}) @binding({binding}): binds no buffer"
+            ));
+        }
         let Some(bufferSize) = ubo.buffer.and_then(AnyResourceHandle::size).map(u64::from) else {
             continue;
         };
@@ -1544,6 +1549,11 @@ pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut
                 "@group({group}) @binding({binding}): the layout has no texture here"
             ));
         };
+        if tex.view.is_none() {
+            return fail(format!(
+                "@group({group}) @binding({binding}): binds no texture view"
+            ));
+        }
         if entry.kind != BindingKind::sampledTexture {
             continue;
         }
@@ -1600,6 +1610,11 @@ pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut
                 "@group({group}) @binding({binding}): the layout has no sampler here"
             ));
         };
+        if samp.sampler.is_none() {
+            return fail(format!(
+                "@group({group}) @binding({binding}): binds no sampler"
+            ));
+        }
         let Some(sampler) = samp.sampler.and_then(AnyResourceHandle::samplerBase) else {
             continue;
         };

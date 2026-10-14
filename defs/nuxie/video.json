@@ -160,6 +160,14 @@
       "description": "Read only. Playback state ordinal: opening 0, ready 1, playing 2, paused 3, seeking 4, buffering 5, ended 6, failed 7, disposed 8.",
       "bindable": true,
       "animates": false
+    },
+    "drawnByScript": {
+      "type": "bool",
+      "key": {
+        "int": 60021
+      },
+      "initialValue": "false",
+      "description": "True when only the scripts that read this video draw it: it paints nothing itself and is decoded while one of those scripts is on screen. Not settable while live."
     }
   }
 }

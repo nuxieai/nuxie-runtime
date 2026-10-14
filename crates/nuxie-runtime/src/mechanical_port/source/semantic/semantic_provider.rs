@@ -127,7 +127,7 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
     source_ancestors_are_visible(component) && !semantic_is_fully_clipped(component)
 }
 
-fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
+pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     while let Some(component) = current {
@@ -554,6 +554,11 @@ fn node_root_polygon(component: &CoreHandle) -> Option<[Vec2D; 4]> {
         })?;
     }
     polygon_has_area(&polygon).then_some(polygon)
+}
+
+/// Whether this node has a box of its own on screen.
+pub(crate) fn node_has_area(component: &CoreHandle) -> bool {
+    node_root_polygon(component).is_some()
 }
 
 fn semantic_geometry(component: &CoreHandle) -> Vec<(CoreHandle, [Vec2D; 4])> {

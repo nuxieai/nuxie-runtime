@@ -1354,3 +1354,74 @@ fn preview_duration_tracks_only_current_source_metadata() {
     playback.opened(generation, 7.0);
     assert_eq!(playback.duration(), Some(7.0));
 }
+
+#[test]
+fn a_video_drawn_by_its_scripts_is_on_screen_where_they_are() {
+    use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+    use nuxie_runtime::video::visibility::is_visible_in;
+    let mut records = scene_records(false);
+    records.last_mut().unwrap().properties.extend([
+        property("Video", "y", FixtureValue::Double(80.0)),
+        property("Video", "drawnByScript", FixtureValue::Bool(true)),
+    ]);
+    // A box at x=128..192, y=84..116, and a script's node inside it with no
+    // box of its own.
+    records.push(record(
+        "Video",
+        vec![
+            property("Video", "parentId", FixtureValue::Uint(0)),
+            property("Video", "assetId", FixtureValue::Uint(0)),
+            property("Video", "x", FixtureValue::Double(160.0)),
+            property("Video", "y", FixtureValue::Double(100.0)),
+        ],
+    ));
+    records.push(record(
+        "Node",
+        vec![property("Node", "parentId", FixtureValue::Uint(2))],
+    ));
+    let bytes = encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+    artboard.update_pass(true);
+    let objects =
+        artboard.with_artboard(|a| a.objects().iter().flatten().cloned().collect::<Vec<_>>());
+    let video = objects[1].clone();
+    let reader = objects[3].clone();
+    let everywhere = Bounds {
+        min_x: 0.0,
+        min_y: 0.0,
+        max_x: 200.0,
+        max_y: 200.0,
+    };
+    // It draws nothing itself, so its own place on the screen does not count.
+    assert!(
+        video
+            .with_downcast::<Video, _>(|v| v.drawn_by_script)
+            .unwrap()
+    );
+    assert!(!video.with(|o| o.drawable_will_draw()).unwrap());
+    assert!(!is_visible_in(&video, everywhere).unwrap());
+    video
+        .with_downcast_mut::<Video, _>(|v| v.add_script_reader(reader))
+        .unwrap();
+    assert!(is_visible_in(&video, everywhere).unwrap());
+    // Off the reader's box, though over the video's own place: not on screen.
+    assert!(
+        !is_visible_in(
+            &video,
+            Bounds {
+                max_x: 120.0,
+                ..everywhere
+            }
+        )
+        .unwrap()
+    );
+}

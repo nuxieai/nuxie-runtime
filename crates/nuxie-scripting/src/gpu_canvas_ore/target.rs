@@ -56,6 +56,7 @@ impl UserData for Target {
                     lua.create_userdata(TextureView {
                         resource,
                         retained_image: None,
+                        follows: None,
                     })
                 })
                 .transpose()

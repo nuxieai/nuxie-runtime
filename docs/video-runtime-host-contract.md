@@ -110,16 +110,21 @@ frame must not undo the decision. Remove the latched decision when the occurrenc
 unmounts. The query itself is read-only and does not advance, pause, or dispose
 playback.
 
-## Reusing a visible video image
+## Drawing a video from a script
 
-Luau `context:video(name):image()` returns an ordinary Image snapshot of the
-currently visible decoded frame or poster, or nil when none is available.
-The snapshot shares the renderer resource; `image:view()` uses the existing
-GPU sampling interface and `renderer:drawImage` uses ordinary scene drawing.
-It does not create another decoder or copy pixels. Request a new snapshot to
-observe a later frame. Retained snapshots remain valid across source replacement
-and decoder disposal; releasing the last owner releases that frame resource.
-A disposed script context cannot acquire another snapshot.
+Luau `context:video(name):image()` returns an Image that always shows the
+occurrence's current decoded frame, or its poster; it has no size while neither
+exists. A script takes it once and draws it with `renderer:drawImage` or samples
+it through `image:view()`. A view made from it moves to each new frame, and a
+`GPUBindGroup` holding such a view is made again at `setBindGroup` when the frame
+has moved on, so a shader is set up once. No decoder is created and no pixels are
+copied. A disposed script context cannot acquire another image.
+
+`context:video(name)` also records the script as one of the occurrence's
+readers. A video is visible where it draws itself and wherever a reader draws
+(the nearest ancestor with a box around the script), so its decoder follows use.
+A Video with drawnByScript (60021) paints nothing itself and is visible only
+through its readers.
 
 ## Explicit synchronization
 
@@ -251,6 +256,7 @@ The Video type is 60001; VideoAsset is 60000. The extension keys are:
 | 60018 | Video duration | number | no | Decoder duration in seconds, zero before metadata. |
 | 60019 | Video ended | boolean | no | True exactly in the ended state. |
 | 60020 | Video state | number | no | Playback state ordinal below. |
+| 60021 | Video drawn by script | boolean | no | Only the scripts that read it draw it. |
 
 State ordinals are opening 0, ready 1, playing 2, paused 3, seeking 4,
 buffering 5, ended 6, failed 7 and disposed 8. Playing requires a decoder

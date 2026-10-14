@@ -22,6 +22,7 @@ pub(crate) use target::target_userdata;
 mod tests;
 pub(super) use canvas::Canvas;
 use enums::*;
+pub(crate) use resources::TextureView;
 use resources::*;
 use shader::*;
 
@@ -178,6 +179,16 @@ pub(crate) fn image_view(
     source_canvas: Option<&nuxie_render_api::RenderCanvasHandle>,
     cached: &RefCell<Option<AnyResourceHandle>>,
 ) -> Result<AnyUserData> {
+    let view = image_texture_view(lua, image, source_canvas, cached)?;
+    lua.create_userdata(view)
+}
+
+pub(crate) fn image_texture_view(
+    lua: &Lua,
+    image: Rc<dyn nuxie_render_api::RenderImage>,
+    source_canvas: Option<&nuxie_render_api::RenderCanvasHandle>,
+    cached: &RefCell<Option<AnyResourceHandle>>,
+) -> Result<TextureView> {
     let context =
         context(lua).map_err(|_| Error::runtime("GPU context not available for Image:view()"))?;
     if cached.borrow().is_none() {
@@ -217,9 +228,10 @@ pub(crate) fn image_view(
         };
         *cached.borrow_mut() = Some(view);
     }
-    lua.create_userdata(TextureView {
+    Ok(TextureView {
         resource: cached.borrow().as_ref().expect("cached image view").clone(),
         retained_image: Some(image),
+        follows: None,
     })
 }
 

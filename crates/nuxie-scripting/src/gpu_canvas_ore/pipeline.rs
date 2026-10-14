@@ -17,6 +17,97 @@ impl UserData for Pipeline {
 }
 pub(super) struct BindGroup {
     pub resource: AnyResourceHandle,
+    /// Kept only when a texture follows a video, to make the group again when
+    /// the video's frame moves on.
+    remake: Option<BindGroupInputs>,
+}
+struct BindGroupInputs {
+    layout: AnyResourceHandle,
+    ubos: Vec<(u32, AnyResourceHandle, u32, u32)>,
+    textures: Vec<(u32, AnyUserData)>,
+    samplers: Vec<(u32, AnyResourceHandle)>,
+}
+impl BindGroup {
+    /// Make the group again if a video it samples shows a new frame.
+    pub(super) fn follow(lua: &Lua, group: &AnyUserData) -> Result<()> {
+        let views = match &group.borrow::<BindGroup>()?.remake {
+            Some(inputs) => inputs
+                .textures
+                .iter()
+                .map(|(_, view)| view.clone())
+                .collect::<Vec<_>>(),
+            None => return Ok(()),
+        };
+        let mut moved = false;
+        for view in &views {
+            moved |= TextureView::follow(lua, view)?;
+        }
+        if !moved {
+            return Ok(());
+        }
+        let mut this = group.borrow_mut::<BindGroup>()?;
+        let inputs = this.remake.as_ref().expect("checked above");
+        let textures = inputs
+            .textures
+            .iter()
+            .map(|(slot, view)| Ok((*slot, view.borrow::<TextureView>()?.resource.clone())))
+            .collect::<Result<Vec<_>>>()?;
+        let resource = make_bind_group(
+            lua,
+            &inputs.layout,
+            &inputs.ubos,
+            &textures,
+            &inputs.samplers,
+        )?;
+        this.resource = resource;
+        Ok(())
+    }
+}
+fn make_bind_group(
+    lua: &Lua,
+    layout: &AnyResourceHandle,
+    ubos: &[(u32, AnyResourceHandle, u32, u32)],
+    textures: &[(u32, AnyResourceHandle)],
+    samplers: &[(u32, AnyResourceHandle)],
+) -> Result<AnyResourceHandle> {
+    let context = context(lua)?;
+    let ubos: Vec<_> = ubos
+        .iter()
+        .map(|(slot, buffer, offset, size)| UBOEntry {
+            slot: *slot,
+            buffer: Some(buffer),
+            offset: *offset,
+            size: *size,
+        })
+        .collect();
+    let textures: Vec<_> = textures
+        .iter()
+        .map(|(slot, view)| TexEntry {
+            slot: *slot,
+            view: Some(view),
+        })
+        .collect();
+    let samplers: Vec<_> = samplers
+        .iter()
+        .map(|(slot, sampler)| SampEntry {
+            slot: *slot,
+            sampler: Some(sampler),
+        })
+        .collect();
+    let desc = BindGroupDesc {
+        layout: Some(layout),
+        ubos: &ubos,
+        uboCount: ubos.len() as u32,
+        textures: &textures,
+        textureCount: textures.len() as u32,
+        samplers: &samplers,
+        samplerCount: samplers.len() as u32,
+        label: None,
+    };
+    let mut ctx = context.borrow_mut();
+    ctx.clearLastError();
+    let value = ctx.makeBindGroup(&desc);
+    resource_result(&*ctx, value, "GPUBindGroup.new", "bind group")
 }
 impl UserData for BindGroup {}
 
@@ -71,7 +162,6 @@ fn stencil(table: Option<Table>) -> Result<StencilFaceState> {
 }
 pub(super) fn install(lua: &Lua) -> Result<()> {
     constructor(lua, "GPUBindGroup", |lua, table| {
-        let context = context(lua)?;
         let layout_data: AnyUserData = table.get("layout")?;
         let layout = layout_data.borrow::<Layout>()?;
         let mut ubos = Vec::new();
@@ -91,6 +181,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             ));
         }
         let mut textures = Vec::new();
+        let mut views = Vec::new();
         for entry in tables(&table, "textures", 8)? {
             let slot = number(&entry, "slot", 0.0)? as u32;
             if slot > 7 {
@@ -99,7 +190,12 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 )));
             }
             let view: AnyUserData = entry.get("view")?;
-            textures.push((slot, view.borrow::<TextureView>()?.resource.clone()));
+            let (resource, follows) = {
+                let view = view.borrow::<TextureView>()?;
+                (view.resource.clone(), view.follows.is_some())
+            };
+            textures.push((slot, resource));
+            views.push((slot, view, follows));
         }
         let mut samplers = Vec::new();
         for entry in tables(&table, "samplers", 8)? {
@@ -112,44 +208,20 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             let sampler: AnyUserData = entry.get("sampler")?;
             samplers.push((slot, sampler.borrow::<Sampler>()?.resource.clone()));
         }
-        let ubos: Vec<_> = ubos
+        let resource = make_bind_group(lua, &layout.resource, &ubos, &textures, &samplers)?;
+        let remake = views
             .iter()
-            .map(|(slot, buffer, offset, size)| UBOEntry {
-                slot: *slot,
-                buffer: Some(buffer),
-                offset: *offset,
-                size: *size,
-            })
-            .collect();
-        let textures: Vec<_> = textures
-            .iter()
-            .map(|(slot, view)| TexEntry {
-                slot: *slot,
-                view: Some(view),
-            })
-            .collect();
-        let samplers: Vec<_> = samplers
-            .iter()
-            .map(|(slot, sampler)| SampEntry {
-                slot: *slot,
-                sampler: Some(sampler),
-            })
-            .collect();
-        let desc = BindGroupDesc {
-            layout: Some(&layout.resource),
-            ubos: &ubos,
-            uboCount: ubos.len() as u32,
-            textures: &textures,
-            textureCount: textures.len() as u32,
-            samplers: &samplers,
-            samplerCount: samplers.len() as u32,
-            label: None,
-        };
-        let mut ctx = context.borrow_mut();
-        ctx.clearLastError();
-        let value = ctx.makeBindGroup(&desc);
-        let resource = resource_result(&*ctx, value, "GPUBindGroup.new", "bind group")?;
-        lua.create_userdata(BindGroup { resource })
+            .any(|(_, _, follows)| *follows)
+            .then(|| BindGroupInputs {
+                layout: layout.resource.clone(),
+                ubos,
+                textures: views
+                    .into_iter()
+                    .map(|(slot, view, _)| (slot, view))
+                    .collect(),
+                samplers,
+            });
+        lua.create_userdata(BindGroup { resource, remake })
     })?;
     constructor(lua, "GPUPipeline", |lua, table| {
         let context = context(lua)?;

@@ -304,19 +304,27 @@ pub struct HbFont {
     base: FontBase,
     bytes: FontBytes,
     face_index: u32,
-    shaper_data: ShaperData,
+    // The face's shaping caches and shape plans, shared by every variant
+    // with_options derives from this face, as HarfBuzz keeps them on the face.
+    face: Arc<HbFace>,
     shaper_instance: ShaperInstance,
     features: Vec<ShapingFeature>,
     feature_values: HashMap<u32, u32>,
     axis_values: HashMap<u32, f32>,
+    color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
+}
+
+/// What a font face's variants share: its shaper data, the shape plans built
+/// for it (a plan is a function of its segment properties, variation
+/// instance and features), and the facts read from its tables alone.
+struct HbFace {
+    shaper_data: ShaperData,
+    shape_plans: Mutex<Vec<harfrust::ShapePlan>>,
     has_color_layers: bool,
     has_color_paint: bool,
     has_png: bool,
     palette_colors: Vec<skrifa::color::Color>,
-    color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
-    // Shape plans built for this face, as HarfBuzz caches them per face; a
-    // plan is a function of its segment properties, instance and features.
-    shape_plans: Mutex<Vec<harfrust::ShapePlan>>,
+    suppress_legacy_kern: bool,
 }
 
 /// A mapped face for nominal coverage, without font metrics or drawing setup.
@@ -492,8 +500,47 @@ impl HbFont {
         axis_values: HashMap<u32, f32>,
         feature_values: HashMap<u32, u32>,
     ) -> Self {
+        Self::with_face_options(bytes, face_index, None, axis_values, feature_values)
+    }
+
+    /// A font of this face at these options, reusing `face` when given (a
+    /// variant of a font already built for the same bytes and index).
+    fn with_face_options(
+        bytes: FontBytes,
+        face_index: u32,
+        face: Option<Arc<HbFace>>,
+        axis_values: HashMap<u32, f32>,
+        feature_values: HashMap<u32, u32>,
+    ) -> Self {
         let shaping = ShapingFont::from_index(&bytes, face_index).expect("validated shaping face");
-        let shaper_data = ShaperData::new(&shaping);
+        let outline = OutlineFont::from_index(&bytes, face_index).expect("validated outline face");
+        let face = face.unwrap_or_else(|| {
+            let has_color_layers = outline.colr().is_ok();
+            let has_color_paint = outline.colr().is_ok_and(|colr| colr.version() >= 1);
+            let has_png = outline.sbix().is_ok() || outline.cbdt().is_ok();
+            let palette_colors = if has_color_layers || has_color_paint {
+                outline
+                    .color_palettes()
+                    .get(0)
+                    .map(|palette| palette.colors().to_vec())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            Arc::new(HbFace {
+                shaper_data: ShaperData::new(&shaping),
+                shape_plans: Mutex::new(Vec::new()),
+                has_color_layers,
+                has_color_paint,
+                has_png,
+                palette_colors,
+                // Pinned Rive HarfBuzz is compiled with HB_NO_LEGACY. HarfRust
+                // has no equivalent build switch, so suppress only its legacy
+                // `kern` fallback. A GPOS or kerx font keeps its normal
+                // positioning path.
+                suppress_legacy_kern: suppress_legacy_kern(&outline),
+            })
+        });
         let shaper_instance = ShaperInstance::from_variations(
             &shaping,
             axis_values
@@ -503,44 +550,23 @@ impl HbFont {
                     value,
                 }),
         );
-        let outline = OutlineFont::from_index(&bytes, face_index).expect("validated outline face");
         let location = outline.axes().location(
             axis_values
                 .iter()
                 .map(|(&tag, &value)| VariationSetting::new(skrifa::Tag::from_u32(tag), value)),
         );
         let line_metrics = make_line_metrics(&outline, LocationRef::from(&location));
-        let has_color_layers = outline.colr().is_ok();
-        let has_color_paint = outline.colr().is_ok_and(|colr| colr.version() >= 1);
-        let has_png = outline.sbix().is_ok() || outline.cbdt().is_ok();
-        let palette_colors = if has_color_layers || has_color_paint {
-            outline
-                .color_palettes()
-                .get(0)
-                .map(|palette| palette.colors().to_vec())
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        // Pinned Rive HarfBuzz is compiled with HB_NO_LEGACY. HarfRust has no
-        // equivalent build switch, so suppress only its legacy `kern` fallback.
-        // A GPOS or kerx font retains its normal positioning path.
-        let features = shaping_features(&feature_values, suppress_legacy_kern(&outline));
+        let features = shaping_features(&feature_values, face.suppress_legacy_kern);
         Self {
             base: FontBase::new(line_metrics),
             bytes,
             face_index,
-            shaper_data,
+            face,
             shaper_instance,
             features,
             feature_values,
             axis_values,
-            has_color_layers,
-            has_color_paint,
-            has_png,
-            palette_colors,
             color_layer_cache: Mutex::new(HashMap::new()),
-            shape_plans: Mutex::new(Vec::new()),
         }
     }
 
@@ -671,9 +697,10 @@ impl Font for HbFont {
         for feature in features {
             values.insert(feature.tag, feature.value);
         }
-        Arc::new(Self::with_stored_options(
+        Arc::new(Self::with_face_options(
             self.bytes.clone(),
             self.face_index,
+            Some(Arc::clone(&self.face)),
             axes,
             values,
         ))
@@ -684,7 +711,7 @@ impl Font for HbFont {
         glyph_path(&font, LocationRef::from(&location), glyph)
     }
     fn has_color_glyphs(&self) -> bool {
-        self.has_color_layers || self.has_color_paint || self.has_png
+        self.face.has_color_layers || self.face.has_color_paint || self.face.has_png
     }
     fn is_color_glyph(&self, glyph: GlyphId) -> bool {
         if !self.has_color_glyphs() {
@@ -725,7 +752,7 @@ impl Font for HbFont {
         let id = OutlineGlyphId::new(glyph as u32);
         let mut layers = Vec::new();
         // Pinned order is COLRv0 layers, then COLRv1/PNG only if no v0 layers.
-        if self.has_color_layers {
+        if self.face.has_color_layers {
             if let Some(color) = font
                 .color_glyphs()
                 .get_with_format(id, skrifa::color::ColorGlyphFormat::ColrV0)
@@ -734,7 +761,7 @@ impl Font for HbFont {
                 let _ = color.paint(LocationRef::from(&location), &mut collector);
             }
         }
-        if layers.is_empty() && self.has_color_paint {
+        if layers.is_empty() && self.face.has_color_paint {
             if let Some(color) = font
                 .color_glyphs()
                 .get_with_format(id, skrifa::color::ColorGlyphFormat::ColrV1)
@@ -743,7 +770,7 @@ impl Font for HbFont {
                 let _ = color.paint(LocationRef::from(&location), &mut collector);
             }
         }
-        if layers.is_empty() && self.has_png {
+        if layers.is_empty() && self.face.has_png {
             if let Some(bitmap) = font.bitmap_strikes().glyph_for_size(Size::unscaled(), id) {
                 if let skrifa::bitmap::BitmapData::Png(bytes) = bitmap.data {
                     if !bytes.is_empty() {
@@ -855,6 +882,7 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
     let face =
         ShapingFont::from_index(&font.bytes, font.face_index).expect("validated shaping face");
     let shaper = font
+        .face
         .shaper_data
         .shaper(&face)
         .instance(Some(&font.shaper_instance))
@@ -881,7 +909,7 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
     let direction = buffer.direction();
     let script = Some(buffer.script());
     let language = buffer.language();
-    let mut plans = font.shape_plans.lock().expect("shape plan cache");
+    let mut plans = font.face.shape_plans.lock().expect("shape plan cache");
     let key = harfrust::ShapePlanKey::new(script, direction)
         .language(language.as_ref())
         .instance(Some(&font.shaper_instance))
@@ -1347,7 +1375,7 @@ impl<'a> PaintState<'a> {
         if palette == 0xffff {
             return (self.foreground, true);
         }
-        let Some(color) = self.font.palette_colors.get(palette as usize) else {
+        let Some(color) = self.font.face.palette_colors.get(palette as usize) else {
             return (0xff000000, false);
         };
         let alpha = (color.alpha() as f32 * alpha).round().clamp(0.0, 255.0) as u32;

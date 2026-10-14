@@ -63,6 +63,10 @@ use crate::mechanical_port::source::{
 };
 use crate::scripting::ScriptAssetRegistration;
 
+#[cfg(test)]
+#[path = "file/data_global_registration_test.rs"]
+mod data_global_registration_test;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ImportResult {
     #[default]
@@ -1178,19 +1182,19 @@ impl File {
             eprintln!("{error}");
         }
         if !vm.with_vm_mut(|vm| vm.initializes_data_global_externally()) {
-            let models = models
-                .into_iter()
-                .map(|model| {
-                    let name = model
-                        .with_downcast::<ViewModel, _>(|model| model.base.name().to_owned())
-                        .expect("File owns ViewModel definitions");
-                    (
-                        name,
-                        crate::scripting::ScriptViewModel::from_native_file_definition(model, file),
-                    )
-                })
-                .collect();
-            if let Err(error) = vm.with_vm_mut(|vm| vm.initialize_data_global(models)) {
+            let mut definitions = std::collections::BTreeMap::new();
+            for model in models {
+                let name = model
+                    .with_downcast::<ViewModel, _>(|model| model.base.name().to_owned())
+                    .expect("File owns ViewModel definitions");
+                // initializeLuaData uses C-string keys and preserves the first
+                // definition in file order, before the map sorts those keys.
+                let name = name.split('\0').next().unwrap_or_default().to_owned();
+                definitions.entry(name).or_insert_with(|| {
+                    crate::scripting::ScriptViewModel::from_native_file_definition(model, file)
+                });
+            }
+            if let Err(error) = vm.with_vm_mut(|vm| vm.initialize_data_global(definitions)) {
                 eprintln!("{error}");
             }
         }

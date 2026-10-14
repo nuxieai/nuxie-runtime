@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "9166e9b62debca7482e3cd13229ec5a8c35af603"
+upstream_ref = "10d08fb6eb7d1b19ceebfba38cbfec7ef9d7d45c"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -4722,7 +4722,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "expose data context to scripts through context"
-producer_line = 568
+producer_line = 597
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4986,7 +4986,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data root view model"
-producer_line = 336
+producer_line = 365
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6042,7 +6042,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data bound view model"
-producer_line = 313
+producer_line = 342
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6108,7 +6108,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "Provide data context and view model instance to artboard"
-producer_line = 598
+producer_line = 627
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]

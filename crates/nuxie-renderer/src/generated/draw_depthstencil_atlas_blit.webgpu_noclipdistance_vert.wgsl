@@ -1,9 +1,9 @@
-struct di {
+struct ei {
     r2_: array<vec4<u32>>,
 }
 
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -11,22 +11,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct jg {
@@ -44,7 +44,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct ei {
+struct fi {
     r2_: array<vec4<u32>>,
 }
 
@@ -57,12 +57,12 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wi: bool = true;
-@id(2) override Yi: bool = true;
-@id(8) override ej: bool = true;
+@id(0) override Xi: bool = true;
+@id(2) override Zi: bool = true;
+@id(8) override fj: bool = true;
 
 @group(0) @binding(2)
-var<storage> KB: di;
+var<storage> KB: ei;
 @group(0) @binding(0)
 var<uniform> j: VB;
 var<private> gl_VertexIndex_1: i32;
@@ -82,7 +82,7 @@ var UB: texture_2d<u32>;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(0) @binding(5)
-var<storage> BD: ei;
+var<storage> BD: fi;
 @group(3) @binding(9)
 var ab: sampler;
 
@@ -99,11 +99,11 @@ fn main_1() {
     let _e58 = KB.r2_[((_e53 * 4u) + 2u)];
     let _e60 = _e50.xy;
     let _e62 = bitcast<vec3<f32>>(_e58.yzw);
-    let _e68 = j.yi;
+    let _e68 = j.zi;
     S2_ = (((_e60 * _e62.x) + _e62.yz) * _e68);
     let _e72 = VC.r2_[_e53];
     let _e74 = (_e72.x & 15u);
-    if Wi {
+    if Xi {
         let _e75 = (_e74 == 0u);
         if _e75 {
             phi_752_ = _e72.y;
@@ -126,7 +126,7 @@ fn main_1() {
         let _e92 = phi_754_;
         f4_ = _e92;
     }
-    if Yi {
+    if Zi {
         P0_ = f32(((_e72.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e74 == 1u) {
@@ -145,8 +145,8 @@ fn main_1() {
         let _e131 = phi_761_;
         O0_ = vec4<f32>(_e117.x, _e117.y, _e131, (-0.75f - round((bitcast<f32>(_e72.y) * 255f))));
     }
-    phi_416_ = ej;
-    if ej {
+    phi_416_ = fj;
+    if fj {
         phi_416_ = ((_e72.x & 2048u) != 0u);
     }
     let _e141 = phi_416_;

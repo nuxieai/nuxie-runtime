@@ -423,6 +423,20 @@ extern "C" rive_ffi_render_shader* rive_ffi_make_radial_gradient(
         ctx->context->makeRadialGradient(cx, cy, radius, colors, stops, count)};
 }
 
+extern "C" rive_ffi_render_shader* rive_ffi_make_angular_gradient(
+    rive_ffi_context* ctx,
+    const uint32_t* colors,
+    const float* stops,
+    size_t count)
+{
+    if (ctx == nullptr || ctx->context == nullptr)
+    {
+        return nullptr;
+    }
+    return new rive_ffi_render_shader{
+        ctx->context->makeAngularGradient(colors, stops, count)};
+}
+
 extern "C" void rive_ffi_render_shader_delete(rive_ffi_render_shader* shader)
 {
     delete shader;

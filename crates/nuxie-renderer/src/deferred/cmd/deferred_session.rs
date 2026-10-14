@@ -6,7 +6,7 @@ use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
-use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
+use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;
@@ -779,6 +779,15 @@ impl Factory for DeferredSession {
         self.factory
             .borrow_mut()
             .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.factory
+            .borrow_mut()
+            .make_angular_gradient(colors, stops)
     }
     fn make_render_path(&mut self, path: RawPath, rule: FillRule) -> Box<dyn RenderPath> {
         self.factory.borrow_mut().make_render_path(path, rule)

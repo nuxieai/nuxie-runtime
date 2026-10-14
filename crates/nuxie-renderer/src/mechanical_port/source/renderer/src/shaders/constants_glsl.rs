@@ -196,6 +196,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define SOLID_COLOR_PAINT_TYPE 1u
 #define LINEAR_GRADIENT_PAINT_TYPE 2u
 #define RADIAL_GRADIENT_PAINT_TYPE 3u
+#define ANGULAR_GRADIENT_PAINT_TYPE 4u
 
 // Paint flags, found in the x-component value of @paintBuffer.
 #define PAINT_FLAG_NON_ZERO_FILL 0x100u
@@ -472,7 +473,11 @@ pub const fn DS_FILL_PATCH_STRIDE(outer_cubic: bool) -> u32 {
 pub const DS_STROKE_STRIDE_LOG2: u32 = 5;
 pub const DS_AA_STROKE_STRIDE_LOG2: u32 = 6;
 pub const fn DS_STROKE_PATCH_STRIDE_LOG2(aa_stroke: bool) -> u32 {
-    if aa_stroke { DS_AA_STROKE_STRIDE_LOG2 } else { DS_STROKE_STRIDE_LOG2 }
+    if aa_stroke {
+        DS_AA_STROKE_STRIDE_LOG2
+    } else {
+        DS_STROKE_STRIDE_LOG2
+    }
 }
 pub const fn DS_STROKE_PATCH_STRIDE(aa_stroke: bool) -> u32 {
     1 << DS_STROKE_PATCH_STRIDE_LOG2(aa_stroke)

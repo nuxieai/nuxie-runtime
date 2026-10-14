@@ -1,5 +1,5 @@
 //! renderer/cmd/render_commands.hpp at e949498e: pointer-free wire vocabulary.
-use super::command_stream::{wire_pod, WirePod};
+use super::command_stream::{WirePod, wire_pod};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,6 +9,7 @@ pub enum RenderCmd {
     MakePaint,
     MakeLinearGradient,
     MakeRadialGradient,
+    MakeAngularGradient,
     DecodeImage,
     MakeBuffer,
     BufferData,
@@ -50,12 +51,13 @@ pub enum RenderCmd {
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 43] = [
+        const COMMANDS: [RenderCmd; 44] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
             RenderCmd::MakeLinearGradient,
             RenderCmd::MakeRadialGradient,
+            RenderCmd::MakeAngularGradient,
             RenderCmd::DecodeImage,
             RenderCmd::MakeBuffer,
             RenderCmd::BufferData,
@@ -152,6 +154,14 @@ wire_pod!(RadialGradientPod {
     cx: f32,
     cy: f32,
     radius: f32,
+    count: u32,
+    blob_offset: u64,
+    stops_offset: u64
+});
+wire_pod!(AngularGradientPod {
+    id: u32,
+    generation: u32,
+    pad: u32,
     count: u32,
     blob_offset: u64,
     stops_offset: u64
@@ -338,6 +348,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::MakeEmptyPath | RenderCmd::MakePaint => MakeIdPod::SIZE,
         RenderCmd::MakeLinearGradient => LinearGradientPod::SIZE,
         RenderCmd::MakeRadialGradient => RadialGradientPod::SIZE,
+        RenderCmd::MakeAngularGradient => AngularGradientPod::SIZE,
         RenderCmd::DecodeImage => DecodeImagePod::SIZE,
         RenderCmd::MakeBuffer => MakeBufferPod::SIZE,
         RenderCmd::BufferData => BufferDataPod::SIZE,
@@ -381,6 +392,7 @@ const _: () = assert!(
     MakePathPod::SIZE == 40
         && LinearGradientPod::SIZE == 48
         && RadialGradientPod::SIZE == 40
+        && AngularGradientPod::SIZE == 32
         && PathRawPod::SIZE == 32
         && DecodeImagePod::SIZE == 32
         && BufferDataPod::SIZE == 16

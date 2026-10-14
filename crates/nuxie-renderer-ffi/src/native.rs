@@ -409,6 +409,28 @@ impl Factory for FfiFactory {
         })
     }
 
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        assert_eq!(colors.len(), stops.len());
+        let handle = unsafe {
+            ffi::rive_ffi_make_angular_gradient(
+                self.context.as_ptr(),
+                colors.as_ptr(),
+                stops.as_ptr(),
+                colors.len(),
+            )
+        };
+        Box::new(FfiRenderShader {
+            handle: Rc::new(FfiShaderHandle(non_null(
+                handle,
+                "rive_ffi_make_angular_gradient",
+            ))),
+        })
+    }
+
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         let (verbs, points) = raw_path_parts(raw_path.as_ref());
         let handle = unsafe {
@@ -1262,6 +1284,12 @@ mod ffi {
             cx: f32,
             cy: f32,
             radius: f32,
+            colors: *const u32,
+            stops: *const f32,
+            count: usize,
+        ) -> *mut RenderShader;
+        pub fn rive_ffi_make_angular_gradient(
+            context: *mut Context,
             colors: *const u32,
             stops: *const f32,
             count: usize,

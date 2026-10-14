@@ -224,6 +224,17 @@ pub fn replay_serialized_commands(
                 };
                 shaders.insert(id, shader);
             }
+            MAKE_ANGULAR_GRADIENT => {
+                let id = reader.read_var_uint();
+                let count = reader.read_var_uint() as usize;
+                let mut colors = Vec::with_capacity(count);
+                let mut stops = Vec::with_capacity(count);
+                for _ in 0..count {
+                    colors.push(reader.read_var_uint() as u32);
+                    stops.push(reader.read_float32());
+                }
+                shaders.insert(id, factory.make_angular_gradient(&colors, &stops));
+            }
             DECODE_IMAGE => {
                 let id = reader.read_var_uint();
                 // BinaryDataReader's length-prefixed bytes preserve C++'s

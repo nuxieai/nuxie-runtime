@@ -384,6 +384,7 @@ impl Gradient {
         debug_assert!(
             paint_type == gpu::PaintType::linearGradient
                 || paint_type == gpu::PaintType::radialGradient
+                || paint_type == gpu::PaintType::angularGradient
         );
         unsafe fn destroy_complete(ptr: *mut RenderShader) {
             // SAFETY: the installed source destructor slot receives the

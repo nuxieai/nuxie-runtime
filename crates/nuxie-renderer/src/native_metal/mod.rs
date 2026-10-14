@@ -93,7 +93,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 #[cfg(test)]
-use capabilities::{select_capabilities, ApplePlatform, MetalDeviceCapabilities};
+use capabilities::{ApplePlatform, MetalDeviceCapabilities, select_capabilities};
 #[cfg(any())]
 use context::NativeMetalContext;
 use nuxie_render_api::{
@@ -309,9 +309,15 @@ impl NativeMetalFactory {
 
     pub fn ore_render_target(&self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
         #[cfg(feature = "native-ore-metal-experimental")]
-        { Some(Self::ore_texture_target(self.target_texture.borrow().clone())) }
+        {
+            Some(Self::ore_texture_target(
+                self.target_texture.borrow().clone(),
+            ))
+        }
         #[cfg(not(feature = "native-ore-metal-experimental"))]
-        { None }
+        {
+            None
+        }
     }
 
     #[cfg(feature = "native-ore-metal-experimental")]
@@ -743,7 +749,10 @@ impl NativeMetalFactory {
         )
     }
 
-    pub fn validate_drawable_texture(&self, texture: &ProtocolObject<dyn MTLTexture>) -> Result<(), RendererError> {
+    pub fn validate_drawable_texture(
+        &self,
+        texture: &ProtocolObject<dyn MTLTexture>,
+    ) -> Result<(), RendererError> {
         let (expected_width, expected_height) = self.dimensions();
         if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
             return Err(RendererError::InvalidDrawable(
@@ -925,6 +934,22 @@ impl Factory for NativeMetalFactory {
             .borrow_mut()
             .make_radial_gradient_handle(cx, cy, radius, colors, stops);
         Box::new(source.unwrap_or_else(|| panic!("mechanical radial gradient owner was not valid")))
+    }
+
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical angular-gradient factory failed: {error}"));
+        let source = mechanical
+            .borrow_mut()
+            .make_angular_gradient_handle(colors, stops);
+        Box::new(
+            source.unwrap_or_else(|| panic!("mechanical angular gradient owner was not valid")),
+        )
     }
 
     fn make_render_path(
@@ -3257,9 +3282,9 @@ fn select_native_metal_mode(
     requested: Option<RenderMode>,
 ) -> Result<RenderMode, RendererError> {
     match requested {
-        Some(RenderMode::Msaa | RenderMode::ClockwiseMsaa1 | RenderMode::ClockwiseInkbleed) => Err(RendererError::Unsupported(
-            "native Metal does not implement depth/stencil rendering",
-        )),
+        Some(RenderMode::Msaa | RenderMode::ClockwiseMsaa1 | RenderMode::ClockwiseInkbleed) => Err(
+            RendererError::Unsupported("native Metal does not implement depth/stencil rendering"),
+        ),
         Some(RenderMode::RasterOrdering) if !capabilities.supports_raster_ordering => Err(
             RendererError::Unsupported("native Metal device does not support raster ordering"),
         ),
@@ -3532,11 +3557,13 @@ mod tests {
         let identity = image.image_identity();
         assert!(!canvas.borrow().is_backed());
         assert!(image.ore_texture_info().is_none());
-        assert!(!image
-            .as_any()
-            .downcast_ref::<RiveRenderImageHandle>()
-            .unwrap()
-            .has_source_texture());
+        assert!(
+            !image
+                .as_any()
+                .downcast_ref::<RiveRenderImageHandle>()
+                .unwrap()
+                .has_source_texture()
+        );
         drop(recording);
         assert!(
             recording_weak.upgrade().is_none(),
@@ -3558,9 +3585,11 @@ mod tests {
             .unwrap();
         assert!(source.source_base_for(&replay_domain).is_some());
         assert!(source.source_base_for(&recording_domain).is_none());
-        assert!(replay
-            .make_gpu_canvas_image_view(retained_before_replay.clone())
-            .is_ok());
+        assert!(
+            replay
+                .make_gpu_canvas_image_view(retained_before_replay.clone())
+                .is_ok()
+        );
         {
             let ore = replay.ore().expect("replaying device ORE context");
             let info = retained_before_replay
@@ -3829,18 +3858,22 @@ mod tests {
                 factory.resize(3, 1).expect("replace target generation");
                 assert!(command_buffer.load().is_some());
                 assert!(texture_owners.iter().all(|owner| owner.load().is_some()));
-                assert!(atomic_buffer_owners
-                    .iter()
-                    .all(|owner| owner.load().is_some()));
+                assert!(
+                    atomic_buffer_owners
+                        .iter()
+                        .all(|owner| owner.load().is_some())
+                );
 
                 drop(frame);
                 (command_buffer, texture_owners, atomic_buffer_owners)
             });
         assert!(command_buffer.load().is_none());
         assert!(texture_owners.iter().all(|owner| owner.load().is_none()));
-        assert!(atomic_buffer_owners
-            .iter()
-            .all(|owner| owner.load().is_none()));
+        assert!(
+            atomic_buffer_owners
+                .iter()
+                .all(|owner| owner.load().is_none())
+        );
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

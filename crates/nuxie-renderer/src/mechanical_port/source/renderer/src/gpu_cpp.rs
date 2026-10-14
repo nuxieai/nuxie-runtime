@@ -2771,6 +2771,7 @@ const CLIP_UPDATE_PAINT_TYPE: u32 = 0;
 const SOLID_COLOR_PAINT_TYPE: u32 = 1;
 const LINEAR_GRADIENT_PAINT_TYPE: u32 = 2;
 const RADIAL_GRADIENT_PAINT_TYPE: u32 = 3;
+const ANGULAR_GRADIENT_PAINT_TYPE: u32 = 4;
 const PAINT_FLAG_NON_ZERO_FILL: u32 = 0x100;
 const PAINT_FLAG_EVEN_ODD_FILL: u32 = 0x200;
 const PAINT_FLAG_HAS_IMAGE: u32 = 0x800;
@@ -3406,7 +3407,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3488,6 +3489,16 @@ pub fn clip_rect_inverse_matrix_reset(clipMatrix: Mat2D, clipRect: AABB) -> Mat2
 }
 
 fn paint_type_to_glsl_id(paintType: PaintType) -> u32 {
+    const {
+        assert!(PaintType::clipUpdate as u32 == CLIP_UPDATE_PAINT_TYPE);
+        assert!(PaintType::solidColor as u32 == SOLID_COLOR_PAINT_TYPE);
+        assert!(PaintType::linearGradient as u32 == LINEAR_GRADIENT_PAINT_TYPE);
+        assert!(PaintType::radialGradient as u32 == RADIAL_GRADIENT_PAINT_TYPE);
+        assert!(PaintType::angularGradient as u32 == ANGULAR_GRADIENT_PAINT_TYPE);
+        assert!(LINEAR_GRADIENT_PAINT_TYPE < 8);
+        assert!(RADIAL_GRADIENT_PAINT_TYPE < 8);
+        assert!(ANGULAR_GRADIENT_PAINT_TYPE < 8);
+    }
     let id = paintType as u32;
     debug_assert!(matches!(
         id,
@@ -3495,6 +3506,7 @@ fn paint_type_to_glsl_id(paintType: PaintType) -> u32 {
             | SOLID_COLOR_PAINT_TYPE
             | LINEAR_GRADIENT_PAINT_TYPE
             | RADIAL_GRADIENT_PAINT_TYPE
+            | ANGULAR_GRADIENT_PAINT_TYPE
     ));
     id
 }
@@ -3746,7 +3758,9 @@ impl PaintData {
                     };
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
-                PaintType::linearGradient | PaintType::radialGradient => {
+                PaintType::linearGradient
+                | PaintType::radialGradient
+                | PaintType::angularGradient => {
                     self.value.m_gradientAdditivenessComplement = 1.0 - additiveness;
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
@@ -3811,18 +3825,22 @@ pub fn getGradientMatrixAndCoord(
         );
     }
     matrix = multiply_mat2d(inverse_gradient_transform, matrix);
-    if paint_type == PaintType::linearGradient {
-        matrix = multiply_mat2d(
-            Mat2D([coeffs[0], 0.0, coeffs[1], 0.0, coeffs[2], 0.0]),
-            matrix,
-        );
-    } else {
-        debug_assert_eq!(paint_type, PaintType::radialGradient);
-        let w = 1.0 / coeffs[2];
-        matrix = multiply_mat2d(
-            Mat2D([w, 0.0, 0.0, w, -coeffs[0] * w, -coeffs[1] * w]),
-            matrix,
-        );
+    match paint_type {
+        PaintType::linearGradient => {
+            matrix = multiply_mat2d(
+                Mat2D([coeffs[0], 0.0, coeffs[1], 0.0, coeffs[2], 0.0]),
+                matrix,
+            );
+        }
+        PaintType::radialGradient => {
+            let w = 1.0 / coeffs[2];
+            matrix = multiply_mat2d(
+                Mat2D([w, 0.0, 0.0, w, -coeffs[0] * w, -coeffs[1] * w]),
+                matrix,
+            );
+        }
+        PaintType::angularGradient => {}
+        PaintType::clipUpdate | PaintType::solidColor => unreachable!(),
     }
     let (x, y) = if location.isComplex() {
         (-1, location.row as u32 + layout.complexOffsetY)
@@ -3850,7 +3868,7 @@ pub fn set_paint_aux_data(
 ) {
     if matches!(
         paintType,
-        PaintType::linearGradient | PaintType::radialGradient
+        PaintType::linearGradient | PaintType::radialGradient | PaintType::angularGradient
     ) {
         let coeffs = gradientCoeffs.expect("gradient is required");
         let (paintMatrix, gradTextureX, gradTextureY) = getGradientMatrixAndCoord(
@@ -4064,7 +4082,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{find_transformed_area, Mat2D, AABB};
+    use super::{AABB, Mat2D, find_transformed_area};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {

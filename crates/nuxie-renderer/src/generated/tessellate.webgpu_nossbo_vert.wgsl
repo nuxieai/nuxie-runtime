@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,22 +7,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct gl_PerVertex {
@@ -56,11 +56,11 @@ var KB: texture_2d<u32>;
 var YC: texture_2d<f32>;
 @group(3) @binding(9)
 var ab: sampler;
-var<private> Y6_: vec4<f32>;
 var<private> Z6_: vec4<f32>;
-var<private> l5_: vec4<f32>;
-var<private> m5_: vec3<f32>;
-var<private> n8_: u32;
+var<private> a7_: vec4<f32>;
+var<private> m5_: vec4<f32>;
+var<private> n5_: vec3<f32>;
+var<private> o8_: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -419,13 +419,13 @@ fn main_1() {
         phi_2015_ = -(_e466);
     }
     let _e478 = phi_2015_;
-    Y6_ = vec4<f32>(_e62.x, _e62.y, _e393.x, _e393.y);
-    Z6_ = vec4<f32>(_e391.x, _e391.y, _e65.z, _e65.w);
+    Z6_ = vec4<f32>(_e62.x, _e62.y, _e393.x, _e393.y);
+    a7_ = vec4<f32>(_e391.x, _e391.y, _e65.z, _e65.w);
     let _e489 = f32((((_e431 + _e121) + _e123) - 1u));
-    l5_ = vec4<f32>((_e489 - abs((_e95 - _e117.x))), _e489, f32(((_e123 << bitcast<u32>(10i)) | _e431)), _e478);
+    m5_ = vec4<f32>((_e489 - abs((_e95 - _e117.x))), _e489, f32(((_e123 << bitcast<u32>(10i)) | _e431)), _e478);
     let _e499 = SC_1;
-    m5_[0u] = _e499.x;
-    m5_[1u] = _e499.y;
+    n5_[0u] = _e499.x;
+    n5_[1u] = _e499.y;
     if (_e123 > 1u) {
         let _e505 = vec2<f32>(_e499.x, _e499.y);
         let _e509 = (_e456 * dot(_e505, _e505));
@@ -447,14 +447,14 @@ fn main_1() {
             phi_2025_ = -(_e523);
         }
         let _e528 = phi_2025_;
-        m5_[2u] = _e528;
+        n5_[2u] = _e528;
     }
     phi_2029_ = _e125;
     if (_e95 < _e92) {
         phi_2029_ = (_e125 | 8388608u);
     }
     let _e533 = phi_2029_;
-    n8_ = _e533;
+    o8_ = _e533;
     unnamed.gl_Position = vec4<f32>(((_e117.x * 0.0009765625f) - 1f), ((_e117.y * _e107) - sign(_e107)), 0f, 1f);
     return;
 }
@@ -467,11 +467,11 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) ND: vec4<f32>, 
     SC_1 = SC;
     WB_1 = WB;
     main_1();
-    let _e18 = Y6_;
-    let _e19 = Z6_;
-    let _e20 = l5_;
-    let _e21 = m5_;
-    let _e22 = n8_;
+    let _e18 = Z6_;
+    let _e19 = a7_;
+    let _e20 = m5_;
+    let _e21 = n5_;
+    let _e22 = o8_;
     let _e23 = unnamed.gl_Position;
     return VertexOutput(_e18, _e19, _e20, _e21, _e22, _e23);
 }

@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,29 +7,29 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(3) @binding(9)
 var ab: sampler;
-var<private> Fi: f32;
+var<private> Gi: f32;
 var<private> S_1: vec4<f32>;
 var<private> gl_FrontFacing_1: bool;
 @group(0) @binding(0)
@@ -39,7 +39,7 @@ var XC: texture_2d<f32>;
 @group(1) @binding(11)
 var TB: texture_2d<f32>;
 @group(3) @binding(8)
-var N8_: sampler;
+var O8_: sampler;
 @group(1) @binding(13)
 var U4_: sampler;
 
@@ -78,7 +78,7 @@ fn main_1() {
         phi_424_ = -(_e83);
     }
     let _e87 = phi_424_;
-    Fi = _e87;
+    Gi = _e87;
     return;
 }
 
@@ -87,6 +87,6 @@ fn main(@location(0) S: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) 
     S_1 = S;
     gl_FrontFacing_1 = gl_FrontFacing;
     main_1();
-    let _e5 = Fi;
+    let _e5 = Gi;
     return _e5;
 }

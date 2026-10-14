@@ -168,6 +168,13 @@ impl<F: RenderFactory> RenderFactory for RoutedTestFactory<F> {
         self.inner
             .make_radial_gradient(cx, cy, radius, colors, stops)
     }
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[nuxie_render_api::ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn nuxie_render_api::RenderShader> {
+        self.inner.make_angular_gradient(colors, stops)
+    }
     fn make_render_path(
         &mut self,
         path: nuxie_render_api::RawPath,

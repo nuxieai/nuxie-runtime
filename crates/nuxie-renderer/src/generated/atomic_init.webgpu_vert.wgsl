@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,22 +7,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct gl_PerVertex {
@@ -32,7 +32,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct di {
+struct ei {
     r2_: array<vec4<u32>>,
 }
 
@@ -44,7 +44,7 @@ struct kg {
     r2_: array<vec4<f32>>,
 }
 
-struct ei {
+struct fi {
     r2_: array<vec4<u32>>,
 }
 
@@ -58,13 +58,13 @@ var UB: texture_2d<u32>;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> KB: di;
+var<storage> KB: ei;
 @group(0) @binding(3)
 var<storage> VC: jg;
 @group(0) @binding(4)
 var<storage> JB: kg;
 @group(0) @binding(5)
-var<storage> BD: ei;
+var<storage> BD: fi;
 @group(3) @binding(9)
 var ab: sampler;
 
@@ -74,18 +74,18 @@ fn main_1() {
 
     let _e22 = gl_VertexIndex_1;
     if ((_e22 & 1i) == 0i) {
-        let _e27 = j.E8_[0u];
+        let _e27 = j.F8_[0u];
         phi_173_ = _e27;
     } else {
-        let _e30 = j.E8_[2u];
+        let _e30 = j.F8_[2u];
         phi_173_ = _e30;
     }
     let _e32 = phi_173_;
     if ((_e22 & 2i) == 0i) {
-        let _e37 = j.E8_[1u];
+        let _e37 = j.F8_[1u];
         phi_176_ = _e37;
     } else {
-        let _e40 = j.E8_[3u];
+        let _e40 = j.F8_[3u];
         phi_176_ = _e40;
     }
     let _e42 = phi_176_;

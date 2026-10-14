@@ -69,6 +69,7 @@ pub enum OpKind {
     ApplyLayerMask = 42,
     StrokePosition = 43,
     ShaderTransform = 44,
+    MakeAngularGradient = 45,
 }
 
 impl OpKind {
@@ -117,6 +118,7 @@ impl OpKind {
             42 => Self::ApplyLayerMask,
             43 => Self::StrokePosition,
             44 => Self::ShaderTransform,
+            45 => Self::MakeAngularGradient,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -173,6 +175,7 @@ impl Display for OpKind {
             Self::ApplyLayerMask => "applyLayerMask",
             Self::StrokePosition => "strokePosition",
             Self::ShaderTransform => "shaderTransform",
+            Self::MakeAngularGradient => "makeAngularGradient",
         })
     }
 }
@@ -486,6 +489,9 @@ fn parse_fields(
             parse_gradient(reader, fields)?;
             push_vec2(reader, fields, "center")?;
             push_float(reader, fields, "radius")?;
+        }
+        OpKind::MakeAngularGradient => {
+            parse_gradient(reader, fields)?;
         }
         OpKind::MakeRenderPath | OpKind::MakeRenderPaint => {
             push_uint(reader, fields, "id")?;

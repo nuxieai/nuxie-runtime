@@ -1,0 +1,44 @@
+provenance_schema=1
+renderer_implementation=cpp-native-metal-approved-fma-and-coverage-adaptations
+capture_tool=upstream-gms
+build_command=DEPENDENCIES=<evidence>/dependency-cache PREMAKE_PATH=<evidence>/build premake5 gmake2 --config=release --out=out/oct14-gms --with_rive_canvas --with_rive_text (from tests); make -C out/oct14-gms -j8 CC=/usr/bin/clang CXX=/usr/bin/clang++ gms
+capture_command=env -u MTL_SHADER_VALIDATION MTL_DEBUG_LAYER=1 <evidence>/gms-adapted --backend metal --headless --match gradienttypes --output <evidence>/adapted -p1 --verbose
+backend=metal
+adapter_vendor=apple
+adapter_device=Apple M5 Max
+adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
+metal_api_validation=enabled
+case_id=gradienttypes
+gm_source=tests/gm/gradients.cpp
+gm_source_sha256=11bcd24162ac0e023685648427a565622c2bc5829b73d0616103e984e59a797f
+runtime_revision=4672b88bf62eee54746854440a914ed20499fe8a
+source_materialization=git archive of pinned revision; only approved FMA and coverage shader adaptations applied after pristine capture
+cpp_compiler=Apple clang version 21.0.0 (clang-2100.3.34.2)
+metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
+xcode_version=27.1
+xcode_build=27A9275
+capture_binary_sha256=9125c69d44ed177ba38b22b53efa6a0029efb4dfa7f13fb509cc0fac31ee47cd
+png_sha256=ad65949e2dc0bdfee5bfea9f79e7cb40f659114b723774934089a0350419528d
+shader_regeneration_command=PYTHONHASHSEED=0 make -C <evidence>/renderer/src/shaders -j8 OUT=<evidence>/tests/out/oct14-gms/include/generated/shaders FLAGS="-p <evidence>/dependency-cache/dabeaz_ply_3.11" rive_pls_macosx_metallib; make -C <evidence>/tests/out/oct14-gms -j8 CC=/usr/bin/clang CXX=/usr/bin/clang++ gms
+approved_fma_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
+fma_adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
+upstream_fragment_shader_sha256=f2485e48efb969f0df1d4d8eb5a127c3839d19108242ba897a1656e37bbf8253
+adapted_fragment_shader_sha256=2376c212f296a666ab66858ed49270ca789ee0826a677f94437e864bb9813f04
+approved_coverage_adaptation_commit=a07db8d3ec50af8eb940db4af788fbbfad74b626
+coverage_adaptation=draw_path.vert selects float4 COVERAGE_TYPE and preserves coverages before interpolation when ENABLE_FEATHER or METAL; both guards and comment match the existing Rust shader literal
+upstream_vertex_shader_sha256=a711a9e5894e149852785b746d347f3dec78e35c555859ba09d0fde196575f2b
+adapted_vertex_shader_sha256=d11c82b89e248af67885f974d57c64fdc3e954f78dfc481b1f6a87e89279f4d5
+pristine_capture_file=gradienttypes.pristine.png
+pristine_capture_command=env -u MTL_SHADER_VALIDATION MTL_DEBUG_LAYER=1 <evidence>/gms-pristine --backend metal --headless --match gradienttypes --output <evidence>/pristine -p1 --verbose
+pristine_capture_binary_sha256=3db617a955dc0cc3e1a1105024a71114dbce892e8d46374e0797af3b6d906bf1
+pristine_png_sha256=e8d91daa982fd0de1ccc95dc5ef42435c208c5e58c7c2c5a5477d9f754d85dbb
+pristine_comparison=56206 differing pixels, maximum channel delta 2; compares pristine C++ to approved-adapted C++ only
+evidence_directory=/private/tmp/nuxie-oct14-angular-gms.TWxpND
+frame=0
+frame_width=2048
+frame_height=1536
+clear_color=0xff404040
+mode=raster-ordering
+shader_compilation_mode=always-synchronous
+sample_count=1
+rust_comparison=0 differing pixels, maximum channel delta 0; exact RGBA comparison against 4672 Rust Metal output

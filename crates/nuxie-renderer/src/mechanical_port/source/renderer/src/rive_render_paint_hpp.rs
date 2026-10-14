@@ -137,7 +137,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    rcp, static_rcp_cast, RefCntTarget,
+    RefCntTarget, rcp, static_rcp_cast,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderImage as SourceRenderImage, RenderPaint as SourceRenderPaint, RenderPaintContract,
@@ -145,7 +145,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
 };
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    lite_rtti_cast, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, lite_rtti_cast,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
@@ -444,7 +444,9 @@ impl RiveRenderPaint {
             gpu::PaintType::solidColor => {
                 (unsafe { self.m_data.m_simpleValue.color } >> 24) == 0xff
             }
-            gpu::PaintType::linearGradient | gpu::PaintType::radialGradient => {
+            gpu::PaintType::linearGradient
+            | gpu::PaintType::radialGradient
+            | gpu::PaintType::angularGradient => {
                 !self.m_data.m_gradient.get().is_null()
                     && unsafe { (&*self.m_data.m_gradient.get()).isOpaque() }
             }

@@ -15,8 +15,8 @@ use std::{
     collections::HashMap,
     rc::{Rc, Weak},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -207,6 +207,29 @@ impl Factory for DeferredFactory {
             base: Rc::new(base),
         })
     }
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        let base = self.allocate(ResourceKind::Shader, &self.shader_ids);
+        let (blob_offset, stops_offset) = self.gradient_blobs(colors, stops);
+        base.append(
+            RenderCmd::MakeAngularGradient,
+            &AngularGradientPod {
+                id: base.id,
+                generation: base.generation(),
+                pad: 0,
+                count: colors.len() as u32,
+                blob_offset,
+                stops_offset,
+            },
+        );
+        Box::new(DeferredRenderShader {
+            base: Rc::new(base),
+        })
+    }
+
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,

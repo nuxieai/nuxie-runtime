@@ -886,6 +886,21 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
         )
     }
 
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        Box::new(
+            self.with_context(|context| {
+                context
+                    .riveRenderFactoryMut()
+                    .makeAngularGradientHandle(colors, stops)
+            })
+            .unwrap_or_else(|| panic!("exact source angular-gradient owner was not valid")),
+        )
+    }
+
     fn make_render_path(&mut self, mut path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         Box::new(
             self.with_context(|context| {

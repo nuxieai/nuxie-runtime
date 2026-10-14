@@ -176,6 +176,14 @@ impl Factory for AndroidVulkanFactory {
             .make_radial_gradient(cx, cy, radius, colors, stops)
     }
 
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.session.make_angular_gradient(colors, stops)
+    }
+
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         self.session.make_render_path(raw_path, fill_rule)
     }

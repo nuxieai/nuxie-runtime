@@ -297,6 +297,14 @@ impl Factory for NativeVulkanFactory {
             .make_radial_gradient(cx, cy, radius, colors, stops)
     }
 
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.core.make_angular_gradient(colors, stops)
+    }
+
     fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         self.core.make_render_path(path, fill_rule)
     }

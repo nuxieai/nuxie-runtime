@@ -5088,6 +5088,10 @@ impl RenderContext {
         self.base.makeRadialGradient(cx, cy, radius, colors, stops)
     }
 
+    pub fn makeAngularGradient(&mut self, colors: &[ColorInt], stops: &[f32]) -> rcp<RenderShader> {
+        self.base.makeAngularGradient(colors, stops)
+    }
+
     pub fn makeRenderPath(
         &mut self,
         raw_path: &mut RawPath,
@@ -6263,7 +6267,9 @@ impl LogicalFlush {
         let stops = gradient.stops_slice();
         let stop_count = gradient.count();
         debug_assert!(stop_count > 0);
-        if stop_count == 1 || (stop_count == 2 && stops[0] == 0.0 && stops[1] == 1.0) {
+        if gradient.paintType() != gpu::PaintType::angularGradient
+            && (stop_count == 1 || (stop_count == 2 && stops[0] == 0.0 && stops[1] == 1.0))
+        {
             let colors = gradient.colors_slice();
             let color_ramp = gpu::TwoTexelRamp {
                 color0: colors[0],
@@ -8525,6 +8531,16 @@ impl FactoryContract for RenderContext {
             self.base
                 .makeRadialGradientSource(cx, cy, radius, colors, stops, count)
         }
+    }
+
+    unsafe fn makeAngularGradient(
+        &mut self,
+        colors: *const ColorInt,
+        stops: *const f32,
+        count: usize,
+    ) -> rcp<RenderShader> {
+        // SAFETY: the Factory caller supplies valid `[count]` arrays.
+        unsafe { self.base.makeAngularGradientSource(colors, stops, count) }
     }
 
     fn makeRenderPath(&mut self, raw_path: &mut RawPath, fill_rule: FillRule) -> rcp<RenderPath> {

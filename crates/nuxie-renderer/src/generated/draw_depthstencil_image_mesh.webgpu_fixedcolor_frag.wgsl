@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,25 +7,25 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
-@id(7) override dj: bool = true;
+@id(7) override ej: bool = true;
 
 @group(1) @binding(11)
 var TB: texture_2d<f32>;
@@ -36,7 +36,7 @@ var<private> d6_1: vec2<f32>;
 var<uniform> j: VB;
 var<private> T1_1: vec4<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
-var<private> Fi: vec4<f32>;
+var<private> Gi: vec4<f32>;
 var<private> f4_1: f32;
 var<private> J1_1: u32;
 @group(0) @binding(12)
@@ -54,7 +54,7 @@ fn main_1() {
     let _e26 = gl_FragCoord_1;
     let _e28 = j.F3_;
     let _e30 = j.G3_;
-    if (dj && (_e23.w != 0f)) {
+    if (ej && (_e23.w != 0f)) {
         phi_207_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e26.x) + (0.00583715f * _e26.y))))) * _e28) + _e30)) + _e24);
     } else {
         phi_207_ = _e24;
@@ -62,7 +62,7 @@ fn main_1() {
     let _e46 = phi_207_;
     let _e52 = vec4<f32>(_e46.x, _e23.y, _e23.z, _e23.w);
     let _e58 = vec4<f32>(_e52.x, _e46.y, _e52.z, _e52.w);
-    Fi = vec4<f32>(_e58.x, _e58.y, _e46.z, _e58.w);
+    Gi = vec4<f32>(_e58.x, _e58.y, _e46.z, _e58.w);
     return;
 }
 
@@ -74,6 +74,6 @@ fn main(@location(0) d6_: vec2<f32>, @location(3) @interpolate(flat, either) T1_
     f4_1 = f4_;
     J1_1 = J1_;
     main_1();
-    let _e11 = Fi;
+    let _e11 = Gi;
     return _e11;
 }

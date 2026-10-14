@@ -1,4 +1,4 @@
-//! tests/unit_tests/renderer/canvas_schedule_test.cpp through 34f6df47.
+//! tests/unit_tests/renderer/canvas_schedule_test.cpp through 536a4f7a.
 use super::super::{
     canvas_schedule::*, command_stream::WirePod, deferred_replayer::*, deferred_session::*,
     render_commands::*, render_handle::*,
@@ -36,6 +36,150 @@ impl StreamBuilder {
     fn schedule(&self) -> CanvasSchedule {
         schedule_canvases(&self.bytes, &self.segments)
     }
+    fn canvas_range_drawing_paint_sampling(&mut self, id: u64, sampled: u64) {
+        let begin = self.bytes.len() as u32;
+        self.append(RenderCmd::DrawPath, &DrawPathPod::default());
+        self.append(
+            RenderCmd::CanvasSample,
+            &ResIdPod {
+                id: CANVAS_HANDLE_FLAG | sampled as u32,
+            },
+        );
+        self.segments.push(DeferredSegment {
+            target: SegmentTarget::Canvas,
+            target_id: id,
+            begin,
+            end: self.bytes.len() as u32,
+        });
+    }
+}
+
+#[test]
+fn canvas_sample_creates_edges_like_draw_image() {
+    let mut b = StreamBuilder::default();
+    b.canvas_range_drawing_paint_sampling(2, 1);
+    b.canvas_range(1, &[]);
+    let s = b.schedule();
+    assert_eq!(s.order, [1, 2]);
+    assert!(!s.had_cycle);
+}
+
+fn canvas_samples(session: &DeferredSession) -> Vec<u32> {
+    use super::super::command_stream::CommandReader;
+    let buffer = session.command_buffer();
+    let buffer = buffer.lock().unwrap();
+    let mut reader = CommandReader::new(buffer.command_bytes(), buffer.blob_bytes());
+    let mut ids = Vec::new();
+    while let Some(kind) = reader.next_u8() {
+        let command = RenderCmd::from_byte(kind).unwrap();
+        if command == RenderCmd::CanvasSample {
+            ids.push(reader.read::<ResIdPod>().id);
+        } else {
+            reader.skip(payload_size_of(command));
+        }
+    }
+    ids
+}
+
+#[test]
+fn replay_opens_a_canvas_before_a_reader_whose_paint_samples_it() {
+    // Upstream OrderSink discards canvas draws but inherits SerializingFactory.
+    // Its paint's modulatedImage unchecked-casts the GPU canvas image to a
+    // SerializingRenderImage. Rust deliberately checks that image boundary.
+    // Use the existing null factory for this order-only sink instead of
+    // reproducing the invalid C++ downcast; session recording, replay, canvas
+    // identities, and the complete opening-order assertion remain unchanged.
+    struct OrderSink {
+        factory: PersistentFactory<NullFactory>,
+        opened_canvases: Vec<usize>,
+    }
+    impl DeferredFrameSink for OrderSink {
+        fn factory(&mut self) -> PersistentFactoryContext {
+            self.factory.persistent_context().unwrap()
+        }
+        fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+            None
+        }
+        fn begin_screen_frame(&mut self, _target: u64) -> Option<RendererOwner> {
+            None
+        }
+        fn begin_canvas_content(
+            &mut self,
+            canvas: RenderCanvasHandle,
+            _clear: u32,
+        ) -> Option<RendererOwner> {
+            self.opened_canvases.push(Rc::as_ptr(&canvas) as usize);
+            None
+        }
+    }
+    let mut session = DeferredSession::with_caps(Default::default());
+    let a = fake_canvas();
+    let b = fake_canvas();
+    let mut modulated = session.make_render_paint();
+    modulated.modulated_image(
+        Some(a.borrow().render_image().as_ref()),
+        ImageSampler::default(),
+        Mat2D::IDENTITY,
+    );
+    let path = session.make_empty_render_path();
+    let mut rb = session.begin_canvas_content(b.clone(), 0).unwrap();
+    rb.draw_path(path.as_ref(), modulated.as_ref());
+    session.end_canvas_content(&b);
+    let mut ra = session.begin_canvas_content(a.clone(), 0).unwrap();
+    let paint = session.make_render_paint();
+    ra.draw_path(path.as_ref(), paint.as_ref());
+    session.end_canvas_content(&a);
+    session.close_open_range();
+    let frame = snapshot_frame(&mut session);
+    let mut sink = OrderSink {
+        factory: PersistentFactory::new(NullFactory),
+        opened_canvases: Vec::new(),
+    };
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+    assert_eq!(
+        sink.opened_canvases,
+        [Rc::as_ptr(&a) as usize, Rc::as_ptr(&b) as usize]
+    );
+}
+
+#[test]
+fn a_canvas_draw_names_the_canvas_its_paint_samples_at_the_draw() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    let a = fake_canvas();
+    let b = fake_canvas();
+    let c = fake_canvas();
+    let mut paint = session.make_render_paint();
+    let path = session.make_empty_render_path();
+    let id_a = session
+        .canvases()
+        .borrow_mut()
+        .image_draw_id(a.borrow().render_image().as_ref());
+    let mut rb = session.begin_canvas_content(b.clone(), 0).unwrap();
+    paint.modulated_image(
+        Some(a.borrow().render_image().as_ref()),
+        ImageSampler::default(),
+        Mat2D::IDENTITY,
+    );
+    rb.draw_path(path.as_ref(), paint.as_ref());
+    paint.modulated_image(
+        Some(c.borrow().render_image().as_ref()),
+        ImageSampler::default(),
+        Mat2D::IDENTITY,
+    );
+    paint.modulated_image(None, ImageSampler::default(), Mat2D::IDENTITY);
+    rb.draw_path(path.as_ref(), paint.as_ref());
+    session.end_canvas_content(&b);
+    paint.modulated_image(
+        Some(a.borrow().render_image().as_ref()),
+        ImageSampler::default(),
+        Mat2D::IDENTITY,
+    );
+    session
+        .screen_renderer(0)
+        .borrow_mut()
+        .draw_path(path.as_ref(), paint.as_ref());
+    session.close_open_range();
+    assert_eq!(canvas_samples(&session), [id_a]);
 }
 #[test]
 fn in_order_sampler_keeps_record_order() {

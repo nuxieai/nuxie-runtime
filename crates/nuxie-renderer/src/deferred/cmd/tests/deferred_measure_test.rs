@@ -262,7 +262,7 @@ impl DeferredFrameSink for MSink {
     }
 }
 struct Census {
-    count: [u64; RenderCmd::ResourceNewVersion as usize + 1],
+    count: [u64; RenderCmd::CanvasSample as usize + 1],
     geom_bytes: u64,
     command_bytes: u64,
     blob_bytes: u64,
@@ -272,7 +272,7 @@ struct Census {
 impl Default for Census {
     fn default() -> Self {
         Self {
-            count: [0; RenderCmd::ResourceNewVersion as usize + 1],
+            count: [0; RenderCmd::CanvasSample as usize + 1],
             geom_bytes: 0,
             command_bytes: 0,
             blob_bytes: 0,
@@ -321,7 +321,7 @@ struct Phase {
 fn row(riv: &str, phase: &str, metric: &str, value: f64) {
     println!("MEASURE,{riv},{phase},{metric},{value:.6}");
 }
-const COMMAND_NAMES: [&str; RenderCmd::ResourceNewVersion as usize + 1] = [
+const COMMAND_NAMES: [&str; RenderCmd::CanvasSample as usize + 1] = [
     "makePath",
     "makeEmptyPath",
     "makePaint",
@@ -366,6 +366,7 @@ const COMMAND_NAMES: [&str; RenderCmd::ResourceNewVersion as usize + 1] = [
     "canvasContentBegin",
     "canvasContentEnd",
     "resourceNewVersion",
+    "canvasSample",
 ];
 fn emit(riv: &str, name: &str, p: &Phase) {
     if p.frames == 0 {

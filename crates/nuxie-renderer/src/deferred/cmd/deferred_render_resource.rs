@@ -4,7 +4,7 @@ use super::{
     foreign_image_registry::ForeignImageRegistry,
     render_command_buffer::{RenderCommandBuffer, SharedIdAllocator},
     render_commands::*,
-    render_handle::INVALID_RENDER_HANDLE,
+    render_handle::{CANVAS_HANDLE_FLAG, INVALID_RENDER_HANDLE},
 };
 use nuxie_render_api::*;
 use std::{
@@ -185,6 +185,13 @@ impl DeferredRenderPaint {
     pub fn mark_drawn(&self) {
         self.resource.mark_drawn();
         self.stroke_invalidated.set(false);
+    }
+    pub fn foreign_image_id(&self) -> u32 {
+        if self.image_id != INVALID_RENDER_HANDLE && self.image_id & CANVAS_HANDLE_FLAG != 0 {
+            self.image_id
+        } else {
+            INVALID_RENDER_HANDLE
+        }
     }
     fn emit_u8(&self, command: RenderCmd, value: u8) {
         self.resource.bump();

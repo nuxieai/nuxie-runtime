@@ -183,7 +183,8 @@ fn filter_allows(filter: ReplayFilter, command: RenderCmd) -> bool {
         | RenderCmd::ModulateOpacity
         | RenderCmd::ModulateColor
         | RenderCmd::CanvasContentBegin
-        | RenderCmd::CanvasContentEnd => filter == ReplayFilter::Draws,
+        | RenderCmd::CanvasContentEnd
+        | RenderCmd::CanvasSample => filter == ReplayFilter::Draws,
         RenderCmd::DestroyResource => filter == ReplayFilter::Destroys,
         _ => filter == ReplayFilter::Resources,
     }
@@ -923,6 +924,9 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                 let _: ResIdPod = reader.read();
                 current_canvas = None;
                 in_canvas = false;
+            }
+            RenderCmd::CanvasSample => {
+                let _: ResIdPod = reader.read(); // Read by the canvas schedule only.
             }
         }
     }

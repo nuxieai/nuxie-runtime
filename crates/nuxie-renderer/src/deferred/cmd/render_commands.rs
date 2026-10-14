@@ -48,10 +48,12 @@ pub enum RenderCmd {
     CanvasContentBegin,
     CanvasContentEnd,
     ResourceNewVersion,
+    // Canvas drawPath's sampled image, captured at record time. Replay no-op.
+    CanvasSample,
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 44] = [
+        const COMMANDS: [RenderCmd; 45] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -96,6 +98,7 @@ impl RenderCmd {
             RenderCmd::CanvasContentBegin,
             RenderCmd::CanvasContentEnd,
             RenderCmd::ResourceNewVersion,
+            RenderCmd::CanvasSample,
         ];
         COMMANDS.get(value as usize).copied()
     }
@@ -355,9 +358,10 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::MakeImageMeshInstances => MakeImageMeshInstancesPod::SIZE,
         RenderCmd::ImageMeshInstancesData => ImageMeshInstancesDataPod::SIZE,
         RenderCmd::DestroyResource => DestroyResourcePod::SIZE,
-        RenderCmd::PathRewind | RenderCmd::PaintInvalidateStroke | RenderCmd::CanvasContentEnd => {
-            ResIdPod::SIZE
-        }
+        RenderCmd::PathRewind
+        | RenderCmd::PaintInvalidateStroke
+        | RenderCmd::CanvasContentEnd
+        | RenderCmd::CanvasSample => ResIdPod::SIZE,
         RenderCmd::PathFillRule => PathFillRulePod::SIZE,
         RenderCmd::PathAddRawPath => PathRawPod::SIZE,
         RenderCmd::PathAddRenderPath => PathAddPathPod::SIZE,

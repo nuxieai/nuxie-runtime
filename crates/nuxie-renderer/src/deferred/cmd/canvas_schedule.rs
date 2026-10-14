@@ -1,6 +1,6 @@
 //! renderer/cmd/canvas_schedule.hpp at e949498e.
 use super::deferred_session::{DeferredSegment, SegmentTarget};
-use super::render_commands::{payload_size_of, RenderCmd};
+use super::render_commands::{RenderCmd, payload_size_of};
 use super::render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE};
 
 #[derive(Default, Debug)]
@@ -58,6 +58,7 @@ pub fn schedule_canvases(commands: &[u8], segments: &[DeferredSegment]) -> Canva
                     | RenderCmd::DrawImageMesh
                     | RenderCmd::DrawImageMeshInstanced
                     | RenderCmd::ApplyLayerMask
+                    | RenderCmd::CanvasSample
             ) {
                 let handle = drawn_image_handle(&commands[pos as usize + 1..]);
                 if handle != INVALID_RENDER_HANDLE && handle & CANVAS_HANDLE_FLAG != 0 {

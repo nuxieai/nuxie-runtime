@@ -1152,9 +1152,18 @@ pub(crate) struct ImportedGpuCanvasShaderAssetEntry {
 
 pub(crate) type ImportedGpuCanvasShaderAssets = Rc<RefCell<Vec<ImportedGpuCanvasShaderAssetEntry>>>;
 
+/// The one shader a direct snapshot program is given. It takes the name of
+/// the first `context:shader(name)` request, so a script asks for its shader
+/// by the name it is linked under; any other name finds no shader.
+#[derive(Debug, Default)]
+struct DirectGpuCanvasShader {
+    entries: Vec<GpuCanvasShaderEntry>,
+    name: RefCell<Option<String>>,
+}
+
 #[derive(Debug, Clone)]
 enum GpuCanvasShaderCatalog {
-    Direct(Rc<BTreeMap<String, Vec<GpuCanvasShaderEntry>>>),
+    Direct(Rc<DirectGpuCanvasShader>),
     Imported(ImportedGpuCanvasShaderAssets),
 }
 
@@ -1166,14 +1175,17 @@ impl GpuCanvasShaderCatalog {
         renderer_bindings: Option<&RendererBindings>,
     ) -> Option<GpuShader> {
         match self {
-            Self::Direct(shaders) => {
-                let entries = shaders.get(name)?.clone();
-                if entries.is_empty() {
+            Self::Direct(shader) => {
+                if shader.entries.is_empty() {
+                    return None;
+                }
+                let mut bound = shader.name.borrow_mut();
+                if bound.get_or_insert_with(|| name.to_owned()) != name {
                     return None;
                 }
                 Some(GpuShader {
                     name: name.to_owned(),
-                    entries,
+                    entries: shader.entries.clone(),
                     module: None,
                 })
             }
@@ -1402,7 +1414,7 @@ impl GpuCanvasContextBindings {
     pub(crate) fn for_test() -> Self {
         Self {
             canvases: Rc::new(RefCell::new(Vec::new())),
-            shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::new())),
+            shaders: GpuCanvasShaderCatalog::Direct(Rc::default()),
             renderer_bindings: None,
             snapshot_images: None,
         }
@@ -2300,9 +2312,8 @@ impl GpuCanvasBytecodeProgram {
         let canvases = Rc::new(RefCell::new(Vec::new()));
         let bindings = GpuCanvasContextBindings {
             canvases: Rc::clone(&canvases),
-            shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::from([(
-                "scene".into(),
-                vec![
+            shaders: GpuCanvasShaderCatalog::Direct(Rc::new(DirectGpuCanvasShader {
+                entries: vec![
                     GpuCanvasShaderEntry {
                         stage: GpuCanvasShaderStage::Vertex,
                         logical_entry_point: "vs_main".into(),
@@ -2314,7 +2325,8 @@ impl GpuCanvasBytecodeProgram {
                         physical_entry_point: "fs_main".into(),
                     },
                 ],
-            )]))),
+                name: RefCell::new(None),
+            })),
             renderer_bindings: None,
             snapshot_images: Some(Rc::clone(&images)),
         };

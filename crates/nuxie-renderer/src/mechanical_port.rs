@@ -525,3 +525,6 @@ pub(crate) mod source {
 #[cfg(test)]
 #[path = "mechanical_port/pls_render_context_test.rs"]
 mod pls_render_context_test;
+#[cfg(test)]
+#[path = "mechanical_port/hairline_batch_test.rs"]
+mod hairline_batch_test;

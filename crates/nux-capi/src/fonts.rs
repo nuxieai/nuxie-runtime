@@ -417,6 +417,8 @@ pub unsafe extern "C" fn nux_font_has_glyph(
 
 /// Copy at the requested weight only when the font has a wght axis; fixed
 /// fonts retain their own weight, as in the upstream Android system provider.
+/// A weighted copy of a variable host-outline font is a plain font without
+/// outline recovery; a fixed host font is returned as is.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_font_with_weight(
     font: *const NuxFont,
@@ -594,6 +596,14 @@ impl Drop for FallbackHookGuard {
     fn drop(&mut self) {
         FALLBACK_HOOK_ACTIVE.with(|active| active.set(false));
     }
+}
+
+#[cfg(test)]
+pub(super) fn with_fallback_hook_for_test<R>(work: impl FnOnce() -> R) -> R {
+    assert!(!fallback_hook_active());
+    FALLBACK_HOOK_ACTIVE.with(|active| active.set(true));
+    let _guard = FallbackHookGuard;
+    work()
 }
 
 fn c_fallback(missing: u32, index: u32, asking_font: &dyn Font) -> Option<FontRef> {

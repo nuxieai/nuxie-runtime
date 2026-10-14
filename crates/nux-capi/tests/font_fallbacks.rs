@@ -530,7 +530,9 @@ fn malformed_font_sources_publish_no_handle() {
 fn fallback_hook_reentry_returns_reentrant_call() {
     const CHILD: &str = "NUX_FONT_REENTRY_TEST_CHILD";
     if std::env::var_os(CHILD).is_some() {
+        static HOOK_RAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         unsafe extern "C" fn reenter(_: *mut c_void, _: u32, _: u32, _: u16) -> *const NuxFont {
+            HOOK_RAN.store(true, std::sync::atomic::Ordering::Release);
             assert_eq!(
                 unsafe { nux_font_set_fallback_proc(None, ptr::null_mut()) },
                 NuxStatus::ReentrantCall
@@ -549,6 +551,10 @@ fn fallback_hook_reentry_returns_reentrant_call() {
             );
         }
         render(LATIN, "مرحبا", None);
+        assert!(
+            HOOK_RAN.load(std::sync::atomic::Ordering::Acquire),
+            "the font hook must run"
+        );
         return;
     }
     let mut child = std::process::Command::new(std::env::current_exe().unwrap())

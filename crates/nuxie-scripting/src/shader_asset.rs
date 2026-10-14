@@ -526,6 +526,20 @@ pub fn decode_browser_shader_asset(
     ShaderAsset::decode(name, payload)?.decode_for_profile(name, profile, None)
 }
 
+/// Decode one precompiled `ShaderAsset` for any renderer profile, native ones
+/// included, under `provenance`. The product mints that provenance for
+/// exactly these bytes once it trusts them, as it does an imported file's:
+/// a shader built into the product itself, say. A native profile still needs
+/// its own support compiled (`apple-authored-msl`, `android-authored-wgsl`).
+pub fn decode_trusted_shader_asset(
+    name: &str,
+    payload: &[u8],
+    profile: GpuCanvasShaderProfile,
+    provenance: GpuCanvasShaderProvenance,
+) -> Result<GpuCanvasShaderArtifact> {
+    ShaderAsset::decode(name, payload)?.decode_for_profile(name, profile, Some(provenance))
+}
+
 struct Cursor<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -2092,6 +2106,31 @@ mod tests {
                 sampling: Some(GpuCanvasShaderSampling::Center),
             },
         );
+    }
+
+    #[test]
+    fn a_trusted_decode_builds_native_code_only_for_the_bytes_it_was_given() {
+        let payload = native_payload();
+        let artifact = decode_trusted_shader_asset(
+            "built-in",
+            &payload,
+            GpuCanvasShaderProfile::TrustedAppleMetal,
+            provenance(&payload),
+        )
+        .unwrap();
+        assert!(matches!(
+            artifact,
+            GpuCanvasShaderArtifact::TrustedAppleMetal(_)
+        ));
+        let other = provenance(b"other bytes");
+        let error = decode_trusted_shader_asset(
+            "built-in",
+            &payload,
+            GpuCanvasShaderProfile::TrustedAppleMetal,
+            other,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("does not authorize"), "{error}");
     }
 
     #[test]

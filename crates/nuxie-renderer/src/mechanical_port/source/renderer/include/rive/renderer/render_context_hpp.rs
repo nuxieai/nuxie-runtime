@@ -2190,7 +2190,9 @@ impl ResourceAllocationCounts {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DrawSortEntry {
     pub sortKey: i64,
-    pub drawIndex: i16,
+    // Negated for prepasses, like sortKey. The signed tiebreaker makes opaque
+    // prepasses go front-to-back when their sort keys are equal.
+    pub signedDrawIndex: i16,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

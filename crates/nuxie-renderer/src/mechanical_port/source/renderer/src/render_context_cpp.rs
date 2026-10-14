@@ -4212,6 +4212,7 @@ use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderImage, RenderPaint, RenderPath, RenderShader,
 };
+use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::*;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
@@ -4222,6 +4223,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::{
     RiveRenderImage, RiveRenderImageHandle,
 };
+use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use nuxie_render_api::{FillRule, RawPath};
 
@@ -4248,6 +4250,64 @@ const SORT_GROUP_SHIFT: u32 = 48;
 const SORT_GROUP_MASK: i64 = 0x7fff_i64 << SORT_GROUP_SHIFT;
 const SORT_CONTENTS_MASK: i64 = 0x1ff_i64 << SORT_CONTENTS_SHIFT;
 const SORT_BLEND_MASK: i64 = 0xf_i64 << SORT_BLEND_SHIFT;
+
+fn drawTypeIsBatchable(draw_type: gpu::DrawType) -> bool {
+    match draw_type {
+        gpu::DrawType::midpointFanPatches
+        | gpu::DrawType::midpointFanCenterAAPatches
+        | gpu::DrawType::outerCurvePatches
+        | gpu::DrawType::interiorTriangulation
+        | gpu::DrawType::featherAtlasBlit
+        | gpu::DrawType::stencilMidpointFanBorrowedCoverage
+        | gpu::DrawType::stencilDynamicMidpointFans
+        | gpu::DrawType::stencilMidpointFans
+        | gpu::DrawType::stencilMidpointFanReset
+        | gpu::DrawType::stencilMidpointFanWinding
+        | gpu::DrawType::stencilMidpointFanCover
+        | gpu::DrawType::stencilOuterCubicBorrowedCoverage
+        | gpu::DrawType::stencilDynamicOuterCubics
+        | gpu::DrawType::stencilOuterCubics
+        | gpu::DrawType::stencilOuterCubicReset
+        | gpu::DrawType::stencilOuterCubicWinding
+        | gpu::DrawType::stencilOuterCubicCover
+        | gpu::DrawType::clipReset
+        | gpu::DrawType::depthStrokes
+        | gpu::DrawType::depthAAStrokes
+        | gpu::DrawType::depthAAOuterHairline => true,
+        // Image draws each have their own unique uniforms.
+        gpu::DrawType::imageRect
+        | gpu::DrawType::imageMesh
+        | gpu::DrawType::renderPassInitialize
+        | gpu::DrawType::renderPassResolve => false,
+    }
+}
+
+fn canCombineShaderMiscFlags(
+    batch: &gpu::DrawBatch,
+    draw_contents: gpu::DrawContents,
+    misc: gpu::ShaderMiscFlags,
+) -> bool {
+    let any_fill = gpu::DrawContents::clockwiseFill
+        | gpu::DrawContents::evenOddFill
+        | gpu::DrawContents::nonZeroFill;
+    let mut compare_mask = !gpu::ShaderMiscFlags::none;
+    // Strokes can combine with paths of any fill type.
+    if (batch.drawContents.0 & any_fill.0) == 0 || (draw_contents.0 & any_fill.0) == 0 {
+        compare_mask &= !gpu::ShaderMiscFlags::clockwiseFill;
+    }
+    (batch.shaderMiscFlags & compare_mask) == (misc & compare_mask)
+}
+
+fn canCombineDrawImages(
+    current_texture: *const Texture,
+    next_texture: *const Texture,
+    current_sampler: ImageSampler,
+    next_sampler: ImageSampler,
+) -> bool {
+    current_texture.is_null()
+        || next_texture.is_null()
+        || (current_texture == next_texture && current_sampler == next_sampler)
+}
 
 fn pls_blend_mode(mode: nuxie_render_api::BlendMode) -> u64 {
     if mode == nuxie_render_api::BlendMode::SrcOver {
@@ -4279,16 +4339,15 @@ fn make_sort_key(
 }
 
 // The pinned Emscripten WebGL2 build sorts DrawSortEntry with libc++'s
-// non-branchless std::sort implementation. Equal sort keys are observable in
-// overlapping draws, so Rust's unrelated unstable-sort permutation is not an
-// exact translation of this platform owner.
+// non-branchless std::sort implementation. Both platform paths use upstream's
+// signed draw-index tiebreaker so subsequent subpasses retain contiguous data.
 fn emscripten_libcpp_sort_draw_entries(entries: &mut [DrawSortEntry]) {
     fn less(entries: &[DrawSortEntry], a: usize, b: usize) -> bool {
-        entries[a].sortKey < entries[b].sortKey
+        less_value(entries[a], entries[b])
     }
 
     fn less_value(a: DrawSortEntry, b: DrawSortEntry) -> bool {
-        a.sortKey < b.sortKey
+        (a.sortKey, a.signedDrawIndex) < (b.sortKey, b.signedDrawIndex)
     }
 
     fn sort3(entries: &mut [DrawSortEntry], x: usize, y: usize, z: usize) {
@@ -6929,60 +6988,52 @@ impl LogicalFlush {
         } else {
             0
         };
-        let mergeable_type = !matches!(
-            draw_type,
-            gpu::DrawType::imageRect
-                | gpu::DrawType::imageMesh
-                | gpu::DrawType::renderPassInitialize
-                | gpu::DrawType::renderPassResolve
-        );
-        let mut can_merge = false;
+        let mut batch: *mut gpu::DrawBatch = core::ptr::null_mut();
         let previous = self.m_draw_list.tail();
-        if mergeable_type
+        if drawTypeIsBatchable(draw_type)
             && !previous.is_null()
             && (self.m_pending_barriers.0 & gpu::BarrierFlags::drawBatchBreak.0) == 0
         {
-            let current = unsafe { &*previous };
-            let any_fill = gpu::DrawContents::clockwiseFill
-                | gpu::DrawContents::evenOddFill
-                | gpu::DrawContents::nonZeroFill;
-            let mut compare_mask = !gpu::ShaderMiscFlags::none;
-            if (current.drawContents.0 & any_fill.0) == 0 || (draw_contents.0 & any_fill.0) == 0 {
-                compare_mask &= !gpu::ShaderMiscFlags::clockwiseFill;
-            }
+            let current = unsafe { &mut *previous };
             let current_texture = current
                 .imageTexture
                 .map_or(core::ptr::null_mut(), |p| p.as_ptr());
-            let images_combine = current_texture.is_null()
-                || draw.imageTexture().is_null()
-                || (current_texture == draw.imageTexture()
-                    && current.imageSampler == draw.imageSampler());
-            can_merge = current.drawType == draw_type
-                && (current.shaderMiscFlags & compare_mask) == (misc & compare_mask)
-                && images_combine;
-            if can_merge
-                && current.baseElement + (current.elementCount << element_stride_log2) != base
+            if current.drawType == draw_type
+                && canCombineShaderMiscFlags(current, draw_contents, misc)
+                && canCombineDrawImages(
+                    current_texture,
+                    draw.imageTexture(),
+                    current.imageSampler,
+                    draw.imageSampler(),
+                )
+                && (!context.platformFeatures().supportsClipScissor
+                    || current.scissorRect
+                        == draw.scissorRect().map(|r| gpu::AABBu16 {
+                            left: r.left,
+                            top: r.top,
+                            right: r.right,
+                            bottom: r.bottom,
+                        }))
             {
-                debug_assert_eq!(
-                    context.frameInterlockMode(),
-                    gpu::InterlockMode::depthStencil
-                );
-                can_merge = false;
-            }
-            if context.platformFeatures().supportsClipScissor {
-                let draw_scissor = draw.scissorRect().map(|r| gpu::AABBu16 {
-                    left: r.left,
-                    top: r.top,
-                    right: r.right,
-                    bottom: r.bottom,
-                });
-                if current.scissorRect != draw_scissor {
-                    can_merge = false;
+                if current.baseElement + (current.elementCount << element_stride_log2) == base {
+                    // We are immediately after the current batch.
+                    batch = previous;
+                } else if base + (count << element_stride_log2) == current.baseElement {
+                    // We are immediately before the current batch.
+                    batch = previous;
+                    current.baseElement = base;
+                } else {
+                    // Depth/stencil subpasses reuse tessellation, so otherwise
+                    // compatible batches need not have contiguous patches.
+                    debug_assert_eq!(
+                        context.frameInterlockMode(),
+                        gpu::InterlockMode::depthStencil
+                    );
                 }
             }
         }
-        let batch = if !can_merge {
-            let batch = self.m_draw_list.push_back(gpu::DrawBatch::new(
+        if batch.is_null() {
+            batch = self.m_draw_list.push_back(gpu::DrawBatch::new(
                 draw_type,
                 misc,
                 draw_contents,
@@ -6997,22 +7048,41 @@ impl LogicalFlush {
                 (*batch).indexCountPerInstance = index_count;
                 (*batch).baseIndex = base_index;
             }
-            batch
         } else {
-            let batch = previous;
             unsafe {
-                debug_assert_eq!(
-                    (*batch).baseElement + ((*batch).elementCount << element_stride_log2),
-                    base
-                );
                 (*batch).elementCount += count;
+                debug_assert!(
+                    context.frameInterlockMode() != gpu::InterlockMode::clockwise
+                        || ((*batch).drawContents & gpu::DrawContents::clipUpdate)
+                            == (draw_contents & gpu::DrawContents::clipUpdate)
+                );
+                debug_assert_eq!(
+                    (*batch).drawContents & gpu::DrawContents::featheredFill,
+                    draw_contents & gpu::DrawContents::featheredFill
+                );
+                debug_assert!(
+                    context.frameInterlockMode() != gpu::InterlockMode::depthStencil
+                        || (*batch).drawContents == draw_contents
+                );
+                // Update flags after the source assertions.
                 (*batch).shaderMiscFlags |= misc;
                 (*batch).drawContents |= draw_contents;
                 (*batch).barriers |= self.m_pending_barriers;
             }
-            batch
-        };
+        }
         self.m_pending_barriers = gpu::BarrierFlags::none;
+        unsafe {
+            debug_assert_eq!((*batch).drawType, draw_type);
+            debug_assert!(canCombineDrawImages(
+                (*batch)
+                    .imageTexture
+                    .map_or(core::ptr::null_mut(), |p| p.as_ptr()),
+                draw.imageTexture(),
+                (*batch).imageSampler,
+                draw.imageSampler(),
+            ));
+        }
+        debug_assert_eq!(self.m_pending_barriers, gpu::BarrierFlags::none);
         let mut shader_features = gpu::ShaderFeatures::NONE;
         if draw.clipID() != 0 {
             shader_features |= gpu::ShaderFeatures::ENABLE_CLIPPING;
@@ -7377,13 +7447,13 @@ impl LogicalFlush {
                     if subpass < draw.prepassCount() as i8 {
                         context.m_indirect_draw_list.push(DrawSortEntry {
                             sortKey: -subpass_key(-1 - i32::from(subpass)),
-                            drawIndex: draw_index as i16,
+                            signedDrawIndex: -(draw_index as i16),
                         });
                     }
                     if subpass < draw.subpassCount() as i8 {
                         context.m_indirect_draw_list.push(DrawSortEntry {
                             sortKey: subpass_key(i32::from(subpass)),
-                            drawIndex: draw_index as i16,
+                            signedDrawIndex: draw_index as i16,
                         });
                     }
                 }
@@ -7397,7 +7467,7 @@ impl LogicalFlush {
             #[cfg(not(all(target_arch = "wasm32", feature = "native-webgl2-experimental")))]
             context
                 .m_indirect_draw_list
-                .sort_unstable_by_key(|entry| entry.sortKey);
+                .sort_unstable_by_key(|entry| (entry.sortKey, entry.signedDrawIndex));
             self.writeSortedDrawsExecutable(&features, all_same_group, max_z_index);
         }
 
@@ -7643,7 +7713,8 @@ impl LogicalFlush {
             if signed_key < 0 {
                 subpass = -1 - subpass;
             }
-            let draw = unsafe { &mut *self.m_draws[entry.drawIndex as usize].0 };
+            let draw =
+                unsafe { &mut *self.m_draws[entry.signedDrawIndex.unsigned_abs() as usize].0 };
             debug_assert_eq!(
                 if all_same_group {
                     draw.combinedDrawContents().0

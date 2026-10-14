@@ -127,6 +127,7 @@ impl UserData for Canvas {
                         TextureView {
                             resource: resource.clone(),
                             retained_image: None,
+                            follows: None,
                         }
                         .format(),
                     )
@@ -151,6 +152,7 @@ impl UserData for Canvas {
                     lua.create_userdata(TextureView {
                         resource,
                         retained_image: None,
+                        follows: None,
                     })
                 })
                 .transpose()
@@ -177,7 +179,7 @@ impl UserData for Canvas {
         });
         methods.add_method_mut("colorView",|lua,this,()| {
             this.satisfy_pending(lua)?;let resource=this.color_view.clone().ok_or_else(||Error::runtime("GPUCanvas:colorView() has no backing texture. Call resize(w, h) with non-zero dimensions first."))?;
-            lua.create_userdata(TextureView {resource, retained_image:None})
+            lua.create_userdata(TextureView {resource, retained_image:None, follows:None})
         });
         methods.add_method("beginRenderPass", |lua, this, descriptor: Value| {
             check_begin_pass(lua, "GPUCanvas")?;
@@ -251,6 +253,7 @@ pub(super) fn begin_pass(
                     Some(resource) => Some(TextureView {
                         resource: resource.clone(),
                         retained_image: None,
+                        follows: None,
                     }),
                     None if host_target => {
                         dropped = true;

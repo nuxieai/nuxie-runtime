@@ -1860,6 +1860,18 @@ impl ScriptedContextSource {
             .flatten()
     }
 
+    /// Resolve a video for this script, which then counts as one of the
+    /// video's readers: the video is decoded while this script is on screen.
+    pub fn read_video_named(&self, name: &str) -> Option<crate::source::core::CoreHandle> {
+        let video = self.video_named(name)?;
+        if let ScriptedContextProjection::Occurrence(owner) = &self.projection {
+            video.with_downcast_mut::<crate::video::Video, _>(|video| {
+                video.add_script_reader(owner.clone())
+            });
+        }
+        Some(video)
+    }
+
     pub fn global_view_model(&self, name: &[u8]) -> Option<ScriptViewModel> {
         let data_context = self.current_data_context()?;
         let file = self.current_file()?.upgrade()?;

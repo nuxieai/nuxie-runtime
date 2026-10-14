@@ -12,6 +12,9 @@ pub const POSITION: u16 = 60017;
 pub const DURATION: u16 = 60018;
 pub const ENDED: u16 = 60019;
 pub const STATE: u16 = 60020;
+/// Only the scripts that read the video draw it. A starting attribute, not a
+/// live property.
+pub const DRAWN_BY_SCRIPT: u16 = 60021;
 pub(crate) const KEYS: [u16; 11] = [
     LOOP, MUTED, VOLUME, RATE, LOOP_START, LOOP_END, PAUSED, POSITION, DURATION, ENDED, STATE,
 ];

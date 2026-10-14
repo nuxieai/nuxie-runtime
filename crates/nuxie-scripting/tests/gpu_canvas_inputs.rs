@@ -281,3 +281,29 @@ fn retained_program_rejects_images_whose_pixels_do_not_match_their_size() {
     .expect_err("short pixel buffers are rejected");
     assert!(error.to_string().contains("must be 2x2 RGBA8 pixels"));
 }
+
+#[test]
+fn retained_program_answers_the_shader_name_the_script_asks_for() {
+    let source = r#"
+        return function(context)
+            local _canvas = context:gpuCanvas()
+            local glow = context:shader("glow")
+            return {
+                advance = function(_self, _seconds)
+                    return glow ~= nil
+                        and context:shader("glow") ~= nil
+                        and context:shader("ripple") == nil
+                end,
+            }
+        end
+    "#;
+    let mut program =
+        GpuCanvasBytecodeProgram::load(&compile_source(source).expect("source compiles"))
+            .expect("program loads");
+
+    assert!(
+        program
+            .advance(1.0 / 60.0)
+            .expect("advance resolves shaders")
+    );
+}

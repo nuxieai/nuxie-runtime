@@ -173,6 +173,24 @@ fn a_bind_group_fills_every_layout_entry_exactly_once() {
 }
 
 #[test]
+fn an_entry_with_no_resource_is_refused() {
+    let mut ctx = DeferredOreContext::fromReal(None);
+    let layout = layout_of(&mut ctx, &[entry(0, BindingKind::sampler)]);
+    let samplers = [SampEntry {
+        slot: 0,
+        sampler: None,
+    }];
+    let desc = BindGroupDesc {
+        layout: Some(&layout),
+        samplers: &samplers,
+        samplerCount: 1,
+        ..Default::default()
+    };
+    assert!(ctx.makeBindGroup(&desc).is_none());
+    assert!(ctx.lastError().contains("@binding(0): binds no sampler"));
+}
+
+#[test]
 fn an_entry_the_layout_lacks_is_refused() {
     let mut ctx = DeferredOreContext::new(ReplayCaps::default());
     let layout = layout_of(&mut ctx, &[entry(0, BindingKind::sampler)]);

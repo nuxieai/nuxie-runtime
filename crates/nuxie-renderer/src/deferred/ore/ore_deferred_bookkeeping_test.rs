@@ -232,13 +232,18 @@ fn a_deferred_bind_group_counts_its_dynamic_offsets() {
             ..Default::default()
         })
         .unwrap();
+    let buffer = ctx
+        .makeBuffer(&BufferDesc::uninitialized(BufferUsage::uniform, 256))
+        .unwrap();
     let ubos = [
         UBOEntry {
             slot: 0,
+            buffer: Some(&buffer),
             ..Default::default()
         },
         UBOEntry {
             slot: 1,
+            buffer: Some(&buffer),
             ..Default::default()
         },
     ];
@@ -312,25 +317,27 @@ fn a_deferred_bind_group_rejects_a_ubo_shorter_than_its_block() {
     }];
     // Replay never talks to the script, so the refusal happens on record.
     ctx.clearLastError();
-    assert!(ctx
-        .makeBindGroup(&BindGroupDesc {
+    assert!(
+        ctx.makeBindGroup(&BindGroupDesc {
             layout: Some(&layout),
             ubos: &ubos,
             uboCount: 1,
             ..Default::default()
         })
-        .is_none());
+        .is_none()
+    );
     assert!(ctx.lastError().contains("needs 192"));
 
     buffer_desc.size = 192;
     let sized = ctx.makeBuffer(&buffer_desc).unwrap();
     ubos[0].buffer = Some(&sized);
-    assert!(ctx
-        .makeBindGroup(&BindGroupDesc {
+    assert!(
+        ctx.makeBindGroup(&BindGroupDesc {
             layout: Some(&layout),
             ubos: &ubos,
             uboCount: 1,
             ..Default::default()
         })
-        .is_some());
+        .is_some()
+    );
 }

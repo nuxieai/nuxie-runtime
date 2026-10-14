@@ -306,6 +306,9 @@ impl Drop for File {
 }
 
 impl File {
+    pub fn testing_data_converters(&self) -> &[CoreHandle] {
+        &self.data_converters
+    }
     pub const MAJOR_VERSION: i32 = 7;
     // 7.4: fitFontSize text reports its fitted size to layout. Older files
     // reserve the authored-size box; Text::import gates the resize behavior.

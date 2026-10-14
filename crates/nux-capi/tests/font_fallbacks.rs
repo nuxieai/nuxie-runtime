@@ -3,6 +3,8 @@ use nux_capi::*;
 use nuxie_binary::BinaryWriter;
 use std::{collections::HashMap, ffi::c_void, ptr};
 
+static HOOK_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 const LATIN: &[u8] = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
 const ARABIC: &[u8] = include_bytes!("../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
 
@@ -96,10 +98,23 @@ fn scene(primary: &[u8], value: &str) -> Vec<u8> {
     bytes
 }
 
-#[derive(Default)]
 struct Recording {
     paths: HashMap<u64, Vec<(Vec<u8>, Vec<u32>)>>,
     drawn: Vec<Vec<(Vec<u8>, Vec<u32>)>>,
+    drawn_transforms: Vec<[f32; 6]>,
+    transform: [f32; 6],
+    saved_transforms: Vec<[f32; 6]>,
+}
+impl Default for Recording {
+    fn default() -> Self {
+        Self {
+            paths: Default::default(),
+            drawn: Vec::new(),
+            drawn_transforms: Vec::new(),
+            transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            saved_transforms: Vec::new(),
+        }
+    }
 }
 
 unsafe fn recording<'a>(context: *mut c_void) -> &'a mut Recording {
@@ -161,7 +176,35 @@ unsafe extern "C" fn draw(context: *mut c_void, path: u64, _: u64) {
     let path = r.paths[&path].clone();
     if !path.is_empty() {
         r.drawn.push(path);
+        r.drawn_transforms.push(r.transform);
     }
+}
+unsafe extern "C" fn save(context: *mut c_void) {
+    let r = unsafe { recording(context) };
+    r.saved_transforms.push(r.transform);
+}
+unsafe extern "C" fn restore(context: *mut c_void) {
+    let r = unsafe { recording(context) };
+    r.transform = r.saved_transforms.pop().unwrap();
+}
+unsafe extern "C" fn transform(context: *mut c_void, incoming: *const f32) {
+    let r = unsafe { recording(context) };
+    let a = r.transform;
+    let b = unsafe { std::slice::from_raw_parts(incoming, 6) };
+    r.transform = [
+        a[0] * b[0] + a[2] * b[1],
+        a[1] * b[0] + a[3] * b[1],
+        a[0] * b[2] + a[2] * b[3],
+        a[1] * b[2] + a[3] * b[3],
+        a[0] * b[4] + a[2] * b[5] + a[4],
+        a[1] * b[4] + a[3] * b[5] + a[5],
+    ];
+}
+
+fn hook_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    HOOK_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn view(value: &str) -> NuxStringView {
@@ -192,6 +235,9 @@ fn render_retiring(
         render_path_rewind: Some(rewind),
         render_path_add_render_path: Some(add_path),
         draw_path: Some(draw),
+        save: Some(save),
+        restore: Some(restore),
+        transform: Some(transform),
         ..Default::default()
     };
     unsafe {
@@ -277,6 +323,7 @@ unsafe extern "C" fn pick_font(
 
 #[test]
 fn process_hook_draws_arabic_keeps_latin_and_clear_restores_missing_glyphs() {
+    let _guard = hook_test_lock();
     unsafe {
         assert_eq!(
             nux_font_set_fallback_proc(None, ptr::null_mut()),
@@ -477,4 +524,260 @@ fn malformed_font_sources_publish_no_handle() {
         }
         assert!(out.is_null());
     }
+}
+
+#[test]
+fn fallback_hook_reentry_returns_reentrant_call() {
+    const CHILD: &str = "NUX_FONT_REENTRY_TEST_CHILD";
+    if std::env::var_os(CHILD).is_some() {
+        unsafe extern "C" fn reenter(_: *mut c_void, _: u32, _: u32, _: u16) -> *const NuxFont {
+            assert_eq!(
+                unsafe { nux_font_set_fallback_proc(None, ptr::null_mut()) },
+                NuxStatus::ReentrantCall
+            );
+            let mut file = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_file_import(ptr::null(), 0, ptr::null(), &mut file) },
+                NuxStatus::ReentrantCall
+            );
+            ptr::null()
+        }
+        unsafe {
+            assert_eq!(
+                nux_font_set_fallback_proc(Some(reenter), ptr::null_mut()),
+                NuxStatus::Ok
+            );
+        }
+        render(LATIN, "مرحبا", None);
+        return;
+    }
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "fallback_hook_reentry_returns_reentrant_call"])
+        .env(CHILD, "1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success(), "the callback must receive REENTRANT_CALL");
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("replacing the hook from its callback deadlocked");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn repeated_font_handle_ends_the_c_fallback_walk() {
+    let _guard = hook_test_lock();
+    struct Context {
+        font: *mut NuxFont,
+        indices: std::sync::Mutex<Vec<u32>>,
+    }
+    unsafe extern "C" fn same(context: *mut c_void, _: u32, index: u32, _: u16) -> *const NuxFont {
+        let context = unsafe { &*context.cast::<Context>() };
+        context.indices.lock().unwrap().push(index);
+        // Bound a broken implementation so the assertion fails instead of recursing forever.
+        if index > 4 {
+            return ptr::null();
+        }
+        context.font
+    }
+    let mut context = Context {
+        font: byte_font(LATIN),
+        indices: Default::default(),
+    };
+    unsafe {
+        assert_eq!(
+            nux_font_set_fallback_proc(Some(same), ptr::from_mut(&mut context).cast()),
+            NuxStatus::Ok
+        );
+    }
+    render(LATIN, "م", None);
+    unsafe {
+        assert_eq!(
+            nux_font_set_fallback_proc(None, ptr::null_mut()),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_font_free(context.font), NuxStatus::Ok);
+    }
+    let indices = context.indices.into_inner().unwrap();
+    assert!(!indices.is_empty());
+    assert!(indices.chunks_exact(2).remainder().is_empty());
+    assert!(
+        indices.chunks_exact(2).all(|pair| pair == [0, 1]),
+        "one fallback followed by the same-identity retry must stop: {indices:?}"
+    );
+}
+
+#[test]
+fn replacing_the_hook_waits_for_its_in_flight_callback() {
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    };
+    let _guard = hook_test_lock();
+    struct Context {
+        entered: Barrier,
+        release: Barrier,
+        first: AtomicBool,
+    }
+    unsafe extern "C" fn blocked(context: *mut c_void, _: u32, _: u32, _: u16) -> *const NuxFont {
+        let context = unsafe { &*context.cast::<Context>() };
+        if context.first.swap(false, Ordering::SeqCst) {
+            context.entered.wait();
+            context.release.wait();
+        }
+        ptr::null()
+    }
+    let context = Box::new(Context {
+        entered: Barrier::new(2),
+        release: Barrier::new(2),
+        first: AtomicBool::new(true),
+    });
+    unsafe {
+        assert_eq!(
+            nux_font_set_fallback_proc(
+                Some(blocked),
+                ptr::from_ref(context.as_ref()).cast_mut().cast()
+            ),
+            NuxStatus::Ok
+        );
+    }
+    let shaping = std::thread::spawn(|| render(LATIN, "م", None));
+    context.entered.wait();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (done_tx, done_rx) = mpsc::channel();
+    let replacing = std::thread::spawn(move || {
+        started_tx.send(()).unwrap();
+        let status = unsafe { nux_font_set_fallback_proc(None, ptr::null_mut()) };
+        done_tx.send(status).unwrap();
+    });
+    started_rx.recv().unwrap();
+    let premature = done_rx.recv_timeout(std::time::Duration::from_millis(100));
+    context.release.wait();
+    shaping.join().unwrap();
+    replacing.join().unwrap();
+    assert!(
+        matches!(premature, Err(mpsc::RecvTimeoutError::Timeout)),
+        "replacement returned while the old context was still borrowed"
+    );
+    assert_eq!(
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap(),
+        NuxStatus::Ok
+    );
+}
+
+#[test]
+fn process_hook_and_host_outline_draw_a_known_square() {
+    let _guard = hook_test_lock();
+    unsafe extern "C" fn square(
+        _: *mut c_void,
+        _: u16,
+        _: *const NuxFontAxisCoord,
+        _: usize,
+        sink: NuxFontOutlineSink,
+        context: *mut c_void,
+    ) {
+        unsafe {
+            sink(context, 0, [0.0, 0.0].as_ptr());
+            sink(context, 1, [1.0, 0.0].as_ptr());
+            sink(context, 1, [1.0, 1.0].as_ptr());
+            sink(context, 1, [0.0, 1.0].as_ptr());
+            sink(context, 4, ptr::null());
+        }
+    }
+    assert!(
+        render(
+            include_bytes!("../../../fixtures/fonts/roboto-a.ttf"),
+            " ",
+            None
+        )
+        .drawn
+        .is_empty(),
+        "the primary font must not draw the square without the hook"
+    );
+    let source = NuxFontSource {
+        bytes: NuxByteView {
+            data: LATIN.as_ptr(),
+            len: LATIN.len(),
+        },
+        ..Default::default()
+    };
+    let callbacks = NuxFontOutlineCallbacks {
+        struct_size: std::mem::size_of::<NuxFontOutlineCallbacks>() as u32,
+        user_data: ptr::null_mut(),
+        get_path: Some(square),
+        release: None,
+    };
+    let mut font = ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            nux_font_new_with_outline(&source, &callbacks, &mut font),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_font_set_fallback_proc(Some(pick_font), font.cast()),
+            NuxStatus::Ok
+        );
+    }
+    // The primary has only 'a'; the fallback maps space but has no outline for it.
+    let actual = render(
+        include_bytes!("../../../fixtures/fonts/roboto-a.ttf"),
+        " ",
+        None,
+    );
+    unsafe {
+        assert_eq!(
+            nux_font_set_fallback_proc(None, ptr::null_mut()),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_font_free(font), NuxStatus::Ok);
+    }
+    assert_eq!(
+        actual.drawn.len(),
+        2,
+        "both authored rows must draw the host shape"
+    );
+    let mut origins = Vec::new();
+    for (row, matrix) in actual.drawn.iter().zip(&actual.drawn_transforms) {
+        assert_eq!(row.len(), 1);
+        assert_eq!(row[0].0, [0, 1, 1, 1, 5]);
+        let points: Vec<_> = row[0].1.iter().map(|bits| f32::from_bits(*bits)).collect();
+        let transformed: Vec<_> = points
+            .chunks_exact(2)
+            .map(|point| {
+                [
+                    matrix[0] * point[0] + matrix[2] * point[1] + matrix[4],
+                    matrix[1] * point[0] + matrix[3] * point[1] + matrix[5],
+                ]
+            })
+            .collect();
+        let origin = transformed[0];
+        origins.push(origin);
+        let relative: Vec<_> = transformed
+            .iter()
+            .map(|point| [point[0] - origin[0], point[1] - origin[1]])
+            .collect();
+        assert_eq!(
+            relative,
+            [[0.0, 0.0], [32.0, 0.0], [32.0, 32.0], [0.0, 32.0]]
+        );
+    }
+    let y0 = origins[0][1];
+    let y1 = origins[1][1];
+    assert_eq!(
+        (y1 - y0).abs(),
+        100.0,
+        "the authored row origins must stay 100 units apart regardless of draw order"
+    );
 }

@@ -15,8 +15,9 @@ then ask the host only if it is empty. `nux_font_new_with_outline` adds a
 plain C command sink. The iOS SDK retains its selected CTFont at size2048,
 inverts y and divides by2048, matching upstream `apply_element`. The runtime
 converts quadratics to cubic paths. Ordinary byte/file font creation retains
-its existing behavior. Callback retention, validation, the bounded command
-sink, and C handle safety are our host machinery.
+its existing behavior. As with upstream `HBFont::withOptions`, option variants
+are plain HB fonts and do not retain host outline recovery. Callback retention,
+validation, the bounded command sink, and C handle safety are our host machinery.
 
 Upstream also provides CoreText tables and units-per-em at construction, and
 on its second attempt (`useSystemShaper=true`) shapes with CTTypesetter and

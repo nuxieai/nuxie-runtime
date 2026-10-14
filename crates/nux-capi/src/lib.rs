@@ -205,7 +205,19 @@ impl CallbackReentryFallback for () {
 }
 
 fn ffi_guard<R: CallbackReentryFallback>(default: R, body: impl FnOnce() -> R) -> R {
-    if platform_callback_active() {
+    ffi_guard_with_font_access(default, body, false)
+}
+
+fn font_ffi_guard<R: CallbackReentryFallback>(default: R, body: impl FnOnce() -> R) -> R {
+    ffi_guard_with_font_access(default, body, true)
+}
+
+fn ffi_guard_with_font_access<R: CallbackReentryFallback>(
+    default: R,
+    body: impl FnOnce() -> R,
+    allow_font_callback: bool,
+) -> R {
+    if platform_callback_active() || (!allow_font_callback && fonts::fallback_hook_active()) {
         return R::callback_reentry(default);
     }
     match panic::catch_unwind(AssertUnwindSafe(body)) {
@@ -1920,7 +1932,7 @@ fn ffi_guard_with_result(
     if !out_result.is_null() {
         unsafe { *out_result = ptr::null_mut() };
     }
-    if platform_callback_active() {
+    if platform_callback_active() || fonts::fallback_hook_active() {
         return NuxStatus::ReentrantCall;
     }
     match panic::catch_unwind(AssertUnwindSafe(body)) {
@@ -1953,7 +1965,7 @@ fn ffi_guard_with_handle_result<T>(
     handle_kind: HandleKind,
     body: impl FnOnce() -> NuxStatus,
 ) -> NuxStatus {
-    let callback_reentry = platform_callback_active();
+    let callback_reentry = platform_callback_active() || fonts::fallback_hook_active();
     if !out_handle.is_null()
         && !out_result.is_null()
         && out_handle.cast::<c_void>() == out_result.cast::<c_void>()
@@ -3552,7 +3564,7 @@ fn ffi_guard_with_player_step_result(
     out_result: *mut *mut NuxPlayerStepResult,
     body: impl FnOnce() -> NuxStatus,
 ) -> NuxStatus {
-    if platform_callback_active() {
+    if platform_callback_active() || fonts::fallback_hook_active() {
         if !out_result.is_null() {
             unsafe { *out_result = ptr::null_mut() };
         }

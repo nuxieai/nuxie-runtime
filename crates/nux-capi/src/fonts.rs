@@ -18,8 +18,9 @@ pub struct NuxFontAxisCoord {
 /// UTF-8, without a terminating NUL. Its trusted local file must remain
 /// immutable and available until this font and all its variants die.
 /// Never supply authored, removable or network files through the mapped path.
-/// Arrays use an exact struct_size and fixed stride. Coordinates are borrowed
-/// only for creation; face_index and coordinates select a collection face.
+/// struct_size must cover the ABI-v4 prefix; appended fields are ignored.
+/// Coordinates are borrowed only for creation and have a fixed element stride;
+/// face_index and coordinates select a collection face.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxFontSource {
@@ -56,9 +57,21 @@ pub struct NuxFontFileProbe {
     probe: FileProbe,
 }
 
-unsafe fn decode_face(face: &NuxFontSource) -> Result<(FontRef, usize), NuxStatus> {
-    if face.struct_size as usize != std::mem::size_of::<NuxFontSource>() {
+const FONT_SOURCE_V4_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxFontSource, coord_count) + std::mem::size_of::<usize>();
+
+unsafe fn decode_face(source: *const NuxFontSource) -> Result<(FontRef, usize), NuxStatus> {
+    let caller_size = unsafe { source.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, FONT_SOURCE_V4_MIN_SIZE) {
         return Err(NuxStatus::InvalidStructSize);
+    }
+    let mut face = NuxFontSource::default();
+    unsafe {
+        ptr::copy_nonoverlapping(
+            source.cast::<u8>(),
+            ptr::from_mut(&mut face).cast(),
+            FONT_SOURCE_V4_MIN_SIZE,
+        );
     }
     if face.bytes.len > NUX_FONT_MAX_BYTES
         || face.immutable_path.len > 4096
@@ -145,7 +158,7 @@ pub unsafe extern "C" fn nux_font_new(
     source: *const NuxFontSource,
     out_font: *mut *mut NuxFont,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_font.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -155,7 +168,7 @@ pub unsafe extern "C" fn nux_font_new(
         if source.is_null() {
             return NuxStatus::NullArgument;
         }
-        match unsafe { decode_face(&*source) } {
+        match unsafe { decode_face(source) } {
             Ok((font, _)) => {
                 unsafe {
                     *out_font = publish_font(font);
@@ -173,9 +186,10 @@ pub unsafe extern "C" fn nux_font_new(
 pub type NuxFontOutlineSink = unsafe extern "C" fn(*mut c_void, u8, *const f32);
 
 /// Host callbacks are copied at creation. Context ownership transfers only on
-/// success and release runs once after the last retained font/variant dies,
+/// success and release runs once after the last retained host font dies,
 /// possibly on any thread. get_path may run concurrently; callbacks and context
 /// must be thread-safe, must not unwind, and must not reenter the font API.
+/// struct_size must cover the ABI-v4 prefix; appended fields are ignored.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NuxFontOutlineCallbacks {
@@ -192,6 +206,28 @@ pub struct NuxFontOutlineCallbacks {
         ),
     >,
     pub release: Option<unsafe extern "C" fn(*mut c_void)>,
+}
+
+const FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxFontOutlineCallbacks, release)
+        + std::mem::size_of::<Option<unsafe extern "C" fn(*mut c_void)>>();
+
+unsafe fn read_font_outline_callbacks(
+    callbacks: *const NuxFontOutlineCallbacks,
+) -> Result<NuxFontOutlineCallbacks, NuxStatus> {
+    let caller_size = unsafe { callbacks.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE) {
+        return Err(NuxStatus::InvalidStructSize);
+    }
+    let mut value: NuxFontOutlineCallbacks = unsafe { std::mem::zeroed() };
+    unsafe {
+        ptr::copy_nonoverlapping(
+            callbacks.cast::<u8>(),
+            ptr::from_mut(&mut value).cast(),
+            FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE,
+        );
+    }
+    Ok(value)
 }
 
 struct HostOutline(NuxFontOutlineCallbacks);
@@ -302,7 +338,7 @@ pub unsafe extern "C" fn nux_font_new_with_outline(
     callbacks: *const NuxFontOutlineCallbacks,
     out_font: *mut *mut NuxFont,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_font.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -312,14 +348,14 @@ pub unsafe extern "C" fn nux_font_new_with_outline(
         if source.is_null() || callbacks.is_null() {
             return NuxStatus::NullArgument;
         }
-        let callbacks = unsafe { *callbacks };
-        if callbacks.struct_size as usize != std::mem::size_of::<NuxFontOutlineCallbacks>() {
-            return NuxStatus::InvalidStructSize;
-        }
+        let callbacks = match unsafe { read_font_outline_callbacks(callbacks) } {
+            Ok(callbacks) => callbacks,
+            Err(status) => return status,
+        };
         if callbacks.get_path.is_none() {
             return NuxStatus::InvalidArgument;
         }
-        let font = match unsafe { decode_face(&*source) } {
+        let font = match unsafe { decode_face(source) } {
             Ok((font, _)) => font,
             Err(status) => return status,
         };
@@ -340,7 +376,7 @@ pub unsafe extern "C" fn nux_font_new_with_outline(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_font_free(font: *mut NuxFont) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if font.is_null() {
             return NuxStatus::Ok;
         }
@@ -360,7 +396,7 @@ pub unsafe extern "C" fn nux_font_has_glyph(
     character: u32,
     out_has_glyph: *mut bool,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_has_glyph.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -387,7 +423,7 @@ pub unsafe extern "C" fn nux_font_with_weight(
     weight: u16,
     out_font: *mut *mut NuxFont,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_font.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -425,7 +461,7 @@ pub unsafe extern "C" fn nux_font_probe_file(
     face_index: u32,
     out_probe: *mut *mut NuxFontFileProbe,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_probe.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -471,7 +507,7 @@ pub unsafe extern "C" fn nux_font_probe_has_glyph(
     character: u32,
     out_has_glyph: *mut bool,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_has_glyph.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -491,7 +527,7 @@ pub unsafe extern "C" fn nux_font_probe_make_font(
     probe: *mut NuxFontFileProbe,
     out_font: *mut *mut NuxFont,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if out_font.is_null() {
             return NuxStatus::NullArgument;
         }
@@ -511,7 +547,7 @@ pub unsafe extern "C" fn nux_font_probe_make_font(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_font_probe_free(probe: *mut NuxFontFileProbe) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
         if probe.is_null() {
             return NuxStatus::Ok;
         }
@@ -545,13 +581,33 @@ struct FallbackRegistration {
 
 static C_FALLBACK: std::sync::RwLock<Option<FallbackRegistration>> = std::sync::RwLock::new(None);
 
+std::thread_local! {
+    static FALLBACK_HOOK_ACTIVE: Cell<bool> = const { Cell::new(false) };
+}
+
+pub(super) fn fallback_hook_active() -> bool {
+    FALLBACK_HOOK_ACTIVE.with(Cell::get)
+}
+
+struct FallbackHookGuard;
+impl Drop for FallbackHookGuard {
+    fn drop(&mut self) {
+        FALLBACK_HOOK_ACTIVE.with(|active| active.set(false));
+    }
+}
+
 fn c_fallback(missing: u32, index: u32, asking_font: &dyn Font) -> Option<FontRef> {
+    if fallback_hook_active() {
+        return None;
+    }
     // Hold the read lease through callback invocation and answer retention.
     // Replacement may then safely release the previous foreign context.
     let registration = C_FALLBACK
         .read()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let registration = registration.as_ref()?;
+    FALLBACK_HOOK_ACTIVE.with(|active| active.set(true));
+    let _guard = FallbackHookGuard;
     let handle = unsafe {
         (registration.callback)(
             registration.context as *mut c_void,
@@ -565,14 +621,18 @@ fn c_fallback(missing: u32, index: u32, asking_font: &dyn Font) -> Option<FontRe
 
 /// Set the engine's process-wide fallback hook; NULL clears it. Applies to all
 /// files, including files already open when next reshaped. Callback and context
-/// must remain valid until replacement completes. Do not replace the hook from
-/// inside its callback. Replacement waits for current C callbacks to return.
+/// must remain valid until replacement completes. Replacement from inside its
+/// callback returns REENTRANT_CALL. Other replacement waits for current C
+/// callbacks to return. The hook may call font APIs, but not other C entry points.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_font_set_fallback_proc(
     _callback: NuxFontFallbackProc,
     _user_data: *mut c_void,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    font_ffi_guard(NuxStatus::RuntimeError, || {
+        if fallback_hook_active() {
+            return NuxStatus::ReentrantCall;
+        }
         let mut registration = C_FALLBACK
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -692,13 +752,140 @@ mod outline_tests {
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(font.line_metrics().ascent, original.line_metrics().ascent);
         let variant = font.with_options(&[], &[]);
+        assert!(
+            variant.get_path(space).empty(),
+            "upstream variants are plain HB fonts"
+        );
         assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        let retained = font.clone();
         drop(font);
         assert_eq!(releases.load(Ordering::SeqCst), 0);
-        std::thread::spawn(move || assert!(!variant.get_path(space).empty()))
+        std::thread::spawn(move || assert!(!retained.get_path(space).empty()))
             .join()
             .unwrap();
         assert_eq!(releases.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn host_outline_receives_source_coordinates() {
+        unsafe extern "C" fn capture(
+            context: *mut c_void,
+            _: u16,
+            coords: *const NuxFontAxisCoord,
+            count: usize,
+            _: NuxFontOutlineSink,
+            _: *mut c_void,
+        ) {
+            let observed = unsafe { &*context.cast::<std::sync::Mutex<Vec<(u32, f32)>>>() };
+            observed.lock().unwrap().extend(
+                unsafe { slice::from_raw_parts(coords, count) }
+                    .iter()
+                    .map(|c| (c.axis, c.value)),
+            );
+        }
+        let bytes = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
+        let coordinates = [NuxFontAxisCoord {
+            axis: u32::from_be_bytes(*b"wght"),
+            value: 650.0,
+        }];
+        let source = NuxFontSource {
+            bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            coords: coordinates.as_ptr(),
+            coord_count: coordinates.len(),
+            ..Default::default()
+        };
+        let mut observed = std::sync::Mutex::new(Vec::<(u32, f32)>::new());
+        let callbacks = NuxFontOutlineCallbacks {
+            struct_size: std::mem::size_of::<NuxFontOutlineCallbacks>() as u32,
+            user_data: ptr::from_mut(&mut observed).cast(),
+            get_path: Some(capture),
+            release: None,
+        };
+        let mut handle = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(&source, &callbacks, &mut handle) },
+            NuxStatus::Ok
+        );
+        let font = clone_font(handle).unwrap();
+        font.get_path(glyph(&font, ' '));
+        assert_eq!(
+            *observed.lock().unwrap(),
+            [(u32::from_be_bytes(*b"wght"), 650.0)]
+        );
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+    }
+
+    #[test]
+    fn font_inputs_accept_larger_callers_and_reject_short_prefixes() {
+        #[repr(C)]
+        struct Extended<T> {
+            current: T,
+            future: [u64; 2],
+        }
+        let bytes = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
+        let source = Extended {
+            current: NuxFontSource {
+                struct_size: std::mem::size_of::<Extended<NuxFontSource>>() as u32,
+                bytes: NuxByteView {
+                    data: bytes.as_ptr(),
+                    len: bytes.len(),
+                },
+                ..Default::default()
+            },
+            future: [u64::MAX; 2],
+        };
+        let mut observed = std::sync::Mutex::new(Vec::<(u32, f32)>::new());
+        unsafe extern "C" fn empty(
+            _: *mut c_void,
+            _: u16,
+            _: *const NuxFontAxisCoord,
+            _: usize,
+            _: NuxFontOutlineSink,
+            _: *mut c_void,
+        ) {
+        }
+        let callbacks = Extended {
+            current: NuxFontOutlineCallbacks {
+                struct_size: std::mem::size_of::<Extended<NuxFontOutlineCallbacks>>() as u32,
+                user_data: ptr::from_mut(&mut observed).cast(),
+                get_path: Some(empty),
+                release: None,
+            },
+            future: [u64::MAX; 2],
+        };
+        let mut handle = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_font_new(&source.current, &mut handle) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(&source.current, &callbacks.current, &mut handle) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        let short = std::mem::size_of::<u32>() as u32;
+        assert_eq!(
+            unsafe { nux_font_new(ptr::from_ref(&short).cast(), &mut handle) },
+            NuxStatus::InvalidStructSize
+        );
+        assert!(handle.is_null());
+        assert_eq!(
+            unsafe {
+                nux_font_new_with_outline(
+                    &source.current,
+                    ptr::from_ref(&short).cast(),
+                    &mut handle,
+                )
+            },
+            NuxStatus::InvalidStructSize
+        );
+        assert!(handle.is_null());
+        assert_eq!(source.future, [u64::MAX; 2]);
+        assert_eq!(callbacks.future, [u64::MAX; 2]);
     }
 
     #[test]

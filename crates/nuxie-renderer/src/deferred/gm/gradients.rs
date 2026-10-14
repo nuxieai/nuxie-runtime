@@ -2,8 +2,8 @@
 use super::clipstrokes::rounded_rect;
 use super::ore_gm_helper::assert_cpp_gm_pixels_with_size;
 use crate::{
-    RenderMode,
     native_metal::{NativeMetalContextOptions, NativeMetalFactory, ShaderCompilationMode},
+    RenderMode,
 };
 use nuxie_render_api::{
     Aabb, Factory, FillRule, ImageSampler, Mat2D, RawPath, RenderPaintStyle, Renderer, StrokeCap,

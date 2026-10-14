@@ -3,7 +3,7 @@ use super::super::{
     command_stream::CommandReader,
     deferred_replayer::snapshot_frame,
     deferred_session::DeferredSession,
-    render_commands::{RenderCmd, payload_size_of},
+    render_commands::{payload_size_of, RenderCmd},
 };
 use super::render_context_null::*;
 use super::*;
@@ -661,16 +661,14 @@ mesh_test!(
         s.frame();
         let cache = Rc::new(RefCell::new(offscreen::CachedRaster::default()));
         let screen = s.session.session.screen_renderer(0);
-        assert!(
-            Artboard::raster_image_handle(
-                &instance.core_handle(),
-                screen.borrow_mut().as_mut(),
-                &cache,
-                1.0,
-                true
-            )
-            .is_some()
-        );
+        assert!(Artboard::raster_image_handle(
+            &instance.core_handle(),
+            screen.borrow_mut().as_mut(),
+            &cache,
+            1.0,
+            true
+        )
+        .is_some());
         let before = cache.borrow().content_revision;
         s.session.session.reset_frame();
         number(
@@ -679,16 +677,14 @@ mesh_test!(
             0.5,
         );
         s.frame();
-        assert!(
-            Artboard::raster_image_handle(
-                &instance.core_handle(),
-                screen.borrow_mut().as_mut(),
-                &cache,
-                1.0,
-                true
-            )
-            .is_some()
-        );
+        assert!(Artboard::raster_image_handle(
+            &instance.core_handle(),
+            screen.borrow_mut().as_mut(),
+            &cache,
+            1.0,
+            true
+        )
+        .is_some());
         assert_ne!(cache.borrow().content_revision, before);
         s.session.session.reset_frame();
     }
@@ -733,21 +729,19 @@ mesh_test!(
         assert_eq!(s.init_status, StatusCode::Ok);
         s.frame();
         let instance = s.instance();
-        assert!(
-            !s.nested
-                .with(|n| n.as_component().unwrap().has_dirt(ComponentDirt::TRANSFORM))
-                .unwrap()
-        );
+        assert!(!s
+            .nested
+            .with(|n| n.as_component().unwrap().has_dirt(ComponentDirt::TRANSFORM))
+            .unwrap());
         number(
             &instance.core_handle(),
             TransformComponentBase::ROTATION_PROPERTY_KEY,
             0.5,
         );
-        assert!(
-            s.nested
-                .with(|n| n.as_component().unwrap().has_dirt(ComponentDirt::TRANSFORM))
-                .unwrap()
-        );
+        assert!(s
+            .nested
+            .with(|n| n.as_component().unwrap().has_dirt(ComponentDirt::TRANSFORM))
+            .unwrap());
     }
 );
 thread_local! {static TRANSFORM_DIRTY_CALLS: Cell<i32> = const {Cell::new(0)};}
@@ -786,12 +780,10 @@ mesh_test!(
                 p.referenced_artboard(Some(s.source.clone()))
             })
             .unwrap();
-        assert!(
-            probe
-                .with_downcast::<NestedArtboard, _>(|p| p.artboard_instance_handle(0))
-                .flatten()
-                .is_none()
-        );
+        assert!(probe
+            .with_downcast::<NestedArtboard, _>(|p| p.artboard_instance_handle(0))
+            .flatten()
+            .is_none());
         let host = MeshHost::from_handle(Some(probe)).unwrap();
         approx(host.width(), 200.0);
         approx(host.height(), 100.0);

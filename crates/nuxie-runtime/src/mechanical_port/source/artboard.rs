@@ -507,9 +507,13 @@ impl KeyedObjectContext for ArtboardObjectContext {
             .unwrap_or(false)
     }
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
-        crate::mechanical_port::source::animation::keyed_object::interpolator_host_overrides(
-            object, key,
-        )
+        object
+            .with_mut(|object| {
+                object
+                    .overrides_keyed_interpolation(key as i32)
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 }
 impl LinearAnimationArtboard for ArtboardObjectContext {
@@ -602,9 +606,13 @@ impl KeyedObjectContext for RuntimeArtboardObjectContext<'_> {
     }
 
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
-        crate::mechanical_port::source::animation::keyed_object::interpolator_host_overrides(
-            object, key,
-        )
+        object
+            .with_mut(|object| {
+                object
+                    .overrides_keyed_interpolation(key as i32)
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 }
 
@@ -6404,9 +6412,11 @@ impl KeyedObjectContext for Artboard {
     }
 
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
-        crate::mechanical_port::source::animation::keyed_object::interpolator_host_overrides(
-            object, key,
-        )
+        object
+            .with_mut(|object| {
+                CoreCapabilities::overrides_keyed_interpolation(object, key as i32).unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 }
 

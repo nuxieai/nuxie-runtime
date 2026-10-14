@@ -1642,22 +1642,27 @@ pub fn script_view_models(source: &impl ScriptFileSource) -> BTreeMap<String, Sc
             .filter_map(|i| file.view_model(i))
             .collect::<Vec<_>>()
     });
-    models
-        .into_iter()
-        .filter_map(|model| {
-            let name = model
-                .with(|owner| {
-                    owner
-                        .as_view_model()
-                        .map(|model| model.base.name().to_owned())
-                })
-                .flatten()?;
-            Some((
-                name,
-                ScriptViewModel::from_native_definition(model, None, file.clone()),
-            ))
-        })
-        .collect()
+    let mut definitions = BTreeMap::new();
+    for model in models {
+        let Some(name) = model
+            .with(|owner| {
+                owner
+                    .as_view_model()
+                    .map(|model| model.base.name().to_owned())
+            })
+            .flatten()
+        else {
+            continue;
+        };
+        // initializeLuaData uses name().c_str() for its Lua field lookup/write.
+        // Normalize that key before first-wins selection; map sorting must not
+        // let a later name sharing the prefix replace the first native owner.
+        let name = name.split('\0').next().unwrap_or_default().to_owned();
+        definitions
+            .entry(name)
+            .or_insert_with(|| ScriptViewModel::from_native_definition(model, None, file.clone()));
+    }
+    definitions
 }
 
 /// The file and data-context projection exposed through one scripted `Context`

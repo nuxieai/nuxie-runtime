@@ -271,6 +271,16 @@ impl DataBindContextTargetValue {
                     {
                         self.update_number(value as f32)
                     } else {
+                        // A view-model source can initialize a view-model value
+                        // for a plain uint target. Never write an integer into
+                        // that retained reference. Integer-derived assets pass.
+                        if !self
+                            .target_value
+                            .as_ref()
+                            .is_some_and(|target| target.is_type_of(DataType::Integer))
+                        {
+                            return false;
+                        }
                         self.update_integer(value as u32)
                     }
                 }
@@ -298,5 +308,60 @@ fn same_arc<T: ?Sized>(a: &Option<Arc<T>>, b: &Option<Arc<T>>) -> bool {
         (Some(a), Some(b)) => Arc::ptr_eq(a, b),
         (None, None) => true,
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::CoreArena,
+        data_bind::{
+            bindable_property_trigger::BindablePropertyTrigger,
+            context::context_value::CoreBinding, data_bind::DataBind,
+        },
+        generated::data_bind::bindable_property_integer_base::BindablePropertyIntegerBase,
+        viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+    };
+
+    // tests/unit_tests/runtime/data_bind_target_value_test.cpp at 10d08fb6.
+    #[test]
+    fn a_uint_target_never_writes_through_a_view_model_value() {
+        let arena = CoreArena::default();
+        let source = arena.insert(ViewModelInstanceViewModel::default());
+        let mut target = BindablePropertyTrigger::default();
+        target.base.base.base.set_property_value_value(107);
+        let target = arena.insert(target);
+        let property_key = u32::from(BindablePropertyIntegerBase::PROPERTY_VALUE_PROPERTY_KEY);
+        let bind = arena.insert(DataBind::default());
+        bind.with_downcast_mut::<DataBind, _>(|bind| {
+            bind.configure_target(target.clone(), property_key);
+            bind.set_source(source.clone());
+        })
+        .unwrap();
+        let binding = CoreBinding::for_bind(bind.clone());
+
+        let mut target_value = DataBindContextTargetValue::default();
+        target_value.initialize(&binding);
+        assert!(
+            target_value
+                .data_value()
+                .unwrap()
+                .as_any()
+                .is::<DataValueViewModel>()
+        );
+        assert!(!target_value.sync_target_value(&binding));
+        assert!(
+            target_value
+                .data_value()
+                .unwrap()
+                .as_any()
+                .downcast_ref::<DataValueViewModel>()
+                .unwrap()
+                .value()
+                .is_none()
+        );
+        bind.with_downcast_mut::<DataBind, _>(|bind| bind.set_target(None))
+            .unwrap();
     }
 }

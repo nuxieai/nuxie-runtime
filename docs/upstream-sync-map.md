@@ -7,18 +7,31 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9166e9b62debca7482e3cd13229ec5a8c35af603`
+- LAST_SYNCED_SHA: `10d08fb6eb7d1b19ceebfba38cbfec7ef9d7d45c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` (refreshed 2026-10-14 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Four upstream commits remain after this checkpoint at the fetched target.
-  All 237 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (259 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 238 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (260 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `10d08fb6`, integrated atop downstream `5ca6b63393`:
+  independent source-equivalence and subsequent Rust-integration reviews and
+  correction rereviews are clean. Review corrected C-string name collisions,
+  persistent registry-backed Data, the native file-registration projection and
+  Data creation after sandboxing. Runtime units pass 398 (two existing ignores);
+  focused scripting view-model units pass 79 (one existing ignore), including
+  native identity and late-initialization regressions. Source/manifest/pipeline
+  checks pass 39; regenerated Silver metadata changes only current provenance
+  and upstream test locations. Browser scripting compiles for
+  wasm32-unknown-unknown. Generated build files, changed-file formatting and
+  diff hygiene pass.
+  No broad Golden/Silver replay or hardware/browser-pixel coverage is claimed;
+  no assertions or tolerances were weakened.
 - Validation at `9166e9b6`, integrated atop downstream `daae4170d9`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Validation corrected test-only paint/CommandPath dispatch; both reviews
@@ -887,6 +900,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `10d08fb6eb7d1b19ceebfba38cbfec7ef9d7d45c` | Keep the first view model carrying each Data name, preserving its retained constructor identity through the Rust scripting projection. Refuse a generic uint target sync into a missing or non-integer data value, while retaining derived integer asset values. Translate both public regressions. CLI/RML/editor changes described in the commit message have no public implementation in this delta; private .rive_head code is not claimed imported. | — |
 | `9166e9b62debca7482e3cd13229ec5a8c35af603` | Tie-break equal draw sort keys by signed draw index, negative for prepasses, in native and browser-specific sorters. Preserve image/shader/scissor batch admission and merge both append- and prepend-contiguous tessellation ranges. Translate both upstream hairline batch-count regressions using actual flushed draws. Private .rive_head contents are not claimed imported. | — |
 | `9a20396e3ccdb89365b6fefa95ce8166946e3418` | Reject bind-group entries containing null buffers, texture views or samplers with upstream error order/text. Preserve wrapped canvas views and undescribed sampler behavior. Translate the null-sampler regression and update the dynamic-offset test to supply real buffers. Shader entry-point comment handling mentioned in the title is absent from the public delta; private .rive_head compiler changes are not claimed imported. | — |
 | `a92390456361a349705a59105567e7a8271946d3` | Translate empty styled-text append suppression, list-pop parent removal, delegate mutation/reentrancy ordering, and the four new public runtime regressions. Share sample-count, sampler and vertex-layout guards with live Luau bindings, including count admission and exact errors. Forty-nine public files remain guest-execution-only and parked: Wasm headers/VMs, WAMR tools/patches, AOT cache/security/tiering, guest renderer/import/browser-runner changes and guest GC/browser fixtures. These browser files are the guest scripting lane, not the wasm32 browser renderer. Private compiler changes behind .rive_head are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

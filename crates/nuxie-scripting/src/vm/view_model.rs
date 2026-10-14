@@ -2850,8 +2850,22 @@ pub(super) fn install_data_global(
     lua: &Lua,
     models: &BTreeMap<String, ScriptViewModel>,
 ) -> luaur_rt::Result<()> {
-    let data = lua.create_table();
+    // initializeLuaData reuses the registry's Data table and publishes it
+    // before installing any definitions, including on repeated initialization.
+    let data = match lua.named_registry_value::<Option<Table>>("Data")? {
+        Some(data) => data,
+        None => {
+            let data = lua.create_table();
+            lua.set_named_registry_value("Data", data.clone())?;
+            data
+        }
+    };
+    lua.globals().set("Data", data.clone())?;
     for (name, model) in models {
+        let name = name.split('\0').next().unwrap_or_default();
+        if !matches!(data.raw_get::<Value>(name)?, Value::Nil) {
+            continue;
+        }
         let definition = lua.create_table();
         let model = model.clone();
         definition.set(
@@ -2877,9 +2891,9 @@ pub(super) fn install_data_global(
                 create_scripted_view_model(lua, instance).map(Value::Table)
             })?,
         )?;
-        data.set(name.as_str(), definition)?;
+        data.set(name, definition)?;
     }
-    lua.globals().set("Data", data)
+    Ok(())
 }
 
 struct ScriptedTriggerWatch {
@@ -3364,6 +3378,185 @@ mod tests {
 
     fn fixture_models() -> BTreeMap<String, ScriptViewModel> {
         fixture_models_from("script_create_viewmodel_instance.riv")
+    }
+
+    // scripting_context_test.cpp at 10d08fb6: Data keeps the first view model
+    // carrying a name. Rust closures retain the native definition rather than
+    // exposing it as a raw Lua upvalue; verify that retained identity through
+    // the actual Data.Dup.new constructor and its native result.
+    #[test]
+    fn data_keeps_the_first_view_model_carrying_a_name() {
+        assert_data_dup_keeps_first_definition([b"Dup", b"Dup"]);
+    }
+
+    #[test]
+    fn data_deduplicates_c_string_names_before_ordering_the_map() {
+        // The first authored name sorts after the second as a full Rust string,
+        // but both name().c_str() keys are Dup. File order must decide ownership.
+        assert_data_dup_keeps_first_definition([b"Dup\0first", b"Dup"]);
+    }
+
+    fn duplicate_definitions_file(names: [&[u8]; 2]) -> nuxie_runtime::RuntimeFileHandle {
+        use nuxie_binary::{BinaryWriter, SUPPORTED_MAJOR_VERSION, SUPPORTED_MINOR_VERSION};
+        use nuxie_runtime::source::generated::{
+            backboard_base::BackboardBase,
+            viewmodel::{
+                viewmodel_base::ViewModelBase, viewmodel_component_base::ViewModelComponentBase,
+            },
+        };
+
+        // Import empty definitions through the native File boundary rather
+        // than constructing a mocked, already-deduplicated scripting map.
+        let mut bytes = Vec::new();
+        {
+            let mut writer = BinaryWriter::new(&mut bytes);
+            writer.write_bytes(b"RIVE");
+            for value in [SUPPORTED_MAJOR_VERSION, SUPPORTED_MINOR_VERSION, 0, 0] {
+                writer.write_var_uint64(value);
+            }
+            writer.write_var_uint64(u64::from(BackboardBase::TYPE_KEY));
+            writer.write_var_uint64(0);
+            for name in names {
+                writer.write_var_uint64(u64::from(ViewModelBase::TYPE_KEY));
+                writer.write_var_uint64(u64::from(ViewModelComponentBase::NAME_PROPERTY_KEY));
+                writer.write_var_uint64(name.len() as u64);
+                writer.write_bytes(name);
+                writer.write_var_uint64(0);
+            }
+        }
+        native_test_file(&bytes)
+    }
+
+    fn assert_data_dup_keeps_first_definition(names: [&[u8]; 2]) {
+        let file = duplicate_definitions_file(names);
+        let first = file.view_model(0).expect("first native definition");
+        let second = file.view_model(1).expect("second native definition");
+        assert_ne!(first.identity_key(), second.identity_key());
+        let models = nuxie_runtime::script_view_models(&file);
+        assert_eq!(models.len(), 1);
+        assert_eq!(
+            models["Dup"].native_model().unwrap().identity_key(),
+            first.identity_key()
+        );
+
+        let mut vm = ScriptVm::new();
+        vm.set_view_models(models);
+        vm.install_rive_globals().expect("Data initialization");
+        let data: Table = vm.lua().globals().get("Data").expect("Data table");
+        let definition: Table = data.get("Dup").expect("Data.Dup table");
+        let constructor: Function = definition.get("new").expect("Data.Dup.new function");
+        let instance: Table = constructor.call(()).expect("native constructor");
+        let constructed = model_from_table(&instance).expect("native model identity");
+        assert_eq!(
+            constructed.native_model().unwrap().identity_key(),
+            first.identity_key()
+        );
+    }
+
+    #[test]
+    fn data_reinitialization_retains_the_first_native_definition() {
+        let first_file = duplicate_definitions_file([b"Dup", b"Dup"]);
+        let later_file = duplicate_definitions_file([b"Dup", b"Dup"]);
+        let first = first_file.view_model(0).unwrap();
+        let mut vm = ScriptVm::new();
+        vm.set_view_models(nuxie_runtime::script_view_models(&first_file));
+        vm.install_rive_globals().unwrap();
+        let original: Table = vm.lua().globals().get("Data").unwrap();
+        // Reinitialization must restore the registry table even if the global
+        // was replaced, and must not replace its already-installed definition.
+        vm.lua().globals().set("Data", Value::Nil).unwrap();
+        vm.set_view_models(nuxie_runtime::script_view_models(&later_file));
+        let data: Table = vm.lua().globals().get("Data").unwrap();
+        assert_eq!(data.to_pointer(), original.to_pointer());
+        let definition: Table = data.get("Dup").unwrap();
+        let constructor: Function = definition.get("new").unwrap();
+        let instance: Table = constructor.call(()).unwrap();
+        assert_eq!(
+            model_from_table(&instance)
+                .unwrap()
+                .native_model()
+                .unwrap()
+                .identity_key(),
+            first.identity_key()
+        );
+    }
+
+    #[test]
+    fn data_native_initialization_adds_distinct_names_after_sandbox() {
+        assert_data_late_distinct_names(false);
+    }
+
+    #[test]
+    fn data_set_view_models_adds_distinct_names_after_sandbox() {
+        assert_data_late_distinct_names(true);
+    }
+
+    fn assert_data_late_distinct_names(use_set_view_models: bool) {
+        let first_file = duplicate_definitions_file([b"Dup", b"Dup"]);
+        let later_file = duplicate_definitions_file([b"Other", b"Other"]);
+        let replacement_file = duplicate_definitions_file([b"Dup", b"Dup"]);
+        let mut vm = ScriptVm::new();
+        vm.install_rive_globals()
+            .expect("sandbox before file registration");
+        let original: Table = vm.lua().globals().get("Data").unwrap();
+        for file in [&first_file, &later_file, &replacement_file] {
+            let models = nuxie_runtime::script_view_models(file);
+            if use_set_view_models {
+                vm.set_view_models(models);
+            } else {
+                nuxie_runtime::ScriptingVm::initialize_data_global(&vm, models)
+                    .expect("late native Data initialization");
+            }
+        }
+        let data: Table = vm.lua().globals().get("Data").unwrap();
+        assert_eq!(data.to_pointer(), original.to_pointer());
+        for (name, file) in [("Dup", &first_file), ("Other", &later_file)] {
+            let definition: Table = data.get(name).expect("late definition table");
+            let constructor: Function = definition.get("new").unwrap();
+            let instance: Table = constructor.call(()).expect("native constructor");
+            assert_eq!(
+                model_from_table(&instance)
+                    .unwrap()
+                    .native_model()
+                    .unwrap()
+                    .identity_key(),
+                file.view_model(0).unwrap().identity_key()
+            );
+        }
+    }
+
+    #[test]
+    fn data_reinitialization_preserves_any_non_nil_entry_and_c_string_key() {
+        let file = duplicate_definitions_file([b"Dup", b"Dup"]);
+        let models = nuxie_runtime::script_view_models(&file);
+        let lua = Lua::new();
+        install_data_global(&lua, &BTreeMap::new()).unwrap();
+        let data: Table = lua.globals().get("Data").unwrap();
+        data.raw_set("Dup", false).unwrap();
+        // Direct host maps use the same C-string field boundary as file input.
+        let direct_models = BTreeMap::from([("Dup\0later".to_owned(), models["Dup"].clone())]);
+        install_data_global(&lua, &direct_models).unwrap();
+        assert!(matches!(
+            data.raw_get::<Value>("Dup").unwrap(),
+            Value::Boolean(false)
+        ));
+        assert!(matches!(
+            data.raw_get::<Value>("Dup\0later").unwrap(),
+            Value::Nil
+        ));
+        data.raw_set("Dup", Value::Nil).unwrap();
+        install_data_global(&lua, &direct_models).unwrap();
+        let definition: Table = data.raw_get("Dup").unwrap();
+        let constructor: Function = definition.get("new").unwrap();
+        let instance: Table = constructor.call(()).unwrap();
+        assert_eq!(
+            model_from_table(&instance)
+                .unwrap()
+                .native_model()
+                .unwrap()
+                .identity_key(),
+            file.view_model(0).unwrap().identity_key()
+        );
     }
 
     fn model_with_property(kind: ScriptViewModelProperty) -> (ScriptViewModel, String) {

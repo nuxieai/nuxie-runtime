@@ -2461,10 +2461,13 @@ impl ScriptVm {
         self.install_require_global(cache)?;
         self.renderer_bindings.install(&self.lua)?;
         crate::gpu_canvas::install_gpu_canvas_globals(self)?;
-        view_model::install_data_global(&self.lua, &self.view_models)?;
         resource_limits::install_protected_call_guards(&self.lua, self.resource_limits.clone())?;
 
         self.lua.sandbox(true)?;
+        // ScriptingVM::init sandboxes before File calls initializeLuaData.
+        // Data must be created afterward: sandbox freezes existing global
+        // tables, but later file imports must extend this one registry table.
+        view_model::install_data_global(&self.lua, &self.view_models)?;
         self.rive_globals_installed.set(true);
         Ok(())
     }

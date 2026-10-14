@@ -511,6 +511,16 @@ impl Renderer for DeferredRenderer {
                 paint_version: paint.resource.version(),
             },
         );
+        // Read the paint's image now, not after subsequent paint mutations.
+        if !is_screen_target(self.route_target) {
+            let sampled = paint.foreign_image_id();
+            if sampled != INVALID_RENDER_HANDLE {
+                self.buffer
+                    .lock()
+                    .unwrap()
+                    .append(RenderCmd::CanvasSample, &ResIdPod { id: sampled });
+            }
+        }
     }
     fn clip_path(&mut self, path: &dyn RenderPath) {
         DeferredRenderPath::flush_scratch_of(path);

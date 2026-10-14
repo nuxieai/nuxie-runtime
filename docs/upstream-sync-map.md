@@ -7,18 +7,34 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `4672b88bf62eee54746854440a914ed20499fe8a`
+- LAST_SYNCED_SHA: `536a4f7a3c2e5817d91fdf80f933fa0018750921`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` (refreshed 2026-10-14 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 239 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (261 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 240 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (262 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `536a4f7a`, integrated atop downstream `388727443d`:
+  independent source-equivalence and subsequent Rust-integration reviews and
+  correction rereviews are clean. Full feature-enabled live Metal renderer units
+  pass 728 (six existing ignores), including all four new upstream regressions
+  and the retained native-paint texture assertion. WebGPU/WebGL2 compilation for
+  wasm32-unknown-unknown passes; source/manifest/pipeline checks pass 39 and
+  generated build files, changed-file formatting and diff hygiene pass.
+  Validation corrected test-only identity-matrix API spelling and the scheduling
+  test host: upstream serializing paint unchecked-casts a canvas image to its
+  concrete serializing image type; Rust retains its checked boundary and uses
+  the existing null factory only for that order-only test. Real recording,
+  resource replay and exact canvas-order assertions remain unchanged. Both
+  corrections were independently rereviewed; production and tolerances were
+  not changed to fit tests. Historical shader/reference provenance is retained.
+  No new browser pixels, Vulkan/Android hardware or broad runtime Golden/Silver
+  replay is claimed.
 - Validation at `4672b88b`, integrated atop downstream `4ce0085eab`:
   independent source-equivalence and subsequent Rust-integration reviews and
   correction rereviews are clean. Review corrected forwarding through existing
@@ -919,6 +935,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `536a4f7a3c2e5817d91fdf80f933fa0018750921` | Back a deferred canvas before resolving its image during paint mutations. Record canvasSample beside each canvas drawPath that samples a foreign image, capturing the handle at draw time; schedule its dependency without walking screen draws or tracking later paint state. Preserve the draw-filtered no-op replay and translate all four upstream regressions. The existing generic command decoder accounts for the redundant-command analysis addition; private .rive_head contents are not claimed imported. | — |
 | `4672b88bf62eee54746854440a914ed20499fe8a` | Translate angular gradients through renderer factories, deferred commands, append-only SRIV opcode 45, paint packing, inverse transforms and always-complex texture ramps. Preserve upstream first-stop default only for factories without an angular implementation. Regenerate supported shader artifacts and translate both gradient GMs. The upstream-only counting benchmark and redundant-command analysis remain source-oracle tools; the shared downstream decoder understands the new payload. Private .rive_head contents are not claimed imported. | — |
 | `10d08fb6eb7d1b19ceebfba38cbfec7ef9d7d45c` | Keep the first view model carrying each Data name, preserving its retained constructor identity through the Rust scripting projection. Refuse a generic uint target sync into a missing or non-integer data value, while retaining derived integer asset values. Translate both public regressions. CLI/RML/editor changes described in the commit message have no public implementation in this delta; private .rive_head code is not claimed imported. | — |
 | `9166e9b62debca7482e3cd13229ec5a8c35af603` | Tie-break equal draw sort keys by signed draw index, negative for prepasses, in native and browser-specific sorters. Preserve image/shader/scissor batch admission and merge both append- and prepend-contiguous tessellation ranges. Translate both upstream hairline batch-count regressions using actual flushed draws. Private .rive_head contents are not claimed imported. | — |

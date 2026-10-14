@@ -715,15 +715,13 @@ impl Font for HbFont {
         for feature in features {
             values.insert(feature.tag, feature.value);
         }
-        let mut font = Self::with_face_options(
+        Arc::new(Self::with_face_options(
             self.bytes.clone(),
             self.face_index,
             Some(Arc::clone(&self.face)),
             axes,
             values,
-        );
-        font.host_outline = self.host_outline.clone();
-        Arc::new(font)
+        ))
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
         let font = self.outline_font();

@@ -1065,8 +1065,9 @@ typedef struct NuxFontAxisCoord {
  * UTF-8, without a terminating NUL. Its trusted local file must remain
  * immutable and available until this font and all its variants die.
  * Never supply authored, removable or network files through the mapped path.
- * Arrays use an exact struct_size and fixed stride. Coordinates are borrowed
- * only for creation; face_index and coordinates select a collection face.
+ * struct_size must cover the ABI-v4 prefix; appended fields are ignored.
+ * Coordinates are borrowed only for creation and have a fixed element stride;
+ * face_index and coordinates select a collection face.
  */
 typedef struct NuxFontSource {
   uint32_t struct_size;
@@ -1086,9 +1087,10 @@ typedef void (*NuxFontOutlineSink)(void*, uint8_t, const float*);
 
 /**
  * Host callbacks are copied at creation. Context ownership transfers only on
- * success and release runs once after the last retained font/variant dies,
+ * success and release runs once after the last retained host font dies,
  * possibly on any thread. get_path may run concurrently; callbacks and context
  * must be thread-safe, must not unwind, and must not reenter the font API.
+ * struct_size must cover the ABI-v4 prefix; appended fields are ignored.
  */
 typedef struct NuxFontOutlineCallbacks {
   uint32_t struct_size;
@@ -2526,8 +2528,9 @@ NuxStatus nux_font_probe_make_font(struct NuxFontFileProbe *probe, struct NuxFon
 /**
  * Set the engine's process-wide fallback hook; NULL clears it. Applies to all
  * files, including files already open when next reshaped. Callback and context
- * must remain valid until replacement completes. Do not replace the hook from
- * inside its callback. Replacement waits for current C callbacks to return.
+ * must remain valid until replacement completes. Replacement from inside its
+ * callback returns REENTRANT_CALL. Other replacement waits for current C
+ * callbacks to return. The hook may call font APIs, but not other C entry points.
  */
 NuxStatus nux_font_set_fallback_proc(NuxFontFallbackProc _callback, void *_user_data);
 

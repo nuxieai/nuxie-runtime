@@ -1,0 +1,3 @@
+pub mod string_template_argument_base;
+pub mod string_template_argument_number_base;
+pub mod string_template_argument_string_base;

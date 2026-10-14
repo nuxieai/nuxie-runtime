@@ -187,18 +187,9 @@ impl DataConverterToString {
     }
 
     fn format_with_commas(value: &str) -> String {
-        let (integer, fraction) = if let Some(dot) = value.find('.') {
-            (&value[..dot], &value[dot..])
-        } else {
-            (value, "")
-        };
-        let mut integer = integer.to_owned();
-        let mut position = integer.len() as isize - 3;
-        while position > 0 && integer.as_bytes()[position as usize - 1].is_ascii_digit() {
-            integer.insert(position as usize, ',');
-            position -= 3;
-        }
-        integer + fraction
+        super::string_template::string_template_format::StringTemplateFormat::format_thousands(
+            value,
+        )
     }
 
     fn convert_number(&mut self, value: f32) {

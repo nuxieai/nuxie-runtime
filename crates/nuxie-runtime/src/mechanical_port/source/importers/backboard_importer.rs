@@ -112,6 +112,10 @@ impl BackboardImporter {
         self.data_converters.push(converter);
     }
 
+    pub fn last_data_converter(&self) -> Option<CoreHandle> {
+        self.data_converters.last().cloned()
+    }
+
     pub fn add_data_converter_referencer(&mut self, data_bind: CoreHandle) {
         self.data_converter_referencers.push(data_bind);
     }

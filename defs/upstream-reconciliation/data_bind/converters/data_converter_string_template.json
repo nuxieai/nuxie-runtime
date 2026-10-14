@@ -1,0 +1,9 @@
+{
+  "name": "DataConverterStringTemplate",
+  "key": { "int": 177, "string": "dataconverterstringtemplate" },
+  "extends": "data_bind/converters/data_converter.json",
+  "properties": {
+    "openDelimiter": { "type": "String", "initialValue": "'${'", "key": { "int": 485, "string": "opendelimiter" } },
+    "closeDelimiter": { "type": "String", "initialValue": "'}'", "key": { "int": 486, "string": "closedelimiter" } }
+  }
+}

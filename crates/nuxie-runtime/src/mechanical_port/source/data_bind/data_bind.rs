@@ -267,6 +267,13 @@ impl DataBind {
                         .unwrap()
                         .add_data_bind(owner.clone())
                 });
+            } else if target.is_type_of(156) {
+                target.with_mut(|target| {
+                    target
+                        .as_string_template_argument_mut()
+                        .unwrap()
+                        .add_data_bind(owner.clone())
+                });
             } else if Self::state_machine_owned_type(target.core_type().unwrap_or_default()) {
                 if let Some(machine) =
                     stack.latest::<StateMachineImporter>(StateMachineBase::TYPE_KEY)

@@ -1,0 +1,7 @@
+{
+  "name": "StringTemplateArgument",
+  "key": { "int": 156, "string": "stringtemplateargument" },
+  "properties": {
+    "name": { "type": "String", "initialValue": "''", "key": { "int": 481, "string": "name" } }
+  }
+}

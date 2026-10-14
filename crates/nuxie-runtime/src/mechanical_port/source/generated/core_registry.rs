@@ -3732,6 +3732,9 @@ mod update_dispatch_tests {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoreConcreteType {
+    DataConverterStringTemplate,
+    StringTemplateArgumentNumber,
+    StringTemplateArgumentString,
     ViewModelInstanceListItem,
     ViewModelComponent,
     ViewModelProperty,
@@ -4030,6 +4033,12 @@ pub enum CoreConcreteType {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoreField {
+    StringTemplateArgumentName,
+    StringTemplateArgumentStringPropertyValue,
+    StringTemplateArgumentNumberPropertyValue,
+    DataConverterStringTemplateOpenDelimiter,
+    DataConverterStringTemplateCloseDelimiter,
+
     SelectionStyleHighlightColor,
     SelectionStyleCornerRadius,
     AdvanceableStateSpeed,
@@ -4757,6 +4766,9 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+fn as_string_template_argument(&self)->Option<&crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { None }
+fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { None }
+
     fn as_blend_state_transition(
         &self,
     ) -> Option<
@@ -6112,6 +6124,7 @@ pub trait CoreCapabilities: Any {
         // Formula token subclasses inherit FormulaToken::import, which
         // registers each token with the active formula importer before the
         // formula's output queue is calculated.
+        if let Some(argument) = self.as_string_template_argument_mut() { return Some(argument.import(stack)); }
         if let Some(token) = self.as_formula_token_mut() {
             return Some(token.import(stack));
         }
@@ -8579,6 +8592,9 @@ impl CoreRegistry {
             446 => CoreConcreteType::DataBind,
             588 => CoreConcreteType::BindablePropertyAsset,
             568 => CoreConcreteType::DataConverterNumberToList,
+            177 => CoreConcreteType::DataConverterStringTemplate,
+            176 => CoreConcreteType::StringTemplateArgumentNumber,
+            157 => CoreConcreteType::StringTemplateArgumentString,
             536 => CoreConcreteType::DataConverterFormula,
             617 => CoreConcreteType::DataConverterToNumber,
             516 => CoreConcreteType::DataConverterOperation,
@@ -9119,6 +9135,10 @@ impl CoreRegistry {
             984 => CoreField::SemanticDataValue,
             985 => CoreField::SemanticDataHint,
             246 => CoreField::CustomPropertyStringPropertyValue,
+            481 => CoreField::StringTemplateArgumentName,
+            482 => CoreField::StringTemplateArgumentStringPropertyValue,
+            485 => CoreField::DataConverterStringTemplateOpenDelimiter,
+            486 => CoreField::DataConverterStringTemplateCloseDelimiter,
             744 => CoreField::DataConverterStringPadText,
             766 => CoreField::DataConverterToStringColorFormat,
             635 => CoreField::BindablePropertyStringPropertyValue,
@@ -9473,6 +9493,7 @@ impl CoreRegistry {
             718 => CoreField::DataConverterRangeMapperMinOutput,
             719 => CoreField::DataConverterRangeMapperMaxOutput,
             756 => CoreField::DataConverterInterpolatorDuration,
+            483 => CoreField::StringTemplateArgumentNumberPropertyValue,
             777 => CoreField::FormulaTokenValueOperationValue,
             636 => CoreField::BindablePropertyNumberPropertyValue,
             644 => CoreField::NestedArtboardLeafAlignmentX,
@@ -9977,6 +9998,10 @@ impl CoreRegistry {
             984 => CoreField::SemanticDataValue,
             985 => CoreField::SemanticDataHint,
             246 => CoreField::CustomPropertyStringPropertyValue,
+            481 => CoreField::StringTemplateArgumentName,
+            482 => CoreField::StringTemplateArgumentStringPropertyValue,
+            485 => CoreField::DataConverterStringTemplateOpenDelimiter,
+            486 => CoreField::DataConverterStringTemplateCloseDelimiter,
             744 => CoreField::DataConverterStringPadText,
             766 => CoreField::DataConverterToStringColorFormat,
             635 => CoreField::BindablePropertyStringPropertyValue,
@@ -10288,6 +10313,7 @@ impl CoreRegistry {
             718 => CoreField::DataConverterRangeMapperMinOutput,
             719 => CoreField::DataConverterRangeMapperMaxOutput,
             756 => CoreField::DataConverterInterpolatorDuration,
+            483 => CoreField::StringTemplateArgumentNumberPropertyValue,
             777 => CoreField::FormulaTokenValueOperationValue,
             636 => CoreField::BindablePropertyNumberPropertyValue,
             644 => CoreField::NestedArtboardLeafAlignmentX,
@@ -10653,6 +10679,11 @@ impl CoreRegistry {
 
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
+            486 => 1,
+            485 => 1,
+            483 => 2,
+            482 => 1,
+            481 => 1,
             222 | 1087 | 1094 => 0,
             1095 => 4,
             453 | 454 => 0,
@@ -11316,6 +11347,11 @@ impl CoreRegistry {
     }
     pub fn property_owner_type_key(property_key: u32) -> u16 {
         match property_key {
+            486 => 177,
+            485 => 177,
+            483 => 176,
+            482 => 157,
+            481 => 156,
             222 | 1094 | 1095 => 569,
             1087 => 1071,
             453 | 454 => 487,
@@ -87021,6 +87057,9 @@ impl CoreRegistry {
             446 => Some(Box::new(<crate::mechanical_port::source::data_bind::data_bind::DataBind>::default())),
             588 => Some(Box::new(<crate::mechanical_port::source::data_bind::bindable_property_asset::BindablePropertyAsset>::default())),
             568 => Some(Box::new(<crate::mechanical_port::source::data_bind::converters::data_converter_number_to_list::DataConverterNumberToList>::default())),
+            177 => Some(Box::new(<crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate>::default())),
+            176 => Some(Box::new(<crate::source::data_bind::converters::string_template::string_template_argument_number::StringTemplateArgumentNumber>::default())),
+            157 => Some(Box::new(<crate::source::data_bind::converters::string_template::string_template_argument_string::StringTemplateArgumentString>::default())),
             536 => Some(Box::new(<crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula>::default())),
             617 => Some(Box::new(<crate::mechanical_port::source::data_bind::converters::data_converter_to_number::DataConverterToNumber>::default())),
             516 => Some(Box::new(<crate::mechanical_port::source::data_bind::converters::data_converter_operation::DataConverterOperation>::default())),
@@ -87613,6 +87652,105 @@ impl crate::mechanical_port::source::generated::assets::file_asset_base::FileAss
             object,
         )
     }
+}
+
+impl crate::source::core::CoreType for crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate { const TYPE_KEY: u16 = 177; }
+impl CoreRegistryObject for crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate {
+fn as_registry_any(&self) -> &dyn Any { self }
+fn as_registry_any_mut(&mut self) -> &mut dyn Any { self }
+fn is_type_of(&self,key:u16)->bool { crate::source::generated::data_bind::converters::data_converter_string_template_base::DataConverterStringTemplateBase::is_type_of(key) }
+fn set_uint_with_completion(&mut self, field:CoreField,value:u32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_uint(&mut self, field:CoreField)->u32 { match field {_ => 0 } }
+fn set_string_with_completion(&mut self, field:CoreField,value:String,completion:&mut crate::source::core::PropertySetterCompletion) { match field {CoreField::DataConverterStringTemplateOpenDelimiter => { if self.base.set_open_delimiter_value(value) { self.open_delimiter_changed(); completion.record(crate::source::core::CoreObject::core(self),485); } },CoreField::DataConverterStringTemplateCloseDelimiter => { if self.base.set_close_delimiter_value(value) { self.close_delimiter_changed(); completion.record(crate::source::core::CoreObject::core(self),486); } },CoreField::DataConverterName => { if self.base.base.base.set_name_value(value) {  completion.record(crate::source::core::CoreObject::core(self),662); } },_ => {} } }
+fn get_string(&mut self, field:CoreField)->String { match field {CoreField::DataConverterStringTemplateOpenDelimiter => self.base.open_delimiter().to_owned(),CoreField::DataConverterStringTemplateCloseDelimiter => self.base.close_delimiter().to_owned(),CoreField::DataConverterName => self.base.base.base.name().to_owned(),_ => String::new() } }
+fn set_color_with_completion(&mut self, field:CoreField,value:i32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_color(&mut self, field:CoreField)->i32 { match field {_ => 0 } }
+fn set_bool_with_completion(&mut self, field:CoreField,value:bool,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_bool(&mut self, field:CoreField)->bool { match field {_ => false } }
+fn set_double_with_completion(&mut self, field:CoreField,value:f32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_double(&mut self, field:CoreField)->f32 { match field {_ => 0.0 } }
+fn set_int_with_completion(&mut self, field:CoreField,value:i32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_int(&mut self, field:CoreField)->i32 { match field {_ => 0 } }
+fn set_callback_with_completion(&mut self, field:CoreField,value:CallbackData<'_>,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+}
+impl crate::source::core::CoreObject for crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate {
+fn set_core_handle(&mut self, handle: CoreHandle) { self.attach_handle(handle); }
+fn core(&self)->&crate::source::core::Core { &self.base.base.base.base }
+fn core_mut(&mut self)->&mut crate::source::core::Core { &mut self.base.base.base.base }
+fn core_type(&self)->u16 { 177 }
+fn type_predicate(&self)->fn(u16)->bool { crate::source::generated::data_bind::converters::data_converter_string_template_base::DataConverterStringTemplateBase::is_type_of }
+fn deserialize(&mut self,key:u16,reader:&mut crate::source::core::binary_reader::BinaryReader<'_>)->bool { self.base.deserialize(key,reader) }
+fn clone_occurrence_parts(&self)->crate::source::core::CoreCloneParts { crate::source::data_bind::converters::data_converter::DataConverter::clone_occurrence_parts(self) }
+fn clone_boxed(&self)->Option<Box<dyn crate::source::core::CoreObject>> { Some(Box::new(self.clone_definition())) }
+}
+impl CoreCapabilities for crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate {fn clone_completion_handler(&self)->Option<fn(&CoreHandle,&CoreHandle)->bool> { Some(Self::complete_clone) }
+fn as_data_converter_capability(&self)->Option<&dyn DataConverterCapability> { Some(self) }
+fn as_data_converter_capability_mut(&mut self)->Option<&mut dyn DataConverterCapability> { Some(self) }
+fn as_data_converter(&self)->Option<&crate::source::data_bind::converters::data_converter::DataConverter> { Some(&self.base.base) }
+fn as_data_converter_mut(&mut self)->Option<&mut crate::source::data_bind::converters::data_converter::DataConverter> { Some(&mut self.base.base) }
+}
+impl crate::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks for crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate { fn notify_property_changed(&mut self,key:u16) { crate::source::core::CoreObject::core_mut(self).notify_property_changed(key); } }
+
+impl crate::source::core::CoreType for crate::source::data_bind::converters::string_template::string_template_argument_number::StringTemplateArgumentNumber { const TYPE_KEY: u16 = 176; }
+impl CoreRegistryObject for crate::source::data_bind::converters::string_template::string_template_argument_number::StringTemplateArgumentNumber {
+fn as_registry_any(&self) -> &dyn Any { self }
+fn as_registry_any_mut(&mut self) -> &mut dyn Any { self }
+fn is_type_of(&self,key:u16)->bool { crate::source::generated::data_bind::converters::string_template::string_template_argument_number_base::StringTemplateArgumentNumberBase::is_type_of(key) }
+fn set_uint_with_completion(&mut self, field:CoreField,value:u32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_uint(&mut self, field:CoreField)->u32 { match field {_ => 0 } }
+fn set_string_with_completion(&mut self, field:CoreField,value:String,completion:&mut crate::source::core::PropertySetterCompletion) { match field {CoreField::StringTemplateArgumentName => { if self.base.base.base.set_name_value(value) {  completion.record(crate::source::core::CoreObject::core(self),481); } },_ => {} } }
+fn get_string(&mut self, field:CoreField)->String { match field {CoreField::StringTemplateArgumentName => self.base.base.base.name().to_owned(),_ => String::new() } }
+fn set_color_with_completion(&mut self, field:CoreField,value:i32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_color(&mut self, field:CoreField)->i32 { match field {_ => 0 } }
+fn set_bool_with_completion(&mut self, field:CoreField,value:bool,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_bool(&mut self, field:CoreField)->bool { match field {_ => false } }
+fn set_double_with_completion(&mut self, field:CoreField,value:f32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {CoreField::StringTemplateArgumentNumberPropertyValue => { if self.base.set_property_value_value(value) {  completion.record(crate::source::core::CoreObject::core(self),483); } },_ => {} } }
+fn get_double(&mut self, field:CoreField)->f32 { match field {CoreField::StringTemplateArgumentNumberPropertyValue => self.base.property_value(),_ => 0.0 } }
+fn set_int_with_completion(&mut self, field:CoreField,value:i32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_int(&mut self, field:CoreField)->i32 { match field {_ => 0 } }
+fn set_callback_with_completion(&mut self, field:CoreField,value:CallbackData<'_>,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+}
+impl crate::source::core::CoreObject for crate::source::data_bind::converters::string_template::string_template_argument_number::StringTemplateArgumentNumber {
+fn core(&self)->&crate::source::core::Core { &self.base.base.base.base }
+fn core_mut(&mut self)->&mut crate::source::core::Core { &mut self.base.base.base.base }
+fn core_type(&self)->u16 { 176 }
+fn type_predicate(&self)->fn(u16)->bool { crate::source::generated::data_bind::converters::string_template::string_template_argument_number_base::StringTemplateArgumentNumberBase::is_type_of }
+fn deserialize(&mut self,key:u16,reader:&mut crate::source::core::binary_reader::BinaryReader<'_>)->bool { self.base.deserialize(key,reader) }
+fn clone_boxed(&self)->Option<Box<dyn crate::source::core::CoreObject>> { let mut cloned = Self::default(); cloned.base.copy(&self.base); Some(Box::new(cloned)) }
+}
+impl CoreCapabilities for crate::source::data_bind::converters::string_template::string_template_argument_number::StringTemplateArgumentNumber {fn as_string_template_argument(&self)->Option<&crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { Some(&self.base.base) }
+fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { Some(&mut self.base.base) }
+}
+
+impl crate::source::core::CoreType for crate::source::data_bind::converters::string_template::string_template_argument_string::StringTemplateArgumentString { const TYPE_KEY: u16 = 157; }
+impl CoreRegistryObject for crate::source::data_bind::converters::string_template::string_template_argument_string::StringTemplateArgumentString {
+fn as_registry_any(&self) -> &dyn Any { self }
+fn as_registry_any_mut(&mut self) -> &mut dyn Any { self }
+fn is_type_of(&self,key:u16)->bool { crate::source::generated::data_bind::converters::string_template::string_template_argument_string_base::StringTemplateArgumentStringBase::is_type_of(key) }
+fn set_uint_with_completion(&mut self, field:CoreField,value:u32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_uint(&mut self, field:CoreField)->u32 { match field {_ => 0 } }
+fn set_string_with_completion(&mut self, field:CoreField,value:String,completion:&mut crate::source::core::PropertySetterCompletion) { match field {CoreField::StringTemplateArgumentStringPropertyValue => { if self.base.set_property_value_value(value) {  completion.record(crate::source::core::CoreObject::core(self),482); } },CoreField::StringTemplateArgumentName => { if self.base.base.base.set_name_value(value) {  completion.record(crate::source::core::CoreObject::core(self),481); } },_ => {} } }
+fn get_string(&mut self, field:CoreField)->String { match field {CoreField::StringTemplateArgumentStringPropertyValue => self.base.property_value().to_owned(),CoreField::StringTemplateArgumentName => self.base.base.base.name().to_owned(),_ => String::new() } }
+fn set_color_with_completion(&mut self, field:CoreField,value:i32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_color(&mut self, field:CoreField)->i32 { match field {_ => 0 } }
+fn set_bool_with_completion(&mut self, field:CoreField,value:bool,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_bool(&mut self, field:CoreField)->bool { match field {_ => false } }
+fn set_double_with_completion(&mut self, field:CoreField,value:f32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_double(&mut self, field:CoreField)->f32 { match field {_ => 0.0 } }
+fn set_int_with_completion(&mut self, field:CoreField,value:i32,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+fn get_int(&mut self, field:CoreField)->i32 { match field {_ => 0 } }
+fn set_callback_with_completion(&mut self, field:CoreField,value:CallbackData<'_>,completion:&mut crate::source::core::PropertySetterCompletion) { match field {_ => {} } }
+}
+impl crate::source::core::CoreObject for crate::source::data_bind::converters::string_template::string_template_argument_string::StringTemplateArgumentString {
+fn core(&self)->&crate::source::core::Core { &self.base.base.base.base }
+fn core_mut(&mut self)->&mut crate::source::core::Core { &mut self.base.base.base.base }
+fn core_type(&self)->u16 { 157 }
+fn type_predicate(&self)->fn(u16)->bool { crate::source::generated::data_bind::converters::string_template::string_template_argument_string_base::StringTemplateArgumentStringBase::is_type_of }
+fn deserialize(&mut self,key:u16,reader:&mut crate::source::core::binary_reader::BinaryReader<'_>)->bool { self.base.deserialize(key,reader) }
+fn clone_boxed(&self)->Option<Box<dyn crate::source::core::CoreObject>> { let mut cloned = Self::default(); cloned.base.copy(&self.base); Some(Box::new(cloned)) }
+}
+impl CoreCapabilities for crate::source::data_bind::converters::string_template::string_template_argument_string::StringTemplateArgumentString {fn as_string_template_argument(&self)->Option<&crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { Some(&self.base.base) }
+fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { Some(&mut self.base.base) }
 }
 impl crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks
     for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset

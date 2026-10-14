@@ -1,0 +1,8 @@
+{
+  "name": "StringTemplateArgumentNumber",
+  "key": { "int": 176, "string": "stringtemplateargumentnumber" },
+  "extends": "data_bind/converters/string_template/string_template_argument.json",
+  "properties": {
+    "propertyValue": { "type": "double", "initialValue": "0.0", "key": { "int": 483, "string": "propertyvalue" } }
+  }
+}

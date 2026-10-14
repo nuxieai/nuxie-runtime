@@ -12,8 +12,6 @@ use crate::mechanical_port::source::{
     generated::animation::{
         keyed_object_base::KeyedObjectBase, linear_animation_base::LinearAnimationBase,
     },
-    generated::layout_component_base::LayoutComponentBase,
-    type_tables::{DescendantTable, contains, descendant_table},
     importers::{import_stack::ImportStack, linear_animation_importer::LinearAnimationImporter},
     lazy_vector::LazyVector,
     status_code::StatusCode,
@@ -23,27 +21,6 @@ pub trait KeyedObjectContext: CoreContext {
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle>;
     fn object_supports_property(&self, id: u32, key: u32) -> bool;
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool;
-}
-
-/// Whether each type key is a LayoutComponent, the only InterpolatorHost:
-/// InterpolatorHost::from's cast, computed from the type tree at compile time.
-const INTERPOLATOR_HOSTS: DescendantTable = descendant_table(LayoutComponentBase::TYPE_KEY);
-
-/// KeyedProperty::apply's InterpolatorHost::from(object) followed by
-/// overridesKeyedInterpolation(propertyKey). A target that is not a
-/// LayoutComponent answers from its type key, without a loan.
-pub(crate) fn interpolator_host_overrides(object: &CoreHandle, key: u32) -> bool {
-    let is_host = object
-        .occupied_core_type()
-        .is_some_and(|type_key| contains(&INTERPOLATOR_HOSTS, type_key));
-    is_host
-        && object
-            .with_mut(|object| {
-                object
-                    .overrides_keyed_interpolation(key as i32)
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false)
 }
 
 #[derive(Default)]

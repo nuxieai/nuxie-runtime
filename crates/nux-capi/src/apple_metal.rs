@@ -1690,7 +1690,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
     out_outcome: *mut NuxRendererOutcome,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
-    if super::platform_callback_active() {
+    if super::platform_callback_active() || super::fonts::fallback_hook_active() {
         // The common firewall rejects reentry before its body runs. Consume
         // only the readable completion pair here, without touching handles.
         let _ = std::panic::catch_unwind(|| {
@@ -2233,6 +2233,27 @@ mod tests {
         let mut outcome = NuxRendererOutcome::default();
         let mut result = ptr::dangling_mut();
         let status = crate::with_platform_callback(|| {
+            call_with_probe(
+                operation_with_probe(probe),
+                &raw mut outcome,
+                &raw mut result,
+            )
+        });
+        assert_eq!(status, NuxStatus::ReentrantCall);
+        assert!(result.is_null());
+        wait_for_completion(unsafe { &*probe });
+        drop(unsafe { Box::from_raw(probe) });
+    }
+
+    #[test]
+    fn font_hook_reentry_releases_readable_completion_once() {
+        let probe = Box::into_raw(Box::new(CompletionProbe {
+            calls: AtomicUsize::new(0),
+            inline: AtomicBool::new(false),
+        }));
+        let mut outcome = NuxRendererOutcome::default();
+        let mut result = ptr::dangling_mut();
+        let status = crate::fonts::with_fallback_hook_for_test(|| {
             call_with_probe(
                 operation_with_probe(probe),
                 &raw mut outcome,

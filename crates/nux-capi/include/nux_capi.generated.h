@@ -2537,6 +2537,8 @@ NuxStatus nux_font_set_fallback_proc(NuxFontFallbackProc _callback, void *_user_
 /**
  * Copy at the requested weight only when the font has a wght axis; fixed
  * fonts retain their own weight, as in the upstream Android system provider.
+ * A weighted copy of a variable host-outline font is a plain font without
+ * outline recovery; a fixed host font is returned as is.
  */
 NuxStatus nux_font_with_weight(const struct NuxFont *font,
                                uint16_t weight,

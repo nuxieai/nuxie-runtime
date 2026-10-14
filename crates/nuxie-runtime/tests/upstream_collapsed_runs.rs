@@ -19,7 +19,7 @@ fn collapsed(component: &CoreHandle) -> bool {
 
 fn world_transform(shape: &CoreHandle) -> Mat2D {
     shape
-        .with(|s| *s.as_world_transform_component().unwrap().world_transform())
+        .with(|s| s.as_world_transform_component().unwrap().world_transform())
         .unwrap()
 }
 

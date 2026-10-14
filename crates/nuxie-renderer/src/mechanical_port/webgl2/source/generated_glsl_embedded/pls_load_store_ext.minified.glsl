@@ -14,7 +14,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef ZE
 #if __VERSION__>=310
-layout(binding=0,std140) uniform Jk{uniform highp vec4 Pi;}Qi;
+layout(binding=0,std140) uniform Kk{uniform highp vec4 Qi;}Ri;
 #else
 uniform mediump vec4 AF;
 #endif
@@ -25,19 +25,19 @@ __pixel_local_inEXT h2
 #else
 __pixel_local_outEXT h2
 #endif
-{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 I4;layout(r32ui) highp uint m8;};
+{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 I4;layout(r32ui) highp uint n8;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef BF
-layout(location=0) inout mediump vec4 nc;
+layout(location=0) inout mediump vec4 oc;
 #endif
 #endif
 #ifdef GE
-layout(location=0) out mediump vec4 nc;
+layout(location=0) out mediump vec4 oc;
 #endif
 void main(){
 #ifdef ZE
 #if __VERSION__>=310
-n0=Qi.Pi;
+n0=Ri.Qi;
 #else
 n0=AF;
 #endif
@@ -46,20 +46,20 @@ n0=AF;
 #ifdef GL_ARM_shader_framebuffer_fetch
 n0=gl_LastFragColorARM;
 #else
-n0=nc;
+n0=oc;
 #endif
 #endif
 #ifdef HE
-m8=0u;
+n8=0u;
 #endif
 #ifdef ZF
 m0=0u;
 #endif
 #ifdef GE
-nc=n0;
+oc=n0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 Ri;void main(){Ri=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 Si;void main(){Si=vec4(0,1,0,1);}
 #endif
 #endif

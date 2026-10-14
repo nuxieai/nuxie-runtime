@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,22 +7,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct gl_PerVertex {
@@ -40,7 +40,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wi: bool = true;
+@id(0) override Xi: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> ZB_1: vec4<f32>;
@@ -71,7 +71,7 @@ fn main_1() {
     let _e44 = PC_1;
     let _e45 = HC_1;
     d6_ = ((_e44 * _e45.zw) + _e45.xy);
-    if Wi {
+    if Xi {
         let _e50 = BC_1;
         let _e52 = j.w6_;
         if (_e50 == 0u) {

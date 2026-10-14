@@ -117,7 +117,7 @@ use nuxie_render_api::{
     Aabb, AudioDecodeError, AudioSource, ColorInt, DecodedFont, FillRule, FontDecodeError, RawPath,
 };
 
-use super::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
+use super::refcnt_hpp::{RefCnt, RefCntTarget, rcp};
 use super::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
     RenderShader,
@@ -243,6 +243,14 @@ pub trait FactoryContract: FactoryAccess {
         stops: *const f32,
         count: usize,
     ) -> rcp<RenderShader>;
+    unsafe fn makeAngularGradient(
+        &mut self,
+        colors: *const ColorInt,
+        stops: *const f32,
+        count: usize,
+    ) -> rcp<RenderShader> {
+        unsafe { self.makeLinearGradient(0.0, 0.0, 1.0, 0.0, colors, stops, count.min(1)) }
+    }
     fn makeRenderPath(&mut self, rawPath: &mut RawPath, fillRule: FillRule) -> rcp<RenderPath>;
     fn makeEmptyRenderPath(&mut self) -> rcp<RenderPath>;
     fn makeRenderPaint(&mut self) -> rcp<RenderPaint>;

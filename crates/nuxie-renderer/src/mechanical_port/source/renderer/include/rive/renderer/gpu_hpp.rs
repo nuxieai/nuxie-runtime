@@ -2736,6 +2736,7 @@ pub enum PaintType {
     solidColor = 1,
     linearGradient = 2,
     radialGradient = 3,
+    angularGradient = 4,
 }
 
 #[repr(C)]

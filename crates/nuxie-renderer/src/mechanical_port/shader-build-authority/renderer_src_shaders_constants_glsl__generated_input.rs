@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4672b88bf62eee54746854440a914ed20499fe8a";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "98875523b3c485c348f6ffcc8151c1bbb762bc32d9ab132438accc9fc0db5507";
+pub const PINNED_SOURCE_SHA256: &str = "32650e811721a020028be54dd85ab05736e18d0b95eff434ccdb18fe0075fcc2";
 pub const OWNERSHIP_UNIT: &str = "shader:source:constants";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 419;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18339;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 420;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18378;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_constants_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

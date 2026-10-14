@@ -442,6 +442,33 @@ impl Gradient {
         }
     }
 
+    /// Source `Gradient::MakeAngular` with the original pointer/count surface.
+    pub unsafe fn MakeAngular(
+        colors: *const ColorInt,
+        stops: *const f32,
+        count: usize,
+    ) -> rcp<Gradient> {
+        let Some((colors, stops)) = (unsafe { checked_inputs(colors, stops, count) }) else {
+            return rcp::new();
+        };
+        if !validate_gradient_stops(stops) {
+            return rcp::new();
+        }
+        let new_colors = GradDataArray::from_slice(colors);
+        let new_stops = GradDataArray::from_slice(stops);
+        unsafe {
+            Gradient::make_rcp(
+                gpu::PaintType::angularGradient,
+                new_colors,
+                new_stops,
+                count,
+                0.0,
+                0.0,
+                0.0,
+            )
+        }
+    }
+
     pub fn isOpaque(&self) -> bool {
         let mut cached = unsafe { *self.m_isOpaque.get() };
         if cached == gpu::TriState::unknown {
@@ -487,7 +514,10 @@ impl Gradient {
         for index in 0..self.m_count {
             let value = unsafe { self.m_colors.read(index) };
             unsafe {
-                new_colors.write(index, super::draw_cpp::color_modulate(value, color, opacity));
+                new_colors.write(
+                    index,
+                    super::draw_cpp::color_modulate(value, color, opacity),
+                );
             }
         }
         let new_stops = GradDataArray::from_slice(unsafe { self.m_stops.as_slice(self.m_count) });

@@ -6,7 +6,7 @@ mod additive_blend;
 mod bitmap_cache_pixel;
 mod clipstrokes;
 mod emptypath;
-mod gradienttransform;
+mod gradients;
 mod image_paint;
 mod layer_mask_pixel;
 mod mesh_instanced;

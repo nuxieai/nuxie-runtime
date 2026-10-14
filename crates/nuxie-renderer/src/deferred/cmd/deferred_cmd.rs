@@ -377,6 +377,25 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                     c.generation,
                 );
             }
+            RenderCmd::MakeAngularGradient => {
+                let c: AngularGradientPod = reader.read();
+                let bytes = c.count.wrapping_mul(4);
+                let colors = reader.blob_at(c.blob_offset, bytes);
+                let stops = reader.blob_at(c.stops_offset, bytes);
+                if colors.len() != bytes as usize || stops.len() != bytes as usize {
+                    continue;
+                }
+                table.shaders.set(
+                    c.id,
+                    Some(Rc::from(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_angular_gradient(&scalars::<u32>(colors), &scalars::<f32>(stops)),
+                    )),
+                    c.generation,
+                );
+            }
             RenderCmd::DecodeImage => {
                 let c: DecodeImagePod = reader.read();
                 table.images.set(

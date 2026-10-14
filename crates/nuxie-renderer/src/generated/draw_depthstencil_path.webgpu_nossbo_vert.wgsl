@@ -8,7 +8,7 @@ struct gl_PerVertex {
 }
 
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -16,22 +16,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct VertexOutput {
@@ -42,11 +42,11 @@ struct VertexOutput {
     @location(1) @interpolate(flat, either) member_2: f32,
 }
 
-@id(15) override K7_: bool = false;
+@id(15) override L7_: bool = false;
 @id(16) override fe: bool = false;
-@id(1) override Xi: bool = true;
-@id(2) override Yi: bool = true;
-@id(8) override ej: bool = true;
+@id(1) override Yi: bool = true;
+@id(2) override Zi: bool = true;
+@id(8) override fj: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -121,7 +121,7 @@ fn main_1() {
     let _e81 = (_e75 & 268435455i);
     switch bitcast<i32>(0u) {
         default: {
-            if K7_ {
+            if L7_ {
                 phi_1337_ = true;
                 break;
             }
@@ -140,7 +140,7 @@ fn main_1() {
         let _e92 = select(1i, 2i, _e80);
         let _e98 = (_e91 & ((1i << bitcast<u32>(_e92)) - 1i));
         phi_1338_ = _e98;
-        if (K7_ && !(_e80)) {
+        if (L7_ && !(_e80)) {
             phi_1338_ = (_e98 + 1i);
         }
         let _e103 = phi_1338_;
@@ -184,7 +184,7 @@ fn main_1() {
     let _e187 = (_e159 + 2u);
     let _e194 = textureLoad(KB, vec2<i32>(bitcast<i32>((_e187 & 255u)), bitcast<i32>((_e187 >> bitcast<u32>(8i)))), 0i);
     let _e196 = (_e142.w & 8388608u);
-    if K7_ {
+    if L7_ {
         phi_1384_ = _e125;
         phi_1349_ = false;
     } else {
@@ -219,7 +219,7 @@ fn main_1() {
         let _e219 = ((_e137 + _e216) - _e135);
         let _e224 = textureLoad(UB, vec2<i32>((_e219 & 2047i), (_e219 >> bitcast<u32>(11i))), 0i);
         if ((_e224.w & 8454143u) != (_e142.w & 8454143u)) {
-            if K7_ {
+            if L7_ {
                 phi_1360_ = (_e155.x != 0f);
             } else {
                 phi_1360_ = true;
@@ -244,7 +244,7 @@ fn main_1() {
     let _e249 = phi_1379_;
     switch bitcast<i32>(0u) {
         default: {
-            if K7_ {
+            if L7_ {
                 phi_1368_ = true;
                 break;
             }
@@ -266,7 +266,7 @@ fn main_1() {
         phi_1432_ = _e266;
         phi_1429_ = _e255;
         phi_1419_ = _e262;
-        if K7_ {
+        if L7_ {
             let _e268 = ((_e247 & 1048576u) != 0u);
             phi_1404_ = _e255;
             if _e268 {
@@ -354,7 +354,7 @@ fn main_1() {
         phi_1454_ = ((_e174 * _e356) + _e184);
     }
     let _e360 = phi_1454_;
-    if Xi {
+    if Yi {
         let _e361 = (_e157 * 8u);
         let _e362 = (_e361 + 2u);
         let _e369 = textureLoad(JB, vec2<i32>(bitcast<i32>((_e362 & 255u)), bitcast<i32>((_e362 >> bitcast<u32>(8i)))), 0i);
@@ -381,7 +381,7 @@ fn main_1() {
         let _e420 = textureLoad(VC, vec2<i32>(bitcast<i32>((_e153.z & 255u)), bitcast<i32>((_e157 >> bitcast<u32>(8i)))), 0i);
         let _e422 = (_e420.x & 15u);
         phi_1505_ = false;
-        if Yi {
+        if Zi {
             let _e425 = ((_e420.x >> bitcast<u32>(4i)) & 15u);
             P0_ = f32(_e425);
             phi_1505_ = (_e425 != 0u);
@@ -411,8 +411,8 @@ fn main_1() {
             let _e479 = phi_1503_;
             O0_ = vec4<f32>(_e465.x, _e465.y, _e479, (((_e123 * -0.5f) - 0.25f) - round((bitcast<f32>(_e420.y) * 255f))));
         }
-        phi_939_ = ej;
-        if ej {
+        phi_939_ = fj;
+        if fj {
             phi_939_ = ((_e420.x & 2048u) != 0u);
         }
         let _e489 = phi_939_;
@@ -433,7 +433,7 @@ fn main_1() {
     let _e533 = vec4<f32>(((_e360.x * _e523) - 1f), ((_e360.y * _e525) - sign(_e525)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {
-            if K7_ {
+            if L7_ {
                 phi_1515_ = true;
                 break;
             }

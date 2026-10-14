@@ -3124,6 +3124,15 @@ pub trait Factory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader>;
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        assert_eq!(colors.len(), stops.len());
+        let count = colors.len().min(1);
+        self.make_linear_gradient(0.0, 0.0, 1.0, 0.0, &colors[..count], &stops[..count])
+    }
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath>;
 
     /// Build the pinned nonzero clockwise rectangle-path helper.
@@ -3360,6 +3369,13 @@ impl Factory for PersistentFactoryContext {
     ) -> Box<dyn RenderShader> {
         self.with_factory(|factory| factory.make_radial_gradient(cx, cy, radius, colors, stops))
     }
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.with_factory(|factory| factory.make_angular_gradient(colors, stops))
+    }
     fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         self.with_factory(|factory| factory.make_render_path(path, fill_rule))
     }
@@ -3520,6 +3536,14 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
     ) -> Box<dyn RenderShader> {
         self.borrow_mut()
             .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.borrow_mut().make_angular_gradient(colors, stops)
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {

@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,22 +7,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct gl_PerVertex {
@@ -41,9 +41,9 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wi: bool = true;
-@id(2) override Yi: bool = true;
-@id(8) override ej: bool = true;
+@id(0) override Xi: bool = true;
+@id(2) override Zi: bool = true;
+@id(8) override fj: bool = true;
 
 @group(0) @binding(2)
 var KB: texture_2d<u32>;
@@ -85,11 +85,11 @@ fn main_1() {
     let _e63 = textureLoad(KB, vec2<i32>(bitcast<i32>((_e56 & 255u)), bitcast<i32>((_e56 >> bitcast<u32>(8i)))), 0i);
     let _e65 = _e51.xy;
     let _e67 = bitcast<vec3<f32>>(_e63.yzw);
-    let _e73 = j.yi;
+    let _e73 = j.zi;
     S2_ = (((_e65 * _e67.x) + _e67.yz) * _e73);
     let _e81 = textureLoad(VC, vec2<i32>(bitcast<i32>((_e53 & 255u)), bitcast<i32>((_e54 >> bitcast<u32>(8i)))), 0i);
     let _e83 = (_e81.x & 15u);
-    if Wi {
+    if Xi {
         let _e84 = (_e83 == 0u);
         if _e84 {
             phi_809_ = _e81.y;
@@ -112,7 +112,7 @@ fn main_1() {
         let _e101 = phi_811_;
         f4_ = _e101;
     }
-    if Yi {
+    if Zi {
         P0_ = f32(((_e81.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e83 == 1u) {
@@ -132,8 +132,8 @@ fn main_1() {
         let _e148 = phi_818_;
         O0_ = vec4<f32>(_e134.x, _e134.y, _e148, (-0.75f - round((bitcast<f32>(_e81.y) * 255f))));
     }
-    phi_457_ = ej;
-    if ej {
+    phi_457_ = fj;
+    if fj {
         phi_457_ = ((_e81.x & 2048u) != 0u);
     }
     let _e158 = phi_457_;

@@ -13,21 +13,21 @@ f I=f(E2,0,1);x1(I);}
 #ifdef EB
 V3
 #ifdef VD
-Dg(A5,v4,IC);
+Dg(B5,v4,IC);
 #else
-p3(A5,v4,IC);
+q3(B5,v4,IC);
 #endif
 W3
 #ifdef ID
-B5 w4(Eg) C5
+C5 w4(Eg) D5
 #endif
-V2(i,RE){i Z8;
+V2(i,RE){i a9;
 #ifdef ID
-q(l2,c);Z8=D5(IC,Eg,l2,.0);
+q(l2,c);a9=E5(IC,Eg,l2,.0);
 #elif defined(VD)
-Z8=(a9(IC,0,g0(floor(d0.xy)))+a9(IC,1,g0(floor(d0.xy)))+a9(IC,2,g0(floor(d0.xy)))+a9(IC,3,g0(floor(d0.xy))))*0.25;
+a9=(c9(IC,0,g0(floor(d0.xy)))+c9(IC,1,g0(floor(d0.xy)))+c9(IC,2,g0(floor(d0.xy)))+c9(IC,3,g0(floor(d0.xy))))*0.25;
 #else
-Z8=q1(IC,g0(floor(d0.xy)));
+a9=q1(IC,g0(floor(d0.xy)));
 #endif
-K2(Z8);}
+K2(a9);}
 #endif

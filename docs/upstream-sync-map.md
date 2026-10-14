@@ -7,18 +7,37 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `10d08fb6eb7d1b19ceebfba38cbfec7ef9d7d45c`
+- LAST_SYNCED_SHA: `4672b88bf62eee54746854440a914ed20499fe8a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` (refreshed 2026-10-14 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 238 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (260 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 239 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (261 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `4672b88b`, integrated atop downstream `4ce0085eab`:
+  independent source-equivalence and subsequent Rust-integration reviews and
+  correction rereviews are clean. Review corrected forwarding through existing
+  scripting/C API factories and the C++ source-oracle bridge. Validation corrected
+  a manual test command-name table and source-proven contracted arithmetic in the
+  translated GM grid positioning; production rendering and tolerances were not
+  changed to fit the test. Full feature-enabled live Metal renderer units pass
+  724 (six existing ignores), including exact RGBA comparisons for both updated
+  gradienttransform and new gradienttypes against fresh approved-adapted C++
+  captures. Pristine C++ captures and both adaptation identities are retained
+  separately; pristine/adapted differences are not called literal pixel parity.
+  API/SRIV units pass 49; mechanical units pass 143 and deferred units pass 184
+  (three existing ignores). WebGPU/WebGL2 wasm32 and Apple C API with scripting
+  compilation pass; the modified C++ bridge passes pinned-header syntax checking.
+  Shader regeneration reproduces all 66 WGSL modules and 56 upstream headers;
+  Vulkan SPIR-V and embedded GLSL are regenerated from the same source. Source,
+  manifest and pipeline checks pass 39; generated owners/build files and diff
+  hygiene pass. No broad runtime Golden/Silver replay, new browser pixels or
+  Vulkan/Android hardware coverage is claimed.
 - Validation at `10d08fb6`, integrated atop downstream `5ca6b63393`:
   independent source-equivalence and subsequent Rust-integration reviews and
   correction rereviews are clean. Review corrected C-string name collisions,
@@ -900,6 +919,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `4672b88bf62eee54746854440a914ed20499fe8a` | Translate angular gradients through renderer factories, deferred commands, append-only SRIV opcode 45, paint packing, inverse transforms and always-complex texture ramps. Preserve upstream first-stop default only for factories without an angular implementation. Regenerate supported shader artifacts and translate both gradient GMs. The upstream-only counting benchmark and redundant-command analysis remain source-oracle tools; the shared downstream decoder understands the new payload. Private .rive_head contents are not claimed imported. | — |
 | `10d08fb6eb7d1b19ceebfba38cbfec7ef9d7d45c` | Keep the first view model carrying each Data name, preserving its retained constructor identity through the Rust scripting projection. Refuse a generic uint target sync into a missing or non-integer data value, while retaining derived integer asset values. Translate both public regressions. CLI/RML/editor changes described in the commit message have no public implementation in this delta; private .rive_head code is not claimed imported. | — |
 | `9166e9b62debca7482e3cd13229ec5a8c35af603` | Tie-break equal draw sort keys by signed draw index, negative for prepasses, in native and browser-specific sorters. Preserve image/shader/scissor batch admission and merge both append- and prepend-contiguous tessellation ranges. Translate both upstream hairline batch-count regressions using actual flushed draws. Private .rive_head contents are not claimed imported. | — |
 | `9a20396e3ccdb89365b6fefa95ce8166946e3418` | Reject bind-group entries containing null buffers, texture views or samplers with upstream error order/text. Preserve wrapped canvas views and undescribed sampler behavior. Translate the null-sampler regression and update the dynamic-offset test to supply real buffers. Shader entry-point comment handling mentioned in the title is absent from the public delta; private .rive_head compiler changes are not claimed imported. | — |

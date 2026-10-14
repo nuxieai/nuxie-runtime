@@ -1852,6 +1852,7 @@ pub unsafe fn make_path_draw_from_source(
             }
             gpu::PaintType::linearGradient
             | gpu::PaintType::radialGradient
+            | gpu::PaintType::angularGradient
             | gpu::PaintType::clipUpdate => {}
         }
     }
@@ -1927,10 +1928,21 @@ mod transformed_area_consumer_tests {
         // clip: pushed without them, a nested clip's reset clears the outer
         // clip and everything drawn inside the nested clip is lost.
         let features = gpu::PlatformFeatures::default();
-        let bounds = gpu::IAABB { left: 0, top: 0, right: 8, bottom: 8 };
+        let bounds = gpu::IAABB {
+            left: 0,
+            top: 0,
+            right: 8,
+            bottom: 8,
+        };
         for (action, stencil_type) in [
-            (ClipResetAction::intersectPreviousClip, gpu::StencilType::nestedClipReset),
-            (ClipResetAction::clearPreviousClip, gpu::StencilType::clipReset),
+            (
+                ClipResetAction::intersectPreviousClip,
+                gpu::StencilType::nestedClipReset,
+            ),
+            (
+                ClipResetAction::clearPreviousClip,
+                gpu::StencilType::clipReset,
+            ),
         ] {
             let mut reset = make_clip_reset(bounds, 1, gpu::DrawContents::clockwiseFill, action);
             unsafe { reset.base.countSubpasses(&features) };

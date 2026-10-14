@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,22 +7,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 struct gl_PerVertex {
@@ -435,7 +435,7 @@ fn main_1() {
     let _e588 = phi_2513_;
     let _e590 = phi_2507_;
     let _e592 = phi_2483_;
-    let _e598 = j.vi;
+    let _e598 = j.wi;
     let _e601 = select(_e588.xy, vec2<f32>(1f, -1f), vec2((_e598 != 0u)));
     let _e607 = vec4<f32>(_e601.x, _e588.y, _e588.z, _e588.w);
     S = vec4<f32>(_e607.x, _e601.y, _e607.z, _e607.w);
@@ -448,7 +448,7 @@ fn main_1() {
         let _e634 = j.De[1u];
         phi_2551_ = vec4<f32>(((_e628.x * _e631) - 1f), ((_e628.y * _e634) - sign(_e634)), 0f, 1f);
     } else {
-        let _e644 = j.h3_;
+        let _e644 = j.i3_;
         phi_2551_ = vec4(_e644);
     }
     let _e647 = phi_2551_;

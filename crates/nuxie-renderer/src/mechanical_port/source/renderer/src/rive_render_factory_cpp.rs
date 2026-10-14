@@ -74,7 +74,11 @@ use nuxie_render_api::{ColorInt, FillRule, RawPath};
 
 /// Source RTTI helper. `path` must be null or a live intrusive RenderPath.
 pub unsafe fn asRiveRenderPath(path: *mut RenderPath) -> *mut RiveRenderPath {
-    unsafe { crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(path) }
+    unsafe {
+        crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(
+            path,
+        )
+    }
 }
 /// Const counterpart of the source RTTI helper; the result is never mutated.
 pub unsafe fn asRiveRenderPathConst(path: *const RenderPath) -> *const RiveRenderPath {
@@ -82,7 +86,11 @@ pub unsafe fn asRiveRenderPathConst(path: *const RenderPath) -> *const RiveRende
 }
 /// Source RTTI helper. `paint` must be null or a live intrusive RenderPaint.
 pub unsafe fn asRiveRenderPaint(paint: *mut RenderPaint) -> *mut RiveRenderPaint {
-    unsafe { crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(paint) }
+    unsafe {
+        crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(
+            paint,
+        )
+    }
 }
 /// Const counterpart of the source RTTI helper; the result is never mutated.
 pub unsafe fn asRiveRenderPaintConst(paint: *const RenderPaint) -> *const RiveRenderPaint {
@@ -248,6 +256,44 @@ impl RiveRenderFactory {
         stops: &[f32],
     ) -> Option<GradientShader> {
         self.makeRadialGradientShader(cx, cy, radius, colors, stops)
+    }
+
+    pub unsafe fn makeAngularGradientSource(
+        &mut self,
+        colors: *const ColorInt,
+        stops: *const f32,
+        count: usize,
+    ) -> rcp<RenderShader> {
+        let mut gradient = unsafe { Gradient::MakeAngular(colors, stops, count) };
+        unsafe { rcp::converting_move_ctor(&mut gradient) }
+    }
+
+    pub fn makeAngularGradient(&mut self, colors: &[ColorInt], stops: &[f32]) -> rcp<RenderShader> {
+        if colors.len() != stops.len() {
+            return rcp::new();
+        }
+        unsafe { self.makeAngularGradientSource(colors.as_ptr(), stops.as_ptr(), colors.len()) }
+    }
+
+    pub fn makeAngularGradientShader(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Option<GradientShader> {
+        if colors.len() != stops.len() {
+            return None;
+        }
+        GradientShader::new(unsafe {
+            Gradient::MakeAngular(colors.as_ptr(), stops.as_ptr(), colors.len())
+        })
+    }
+
+    pub fn makeAngularGradientHandle(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Option<GradientShader> {
+        self.makeAngularGradientShader(colors, stops)
     }
 
     pub fn makeRenderPath(&mut self, rawPath: &mut RawPath, fillRule: FillRule) -> rcp<RenderPath> {

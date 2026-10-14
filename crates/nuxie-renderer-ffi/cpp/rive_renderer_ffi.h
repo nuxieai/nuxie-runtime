@@ -116,6 +116,10 @@ rive_ffi_render_shader* rive_ffi_make_radial_gradient(rive_ffi_context*,
                                                       const uint32_t* colors,
                                                       const float* stops,
                                                       size_t count);
+rive_ffi_render_shader* rive_ffi_make_angular_gradient(rive_ffi_context*,
+                                                      const uint32_t* colors,
+                                                      const float* stops,
+                                                      size_t count);
 void rive_ffi_render_shader_delete(rive_ffi_render_shader*);
 
 rive_ffi_render_path* rive_ffi_make_render_path(rive_ffi_context*,

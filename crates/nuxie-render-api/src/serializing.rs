@@ -342,6 +342,24 @@ impl Factory for SerializingFactory {
         })
     }
 
+    fn make_angular_gradient(
+        &mut self,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        assert_eq!(colors.len(), stops.len());
+        let id = self.next_shader_id;
+        self.next_shader_id += 1;
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(MAKE_ANGULAR_GRADIENT);
+        writer.varuint(id);
+        write_stops(&mut writer, colors, stops);
+        Box::new(SerializingRenderShader {
+            id,
+            identity: Rc::new(()),
+        })
+    }
+
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         let id = self.next_path_id;
         self.next_path_id += 1;

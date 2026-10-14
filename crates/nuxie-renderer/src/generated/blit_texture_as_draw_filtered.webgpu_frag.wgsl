@@ -1,5 +1,5 @@
 struct VB {
-    wd: f32,
+    xd: f32,
     Ce: f32,
     Hg: f32,
     Ig: f32,
@@ -7,22 +7,22 @@ struct VB {
     Ca: u32,
     tg: u32,
     ug: u32,
-    E8_: vec4<i32>,
-    yi: vec2<f32>,
+    F8_: vec4<i32>,
+    zi: vec2<f32>,
     De: vec2<f32>,
     q2_: u32,
-    Ci: f32,
+    Di: f32,
     w6_: u32,
-    h3_: f32,
+    i3_: f32,
     Ee: f32,
     mg: u32,
     F3_: f32,
     G3_: f32,
     Fe: f32,
-    vi: u32,
+    wi: u32,
     Ba: u32,
-    L8_: f32,
     M8_: f32,
+    N8_: f32,
 }
 
 @group(1) @binding(11)
@@ -30,14 +30,14 @@ var IC: texture_2d<f32>;
 @group(1) @binding(13)
 var Eg: sampler;
 var<private> l2_1: vec2<f32>;
-var<private> Fi: vec4<f32>;
+var<private> Gi: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 
 fn main_1() {
     let _e6 = l2_1;
     let _e7 = textureSampleLevel(IC, Eg, _e6, 0f);
-    Fi = _e7;
+    Gi = _e7;
     return;
 }
 
@@ -45,6 +45,6 @@ fn main_1() {
 fn main(@location(0) l2_: vec2<f32>) -> @location(0) vec4<f32> {
     l2_1 = l2_;
     main_1();
-    let _e3 = Fi;
+    let _e3 = Gi;
     return _e3;
 }

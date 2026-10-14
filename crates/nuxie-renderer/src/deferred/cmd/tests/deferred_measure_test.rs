@@ -6,7 +6,7 @@ use super::super::{
     deferred_session::DeferredSession,
     render_command_buffer::RenderCommandBuffer,
     render_commands::*,
-    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
+    render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
 };
 use super::*;
 use std::{path::PathBuf, time::Instant};
@@ -327,6 +327,7 @@ const COMMAND_NAMES: [&str; RenderCmd::ResourceNewVersion as usize + 1] = [
     "makePaint",
     "makeLinearGradient",
     "makeRadialGradient",
+    "makeAngularGradient",
     "decodeImage",
     "makeBuffer",
     "bufferData",

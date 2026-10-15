@@ -609,6 +609,14 @@ impl ComponentGraph {
             }
             let mut i = 0;
             while i < count {
+                // A member without dirt does nothing in upstream's walk; step
+                // over it on one read. The depth only matters to a member's
+                // update and its callbacks, so it is set where those can run.
+                let node = &self.nodes[i];
+                if node.dirt.get() == ComponentDirt::NONE && !node.on_dirty.is_outside() {
+                    i += 1;
+                    continue;
+                }
                 dirty.set_depth(i as u32);
                 if self.member_dirt(i).contains(ComponentDirt::COLLAPSED) {
                     // Collapsed members aren't updated and sit in long runs (a

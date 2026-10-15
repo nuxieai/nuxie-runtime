@@ -17,12 +17,44 @@
 use std::any::{Any, TypeId};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
 use crate::sys::lua_State;
+
+/// Hashes the single word these maps' keys write: a VM's global-state pointer
+/// or a `TypeId`. Hot callbacks look app data up on every script call, and
+/// SipHash's flooding resistance buys nothing for process-local keys.
+#[derive(Default)]
+struct WordHasher(u64);
+
+impl Hasher for WordHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u64(u64::from(byte));
+        }
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        // Spread an aligned pointer's varying middle bits into both the low
+        // bits (bucket index) and the high bits (control byte).
+        let mixed = (self.0 ^ value).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        self.0 = mixed ^ (mixed >> 32);
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.write_u64(value as u64);
+    }
+}
+
+type WordMap<K, V> = HashMap<K, V, BuildHasherDefault<WordHasher>>;
 
 /// One entry: a value behind a `RefCell` so per-type borrows can be tracked,
 /// shared via `Rc` so a returned guard can outlive a borrow of the outer map.
@@ -32,14 +64,14 @@ type Entry = Rc<RefCell<Box<dyn Any>>>;
 /// via `Rc<Cell<usize>>` so a live guard can decrement it on drop).
 #[derive(Default)]
 struct Store {
-    entries: HashMap<TypeId, Entry>,
+    entries: WordMap<TypeId, Entry>,
     borrow: Rc<Cell<usize>>,
 }
 
 thread_local! {
     /// Per-VM application-data store, keyed by global-state pointer.
-    static APP_DATA: RefCell<HashMap<*mut core::ffi::c_void, Store>> =
-        RefCell::new(HashMap::new());
+    static APP_DATA: RefCell<WordMap<*mut core::ffi::c_void, Store>> =
+        RefCell::new(WordMap::default());
 }
 
 unsafe fn vm_key(state: *mut lua_State) -> *mut core::ffi::c_void {

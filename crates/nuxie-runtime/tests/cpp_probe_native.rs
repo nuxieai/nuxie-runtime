@@ -1304,9 +1304,11 @@ fn state_machine_added_phases_match_cpp() {
             "StatusCode StateMachine::onAddedDirty",
             "StatusCode StateMachine::onAddedClean",
         ),
+        // addScriptedInterpolators (c63a5ba0) follows onAddedClean; it is the
+        // scripted-object registration onAddedClean calls, not its body.
         (
             "StatusCode StateMachine::onAddedClean",
-            "StatusCode StateMachine::import",
+            "void StateMachine::addScriptedInterpolators",
         ),
     ] {
         let body = member_body(member, next);

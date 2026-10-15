@@ -126,6 +126,14 @@ impl PathCells {
         self.shape.get().map(|shape| shape.handle.clone())
     }
 
+    /// Path::deformer().is_some(): the joined shape is live and deformed.
+    #[inline]
+    pub(crate) fn has_deformer(&self) -> bool {
+        self.shape
+            .get()
+            .is_some_and(|shape| shape.handle.is_occupied() && shape.cells.has_deformer())
+    }
+
     /// Path::onAddedClean's shape link; a path joins one Shape.
     pub(crate) fn bind_shape(&self, handle: CoreHandle, cells: Rc<ShapeCells>) {
         if let Err(PathShape { handle, .. }) = self.shape.set(PathShape { handle, cells }) {

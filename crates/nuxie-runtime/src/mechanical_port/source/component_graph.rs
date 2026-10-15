@@ -654,29 +654,42 @@ impl ComponentGraph {
         let handle = self.authored(i);
         match node.update {
             Update::Transform => {
-                self.transforms[i]
+                let kernel = self.transforms[i]
                     .as_ref()
-                    .expect("transform members record their kernel")
-                    .update(handle, dirt);
+                    .expect("transform members record their kernel");
+                if kernel.takes(dirt) {
+                    kernel.update(handle, dirt);
+                } else {
+                    self.update_owner(i, handle, dirt);
+                }
             }
-            Update::Handler => {
-                (self.update[i].expect("handler members record their handler"))(handle, dirt);
-            }
-            Update::Receiver => {
-                handle.with_mut(|object| object.component_update(dirt));
-            }
+            Update::Handler | Update::Receiver => self.update_owner(i, handle, dirt),
         }
         true
     }
+
+    /// Member `i`'s own update: its registered handler, or its receiver's.
+    fn update_owner(&self, i: usize, handle: &CoreHandle, dirt: ComponentDirt) {
+        match self.update[i] {
+            Some(update) => {
+                update(handle, dirt);
+            }
+            None => {
+                handle.with_mut(|object| object.component_update(dirt));
+            }
+        }
+    }
 }
 
-/// The cells-only update of a concrete Node, Bone, RootBone or Shape (without
-/// a layout participant) that has no constraints and whose parent, if any, is
-/// a TransformComponent (so its child opacity is
-/// TransformComponent::childOpacity).
+/// The cells-only update of a concrete Node, Bone, RootBone, Shape (without
+/// a layout participant) or Path that has no constraints and whose parent, if
+/// any, is a TransformComponent (so its child opacity is
+/// TransformComponent::childOpacity). A Path's kernel takes only its
+/// transform-only updates (PlainTransform::takes).
 fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
     let actual: &dyn Any = object;
     let mut after: Option<fn(&CoreHandle, ComponentDirt)> = None;
+    let mut path = None;
     let (translation, node) = if actual.is::<NodeObject>() {
         (Translation::Own, true)
     } else if actual.is::<RootBone>() {
@@ -688,6 +701,11 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
             return None;
         }
         after = Some(shape_after_transform);
+        (Translation::Own, true)
+    } else if is_kernel_path(actual) {
+        // These paths' updates are Path::update after a prefix that acts only
+        // on Path dirt, with Node's local and world transform.
+        path = Some(Rc::clone(object.as_path()?.cells()));
         (Translation::Own, true)
     } else {
         return None;
@@ -721,7 +739,23 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
         translation,
         node,
         after,
+        path,
     })
+}
+
+/// The concrete Path types whose update is Path::update (Node's transform
+/// steps, then the rebuild) after a prefix that acts only on Path dirt.
+fn is_kernel_path(actual: &dyn Any) -> bool {
+    use crate::mechanical_port::source::shapes::{
+        ellipse::Ellipse, points_path::PointsPath, polygon::Polygon, rectangle::Rectangle,
+        star::Star, triangle::Triangle,
+    };
+    actual.is::<PointsPath>()
+        || actual.is::<Ellipse>()
+        || actual.is::<Rectangle>()
+        || actual.is::<Triangle>()
+        || actual.is::<Polygon>()
+        || actual.is::<Star>()
 }
 
 /// Shape::update after TransformComponent::update: propagate render opacity.

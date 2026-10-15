@@ -16,6 +16,7 @@ use crate::mechanical_port::source::{
     shapes::{
         paint::{
             effects_container,
+            feather::FeatherCells,
             shape_paint_path::ShapePaintPath,
             stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
             shape_paint::{RuntimeRenderPaintHandle, ShapePaintPathKind, ShapePaintType},
@@ -37,6 +38,8 @@ pub(crate) struct PaintCells {
     effect_paths: RefCell<Vec<(CoreHandle, EffectPaths)>>,
     has_other_effects: Cell<bool>,
     has_feather: Cell<bool>,
+    // The installed feather and its cells.
+    feather: RefCell<Option<(CoreHandle, Rc<FeatherCells>)>>,
     // Created once, when the paint mutator first initializes the paint.
     render_paint: OnceCell<RuntimeRenderPaintHandle>,
     // The paint's own Component dirt.
@@ -72,6 +75,7 @@ impl PaintCells {
             effect_paths: RefCell::new(Vec::new()),
             has_other_effects: Cell::new(false),
             has_feather: Cell::new(false),
+            feather: RefCell::new(None),
             render_paint: OnceCell::new(),
             dirt,
             container: RefCell::new(Weak::new()),
@@ -101,14 +105,31 @@ impl PaintCells {
         self.has_modulated_image.set(value);
     }
 
-    /// A paint with no feather, no effect beyond those that only rewind their
-    /// path, and no image: ShapePaint::draw needs nothing but these cells.
+    /// A paint with no inner feather, no effect beyond those that only
+    /// rewind their path, and no image: ShapePaint::draw needs nothing but
+    /// these cells (and an outer feather's).
     #[inline]
     pub(crate) fn is_plain(&self) -> bool {
-        !self.has_feather.get()
-            && !self.has_other_effects.get()
+        !self.has_other_effects.get()
             && !self.has_paint_image.get()
             && !self.has_modulated_image.get()
+            && (!self.has_feather.get()
+                || self
+                    .feather
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|(_, feather)| !feather.is_inner()))
+    }
+
+    /// The feather's cells while its occurrence lives; a retired feather
+    /// draws nothing, as its loan would fail.
+    #[inline]
+    pub(crate) fn live_feather(&self) -> Option<Rc<FeatherCells>> {
+        self.feather
+            .borrow()
+            .as_ref()
+            .filter(|(handle, _)| handle.is_occupied())
+            .map(|(_, cells)| Rc::clone(cells))
     }
 
     /// ShapePaint::draw for a plain paint as a Shape draws it (its own fill
@@ -123,6 +144,23 @@ impl PaintCells {
         factory: &dyn Fn() -> RuntimeFactoryHandle,
     ) {
         let mut saved = !needs_save_operation;
+        // An outer feather offsets the drawing: in artboard space before the
+        // path's local transform, in local space after it.
+        let feather = if self.has_feather.get() { self.live_feather() } else { None };
+        let offset = |world: bool| {
+            feather
+                .as_ref()
+                .filter(|feather| feather.space_is_world() == world && feather.has_offset())
+        };
+        if offset(true).is_some() {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            // save() may change the feather: translate by its current offset.
+            let feather = feather.as_ref().expect("an offset feather");
+            renderer.translate(feather.offset_x(), feather.offset_y());
+        }
         if shape_paint_path.is_local() {
             if !saved {
                 saved = true;
@@ -133,6 +171,14 @@ impl PaintCells {
         let path_effect = self
             .last_effect_path(&self.provider)
             .expect("a plain paint has only rewinding effects");
+        if offset(false).is_some() {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            let feather = feather.as_ref().expect("an offset feather");
+            renderer.translate(feather.offset_x(), feather.offset_y());
+        }
         let mut draw_path = |path: &mut ShapePaintPath| {
             let render_path = path.render_path_with_deferred_factory(factory);
             if self.is_fill.get() {
@@ -282,7 +328,10 @@ impl PaintCells {
         self.has_other_effects.get() || !self.effect_paths.borrow().is_empty()
     }
 
-    pub(crate) fn set_has_feather(&self) {
+    /// Install the feather and its cells (ShapePaint::feather).
+    pub(crate) fn set_feather(&self, feather: CoreHandle, cells: Rc<FeatherCells>) {
+        cells.set_paint_is_fill(self.paint_type == ShapePaintType::Fill);
+        *self.feather.borrow_mut() = Some((feather, cells));
         self.has_feather.set(true);
     }
 

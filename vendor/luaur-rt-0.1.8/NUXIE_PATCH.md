@@ -90,3 +90,15 @@
   look app data up on every script call; lookup results, borrow tracking and
   the API are unchanged.
 - Touched file: `src/app_data.rs`.
+
+## Unprotected reads of metatable-free tables; `Table::get_field`
+
+- `Table::get` reads a table that has no metatable with `lua_rawget`: with no
+  `__index` the raw value is exactly what `lua_gettable` yields, and the read
+  cannot raise, so the protected call (and the C closure it allocates) is
+  needed only for tables with a metatable, which keep that path unchanged.
+- `Table::get_field(&str)` mirrors `lua_getfield`: it pushes the key directly
+  instead of first creating a registry-owned `LuaString`, for hosts that look
+  up script methods by name on every call.
+- Touched file: `src/table.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/table_get_field.rs`.

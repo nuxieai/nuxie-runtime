@@ -39,12 +39,22 @@ impl KeyedProperty {
 
     /// Add a keyframe the caller already borrows, with its shared cells.
     pub(crate) fn add_key_frame_with_cells(&mut self, value: CoreHandle, cells: Rc<KeyFrameCells>) {
-        self.base.cells().push_frame(KeyFrameEntry {
-            handle: value.clone(),
-            cells: Rc::clone(&cells),
-        });
         self.keyframes.push(value);
         self.frame_cells.push(cells);
+        // Upstream keeps this list on KeyedProperty itself (m_keyFrames), so
+        // the property's own list is the authority and the shared cells only
+        // mirror all of it. A base moved in from another property, as an
+        // in-place track rebuild does, must not keep that property's frames.
+        self.base.cells().set_frames(
+            self.keyframes
+                .iter()
+                .zip(&self.frame_cells)
+                .map(|(handle, cells)| KeyFrameEntry {
+                    handle: handle.clone(),
+                    cells: Rc::clone(cells),
+                })
+                .collect(),
+        );
     }
     pub fn keyframes(&self) -> &[CoreHandle] {
         &self.keyframes

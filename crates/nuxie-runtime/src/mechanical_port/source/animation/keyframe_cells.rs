@@ -54,7 +54,10 @@ pub(crate) struct KeyFrameEntry {
 /// so animation application reads them without borrowing the property.
 pub(crate) struct KeyedPropertyCells {
     property_key: Cell<u32>,
-    // Replaced, never edited, when a keyframe is added.
+    // The owning KeyedProperty's whole keyframe list, replaced (never
+    // edited) on every add. A base moved into a fresh property keeps its old
+    // list until the first add, so such a rebuild must add at least one key,
+    // as upstream apply requires a non-empty list anyway.
     frames: std::cell::RefCell<std::rc::Rc<[KeyFrameEntry]>>,
 }
 
@@ -88,14 +91,8 @@ impl KeyedPropertyCells {
         read(&self.frames.borrow())
     }
 
-    pub(crate) fn push_frame(&self, frame: KeyFrameEntry) {
-        let frames: std::rc::Rc<[KeyFrameEntry]> = self
-            .frames
-            .borrow()
-            .iter()
-            .cloned()
-            .chain(std::iter::once(frame))
-            .collect();
+    /// Replace the keyframes with the owning KeyedProperty's whole list.
+    pub(crate) fn set_frames(&self, frames: std::rc::Rc<[KeyFrameEntry]>) {
         *self.frames.borrow_mut() = frames;
     }
 }

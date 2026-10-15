@@ -63,6 +63,14 @@ sha2 = "0.10"
 name = "upstream_painted_bounds"
 required-features = ["testing"]
 
+[[test]]
+name = "upstream_paint_artboard"
+required-features = ["testing"]
+
+[[test]]
+name = "paint_artboard_context_reentry"
+required-features = ["testing"]
+
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 libc = "0.2"
 

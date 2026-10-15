@@ -393,6 +393,7 @@ impl Factory for SerializingFactory {
         }
         Box::new(SerializingRenderPaint {
             writer: Rc::clone(&self.writer),
+            canvases: Rc::clone(&self.canvases),
             id,
             style: RenderPaintStyle::Fill,
             color: 0xff000000,
@@ -506,6 +507,7 @@ impl RenderImage for SerializingRenderImage {
 
 struct SerializingRenderPaint {
     writer: Rc<RefCell<Writer>>,
+    canvases: Rc<RefCell<SerializingCanvases>>,
     id: u64,
     style: RenderPaintStyle,
     color: ColorInt,
@@ -648,14 +650,7 @@ impl RenderPaint for SerializingRenderPaint {
         let mut writer = self.writer.borrow_mut();
         writer.varuint(PAINT_MODULATED_IMAGE);
         writer.varuint(self.id);
-        writer.varuint(image.map_or(0, |image| {
-            image
-                .as_any()
-                .downcast_ref::<SerializingRenderImage>()
-                .expect("SerializingFactory requires SerializingRenderImage")
-                .id
-                + 1
-        }));
+        writer.varuint(image.map_or(0, |image| image_id(&self.canvases.borrow(), image) + 1));
         writer.varuint(sampler.filter as u64);
         writer.varuint(sampler.wrap_x as u64);
         writer.varuint(sampler.wrap_y as u64);

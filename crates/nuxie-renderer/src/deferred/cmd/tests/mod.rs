@@ -135,6 +135,17 @@ mod ore_deferred_target_test;
         feature = "renderer-metal"
     )
 ))]
+mod paint_artboard_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
 mod render_context_null;
 use super::{deferred_replayer::DeferredFrameSink, render_replay::RendererOwner};
 use nuxie_render_api::*;

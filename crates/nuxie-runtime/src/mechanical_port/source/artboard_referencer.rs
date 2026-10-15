@@ -61,7 +61,10 @@ impl ArtboardReferencer {
             NestedArtboardBase::TYPE_KEY
             | NestedArtboardLeafBase::TYPE_KEY
             | NestedArtboardLayoutBase::TYPE_KEY
-            | ScriptInputArtboardBase::TYPE_KEY => Some(component),
+            | ScriptInputArtboardBase::TYPE_KEY
+            | crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY => {
+                Some(component)
+            }
             _ => None,
         }
     }

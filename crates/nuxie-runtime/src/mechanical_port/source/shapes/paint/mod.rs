@@ -1,3 +1,4 @@
+pub mod artboard_paint_source;
 pub mod blend_mode;
 pub mod color;
 pub mod dash;
@@ -9,8 +10,8 @@ pub mod gradient_stop;
 pub mod group_effect;
 pub mod image_sampler;
 pub mod linear_gradient;
-pub mod paint_image;
 pub mod paint_cells;
+pub mod paint_image;
 pub mod paint_outset;
 pub mod radial_gradient;
 pub mod shape_paint;

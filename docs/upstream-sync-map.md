@@ -46,18 +46,38 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `30454306ffcd0f360a122af1afa6e2295182abc5`
+- LAST_SYNCED_SHA: `fa2cd6e38c6ab109a7feb6c814b55e4fa1f3d33c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Six upstream commits remain after this checkpoint at the fetched target.
-  All 243 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (265 after `5892bb05`); this
+  Five upstream commits remain after this checkpoint at the fetched target.
+  All 244 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (266 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `fa2cd6e3`, integrated atop downstream `ba5a8cdf71`:
+  independent source-equivalence and subsequent Rust-integration reviews and
+  correction rereviews are clean. All eight translated non-canvas runtime
+  cases and the supplemental callback-reentry regression pass. Renderer units
+  pass 740 with six existing ignores, including seven translated canvas cases,
+  three live Metal pixel tests and two new golden cases. One unchanged allocator
+  address-reuse test failed its allocation premise in the first full run; the
+  unchanged full rerun passed. Serializer replay passes 14. Both browser
+  renderers compile for wasm32-unknown-unknown. Source/manifest/pipeline checks
+  pass 39, build-generator tests pass 16, schema reproducibility passes, and the
+  generated build files and Silver manifest are current.
+  Validation corrected TESTING feature registration, fixture API/borrow usage,
+  and an existing test's transform-only update-dispatch expectation: upstream
+  now also gives non-transform PaintImage an update override. The exact
+  registration set and transform-only constraint assertions remain enforced.
+  The final runtime unit rerun passes 399 with two existing ignores.
+  New golden captures come from independently built pinned C++ with pristine
+  and existing approved Metal-adapted captures retained. No tolerances changed.
+  No broad Silver replay, browser pixels, Vulkan/Android hardware, performance,
+  private editor behavior or guest-Wasm execution coverage is claimed.
 - Validation at `30454306`, integrated atop downstream `09c3eaa7fe`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. The translated renderer's member API is accessible to its internal
@@ -1010,6 +1030,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fa2cd6e38c6ab109a7feb6c814b55e4fa1f3d33c` | Translate artboard-backed PaintImage sources: per-host instancing and cycle/nesting limits, default playback, ordered advancement/update, data-context propagation, raster sizing/hysteresis and failure retry, renderer rerouting, lifetime and canvas identity. Register artboardId 487 and all advancing/referencer/host/update dispatch. Preserve editor-feature paint discovery. Rust occurrence entrypoints release parent borrows across child callbacks while retaining child host visibility. Translate all public runtime/canvas/pixel/GM/replay cases and retain the exact binding fixture and independent C++ golden provenance. No private editor implementation or guest execution is claimed. | — |
 | `30454306ffcd0f360a122af1afa6e2295182abc5` | Expose RenderContext::selectInterlockMode and route beginFrame through it, preserving capability checks and selection order. ViewModelInstance null initialization is already equivalent to Rust's default None. Native-editor ObjectArena retirement, diagnostic and reference-count hooks remain outside the admitted editor-arena profile established at d4fe1022; their retirement behavior is not claimed implemented. Duplicate includes and ownership comments require no runtime change. Private editor code absent from the public delta is not claimed imported. | — |
 | `1b887eb61219d549bd59eb4cb879b957384fcc64` | Already equivalent: the public change only exposes LayerState and StateTransition headers to C++ editor builds for the existing addScriptedInterpolators body. Both Rust modules and that method are unconditional; no runtime semantic change is needed. Private script undo/collaboration changes and tests mentioned in the commit message are absent from the public delta and are not claimed imported. | — |
 | `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` | Translate the string-template converter, named/positional/sequential placeholders, configurable delimiter parsing, validated number formatting and shared thousands helper. Preserve argument import attachment, bind ownership/clone retargeting, dirty propagation, generated type/property dispatch and the testing converter accessor; retain the already-null Rust parent-bind initialization. Port the public unit tests and exact string_template.riv fixture. Formatting remains pure Rust at the approved host boundary. Private editor/RML/rive_native changes referenced by the commit message but absent from the public delta are not claimed imported. | — |

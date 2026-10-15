@@ -590,13 +590,23 @@ impl ShapePaint {
                     }
                 }
             }
+            let mut target =
+                crate::source::shapes::paint::artboard_paint_source::ModulatedDrawTarget::default();
             if override_paint.is_none() {
-                self.apply_modulated_image(original.unwrap_or(path));
+                self.apply_modulated_image(renderer, original.unwrap_or(path), &mut target);
             }
             // C++ retains the selected RenderPath pointer through modulation.
             // Reborrow that resource, without a second factory/path request.
             let render_path = path.existing_render_path();
-            if let Some(paint) = override_paint.as_deref() {
+            if let Some(mut rerouted) = target.renderer {
+                rerouted.save();
+                rerouted.transform(nuxie_render_api::Mat2D(*target.transform.values()));
+                rerouted.modulate_opacity(target.opacity);
+                if let Some(paint) = self.cells.render_paint() {
+                    rerouted.draw_path(render_path, paint.borrow().as_ref());
+                }
+                rerouted.restore();
+            } else if let Some(paint) = override_paint.as_deref() {
                 renderer.draw_path(render_path, paint);
             } else if let Some(paint) = self.cells.render_paint() {
                 renderer.draw_path(render_path, paint.borrow().as_ref());
@@ -667,13 +677,17 @@ impl ShapePaint {
         self.feather.clone()
     }
 
-    fn apply_modulated_image(&mut self, path: &ShapePaintPath) {
+    fn apply_modulated_image(
+        &mut self,
+        renderer: &mut dyn nuxie_render_api::Renderer,
+        path: &ShapePaintPath,
+        target: &mut crate::source::shapes::paint::artboard_paint_source::ModulatedDrawTarget,
+    ) {
         use crate::source::{
             generated::shapes::paint::paint_image_base::PaintImageBase,
             shapes::paint::paint_image::PaintImage,
         };
-        let child = self
-            .has_paint_image
+        let child = (cfg!(feature = "editor") || self.has_paint_image)
             .then(|| {
                 self.base
                     .children()
@@ -685,11 +699,13 @@ impl ShapePaint {
         if let Some(child) = child {
             let applied = self
                 .with_render_paint_mut(|paint| {
-                    child
-                        .with_downcast::<PaintImage, _>(|image| {
-                            image.apply_to(paint, &path.raw_path().bounds())
-                        })
-                        .unwrap_or(false)
+                    PaintImage::apply_to_occurrence(
+                        &child,
+                        renderer,
+                        paint,
+                        &path.raw_path().bounds(),
+                        target,
+                    )
                 })
                 .unwrap_or(false);
             if applied {

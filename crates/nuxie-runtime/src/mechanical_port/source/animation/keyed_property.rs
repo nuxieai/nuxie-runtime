@@ -227,7 +227,7 @@ impl KeyedProperty {
     /// reads after it, without borrowing the property.
     pub(crate) fn apply_cells(
         property: &KeyedPropertyCells,
-        object: CoreHandle,
+        object: &CoreHandle,
         seconds: f32,
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
@@ -272,21 +272,23 @@ impl KeyedProperty {
         match (next, frame.cells.double_value()) {
             // A double keyframe applies from its cells.
             (None, Some(stored)) => {
-                KeyFrameDouble::apply_stored(&frame.handle, stored, &object, property_key, mix, context);
+                KeyFrameDouble::apply_stored(&frame.handle, stored, object, property_key, mix, context);
             }
             (None, None) => {
-                frame.handle.with(|keyframe| keyframe.keyframe_apply(object, property_key, mix, context));
+                frame.handle.with(|keyframe| {
+                    keyframe.keyframe_apply(object.clone(), property_key, mix, context)
+                });
             }
             // A linear pair of double keyframes interpolates from its cells.
             (Some(next), Some(_))
                 if !frame.cells.has_interpolator() && next.cells.double_value().is_some() =>
             {
-                KeyFrameDouble::interpolate_stored(frame, next, &object, property_key, seconds, mix, context);
+                KeyFrameDouble::interpolate_stored(frame, next, object, property_key, seconds, mix, context);
             }
             (Some(next), _) => {
                 let next = next.handle.clone();
                 frame.handle.with(|keyframe| {
-                    keyframe.keyframe_interpolate(object, property_key, seconds, next, mix, context)
+                    keyframe.keyframe_interpolate(object.clone(), property_key, seconds, next, mix, context)
                 });
             }
         }

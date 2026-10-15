@@ -221,6 +221,9 @@ def build_golden_report(
             record[script_field] = fixture_record(script_label, script_path)
         if signature is not None:
             record["signature"] = signature
+        layout = [feature for feature in features if feature.startswith("layout-diverges:")]
+        if layout:
+            record["layout_divergence"] = layout[0].removeprefix("layout-diverges:")
         cases.append(record)
         counts[classified] += 1
 

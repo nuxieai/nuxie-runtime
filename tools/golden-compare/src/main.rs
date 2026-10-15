@@ -652,6 +652,19 @@ impl CorpusEntry {
                 self.divergence_signature.as_deref(),
             )?;
         }
+        if let Some(reason) = self.layout_divergence() {
+            let diverges = self.status == Status::Diverges
+                || self
+                    .features
+                    .iter()
+                    .any(|feature| feature == "scripted-status:diverges");
+            if reason.trim().is_empty() || !diverges {
+                return Err(format!(
+                    "entry {} layout divergence needs a reason and a diverging status",
+                    self.id
+                ));
+            }
+        }
         if self
             .features
             .iter()
@@ -698,6 +711,16 @@ impl CorpusEntry {
         self.features
             .iter()
             .find_map(|feature| feature.strip_prefix("side-channel-diverges:"))
+    }
+
+    /// Layout is a deliberate divergence from upstream Rive (stock Taffy with
+    /// CSS semantics replaces Rive's Yoga). An entry whose first difference
+    /// comes from that solver change names the reason here; its pinned
+    /// divergence signature still fails the gate if anything moves it.
+    fn layout_divergence(&self) -> Option<&str> {
+        self.features
+            .iter()
+            .find_map(|feature| feature.strip_prefix("layout-diverges:"))
     }
 
     fn import_error_feature(&self) -> Option<&str> {
@@ -1516,6 +1539,24 @@ mod tests {
         assert_eq!(validate_composed_entry(&entry, true), Ok(()));
         entry.semantic_side_channel_only = true;
         assert!(validate_composed_entry(&entry, true).is_err());
+    }
+
+    #[test]
+    fn layout_divergence_requires_reason_and_diverging_status() {
+        let mut entry = CorpusEntry::new();
+        entry.id = "layout".to_owned();
+        entry.path = "layout.riv".to_owned();
+        entry.status = Status::Exact;
+        entry
+            .features
+            .push("layout-diverges:CSS flex basis".to_owned());
+        assert!(entry.validate(1).is_err());
+        entry.status = Status::Diverges;
+        entry.divergence_signature = Some("line 3: expected a, got b".to_owned());
+        assert_eq!(entry.validate(1), Ok(()));
+        assert_eq!(entry.layout_divergence(), Some("CSS flex basis"));
+        entry.features = vec!["layout-diverges: ".to_owned()];
+        assert!(entry.validate(1).is_err());
     }
 
     #[test]

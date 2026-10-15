@@ -176,12 +176,23 @@ fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
 // Upstream 4ca3b88a text_test.cpp: all four producers use the same five-frame
 // helper, binding the default VMI when present and advancing the authored
 // default state machine (or the artboard when there is no default machine).
+// Layout divergence (stock Taffy, CSS semantics): CSS fit-content keeps the
+// hugging text box at its 300 max width where Yoga shrinks it to the widest
+// wrapped line, so both upstream text-matrix silvers pin that first difference.
+const TEXT_MATRIX_LAYOUT_DIVERGENCE: &str =
+    "frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)";
+
 #[test]
 fn text_box_keeps_its_content_size_before_7_3() {
     let Some(runtime) = runtime_root("upstream pre-7.3 layout text matrix") else {
         return;
     };
-    compare_case("layout_text_match", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+    let difference = compare_case("layout_text_match", &runtime)
+        .expect_err("layout divergence should remain present");
+    assert_eq!(
+        difference.to_string(),
+        format!("layout_text_match: {TEXT_MATRIX_LAYOUT_DIVERGENCE}")
+    );
 }
 
 #[test]
@@ -189,7 +200,12 @@ fn text_box_matches_layout_controlled_size() {
     let Some(runtime) = runtime_root("upstream 7.3 layout text matrix") else {
         return;
     };
-    compare_case("layout_text_match_7_3", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+    let difference = compare_case("layout_text_match_7_3", &runtime)
+        .expect_err("layout divergence should remain present");
+    assert_eq!(
+        difference.to_string(),
+        format!("layout_text_match_7_3: {TEXT_MATRIX_LAYOUT_DIVERGENCE}")
+    );
 }
 
 #[test]

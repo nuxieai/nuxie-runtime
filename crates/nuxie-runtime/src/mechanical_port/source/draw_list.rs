@@ -90,6 +90,8 @@ pub(crate) struct DrawEntry {
 pub(crate) struct ShapeDraw {
     pub(crate) cells: Rc<ShapeCells>,
     pub(crate) drawable: DrawableCells,
+    // The shape's Component dirt in its artboard's graph, when it is a member.
+    pub(crate) dirt: Option<crate::mechanical_port::source::component_graph::DirtBinding>,
 }
 
 impl DrawEntry {
@@ -125,6 +127,9 @@ impl DrawEntry {
                         object.as_shape().map(|shape| ShapeDraw {
                             cells: Rc::clone(shape.cells()),
                             drawable: shape.base.draw_cells(),
+                            dirt: handle
+                                .component_graph()
+                                .map(|(graph, order)| graph.dirt_binding(order)),
                         })
                     })
                     .flatten()

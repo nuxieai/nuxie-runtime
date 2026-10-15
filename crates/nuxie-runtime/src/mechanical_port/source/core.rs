@@ -775,23 +775,6 @@ impl CoreHandle {
         Some((result, slot.component_graph_order.get()?))
     }
 
-    /// A graph member's Component dirt, read from its graph node without
-    /// borrowing the payload; None for a slot that is not a live member.
-    #[inline]
-    pub(crate) fn graph_dirt(
-        &self,
-    ) -> Option<crate::mechanical_port::source::component_dirt::ComponentDirt> {
-        let slot = &self.identity.slot;
-        if slot.generation.get() != slot.identity_generation {
-            return None;
-        }
-        let order = slot.component_graph_order.get()?;
-        let graph = slot.component_graph.take()?;
-        let dirt = graph.node_dirt(order);
-        slot.component_graph.set(Some(graph));
-        Some(dirt)
-    }
-
     pub fn identity_key(&self) -> (usize, usize, u64) {
         (
             self.identity.arena.as_ptr() as usize,

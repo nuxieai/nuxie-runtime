@@ -50,12 +50,17 @@ fn float(bytes: &mut Vec<u8>, kind: &str, name: &str, value: f32) {
 }
 
 fn video(bytes: &mut Vec<u8>, readiness: u32) {
+    video_with_autoplay(bytes, readiness, false);
+}
+fn video_with_autoplay(bytes: &mut Vec<u8>, readiness: u32, autoplay: bool) {
     var(bytes, 60001);
     uint(bytes, "Component", "parentId", 0);
     var(bytes, 206);
     var(bytes, 0);
     var(bytes, 60011);
     var(bytes, readiness.into());
+    var(bytes, 60003);
+    var(bytes, u64::from(autoplay));
     var(bytes, 0);
 }
 fn asset(bytes: &mut Vec<u8>) {
@@ -84,6 +89,20 @@ pub fn bool_timeline() -> Vec<u8> {
     fixture_with_key(0, Some(60005))
 }
 fn fixture_with_key(readiness: u32, timeline_key: Option<u64>) -> Vec<u8> {
+    // This fixture models a control whose initial value drives playback.
+    fixture_with_playback(readiness, timeline_key, false, true, 10)
+}
+pub fn load_fixture(autoplay: bool, paused: bool, source_first: bool) -> Vec<u8> {
+    // Upstream DataBindFlags: TWO_WAY = 2, SOURCE_TO_TARGET_RUNS_FIRST = 8.
+    fixture_with_playback(0, None, autoplay, paused, if source_first { 10 } else { 2 })
+}
+fn fixture_with_playback(
+    readiness: u32,
+    timeline_key: Option<u64>,
+    autoplay: bool,
+    paused: bool,
+    paused_flags: u64,
+) -> Vec<u8> {
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 3593, 0] {
         var(&mut b, n);
@@ -96,7 +115,7 @@ fn fixture_with_key(readiness: u32, timeline_key: Option<u64>) -> Vec<u8> {
     let fields = [
         ("Boolean", "muted", 0.0),
         ("Number", "volume", 1.0),
-        ("Boolean", "paused", 1.0),
+        ("Boolean", "paused", u8::from(paused) as f32),
         ("Number", "seek", 0.0),
         ("Number", "position", 0.0),
         ("Number", "duration", 0.0),
@@ -128,7 +147,7 @@ fn fixture_with_key(readiness: u32, timeline_key: Option<u64>) -> Vec<u8> {
         float(b, "Artboard", "width", 64.0);
         float(b, "Artboard", "height", 32.0);
     });
-    video(&mut b, readiness);
+    video_with_autoplay(&mut b, readiness, autoplay);
     for (i, key) in [
         60005, 60006, 60016, 60017, 60017, 60018, 60016, 60019, 60020, 60006,
     ]
@@ -142,7 +161,11 @@ fn fixture_with_key(readiness: u32, timeline_key: Option<u64>) -> Vec<u8> {
             &mut b,
             *key,
             &[0, i as u8],
-            if i == 2 { 2 } else { u64::from(i >= 4) },
+            if i == 2 {
+                paused_flags
+            } else {
+                u64::from(i >= 4)
+            },
         );
     }
     object(&mut b, "StateMachine", |b| {

@@ -129,14 +129,14 @@ impl RendererBindings {
         if let Some(context) = self.routing.borrow().render_context.clone() {
             return Some(context);
         }
-        self.with_factory(|factory| Ok(factory.render_context()))
-            .ok()
+        self.render_context
+            .try_with_factory(|factory| factory.render_context())
             .flatten()
     }
     pub(crate) fn ore_context(&self) -> Option<OreContextHandle> {
         if let Some(context) = self
-            .with_factory(|factory| Ok(factory.ore()))
-            .ok()
+            .render_context
+            .try_with_factory(|factory| factory.ore())
             .flatten()
         {
             return Some(context);
@@ -149,8 +149,8 @@ impl RendererBindings {
             .and_then(|mut context| context.ore())
     }
     pub(crate) fn deferred_canvas_host(&self) -> Option<DeferredCanvasHostHandle> {
-        self.with_factory(|factory| Ok(factory.deferred_canvas_host()))
-            .ok()
+        self.render_context
+            .try_with_factory(|factory| factory.deferred_canvas_host())
             .flatten()
     }
     pub(crate) fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {

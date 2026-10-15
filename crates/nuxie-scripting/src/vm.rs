@@ -1072,14 +1072,16 @@ fn luau_write_scope(
 
 fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGpuScope) {
     if let Some(bindings) = RendererBindings::for_lua(lua) {
-        let logging = lua
-            .app_data_ref::<LoggingScriptingContext>()
-            .map(|logging| logging.clone())
-            .unwrap_or_default();
+        // The logging context is read only when there is something to report.
+        let logging = || {
+            lua.app_data_ref::<LoggingScriptingContext>()
+                .map(|logging| logging.clone())
+                .unwrap_or_default()
+        };
         let report = |closed: Result<bool>, warning: &str| match closed {
-            Ok(true) => logging.print_error(Some(warning.as_bytes())),
+            Ok(true) => logging().print_error(Some(warning.as_bytes())),
             Ok(false) => {}
-            Err(error) => logging.log_error(&error),
+            Err(error) => logging().log_error(&error),
         };
         report(
             crate::gpu_canvas::close_orphan_render_pass(&bindings, scope.open_render_pass_token),
@@ -1331,7 +1333,7 @@ impl LuaScriptInstance {
             return Ok(Value::Nil);
         };
         let value: Value = table
-            .get(method.as_str())
+            .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return match value {
@@ -1383,7 +1385,7 @@ impl LuaScriptInstance {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
         let field: Value = table
-            .get(ScriptMethod::Advance.as_str())
+            .get_field(ScriptMethod::Advance.as_str())
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = field else {
             return Ok(false);
@@ -1424,7 +1426,7 @@ impl LuaScriptInstance {
             self.reset_execution_budget();
             let table = self.live_table()?;
             let value: Value = table
-                .get(ScriptMethod::Init.as_str())
+                .get_field(ScriptMethod::Init.as_str())
                 .map_err(|error| self.script_error(error))?;
             let Value::Function(function) = value else {
                 // `tryLuaUserInit` treats a missing/non-function field as a
@@ -1613,7 +1615,7 @@ impl LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };
-        let field: Value = table.get(method.as_str()).map_err(&conversion_error)?;
+        let field: Value = table.get_field(method.as_str()).map_err(&conversion_error)?;
         let Value::Function(function) = field else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };
@@ -3269,7 +3271,7 @@ impl ScriptInstance for LuaScriptInstance {
         // ScriptingVM::hasMethod uses lua_getfield, including __index, and
         // accepts only LUA_TFUNCTION (not merely a truthy/callable value).
         let value: Value = table
-            .get(method.as_str())
+            .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
         Ok(matches!(value, Value::Function(_)))
     }
@@ -3315,7 +3317,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(ScriptOptionalMethodResult::Missing);
         };
         let value: Value = table
-            .get(method.as_str())
+            .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return Ok(ScriptOptionalMethodResult::Missing);
@@ -3346,7 +3348,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(ScriptOptionalNumberResult::Missing);
         };
         let value: Value = table
-            .get(method.as_str())
+            .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return Ok(ScriptOptionalNumberResult::Missing);
@@ -3417,7 +3419,7 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let table = self.live_table()?;
         let function: Function = table
-            .get(method.as_script_method().as_str())
+            .get_field(method.as_script_method().as_str())
             .map_err(|error| self.script_error(error))?;
         let lua = table.lua();
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
@@ -3497,7 +3499,7 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let table = self.live_table()?;
         let value: Value = table
-            .get(method)
+            .get_field(method)
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             // C++ treats missing and non-function direct input methods as an
@@ -3577,7 +3579,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
         };
         let value: Value = table
-            .get(method.as_str())
+            .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
@@ -3626,7 +3628,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
         };
         let value: Value = table
-            .get("pointerScroll")
+            .get_field("pointerScroll")
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
@@ -3935,7 +3937,7 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let table = self.live_table()?;
         let value: Value = table
-            .get(method.as_str())
+            .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
         Ok(matches!(value, Value::Function(_)))
     }

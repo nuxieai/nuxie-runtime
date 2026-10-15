@@ -56,7 +56,7 @@ impl RendererBindings {
         // factory, which remains installed for script-created resources.
         let (scripted_renderer, _renderer_scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
-        let field: Value = table.get("draw")?;
+        let field: Value = table.get_field("draw")?;
         let result = match field {
             Value::Function(function) => {
                 let _property_owner = owner.map(|owner| {

@@ -75,8 +75,10 @@ fn d_rt_api_defaults_empty_run_and_lazy_equality_noops() {
     assert_eq!(raw.bounds(), nuxie::Aabb::new(0.0, 0.0, 0.0, 0.0));
     assert!(!raw.debug_dirty(), "initial RawText is clean");
 
+    // StyledText::append adds no run for empty text (shaping takes no empty
+    // runs), but RawText::append still marks the text dirty.
     append_default(&mut raw, "", None, &roboto());
-    assert!(!raw.empty(), "empty means no runs, not no characters");
+    assert!(raw.empty(), "an empty append adds no run");
     assert!(raw.debug_dirty());
 
     // The pinned source also asserts when shaping a zero-length run, so use

@@ -78,6 +78,9 @@ struct Node {
     alive: Cell<bool>,
     kind: Kind,
     update: Update,
+    // Component::m_collapsedRunSkip: the length of the collapsed run starting
+    // here, as markCollapsedRuns last measured it. Fits the node's padding.
+    collapsed_run_skip: Cell<u16>,
     dependents_start: u32,
     dependents_end: u32,
 }
@@ -210,6 +213,7 @@ impl ComponentGraph {
                 } else {
                     Update::Receiver
                 },
+                collapsed_run_skip: Cell::new(0),
                 dependents_start: start,
                 dependents_end: dependents.len() as u32,
             });
@@ -236,7 +240,67 @@ impl ComponentGraph {
                 handle.bind_component_graph(Rc::clone(&graph));
             }
         }
+        // The nodes start with no collapsed-run skips: the first pass marks
+        // them, whatever an earlier walk measured.
+        graph.artboard.collapse_changed();
         graph
+    }
+
+    /// Member `i`'s Component dirt, wherever it lives.
+    #[inline]
+    fn member_dirt(&self, i: usize) -> ComponentDirt {
+        let node = &self.nodes[i];
+        if node.kind == Kind::Outside {
+            return self.occurrences[i]
+                .with_component(|component| component.dirt())
+                .unwrap_or(ComponentDirt::NONE);
+        }
+        node.dirt.get()
+    }
+
+    /// The skip from a collapsed member at `index` to the end of its run of
+    /// collapsed members, `run_end`.
+    fn collapsed_run_skip(run_end: usize, index: usize) -> u16 {
+        (run_end - index).min(u16::MAX as usize) as u16
+    }
+
+    /// Artboard::markCollapsedRuns: measure every collapsed run, matching the
+    /// update walk's Collapsed dirt bit rather than virtual isCollapsed.
+    fn mark_collapsed_runs(&self) {
+        self.artboard.clear_collapsed_runs_dirty();
+        let mut run_end = self.nodes.len();
+        for (i, node) in self.nodes.iter().enumerate().rev() {
+            if !self.member_dirt(i).contains(ComponentDirt::COLLAPSED) {
+                run_end = i;
+                continue;
+            }
+            node.collapsed_run_skip
+                .set(Self::collapsed_run_skip(run_end, i));
+        }
+    }
+
+    /// Artboard::verifyCollapsedRuns: a collapse change that skipped
+    /// collapseChanged() leaves a stale skip, which aborts testing builds.
+    #[cfg(any(test, feature = "testing"))]
+    fn verify_collapsed_runs(&self) {
+        let mut run_end = self.nodes.len();
+        for (i, node) in self.nodes.iter().enumerate().rev() {
+            if !self.member_dirt(i).contains(ComponentDirt::COLLAPSED) {
+                run_end = i;
+                continue;
+            }
+            let expected = Self::collapsed_run_skip(run_end, i);
+            if node.collapsed_run_skip.get() != expected {
+                let name = self.occurrences[i]
+                    .with_component(|component| component.base.name().to_owned())
+                    .unwrap_or_default();
+                eprintln!(
+                    "Collapsed '{name}' at {i} skips {}, not {expected}: a collapse change didn't reach collapseChanged()",
+                    node.collapsed_run_skip.get()
+                );
+                std::process::abort();
+            }
+        }
     }
 
     /// Whether member `index` is still live (not retired).
@@ -426,14 +490,37 @@ impl ComponentGraph {
         let mut step = 0;
         while step < 100 && dirty.has_component_dirt() {
             dirty.clear_components_dirt();
-            for i in 0..count {
+            if dirty.collapsed_runs_dirty() {
+                self.mark_collapsed_runs();
+            } else {
+                #[cfg(any(test, feature = "testing"))]
+                self.verify_collapsed_runs();
+            }
+            let mut i = 0;
+            while i < count {
                 dirty.set_depth(i as u32);
+                if self.member_dirt(i).contains(ComponentDirt::COLLAPSED) {
+                    // Collapsed members aren't updated and sit in long runs (a
+                    // Solo's inactive options): skip the whole run. A collapse
+                    // change during this pass makes the skips stale, so step
+                    // one by one until the next pass marks them again.
+                    let skip = self.nodes[i].collapsed_run_skip.get();
+                    if !dirty.collapsed_runs_dirty() && skip > 1 {
+                        dirty.count_collapsed_run_skip();
+                        i += usize::from(skip);
+                    } else {
+                        i += 1;
+                    }
+                    continue;
+                }
                 if !self.update_entry(i) {
+                    i += 1;
                     continue;
                 }
                 if dirty.depth() < i as u32 {
                     break;
                 }
+                i += 1;
             }
             step += 1;
         }

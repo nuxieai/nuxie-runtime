@@ -132,6 +132,20 @@ impl RuntimeArtboardDirtyHandle {
     pub fn collapse_changed(&self) {
         self.0.collapsed_runs_dirty.set(true);
     }
+    /// Whether a collapse change since the last markCollapsedRuns left the
+    /// members' collapsed-run skips stale.
+    pub(crate) fn collapsed_runs_dirty(&self) -> bool {
+        self.0.collapsed_runs_dirty.get()
+    }
+    pub(crate) fn clear_collapsed_runs_dirty(&self) {
+        self.0.collapsed_runs_dirty.set(false);
+    }
+    /// sm_collapsedRunSkips++: one collapsed run skipped by updateComponents.
+    #[inline]
+    pub(crate) fn count_collapsed_run_skip(&self) {
+        #[cfg(any(test, feature = "testing"))]
+        COLLAPSED_RUN_SKIPS.with(|count| count.set(count.get() + 1));
+    }
     pub fn change_serial(&self) -> u32 {
         self.0.change_serial.get()
     }

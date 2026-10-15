@@ -762,6 +762,13 @@ impl ComponentOccurrenceHandle {
                     .expect("live component in dependency graph");
                 let shape = owner.borrow_mut().update(dirt);
                 if let Some((shape, measured_geometry_changed)) = shape {
+                    let cells = Rc::clone(owner.borrow().cells_ref());
+                    // A live shape's bounds marking runs on its cells.
+                    if shape.is_occupied()
+                        && cells.mark_bounds_dirty_from_composer(&shape, measured_geometry_changed)
+                    {
+                        return;
+                    }
                     shape.with_mut(|shape| {
                         let shape = shape.as_shape_mut().expect("PathComposer Shape");
                         if measured_geometry_changed {

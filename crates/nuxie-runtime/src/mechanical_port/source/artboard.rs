@@ -284,6 +284,11 @@ struct DrawRangeState {
     runtime_receiver: Option<RuntimeArtboardInstanceHandle>,
     empty_clips: i32,
     pending_clip_operations: Vec<RuntimeDrawableOccurrence>,
+    // Whether the artboard has a draw visitor, as last read by a listed
+    // Shape's step. The visitor is set for a whole draw and restored when a
+    // nested draw ends, so only a drawable's own draw (which can run
+    // callbacks) clears this for a fresh read.
+    has_visitor: Option<bool>,
 }
 
 impl DrawRangeState {
@@ -292,7 +297,22 @@ impl DrawRangeState {
             runtime_receiver: root.runtime_artboard_instance(),
             empty_clips: 0,
             pending_clip_operations: Vec::new(),
+            has_visitor: None,
         }
+    }
+
+    fn has_visitor(&mut self, root: &CoreHandle) -> bool {
+        if let Some(has_visitor) = self.has_visitor {
+            return has_visitor;
+        }
+        let has_visitor = match self.runtime_receiver.as_ref() {
+            Some(receiver) => receiver.with_artboard(|instance| instance.draw_visitor.is_some()),
+            None => root
+                .with_downcast::<Artboard, _>(|a| a.draw_visitor.is_some())
+                .unwrap_or(false),
+        };
+        self.has_visitor = Some(has_visitor);
+        has_visitor
     }
 }
 
@@ -3890,15 +3910,26 @@ impl Artboard {
         };
         let mut index = 0;
         while let Some(entry) = list.entries.get(index) {
+            // A listed Shape draws from its cells against the entry's handle.
+            if state.pending_clip_operations.is_empty()
+                && let (Some(shape), Some(handle)) = (entry.shape.as_ref(), entry.authored())
+                && Self::draw_listed_shape(root, renderer, handle, shape, &mut state)
+            {
+                if links.version() != list.version || !handle.is_occupied_settled() {
+                    let next = RuntimeDrawableOccurrence::Authored(handle.clone())
+                        .with(Drawable::prev_drawable_for_draw_range)
+                        .flatten();
+                    return Self::draw_range_from(root, renderer, next, None, &mut state);
+                }
+                index += 1;
+                continue;
+            }
             // Where the link walk's upgrade of this link fails, it ends.
             let Some(mut current) = entry.occurrence() else {
                 return;
             };
-            let listed_shape = state.pending_clip_operations.is_empty()
-                && entry.shape.as_ref().is_some_and(|shape| {
-                    Self::draw_listed_shape(root, renderer, &current, shape, &state)
-                });
-            let moved = !listed_shape && Self::draw_range_entry(root, renderer, &mut current, &mut state);
+            let moved = Self::draw_range_entry(root, renderer, &mut current, &mut state);
+            state.has_visitor = None;
             if moved || links.version() != list.version || !current.link_read_is_settled() {
                 let next = current
                     .with(Drawable::prev_drawable_for_draw_range)
@@ -3915,13 +3946,10 @@ impl Artboard {
     fn draw_listed_shape(
         root: &CoreHandle,
         renderer: &mut Renderer,
-        current: &RuntimeDrawableOccurrence,
+        handle: &CoreHandle,
         shape: &crate::mechanical_port::source::draw_list::ShapeDraw,
-        state: &DrawRangeState,
+        state: &mut DrawRangeState,
     ) -> bool {
-        let RuntimeDrawableOccurrence::Authored(handle) = current else {
-            return false;
-        };
         // A loan of the shape would succeed and its release would run nothing.
         if !handle.is_occupied_settled() {
             return false;
@@ -3938,13 +3966,7 @@ impl Artboard {
             return true;
         }
         // An authored drawable has no layer mask operation.
-        let visitor = if let Some(receiver) = state.runtime_receiver.as_ref() {
-            receiver.with_artboard(|instance| instance.draw_visitor.clone())
-        } else {
-            root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
-                .flatten()
-        };
-        if visitor.is_some() && shape.drawable.has_custom_properties() {
+        if state.has_visitor(root) && shape.drawable.has_custom_properties() {
             return false;
         }
         shape.cells.draw(shape.drawable.needs_save_operation(), renderer, &|| {

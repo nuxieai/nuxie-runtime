@@ -243,6 +243,7 @@ impl PaintCells {
 
     /// EffectsContainer::lastEffectPath(provider) when every effect keeps its
     /// paths here; None when another kind of effect must answer for itself.
+    #[inline]
     pub(crate) fn last_effect_path(
         &self,
         provider: &PathProvider,
@@ -250,19 +251,26 @@ impl PaintCells {
         if self.has_other_effects.get() {
             return None;
         }
-        Some(
-            self.effect_paths
-                .borrow()
-                .iter()
-                .rev()
-                .filter(|(effect, _)| effect.is_occupied())
-                .find_map(|(_, paths)| {
-                    paths
-                        .borrow_mut()
-                        .get_mut(&provider.identity())
-                        .and_then(|path| path.path())
-                }),
-        )
+        // Most paints have no effects at all.
+        if self.effect_paths.borrow().is_empty() {
+            return Some(None);
+        }
+        Some(self.search_effect_paths(provider))
+    }
+
+    #[inline(never)]
+    fn search_effect_paths(&self, provider: &PathProvider) -> Option<Rc<RefCell<ShapePaintPath>>> {
+        self.effect_paths
+            .borrow()
+            .iter()
+            .rev()
+            .filter(|(effect, _)| effect.is_occupied())
+            .find_map(|(_, paths)| {
+                paths
+                    .borrow_mut()
+                    .get_mut(&provider.identity())
+                    .and_then(|path| path.path())
+            })
     }
 
     pub(crate) fn paint_type(&self) -> ShapePaintType {

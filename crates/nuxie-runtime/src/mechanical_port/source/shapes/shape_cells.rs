@@ -109,20 +109,24 @@ impl ShapeCells {
         self.paints.paints()
     }
 
-    /// Run `use_path` on the composer's path of `kind`, as
-    /// Shape::with_path_mut does through the Shape's strong composer handle.
-    fn with_path_mut<R>(
+    /// The composer of a drawing shape, which the shape keeps alive.
+    fn drawing_composer(
         &self,
+    ) -> Rc<std::cell::RefCell<crate::mechanical_port::source::shapes::path_composer::PathComposer>> {
+        let ComponentOccurrenceHandle::PathComposer(composer) = &self.composer else {
+            unreachable!("a shape's composer occurrence is a PathComposer");
+        };
+        composer
+            .upgrade()
+            .expect("a drawing shape keeps its composer")
+    }
+
+    fn composer_path_mut<R>(
+        composer: &std::cell::RefCell<crate::mechanical_port::source::shapes::path_composer::PathComposer>,
         kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
         use_path: impl FnOnce(&mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath) -> R,
     ) -> R {
         use crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind;
-        let ComponentOccurrenceHandle::PathComposer(composer) = &self.composer else {
-            unreachable!("a shape's composer occurrence is a PathComposer");
-        };
-        let composer = composer
-            .upgrade()
-            .expect("a drawing shape keeps its composer");
         let mut composer = composer.borrow_mut();
         use_path(match kind {
             ShapePaintPathKind::Local => composer.local_path(),
@@ -142,6 +146,8 @@ impl ShapeCells {
         let paints = self.paints.paints();
         let needs_save = needs_save_operation || paints.len() > 1;
         let transform = self.transform.world();
+        // One upgrade of the composer for all the paints.
+        let composer = self.drawing_composer();
         for paint in paints.iter() {
             if !paint.cells.is_visible() {
                 continue;
@@ -149,7 +155,7 @@ impl ShapeCells {
             let kind = paint.cells.path_kind();
             let fill_rule = paint.cells.fill_rule();
             if paint.cells.is_plain() && paint.handle.is_occupied_settled() {
-                self.with_path_mut(kind, |path| {
+                Self::composer_path_mut(&composer, kind, |path| {
                     paint.cells.draw_plain(renderer, path, transform, needs_save, fill_rule, factory);
                 });
                 continue;
@@ -158,7 +164,7 @@ impl ShapeCells {
                 let Some(behavior) = object.as_shape_paint_behavior_mut() else {
                     return;
                 };
-                self.with_path_mut(kind, |path| {
+                Self::composer_path_mut(&composer, kind, |path| {
                     behavior.shape_paint_mut().draw_with_active_container(
                         renderer,
                         path,

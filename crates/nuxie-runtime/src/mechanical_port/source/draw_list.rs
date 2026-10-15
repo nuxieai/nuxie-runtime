@@ -106,6 +106,15 @@ impl DrawEntry {
         }
     }
 
+    /// The authored occurrence at this entry, borrowed; None for a proxy.
+    #[inline]
+    pub(crate) fn authored(&self) -> Option<&crate::mechanical_port::source::core::CoreHandle> {
+        match &self.occurrence {
+            RuntimeDrawableWeakOccurrence::Authored(handle) => Some(handle),
+            RuntimeDrawableWeakOccurrence::RuntimeProxy(_) => None,
+        }
+    }
+
     fn of(drawable: &RuntimeDrawableOccurrence) -> Self {
         let shape = match drawable {
             RuntimeDrawableOccurrence::Authored(handle)

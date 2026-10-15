@@ -3287,6 +3287,11 @@ impl Artboard {
                 (before, joysticks)
             })
             .expect("live Artboard update pass");
+        // Joystick animations resolve their targets through the runtime
+        // instance the root names, as state machine animations do.
+        let runtime_instance = joysticks
+            .as_ref()
+            .and_then(|_| root.runtime_artboard_instance());
         let mut joystick_state = joysticks.map(|joysticks| {
             let arena = root
                 .retain_arena()
@@ -3296,7 +3301,7 @@ impl Artboard {
                 RuntimeArtboardObjectContext {
                     arena,
                     root: root.clone(),
-                    instance: None,
+                    instance: runtime_instance.as_ref(),
                 },
             )
         });

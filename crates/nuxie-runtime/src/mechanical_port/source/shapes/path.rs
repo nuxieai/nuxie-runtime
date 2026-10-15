@@ -89,6 +89,28 @@ fn read_vertex_cells(owner: &CoreHandle, cells: &VertexCells, read: VertexRead) 
     let mut translation = Vec2D::default();
     let mut in_point = Vec2D::default();
     let mut out_point = Vec2D::default();
+    // A weighted vertex reads its deformed points without computing any, so
+    // one read of its weight answers all three.
+    if let Some((weighted_in, weighted_out, weighted_translation)) = cells.weighted_render_points() {
+        match read {
+            VertexRead::First => {
+                in_point = weighted_in;
+                out_point = weighted_out;
+                translation = weighted_translation;
+            }
+            VertexRead::Body => {
+                in_point = weighted_in;
+                translation = weighted_translation;
+            }
+            VertexRead::Incoming => in_point = weighted_in,
+            VertexRead::Outgoing => out_point = weighted_out,
+        }
+        return RenderVertex::Cubic {
+            translation,
+            in_point,
+            out_point,
+        };
+    }
     match read {
         VertexRead::First => {
             in_point = cells.render_in_of(owner);

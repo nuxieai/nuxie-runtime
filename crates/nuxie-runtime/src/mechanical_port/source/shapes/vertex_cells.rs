@@ -188,6 +188,17 @@ impl VertexCells {
 
     /// Vertex::renderTranslation(): the deformed translation when weighted.
     #[inline]
+    /// A weighted vertex's renderIn, renderOut and renderTranslation, read
+    /// under one weight read; None for an unweighted vertex, whose points may
+    /// need computing.
+    #[inline]
+    pub(crate) fn weighted_render_points(&self) -> Option<(Vec2D, Vec2D, Vec2D)> {
+        self.weight
+            .borrow()
+            .as_ref()
+            .map(|weight| (weight.in_translation(), weight.out_translation(), weight.translation()))
+    }
+
     pub(crate) fn render_translation(&self) -> Vec2D {
         match self.weight.borrow().as_ref() {
             Some(weight) => weight.translation(),

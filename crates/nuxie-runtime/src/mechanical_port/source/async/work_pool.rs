@@ -98,6 +98,12 @@ impl WorkPool {
         !self.queue.lock().unwrap().work_queue.is_empty()
     }
 
+    /// Some owner's work is undelivered: has_pending_work_for_owner holds for
+    /// at least one owner.
+    pub fn has_undelivered_work(&self) -> bool {
+        self.has_pending_work()
+    }
+
     pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {
         // Tasks leave this queue as they are delivered.
         self.queue
@@ -305,6 +311,12 @@ impl WorkPool {
         false
     }
 
+    /// Some owner's work is undelivered: has_pending_work_for_owner holds for
+    /// at least one owner.
+    pub fn has_undelivered_work(&self) -> bool {
+        !self.state.queue.lock().unwrap().undelivered_by_owner.is_empty()
+    }
+
     pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {
         self.state
             .queue
@@ -405,6 +417,23 @@ pub fn vm_completions_taken(count: usize) {
 
 pub fn has_queued_vm_completions() -> bool {
     QUEUED_VM_COMPLETIONS.load(Ordering::Acquire) != 0
+}
+
+/// No scripting VM can report pending async work: no completion is queued
+/// for any VM, no pool task is undelivered for any owner and no net request
+/// is outstanding.
+pub fn vm_async_work_idle() -> bool {
+    if has_queued_vm_completions() {
+        return false;
+    }
+    if get_global_work_pool_if_exists().is_some_and(|pool| pool.has_undelivered_work()) {
+        return false;
+    }
+    #[cfg(feature = "scriptnet")]
+    if super::super::scriptnet::net::has_outstanding_requests() {
+        return false;
+    }
+    true
 }
 
 pub fn rive_has_pending_async_work() -> bool {

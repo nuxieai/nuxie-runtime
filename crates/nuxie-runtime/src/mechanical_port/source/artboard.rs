@@ -2429,6 +2429,12 @@ impl Artboard {
     }
 
     pub fn has_pending_async_work(&self) -> bool {
+        // Every VM's pending work is queued completions, undelivered pool
+        // tasks or outstanding net requests; with none anywhere, no VM this
+        // walk would reach reports any.
+        if crate::mechanical_port::source::r#async::work_pool::vm_async_work_idle() {
+            return false;
+        }
         let file_has_pending = |file: RuntimeFileWeakHandle| {
             file.upgrade()
                 .and_then(|file| file.with_file(|file| file.scripting_vm()))

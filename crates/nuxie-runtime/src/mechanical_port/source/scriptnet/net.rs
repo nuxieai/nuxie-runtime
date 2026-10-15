@@ -391,6 +391,10 @@ pub fn poll(max_deliveries: u32) -> u32 {
     }
     delivered
 }
+/// Any request is outstanding, for any owner on any thread.
+pub fn has_outstanding_requests() -> bool {
+    OUTSTANDING_COUNT.load(Ordering::Relaxed) != 0
+}
 pub fn has_pending_work() -> bool {
     if OUTSTANDING_COUNT.load(Ordering::Relaxed) == 0 {
         return false;

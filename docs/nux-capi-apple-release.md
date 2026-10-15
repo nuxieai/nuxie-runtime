@@ -133,12 +133,43 @@ gives text input and scroll physics one monotonic engine clock. Scripts can
 decode a trusted shader asset for native renderers, and a direct GPU-canvas
 script now gets the shader name it asks for. The upstream watermark pre-roll is
 removed; files that carry its manifest section still import. This is the first
-release whose archives are compiled through the repository's Bazel build. ABI
-v4 is retained with no symbol, struct or layout change; the export lists and
-layout oracle match v0.10.14. The generated header changes only in
-documentation comments, which now describe the refused command kinds and
-observation; every declaration is identical to v0.10.14. Existing release size
-ceilings remain unchanged pending measurement.
+release whose archives are compiled through the repository's Bazel build.
+
+Changes kept landing on main after this candidate was prepared, and the release
+carries everything up to its tagged commit; `git log
+apple-runtime-v0.10.14..apple-runtime-v0.10.15` lists every change. Those that
+matter to SDKs follow. A drawing script can draw a video's frames like a
+picture. Video gains `drawnByScript` (60021), a starting-only bool; a Video
+with it set paints nothing itself, is not hit-tested, and is decoded while a
+script that reads it is on screen
+([nuxie-runtime#1051](https://github.com/nuxieai/nuxie-runtime/pull/1051)).
+Missing characters can reach the runtime's process-wide font fallback hook
+through the C API, and a host can supply a glyph's outline when the ordinary
+outline is empty, following upstream's first CoreText outline recovery
+([nuxie-runtime#1040](https://github.com/nuxieai/nuxie-runtime/pull/1040)). Ten
+portable symbols are added: `nux_font_new`, `nux_font_new_with_outline`,
+`nux_font_with_weight`, `nux_font_has_glyph`, `nux_font_free`,
+`nux_font_probe_file`, `nux_font_probe_has_glyph`, `nux_font_probe_make_font`,
+`nux_font_probe_free` and `nux_font_set_fallback_proc`. Immutable `NuxFont`
+handles may be used across threads, hook reentry returns `REENTRANT_CALL`, and
+caller-sized input structs accept appended fields. Layout is no longer a Rive
+parity target: the runtime now lays out with stock Taffy 0.15, with CSS
+semantics, on a persistent tree, in place of the vendored Yoga-order fork.
+Rive's Yoga defaults are stated explicitly, but some layouts now resolve
+differently from Rive's; for example a hugging text box can settle at a
+different width. Hosts that compare layout output with upstream Rive should
+expect such differences. The other later changes are upstream mirrors and
+fixes, among them renderer interlock selection, artboard paint sources, cached
+bounds, and shared editor and nested animation APIs in the Rust runtime (no C
+API change).
+
+ABI v4 is retained. The font symbols and their layout entries are additions:
+every v0.10.14 export and layout entry is unchanged, and no existing symbol,
+struct or layout changes. The packaged headers gain the font declarations;
+their other changes are documentation comments, which now describe the refused
+command kinds and observation and the thread rule for `NuxFont`. Existing
+release size ceilings remain unchanged, and the release build's measurements
+are checked against them before publication.
 
 The v0.10.14 candidate adds checked replacement of several values at once. The
 runtime checks a batch of value writes against the installed rules and groups

@@ -9,6 +9,8 @@ pub(crate) struct KeyFrameCells {
     seconds: Cell<f32>,
     // InterpolatingKeyFrame's interpolationType; 0 (hold) for any other frame.
     interpolation_type: Cell<u32>,
+    // A KeyFrameDouble's value (its storage); None for any other frame.
+    double_value: Cell<Option<f32>>,
 }
 
 impl Default for KeyFrameCells {
@@ -16,6 +18,7 @@ impl Default for KeyFrameCells {
         Self {
             seconds: Cell::new(0.0),
             interpolation_type: Cell::new(0),
+            double_value: Cell::new(None),
         }
     }
 }
@@ -39,6 +42,17 @@ impl KeyFrameCells {
     #[inline]
     pub(crate) fn set_interpolation_type(&self, value: u32) {
         self.interpolation_type.set(value);
+    }
+
+    /// The frame's value when it is a KeyFrameDouble.
+    #[inline]
+    pub(crate) fn double_value(&self) -> Option<f32> {
+        self.double_value.get()
+    }
+
+    #[inline]
+    pub(crate) fn set_double_value(&self, value: f32) {
+        self.double_value.set(Some(value));
     }
 }
 

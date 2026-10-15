@@ -60,6 +60,32 @@ impl KeyFrameDouble {
         }
         Self::apply_value(object, key, mix, self.effective_value(context))
     }
+
+    /// apply() for the double keyframe `keyframe`, whose value `stored` its
+    /// shared cells hold: the same accumulator, bound-value and mix steps,
+    /// without borrowing the keyframe.
+    pub(crate) fn apply_stored(
+        keyframe: &CoreHandle,
+        stored: f32,
+        object: &CoreHandle,
+        key: i32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) -> bool {
+        let effective_value = || {
+            context
+                .and_then(|context| context.number_value(keyframe))
+                .unwrap_or(stored)
+        };
+        if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
+            let value = effective_value();
+            accumulator
+                .borrow_mut()
+                .apply_double(object, key, mix, value);
+            return true;
+        }
+        Self::apply_value(object, key, mix, effective_value())
+    }
     pub fn apply_interpolation(
         &self,
         object: &CoreHandle,

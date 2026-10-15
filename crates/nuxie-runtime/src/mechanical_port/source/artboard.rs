@@ -3702,21 +3702,47 @@ impl Artboard {
         Self::draw_content_with_visitor_handle(root, renderer, None);
     }
 
+    /// `root.with_downcast::<Artboard, _>(f)`, read through the runtime
+    /// instance already retained for `root` when there is one: the same
+    /// artboard, without leasing its slot and upgrading the instance again.
+    fn with_root<R>(
+        root: &CoreHandle,
+        receiver: Option<&RuntimeArtboardInstanceHandle>,
+        f: impl FnOnce(&Artboard) -> R,
+    ) -> Option<R> {
+        match receiver {
+            Some(receiver) => Some(receiver.with_artboard(|instance| f(&instance.base))),
+            None => root.with_downcast::<Artboard, _>(f),
+        }
+    }
+
+    /// with_root for `root.with_downcast_mut::<Artboard, _>(f)`.
+    fn with_root_mut<R>(
+        root: &CoreHandle,
+        receiver: Option<&RuntimeArtboardInstanceHandle>,
+        f: impl FnOnce(&mut Artboard) -> R,
+    ) -> Option<R> {
+        match receiver {
+            Some(receiver) => Some(receiver.with_artboard_mut(|instance| f(&mut instance.base))),
+            None => root.with_downcast_mut::<Artboard, _>(f),
+        }
+    }
+
     pub fn draw_content_with_visitor_handle(
         root: &CoreHandle,
         renderer: &mut Renderer,
         visitor: Option<RuntimeDrawVisitor>,
     ) {
-        let _runtime_receiver = root.runtime_artboard_instance();
-        let visible = root.with_downcast::<Artboard, _>(|artboard| {
+        let runtime_receiver = root.runtime_artboard_instance();
+        let receiver = runtime_receiver.as_ref();
+        let visible = Self::with_root(root, receiver, |artboard| {
             artboard.dirty_state.0.did_change.set(false);
             artboard.child_opacity() != 0.0
         });
         if visible != Some(true) {
             return;
         }
-        let previous = root
-            .with_downcast_mut::<Artboard, _>(|a| {
+        let previous = Self::with_root_mut(root, receiver, |a| {
                 std::mem::replace(&mut a.draw_visitor, visitor.clone())
             })
             .flatten();
@@ -3724,7 +3750,7 @@ impl Artboard {
             artboard: root.clone(),
             previous,
         };
-        let Some((has_self, save)) = root.with_downcast::<Artboard, _>(|artboard| {
+        let Some((has_self, save)) = Self::with_root(root, receiver, |artboard| {
             let has_self = artboard.has_self_transform() && !artboard.skip_self_transform;
             (
                 has_self,
@@ -3737,8 +3763,7 @@ impl Artboard {
             renderer.save();
         }
         // C++ reads each property after the preceding renderer callback.
-        let frame_transform = root
-            .with_downcast::<Artboard, _>(|artboard| {
+        let frame_transform = Self::with_root(root, receiver, |artboard| {
                 artboard.frame_origin.then(|| {
                     Mat2D::from_translate(
                         artboard.layout_width() * artboard.origin_x(),
@@ -3751,12 +3776,11 @@ impl Artboard {
             renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
         }
         if has_self {
-            if let Some(transform) = root.with_downcast::<Artboard, _>(Artboard::self_transform) {
+            if let Some(transform) = Self::with_root(root, receiver, Artboard::self_transform) {
                 renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
             }
         }
-        let clipping = root
-            .with_downcast_mut::<Artboard, _>(|artboard| {
+        let clipping = Self::with_root_mut(root, receiver, |artboard| {
                 if !artboard.clip() {
                     return None;
                 }
@@ -3772,8 +3796,7 @@ impl Artboard {
         }
         let mut paint_index = 0;
         loop {
-            let paint = root
-                .with_downcast::<Artboard, _>(|artboard| {
+            let paint = Self::with_root(root, receiver, |artboard| {
                     artboard
                         .base
                         .base
@@ -3792,9 +3815,9 @@ impl Artboard {
                 if !behavior.should_draw() { return; }
                 let kind = behavior.pick_path_kind();
                 let fill_rule = behavior.fill_rule();
-                let paths = root.with_downcast::<Artboard, _>(|artboard| artboard.base.base.render_paths_handle()).flatten();
+                let paths = Self::with_root(root, receiver, |artboard| artboard.base.base.render_paths_handle()).flatten();
                 let Some(paths) = paths else { return; };
-                let Some(world_transform) = root.with_downcast::<Artboard, _>(Artboard::world_transform) else { return; };
+                let Some(world_transform) = Self::with_root(root, receiver, Artboard::world_transform) else { return; };
                 let mut paths = paths.borrow_mut();
                 let path = match kind {
                     crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local |
@@ -3803,13 +3826,12 @@ impl Artboard {
                 };
                 behavior.shape_paint_mut().draw_with_active_container(
                     renderer, path, world_transform, false, None, true, fill_rule,
-                    &|| root.with_downcast::<Artboard, _>(Artboard::world_transform).unwrap_or(world_transform),
+                    &|| Self::with_root(root, receiver, Artboard::world_transform).unwrap_or(world_transform),
                     None,
                 );
             });
         }
-        let (first_drawable, links) = root
-            .with_downcast::<Artboard, _>(|artboard| {
+        let (first_drawable, links) = Self::with_root(root, receiver, |artboard| {
                 (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
             })
             .map_or((None, None), |(first, links)| (first, Some(links)));

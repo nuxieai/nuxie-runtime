@@ -5031,33 +5031,34 @@ fn empty_flush_descriptor() -> gpu::FlushDescriptor {
     }
 }
 
-fn select_interlock_mode(
-    frame_descriptor: &FrameDescriptor,
-    platform_features: &gpu::PlatformFeatures,
-) -> gpu::InterlockMode {
-    if frame_descriptor.msaaSampleCount != 0 {
-        return gpu::InterlockMode::depthStencil;
-    }
-    if frame_descriptor.clockwiseFillOverride {
-        if platform_features.supportsClockwiseMode && !frame_descriptor.disableRasterOrdering {
-            return gpu::InterlockMode::clockwise;
-        }
-        if platform_features.supportsClockwiseAtomicMode {
-            return gpu::InterlockMode::clockwiseAtomic;
-        }
-    }
-    if platform_features.supportsRasterOrderingMode
-        && (!frame_descriptor.disableRasterOrdering || !platform_features.supportsAtomicMode)
-    {
-        return gpu::InterlockMode::rasterOrdering;
-    }
-    if platform_features.supportsAtomicMode {
-        return gpu::InterlockMode::atomics;
-    }
-    gpu::InterlockMode::depthStencil
-}
-
 impl RenderContext {
+    /// Returns the interlock mode that beginFrame() will select for the given
+    /// FrameDescriptor.
+    pub fn selectInterlockMode(&self, frame_descriptor: &FrameDescriptor) -> gpu::InterlockMode {
+        if frame_descriptor.msaaSampleCount != 0 {
+            return gpu::InterlockMode::depthStencil;
+        }
+        if frame_descriptor.clockwiseFillOverride {
+            if self.platformFeatures().supportsClockwiseMode
+                && !frame_descriptor.disableRasterOrdering
+            {
+                return gpu::InterlockMode::clockwise;
+            }
+            if self.platformFeatures().supportsClockwiseAtomicMode {
+                return gpu::InterlockMode::clockwiseAtomic;
+            }
+        }
+        if self.platformFeatures().supportsRasterOrderingMode
+            && (!frame_descriptor.disableRasterOrdering
+                || !self.platformFeatures().supportsAtomicMode)
+        {
+            return gpu::InterlockMode::rasterOrdering;
+        }
+        if self.platformFeatures().supportsAtomicMode {
+            return gpu::InterlockMode::atomics;
+        }
+        gpu::InterlockMode::depthStencil
+    }
     pub fn riveRenderFactory(&self) -> &RiveRenderFactory {
         &self.base
     }
@@ -5383,8 +5384,7 @@ impl RenderContext {
         debug_assert!(frame_descriptor.renderTargetWidth > 0);
         debug_assert!(frame_descriptor.renderTargetHeight > 0);
         self.m_frame_descriptor = *frame_descriptor;
-        self.m_frame_interlock_mode =
-            select_interlock_mode(&self.m_frame_descriptor, self.platformFeatures());
+        self.m_frame_interlock_mode = self.selectInterlockMode(&self.m_frame_descriptor);
         if self.m_frame_interlock_mode == gpu::InterlockMode::depthStencil
             && self.m_frame_descriptor.msaaSampleCount == 0
         {

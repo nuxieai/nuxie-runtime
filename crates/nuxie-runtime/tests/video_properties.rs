@@ -43,13 +43,66 @@ fn video_properties_expose_decoder_metadata_and_state() {
 }
 
 #[test]
-fn video_numeric_keys_have_the_native_float_field_type() {
-    for key in [60006, 60007, 60014, 60015, 60017, 60018, 60020] {
-        assert_eq!(CoreRegistry::property_field_id(key), 2);
+fn schema_typed_video_boolean_writes_reach_playback() {
+    use nuxie_schema::{CoreRegistryFieldKind, definition_by_name};
+    let arena = CoreArena::default();
+    let video = arena.insert(Video::default());
+    let definition = definition_by_name("Video").unwrap();
+    for key in [60004, 60005] {
+        let property = definition
+            .properties
+            .iter()
+            .find(|p| p.key.int == key)
+            .unwrap();
+        // Dispatch as schema consumers do, rather than assuming the field family.
+        match CoreRegistryFieldKind::from_property(property).unwrap() {
+            CoreRegistryFieldKind::Bool => {
+                CoreRegistry::set_bool_handle(&video, key.into(), true);
+            }
+            CoreRegistryFieldKind::Uint => {
+                CoreRegistry::set_uint_handle(&video, key.into(), 1);
+            }
+            other => panic!("unexpected video flag type: {other:?}"),
+        }
+        assert_eq!(
+            CoreRegistry::get_bool_handle(&video, key.into()),
+            Some(true),
+            "schema write to {key}"
+        );
     }
-    for key in [60004, 60005, 60016, 60019] {
-        assert_eq!(CoreRegistry::property_field_id(key), 4);
+}
+
+#[test]
+fn video_loop_bounds_reject_empty_ranges_and_zero_end_uses_duration() {
+    use nuxie_runtime::video::properties::{LOOP, LOOP_END, LOOP_START, PAUSED, Write};
+    let mut video = Video::default();
+    video.playback.opened(0, 12.5);
+    for start in [12.5, 13.0] {
+        assert!(
+            video
+                .write_property(Write::Number(LOOP_START, start))
+                .is_err()
+        );
     }
+    video
+        .write_property(Write::Number(LOOP_START, 3.0))
+        .unwrap();
+    for end in [2.0, 3.0] {
+        assert!(video.write_property(Write::Number(LOOP_END, end)).is_err());
+    }
+    video.write_property(Write::Number(LOOP_END, 0.0)).unwrap();
+    video.write_property(Write::Bool(LOOP, true)).unwrap();
+    video.write_property(Write::Bool(PAUSED, false)).unwrap();
+    video.playback.drain_actions();
+    let generation = video.playback.generation();
+    assert!(video.playback.accept_frame(generation, 12.4));
+    assert!(!video.playback.accept_frame(generation, 12.5));
+    let actions = video.playback.drain_actions();
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, DecoderAction::Seek { seconds: 3.0, .. }))
+    );
 }
 
 #[test]

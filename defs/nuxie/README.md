@@ -11,16 +11,21 @@ Upstream has not reserved this band; a future overlap blocks adoption until
 resolved explicitly.
 
 - VideoAsset: type 60000; properties 60000–60002.
-- Video: type 60001; properties 60003–60015.
+- Video: type 60001; properties 60003–60020.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.
 The optional `--extensions` argument overrides this directory.
 
-Boolean playback flags use the uint wire family so unknown-property skipping
-uses the existing header field-type metadata. Video inherits the Image asset
-reference and component properties; VideoAsset inherits DrawableAsset metadata
-and FileAsset loading, including ordinary FileAssetContents records.
+Loop, muted, paused and ended are bool fields. Volume, playbackRate, loopStart,
+loopEnd, position, duration and state are number fields (`double` in the schema).
+Duration, ended and state are read only; the schema has no read-only marker, so
+the descriptions record this and Video refuses their setters. Autoplay retains
+its uint starting attribute.
+
+Video inherits the Image asset reference and component properties; VideoAsset
+inherits DrawableAsset metadata and FileAsset loading, including ordinary
+FileAssetContents records.
 
 Qualification regeneration uses the repository Makefile upstream pin
 `5892bb05be7ae966b751625b4ee12239e6860dc1`. The upstream sampler metadata

@@ -642,6 +642,7 @@ impl Playback {
     }
     fn observed_play_blocked_inner(&mut self, generation: u64) {
         if generation == self.generation && self.effective_play() {
+            self.wants_play = false;
             self.transition(PlaybackState::Paused);
             self.emit(PlaybackEvent::PlayBlocked);
         }

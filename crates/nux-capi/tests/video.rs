@@ -292,7 +292,7 @@ unsafe extern "C" fn info(data: *mut c_void, info: *const NuxVideoInfo) {
         String::from_utf8_lossy(source).into_owned(),
     ));
     probe.reentry =
-        Some(unsafe { nux_player_video_command(probe.player, info.component_id, 0, 0.0, 0) });
+        Some(unsafe { nux_player_video_command(probe.player, info.component_id, 1, 0.0, 0) });
 }
 unsafe extern "C" fn action(data: *mut c_void, action: *const NuxVideoAction) {
     let probe = unsafe { &mut *data.cast::<Probe>() };
@@ -350,7 +350,7 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
             std::thread::spawn(move || nux_player_video_command(
                 address as *const NuxPlayer,
                 1,
-                0,
+                1,
                 0.0,
                 0
             ))
@@ -359,7 +359,7 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
             NuxStatus::WrongThread
         );
         assert_eq!(
-            nux_player_video_command(player, 99, 0, 0.0, 0),
+            nux_player_video_command(player, 99, 1, 0.0, 0),
             NuxStatus::NotFound
         );
         assert_eq!(
@@ -438,7 +438,7 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
         nux_view_model_instance_free(values);
         assert_eq!(nux_player_free(player), NuxStatus::Ok);
         assert_eq!(
-            nux_player_video_command(player, 1, 0, 0.0, 0),
+            nux_player_video_command(player, 1, 1, 0.0, 0),
             NuxStatus::HandleMismatch
         );
     }
@@ -1019,7 +1019,7 @@ fn synchronization_c_api_uses_native_clocks_and_retains_thread_affine_occurrence
         assert_eq!(
             std::thread::spawn(move || nux_video_sync_group_command(
                 address as *const NuxVideoSyncGroup,
-                0,
+                1,
                 0.0,
                 0
             ))

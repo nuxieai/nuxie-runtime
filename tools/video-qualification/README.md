@@ -40,8 +40,9 @@ uploaded), and requires every channel of every pixel to agree within 3. The
 default source is the translucent `parity-alpha.webm`; `?video=parity-opaque.mp4`
 checks H.264. Both fixtures are asymmetric, so a flip cannot pass.
 `/endpoint.html` checks a 10fps final sample 100ms before the source endpoint:
-first scrub, coalesced repeated scrub, departure and return, and superseding
-an in-flight seek. It requires settled playback and actual blue decoded pixels.
+first seek, repeated position writes, departure and return, and replacing an
+in-flight seek. It writes the paused and position properties and requires
+paused playback after decoding and actual blue decoded pixels.
 Append `?embedded=1` to exercise an MP4 embedded in the imported scene and
 resolved through a Blob URL. The page displays a pass/failure and submitted frame count. These are owned
 local fixture pages; no provider requests or credentials are involved. The

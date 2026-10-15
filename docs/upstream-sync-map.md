@@ -5,6 +5,8 @@ restarting a whole-runtime migration. [PARITY_WORKFLOW.md](PARITY_WORKFLOW.md)
 defines the source-first translation and two separate review passes. This
 document replaces the former large-cycle, scored-row, and ratchet workflow.
 
+Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_completion`, `set_double_with_completion`, `get_bool`, `get_double`, `property_field_id` and `object_supports_property` route keys 60004 through 60020 to Video.
+
 ## Current checkpoint
 
 - LAST_SYNCED_SHA: `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382`

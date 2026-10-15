@@ -14,32 +14,40 @@
       "initialValue": "0"
     },
     "loop": {
-      "type": "uint",
+      "type": "bool",
       "key": {
         "int": 60004
       },
-      "initialValue": "0"
+      "initialValue": "false",
+      "bindable": true,
+      "animates": true
     },
     "muted": {
-      "type": "uint",
+      "type": "bool",
       "key": {
         "int": 60005
       },
-      "initialValue": "0"
+      "initialValue": "false",
+      "bindable": true,
+      "animates": true
     },
     "volume": {
       "type": "double",
       "key": {
         "int": 60006
       },
-      "initialValue": "1"
+      "initialValue": "1",
+      "bindable": true,
+      "animates": true
     },
     "playbackRate": {
       "type": "double",
       "key": {
         "int": 60007
       },
-      "initialValue": "1"
+      "initialValue": "1",
+      "bindable": true,
+      "animates": true
     },
     "priority": {
       "type": "uint",
@@ -89,7 +97,9 @@
       "key": {
         "int": 60014
       },
-      "initialValue": "0"
+      "initialValue": "0",
+      "bindable": true,
+      "animates": true
     },
     "loopEnd": {
       "type": "double",
@@ -97,7 +107,59 @@
         "int": 60015
       },
       "initialValue": "0",
-      "description": "Exclusive loop end in seconds; zero selects source duration."
+      "description": "Exclusive loop end in seconds; zero selects source duration.",
+      "bindable": true,
+      "animates": true
+    },
+    "paused": {
+      "type": "bool",
+      "key": {
+        "int": 60016
+      },
+      "initialValue": "true",
+      "description": "True pauses playback; false requests play.",
+      "bindable": true,
+      "animates": true
+    },
+    "position": {
+      "type": "double",
+      "key": {
+        "int": 60017
+      },
+      "initialValue": "0",
+      "description": "Media time in seconds; writing seeks.",
+      "bindable": true,
+      "animates": true
+    },
+    "duration": {
+      "type": "double",
+      "key": {
+        "int": 60018
+      },
+      "initialValue": "0",
+      "description": "Read only. Source duration in seconds; zero before metadata.",
+      "bindable": true,
+      "animates": false
+    },
+    "ended": {
+      "type": "bool",
+      "key": {
+        "int": 60019
+      },
+      "initialValue": "false",
+      "description": "Read only. True exactly when playback has ended.",
+      "bindable": true,
+      "animates": false
+    },
+    "state": {
+      "type": "double",
+      "key": {
+        "int": 60020
+      },
+      "initialValue": "0",
+      "description": "Read only. Playback state ordinal: opening 0, ready 1, playing 2, paused 3, seeking 4, buffering 5, ended 6, failed 7, disposed 8.",
+      "bindable": true,
+      "animates": false
     }
   }
 }

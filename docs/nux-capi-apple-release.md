@@ -132,6 +132,8 @@ the geometry and accessibility basis. This presentation-only operation does
 not edit text, selection, bindings, or responses. ABI v4 is retained; SDKs using
 the new symbol must adopt this release rather than the v0.10.10 binary.
 
+The former v0.10.9 request API described below is replaced by the video properties in [the current host contract](video-runtime-host-contract.md#video-properties-and-script-control); its request and hold methods are no longer available.
+
 The v0.10.9 candidate adds script-owned video ranges, terminal hold, duration,
 coalesced scrubbing and observable request completion. Browser and Apple hosts
 preserve initial and same-position paused frames. A completed endpoint seek can

@@ -801,7 +801,7 @@ fn pipeline_ref(manager: &PipelineManagerVulkan, key: u64) -> Option<&DrawPipeli
     ptr.map(|ptr| unsafe { &*ptr })
 }
 
-fn queuePipelineIfNotFound(
+pub(crate) fn queuePipelineIfNotFound(
     manager: &PipelineManagerVulkan,
     props: &PipelineProps,
     platformFeatures: &PlatformFeatures,

@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 155092] = [(); PINNED_SOURCE.len()];
+const _: [(); 156368] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -2331,7 +2331,7 @@ fn tryGetPipeline(
     tryGetPipeline(context, &props)
 }
 
-fn queuePipelineIfNotFound(
+pub(crate) fn queuePipelineIfNotFound(
     context: &mut RenderContextGLImpl,
     props: &StandardPipelineProps,
 ) -> bool {
@@ -2350,6 +2350,46 @@ fn queuePipelineIfNotFound(
         .base
         .m_pipelines
         .insert(key, Some(pipeline));
+    true
+}
+
+pub(crate) fn tryStartAsyncUbershaderCreation(
+    context: &mut RenderContextGLImpl,
+    interlockMode: gpu::InterlockMode,
+) -> bool {
+    if !context.m_capabilities.KHR_parallel_shader_compile() {
+        return false;
+    }
+    // GL entry points execute in their owner's domain and restore any caller
+    // domain. Program/shader creation below includes thread-current GL calls.
+    let execution = (&*context.rust_execution).clone();
+    execution.withCurrent(|| {
+        // Copy the immutable features so the callback can mutate the pipeline
+        // manager without borrowing the context twice.
+        let platformFeatures = *context.platformFeatures();
+        crate::mechanical_port::source::renderer::src::gpu_cpp::ForEachUbershaderPermutation(
+            interlockMode,
+            &platformFeatures,
+            |drawType, shaderFeatures, shaderMiscFlags| {
+                if drawType == gpu::DrawType::renderPassResolve
+                    && interlockMode != gpu::InterlockMode::atomics
+                {
+                    // GL has no subpass loads; other resolves use blits and this
+                    // unsupported combination would assert in DrawShader.
+                    return true;
+                }
+                queuePipelineIfNotFound(context, &StandardPipelineProps {
+                    drawType,
+                    shaderFeatures,
+                    interlockMode,
+                    shaderMiscFlags,
+                    #[cfg(feature = "with-rive-tools")]
+                    synthesizedFailureType: gpu::SynthesizedFailureType::none,
+                });
+                true
+            },
+        );
+    });
     true
 }
 
@@ -4339,6 +4379,7 @@ impl Drop for RenderContextGLImpl {
 #[cfg(test)]
 mod tests {
     include!("dynamic_msaa_flush_tests.rs");
+    include!("async_ubershader_precreation_tests.rs");
     use super::*;
 
     #[cfg(feature = "with-rive-tools")]
@@ -4515,8 +4556,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3968);
-        assert_eq!(PINNED_SOURCE.len(), 155092);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4006);
+        assert_eq!(PINNED_SOURCE.len(), 156368);
     }
 
     #[test]

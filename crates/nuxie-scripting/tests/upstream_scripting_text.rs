@@ -22,7 +22,9 @@ fn text_append_preserves_upstream_nul_and_permissive_decoder_behavior() {
         text:clear()
         text:append("\0" .. string.char(255), {font = latin})
         assert(text.length == 0)
-        assert(not text.isEmpty)
+        -- StyledText::append adds no run for empty text: shaping takes no
+        -- empty runs.
+        assert(text.isEmpty)
         text:clear()
         -- UTF::NextUTF8 accepts complete overlong sequences, masking payload
         -- bytes without Unicode validation. C0 AF represents one slash.

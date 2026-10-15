@@ -2959,7 +2959,10 @@ impl Artboard {
     }
 
     pub fn advance_data_binds_handle(root: &CoreHandle, elapsed: f32) -> bool {
-        crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone()).advance_data_binds(elapsed)
+        // DataBindContainerOwner::Authored's container, read without a copy
+        // of the root handle.
+        root.data_bind_container()
+            .is_some_and(|container| container.advance_data_binds(elapsed))
     }
 
     fn mark_collapsed_runs_handle(root: &CoreHandle) {
@@ -3370,8 +3373,7 @@ impl Artboard {
             .expect("live Artboard advance");
         let mut did_update = false;
         for component in advancing.iter() {
-            let mut component = component.clone();
-            did_update |= component.advance_component(elapsed_seconds, flags);
+            did_update |= component.advance(elapsed_seconds, flags);
         }
         did_update | Self::advance_data_binds_handle(root, elapsed_seconds)
     }

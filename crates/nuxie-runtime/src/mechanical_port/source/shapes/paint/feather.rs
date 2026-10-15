@@ -25,6 +25,77 @@ impl Feather {
     pub const TYPE_KEY: u16 = FeatherBase::TYPE_KEY;
 }
 
+/// A Feather's space, offsets and inner flag (FeatherBase's storage), shared
+/// with the ShapePaint it feathers so drawing reads them without a loan.
+pub(crate) struct FeatherCells {
+    space_value: std::cell::Cell<u32>,
+    offset_x: std::cell::Cell<f32>,
+    offset_y: std::cell::Cell<f32>,
+    inner: std::cell::Cell<bool>,
+    // Feather::isInner's second condition, recorded when the feather joins
+    // its paint: that paint is a Fill.
+    paint_is_fill: std::cell::Cell<bool>,
+}
+
+impl Default for FeatherCells {
+    fn default() -> Self {
+        Self {
+            space_value: std::cell::Cell::new(0),
+            offset_x: std::cell::Cell::new(0.0),
+            offset_y: std::cell::Cell::new(0.0),
+            inner: std::cell::Cell::new(false),
+            paint_is_fill: std::cell::Cell::new(false),
+        }
+    }
+}
+
+impl FeatherCells {
+    #[inline]
+    pub(crate) fn space_value(&self) -> u32 {
+        self.space_value.get()
+    }
+    pub(crate) fn set_space_value(&self, value: u32) {
+        self.space_value.set(value);
+    }
+    #[inline]
+    pub(crate) fn offset_x(&self) -> f32 {
+        self.offset_x.get()
+    }
+    pub(crate) fn set_offset_x(&self, value: f32) {
+        self.offset_x.set(value);
+    }
+    #[inline]
+    pub(crate) fn offset_y(&self) -> f32 {
+        self.offset_y.get()
+    }
+    pub(crate) fn set_offset_y(&self, value: f32) {
+        self.offset_y.set(value);
+    }
+    #[inline]
+    pub(crate) fn inner(&self) -> bool {
+        self.inner.get()
+    }
+    pub(crate) fn set_inner(&self, value: bool) {
+        self.inner.set(value);
+    }
+    pub(crate) fn set_paint_is_fill(&self, value: bool) {
+        self.paint_is_fill.set(value);
+    }
+    /// Feather::isInner for the feather of the paint these cells joined.
+    #[inline]
+    pub(crate) fn is_inner(&self) -> bool {
+        self.inner.get() && self.paint_is_fill.get()
+    }
+    #[inline]
+    pub(crate) fn space_is_world(&self) -> bool {
+        TransformSpace::from(self.space_value.get()) == TransformSpace::World
+    }
+    #[inline]
+    pub(crate) fn has_offset(&self) -> bool {
+        self.offset_x.get() != 0.0 || self.offset_y.get() != 0.0
+    }
+}
+
 pub struct Feather {
     pub base: FeatherBase,
     inner_path: Rc<RefCell<ShapePaintPath>>,
@@ -63,11 +134,12 @@ impl Feather {
         let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) else {
             return StatusCode::MissingObject;
         };
+        let cells = Rc::clone(self.base.cells());
         let installed = parent
             .with_mut(|parent| {
                 parent
                     .as_shape_paint_mut()
-                    .map(|paint| paint.set_feather(this))
+                    .map(|paint| paint.set_feather_with_cells(this, cells))
             })
             .is_some();
         if !installed {

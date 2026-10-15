@@ -368,8 +368,21 @@ impl ShapePaint {
     }
 
     pub fn set_feather(&mut self, feather: CoreHandle) {
+        let cells = feather
+            .with_downcast::<Feather, _>(|feather| Rc::clone(feather.base.cells()))
+            .expect("set_feather installs a Feather that is not borrowed");
+        self.set_feather_with_cells(feather, cells);
+    }
+
+    /// set_feather for a Feather that supplies its own cells (it is borrowed
+    /// while it joins this paint).
+    pub(crate) fn set_feather_with_cells(
+        &mut self,
+        feather: CoreHandle,
+        cells: Rc<crate::mechanical_port::source::shapes::paint::feather::FeatherCells>,
+    ) {
+        self.cells.set_feather(feather.clone(), cells);
         self.feather = Some(feather);
-        self.cells.set_has_feather();
     }
 
     pub fn feather(&self) -> Option<CoreHandle> {
@@ -483,27 +496,20 @@ impl ShapePaint {
         active_factory: Option<&RuntimeFactoryHandle>,
     ) {
         let mut saved = !needs_save_operation;
-        if let Some(feather) = self.feather.as_ref() {
-            let offset_in_artboard = feather
-                .with_downcast::<Feather, _>(|feather| {
-                    feather.space() == TransformSpace::World
-                        && !feather.is_inner()
-                        && (feather.base.offset_x() != 0.0 || feather.base.offset_y() != 0.0)
-                })
-                .unwrap_or(false);
-            if offset_in_artboard {
-                if !saved {
-                    saved = true;
-                    renderer.save();
-                }
-                // save() may change the feather. Only the branch decision is
-                // retained upstream; the translation uses the current offset.
-                if let Some((x, y)) = feather.with_downcast::<Feather, _>(|feather| {
-                    (feather.base.offset_x(), feather.base.offset_y())
-                }) {
-                    renderer.translate(x, y);
-                }
+        // The feather's space, offsets and inner flag, from its cells.
+        let feather = self.cells.live_feather();
+        if let Some(cells) = feather.as_ref()
+            && cells.space_is_world()
+            && !cells.is_inner()
+            && cells.has_offset()
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
             }
+            // save() may change the feather. Only the branch decision is
+            // retained upstream; the translation uses the current offset.
+            renderer.translate(cells.offset_x(), cells.offset_y());
         }
         if shape_paint_path.is_local() {
             if !saved {
@@ -519,16 +525,20 @@ impl ShapePaint {
             None => EffectsContainer::last_effect_path(self, &provider),
         };
         let mut inner_path = None;
-        if let Some(feather) = self.feather.as_ref() {
-            // isInner, innerPath and effectPathDirty are adjacent reads with no
-            // callback between them: one receiver loan answers all three.
-            let inner = feather
-                .with_downcast::<Feather, _>(|feather| {
-                    feather
-                        .is_inner()
-                        .then(|| (feather.inner_path(), feather.effect_path_dirty()))
+        if let Some(cells) = feather.as_ref() {
+            // innerPath and effectPathDirty are adjacent reads with no
+            // callback between them: one receiver loan answers both.
+            let inner = cells
+                .is_inner()
+                .then(|| {
+                    self.feather.as_ref().and_then(|feather| {
+                        feather.with_downcast::<Feather, _>(|feather| {
+                            (feather.inner_path(), feather.effect_path_dirty())
+                        })
+                    })
                 })
                 .flatten();
+            let feather = self.feather.as_ref().expect("cells of an installed feather");
             if let Some((path, effect_path_dirty)) = inner {
                 // Upstream's nonvirtual innerPath() returns its value member's
                 // address, represented by this non-null, stable Rc.
@@ -570,23 +580,12 @@ impl ShapePaint {
                     renderer.clip_path(self.render_path_for_draw(shape_paint_path, active_factory));
                 }
             }
-            let offset_in_local = feather
-                .with_downcast::<Feather, _>(|feather| {
-                    feather.space() != TransformSpace::World
-                        && !feather.is_inner()
-                        && (feather.base.offset_x() != 0.0 || feather.base.offset_y() != 0.0)
-                })
-                .unwrap_or(false);
-            if offset_in_local {
+            if !cells.space_is_world() && !cells.is_inner() && cells.has_offset() {
                 if !saved {
                     saved = true;
                     renderer.save();
                 }
-                if let Some((x, y)) = feather.with_downcast::<Feather, _>(|feather| {
-                    (feather.base.offset_x(), feather.base.offset_y())
-                }) {
-                    renderer.translate(x, y);
-                }
+                renderer.translate(cells.offset_x(), cells.offset_y());
             }
         }
 

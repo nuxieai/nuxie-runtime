@@ -1,6 +1,7 @@
 use crate::mechanical_port::source::{
-    container_component::ContainerComponent, core::binary_reader::BinaryReader,
-    shapes::paint::feather::Feather,
+    container_component::ContainerComponent,
+    core::binary_reader::BinaryReader,
+    shapes::paint::feather::{Feather, FeatherCells},
 };
 
 pub trait FeatherBaseCallbacks:
@@ -12,24 +13,20 @@ pub trait FeatherBaseCallbacks:
     fn offset_y_changed(&mut self) {}
 }
 
+/// The space, offsets and inner flag live in cells shared with the feathered
+/// ShapePaint, which reads them while drawing without borrowing the feather.
 pub struct FeatherBase {
     pub base: ContainerComponent,
-    space_value: u32,
+    cells: std::rc::Rc<FeatherCells>,
     strength: f32,
-    offset_x: f32,
-    offset_y: f32,
-    inner: bool,
 }
 
 impl Default for FeatherBase {
     fn default() -> Self {
         Self {
             base: ContainerComponent::default(),
-            space_value: 0,
+            cells: std::rc::Rc::default(),
             strength: 12.0,
-            offset_x: 0.0,
-            offset_y: 0.0,
-            inner: false,
         }
     }
 }
@@ -52,8 +49,11 @@ impl FeatherBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(&self) -> &std::rc::Rc<FeatherCells> {
+        &self.cells
+    }
     pub fn space_value(&self) -> u32 {
-        self.space_value
+        self.cells.space_value()
     }
     pub fn set_space_value(&mut self, value: u32, callbacks: &mut impl FeatherBaseCallbacks) {
         if !self.set_space_value_value(value) {
@@ -63,10 +63,10 @@ impl FeatherBase {
     }
 
     pub(crate) fn set_space_value_value(&mut self, value: u32) -> bool {
-        if self.space_value == value {
+        if self.cells.space_value() == value {
             return false;
         }
-        self.space_value = value;
+        self.cells.set_space_value(value);
         true
     }
     pub fn strength(&self) -> f32 {
@@ -88,7 +88,7 @@ impl FeatherBase {
         true
     }
     pub fn offset_x(&self) -> f32 {
-        self.offset_x
+        self.cells.offset_x()
     }
     pub fn set_offset_x(&mut self, value: f32, callbacks: &mut impl FeatherBaseCallbacks) {
         if !self.set_offset_x_value(value) {
@@ -99,14 +99,14 @@ impl FeatherBase {
     }
 
     pub(crate) fn set_offset_x_value(&mut self, value: f32) -> bool {
-        if self.offset_x == value {
+        if self.cells.offset_x() == value {
             return false;
         }
-        self.offset_x = value;
+        self.cells.set_offset_x(value);
         true
     }
     pub fn offset_y(&self) -> f32 {
-        self.offset_y
+        self.cells.offset_y()
     }
     pub fn set_offset_y(&mut self, value: f32, callbacks: &mut impl FeatherBaseCallbacks) {
         if !self.set_offset_y_value(value) {
@@ -117,14 +117,14 @@ impl FeatherBase {
     }
 
     pub(crate) fn set_offset_y_value(&mut self, value: f32) -> bool {
-        if self.offset_y == value {
+        if self.cells.offset_y() == value {
             return false;
         }
-        self.offset_y = value;
+        self.cells.set_offset_y(value);
         true
     }
     pub fn inner(&self) -> bool {
-        self.inner
+        self.cells.inner()
     }
     pub fn set_inner(&mut self, value: bool, callbacks: &mut impl FeatherBaseCallbacks) {
         if !self.set_inner_value(value) {
@@ -134,10 +134,10 @@ impl FeatherBase {
     }
 
     pub(crate) fn set_inner_value(&mut self, value: bool) -> bool {
-        if self.inner == value {
+        if self.cells.inner() == value {
             return false;
         }
-        self.inner = value;
+        self.cells.set_inner(value);
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl FeatherBaseCallbacks) -> Feather {
@@ -146,11 +146,11 @@ impl FeatherBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl FeatherBaseCallbacks) {
-        self.space_value = object.space_value;
+        self.cells.set_space_value(object.space_value());
         self.strength = object.strength;
-        self.offset_x = object.offset_x;
-        self.offset_y = object.offset_y;
-        self.inner = object.inner;
+        self.cells.set_offset_x(object.offset_x());
+        self.cells.set_offset_y(object.offset_y());
+        self.cells.set_inner(object.inner());
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -161,7 +161,7 @@ impl FeatherBase {
     ) -> bool {
         match property_key {
             Self::SPACE_VALUE_PROPERTY_KEY => {
-                self.space_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_space_value(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::STRENGTH_PROPERTY_KEY => {
@@ -169,15 +169,15 @@ impl FeatherBase {
                 true
             }
             Self::OFFSET_X_PROPERTY_KEY => {
-                self.offset_x = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.cells.set_offset_x(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::OFFSET_Y_PROPERTY_KEY => {
-                self.offset_y = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.cells.set_offset_y(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::INNER_PROPERTY_KEY => {
-                self.inner = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.cells.set_inner(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

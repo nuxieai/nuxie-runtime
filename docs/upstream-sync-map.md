@@ -26,10 +26,12 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
   clean. The translated renderer's member API is accessible to its internal
   adapters; no new external Rust crate API is claimed. Source/manifest/pipeline
   checks pass 39; generated build files, corpus metadata, changed-file formatting
-  and diff hygiene pass. Native renderer validation failed to build before any
-  tests executed because the host filesystem ran out of space. The queued
-  WebGPU/WebGL2 wasm32 compilation was cancelled for the same capacity blocker.
-  These are unavailable validation results, not passes or renderer regressions.
+  and diff hygiene pass. The first native validation attempt exhausted host
+  disk space before tests executed, and queued browser compilation was cancelled.
+  After task-local output cleanup and capacity recovery, the reduced-parallelism
+  retry passes all 728 renderer tests with six existing ignores, including live
+  Metal coverage. The separate WebGPU/WebGL2 wasm32-unknown-unknown compilation
+  retry also passes.
   Native-editor arena retirement remains explicitly excluded. No new pixel,
   hardware, Golden or Silver replay coverage is claimed.
 - Validation at `1b887eb6`, integrated atop downstream `35e3b96ded`:

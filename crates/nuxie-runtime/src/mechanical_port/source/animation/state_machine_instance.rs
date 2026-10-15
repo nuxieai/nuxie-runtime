@@ -5244,6 +5244,12 @@ impl StateMachineInstance {
             return;
         };
         b.change_searched = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
+        // A baseline at the highest inactive mark is at every host's mark.
+        if b.change_baseline
+            >= crate::mechanical_port::source::artboard_host::InactiveChangeMark::highest()
+        {
+            return;
+        }
         let mut inactive = 0;
         let mut artboard = self.artboard_instance.upgrade().map(|a| a.core_handle());
         while let Some(current) = artboard {

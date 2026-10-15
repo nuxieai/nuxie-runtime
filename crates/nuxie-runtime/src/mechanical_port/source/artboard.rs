@@ -105,7 +105,7 @@ struct ArtboardDirtyState {
 /// fixed at onAddedDirty; mounting/onAddedClean installs that exact identity.
 struct ArtboardHostAttachment {
     host: CoreHandle,
-    inactive_change_sequence: Rc<Cell<u64>>,
+    inactive_change_sequence: crate::mechanical_port::source::artboard_host::InactiveChangeMark,
     parent_artboard: Option<CoreHandle>,
     artboard: Option<CoreHandle>,
     quiet_rows: Option<crate::source::artboard_component_list::QuietRowHostState>,
@@ -2666,7 +2666,7 @@ impl Artboard {
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
-        inactive_change_sequence: Option<Rc<Cell<u64>>>,
+        inactive_change_sequence: Option<crate::mechanical_port::source::artboard_host::InactiveChangeMark>,
     ) {
         let parent = self.set_host_state(host, parent_artboard, inactive_change_sequence);
         if let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
@@ -2706,7 +2706,7 @@ impl Artboard {
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
-        inactive_change_sequence: Option<Rc<Cell<u64>>>,
+        inactive_change_sequence: Option<crate::mechanical_port::source::artboard_host::InactiveChangeMark>,
     ) -> Option<CoreHandle> {
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {

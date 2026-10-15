@@ -169,6 +169,9 @@ impl TextStyle {
             .and_then(|asset| asset.with_downcast::<FontAsset, _>(FontAsset::font))
             .flatten()
         else {
+            // Not ready yet, or the font was cleared. Drop the variable font
+            // cached from the previous base so font() cannot return it.
+            self.variable_font = None;
             return;
         };
         if !self.variations.is_empty() || !self.style_features.is_empty() {

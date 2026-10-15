@@ -1,11 +1,12 @@
-//! Direct ports of both pinned `data_binding_fonts_test.cpp` cases.
+//! Direct ports of the pinned `data_binding_fonts_test.cpp` cases.
 use std::path::PathBuf;
 
 use nuxie_render_api::{Factory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+    assets::font_asset::FontAsset,
     math::vec2d::Vec2D,
-    text::font_hb::HbFont,
+    text::{font_hb::HbFont, text_style::TextStyle},
     text_engine::FontRef,
     viewmodel::{
         viewmodel_instance::ViewModelInstance,
@@ -211,4 +212,54 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     set_font(&property, None);
     fixture.advance(0.0);
     assert!(stored_font(&property).is_none());
+}
+
+#[test]
+fn clearing_a_font_asset_drops_the_styles_cached_variable_font() {
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let file = File::import(
+        &pinned_fixture("data_bind_font_test.riv"),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("font binding fixture");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    machine.advance_and_apply(0.0);
+
+    // The fixture's first TextStyle, bound to fontProperty, in object order.
+    let style = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(TextStyle::TYPE_KEY))
+                .cloned()
+        })
+        .expect("bound TextStyle");
+    let asset_id = style
+        .with_mut(|object| {
+            let style = object.as_text_style_mut().unwrap();
+            assert!(style.variation_helper().is_some());
+            assert!(style.font().is_some());
+            style.font_asset_id()
+        })
+        .unwrap();
+    let asset = file
+        .with_file(|file| file.asset(asset_id as usize))
+        .expect("style font asset");
+    assert!(asset.with_downcast::<FontAsset, _>(|_| ()).is_some());
+    FontAsset::set_font_occurrence(&asset, None);
+    machine.advance_and_apply(0.0);
+    assert!(
+        style
+            .with_mut(|object| object.as_text_style_mut().unwrap().font())
+            .flatten()
+            .is_none()
+    );
 }

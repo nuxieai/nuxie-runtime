@@ -18,6 +18,12 @@ pub(crate) type GLsizei = i32;
 pub(crate) type GLfloat = f32;
 pub(crate) type GLbitfield = u32;
 pub(crate) type GLboolean = u8;
+pub(crate) type GLsync = u32;
+pub(crate) const GL_SYNC_GPU_COMMANDS_COMPLETE: GLenum = 0x9117;
+pub(crate) const GL_ALREADY_SIGNALED: GLenum = 0x911A;
+pub(crate) const GL_TIMEOUT_EXPIRED: GLenum = 0x911B;
+pub(crate) const GL_CONDITION_SATISFIED: GLenum = 0x911C;
+pub(crate) const GL_WAIT_FAILED: GLenum = 0x911D;
 
 /// Exact GL object namespaces whose source APIs synchronously return a real
 /// name. Names from different kinds may legally have the same numeric value.
@@ -599,6 +605,25 @@ pub(crate) trait GLExecutionProvider {
     fn generateObject(&mut self, kind: GLObjectKind) -> GLuint;
     fn createProgram(&mut self) -> GLuint;
     fn createShader(&mut self, shaderType: GLenum) -> GLuint;
+
+    #[cfg(not(test))]
+    fn fenceSync(&mut self, condition: GLenum, flags: GLbitfield) -> GLsync;
+    #[cfg(test)]
+    fn fenceSync(&mut self, _condition: GLenum, _flags: GLbitfield) -> GLsync {
+        panic!("test GL provider must implement fenceSync")
+    }
+    #[cfg(not(test))]
+    fn clientWaitSync(&mut self, sync: GLsync, flags: GLbitfield, timeout: u64) -> GLenum;
+    #[cfg(test)]
+    fn clientWaitSync(&mut self, _sync: GLsync, _flags: GLbitfield, _timeout: u64) -> GLenum {
+        panic!("test GL provider must implement clientWaitSync")
+    }
+    #[cfg(not(test))]
+    fn deleteSync(&mut self, sync: GLsync);
+    #[cfg(test)]
+    fn deleteSync(&mut self, _sync: GLsync) {
+        panic!("test GL provider must implement deleteSync")
+    }
 
     fn getInteger(&mut self, parameter: GLenum) -> GLint;
     #[cfg(not(test))]
@@ -1395,6 +1420,24 @@ pub(crate) fn currentGLExecutionIdentity() -> Option<(u64, u64)> {
     currentGLExecutionDomain().map(|domain| (domain.key(), domain.generation()))
 }
 
+pub(crate) fn fenceSync(condition: GLenum, flags: GLbitfield) -> GLsync {
+    currentGLExecutionDomain()
+        .expect("GL fence insertion requires its owning execution domain")
+        .withProvider(|provider| provider.fenceSync(condition, flags))
+}
+
+pub(crate) fn clientWaitSync(sync: GLsync, flags: GLbitfield, timeout: u64) -> GLenum {
+    currentGLExecutionDomain()
+        .expect("GL fence polling requires its owning execution domain")
+        .withProvider(|provider| provider.clientWaitSync(sync, flags, timeout))
+}
+
+pub(crate) fn deleteSync(sync: GLsync) {
+    currentGLExecutionDomain()
+        .expect("GL fence deletion requires its owning execution domain")
+        .withProvider(|provider| provider.deleteSync(sync));
+}
+
 /// Captures the creation/adoption identity for a nonzero GL name. Production
 /// code may only publish a name while its owning execution domain is current;
 /// command-stream tests deliberately use an unstamped synthetic domain.
@@ -1651,6 +1694,7 @@ pub(crate) struct GLCapabilities {
     pub(crate) maxSupportedInstancesPerFlush: u32,
     pub(crate) usePixelLocalStorage2AsWorkaround: bool,
     pub(crate) avoidTexture2DArrayWithWebGLPLS: bool,
+    pub(crate) avoidTexSubImage2DOnInFlightTextures: bool,
     pub(crate) avoidPartialFramebufferBlits: bool,
     extensionFlags: u32,
 }
@@ -2140,7 +2184,7 @@ mod tests {
 
     #[test]
     fn webgl2_constants_and_version_comparison_match_the_header() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 272);
+        assert_eq!(PINNED_SOURCE.lines().count(), 275);
         assert_eq!(GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE, 0x96E0);
         assert_eq!(GL_PIXEL_LOCAL_CLEAR_VALUE_UNSIGNED_INT_ANGLE, 0x96ED);
         assert_eq!(GL_BLEND_ADVANCED_COHERENT_KHR, 0x9285);

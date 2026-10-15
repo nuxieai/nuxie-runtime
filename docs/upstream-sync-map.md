@@ -46,18 +46,34 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ce788b3b6b20aa641c20f320cd9ccce920648786`
+- LAST_SYNCED_SHA: `fdd555d62280db2f1d659b0d8fd821ed6a4d11f3`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 247 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (269 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 248 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (270 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `fdd555d6`, integrated atop downstream `5ea7a8fd55`:
+  independent source-equivalence and subsequent fresh Rust-integration reviews
+  and correction rereviews are clean. Source review restored the upstream
+  constructor's all-slot name generation followed by forward clearing. Integration
+  review restored owner-scoped reverse texture destruction so replaced rings do
+  not defer deletion. Native WebGL tests pass 119, including all eight new cases;
+  the sole failure is the unchanged uniform-range fixture tracked in UNIV-4801.
+  Both browser renderers compile for wasm32-unknown-unknown. Source/manifest/
+  pipeline checks pass 39; generated build files and four exact source snapshots
+  are current. The rotation/reuse test uses actual Rust context/storage owners
+  with a recording provider and zeroed records, preserving upstream counts and
+  identity assertions but not drawing its rectangles on a GPU. Supplemental
+  cases cover pending/failed fence replacement, ordering, SSBO exclusion,
+  async modes, constructor order and owner/stale-generation destruction.
+  Real browser GLsync plumbing is compiled, not browser-executed here. No actual
+  ANGLE/Mali device, raster-image or new Vulkan hardware coverage is claimed.
 - Validation at `ce788b3b`, integrated atop downstream `5b2837f46d`:
   independent source-equivalence and subsequent fresh Rust-integration reviews
   are clean. Runtime units pass 407 with two existing ignores; live scripting
@@ -1083,6 +1099,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fdd555d62280db2f1d659b0d8fd821ed6a4d11f3` | Translate Mali storage-texture rotation: lazy ring slots, shared per-flush slot selection, replacement for pending or failed fences, zero-timeout polling, fence-before-flush advancement, and SSBO exclusion. Wire real browser sync objects with owning-context/generation-safe deletion; retain upstream constructor and reverse destruction order. Pending ubershaders advance synchronously by feature equality, specialized pipelines asynchronously; Vulkan has no override of the unchanged default no-op advancement. Port upstream rotation/reuse assertions at the documented recording-provider boundary and add lifetime/failure regressions. Private .rive_head contents are not claimed imported. | — |
 | `ce788b3b6b20aa641c20f320cd9ccce920648786` | Translate constant-time scripted-property untracking in live luaur and corresponding source owners: retained slot index, bounds/identity-guarded swap removal, moved-slot repair, owner/orphan registration and exact tag filtering. Preserve non-owning stable Rust identity and untrack-before-cleanup order. Port all three public stress/lifecycle tests without changing their counts or timing threshold. Private Dart editor wrapper-cache changes described in the message are absent from the public delta and are not claimed imported; existing runtime caching is unchanged. | — |
 | `ce891f526a3297f9498a3e524fce6385cf0f2f25` | Translate six shared shader owners: source-over blending, guarded UAV destination reads/writes and retained RHI declarations. Regenerate supported-backend shader inventories and exact minified-name consumers; restore the existing supplemental sampled-clip bridge's renamed aliases without enabling a new host path. Unreal-only wrappers, D3D testing aliases, Unreal deployment options and upstream-only golden launcher/filter changes have no shipped counterpart. The private .rive_head revision does not expose an additional implementation. | — |
 | `6fa2cccf37a5909824dc98311d8cf2d8327abbd4` | Translate GL async ubershader precreation: require KHR_parallel_shader_compile, preserve permutation order, exclude renderPassResolve outside atomics, queue without synchronous completion, and expose the existing generic queue operation in both Rust specializations. Enter the owning GL execution domain and restore the caller domain at the approved host boundary. Retain exact GL header/implementation snapshots. The .rive_head private revision is provenance, not an additional public implementation. | — |

@@ -172,6 +172,54 @@ pub(crate) struct Buffer(pub(crate) GLObject);
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Texture(pub(crate) GLObject);
 
+#[derive(Debug, Default)]
+pub(crate) struct Fence {
+    m_sync: super::gles3_decl::GLsync,
+    m_insertFailed: bool,
+    executionStamp: Option<GLExecutionStamp>,
+}
+
+impl Fence {
+    pub(crate) fn insert(&mut self) {
+        self.reset();
+        self.m_sync =
+            super::gles3_decl::fenceSync(super::gles3_decl::GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        self.m_insertFailed = self.m_sync == 0;
+        self.executionStamp = stampCurrentGLObject(self.m_sync);
+    }
+
+    pub(crate) fn poll(&mut self) -> bool {
+        if self.m_insertFailed {
+            return false;
+        }
+        if self.m_sync == 0 {
+            return true;
+        }
+        let stamp = self.executionStamp.as_ref().expect("live fence owner");
+        if !stamp.isCurrentGeneration() {
+            return false;
+        }
+        let status = stamp.withCurrent(|| super::gles3_decl::clientWaitSync(self.m_sync, 0, 0));
+        status == super::gles3_decl::GL_ALREADY_SIGNALED
+            || status == super::gles3_decl::GL_CONDITION_SATISFIED
+    }
+
+    pub(crate) fn reset(&mut self) {
+        if self.m_sync != 0 {
+            let stamp = self.executionStamp.take().expect("live fence owner");
+            let _ = stamp.withDeleteCurrent(|| super::gles3_decl::deleteSync(self.m_sync));
+            self.m_sync = 0;
+        }
+        self.m_insertFailed = false;
+    }
+}
+
+impl Drop for Fence {
+    fn drop(&mut self) {
+        self.reset();
+    }
+}
+
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Framebuffer(pub(crate) GLObject);

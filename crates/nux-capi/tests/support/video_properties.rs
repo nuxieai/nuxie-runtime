@@ -78,6 +78,12 @@ fn binding(bytes: &mut Vec<u8>, key: u64, path: &[u8], flags: u64) {
     });
 }
 pub fn fixture(readiness: u32, timeline: bool) -> Vec<u8> {
+    fixture_with_key(readiness, timeline.then_some(60006))
+}
+pub fn bool_timeline() -> Vec<u8> {
+    fixture_with_key(0, Some(60005))
+}
+fn fixture_with_key(readiness: u32, timeline_key: Option<u64>) -> Vec<u8> {
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 3593, 0] {
         var(&mut b, n);
@@ -129,15 +135,20 @@ pub fn fixture(readiness: u32, timeline: bool) -> Vec<u8> {
     .iter()
     .enumerate()
     {
-        if timeline && i == 1 {
+        if timeline_key == Some(*key) && i < 4 {
             continue;
         }
-        binding(&mut b, *key, &[0, i as u8], u64::from(i >= 4));
+        binding(
+            &mut b,
+            *key,
+            &[0, i as u8],
+            if i == 2 { 2 } else { u64::from(i >= 4) },
+        );
     }
     object(&mut b, "StateMachine", |b| {
         string(b, "StateMachine", "name", "Main")
     });
-    if timeline {
+    if let Some(timeline_key) = timeline_key {
         object(&mut b, "LinearAnimation", |b| {
             string(b, "LinearAnimation", "name", "Volume");
             uint(b, "LinearAnimation", "fps", 60);
@@ -147,14 +158,21 @@ pub fn fixture(readiness: u32, timeline: bool) -> Vec<u8> {
             uint(b, "KeyedObject", "objectId", 1)
         });
         object(&mut b, "KeyedProperty", |b| {
-            uint(b, "KeyedProperty", "propertyKey", 60006)
+            uint(b, "KeyedProperty", "propertyKey", timeline_key)
         });
         for (frame, value, interpolation) in [(0, 0.0, 1), (60, 1.0, 0)] {
-            object(&mut b, "KeyFrameDouble", |b| {
-                uint(b, "KeyFrameDouble", "frame", frame);
-                uint(b, "KeyFrameDouble", "interpolationType", interpolation);
-                float(b, "KeyFrameDouble", "value", value);
-            });
+            if timeline_key == 60005 {
+                object(&mut b, "KeyFrameBool", |b| {
+                    uint(b, "KeyFrameBool", "frame", frame);
+                    uint(b, "KeyFrameBool", "value", value as u64);
+                });
+            } else {
+                object(&mut b, "KeyFrameDouble", |b| {
+                    uint(b, "KeyFrameDouble", "frame", frame);
+                    uint(b, "KeyFrameDouble", "interpolationType", interpolation);
+                    float(b, "KeyFrameDouble", "value", value);
+                });
+            }
         }
     }
     b

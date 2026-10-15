@@ -88,6 +88,21 @@ rust_test(
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-video-host"),
 )
 
+rust_test(
+    name = "nuxie-video-host__test_video_properties",
+    crate_name = "video_properties",
+    crate_root = "tests/video_properties.rs",
+    srcs = _test_sources,
+    compile_data = _compile_data,
+    data = _compile_data + [],
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default"],
+    deps = [":nuxie-video-host__test"] + select({"//bazel:android": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test"] + crate_deps(["jni"], package_name = "bazel/cargo/nuxie-video-host"), "//bazel:ios": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test"], "//bazel:linux": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test"], "//bazel:macos": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test"], "//bazel:windows": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test"], "//conditions:default": []}) + [":nuxie-video-host__test__build_script"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-video-host"),
+    rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-video-host"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
+)
+
 cargo_build_script(
     name = "nuxie-video-host__host__build_script",
     pkg_name = "nuxie-video-host",

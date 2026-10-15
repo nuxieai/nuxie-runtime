@@ -338,14 +338,14 @@ fn unsupported_host_rejects_video_before_asset_loading() {
     assert!(admission.is_rejected());
 }
 #[test]
-fn explicit_play_retries_autoplay_rejection_without_losing_intent() {
+fn blocked_autoplay_reads_paused_and_explicit_play_retries() {
     let mut p = Playback::new(PlaybackSettings {
         autoplay: true,
         ..Default::default()
     });
     assert!(p.opened(0, 10.0).contains(&DecoderAction::Play));
     p.observed_play_blocked(0);
-    assert!(p.wants_play());
+    assert!(!p.wants_play());
     assert_eq!(p.state(), PlaybackState::Paused);
     p.enqueue(Command::Play).unwrap();
     assert_eq!(p.drain_actions(), vec![DecoderAction::Play]);

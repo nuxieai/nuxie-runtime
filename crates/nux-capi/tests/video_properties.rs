@@ -65,8 +65,11 @@ struct Scene {
 }
 impl Scene {
     fn new(timeline: bool) -> Self {
+        Self::from_fixture(&fixture::fixture(0, timeline), timeline)
+    }
+    fn from_fixture(bytes: &[u8], timeline: bool) -> Self {
         let mut scene = Self {
-            file: import(&fixture::fixture(0, timeline)),
+            file: import(bytes),
             artboard: ptr::null_mut(),
             values: ptr::null_mut(),
             player: ptr::null_mut(),
@@ -316,4 +319,41 @@ fn reclaiming_a_decoder_publishes_opening_before_another_decoder_step() {
     s.step(0.0);
     assert_eq!(s.value(8).0, 0.0);
     assert_eq!(s.value(4).0, 0.0);
+}
+
+#[test]
+fn blocked_play_publishes_paused_and_a_bound_false_retries() {
+    let s = Scene::new(false);
+    s.observe(1, 0, 12.5);
+    s.boolean(c"paused", false);
+    assert!(s.observe(0, 0, 0.0).contains(&(0, 0.0, 0)));
+    s.observe(5, 0, 0.0);
+    s.step(0.0);
+    assert_eq!(s.value(6).1, 1, "blocked play must notify outbound paused");
+    assert_eq!(s.value(2).1, 1, "two-way control must read paused true");
+    s.boolean(c"paused", false);
+    assert!(
+        s.observe(0, 0, 0.0).contains(&(0, 0.0, 0)),
+        "bound false retries play"
+    );
+}
+
+#[test]
+fn removed_selected_seek_observation_is_refused() {
+    unsafe extern "C" fn discard(_: *mut c_void, _: *const NuxVideoAction) {}
+    let s = Scene::new(false);
+    assert_eq!(
+        unsafe { nux_player_video_step(s.player, 1, 7, 0, 0.0, Some(discard), ptr::null_mut()) },
+        NuxStatus::InvalidArgument
+    );
+}
+
+#[test]
+fn keyed_muted_boolean_changes_the_decoder_volume() {
+    let s = Scene::from_fixture(&fixture::bool_timeline(), true);
+    s.observe(1, 0, 12.5);
+    s.step(0.5);
+    s.observe(0, 0, 0.0);
+    s.step(0.5);
+    assert_eq!(s.observe(0, 0, 0.0), [(4, 0.0, 0)]);
 }

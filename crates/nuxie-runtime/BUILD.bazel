@@ -3569,9 +3569,9 @@ rust_test(
 )
 
 rust_test(
-    name = "nuxie-runtime__test_video_interactive",
-    crate_name = "video_interactive",
-    crate_root = "tests/video_interactive.rs",
+    name = "nuxie-runtime__test_video_properties",
+    crate_name = "video_properties",
+    crate_root = "tests/video_properties.rs",
     srcs = _test_sources,
     compile_data = _compile_data,
     data = _compile_data + ["//:cpp_probe_sources"],

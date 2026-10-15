@@ -1046,7 +1046,7 @@ mod occurrence_tests {
             assert!(first.contains(&surviving[0]));
             let removed = *first.iter().find(|id| **id != surviving[0]).unwrap();
             assert_eq!(
-                nux_player_video_command(player, removed, 0, 0.0, 0),
+                nux_player_video_command(player, removed, 1, 0.0, 0),
                 NuxStatus::NotFound
             );
             assert_eq!(
@@ -1181,7 +1181,7 @@ mod occurrence_tests {
             NestedArtboard::update_artboard_occurrence(&host, Some(property.clone()));
             assert!(ids(player).is_empty());
             assert_eq!(
-                nux_player_video_command(player, first[0], 0, 0.0, 0),
+                nux_player_video_command(player, first[0], 1, 0.0, 0),
                 NuxStatus::NotFound
             );
             property.with_downcast_mut::<ViewModelInstanceArtboard, _>(|property| {
@@ -1192,7 +1192,7 @@ mod occurrence_tests {
             assert_eq!(second.len(), 1);
             assert_ne!(first[0], second[0]);
             assert_eq!(
-                nux_player_video_command(player, first[0], 0, 0.0, 0),
+                nux_player_video_command(player, first[0], 1, 0.0, 0),
                 NuxStatus::NotFound
             );
             assert_eq!(

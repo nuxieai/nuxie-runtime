@@ -348,24 +348,26 @@ impl BrowserVideoProof {
             .unwrap()
     }
     pub fn endpoint_scrub(&mut self, progress: f64) -> Result<(), JsValue> {
+        use nuxie_runtime::video::properties::{PAUSED, POSITION, Write};
+        if !progress.is_finite() || !(0.0..=1.0).contains(&progress) {
+            return Err(error("invalid endpoint progress"));
+        }
         self.video
             .with_downcast_mut::<Video, _>(|v| {
-                v.playback
-                    .scrub(progress, 0.0, v.playback.duration().unwrap())
+                let duration = v.playback.duration().ok_or(PlaybackError::InvalidValue)?;
+                v.write_property(Write::Bool(PAUSED, true))?;
+                v.write_property(Write::Number(POSITION, progress * duration))
             })
             .unwrap()
-            .map(|_| ())
-            .map_err(error)
+            .map_err(error)?;
+        Video::flush_property_changes(&self.video);
+        Ok(())
     }
     pub fn endpoint_tick(&mut self) -> Result<bool, JsValue> {
         self.render_tick()?;
         Ok(self
             .video
-            .with_downcast::<Video, _>(|v| {
-                v.playback
-                    .request_status()
-                    .is_some_and(|r| r.state == RequestState::Settled)
-            })
+            .with_downcast::<Video, _>(|v| v.playback.state() == PlaybackState::Paused)
             .unwrap())
     }
     pub fn endpoint_pts(&self) -> f64 {

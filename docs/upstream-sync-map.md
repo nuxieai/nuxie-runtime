@@ -9,18 +9,24 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382`
+- LAST_SYNCED_SHA: `1b887eb61219d549bd59eb4cb879b957384fcc64`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` (refreshed 2026-10-14 by the daily upstream sync).
+- Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  No upstream commits remain after this checkpoint at the fetched target.
-  All 241 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (263 after `5892bb05`); this
+  Seven upstream commits remain after this checkpoint at the fetched target.
+  All 242 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (264 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `1b887eb6`, integrated atop downstream `35e3b96ded`:
+  independent source-equivalence and separate Rust-integration reviews confirm
+  the public header-visibility fix is already equivalent. No runtime source or
+  tests changed. Source/manifest/pipeline checks pass 39; generated build files,
+  corpus metadata and diff hygiene pass. No runtime execution, editor feature
+  parity, private undo behavior or new hardware coverage is claimed.
 - Validation at `c63a5ba0`, integrated atop downstream `d185c5d94d`:
   independent source-equivalence and subsequent Rust-integration reviews and
   correction rereviews are clean. Integration review corrected parent identity
@@ -954,6 +960,7 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1b887eb61219d549bd59eb4cb879b957384fcc64` | Already equivalent: the public change only exposes LayerState and StateTransition headers to C++ editor builds for the existing addScriptedInterpolators body. Both Rust modules and that method are unconditional; no runtime semantic change is needed. Private script undo/collaboration changes and tests mentioned in the commit message are absent from the public delta and are not claimed imported. | — |
 | `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` | Translate the string-template converter, named/positional/sequential placeholders, configurable delimiter parsing, validated number formatting and shared thousands helper. Preserve argument import attachment, bind ownership/clone retargeting, dirty propagation, generated type/property dispatch and the testing converter accessor; retain the already-null Rust parent-bind initialization. Port the public unit tests and exact string_template.riv fixture. Formatting remains pure Rust at the approved host boundary. Private editor/RML/rive_native changes referenced by the commit message but absent from the public delta are not claimed imported. | — |
 | `536a4f7a3c2e5817d91fdf80f933fa0018750921` | Back a deferred canvas before resolving its image during paint mutations. Record canvasSample beside each canvas drawPath that samples a foreign image, capturing the handle at draw time; schedule its dependency without walking screen draws or tracking later paint state. Preserve the draw-filtered no-op replay and translate all four upstream regressions. The existing generic command decoder accounts for the redundant-command analysis addition; private .rive_head contents are not claimed imported. | — |
 | `4672b88bf62eee54746854440a914ed20499fe8a` | Translate angular gradients through renderer factories, deferred commands, append-only SRIV opcode 45, paint packing, inverse transforms and always-complex texture ramps. Preserve upstream first-stop default only for factories without an angular implementation. Regenerate supported shader artifacts and translate both gradient GMs. The upstream-only counting benchmark and redundant-command analysis remain source-oracle tools; the shared downstream decoder understands the new payload. Private .rive_head contents are not claimed imported. | — |

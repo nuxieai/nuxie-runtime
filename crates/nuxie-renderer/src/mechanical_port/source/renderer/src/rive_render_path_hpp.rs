@@ -586,6 +586,53 @@ mod upstream_1db281b3_triangulation_cache_tests {
 mod mat2d_caller_tests {
     use super::{FillRule, Mat2D, RawPath, RiveRenderPath};
 
+    // tests/unit_tests/renderer/pls_path_test.cpp at 113d1bce.
+    #[test]
+    fn calculate_pixel_bounds_matches_mapping_every_point() {
+        // libc rand() is platform-dependent and process-global. Keep its
+        // seeded sampling/range semantics with a local portable Rust PRNG;
+        // this is not a byte-identical libc-generated corpus.
+        struct Random(u32);
+        impl Random {
+            fn next(&mut self) -> u32 {
+                self.0 = self.0.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                self.0 & 0x7fff_ffff
+            }
+            fn range(&mut self, lo: f32, hi: f32) -> f32 {
+                lo + (hi - lo) * (self.next() as f32 / 0x7fff_ffffu32 as f32)
+            }
+        }
+        let mut random = Random(0);
+        let matrices = [
+            Mat2D::IDENTITY,
+            Mat2D([1.0, 0.0, 0.0, 1.0, 10.25, -7.5]),
+            Mat2D([3.7, 0.0, 0.0, 0.31, 100.1, 20.9]),
+            Mat2D([-2.5, 0.0, 0.0, 1.75, 512.3, 3.3]),
+            Mat2D([0.4, 0.0, 0.0, -6.1, -40.6, 900.7]),
+            Mat2D([-1.0, 0.0, 0.0, -1.0, 0.5, 0.5]),
+            Mat2D([0.8, 0.6, -0.6, 0.8, 30.0, 40.0]),
+        ];
+        for _ in 0..200 {
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(random.range(-500.0, 500.0), random.range(-500.0, 500.0));
+            for _ in 0..=random.next() % 8 {
+                raw_path.cubic_to(
+                    random.range(-500.0, 500.0),
+                    random.range(-500.0, 500.0),
+                    random.range(-500.0, 500.0),
+                    random.range(-500.0, 500.0),
+                    random.range(-500.0, 500.0),
+                    random.range(-500.0, 500.0),
+                );
+            }
+            let path = RiveRenderPath::new_with_raw_path(FillRule::NonZero, &mut raw_path);
+            for matrix in matrices {
+                let expected = matrix.map_bounding_box(path.getRawPath().points()).round_out();
+                assert_eq!(path.calculatePixelBounds(matrix, None, 0.0, false), expected);
+            }
+        }
+    }
+
     // tests/unit_tests/renderer/pls_path_test.cpp at 498419c4.
     #[test]
     fn add_untrusted_raw_path_prunes_empty_segments() {

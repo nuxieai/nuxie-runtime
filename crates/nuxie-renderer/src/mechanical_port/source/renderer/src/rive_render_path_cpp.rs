@@ -1,7 +1,8 @@
 /*
- * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
- * The literal source is retained below in declaration/order form.
+ * Live mechanical owner updated through 113d1bcedcc387c92ee000f64a5d7d947b4229dc.
+ * The retained declaration/order comments began at
+ * 0d8bb5a342f84a53119a6817c46ad1739cb7b696 and have selected delta updates;
+ * they are historical reference, not an exact snapshot of the current source.
  */
 
 // /*
@@ -487,7 +488,11 @@
 //     const std::optional<StrokeParams>& stroke,
 //     float feather) const
 // {
-//     AABB mappedBounds = matrix.mapBoundingBox(getRawPath().points());
+//     // If the matrix contains only translate and scale, we can simply map the
+//     // cached untransformed AABB. Otherwise, map all points to get tight bounds.
+//     AABB mappedBounds = matrix.xy() == 0.0f && matrix.yx() == 0.0f
+//                             ? matrix.mapBoundingBox(getBounds())
+//                             : matrix.mapBoundingBox(getRawPath().points());
 //
 //     assert(mappedBounds.width() >= 0);
 //     assert(mappedBounds.height() >= 0);
@@ -685,11 +690,11 @@ impl RiveRenderPath {
         feather: f32,
         inkbleed: bool,
     ) -> nuxie_render_api::IntegerAabb {
-        calculate_pixel_bounds(self.getRawPath(), matrix, stroke, feather, inkbleed)
+        calculate_pixel_bounds(self, matrix, stroke, feather, inkbleed)
     }
 
     pub fn implementation_source_identity() -> &'static str {
-        "renderer/src/rive_render_path.cpp@0d8bb5a342f84a53119a6817c46ad1739cb7b696"
+        "renderer/src/rive_render_path.cpp@113d1bcedcc387c92ee000f64a5d7d947b4229dc"
     }
     pub fn constructor(fill_rule: FillRule, raw_path: &mut RawPath) -> Self {
         Self::new_with_raw_path(fill_rule, raw_path)
@@ -729,13 +734,17 @@ impl RiveRenderPath {
 }
 
 pub(crate) fn calculate_pixel_bounds(
-    path: &RawPath,
+    path: &RiveRenderPath,
     matrix: Mat2D,
     stroke: Option<&crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::StrokeParams>,
     feather: f32,
     inkbleed: bool,
 ) -> nuxie_render_api::IntegerAabb {
-    let mut mapped_bounds = matrix.map_bounding_box(path.points());
+    let mut mapped_bounds = if matrix.0[2] == 0.0 && matrix.0[1] == 0.0 {
+        matrix.map_bounds(path.getBounds())
+    } else {
+        matrix.map_bounding_box(path.getRawPath().points())
+    };
     debug_assert!(mapped_bounds.width() >= 0.0);
     debug_assert!(mapped_bounds.height() >= 0.0);
     if stroke.is_some() || feather != 0.0 {

@@ -34,6 +34,7 @@ from tools.android_runtime_contract import layout_assertions
 from tools.android_runtime_contract import metadata_document
 from tools.android_runtime_contract import parse_needed
 from tools.android_runtime_contract import parse_nm_symbols
+from tools.android_runtime_contract import release_notes
 from tools.android_runtime_contract import sha256_bytes
 from tools.android_runtime_contract import size_report
 from tools.android_runtime_contract import validate_budget
@@ -562,6 +563,54 @@ class EvidenceContractTests(unittest.TestCase):
                 target="aarch64-linux-android",
             )
 
+    def release_evidence(self) -> dict[str, object]:
+        budget = validate_budget(self.budget)
+        encoded_budget = (json.dumps(budget) + "\n").encode()
+        return size_report(self.archive, self.records, budget, sha256_bytes(encoded_budget))
+
+    def test_release_notes_render_from_the_current_build_input_schema(self) -> None:
+        sizes = self.release_evidence()
+        notes = release_notes(self.metadata, self.inputs, sizes)
+        for expected in (
+            f"Nuxie Android runtime {self.metadata['artifactVersion']}",
+            f"Source: `{'a' * 40}`",
+            f"- Rust {RUST_TOOLCHAIN}",
+            f"- Bazel {BAZEL_VERSION} (`{ANDROID_LABEL}`)",
+            f"- Android NDK {ANDROID_NDK_VERSION}",
+            f"- Android API {ANDROID_API_LEVEL}",
+            f"- ABIs: {', '.join(ABIS)}",
+            f"- Features: {', '.join(FEATURES)}",
+            f"Archive bytes: {self.archive.stat().st_size}",
+            f"Archive SHA-256: `{self.metadata['artifact']['sha256']}`",
+        ):
+            self.assertIn(expected, notes)
+        self.assertNotIn("cargo-ndk", notes)
+        # Notes read the configuration only through the build-input contract,
+        # so evidence from another schema fails before any release draft.
+        retired = copy.deepcopy(self.inputs)
+        retired["configuration"]["cargoNdk"] = "cargo-ndk 4.1.2"
+        with self.assertRaisesRegex(ContractError, "configuration"):
+            release_notes(self.metadata, retired, sizes)
+
+    def test_release_notes_cli_reads_the_release_assets_the_publisher_uploads(self) -> None:
+        assets = self.root / "assets"
+        assets.mkdir()
+        (assets / android_runtime_contract.METADATA_NAME).write_text(json.dumps(self.metadata))
+        (assets / android_runtime_contract.BUILD_INPUTS_NAME).write_bytes(self.input_bytes)
+        (assets / android_runtime_contract.SIZE_REPORT_NAME).write_text(
+            json.dumps(self.release_evidence())
+        )
+        output = self.root / "notes.md"
+        subprocess.run(
+            [sys.executable, str(REPO_ROOT / "tools/android_runtime_contract.py"),
+             "release-notes", "--artifact-root", str(assets), str(output)],
+            check=True, capture_output=True, text=True,
+        )
+        self.assertEqual(
+            output.read_text(),
+            release_notes(self.metadata, self.inputs, self.release_evidence()),
+        )
+
 
 class PipelineContractTests(unittest.TestCase):
     def test_committed_budget_is_a_frozen_exact_tree_budget(self) -> None:
@@ -628,6 +677,16 @@ class PipelineContractTests(unittest.TestCase):
         self.assertLess(publisher.index("gh release create"), publisher.index("gh release download"))
         self.assertLess(publisher.index("gh release download"), publisher.rindex(" verify "))
         self.assertLess(publisher.rindex(" verify "), publisher.index("--draft=false"))
+
+    def test_builder_and_publisher_render_notes_through_the_contract(self) -> None:
+        notes_command = 'android_runtime_contract.py" release-notes'
+        publisher = (REPO_ROOT / "tools/publish-nux-capi-android-release.sh").read_text()
+        self.assertIn(notes_command, publisher)
+        self.assertNotIn("configuration[", publisher)
+        self.assertLess(publisher.index(notes_command), publisher.index("gh release create"))
+        builder = (REPO_ROOT / "tools/build-nux-capi-android.sh").read_text()
+        self.assertIn(notes_command, builder)
+        self.assertLess(builder.index('android_runtime_contract.py" verify'), builder.index(notes_command))
 
 
 if __name__ == "__main__":

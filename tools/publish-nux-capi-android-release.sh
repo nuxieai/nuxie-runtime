@@ -83,38 +83,8 @@ cleanup() {
     rm -rf "${downloads}"
 }
 trap cleanup EXIT
-python3 - "${metadata}" "${build_inputs}" "${size_report}" "${notes}" <<'PY'
-import json
-import pathlib
-import sys
-
-metadata_path, inputs_path, sizes_path, notes_path = map(pathlib.Path, sys.argv[1:])
-metadata = json.loads(metadata_path.read_text())
-inputs = json.loads(inputs_path.read_text())
-sizes = json.loads(sizes_path.read_text())
-configuration = inputs["configuration"]
-measurements = sizes["measurements"]
-lines = [
-    f"Nuxie Android runtime {metadata['artifactVersion']}",
-    "",
-    f"Source: `{metadata['buildSourceRevision']}`",
-    f"C ABI runtime: `{metadata['runtimeIdentity']}`",
-    "",
-    "Pinned release cut:",
-    "",
-    f"- Rust {configuration['rustToolchain']}",
-    f"- cargo-ndk {configuration['cargoNdk'].removeprefix('cargo-ndk ')}",
-    f"- Android NDK {configuration['androidNdk']}",
-    f"- Android API {configuration['androidApiLevel']}",
-    f"- ABIs: {', '.join(metadata['android']['abis'])}",
-    f"- Features: {', '.join(metadata['android']['features'])}",
-    "",
-    f"Archive bytes: {measurements['archiveBytes']}",
-    f"Expanded bytes: {measurements['expandedBytes']}",
-    f"Archive SHA-256: `{metadata['artifact']['sha256']}`",
-]
-notes_path.write_text("\n".join(lines) + "\n")
-PY
+python3 "${script_dir}/android_runtime_contract.py" release-notes \
+    --artifact-root "${artifact_root}" "${notes}"
 
 gh release create "${release_tag}" \
     "${archive}#NuxieRuntimeAndroid.zip" \

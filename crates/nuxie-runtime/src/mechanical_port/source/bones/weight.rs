@@ -120,6 +120,9 @@ impl Weight {
         bone_transforms: &[f32],
     ) -> Vec2D {
         let (mut xx, mut xy, mut yx, mut yy, mut tx, mut ty) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        // Each bone's transform is six contiguous values; a trailing partial
+        // transform is not a bone.
+        let (transforms, _) = bone_transforms.as_chunks::<6>();
         for index_in_packed_values in 0..4 {
             let weight = Self::encoded_weight_value(index_in_packed_values, weights);
             if weight == 0 {
@@ -128,11 +131,10 @@ impl Weight {
 
             let normalized_weight = weight as f32 / 255.0;
             let bone_index = Self::encoded_weight_value(index_in_packed_values, indices);
-            let transform_index = bone_index * 6;
             // Source reads one contiguous affine transform. Check its complete
             // extent once, after the zero-weight gate, keeping the six fused
             // accumulations in source order.
-            let transform = &bone_transforms[transform_index..transform_index + 6];
+            let transform = &transforms[bone_index];
             xx = transform[0].mul_add(normalized_weight, xx);
             xy = transform[1].mul_add(normalized_weight, xy);
             yx = transform[2].mul_add(normalized_weight, yx);

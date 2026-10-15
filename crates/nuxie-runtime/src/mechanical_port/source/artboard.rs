@@ -336,7 +336,8 @@ pub struct Artboard {
     draw_targets: Vec<CoreHandle>,
     nested_artboards: Vec<CoreHandle>,
     component_lists: Vec<CoreHandle>,
-    artboard_hosts: Vec<CoreHandle>,
+    // Fixed once the artboard is initialized; shared so walks need no copy.
+    artboard_hosts: Rc<[CoreHandle]>,
     joysticks: Vec<CoreHandle>,
     // The BitmapCache child, collected in initialize(). None unless the
     // artboard has one; the object itself owns the offscreen render state.
@@ -441,7 +442,7 @@ impl Default for Artboard {
             draw_targets: Vec::new(),
             nested_artboards: Vec::new(),
             component_lists: Vec::new(),
-            artboard_hosts: Vec::new(),
+            artboard_hosts: Rc::default(),
             joysticks: Vec::new(),
             bitmap_cache: None,
             scripted_objects: Vec::new(),
@@ -1298,13 +1299,19 @@ impl Artboard {
                 }
             } else if object.is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY) {
                 root.with_downcast_mut::<Artboard, _>(|artboard| artboard.nested_artboards.push(object.clone()));
-                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.artboard_hosts.push(object.clone()));
+                root.with_downcast_mut::<Artboard, _>(|artboard| {
+                    artboard.artboard_hosts = artboard.artboard_hosts.iter().cloned().chain([object.clone()]).collect();
+                });
             } else if object.is_type_of(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
                 root.with_downcast_mut::<Artboard, _>(|artboard| artboard.component_lists.push(object.clone()));
-                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.artboard_hosts.push(object.clone()));
+                root.with_downcast_mut::<Artboard, _>(|artboard| {
+                    artboard.artboard_hosts = artboard.artboard_hosts.iter().cloned().chain([object.clone()]).collect();
+                });
             } else if object.is_type_of(crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY) {
                 if object.with_downcast::<crate::source::shapes::paint::paint_image::PaintImage, _>(|paint| paint.source_artboard().is_some()).unwrap_or(false) {
-                    root.with_downcast_mut::<Artboard, _>(|artboard| artboard.artboard_hosts.push(object.clone()));
+                    root.with_downcast_mut::<Artboard, _>(|artboard| {
+                        artboard.artboard_hosts = artboard.artboard_hosts.iter().cloned().chain([object.clone()]).collect();
+                    });
                 }
             } else if object.is_type_of(crate::mechanical_port::source::generated::joystick_base::JoystickBase::TYPE_KEY) {
                 let can_apply_before = object
@@ -2394,7 +2401,7 @@ impl Artboard {
             .and_then(|file| file.upgrade())
             .and_then(|file| file.with_file(|file| file.scripting_vm()));
         add_vm(vms, file_vm);
-        for host in &self.artboard_hosts {
+        for host in self.artboard_hosts.iter() {
             let Some((foreign, instances)) = host
                 .with(|owner| {
                     let host = owner.as_artboard_host()?;
@@ -2430,7 +2437,7 @@ impl Artboard {
         if self.artboard_file().is_some_and(&file_has_pending) {
             return true;
         }
-        for host in &self.artboard_hosts {
+        for host in self.artboard_hosts.iter() {
             let Some((foreign, instances)) = host
                 .with(|owner| {
                     let host = owner.as_artboard_host()?;
@@ -2937,15 +2944,15 @@ impl Artboard {
 
     pub fn update_data_binds_handle(root: &CoreHandle, apply_target_to_source: bool) {
         let hosts = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.artboard_hosts.clone())
+            .with_downcast::<Artboard, _>(|artboard| Rc::clone(&artboard.artboard_hosts))
             .expect("live Artboard");
-        for host in hosts {
+        for host in hosts.iter() {
             if host.is_type_of(NestedArtboard::TYPE_KEY) {
-                NestedArtboard::update_data_binds_occurrence(&host);
+                NestedArtboard::update_data_binds_occurrence(host);
             } else if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
-                crate::source::shapes::paint::paint_image::PaintImage::update_data_binds_occurrence(&host);
+                crate::source::shapes::paint::paint_image::PaintImage::update_data_binds_occurrence(host);
             } else {
-                ArtboardComponentList::update_data_binds_occurrence(&host);
+                ArtboardComponentList::update_data_binds_occurrence(host);
             }
         }
         crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone()).update_data_binds(apply_target_to_source);
@@ -4700,7 +4707,7 @@ impl Artboard {
         }) {
             return true;
         }
-        for host in self.artboard_hosts.clone() {
+        for host in Rc::clone(&self.artboard_hosts).iter() {
             let has_audio = host
                 .with_mut(|host| {
                     let host = host.as_artboard_host_mut()?;
@@ -4897,7 +4904,7 @@ impl Artboard {
 
     pub fn set_volume(&mut self, value: f32) {
         self.volume = value;
-        for host in self.artboard_hosts.clone() {
+        for host in Rc::clone(&self.artboard_hosts).iter() {
             host.with_mut(|host| {
                 let Some(host) = host.as_artboard_host_mut() else {
                     return;
@@ -4985,7 +4992,7 @@ impl Artboard {
 
     pub fn set_audio_engine(&mut self, audio_engine: Option<AudioEngineRef>) {
         self.audio_engine = audio_engine.clone();
-        for host in self.artboard_hosts.clone() {
+        for host in Rc::clone(&self.artboard_hosts).iter() {
             host.with_mut(|host| {
                 let Some(host) = host.as_artboard_host_mut() else {
                     return;
@@ -5716,11 +5723,11 @@ impl Artboard {
                 artboard
                     .data_bind_container
                     .set_data_bind_context(Some(value.clone()));
-                artboard.artboard_hosts.clone()
+                Rc::clone(&artboard.artboard_hosts)
             })
             .expect("live Artboard");
         Self::sync_instance_value_binds_handle(root);
-        for host in hosts {
+        for host in hosts.iter() {
             let instance = host
                 .with(|owner| {
                     owner
@@ -5799,14 +5806,14 @@ impl Artboard {
         let (hosts, objects) = root
             .with_downcast::<Artboard, _>(|artboard| {
                 (
-                    artboard.artboard_hosts.clone(),
+                    Rc::clone(&artboard.artboard_hosts),
                     artboard.scripted_objects.clone(),
                 )
             })
             .expect("live Artboard");
-        for host in hosts {
+        for host in hosts.iter() {
             if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
-                crate::source::shapes::paint::paint_image::PaintImage::clear_data_context_occurrence(&host);
+                crate::source::shapes::paint::paint_image::PaintImage::clear_data_context_occurrence(host);
                 continue;
             }
             host.with_mut(|host| {
@@ -5845,11 +5852,11 @@ impl Artboard {
         Self::clear_data_context_handle(root);
         crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone()).unbind_data_binds();
         let hosts = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.artboard_hosts.clone())
+            .with_downcast::<Artboard, _>(|artboard| Rc::clone(&artboard.artboard_hosts))
             .expect("live Artboard");
-        for host in hosts {
+        for host in hosts.iter() {
             if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
-                crate::source::shapes::paint::paint_image::PaintImage::unbind_occurrence(&host);
+                crate::source::shapes::paint::paint_image::PaintImage::unbind_occurrence(host);
                 continue;
             }
             host.with_mut(|host| {
@@ -5928,9 +5935,9 @@ impl Artboard {
             return;
         };
         let hosts = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.artboard_hosts.clone())
+            .with_downcast::<Artboard, _>(|artboard| Rc::clone(&artboard.artboard_hosts))
             .expect("live Artboard");
-        for host in hosts {
+        for host in hosts.iter() {
             let resolved = host
                 .with(|owner| {
                     owner
@@ -5961,9 +5968,9 @@ impl Artboard {
     fn unbind_for_drop(&mut self) {
         self.clear_data_context_for_drop();
         self.data_bind_container.unbind_data_binds();
-        for host in self.artboard_hosts.clone() {
+        for host in Rc::clone(&self.artboard_hosts).iter() {
             if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
-                crate::source::shapes::paint::paint_image::PaintImage::unbind_occurrence(&host);
+                crate::source::shapes::paint::paint_image::PaintImage::unbind_occurrence(host);
                 continue;
             }
             host.with_mut(|host| {
@@ -6004,9 +6011,9 @@ impl Artboard {
                 self.instance_value_binds_source = None;
             }
         }
-        for host in self.artboard_hosts.clone() {
+        for host in Rc::clone(&self.artboard_hosts).iter() {
             if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
-                crate::source::shapes::paint::paint_image::PaintImage::clear_data_context_occurrence(&host);
+                crate::source::shapes::paint::paint_image::PaintImage::clear_data_context_occurrence(host);
                 continue;
             }
             host.with_mut(|host| {

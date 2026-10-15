@@ -14,11 +14,13 @@ jniLibs/x86_64/libc++_shared.so
 jniLibs/x86_64/libnux_capi.so
 ```
 
-The release cut is fixed at Rust 1.94.1, cargo-ndk 4.1.2, Android NDK
+The release cut is fixed at Rust 1.94.1, Bazel 9.3.0 with rules_rust 0.74.0
+building `//crates/nux-capi:nux-capi__android__cdylib`, Android NDK
 29.0.14206865, API 23, `arm64-v8a` plus `x86_64`, and the feature union
-`android-vulkan,scripting,android-authored-wgsl`. `libc++_shared.so` is copied
-byte-for-byte from that NDK for each ABI because the Vulkan runtime has a
-dynamic C++ runtime dependency.
+`android-vulkan,scripting,android-authored-wgsl`. Bazel supplies the pinned
+Rust toolchain and both Android targets; the build does not use rustup or
+cargo-ndk. `libc++_shared.so` is copied byte-for-byte from that NDK for each
+ABI because the Vulkan runtime has a dynamic C++ runtime dependency.
 
 The ZIP writer fixes entry order, timestamps, Unix modes, compression level,
 and metadata. The release evidence records the full 40-character source SHA,
@@ -33,12 +35,10 @@ budget.
 
 ## Candidate qualification
 
-Install the exact toolchain and both Rust Android targets:
+Install the pinned Bazel launcher and point the build at the exact NDK:
 
 ```sh
-rustup toolchain install 1.94.1
-rustup target add --toolchain 1.94.1 aarch64-linux-android x86_64-linux-android
-cargo install --locked cargo-ndk --version 4.1.2
+tools/bazel/install.sh
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 ```
 
@@ -72,46 +72,56 @@ The v0.4.13 candidate adds the video properties layer. Bindings, keyed
 animation and Lua now control a playing video through the same native
 properties. Loop (60004), muted (60005), volume (60006), rate (60007), loop
 start (60014), loop end (60015), paused (60016) and position (60017) are
-bindable and animatable while the video plays; writing position seeks.
-Duration (60018), ended (60019) and state (60020) are read only and notify
-bindings as decoder state and the media clock change. Keys 60008 to 60013 keep
-their starting-only meanings, and an invalid write keeps the prior value. The
-direct command path is cut: `nux_player_video_command` and
+bindable and animatable while the video plays; writing position seeks. Duration
+(60018), ended (60019) and state (60020) are read only and notify bindings as
+decoder state and the media clock change. Keys 60008 to 60013 keep their
+starting-only meanings, and an invalid write keeps the prior value. The direct
+command path is cut: `nux_player_video_command` and
 `nux_video_sync_group_command` accept only the host decisions pause (1),
 suspend reason (6), reenter (7) and dispose (8) and return
 `NUX_STATUS_INVALID_ARGUMENT` for every other kind, and `nux_player_video_step`
-refuses decoder observation 7 (selected seek frame) the same way. A host report
-that play was blocked now sets paused to true and notifies bindings; writing
-false through the bound control retries play. The video schema declares loop
-and muted as bool, marks the live settings bindable and animatable, and adds
-keys 60016 to 60020. At load a default two-way paused binding takes the
-video's starting value, so autoplay wins; a file that chooses source-first for
-that binding lets the starting view-model value win. SDKs must adopt this
-release together with their matching source changes (Android in
+refuses decoder observation 7 (selected seek frame) the same way. For Lua
+scripts, `video:playRange`, `video:scrub`, `video:cancelRequest` and
+`video:requestStatus` are removed, `video:state()` returns the state number
+(the key 60020 ordinal) instead of a name, and `video:duration()` returns 0
+before metadata instead of nil. A host report that play was blocked now sets
+paused to true and notifies bindings; writing false through the bound control
+retries play. The video schema declares loop and muted as bool, marks the live
+settings bindable and animatable, and adds keys 60016 to 60020. At load a
+default two-way paused binding takes the video's starting value, so autoplay
+wins; a file that chooses source-first for that binding lets the starting
+view-model value win. SDKs must adopt this release together with their matching
+source changes (Android in
 [nuxie-android#196](https://github.com/nuxieai/nuxie-android/pull/196); iOS
 main from 92770f81). An SDK that still sends the removed command kinds cannot
 play video on this binary, and the new SDK sources need this binary.
 
 The candidate also carries the runtime performance campaign (a data-oriented
 component graph, shared property and paint cells, and reused draw lists and
-text shape plans) and upstream mirrors: the string template converter, deferred
-canvas sampling, angular gradients with regenerated Vulkan SPIR-V, data
-definitions and uint target guards, draw batching order, empty binding
-rejection, font codepoint coverage, ORE binding validation, reverse-state
-freezing, selectable drawable traversal, draw-target validation, async poll
-pacing, collapsed text runs and keyframe lookup, stateful scripted
-interpolators, nested artboard mesh hosts, cubic vertex weight guards and
-import slot ownership. It fixes single-pass draws losing their draw contents,
-hosts a video's mesh on the image it draws through, and gives text input and
-scroll physics one monotonic engine clock. Scripts can decode a trusted shader
-asset for native renderers. The upstream watermark pre-roll is removed; files
-that carry its manifest section still import. This is the first release whose
-archive is compiled through the repository's Bazel build. ABI v4 is retained
-with no symbol, struct or layout change; the export lists and layout oracle
-match v0.4.12. The packaged `include/nux_capi.generated.h` changes only in
-documentation comments, which now describe the refused command kinds and
-observation; every declaration is identical to v0.4.12. Existing release size
-ceilings remain unchanged pending measurement.
+text shape plans) and every upstream mirror since the previous release: the
+string template converter, deferred canvas sampling, angular gradients with
+regenerated Vulkan SPIR-V, data definitions and uint target guards, draw
+batching order, empty binding rejection, the applicable a9239045 runtime fixes,
+font codepoint coverage, ORE binding validation, reverse-state freezing,
+selectable drawable traversal, draw-target validation, async poll pacing,
+collapsed text runs and keyframe lookup, stateful scripted interpolators,
+held-pose freezing, nested artboard mesh hosts, cubic vertex weight guards,
+import slot ownership and stopping recursive script artboard inputs; WebGL
+synchronization and target exposure, a browser backend change outside this
+archive; and the parked guest frame release and deferred guest VM teardown,
+accounted for without runtime behavior while guest execution stays parked. It
+fixes single-pass draws losing their draw contents, hosts a video's mesh on the
+image it draws through, and gives text input and scroll physics one monotonic
+engine clock. Scripts can decode a trusted shader asset for native renderers,
+and a direct GPU-canvas script now gets the shader name it asks for. The
+upstream watermark pre-roll is removed; files that carry its manifest section
+still import. This is the first release whose archive is compiled through the
+repository's Bazel build. ABI v4 is retained with no symbol, struct or layout
+change; the export lists and layout oracle match v0.4.12. The packaged
+`include/nux_capi.generated.h` changes only in documentation comments, which
+now describe the refused command kinds and observation; every declaration is
+identical to v0.4.12. Existing release size ceilings remain unchanged pending
+measurement.
 
 The inherited v0.4.12 release adds checked replacement of several values at once. The
 runtime checks a batch of value writes against the installed rules and groups

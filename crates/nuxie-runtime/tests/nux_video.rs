@@ -1425,3 +1425,80 @@ fn a_video_drawn_by_its_scripts_is_on_screen_where_they_are() {
         .unwrap()
     );
 }
+
+#[test]
+fn a_reader_in_a_box_off_screen_leaves_its_video_undecoded() {
+    use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+    use nuxie_runtime::video::visibility::is_visible_in;
+    let mut records = scene_records(false);
+    records.last_mut().unwrap().properties.extend([property(
+        "Video",
+        "drawnByScript",
+        FixtureValue::Bool(true),
+    )]);
+    // A screen taller than the window onto it.
+    records[2].properties[1] = property("Artboard", "height", FixtureValue::Double(400.0));
+    // Two boxes laid out in a column: the first fills the window and the
+    // second, below it at y=200..230, holds a drawing script, as the editor
+    // places a script under its canvas element.
+    for (height, style) in [(200.0, 3), (30.0, 5)] {
+        records.push(record(
+            "LayoutComponent",
+            vec![
+                property("LayoutComponent", "parentId", FixtureValue::Uint(0)),
+                property("LayoutComponent", "width", FixtureValue::Double(50.0)),
+                property("LayoutComponent", "height", FixtureValue::Double(height)),
+                property("LayoutComponent", "styleId", FixtureValue::Uint(style)),
+            ],
+        ));
+        records.push(record("LayoutComponentStyle", vec![]));
+    }
+    records.push(record(
+        "ScriptedDrawable",
+        vec![property(
+            "ScriptedDrawable",
+            "parentId",
+            FixtureValue::Uint(4),
+        )],
+    ));
+    let bytes = encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+    artboard.update_pass(true);
+    let objects =
+        artboard.with_artboard(|a| a.objects().iter().flatten().cloned().collect::<Vec<_>>());
+    let video = objects[1].clone();
+    let reader = objects[6].clone();
+    video
+        .with_downcast_mut::<Video, _>(|v| v.add_script_reader(reader))
+        .unwrap();
+    let window = Bounds {
+        min_x: 0.0,
+        min_y: 0.0,
+        max_x: 200.0,
+        max_y: 200.0,
+    };
+    // The window shows the screen's top, not the box: the video is not
+    // decoded, though the script is on the screen.
+    assert!(!is_visible_in(&video, window).unwrap());
+    // Scrolled down to the box, it is.
+    assert!(
+        is_visible_in(
+            &video,
+            Bounds {
+                min_y: 150.0,
+                max_y: 350.0,
+                ..window
+            }
+        )
+        .unwrap()
+    );
+}

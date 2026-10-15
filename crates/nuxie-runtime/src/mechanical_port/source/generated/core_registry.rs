@@ -2008,6 +2008,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::paint
                     );
                 }
             }
+            CoreField::PaintImageArtboardId => {
+                if self.base.set_artboard_id_value(value) {
+                    #[cfg(feature = "editor")]
+                    <Self as crate::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::artboard_id_changed(self);
+                    completion.record(crate::source::core::CoreObject::core(self), 487);
+                }
+            }
             CoreField::PaintImageImageSamplerFilter => {
                 if self.base.set_image_sampler_filter_value(value as u8) {
                     completion.record(
@@ -2151,6 +2158,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::paint
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::PaintImageImageAssetId => self.base.image_asset_id(),
+            CoreField::PaintImageArtboardId => self.base.artboard_id(),
             CoreField::PaintImageImageSamplerFilter => self.base.image_sampler_filter() as u32,
             CoreField::PaintImageImageSamplerWrapX => self.base.image_sampler_wrap_x() as u32,
             CoreField::PaintImageImageSamplerWrapY => self.base.image_sampler_wrap_y() as u32,
@@ -3426,6 +3434,9 @@ pub fn advancing_component_advance_handle(
     elapsed_seconds: f32,
     flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
 ) -> Option<bool> {
+    if handle.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+        return Some(crate::source::shapes::paint::paint_image::PaintImage::advance_component_occurrence(handle, elapsed_seconds, flags));
+    }
     if handle.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
         return Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::advance_occurrence(handle, elapsed_seconds, flags));
     }
@@ -3580,9 +3591,11 @@ mod update_dispatch_tests {
                 continue;
             };
             let transform = object.as_transform_component().is_some();
+            // PaintImage now overrides update without being a transform.
+            let paint_image = key == crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY;
             assert_eq!(
                 object.component_update_handler().is_some(),
-                transform,
+                transform || paint_image,
                 "update registration {key}"
             );
             assert_eq!(
@@ -4521,6 +4534,7 @@ pub enum CoreField {
     ScriptedTransitionActiveComponentId,
     ScriptedTransitionListSource,
     PaintImageImageAssetId,
+    PaintImageArtboardId,
     PaintImageImageSamplerFilter,
     PaintImageImageSamplerWrapX,
     PaintImageImageSamplerWrapY,
@@ -9033,6 +9047,7 @@ impl CoreRegistry {
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
+            487 => CoreField::PaintImageArtboardId,
             549 => CoreField::ViewModelInstanceListItemViewModelId,
             550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
             5 => CoreField::ComponentParentId,
@@ -9141,6 +9156,7 @@ impl CoreRegistry {
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
+            487 => CoreField::PaintImageArtboardId,
             269 => CoreField::PaintImageImageSamplerFilter,
             270 => CoreField::PaintImageImageSamplerWrapX,
             271 => CoreField::PaintImageImageSamplerWrapY,
@@ -9718,6 +9734,7 @@ impl CoreRegistry {
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
+            487 => CoreField::PaintImageArtboardId,
             549 => CoreField::ViewModelInstanceListItemViewModelId,
             550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
             5 => CoreField::ComponentParentId,
@@ -9815,6 +9832,7 @@ impl CoreRegistry {
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
+            487 => CoreField::PaintImageArtboardId,
             269 => CoreField::PaintImageImageSamplerFilter,
             270 => CoreField::PaintImageImageSamplerWrapX,
             271 => CoreField::PaintImageImageSamplerWrapY,
@@ -10600,6 +10618,7 @@ impl CoreRegistry {
             273 => 0,
             414 => 0,
             415 => 0,
+            487 => 0,
             269 => 0,
             270 => 0,
             271 => 0,
@@ -11266,6 +11285,7 @@ impl CoreRegistry {
             273 => 110,
             414 => 110,
             415 => 113,
+            487 => 113,
             269 => 113,
             270 => 113,
             271 => 113,
@@ -70220,6 +70240,43 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::group_e
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::source::component_dirt::ComponentDirt) -> bool> {
+        Some(|handle, dirt| {
+            crate::source::shapes::paint::paint_image::PaintImage::update_occurrence(handle, dirt);
+            true
+        })
+    }
+    fn as_artboard_host(&self) -> Option<&dyn crate::source::artboard_host::ArtboardHost> {
+        Some(self)
+    }
+    fn as_artboard_host_mut(&mut self) -> Option<&mut dyn crate::source::artboard_host::ArtboardHost> {
+        Some(self)
+    }
+    fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
+        Some(crate::source::artboard_referencer::ArtboardReferencerBehavior::referenced_artboard_id(self))
+    }
+    fn artboard_referencer_nesting_artboard(&self) -> Option<CoreHandle> {
+        crate::source::artboard_referencer::ArtboardReferencerBehavior::nesting_artboard(self)
+    }
+    fn artboard_referencer_set_referenced_artboard(&mut self, artboard: CoreHandle) -> bool {
+        crate::source::artboard_referencer::ArtboardReferencerBehavior::set_referenced_artboard(self, Some(artboard));
+        true
+    }
+    fn is_advancing_component(&self) -> bool { true }
+    fn advancing_component_quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        crate::source::advancing_component::AdvancingComponent::quiet_state(self)
+    }
+    fn advancing_component_advance(&mut self, elapsed_seconds: f32, flags: crate::source::advance_flags::AdvanceFlags) -> Option<bool> {
+        Some(crate::source::advancing_component::AdvancingComponent::advance_component(self, elapsed_seconds, flags))
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        self.build_dependencies();
+        true
+    }
+    fn component_update(&mut self, value: crate::source::component_dirt::ComponentDirt) -> bool {
+        self.update(value);
+        true
+    }
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,

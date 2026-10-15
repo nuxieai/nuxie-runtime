@@ -8,7 +8,7 @@ _source_dir = source_path()
 _package_inputs = glob(["**"], exclude = ["**/BUILD.bazel", "target/**", "__pycache__/**", "dist/**"], allow_empty = True)
 exports_files(_package_inputs)
 _sources = glob(["src/**/*.rs"], allow_empty = True)
-_compile_data = _package_inputs + ["//:fixtures"]
+_compile_data = _package_inputs + ["//:fixtures", "//crates/nuxie-runtime:tests/support/paint_artboard.rs"]
 _build_sources = glob(["build.rs", "src/**/*.rs"], allow_empty = True)
 _build_data = _package_inputs
 _test_sources = glob(["tests/**/*.rs"], allow_empty = True)

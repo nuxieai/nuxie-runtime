@@ -36,6 +36,8 @@ impl AdvancingComponentHandle {
             advance_nested_artboard
         } else if component.is_type_of(ArtboardComponentListBase::TYPE_KEY) {
             advance_artboard_component_list
+        } else if component.is_type_of(crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY) {
+            crate::source::shapes::paint::paint_image::PaintImage::advance_component_occurrence
         } else if component.is_type_of(crate::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY) {
             crate::source::scripted::scripted_transition::ScriptedTransition::advance_occurrence
         } else if component
@@ -163,7 +165,8 @@ impl dyn AdvancingComponent {
             | ScriptedDrawableBase::TYPE_KEY
             | ScriptedLayoutBase::TYPE_KEY
             | ScriptedTransitionBase::TYPE_KEY
-            | ScriptedPathEffectBase::TYPE_KEY => {
+            | ScriptedPathEffectBase::TYPE_KEY
+            | crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY => {
                 Some(AdvancingComponentHandle::classified(component))
             }
             _ => None,

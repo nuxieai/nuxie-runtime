@@ -80,6 +80,13 @@
         "string": "imagerotation"
       }
     },
+    "artboardId": {
+      "type": "Id",
+      "typeRuntime": "uint",
+      "initialValue": "Core.missingId",
+      "initialValueRuntime": "-1",
+      "key": { "int": 487, "string": "artboardid" }
+    },
     "imageSizeMode": {
       "type": "uint8",
       "initialValue": "0",

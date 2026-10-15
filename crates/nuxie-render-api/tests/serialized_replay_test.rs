@@ -596,6 +596,149 @@ fn serialized_canvas_content_replays_byte_identically() {
     assert_eq!(canvases.borrow()[0].borrow().height(), 48);
     assert_eq!(&*a.bytes(), &*b.borrow().bytes());
 }
+
+#[derive(Default)]
+struct ImageCapturingPaint(Rc<RefCell<Option<usize>>>);
+impl RenderPaint for ImageCapturingPaint {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn style(&mut self, _: RenderPaintStyle) {}
+    fn color(&mut self, _: ColorInt) {}
+    fn thickness(&mut self, _: f32) {}
+    fn join(&mut self, _: StrokeJoin) {}
+    fn cap(&mut self, _: StrokeCap) {}
+    fn feather(&mut self, _: f32) {}
+    fn blend_mode(&mut self, _: BlendMode) {}
+    fn shader(&mut self, _: Option<&dyn RenderShader>) {}
+    fn shader_transform(&mut self, _: Mat2D) {}
+    fn invalidate_stroke(&mut self) {}
+    fn modulated_image(&mut self, image: Option<&dyn RenderImage>, _: ImageSampler, _: Mat2D) {
+        *self.0.borrow_mut() = image.map(RenderImage::image_identity);
+    }
+}
+#[derive(Default)]
+struct ImageCapturingFactory {
+    paints: Vec<Rc<RefCell<Option<usize>>>>,
+}
+impl Factory for ImageCapturingFactory {
+    fn make_render_buffer(
+        &mut self,
+        ty: RenderBufferType,
+        flags: RenderBufferFlags,
+        size: usize,
+    ) -> Box<dyn RenderBuffer> {
+        NullFactory.make_render_buffer(ty, flags, size)
+    }
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        NullFactory.make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        NullFactory.make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+    fn make_render_path(&mut self, path: RawPath, fill: FillRule) -> Box<dyn RenderPath> {
+        NullFactory.make_render_path(path, fill)
+    }
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        NullFactory.make_empty_render_path()
+    }
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        let paint = ImageCapturingPaint::default();
+        self.paints.push(paint.0.clone());
+        Box::new(paint)
+    }
+    fn decode_image(&mut self, _: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        Ok(Box::new(CanvasImage {
+            identity: Rc::new(()),
+            width: 0,
+            height: 0,
+        }))
+    }
+}
+
+#[test]
+fn a_paint_modulated_by_a_canvas_replays_sampling_that_canvas() {
+    let mut a = SerializingFactory::default();
+    a.frame_size(256, 256);
+    a.add_frame();
+    let mut renderer = a.make_renderer();
+    let path = std::path::PathBuf::from(
+        std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+    )
+    .join("tests/unit_tests/assets/open_source.jpg");
+    let _decoded = a.decode_image(&std::fs::read(path).unwrap()).unwrap();
+    let mut raw = RawPath::new();
+    raw.move_to(0.0, 0.0);
+    raw.line_to(10.0, 0.0);
+    raw.line_to(10.0, 10.0);
+    raw.close();
+    let path = a.make_render_path(raw, FillRule::NonZero);
+    let mut ink = a.make_render_paint();
+    ink.color(0xff445566);
+    let canvas_a = canvas(32, 16);
+    let mut content = a
+        .begin_canvas_content(Some(canvas_a.clone()), 0xff204060)
+        .unwrap();
+    content.draw_path(path.as_ref(), ink.as_ref());
+    a.end_canvas_content(Some(&canvas_a));
+    let mut patterned = a.make_render_paint();
+    patterned.modulated_image(
+        a.content_canvas_image(Some(&canvas_a)).as_deref(),
+        ImageSampler {
+            wrap_x: ImageWrap::Repeat,
+            wrap_y: ImageWrap::Repeat,
+            ..ImageSampler::LINEAR_CLAMP
+        },
+        Mat2D([32.0, 0.0, 0.0, 16.0, 0.0, 0.0]),
+    );
+    renderer.draw_path(path.as_ref(), patterned.as_ref());
+    let mut b = ImageCapturingFactory::default();
+    let mut renderer_b = CountingRenderer::default();
+    let canvases = Rc::new(RefCell::new(Vec::new()));
+    let retained = canvases.clone();
+    let image_b = Rc::new(RefCell::new(None::<Rc<dyn RenderImage>>));
+    let captured = image_b.clone();
+    let mut hooks = SerializedReplayHooks {
+        on_canvas_content_begin: Some(Box::new(move |_, w, h, _, image| {
+            let canvas = canvas(w, h);
+            let canvas_image = canvas.borrow().render_image();
+            *captured.borrow_mut() = Some(canvas_image.clone());
+            *image = Some(canvas_image);
+            retained.borrow_mut().push(canvas);
+            Some(Box::new(CountingRenderer::default()))
+        })),
+        on_canvas_content_end: Some(Box::new(|_| {})),
+        ..Default::default()
+    };
+    assert!(replay_serialized_commands(
+        &a.bytes(),
+        &mut b,
+        &mut renderer_b,
+        &mut hooks
+    ));
+    assert_eq!(b.paints.len(), 2);
+    assert!(image_b.borrow().is_some());
+    assert_eq!(
+        *b.paints[1].borrow(),
+        Some(image_b.borrow().as_ref().unwrap().image_identity())
+    );
+}
 #[test]
 fn serialized_canvas_content_without_target_is_dropped() {
     let mut a = SerializingFactory::default();

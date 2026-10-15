@@ -1249,6 +1249,8 @@ impl Artboard {
                 code
             } else if object.is_type_of(NestedArtboard::TYPE_KEY) {
                 NestedArtboard::on_added_clean_occurrence(&object, &mut context)
+            } else if object.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::on_added_clean_occurrence(&object, &mut context)
             } else if object.is_type_of(crate::mechanical_port::source::layout::layout_participant::LayoutParticipant::TYPE_KEY) {
                 crate::mechanical_port::source::layout::layout_participant::LayoutParticipant::on_added_clean_occurrence(&object, &mut context)
             } else {
@@ -1280,6 +1282,10 @@ impl Artboard {
             } else if object.is_type_of(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
                 root.with_downcast_mut::<Artboard, _>(|artboard| artboard.component_lists.push(object.clone()));
                 root.with_downcast_mut::<Artboard, _>(|artboard| artboard.artboard_hosts.push(object.clone()));
+            } else if object.is_type_of(crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY) {
+                if object.with_downcast::<crate::source::shapes::paint::paint_image::PaintImage, _>(|paint| paint.source_artboard().is_some()).unwrap_or(false) {
+                    root.with_downcast_mut::<Artboard, _>(|artboard| artboard.artboard_hosts.push(object.clone()));
+                }
             } else if object.is_type_of(crate::mechanical_port::source::generated::joystick_base::JoystickBase::TYPE_KEY) {
                 let can_apply_before = object
                     .with_downcast_mut::<Joystick, _>(|joystick| {
@@ -2898,6 +2904,8 @@ impl Artboard {
         for host in hosts {
             if host.is_type_of(NestedArtboard::TYPE_KEY) {
                 NestedArtboard::update_data_binds_occurrence(&host);
+            } else if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::update_data_binds_occurrence(&host);
             } else {
                 ArtboardComponentList::update_data_binds_occurrence(&host);
             }
@@ -5679,6 +5687,10 @@ impl Artboard {
                         .flatten()
                 })
                 .flatten();
+            if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::internal_data_context_occurrence(&host, value.clone());
+                continue;
+            }
             host.with_mut(|host| {
                 if let Some(host) = host.as_artboard_host_mut() {
                     if let Some(instance) = instance {
@@ -5747,6 +5759,10 @@ impl Artboard {
             })
             .expect("live Artboard");
         for host in hosts {
+            if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::clear_data_context_occurrence(&host);
+                continue;
+            }
             host.with_mut(|host| {
                 if let Some(host) = host.as_artboard_host_mut() {
                     host.clear_data_context();
@@ -5786,6 +5802,10 @@ impl Artboard {
             .with_downcast::<Artboard, _>(|artboard| artboard.artboard_hosts.clone())
             .expect("live Artboard");
         for host in hosts {
+            if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::unbind_occurrence(&host);
+                continue;
+            }
             host.with_mut(|host| {
                 if let Some(host) = host.as_artboard_host_mut() {
                     host.unbind();
@@ -5880,6 +5900,10 @@ impl Artboard {
                 .flatten();
             let value =
                 resolved.or_else(|| context.with_context(DataContext::main_view_model_instance));
+            if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::relink_data_context_occurrence(&host, value);
+                continue;
+            }
             host.with_mut(|host| {
                 if let Some(host) = host.as_artboard_host_mut() {
                     host.relink_data_context(value);
@@ -5892,6 +5916,10 @@ impl Artboard {
         self.clear_data_context_for_drop();
         self.data_bind_container.unbind_data_binds();
         for host in self.artboard_hosts.clone() {
+            if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::unbind_occurrence(&host);
+                continue;
+            }
             host.with_mut(|host| {
                 if let Some(host) = host.as_artboard_host_mut() {
                     host.unbind();
@@ -5931,6 +5959,10 @@ impl Artboard {
             }
         }
         for host in self.artboard_hosts.clone() {
+            if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
+                crate::source::shapes::paint::paint_image::PaintImage::clear_data_context_occurrence(&host);
+                continue;
+            }
             host.with_mut(|host| {
                 if let Some(host) = host.as_artboard_host_mut() {
                     host.clear_data_context();

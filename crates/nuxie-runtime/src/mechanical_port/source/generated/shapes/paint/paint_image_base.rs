@@ -12,6 +12,7 @@ pub trait PaintImageBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
+    fn artboard_id_changed(&mut self) {}
 }
 
 pub struct PaintImageBase {
@@ -26,6 +27,7 @@ pub struct PaintImageBase {
     image_offset_y: f32,
     image_rotation: f32,
     image_size_mode: u8,
+    artboard_id: u32,
 }
 impl Default for PaintImageBase {
     fn default() -> Self {
@@ -41,6 +43,7 @@ impl Default for PaintImageBase {
             image_offset_y: 0.0,
             image_rotation: 0.0,
             image_size_mode: 0,
+            artboard_id: u32::MAX,
         }
     }
 }
@@ -56,6 +59,7 @@ impl PaintImageBase {
     pub const IMAGE_OFFSET_Y_PROPERTY_KEY: u16 = 410;
     pub const IMAGE_ROTATION_PROPERTY_KEY: u16 = 411;
     pub const IMAGE_SIZE_MODE_PROPERTY_KEY: u16 = 412;
+    pub const ARTBOARD_ID_PROPERTY_KEY: u16 = 487;
     pub fn is_type_of(type_key: u16) -> bool {
         Self::TYPE_KEY == type_key
             || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
@@ -68,6 +72,24 @@ impl PaintImageBase {
     }
     pub fn image_asset_id(&self) -> u32 {
         self.image_asset_id
+    }
+    pub fn artboard_id(&self) -> u32 {
+        self.artboard_id
+    }
+    pub fn set_artboard_id<C: PaintImageBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
+        if !self.set_artboard_id_value(value) {
+            return;
+        }
+        #[cfg(feature = "editor")]
+        callbacks.artboard_id_changed();
+        PaintImageBaseCallbacks::notify_property_changed(callbacks, Self::ARTBOARD_ID_PROPERTY_KEY);
+    }
+    pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {
+        if self.artboard_id == value {
+            return false;
+        }
+        self.artboard_id = value;
+        true
     }
     pub fn set_image_asset_id<C: PaintImageBaseCallbacks>(
         &mut self,
@@ -304,6 +326,7 @@ impl PaintImageBase {
         self.image_offset_y = object.image_offset_y;
         self.image_rotation = object.image_rotation;
         self.image_size_mode = object.image_size_mode;
+        self.artboard_id = object.artboard_id;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize<C: PaintImageBaseCallbacks>(
@@ -313,6 +336,10 @@ impl PaintImageBase {
         callbacks: &mut C,
     ) -> bool {
         match property_key {
+            Self::ARTBOARD_ID_PROPERTY_KEY => {
+                self.artboard_id = CoreIdType::runtime_deserialize(reader);
+                true
+            }
             Self::IMAGE_ASSET_ID_PROPERTY_KEY => {
                 self.image_asset_id = CoreIdType::runtime_deserialize(reader);
                 true

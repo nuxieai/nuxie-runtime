@@ -4,6 +4,7 @@
 mod additive_advanced_blend;
 mod additive_blend;
 mod bitmap_cache_pixel;
+mod canvas_paint_image;
 mod clipstrokes;
 mod emptypath;
 mod gradients;
@@ -26,6 +27,7 @@ mod ore_nested_pass;
 mod ore_pipeline_switch;
 mod ore_render_deferred_canvas;
 mod ore_vertex_buffer_before_pipeline;
+mod paint_artboard_pixel_test;
 mod render_canvas;
 mod render_canvas_dag;
 mod render_deferred_2d;

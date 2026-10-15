@@ -19,6 +19,46 @@ use crate::mechanical_port::source::{
 
 use super::symbol_type::SymbolType;
 
+#[cfg(all(test, feature = "editor"))]
+mod editor_clone_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::CoreArena,
+        viewmodel::{
+            viewmodel_instance_number::ViewModelInstanceNumber,
+            viewmodel_property_number::ViewModelPropertyNumber,
+        },
+    };
+
+    #[test]
+    fn cloned_values_retain_shared_editor_property_metadata() {
+        let arena = CoreArena::default();
+        let metadata = arena.insert(ViewModelPropertyNumber::default());
+        let value = arena.insert(ViewModelInstanceNumber::default());
+        value.with_mut(|value| {
+            value
+                .as_view_model_instance_value_mut()
+                .unwrap()
+                .set_view_model_property(metadata.clone());
+        });
+        let source = arena.insert(ViewModelInstance::default());
+        source.with_downcast_mut::<ViewModelInstance, _>(|source| source.append_value(value.clone()));
+        let cloned = ViewModelInstance::clone_instance(&source).unwrap();
+        let cloned_value = cloned
+            .with_downcast::<ViewModelInstance, _>(|cloned| cloned.property_values()[0].clone())
+            .unwrap();
+        assert_ne!(cloned_value, value);
+        assert_eq!(
+            cloned_value
+                .with(|value| {
+                    value.as_view_model_instance_value().unwrap().view_model_property()
+                })
+                .flatten(),
+            Some(metadata)
+        );
+    }
+}
+
 #[derive(Clone)]
 pub enum DataBindContainerDependent {
     Authored(CoreHandle),
@@ -514,11 +554,24 @@ impl ViewModelInstance {
         if copy_values {
             cloned.with_downcast_mut::<Self, _>(|cloned| cloned.reserve_values(properties.len()));
             for property in &properties {
-                let Some(property) = property.clone_occurrence() else {
+                let Some(cloned_property) = property.clone_occurrence() else {
                     return false;
                 };
+                #[cfg(feature = "editor")]
+                {
+                    let metadata = property
+                        .with(|property| {
+                            property.as_view_model_instance_value()?.view_model_property()
+                        })
+                        .flatten();
+                    cloned_property.with_mut(|property| {
+                        if let Some(property) = property.as_view_model_instance_value_mut() {
+                            property.set_view_model_property(metadata);
+                        }
+                    });
+                }
                 if cloned
-                    .with_downcast_mut::<Self, _>(|cloned| cloned.append_value(property))
+                    .with_downcast_mut::<Self, _>(|cloned| cloned.append_value(cloned_property))
                     .is_none()
                 {
                     return false;

@@ -127,7 +127,9 @@ impl ScriptedArtboard {
         state: &mut LuaState,
         view_model: Option<Rc<ViewModelInstance>>,
     ) -> i32 {
-        let mut artboard = self.artboard_mut().instance();
+        let Some(mut artboard) = self.artboard_mut().instance() else {
+            return state.error("Could not instantiate artboard".to_owned());
+        };
         artboard.set_frame_origin(false);
         state.new_rive(ScriptedArtboard::new(
             state,

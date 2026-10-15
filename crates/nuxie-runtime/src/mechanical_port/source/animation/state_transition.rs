@@ -181,8 +181,9 @@ impl StateTransition {
         if self.is_disabled() {
             return AllowTransition::No;
         }
-        for c in &self.conditions {
-            if !r.evaluate_condition(c, machine, layer.clone()) {
+        for index in 0..self.condition_count() {
+            let condition = self.condition(index).expect("condition index is in range");
+            if !r.evaluate_condition(&condition, machine, layer.clone()) {
                 return AllowTransition::No;
             }
         }
@@ -222,8 +223,9 @@ impl StateTransition {
         layer: RuntimeStateMachineLayerInstanceWeakHandle,
         r: &dyn TransitionRuntime,
     ) {
-        for c in &self.conditions {
-            r.use_condition_in_layer(c, machine, layer.clone())
+        for index in 0..self.condition_count() {
+            let condition = self.condition(index).expect("condition index is in range");
+            r.use_condition_in_layer(&condition, machine, layer.clone())
         }
     }
 }

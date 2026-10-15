@@ -14,6 +14,34 @@ pub struct ShapePaintContainer {
     cells: Rc<ContainerCells>,
 }
 
+#[cfg(test)]
+mod registration_tests {
+    use super::*;
+    use crate::mechanical_port::source::{core::CoreArena, shapes::paint::fill::Fill};
+
+    #[test]
+    fn paint_registration_matches_editor_identity_deduplication() {
+        let arena = CoreArena::default();
+        let first = arena.insert(Fill::default());
+        let second = arena.insert(Fill::default());
+        let mut container = ShapePaintContainer::default();
+        for paint in [&first, &first, &second] {
+            let cells = paint
+                .with(|paint| Rc::clone(paint.as_shape_paint().unwrap().cells()))
+                .unwrap();
+            container.add_paint(paint.clone(), cells);
+        }
+        #[cfg(feature = "editor")]
+        assert_eq!(container.shape_paints(), &[first, second]);
+        #[cfg(not(feature = "editor"))]
+        assert_eq!(container.shape_paints(), &[first.clone(), first, second]);
+        assert_eq!(
+            container.cells.paints.borrow().len(),
+            container.shape_paints().len()
+        );
+    }
+}
+
 /// A paint container's path flags and paints, shared with the path pipeline's
 /// cells (ShapeCells) so they read them without borrowing the container.
 pub(crate) struct ContainerCells {
@@ -105,6 +133,10 @@ impl ShapePaintContainer {
     }
 
     pub(crate) fn add_paint(&mut self, paint: CoreHandle, cells: Rc<PaintCells>) {
+        #[cfg(feature = "editor")]
+        if self.shape_paints.contains(&paint) {
+            return;
+        }
         cells.set_container(Rc::downgrade(&self.cells));
         self.shape_paints = self
             .shape_paints

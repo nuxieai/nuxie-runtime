@@ -46,18 +46,39 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `fdd555d62280db2f1d659b0d8fd821ed6a4d11f3`
+- LAST_SYNCED_SHA: `8f06a91c7dad29a8cb1345535c0855de3ace4411`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 248 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (270 after `5892bb05`); this
+  Zero upstream commits remain after this checkpoint at the fetched target.
+  All 249 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (271 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `8f06a91c`, integrated atop downstream `325b282ef7`:
+  independent source-equivalence and subsequent fresh Rust-integration reviews
+  are clean. Runtime units pass 408 with two existing ignores; editor-enabled
+  runtime units pass 409 with two existing ignores; live scripting units pass
+  363 with one existing ignore. All three supplied nested-animation/editor
+  integration tests pass. The integration test initially called a nonexistent
+  strong-handle identity method; both rereviews accepted the test-only correction
+  to the existing weak-handle identity comparison. Production bytes were unchanged;
+  the three integration tests were rerun, not the complete unit suites afterward.
+  Live scripting and its runtime dependency compile for wasm32-unknown-unknown.
+  Source/manifest/pipeline checks pass 39; generated build files are current.
+  An initial manifest invocation omitted the explicit upstream directory and
+  rejected another checkout's pin; the correctly scoped invocation passes.
+  The translated Lua regression uses a real null-data host thread and replaces
+  actual renderer/frame context roots before collection and VM destruction with
+  File still alive. This tests approved Rust ownership, not native REV lifetime
+  callbacks. A supplemental failed-hydration test confirms input remains unset.
+  Native REV arenas, persistent-ID decoding/resolution, mutation/validation and
+  borrowed editor comparator ownership remain excluded under d4fe1022; shared
+  editor helpers are included. Inactive mirrored Lua modules are not claimed
+  executed. No browser execution, new device or guest-Wasm coverage is claimed.
 - Validation at `fdd555d6`, integrated atop downstream `5ea7a8fd55`:
   independent source-equivalence and subsequent fresh Rust-integration reviews
   and correction rereviews are clean. Source review restored the upstream
@@ -1099,6 +1120,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `8f06a91c7dad29a8cb1345535c0855de3ace4411` | Translate supplied nested-animation definition/instance APIs with focus-before-input ordering, count/accessor transition traversal, standalone editor animation/keyboard helpers, paint identity deduplication and cloned view-model property metadata. Preserve exact artboard instantiation error and port the host-thread/context-replacement regression at the approved Rust ownership boundary; failed host hydration already constructs before publishing input. Missing-File completion is already weak-upgrade guarded; ordinary state-machine object iteration and no-arena composer/layout paths are equivalent. Native REV arena rebuilding/mounting, persistent (client,object) paths, mutation envelopes, coop validation, arena-only path-effect hydration, borrowed editor comparator/listener ownership and Lua instantiate/release/lifetime hooks remain excluded under d4fe1022. No dummy validation flags or native editor host were introduced. Private editor contents referenced by .rive_head are not claimed imported. | — |
 | `fdd555d62280db2f1d659b0d8fd821ed6a4d11f3` | Translate Mali storage-texture rotation: lazy ring slots, shared per-flush slot selection, replacement for pending or failed fences, zero-timeout polling, fence-before-flush advancement, and SSBO exclusion. Wire real browser sync objects with owning-context/generation-safe deletion; retain upstream constructor and reverse destruction order. Pending ubershaders advance synchronously by feature equality, specialized pipelines asynchronously; Vulkan has no override of the unchanged default no-op advancement. Port upstream rotation/reuse assertions at the documented recording-provider boundary and add lifetime/failure regressions. Private .rive_head contents are not claimed imported. | — |
 | `ce788b3b6b20aa641c20f320cd9ccce920648786` | Translate constant-time scripted-property untracking in live luaur and corresponding source owners: retained slot index, bounds/identity-guarded swap removal, moved-slot repair, owner/orphan registration and exact tag filtering. Preserve non-owning stable Rust identity and untrack-before-cleanup order. Port all three public stress/lifecycle tests without changing their counts or timing threshold. Private Dart editor wrapper-cache changes described in the message are absent from the public delta and are not claimed imported; existing runtime caching is unchanged. | — |
 | `ce891f526a3297f9498a3e524fce6385cf0f2f25` | Translate six shared shader owners: source-over blending, guarded UAV destination reads/writes and retained RHI declarations. Regenerate supported-backend shader inventories and exact minified-name consumers; restore the existing supplemental sampled-clip bridge's renamed aliases without enabling a new host path. Unreal-only wrappers, D3D testing aliases, Unreal deployment options and upstream-only golden launcher/filter changes have no shipped counterpart. The private .rive_head revision does not expose an additional implementation. | — |

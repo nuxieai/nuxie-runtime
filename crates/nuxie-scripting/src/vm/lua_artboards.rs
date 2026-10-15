@@ -531,6 +531,7 @@ impl UserData for ScriptedNode {
 
 #[cfg(all(test, feature = "compiler"))]
 mod artboard_owner_tests {
+    include!("artboard_context_8f06_tests.rs");
     use super::*;
     use crate::vm::ScriptViewModelFrameContext;
     use crate::vm::ScriptVm;

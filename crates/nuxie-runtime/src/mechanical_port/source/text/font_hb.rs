@@ -578,9 +578,12 @@ impl HbFont {
     /// Host equivalent of CoreTextHBFont::getPath's empty-HB recovery.
     /// Ordinary byte/file fonts never install this provider.
     pub fn with_host_outline(&self, outline: HostGlyphOutline) -> FontRef {
-        let mut font = Self::with_stored_options(
+        // A variant of this face: it shares the face's shaping caches, as
+        // with_options variants do.
+        let mut font = Self::with_face_options(
             self.bytes.clone(),
             self.face_index,
+            Some(Arc::clone(&self.face)),
             self.axis_values.clone(),
             self.feature_values.clone(),
         );

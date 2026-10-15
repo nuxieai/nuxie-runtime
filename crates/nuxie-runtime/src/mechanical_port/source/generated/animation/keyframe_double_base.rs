@@ -9,17 +9,17 @@ pub trait KeyFrameDoubleBaseCallbacks: crate::mechanical_port::source::generated
     fn value_changed(&mut self) {}
 }
 
+/// The value lives in the keyframe's shared cells, which keyed property
+/// application reads without borrowing the keyframe.
 pub struct KeyFrameDoubleBase {
     pub base: InterpolatingKeyFrame,
-    value: f32,
 }
 
 impl Default for KeyFrameDoubleBase {
     fn default() -> Self {
-        Self {
-            base: InterpolatingKeyFrame::default(),
-            value: 0.0,
-        }
+        let base = InterpolatingKeyFrame::default();
+        base.base.base.cells().set_double_value(0.0);
+        Self { base }
     }
 }
 
@@ -38,7 +38,12 @@ impl KeyFrameDoubleBase {
         Self::TYPE_KEY
     }
     pub fn value(&self) -> f32 {
-        self.value
+        self.base
+            .base
+            .base
+            .cells()
+            .double_value()
+            .expect("a KeyFrameDouble's cells hold its value")
     }
     pub fn set_value(&mut self, value: f32, callbacks: &mut impl KeyFrameDoubleBaseCallbacks) {
         if !self.set_value_value(value) {
@@ -49,10 +54,10 @@ impl KeyFrameDoubleBase {
     }
 
     pub(crate) fn set_value_value(&mut self, value: f32) -> bool {
-        if self.value == value {
+        if self.value() == value {
             return false;
         }
-        self.value = value;
+        self.base.base.base.cells().set_double_value(value);
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl KeyFrameDoubleBaseCallbacks) -> KeyFrameDouble {
@@ -61,8 +66,8 @@ impl KeyFrameDoubleBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl KeyFrameDoubleBaseCallbacks) {
-        self.value = object.value;
         self.base.copy(&object.base, callbacks);
+        self.base.base.base.cells().set_double_value(object.value());
     }
     pub fn deserialize(
         &mut self,
@@ -72,7 +77,8 @@ impl KeyFrameDoubleBase {
     ) -> bool {
         match property_key {
             Self::VALUE_PROPERTY_KEY => {
-                self.value = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                let value = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.base.base.base.cells().set_double_value(value);
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

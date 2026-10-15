@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyframe_cells::{KeyFrameCells, KeyFrameEntry, KeyedPropertyCells, closest_frame_index},
+        keyframe_double::KeyFrameDouble,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
         keyframe_interpolator::KeyFrameInterpolator, linear_animation::LinearAnimation,
     },
@@ -233,40 +234,56 @@ impl KeyedProperty {
         artboard: &dyn KeyedObjectContext,
         interpolator_host: Option<&CoreHandle>,
     ) {
-        let (frame_count, index, override_key) = property.with_frames(|frames| {
-            assert!(!frames.is_empty());
-            (
-                frames.len(),
-                closest_frame_index(frames, seconds, 0),
-                property.property_key(),
-            )
-        });
-        let mix = if interpolator_host
-            .is_some_and(|host| artboard.overrides_keyed_interpolation(host, override_key))
-        {
-            1.0
-        } else {
-            mix
-        };
-        let selection = property.with_frames(|frames| {
-            let property_key = property.property_key() as i32;
-            if index == 0 {
-                (property_key, frames[0].handle.clone(), None)
-            } else if index < frame_count as i32 {
-                let from = &frames[index as usize - 1];
-                let to = &frames[index as usize];
-                if seconds == to.cells.seconds() {
-                    (property_key, to.handle.clone(), None)
-                } else if from.cells.interpolation_type() == 0 {
-                    (property_key, from.handle.clone(), None)
+        // The frame lists are replaced, never edited, so one snapshot serves
+        // both the search and the selection unless the host hook runs in
+        // between; then the selection reads the current list.
+        let searched = property.frames();
+        assert!(!searched.is_empty());
+        let frame_count = searched.len();
+        let index = closest_frame_index(&searched, seconds, 0);
+        let (frames, mix) = match interpolator_host {
+            None => (searched, mix),
+            Some(host) => {
+                let mix = if artboard.overrides_keyed_interpolation(host, property.property_key()) {
+                    1.0
                 } else {
-                    (property_key, from.handle.clone(), Some(to.handle.clone()))
-                }
-            } else {
-                (property_key, frames[index as usize - 1].handle.clone(), None)
+                    mix
+                };
+                drop(searched);
+                (property.frames(), mix)
             }
-        });
-        Self::apply_selected(selection, object, seconds, mix, context);
+        };
+        let property_key = property.property_key() as i32;
+        let (frame, next) = if index == 0 {
+            (&frames[0], None)
+        } else if index < frame_count as i32 {
+            let from = &frames[index as usize - 1];
+            let to = &frames[index as usize];
+            if seconds == to.cells.seconds() {
+                (to, None)
+            } else if from.cells.interpolation_type() == 0 {
+                (from, None)
+            } else {
+                (from, Some(to))
+            }
+        } else {
+            (&frames[index as usize - 1], None)
+        };
+        match (next, frame.cells.double_value()) {
+            // A double keyframe applies from its cells.
+            (None, Some(stored)) => {
+                KeyFrameDouble::apply_stored(&frame.handle, stored, &object, property_key, mix, context);
+            }
+            (None, None) => {
+                frame.handle.with(|keyframe| keyframe.keyframe_apply(object, property_key, mix, context));
+            }
+            (Some(next), _) => {
+                let next = next.handle.clone();
+                frame.handle.with(|keyframe| {
+                    keyframe.keyframe_interpolate(object, property_key, seconds, next, mix, context)
+                });
+            }
+        }
     }
 
     /// The source searches frames before the host override, then reads the

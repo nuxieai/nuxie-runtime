@@ -7,7 +7,8 @@ use crate::mechanical_port::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
     core::CoreHandle,
     data_bind::{
-        data_bind::DataBind, data_bind_context::DataBindContext,
+        data_bind::{DataBind, DataBindAdvanceCells},
+        data_bind_context::DataBindContext,
         data_context::RuntimeDataContextHandle,
     },
     sidecar::Sidecar,
@@ -225,6 +226,8 @@ struct DataBindContainerState {
     owner: Option<DataBindContainerOwner>,
     parent_data_bind: Option<CoreHandle>,
     data_binds: Vec<CoreHandle>,
+    // Each bind's advance cells, in data_binds order.
+    advance_cells: Vec<Rc<DataBindAdvanceCells>>,
     dirty: Vec<CoreHandle>,
     queues: Sidecar<DataBindQueues>,
     data_context: Option<RuntimeDataContextHandle>,
@@ -415,9 +418,17 @@ impl DataBindContainer {
         for index in 0..count {
             // Keep the retained source list in place. The handle clone only
             // extends this entry's lifetime while advance can call back into
-            // the runtime; it is not a snapshot of the full object list.
-            let Some(bind) = self.0.borrow().data_binds.get(index).cloned() else {
-                break;
+            // the runtime; it is not a snapshot of the full object list. A
+            // bind whose cells fail advance's gate would answer false.
+            let bind = {
+                let state = self.0.borrow();
+                let Some(cells) = state.advance_cells.get(index) else {
+                    break;
+                };
+                if !cells.may_advance() {
+                    continue;
+                }
+                state.data_binds[index].clone()
             };
             updated |= DataBind::advance_handle(&bind, elapsed);
         }
@@ -428,6 +439,19 @@ impl DataBindContainer {
         list.retain(|item| item != bind);
     }
 
+    /// Remove `bind` from the bind list and its cells from theirs.
+    fn erase_bind(state: &mut DataBindContainerState, bind: &CoreHandle) {
+        let mut index = 0;
+        while index < state.data_binds.len() {
+            if &state.data_binds[index] == bind {
+                state.data_binds.remove(index);
+                state.advance_cells.remove(index);
+            } else {
+                index += 1;
+            }
+        }
+    }
+
     pub fn remove_data_bind(&self, bind: CoreHandle) {
         {
             let mut state = self.0.borrow_mut();
@@ -435,7 +459,7 @@ impl DataBindContainer {
                 state.queues.ensure_allocated().pending_removals.push(bind);
                 return;
             }
-            Self::erase(&mut state.data_binds, &bind);
+            Self::erase_bind(&mut state, &bind);
         }
         bind.with_mut(|object| {
             let bind_value = object
@@ -468,7 +492,12 @@ impl DataBindContainer {
                 state.queues.ensure_allocated().pending_additions.push(bind);
                 return;
             }
+            let cells = bind
+                .with(|object| object.as_data_bind().map(|bind| Rc::clone(bind.advance_cells())))
+                .flatten()
+                .unwrap_or_default();
             state.data_binds.push(bind.clone());
+            state.advance_cells.push(cells);
         }
         let persist = bind
             .with(|object| {
@@ -618,7 +647,9 @@ impl DataBindContainer {
                 .unwrap_or(false)
             {
                 if index != to_source {
-                    self.0.borrow_mut().data_binds.swap(to_source, index);
+                    let mut state = self.0.borrow_mut();
+                    state.data_binds.swap(to_source, index);
+                    state.advance_cells.swap(to_source, index);
                 }
                 to_source += 1;
             }

@@ -7,10 +7,39 @@ use crate::mechanical_port::source::{
     math::{mat2d::Mat2D, vec2d::Vec2D},
 };
 
+// Every mark is the change sequence current when it was made, so no mark
+// passes the highest one made on this thread.
+thread_local! {
+    static HIGHEST_INACTIVE_MARK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The latest change sequence a host saw while its artboards were inactive,
+/// shared with the artboards it mounts.
+#[derive(Clone, Default)]
+pub struct InactiveChangeMark(std::rc::Rc<std::cell::Cell<u64>>);
+
+impl InactiveChangeMark {
+    pub fn get(&self) -> u64 {
+        self.0.get()
+    }
+
+    /// Mark the change sequence current now.
+    pub fn mark_latest(&self) {
+        let sequence = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
+        self.0.set(sequence);
+        HIGHEST_INACTIVE_MARK.with(|highest| highest.set(highest.get().max(sequence)));
+    }
+
+    /// No mark on this thread is above this.
+    pub fn highest() -> u64 {
+        HIGHEST_INACTIVE_MARK.with(std::cell::Cell::get)
+    }
+}
+
 pub trait ArtboardHost {
     /// The host's actual inactive sequence storage is shared with mounted
     /// artboards so a child can read it while its host is advancing it.
-    fn inactive_change_sequence_state(&self) -> std::rc::Rc<std::cell::Cell<u64>>;
+    fn inactive_change_sequence_state(&self) -> InactiveChangeMark;
     fn inactive_change_sequence(&self) -> u64 {
         self.inactive_change_sequence_state().get()
     }

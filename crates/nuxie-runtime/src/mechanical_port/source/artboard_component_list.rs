@@ -1,5 +1,5 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     collections::HashMap,
     rc::Rc,
     sync::atomic::{AtomicU32, Ordering},
@@ -173,7 +173,7 @@ pub struct ArtboardComponentList {
     layout_size_version: u32,
     layout_size_gap: f32,
     layout_size_is_horz: bool,
-    inactive_change_sequence: Rc<Cell<u64>>,
+    inactive_change_sequence: crate::mechanical_port::source::artboard_host::InactiveChangeMark,
     window_state: Vec<u8>,
     window_order: Vec<i32>,
     window_visible_count: i32,
@@ -216,7 +216,7 @@ impl Default for ArtboardComponentList {
             layout_size_version: 0,
             layout_size_gap: 0.0,
             layout_size_is_horz: false,
-            inactive_change_sequence: Rc::new(Cell::new(0)),
+            inactive_change_sequence: Default::default(),
             window_state: Vec::new(),
             window_order: Vec::new(),
             window_visible_count: 0,
@@ -1304,9 +1304,7 @@ impl ArtboardComponentList {
                     return true;
                 }
                 if owner.component().is_collapsed() {
-                    owner
-                        .inactive_change_sequence
-                        .set(ViewModelInstanceValue::latest_change_sequence());
+                    owner.inactive_change_sequence.mark_latest();
                     return true;
                 }
                 false
@@ -3057,7 +3055,7 @@ impl VirtualizingComponent for ArtboardComponentList {
 }
 
 impl ArtboardHost for ArtboardComponentList {
-    fn inactive_change_sequence_state(&self) -> Rc<Cell<u64>> {
+    fn inactive_change_sequence_state(&self) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
         self.inactive_change_sequence.clone()
     }
     fn data_bind_path_referencer(

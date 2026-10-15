@@ -39,7 +39,7 @@ pub struct PaintImage {
     pub asset_referencer: FileAssetReferencer,
     pub artboard_referencer: ArtboardReferencer,
     file: Option<RuntimeFileWeakHandle>,
-    inactive_sequence: Rc<Cell<u64>>,
+    inactive_sequence: crate::mechanical_port::source::artboard_host::InactiveChangeMark,
     bind_path: DataBindPathReferencer,
 }
 
@@ -445,7 +445,9 @@ impl AdvancingComponent for PaintImage {
     }
 }
 impl ArtboardHost for PaintImage {
-    fn inactive_change_sequence_state(&self) -> Rc<Cell<u64>> {
+    fn inactive_change_sequence_state(
+        &self,
+    ) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
         self.inactive_sequence.clone()
     }
     fn data_bind_path_referencer(&self) -> &DataBindPathReferencer {

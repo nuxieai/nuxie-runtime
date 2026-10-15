@@ -93,7 +93,7 @@ pub struct NestedArtboard {
     cumulated_seconds: f32,
     owns_active_vmi: bool,
     host_flags: NestedArtboardHostFlags,
-    inactive_change_sequence: std::rc::Rc<std::cell::Cell<u64>>,
+    inactive_change_sequence: crate::mechanical_port::source::artboard_host::InactiveChangeMark,
     // Dropped after the mounted instance and all of its dependent state.
     mounted_bindable:
         Option<crate::mechanical_port::source::bindable_artboard::RuntimeBindableArtboardHandle>,
@@ -1553,9 +1553,7 @@ impl NestedArtboard {
                     return true;
                 }
                 if owner.is_collapsed() || owner.base.is_paused() {
-                    owner.inactive_change_sequence.set(
-                        crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence(),
-                    );
+                    owner.inactive_change_sequence.mark_latest();
                     return true;
                 }
                 false
@@ -1797,7 +1795,7 @@ impl crate::mechanical_port::source::resetting_component::ResettingComponent for
 }
 
 impl ArtboardHost for NestedArtboard {
-    fn inactive_change_sequence_state(&self) -> std::rc::Rc<std::cell::Cell<u64>> {
+    fn inactive_change_sequence_state(&self) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
         self.inactive_change_sequence.clone()
     }
     fn data_bind_path_referencer(&self) -> &DataBindPathReferencer {

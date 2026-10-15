@@ -1,11 +1,70 @@
-//! Literal port of yoga_grid_virtual_contributions_test.cpp at 160085c6.
-//! Taffy is the approved layout engine; contributions and realized nodes must agree.
+//! Port of yoga_grid_virtual_contributions_test.cpp at 160085c6, re-expressed
+//! for stock Taffy. Rive's Yoga sized unrealized tracks inside the solver
+//! (`YGNodeSetGridVirtualContributions`); Nuxie instead appends Taffy-only
+//! grid items that stand in for the unrealized items
+//! (`layout_tree::virtual_item_styles`). The upstream property still holds:
+//! contributions and realized items must size tracks identically.
+use nuxie_runtime::source::layout::{
+    layout_style_applier::rive_default_style,
+    layout_tree::{grid_lines, virtual_item_styles},
+};
+use std::collections::HashMap;
 use taffy::{
     geometry::MinMax,
     prelude::*,
-    style::{GridPlacement, GridTemplateComponent, MaxTrackSizingFunction, MinTrackSizingFunction},
+    style::{MaxTrackSizingFunction, MinTrackSizingFunction},
     tree::DetailedLayoutInfo,
 };
+
+/// A stock tree plus each grid's virtual items, as the runtime keeps them.
+#[derive(Clone, Default)]
+struct Tree {
+    t: TaffyTree<()>,
+    virtual_items: HashMap<NodeId, (Vec<f32>, Vec<f32>, Vec<NodeId>)>,
+}
+impl std::ops::Deref for Tree {
+    type Target = TaffyTree<()>;
+    fn deref(&self) -> &Self::Target {
+        &self.t
+    }
+}
+impl std::ops::DerefMut for Tree {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.t
+    }
+}
+impl Tree {
+    /// Replace a grid's virtual items; returns whether the inputs changed.
+    fn set_grid_virtual_contributions(
+        &mut self,
+        node: NodeId,
+        rows: &[f32],
+        columns: &[f32],
+    ) -> bool {
+        let finite = |values: &[f32]| {
+            values
+                .iter()
+                .map(|v| if v.is_finite() { *v } else { 0.0 })
+                .collect::<Vec<_>>()
+        };
+        let (rows, columns) = (finite(rows), finite(columns));
+        let entry = self.virtual_items.entry(node).or_default();
+        if entry.0 == rows && entry.1 == columns {
+            return false;
+        }
+        for item in std::mem::take(&mut entry.2) {
+            self.t.remove(item).unwrap();
+        }
+        let mut items = Vec::new();
+        for style in virtual_item_styles(&rows, &columns) {
+            let item = self.t.new_leaf(style).unwrap();
+            self.t.add_child(node, item).unwrap();
+            items.push(item);
+        }
+        self.virtual_items.insert(node, (rows, columns, items));
+        true
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
@@ -263,13 +322,9 @@ fn tracks(values: &[Track]) -> Vec<GridTemplateComponent<String>> {
 }
 fn yoga_style() -> Style {
     Style {
-        flex_direction: FlexDirection::Column,
-        flex_shrink: 0.0,
-        align_content: Some(AlignContent::START),
-        justify_content: Some(JustifyContent::START),
-        align_items: Some(AlignItems::STRETCH),
-        justify_items: Some(JustifyItems::STRETCH),
-        ..Default::default()
+        align_content: AlignContent::START,
+        justify_content: JustifyContent::START,
+        ..rive_default_style()
     }
 }
 fn grid_style(width: f32) -> Style {
@@ -282,12 +337,12 @@ fn grid_style(width: f32) -> Style {
         ..yoga_style()
     }
 }
-fn tree() -> TaffyTree<()> {
-    let mut tree = TaffyTree::new();
+fn tree() -> Tree {
+    let mut tree = Tree::default();
     tree.disable_rounding();
     tree
 }
-fn calculate(t: &mut TaffyTree<()>, root: NodeId) {
+fn calculate(t: &mut Tree, root: NodeId) {
     t.compute_layout(
         root,
         Size {
@@ -297,14 +352,10 @@ fn calculate(t: &mut TaffyTree<()>, root: NodeId) {
     )
     .unwrap();
 }
-fn lines(t: &TaffyTree<()>, node: NodeId, rows: bool) -> Vec<f32> {
+fn lines(t: &Tree, node: NodeId, rows: bool) -> Vec<f32> {
     match t.detailed_layout_info(node) {
         DetailedLayoutInfo::Grid(info) => {
-            if rows {
-                info.rows.line_offsets.clone()
-            } else {
-                info.columns.line_offsets.clone()
-            }
+            grid_lines(if rows { &info.rows } else { &info.columns }, 0.0).0
         }
         _ => Vec::new(),
     }
@@ -401,11 +452,11 @@ fn solve(g: &Grid<'_>, realized: &[bool]) -> Vec<f32> {
                 height: length(g.heights[i]),
             },
             grid_row: Line {
-                start: GridPlacement::from_line_index((row + 1) as i32),
+                start: GridPlacement::from_line_index((row + 1) as i16),
                 end: GridPlacement::Auto,
             },
             grid_column: Line {
-                start: GridPlacement::from_line_index((column + 1) as i32),
+                start: GridPlacement::from_line_index((column + 1) as i16),
                 end: GridPlacement::Auto,
             },
             ..yoga_style()
@@ -414,8 +465,7 @@ fn solve(g: &Grid<'_>, realized: &[bool]) -> Vec<f32> {
     }
     let node = t.new_with_children(s, &children).unwrap();
     if realized.iter().any(|&r| !r) {
-        t.set_grid_virtual_contributions(node, &row_sizes, &column_sizes)
-            .unwrap();
+        t.set_grid_virtual_contributions(node, &row_sizes, &column_sizes);
     }
     let root = if matches!(g.sizing, Sizing::FlexParent) {
         t.new_with_children(
@@ -496,19 +546,13 @@ fn virtual_contributions_size_columns_as_items_would() {
 fn virtual_contributions_extend_implicit_grid() {
     let mut t = tree();
     let node = t.new_leaf(grid_style(200.0)).unwrap();
-    assert!(
-        t.set_grid_virtual_contributions(node, &[10.0, 20.0, 30.0], &[50.0, 60.0])
-            .unwrap()
-    );
-    assert!(
-        !t.set_grid_virtual_contributions(node, &[10.0, 20.0, 30.0], &[50.0, 60.0])
-            .unwrap()
-    );
+    assert!(t.set_grid_virtual_contributions(node, &[10.0, 20.0, 30.0], &[50.0, 60.0]));
+    assert!(!t.set_grid_virtual_contributions(node, &[10.0, 20.0, 30.0], &[50.0, 60.0]));
     calculate(&mut t, node);
     assert_eq!(lines(&t, node, true).len(), 4);
     assert_eq!(lines(&t, node, false).len(), 3);
     approx(t.layout(node).unwrap().size.height, 60.0, 0.0);
-    assert!(t.set_grid_virtual_contributions(node, &[], &[]).unwrap());
+    assert!(t.set_grid_virtual_contributions(node, &[], &[]));
     calculate(&mut t, node);
     approx(t.layout(node).unwrap().size.height, 0.0, 0.0);
 }
@@ -527,8 +571,7 @@ fn virtual_sizes_reused_only_while_inputs_hold() {
         let node = t.new_with_children(style, &[item]).unwrap();
         let mut rows = vec![40.0, 50.0, 60.0, 70.0, 80.0];
         let columns = [100.0, 90.0];
-        t.set_grid_virtual_contributions(node, &rows, &columns)
-            .unwrap();
+        t.set_grid_virtual_contributions(node, &rows, &columns);
         calculate(&mut t, node);
         let before_rows = lines(&t, node, true);
         let before_columns = lines(&t, node, false);
@@ -545,8 +588,7 @@ fn virtual_sizes_reused_only_while_inputs_hold() {
             }
             1 => {
                 rows[1] = 100.0;
-                t.set_grid_virtual_contributions(node, &rows, &columns)
-                    .unwrap();
+                t.set_grid_virtual_contributions(node, &rows, &columns);
                 calculate(&mut t, node);
                 assert_eq!(
                     lines(&t, node, true),
@@ -577,13 +619,11 @@ fn virtual_sizes_reused_only_while_inputs_hold() {
 fn virtual_contributions_copy_with_node() {
     let mut t = tree();
     let node = t.new_leaf(grid_style(100.0)).unwrap();
-    t.set_grid_virtual_contributions(node, &[10.0, 20.0], &[])
-        .unwrap();
+    t.set_grid_virtual_contributions(node, &[10.0, 20.0], &[]);
     calculate(&mut t, node);
     // This one-node tree clone deep-copies the node and its retained contribution vectors.
     let mut cloned = t.clone();
-    t.set_grid_virtual_contributions(node, &[50.0, 50.0], &[])
-        .unwrap();
+    t.set_grid_virtual_contributions(node, &[50.0, 50.0], &[]);
     calculate(&mut t, node);
     let mut s = cloned.style(node).unwrap().clone();
     s.size.width = length(101.0);
@@ -601,8 +641,7 @@ fn virtual_sizes_follow_child_into_implicit_grid_before() {
     item_style.grid_column.start = GridPlacement::from_line_index(3);
     let item = t.new_leaf(item_style).unwrap();
     let node = t.new_with_children(s, &[item]).unwrap();
-    t.set_grid_virtual_contributions(node, &[], &[100.0, 10.0])
-        .unwrap();
+    t.set_grid_virtual_contributions(node, &[], &[100.0, 10.0]);
     calculate(&mut t, node);
     let mut s = t.style(item).unwrap().clone();
     s.grid_column.start = GridPlacement::Auto;
@@ -615,18 +654,11 @@ fn virtual_sizes_follow_child_into_implicit_grid_before() {
 fn nonfinite_virtual_contributions_count_as_zero() {
     let mut t = tree();
     let node = t.new_leaf(grid_style(50.0)).unwrap();
-    assert!(
-        t.set_grid_virtual_contributions(node, &[f32::NAN, 30.0], &[])
-            .unwrap()
-    );
-    assert!(
-        !t.set_grid_virtual_contributions(node, &[f32::NAN, 30.0], &[])
-            .unwrap()
-    );
+    assert!(t.set_grid_virtual_contributions(node, &[f32::NAN, 30.0], &[]));
+    assert!(!t.set_grid_virtual_contributions(node, &[f32::NAN, 30.0], &[]));
     calculate(&mut t, node);
     assert_eq!(lines(&t, node, true), vec![0.0, 0.0, 30.0]);
-    t.set_grid_virtual_contributions(node, &[f32::INFINITY, 30.0], &[])
-        .unwrap();
+    t.set_grid_virtual_contributions(node, &[f32::INFINITY, 30.0], &[]);
     calculate(&mut t, node);
     assert_eq!(lines(&t, node, true), vec![0.0, 0.0, 30.0]);
     approx(t.layout(node).unwrap().size.height, 30.0, 0.0);
@@ -636,118 +668,36 @@ fn grid_records_content_distribution_gap() {
     let mut t = tree();
     let mut s = grid_style(100.0);
     s.size.height = length(300.0);
-    s.align_content = Some(AlignContent::SPACE_BETWEEN);
+    s.align_content = AlignContent::SPACE_BETWEEN;
     s.gap.height = length(10.0);
     let node = t.new_leaf(s).unwrap();
-    t.set_grid_virtual_contributions(node, &[50.0, 50.0], &[])
-        .unwrap();
+    t.set_grid_virtual_contributions(node, &[50.0, 50.0], &[]);
     calculate(&mut t, node);
     let DetailedLayoutInfo::Grid(info) = t.detailed_layout_info(node) else {
         panic!("grid layout");
     };
-    approx(info.rows.gap, 200.0, 0.0);
+    approx(grid_lines(&info.rows, 10.0).1, 200.0, 0.0);
     assert_eq!(lines(&t, node, true), vec![0.0, 250.0, 300.0]);
 }
 
-// Source-derived boundary regressions: pinned Yoga's ResolvedAutoPlacement
-// extends the grid with int32_t contribution counts, and its explicit grid
-// lines remain int32_t. Neither nodeless tracks nor realized cells truncate at
-// the former Taffy u16 track-count / i16 line boundaries.
+// Rive's Yoga extended grids past 32,767 lines (int32 placement and
+// contribution counts). Stock Taffy clamps a grid to 10,000 tracks per axis
+// (CSS "overlarge grids"), so a virtualized grid's tracks beyond that limit
+// are not represented: an explicit, documented drop pending a host-side
+// windowing design.
 #[test]
-fn virtual_contributions_preserve_large_nodeless_track_counts() {
-    for rows in [true, false] {
-        for count in [65_536usize, 65_537] {
-            let mut t = tree();
-            let node = t
-                .new_leaf(Style {
-                    display: Display::Grid,
-                    ..yoga_style()
-                })
-                .unwrap();
-            let contributions = vec![1.0; count];
-            let (row_sizes, column_sizes): (&[f32], &[f32]) = if rows {
-                (&contributions, &[1.0])
-            } else {
-                (&[1.0], &contributions)
-            };
-            t.set_grid_virtual_contributions(node, row_sizes, column_sizes)
-                .unwrap();
-            calculate(&mut t, node);
-            let offsets = lines(&t, node, rows);
-            assert_eq!(offsets.len(), count + 1);
-            for (index, offset) in offsets.into_iter().enumerate() {
-                assert_eq!(offset, index as f32);
-            }
-            let size = t.layout(node).unwrap().size;
-            assert_eq!(if rows { size.height } else { size.width }, count as f32);
-        }
-    }
-}
-
-#[test]
-fn realized_virtual_item_preserves_large_grid_cell_indices() {
-    const COUNT: usize = 65_537;
-    const INDEX: usize = COUNT - 1;
-    for rows in [true, false] {
-        let mut t = tree();
-        let placement = GridPlacement::from_line_index((INDEX + 1) as i32);
-        let item = t
-            .new_leaf(Style {
-                size: Size {
-                    width: length(1.0),
-                    height: length(1.0),
-                },
-                grid_row: Line {
-                    start: if rows {
-                        placement.clone()
-                    } else {
-                        GridPlacement::from_line_index(1)
-                    },
-                    end: GridPlacement::Auto,
-                },
-                grid_column: Line {
-                    start: if rows {
-                        GridPlacement::from_line_index(1)
-                    } else {
-                        placement
-                    },
-                    end: GridPlacement::Auto,
-                },
-                ..yoga_style()
-            })
-            .unwrap();
-        let node = t
-            .new_with_children(
-                Style {
-                    display: Display::Grid,
-                    ..yoga_style()
-                },
-                &[item],
-            )
-            .unwrap();
-        let contributions = vec![1.0; COUNT];
-        let (row_sizes, column_sizes): (&[f32], &[f32]) = if rows {
-            (&contributions, &[1.0])
-        } else {
-            (&[1.0], &contributions)
-        };
-        t.set_grid_virtual_contributions(node, row_sizes, column_sizes)
-            .unwrap();
-        calculate(&mut t, node);
-        let offsets = lines(&t, node, rows);
-        assert_eq!(offsets.len(), COUNT + 1);
-        assert_eq!(offsets[INDEX], INDEX as f32);
-        assert_eq!(offsets[COUNT], COUNT as f32);
-        let item_layout = t.layout(item).unwrap();
-        assert_eq!(
-            if rows {
-                item_layout.location.y
-            } else {
-                item_layout.location.x
-            },
-            INDEX as f32
-        );
-        let size = t.layout(node).unwrap().size;
-        assert_eq!(if rows { size.height } else { size.width }, COUNT as f32);
-    }
+fn virtual_contributions_beyond_i16_lines_are_not_represented() {
+    let mut t = tree();
+    let node = t
+        .new_leaf(Style {
+            display: Display::Grid,
+            ..yoga_style()
+        })
+        .unwrap();
+    let contributions = vec![1.0; 40_000];
+    t.set_grid_virtual_contributions(node, &contributions, &[1.0]);
+    calculate(&mut t, node);
+    let represented = nuxie_runtime::source::layout::layout_tree::MAX_GRID_TRACKS;
+    assert_eq!(lines(&t, node, true).len(), represented + 1);
+    assert_eq!(t.layout(node).unwrap().size.height, represented as f32);
 }

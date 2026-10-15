@@ -24,9 +24,11 @@ use crate::mechanical_port::source::{
             LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState, layout_node_owner_for,
         },
         layout_style_applier::{
-            LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDimension, YGDirection, YGDisplay,
-            YGFlexDirection, YGFloatOptional, YGPositionType, YGStyle, YGUnit, YGValue,
+            LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDirection, YGDisplay,
+            YGFlexDirection, YGPositionType, YGUnit, apply_flex_item_minimums, rive_align_self,
+            rive_dimension, rive_hug_dimension,
         },
+        layout_tree::{LayoutNodeKind, LayoutTree},
     },
     math::{aabb::Aabb, mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
     renderer::{RenderPath, Renderer},
@@ -37,6 +39,7 @@ use crate::mechanical_port::source::{
     },
     status_code::StatusCode,
 };
+use taffy::prelude::{Dimension, Style};
 
 /// Only plain groups and Solos are transparent to layout collection.
 pub fn is_transparent_layout_container(component: &CoreHandle) -> bool {
@@ -186,44 +189,6 @@ impl LayoutAnimationData {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-enum LayoutMeasureContext {
-    Layout(CoreHandle),
-    Participant(CoreHandle),
-}
-
-fn intrinsic_measure_axis(
-    known: Option<f32>,
-    available: taffy::style::AvailableSpace,
-) -> (f32, LayoutMeasureMode) {
-    use taffy::style::AvailableSpace;
-    let bounded = |value: f32| {
-        if value.is_nan() {
-            value
-        } else {
-            value.max(0.0)
-        }
-    };
-    if let Some(outer) = known {
-        // Taffy's known dimension is the outer box. Its Definite available
-        // size already excludes the inset: use it without subtracting again.
-        let inner = match available {
-            AvailableSpace::Definite(value) => value,
-            // Resolved leaf known axes normally have Definite available space.
-            // Preserve the previous exact-mode fallback for other callers.
-            _ => outer,
-        };
-        return (bounded(inner), LayoutMeasureMode::Exactly);
-    }
-    match available {
-        // Yoga clamps bounded inner dimensions before invoking measureFunc.
-        AvailableSpace::Definite(value) => (bounded(value), LayoutMeasureMode::AtMost),
-        // Probe/hug normalization happens after this boundary, not here.
-        AvailableSpace::MinContent => (0.0, LayoutMeasureMode::AtMost),
-        AvailableSpace::MaxContent => (f32::NAN, LayoutMeasureMode::Undefined),
-    }
-}
-
 /// Allocated on the first retarget or non-default inherited style and retained
 /// until destruction. Presence does not mean an animation is in flight.
 struct LayoutAnimation {
@@ -232,19 +197,6 @@ struct LayoutAnimation {
     inherited_interpolator: Option<CoreHandle>,
     inherited_interpolation: LayoutStyleInterpolation,
     inherited_interpolation_time: f32,
-}
-
-struct CachedLayoutNode {
-    owner: CoreHandle,
-    node: taffy::prelude::NodeId,
-    children: Vec<usize>,
-    measure: Option<LayoutMeasureContext>,
-}
-
-struct LayoutTreeCache {
-    tree: taffy::prelude::TaffyTree<LayoutMeasureContext>,
-    nodes: Vec<CachedLayoutNode>,
-    root: usize,
 }
 
 #[repr(u16)]
@@ -296,8 +248,17 @@ pub struct LayoutComponent {
     style: Option<CoreHandle>,
     pub(crate) layout_data: Box<LayoutData>,
     layout_children: Vec<LayoutNodeKey>,
-    layout_tree_cache: Option<LayoutTreeCache>,
+    /// The persistent solve tree, present on a layout root.
+    layout_tree: Option<Box<LayoutTree>>,
+    /// A solve of this root is running; a nested request is ignored.
+    layout_solving: bool,
+    /// This node's or a descendant's layout children changed since the last
+    /// solve of its root.
     layout_tree_topology_dirty: bool,
+    /// This node's own layout children changed.
+    layout_children_changed: bool,
+    /// The virtual grid contributions changed since the last solve.
+    virtual_grid_changed: bool,
     layout: Layout,
     layout_padding: LayoutPadding,
     solved_padding: LayoutPadding,
@@ -334,8 +295,11 @@ impl Default for LayoutComponent {
             style: None,
             layout_data: Box::new(LayoutData::default()),
             layout_children: Vec::new(),
-            layout_tree_cache: None,
+            layout_tree: None,
+            layout_solving: false,
             layout_tree_topology_dirty: true,
+            layout_children_changed: true,
+            virtual_grid_changed: false,
             layout: Layout::default(),
             layout_padding: LayoutPadding::default(),
             solved_padding: LayoutPadding::default(),
@@ -661,11 +625,15 @@ impl LayoutComponent {
         Self::mark_layout_node_dirty_with_host_occurrence(owner, force, None);
     }
 
-    /// `YGNode::markDirtyAndPropagate` reaches every ancestor in the retained
-    /// Yoga tree. The Taffy adaptation retains only the calculation root's
-    /// materialized tree, so a child-list mutation must invalidate that same
-    /// ancestor chain before the next solve.
+    /// A child-list change is reconciled by the root's next solve, which
+    /// descends only along the marked ancestor chain to the changed node.
     fn mark_layout_tree_topology_dirty_occurrence(owner: &CoreHandle) {
+        owner.with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .expect("Layout owner")
+                .layout_children_changed = true;
+        });
         let mut current = Some(owner.clone());
         let mut active = Vec::new();
         while let Some(node_owner) = current {
@@ -697,7 +665,7 @@ impl LayoutComponent {
                 if force {
                     layout.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, true);
                 }
-                layout.layout_data.dirty = true;
+                layout.layout_data.mark_dirty();
                 layout.artboard_handle()
             })
             .flatten();
@@ -978,7 +946,7 @@ impl LayoutComponent {
                 let layout = object.as_layout_component_mut().unwrap();
                 let context = layout.style_sync_context(parent_style)?;
                 Some((
-                    std::mem::take(&mut layout.layout_data.style),
+                    layout.layout_data.take_style(),
                     context,
                     layout
                         .layout_data
@@ -1031,8 +999,8 @@ impl LayoutComponent {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
             layout.apply_virtual_grid_placement(&mut style);
-            layout.layout_data.style = style;
-            layout.layout_data.dirty = true;
+            apply_flex_item_minimums(&mut style, context.parent_is_grid);
+            layout.layout_data.set_style(style);
         });
         for (child, provider) in Self::layout_providers_occurrence(owner) {
             let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
@@ -2025,6 +1993,8 @@ impl LayoutComponent {
         }
         self.grid_virtual_rows = rows.iter().map(finite).collect();
         self.grid_virtual_columns = columns.iter().map(finite).collect();
+        // Contributions become virtual grid items, resynced by the next solve.
+        self.virtual_grid_changed = true;
         self.mark_layout_node_dirty(false);
     }
     pub fn hugs_lines(&self) -> bool {
@@ -2069,7 +2039,7 @@ impl LayoutComponent {
             self.grid_column_gap
         }
     }
-    fn clear_virtual_grid_placement(&mut self, style: &mut YGStyle) {
+    fn clear_virtual_grid_placement(&mut self, style: &mut Style) {
         if let Some(grid) = self.virtual_grid.as_mut() {
             if grid.column < 0 && grid.pinned {
                 crate::source::layout::grid_track::GridTrack::sync_item_lines(style, 0, 0, 1, 1);
@@ -2077,7 +2047,7 @@ impl LayoutComponent {
             }
         }
     }
-    fn apply_virtual_grid_placement(&mut self, style: &mut YGStyle) {
+    fn apply_virtual_grid_placement(&mut self, style: &mut Style) {
         if let Some(grid) = self.virtual_grid.as_mut() {
             if grid.column >= 0 {
                 crate::source::layout::grid_track::GridTrack::sync_item_lines(
@@ -2177,7 +2147,7 @@ impl LayoutComponent {
         let Some(context) = self.style_sync_context(None) else {
             return;
         };
-        let mut taffy_style = std::mem::take(&mut self.layout_data.style);
+        let mut taffy_style = self.layout_data.take_style();
         self.clear_virtual_grid_placement(&mut taffy_style);
         let this = self.base.handle();
         let appliers = self
@@ -2206,8 +2176,8 @@ impl LayoutComponent {
             }
         }
         self.apply_virtual_grid_placement(&mut taffy_style);
-        self.layout_data.style = taffy_style;
-        self.layout_data.dirty = true;
+        apply_flex_item_minimums(&mut taffy_style, context.parent_is_grid);
+        self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
             let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
             if !excluded {
@@ -2215,14 +2185,14 @@ impl LayoutComponent {
             }
         }
     }
-    pub fn taffy_style(&self) -> taffy::style::Style {
-        self.layout_data.style.taffy_style()
+    /// The CSS style this node lays out with.
+    pub fn layout_style(&self) -> &Style {
+        self.layout_data.style()
     }
     pub fn is_intrinsic_leaf(&self) -> bool {
-        self.is_leaf()
-            && self
-                .with_style(|style| style.intrinsically_sized())
-                .unwrap_or(false)
+        self.with_style(|style| style.intrinsically_sized())
+            .unwrap_or(false)
+            && self.is_leaf()
     }
     pub fn set_solved_layout(&mut self, layout: Layout, padding: LayoutPadding) {
         self.layout_data.solved_layout = layout;
@@ -2239,6 +2209,7 @@ impl LayoutComponent {
     }
     fn mark_layout_tree_topology_dirty(&mut self) {
         self.layout_tree_topology_dirty = true;
+        self.layout_children_changed = true;
         let this = self.base.base.base.base.base.handle();
         let mut active = this.into_iter().collect::<Vec<_>>();
         let mut current = self
@@ -2470,114 +2441,569 @@ impl LayoutComponent {
         )
     }
 
-    /// Adapter for the pinned YGNodeCalculateLayout call. The tree contains
-    /// actual provider nodes, including complete hosted Artboard subtrees.
-    /// Taffy replaces Yoga only at this calculation boundary.
+    /// Solve this layout root with stock Taffy (CSS semantics; layout is a
+    /// deliberate divergence from upstream Rive's Yoga). The root keeps one
+    /// persistent tree in which every LayoutComponent and LayoutParticipant
+    /// below it, hosted artboards included, owns a stable node. A solve applies
+    /// only queued style changes and changed child lists, so Taffy's caches
+    /// carry every untouched subtree across solves.
     pub fn calculate_layout_occurrence(
         owner: &CoreHandle,
         available_width: f32,
         available_height: f32,
     ) {
-        use crate::mechanical_port::source::layout::layout_participant::LayoutParticipant;
-        use taffy::prelude::{AvailableSpace, Dimension, Display, Size, TaffyTree};
-
-        struct TopologyNode {
-            owner: CoreHandle,
-            children: Vec<usize>,
-            measure: Option<LayoutMeasureContext>,
+        let Some((size, tree)) = owner
+            .with_mut(|object| {
+                let layout = object
+                    .as_layout_component_mut()
+                    .expect("layout calculation owner");
+                // A measure callback (scripted layout) may request a solve of
+                // the root it is being measured for; that root is solving.
+                if layout.layout_solving {
+                    return None;
+                }
+                layout.layout_solving = true;
+                Some((
+                    layout.layout_solve_available_size(available_width, available_height),
+                    layout.layout_tree.take(),
+                ))
+            })
+            .expect("layout calculation owner")
+        else {
+            return;
+        };
+        let mut touched = Vec::new();
+        let mut removed = Vec::new();
+        let mut tree = match tree {
+            Some(mut tree) if Self::layout_tree_root_is_current(owner, &tree) => {
+                let root = tree.root;
+                Self::reconcile_layout_node(&mut tree, owner, root, &mut touched, &mut removed);
+                tree
+            }
+            _ => {
+                let mut tree = Box::new(LayoutTree::new(owner.clone(), LayoutNodeKind::Layout));
+                let root = tree.root;
+                Self::adopt_layout_node(&mut tree, owner, root, &mut touched, &mut removed);
+                Self::sync_layout_root_style(&mut tree, owner, (size.x, size.y), &mut touched);
+                tree
+            }
+        };
+        for (node_owner, link) in tree.sweep(removed) {
+            node_owner.with_mut(|object| {
+                if let Some(data) = Self::layout_data_of(object) {
+                    data.unlink(&link);
+                }
+            });
         }
-
-        fn node_state(
-            owner: CoreHandle,
-        ) -> Option<(taffy::style::Style, Option<LayoutMeasureContext>, bool)> {
-            owner.with(|object| {
-                if let Some(layout) = object.as_layout_component() {
-                    let measure = layout
-                        .is_intrinsic_leaf()
-                        .then(|| LayoutMeasureContext::Layout(owner.clone()));
-                    (layout.taffy_style(), measure, layout.layout_data.dirty)
-                } else {
-                    let participant = object
-                        .as_any()
-                        .downcast_ref::<LayoutParticipant>()
-                        .expect("native layout node owner");
-                    let data = participant
-                        .native_layout_data()
-                        .expect("participating node");
-                    (
-                        data.style.taffy_style(),
-                        Some(LayoutMeasureContext::Participant(owner.clone())),
-                        data.dirty,
+        Self::flush_layout_queue(&mut tree, &mut touched);
+        let same = |a: f32, b: f32| a == b || (a.is_nan() && b.is_nan());
+        if !same(tree.root_available.0, size.x) || !same(tree.root_available.1, size.y) {
+            Self::sync_layout_root_style(&mut tree, owner, (size.x, size.y), &mut touched);
+        }
+        let root = tree.root;
+        let space = |value: f32| {
+            if value.is_nan() {
+                taffy::prelude::AvailableSpace::MaxContent
+            } else {
+                taffy::prelude::AvailableSpace::Definite(value)
+            }
+        };
+        tree.taffy
+            .compute_layout_with_measure(
+                root,
+                taffy::prelude::Size {
+                    width: space(size.x),
+                    height: space(size.y),
+                },
+                |inputs, _node, context, style| {
+                    let measured = context
+                        .filter(|context| context.measured)
+                        .map(|context| (context.owner.clone(), context.kind));
+                    taffy::compute_leaf_layout(
+                        inputs,
+                        style,
+                        |_, _| 0.0,
+                        |known, available| match &measured {
+                            Some((owner, kind)) => {
+                                Self::measure_layout_node(owner, *kind, known, available)
+                            }
+                            None => taffy::prelude::Size::ZERO,
+                        },
                     )
+                },
+            )
+            .expect("valid layout calculation");
+        Self::publish_layout_tree(&tree, &touched);
+        #[cfg(debug_assertions)]
+        Self::verify_layout_against_fresh_solve(owner, (size.x, size.y));
+        owner.with_mut(|object| {
+            let layout = object
+                .as_layout_component_mut()
+                .expect("layout calculation owner");
+            layout.layout_tree = Some(tree);
+            layout.layout_solving = false;
+        });
+    }
+
+    /// Diagnostic (debug builds, `NUXIE_LAYOUT_VERIFY=<file>`): re-solve the
+    /// root in a throwaway tree built from scratch and append every published
+    /// layout that differs to that file. The persistent tree must agree with a fresh solve;
+    /// a mismatch is a stale style, topology, cache or publish bug, never a
+    /// CSS-versus-Yoga difference.
+    #[cfg(debug_assertions)]
+    fn verify_layout_against_fresh_solve(owner: &CoreHandle, available: (f32, f32)) {
+        use crate::mechanical_port::source::layout::layout_tree::{
+            root_style, virtual_item_styles,
+        };
+        use taffy::prelude::{NodeId, Size, TaffyTree};
+        type Context = (CoreHandle, LayoutNodeKind, bool);
+        static REPORT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+        let Some(report) =
+            REPORT.get_or_init(|| std::env::var_os("NUXIE_LAYOUT_VERIFY").map(Into::into))
+        else {
+            return;
+        };
+        fn build(
+            taffy: &mut TaffyTree<Context>,
+            owner: &CoreHandle,
+            nodes: &mut Vec<(CoreHandle, NodeId)>,
+        ) -> Option<NodeId> {
+            let (style, kind, measured, children, virtual_tracks) = owner.with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    Some((
+                        layout.layout_data.style().clone(),
+                        LayoutNodeKind::Layout,
+                        layout.is_intrinsic_leaf(),
+                        layout.layout_children.clone(),
+                        (
+                            layout.grid_virtual_rows.clone(),
+                            layout.grid_virtual_columns.clone(),
+                        ),
+                    ))
+                } else {
+                    let data = object
+                        .as_any()
+                        .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
+                        .native_layout_data()?;
+                    Some((
+                        data.style().clone(),
+                        LayoutNodeKind::Participant,
+                        true,
+                        Vec::new(),
+                        Default::default(),
+                    ))
+                }
+            })??;
+            let mut ids = Vec::new();
+            for child in &children {
+                if let Some(child) = layout_node_owner_for(child) {
+                    ids.extend(build(taffy, &child, nodes));
+                }
+            }
+            for style in virtual_item_styles(&virtual_tracks.0, &virtual_tracks.1) {
+                ids.push(taffy.new_leaf(style).ok()?);
+            }
+            let id = taffy
+                .new_leaf_with_context(style, (owner.clone(), kind, measured))
+                .ok()?;
+            taffy.set_children(id, &ids).ok()?;
+            nodes.push((owner.clone(), id));
+            Some(id)
+        }
+        let mut taffy = TaffyTree::<Context>::new();
+        taffy.disable_rounding();
+        let mut nodes = Vec::new();
+        let Some(root) = build(&mut taffy, owner, &mut nodes) else {
+            return;
+        };
+        let style = taffy.style(root).expect("fresh root").clone();
+        taffy
+            .set_style(root, root_style(&style, available))
+            .expect("fresh root");
+        let space = |value: f32| {
+            if value.is_nan() {
+                taffy::prelude::AvailableSpace::MaxContent
+            } else {
+                taffy::prelude::AvailableSpace::Definite(value)
+            }
+        };
+        taffy
+            .compute_layout_with_measure(
+                root,
+                Size {
+                    width: space(available.0),
+                    height: space(available.1),
+                },
+                |inputs, _node, context, style| {
+                    let measured = context
+                        .filter(|context| context.2)
+                        .map(|context| (context.0.clone(), context.1));
+                    taffy::compute_leaf_layout(
+                        inputs,
+                        style,
+                        |_, _| 0.0,
+                        |known, space| match &measured {
+                            Some((owner, kind)) => {
+                                Self::measure_layout_node(owner, *kind, known, space)
+                            }
+                            None => Size::ZERO,
+                        },
+                    )
+                },
+            )
+            .expect("fresh layout");
+        for (node_owner, id) in nodes {
+            let output = taffy.layout(id).expect("fresh node");
+            let fresh = Layout::new(
+                output.location.x,
+                output.location.y,
+                output.size.width,
+                output.size.height,
+            );
+            let published = node_owner.with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    Some(layout.layout_data.solved_layout)
+                } else {
+                    object
+                        .as_any()
+                        .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
+                        .native_layout_data()
+                        .map(|data| data.solved_layout)
+                }
+            });
+            if let Some(Some(published)) = published {
+                if published != fresh {
+                    use std::io::Write;
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(report)
+                    {
+                        let _ = writeln!(
+                            file,
+                            "mismatch: core type {:?} published {published:?} fresh {fresh:?}",
+                            node_owner.core_type()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn layout_data_of(
+        object: &mut dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> Option<&mut LayoutData> {
+        if object.as_layout_component().is_some() {
+            return object
+                .as_layout_component_mut()
+                .map(|layout| &mut *layout.layout_data);
+        }
+        object
+            .as_any_mut()
+            .downcast_mut::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
+            .native_layout_data_mut()
+    }
+
+    fn layout_tree_root_is_current(owner: &CoreHandle, tree: &LayoutTree) -> bool {
+        owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .and_then(|layout| layout.layout_data.node().cloned())
+            })
+            .flatten()
+            .is_some_and(|link| link.id() == tree.root && tree.owns(&link, owner))
+    }
+
+    /// The node `owner` holds in `tree`, adopting it (and its subtree) if it
+    /// holds none there yet.
+    fn ensure_layout_node(
+        tree: &mut LayoutTree,
+        owner: &CoreHandle,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+        removed: &mut Vec<taffy::prelude::NodeId>,
+    ) -> Option<taffy::prelude::NodeId> {
+        let (link, kind) = owner
+            .with_mut(|object| {
+                let kind = if object.as_layout_component().is_some() {
+                    LayoutNodeKind::Layout
+                } else {
+                    LayoutNodeKind::Participant
+                };
+                Some((Self::layout_data_of(object)?.node().cloned(), kind))
+            })
+            .flatten()?;
+        if let Some(link) = link.filter(|link| tree.owns(link, owner)) {
+            return Some(link.id());
+        }
+        let id = tree.new_node(owner.clone(), kind);
+        Self::adopt_layout_node(tree, owner, id, touched, removed);
+        Some(id)
+    }
+
+    /// Link `owner` to the fresh node `id` and build the subtree below it.
+    fn adopt_layout_node(
+        tree: &mut LayoutTree,
+        owner: &CoreHandle,
+        id: taffy::prelude::NodeId,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+        removed: &mut Vec<taffy::prelude::NodeId>,
+    ) {
+        let link = tree.link(id);
+        let Some((style, measured, children, virtual_tracks, stale_tree)) = owner
+            .with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    layout.layout_tree_topology_dirty = false;
+                    layout.layout_children_changed = false;
+                    layout.virtual_grid_changed = false;
+                    let measured = layout.is_intrinsic_leaf();
+                    Some((
+                        layout.layout_data.link(link),
+                        measured,
+                        layout.layout_children.clone(),
+                        (
+                            layout.grid_virtual_rows.clone(),
+                            layout.grid_virtual_columns.clone(),
+                        ),
+                        // A former root (a hosted artboard now mounted) gives
+                        // up its own tree; a later solo solve rebuilds it.
+                        layout.layout_tree.take(),
+                    ))
+                } else {
+                    Self::layout_data_of(object)
+                        .map(|data| (data.link(link), true, Vec::new(), Default::default(), None))
                 }
             })
-        }
+            .flatten()
+        else {
+            return;
+        };
+        // Release its owner handles outside the owner's borrow.
+        drop(stale_tree);
+        tree.taffy.set_style(id, style).expect("live layout node");
+        tree.taffy
+            .get_node_context_mut(id)
+            .expect("live layout node")
+            .measured = measured;
+        touched.push(id);
+        Self::set_layout_node_children(tree, id, &children, &virtual_tracks, touched, removed);
+    }
 
-        fn collect_topology(
-            owner: CoreHandle,
-            nodes: &mut Vec<TopologyNode>,
-            active: &mut Vec<CoreHandle>,
-        ) -> usize {
-            assert!(!active.contains(&owner), "cyclic layout node ownership");
-            active.push(owner.clone());
-            let children = owner
-                .with(|object| {
-                    if let Some(layout) = object.as_layout_component() {
-                        layout.layout_children.clone()
-                    } else {
-                        Vec::new()
-                    }
-                })
+    fn set_layout_node_children(
+        tree: &mut LayoutTree,
+        id: taffy::prelude::NodeId,
+        children: &[LayoutNodeKey],
+        (virtual_rows, virtual_columns): &(Vec<f32>, Vec<f32>),
+        touched: &mut Vec<taffy::prelude::NodeId>,
+        removed: &mut Vec<taffy::prelude::NodeId>,
+    ) {
+        use taffy::TraversePartialTree;
+        let mut ids = Vec::with_capacity(children.len());
+        for child in children {
+            let Some(child_owner) = layout_node_owner_for(child) else {
+                continue;
+            };
+            if let Some(child_id) = Self::ensure_layout_node(tree, &child_owner, touched, removed) {
+                ids.push(child_id);
+            }
+        }
+        ids.extend(tree.sync_virtual_items(id, virtual_rows, virtual_columns));
+        let old = tree.taffy.child_ids(id).collect::<Vec<_>>();
+        if old != ids {
+            let kept = ids
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>();
+            removed.extend(old.into_iter().filter(|child| !kept.contains(child)));
+            tree.taffy.set_children(id, &ids).expect("live layout node");
+            touched.push(id);
+        }
+    }
+
+    /// Apply child-list changes below `id`, descending only along the marked
+    /// ancestor chains of changed nodes.
+    fn reconcile_layout_node(
+        tree: &mut LayoutTree,
+        owner: &CoreHandle,
+        id: taffy::prelude::NodeId,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+        removed: &mut Vec<taffy::prelude::NodeId>,
+    ) {
+        use taffy::TraversePartialTree;
+        let Some(changed) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut()?;
+                let topology = std::mem::take(&mut layout.layout_tree_topology_dirty);
+                let children = std::mem::take(&mut layout.layout_children_changed);
+                if !topology && !children {
+                    return None;
+                }
+                Some(children.then(|| {
+                    layout.virtual_grid_changed = false;
+                    (
+                        layout.layout_children.clone(),
+                        (
+                            layout.grid_virtual_rows.clone(),
+                            layout.grid_virtual_columns.clone(),
+                        ),
+                        layout.is_intrinsic_leaf(),
+                    )
+                }))
+            })
+            .flatten()
+        else {
+            return;
+        };
+        if let Some((children, virtual_tracks, measured)) = changed {
+            let context = tree
+                .taffy
+                .get_node_context_mut(id)
                 .expect("live layout node");
-            let mut child_indices = Vec::new();
-            for child in children {
-                if let Some(child) = layout_node_owner_for(&child) {
-                    child_indices.push(collect_topology(child, nodes, active));
-                }
+            if context.measured != measured {
+                context.measured = measured;
+                tree.taffy.mark_dirty(id).expect("live layout node");
+                touched.push(id);
             }
-            let measure = node_state(owner.clone()).expect("live layout node").1;
-            assert!(
-                measure.is_none() || child_indices.is_empty(),
-                "a measured Rive layout is a leaf"
-            );
-            let index = nodes.len();
-            nodes.push(TopologyNode {
-                owner,
-                children: child_indices,
-                measure,
-            });
-            active.pop();
-            index
+            Self::set_layout_node_children(tree, id, &children, &virtual_tracks, touched, removed);
         }
+        let children = tree
+            .taffy
+            .child_ids(id)
+            .filter_map(|child| {
+                tree.taffy
+                    .get_node_context(child)
+                    .filter(|context| context.kind == LayoutNodeKind::Layout)
+                    .map(|context| (child, context.owner.clone()))
+            })
+            .collect::<Vec<_>>();
+        for (child, child_owner) in children {
+            Self::reconcile_layout_node(tree, &child_owner, child, touched, removed);
+        }
+    }
 
-        fn build_cache(owner: CoreHandle) -> LayoutTreeCache {
-            let mut topology = Vec::new();
-            let root = collect_topology(owner, &mut topology, &mut Vec::new());
-            let mut tree = TaffyTree::<LayoutMeasureContext>::new();
-            tree.disable_rounding();
-            let mut nodes: Vec<CachedLayoutNode> = Vec::with_capacity(topology.len());
-            for entry in topology {
-                let children = entry
-                    .children
-                    .iter()
-                    .map(|index| nodes[*index].node)
-                    .collect::<Vec<_>>();
-                let node = if let Some(measure) = entry.measure.clone() {
-                    tree.new_leaf_with_context(taffy::style::Style::default(), measure)
-                } else {
-                    tree.new_with_children(taffy::style::Style::default(), &children)
-                }
-                .expect("valid native layout node");
-                nodes.push(CachedLayoutNode {
-                    owner: entry.owner,
-                    node,
-                    children: entry.children,
-                    measure: entry.measure,
+    /// Copy queued style changes into the tree and drop the cached results of
+    /// changed nodes; every queued node is republished.
+    fn flush_layout_queue(tree: &mut LayoutTree, touched: &mut Vec<taffy::prelude::NodeId>) {
+        use crate::mechanical_port::source::layout::layout_tree::root_style;
+        for id in tree.take_queue() {
+            let Some(context) = tree.taffy.get_node_context(id) else {
+                continue;
+            };
+            let owner = context.owner.clone();
+            let link = tree.link(id);
+            let is_root = id == tree.root;
+            let root_available = tree.root_available;
+            let virtual_tracks = owner.with_mut(|object| {
+                let measured = object
+                    .as_layout_component()
+                    .map(LayoutComponent::is_intrinsic_leaf);
+                let virtual_tracks = object.as_layout_component_mut().and_then(|layout| {
+                    std::mem::take(&mut layout.virtual_grid_changed).then(|| {
+                        (
+                            layout.grid_virtual_rows.clone(),
+                            layout.grid_virtual_columns.clone(),
+                        )
+                    })
                 });
+                let Some(data) = Self::layout_data_of(object) else {
+                    return None;
+                };
+                let Some(update) = data.take_update(&link) else {
+                    return virtual_tracks;
+                };
+                let mut invalidate = update.invalidated;
+                if let Some(style) = update.style {
+                    invalidate |= if is_root {
+                        tree.sync_style(id, &root_style(style, root_available))
+                    } else {
+                        tree.sync_style(id, style)
+                    };
+                }
+                if let Some(measured) = measured {
+                    let context = tree
+                        .taffy
+                        .get_node_context_mut(id)
+                        .expect("live layout node");
+                    if context.measured != measured {
+                        context.measured = measured;
+                        invalidate = true;
+                    }
+                }
+                if invalidate {
+                    tree.taffy.mark_dirty(id).expect("live layout node");
+                }
+                touched.push(id);
+                virtual_tracks
+            });
+            if let Some(Some((rows, columns))) = virtual_tracks {
+                Self::sync_layout_virtual_items(tree, id, &rows, &columns, touched);
             }
-            LayoutTreeCache { tree, nodes, root }
         }
+    }
 
+    /// Replace a grid's virtual items, keeping its realized children.
+    fn sync_layout_virtual_items(
+        tree: &mut LayoutTree,
+        id: taffy::prelude::NodeId,
+        rows: &[f32],
+        columns: &[f32],
+        touched: &mut Vec<taffy::prelude::NodeId>,
+    ) {
+        use taffy::TraversePartialTree;
+        let old = tree.taffy.child_ids(id).collect::<Vec<_>>();
+        let previous = tree
+            .taffy
+            .get_node_context(id)
+            .expect("live layout node")
+            .virtual_items
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        let mut ids = old
+            .iter()
+            .copied()
+            .filter(|child| !previous.contains(child))
+            .collect::<Vec<_>>();
+        ids.extend(tree.sync_virtual_items(id, rows, columns));
+        if tree.taffy.child_ids(id).collect::<Vec<_>>() != ids {
+            tree.taffy.set_children(id, &ids).expect("live layout node");
+            touched.push(id);
+        }
+    }
+
+    fn sync_layout_root_style(
+        tree: &mut LayoutTree,
+        owner: &CoreHandle,
+        available: (f32, f32),
+        touched: &mut Vec<taffy::prelude::NodeId>,
+    ) {
+        use crate::mechanical_port::source::layout::layout_tree::root_style;
+        tree.root_available = available;
+        let style = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .map(|layout| root_style(layout.layout_data.style(), available))
+            })
+            .flatten();
+        if let Some(style) = style {
+            let root = tree.root;
+            if tree.sync_style(root, &style) {
+                touched.push(root);
+            }
+        }
+    }
+
+    fn measure_layout_node(
+        owner: &CoreHandle,
+        kind: LayoutNodeKind,
+        known: taffy::prelude::Size<Option<f32>>,
+        available: taffy::prelude::Size<taffy::prelude::AvailableSpace>,
+    ) -> taffy::prelude::Size<f32> {
+        use crate::mechanical_port::source::layout::{
+            layout_measure_mode::unbound_measure_mode, layout_participant::LayoutParticipant,
+            layout_tree::measure_axis,
+        };
         fn measure_host(
             host: &CoreHandle,
             width: f32,
@@ -2593,261 +3019,105 @@ impl LayoutComponent {
             .flatten()
             .unwrap_or_default()
         }
-
-        let size = owner
-            .with(|object| {
-                object
-                    .as_layout_component()
-                    .unwrap()
-                    .layout_solve_available_size(available_width, available_height)
-            })
-            .expect("layout calculation owner");
-        let (cached, topology_dirty) = owner
-            .with_mut(|object| {
-                let layout = object
-                    .as_layout_component_mut()
-                    .expect("layout calculation owner");
-                let topology_dirty = layout.layout_tree_topology_dirty;
-                layout.layout_tree_topology_dirty = false;
-                (layout.layout_tree_cache.take(), topology_dirty)
-            })
-            .expect("layout calculation owner");
-        let mut cache = if topology_dirty {
-            build_cache(owner.clone())
-        } else {
-            cached.unwrap_or_else(|| build_cache(owner.clone()))
+        // An unbounded axis carries no number.
+        let offer = |value: f32, mode: LayoutMeasureMode| {
+            if mode == LayoutMeasureMode::Undefined {
+                f32::NAN
+            } else {
+                value
+            }
         };
-
-        let mut read_states = |cache: &LayoutTreeCache| {
-            let mut styles = Vec::with_capacity(cache.nodes.len());
-            let mut measures = Vec::with_capacity(cache.nodes.len());
-            let mut dirty = Vec::with_capacity(cache.nodes.len());
-            for entry in &cache.nodes {
-                let (style, measure, node_dirty) = node_state(entry.owner.clone())?;
-                styles.push(style);
-                measures.push(measure);
-                dirty.push(node_dirty);
-            }
-            Some((styles, measures, dirty))
-        };
-        let (mut styles, measures, dirty) = if let Some(states) = read_states(&cache) {
-            states
-        } else {
-            // A dynamic list can retire an occurrence between topology sync and
-            // the owning root's solve. A Yoga node is destroyed with that
-            // occurrence, so discard the corresponding retained Taffy tree.
-            cache = build_cache(owner.clone());
-            read_states(&cache).expect("rebuilt layout topology contains live nodes")
-        };
-        for parent in 0..cache.nodes.len() {
-            if styles[parent].display != Display::Flex {
-                continue;
-            }
-            for child in &cache.nodes[parent].children {
-                // Yoga's flex YGNodeBoundAxis enforces explicit min dimensions
-                // and padding/border only. Taffy's Auto instead imposes a
-                // content-based minimum, preventing a fill viewport from
-                // shrinking below its scrolling contents. Adapt this solve
-                // node only: Yoga's grid algorithm does have automatic minima.
-                if styles[*child].min_size.width.is_auto() {
-                    styles[*child].min_size.width = Dimension::length(0.0);
-                }
-                if styles[*child].min_size.height.is_auto() {
-                    styles[*child].min_size.height = Dimension::length(0.0);
-                }
-            }
-        }
-        for index in 0..cache.nodes.len() {
-            let entry = &mut cache.nodes[index];
-            entry.owner.with(|object| {
-                if let Some(layout) = object.as_layout_component() {
-                    cache
-                        .tree
-                        .set_grid_virtual_contributions(
-                            entry.node,
-                            &layout.grid_virtual_rows,
-                            &layout.grid_virtual_columns,
-                        )
-                        .expect("valid native grid contributions");
-                }
-            });
-            if entry.measure != measures[index] {
-                cache
-                    .tree
-                    .set_node_context(entry.node, measures[index].clone())
-                    .expect("valid native measure context");
-                entry.measure = measures[index].clone();
-            }
-            if cache.tree.style(entry.node).expect("valid native node") != &styles[index] {
-                cache
-                    .tree
-                    .set_style(entry.node, styles[index].clone())
-                    .expect("valid native style");
-            }
-            if dirty[index] {
-                cache
-                    .tree
-                    .mark_dirty(entry.node)
-                    .expect("valid dirty native node");
-            }
-        }
-
-        let root = cache.nodes[cache.root].node;
-        let root_style = owner
-            .with(|object| {
-                object
-                    .as_layout_component()
-                    .expect("layout calculation owner")
-                    .layout_data
-                    .style
-                    .taffy_calculation_root_style(size.x, size.y)
-            })
-            .expect("live layout calculation owner");
-        if cache.tree.style(root).expect("valid calculation root") != &root_style {
-            cache
-                .tree
-                .set_style(root, root_style)
-                .expect("valid calculation root");
-        }
-        let mut parents = vec![None; cache.nodes.len()];
-        for (index, node) in cache.nodes.iter().enumerate() {
-            for child in &node.children {
-                parents[*child] = Some(index);
-            }
-        }
-        // Yoga keys owner direction, not the measured node's own direction.
-        // Resolve actual layout-tree ancestors once, retaining live handles so
-        // a direction change during a callback clears the searchable prefix.
-        let direction_owners: std::collections::HashMap<_, _> = cache
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(index, node)| {
-                let mut parent = parents[index];
-                let mut direction_owner = None;
-                while let Some(index) = parent {
-                    let candidate = &cache.nodes[index].owner;
-                    if candidate.is_type_of(LayoutComponentBase::TYPE_KEY) {
-                        direction_owner = Some(candidate.clone());
-                        break;
-                    }
-                    parent = parents[index];
-                }
-                (node.node, direction_owner)
-            })
-            .collect();
-        cache
-            .tree
-            .compute_layout_with_measure_and_probe(
-            root,
-            Size {
-                width: if size.x.is_nan() {
-                    AvailableSpace::MaxContent
-                } else {
-                    AvailableSpace::Definite(size.x)
-                },
-                height: if size.y.is_nan() {
-                    AvailableSpace::MaxContent
-                } else {
-                    AvailableSpace::Definite(size.y)
-                },
-            },
-            |node, context, _probing| {
-                // The upstream root calculation explicitly passes Inherit.
-                let direction = direction_owners.get(&node).and_then(|owner| owner.as_ref())
-                    .and_then(|owner| owner.with(|object| object.as_layout_component().unwrap().actual_direction()))
-                    .unwrap_or(LayoutDirection::Inherit);
-                let (width, height) = match context {
-                    Some(LayoutMeasureContext::Participant(owner)) => owner.with(|object| {
-                        let participant = object.as_any().downcast_ref::<LayoutParticipant>().expect("participant measurement owner");
-                        (participant.hug_unbounded() && participant.layout_width_scale_type() == LayoutScaleType::Hug as u8,
-                         participant.hug_unbounded() && participant.layout_height_scale_type() == LayoutScaleType::Hug as u8)
-                    }).expect("live participant measurement owner"),
-                    Some(LayoutMeasureContext::Layout(owner)) => owner.with(|object| {
-                        let modes = object.as_layout_component().unwrap().content_measure_modes(LayoutMeasureMode::AtMost, LayoutMeasureMode::AtMost);
-                        (modes.0 == LayoutMeasureMode::Undefined, modes.1 == LayoutMeasureMode::Undefined)
-                    }).expect("live layout measurement owner"),
-                    None => (false, false),
-                };
-                taffy::tree::RiveMeasureMetadata { owner_direction: direction as u8, normalization: u8::from(width) | (u8::from(height) << 1) }
-            },
-            |known, available, _node, context, _, probing| {
-                let (width, width_mode) = intrinsic_measure_axis(known.width, available.width);
-                let (height, height_mode) = intrinsic_measure_axis(known.height, available.height);
-                let measured = match context {
-                    Some(LayoutMeasureContext::Participant(owner)) => {
-                        use crate::mechanical_port::source::layout::layout_measure_mode::{
-                            measure_mode_for_content, unbound_measure_mode,
+        let (width, width_mode) = measure_axis(known.width, available.width);
+        let (height, height_mode) = measure_axis(known.height, available.height);
+        let measured = match kind {
+            LayoutNodeKind::Participant => {
+                let Some((host, width_mode, height_mode)) = owner
+                    .with(|object| {
+                        let participant = object.as_any().downcast_ref::<LayoutParticipant>()?;
+                        let hug = |scale: u8, mode: LayoutMeasureMode| {
+                            if participant.hug_unbounded() && scale == LayoutScaleType::Hug as u8 {
+                                unbound_measure_mode(mode)
+                            } else {
+                                mode
+                            }
                         };
-                        let (host, mut width_mode, mut height_mode) = owner
-                            .with(|object| {
-                                let participant = object.as_any().downcast_ref::<LayoutParticipant>()
-                                    .expect("participant measurement owner");
-                                let mut w = width_mode;
-                                let mut h = height_mode;
-                                if participant.hug_unbounded() {
-                                    if participant.layout_width_scale_type() == LayoutScaleType::Hug as u8 {
-                                        w = unbound_measure_mode(w);
-                                    }
-                                    if participant.layout_height_scale_type() == LayoutScaleType::Hug as u8 {
-                                        h = unbound_measure_mode(h);
-                                    }
-                                }
-                                (participant.measurement_host_handle(), w, h)
-                            })
-                            .expect("live participant measurement owner");
-                        width_mode = measure_mode_for_content(width_mode, width, probing);
-                        height_mode = measure_mode_for_content(height_mode, height, probing);
-                        host.map(|host| measure_host(&host, width, width_mode, height, height_mode)).unwrap_or_default()
-                    }
-                    Some(LayoutMeasureContext::Layout(owner)) => {
-                        use crate::mechanical_port::source::layout::layout_measure_mode::measure_mode_for_content;
-                        let width_mode = measure_mode_for_content(width_mode, width, probing);
-                        let height_mode = measure_mode_for_content(height_mode, height, probing);
-                        let (children, (width_mode, height_mode)) = owner
-                            .with(|object| {
-                                let layout = object.as_layout_component().unwrap();
-                                (object.as_container_component().unwrap().children().to_vec(),
-                                 layout.content_measure_modes(width_mode, height_mode))
-                            })
-                            .expect("measurement owner");
-                        let mut measured = Vec2D::default();
-                        for child in children {
-                            let is_layout = child
-                                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY);
-                            if is_layout {
-                                continue;
-                            }
-                            let next = measure_host(&child, width, width_mode, height, height_mode);
-                            if measured.x < next.x {
-                                measured.x = next.x;
-                            }
-                            if measured.y < next.y {
-                                measured.y = next.y;
-                            }
-                        }
-                        measured
-                    }
-                    None => Vec2D::default(),
+                        Some((
+                            participant.measurement_host_handle(),
+                            hug(participant.layout_width_scale_type(), width_mode),
+                            hug(participant.layout_height_scale_type(), height_mode),
+                        ))
+                    })
+                    .flatten()
+                else {
+                    return taffy::prelude::Size::ZERO;
                 };
-                Size {
-                    width: known.width.unwrap_or(measured.x),
-                    height: known.height.unwrap_or(measured.y),
+                host.map(|host| {
+                    measure_host(
+                        &host,
+                        offer(width, width_mode),
+                        width_mode,
+                        offer(height, height_mode),
+                        height_mode,
+                    )
+                })
+                .unwrap_or_default()
+            }
+            LayoutNodeKind::Layout => {
+                let Some((children, (width_mode, height_mode))) = owner.with(|object| {
+                    let layout = object
+                        .as_layout_component()
+                        .expect("layout measurement owner");
+                    (
+                        object.as_container_component().unwrap().children().to_vec(),
+                        layout.content_measure_modes(width_mode, height_mode),
+                    )
+                }) else {
+                    return taffy::prelude::Size::ZERO;
+                };
+                let width = offer(width, width_mode);
+                let height = offer(height, height_mode);
+                let mut measured = Vec2D::default();
+                for child in children {
+                    if child.is_type_of(LayoutComponentBase::TYPE_KEY) {
+                        continue;
+                    }
+                    let next = measure_host(&child, width, width_mode, height, height_mode);
+                    measured.x = measured.x.max(next.x);
+                    measured.y = measured.y.max(next.y);
                 }
-            },
-        )
-        .expect("valid native layout calculation");
-
-        let mut subtree_dirty = dirty.clone();
-        for index in 0..cache.nodes.len() {
-            subtree_dirty[index] |= cache.nodes[index]
-                .children
-                .iter()
-                .any(|child| subtree_dirty[*child]);
+                measured
+            }
+        };
+        taffy::prelude::Size {
+            width: measured.x,
+            height: measured.y,
         }
-        let mut outputs = Vec::with_capacity(cache.nodes.len());
-        for (index, entry) in cache.nodes.iter().enumerate() {
-            let output = cache.tree.layout(entry.node).expect("solved native node");
+    }
+
+    /// Publish solved layouts to their owners. Descends only into nodes whose
+    /// result changed or whose subtree held a touched node: Taffy leaves an
+    /// untouched subtree's results in place when its parent's result holds.
+    fn publish_layout_tree(tree: &LayoutTree, touched: &[taffy::prelude::NodeId]) {
+        use crate::mechanical_port::source::layout::layout_tree::{
+            grid_lines, is_grid, resolve_gap,
+        };
+        use taffy::TraversePartialTree;
+        let mut visited = std::collections::HashSet::with_capacity(touched.len() * 2);
+        for &node in touched {
+            let mut current = Some(node);
+            while let Some(node) = current {
+                if !visited.insert(node) {
+                    break;
+                }
+                current = tree.taffy.parent(node);
+            }
+        }
+        let mut stack = vec![tree.root];
+        while let Some(id) = stack.pop() {
+            let Some(context) = tree.taffy.get_node_context(id) else {
+                continue;
+            };
+            let output = tree.taffy.layout(id).expect("solved layout node");
             let next = Layout::new(
                 output.location.x,
                 output.location.y,
@@ -2860,56 +3130,61 @@ impl LayoutComponent {
                 output.padding.right,
                 output.padding.bottom,
             );
-            let grid_lines = match cache.tree.detailed_layout_info(entry.node) {
-                taffy::tree::DetailedLayoutInfo::Grid(info) => (
-                    info.columns.line_offsets.clone(),
-                    info.rows.line_offsets.clone(),
-                    info.columns.gap,
-                    info.rows.gap,
-                ),
-                _ => (Vec::new(), Vec::new(), 0.0, 0.0),
-            };
-            outputs.push((
-                entry.owner.clone(),
-                next,
-                padding,
-                subtree_dirty[index],
-                grid_lines,
-            ));
-        }
-        owner.with_mut(|object| {
-            object
-                .as_layout_component_mut()
-                .expect("layout calculation owner")
-                .layout_tree_cache = Some(cache);
-        });
-        for (owner, next, padding, subtree_dirty, grid_lines) in outputs {
-            owner.with_mut(|object| {
-                let data = if let Some(layout) = object.as_layout_component_mut() {
-                    (
-                        layout.grid_column_lines,
-                        layout.grid_row_lines,
-                        layout.grid_column_gap,
-                        layout.grid_row_gap,
-                    ) = grid_lines;
-                    layout.layout_data.has_new_layout |= layout.solved_padding != padding;
-                    layout.solved_padding = padding;
-                    &mut *layout.layout_data
-                } else {
-                    object
-                        .as_any_mut()
-                        .downcast_mut::<LayoutParticipant>()
-                        .unwrap()
-                        .native_layout_data_mut()
-                        .unwrap()
-                };
-                // Yoga publishes a new layout only for a visited subtree or a
-                // changed cached result. Taffy's retained cache now supplies the
-                // same visit boundary across root calculations.
-                data.has_new_layout |= subtree_dirty || data.solved_layout != next;
-                data.solved_layout = next;
-                data.dirty = false;
+            let grid = (context.kind == LayoutNodeKind::Layout).then(|| {
+                let style = tree.taffy.style(id).expect("solved layout node");
+                match tree.taffy.detailed_layout_info(id) {
+                    taffy::tree::DetailedLayoutInfo::Grid(info) if is_grid(style) => {
+                        let content_width = output.size.width
+                            - output.padding.left
+                            - output.padding.right
+                            - output.border.left
+                            - output.border.right;
+                        let content_height = output.size.height
+                            - output.padding.top
+                            - output.padding.bottom
+                            - output.border.top
+                            - output.border.bottom;
+                        let (columns, column_gap) =
+                            grid_lines(&info.columns, resolve_gap(style.gap.width, content_width));
+                        let (rows, row_gap) =
+                            grid_lines(&info.rows, resolve_gap(style.gap.height, content_height));
+                        (columns, rows, column_gap, row_gap)
+                    }
+                    _ => (Vec::new(), Vec::new(), 0.0, 0.0),
+                }
             });
+            let touched = visited.contains(&id);
+            let changed = context
+                .owner
+                .with_mut(|object| {
+                    if let Some(layout) = object.as_layout_component_mut() {
+                        if let Some(grid) = grid {
+                            (
+                                layout.grid_column_lines,
+                                layout.grid_row_lines,
+                                layout.grid_column_gap,
+                                layout.grid_row_gap,
+                            ) = grid;
+                        }
+                        let padding_changed = layout.solved_padding != padding;
+                        layout.solved_padding = padding;
+                        let changed = padding_changed || layout.layout_data.solved_layout != next;
+                        layout.layout_data.has_new_layout |= touched || changed;
+                        layout.layout_data.solved_layout = next;
+                        changed
+                    } else if let Some(data) = Self::layout_data_of(object) {
+                        let changed = data.solved_layout != next;
+                        data.has_new_layout |= touched || changed;
+                        data.solved_layout = next;
+                        changed
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false);
+            if changed || touched {
+                stack.extend(tree.taffy.child_ids(id));
+            }
         }
     }
     pub fn style_display_hidden(&self) -> bool {
@@ -3613,7 +3888,7 @@ impl LayoutComponent {
         if force {
             self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, true);
         }
-        self.layout_data.dirty = true;
+        self.layout_data.mark_dirty();
         if let (Some(artboard), Some(this)) = (
             self.base.base.base.base.base.artboard_handle(),
             self.base.base.base.base.base.handle(),
@@ -3966,7 +4241,7 @@ impl LayoutComponent {
     pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
         self.layout_data.add_applier(applier);
     }
-    pub fn apply_container_style(&self, style: &mut YGStyle, _context: &LayoutSyncContext) {
+    pub fn apply_container_style(&self, style: &mut Style, _context: &LayoutSyncContext) {
         let justify = self.with_style(|component_style| {
             (!component_style.is_stack()).then_some(component_style.base.justify_items_value())
         });
@@ -3978,7 +4253,7 @@ impl LayoutComponent {
             );
         }
     }
-    pub fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_base_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         let Some(component_style) = self.style_handle() else {
             return;
         };
@@ -3991,6 +4266,7 @@ impl LayoutComponent {
             stored_height_units,
             flex_basis,
             flex_basis_units,
+            hug_unbounded,
         )) = component_style.with_downcast::<LayoutComponentStyle, _>(|component_style| {
             (
                 component_style.position_type() == YGPositionType::Absolute,
@@ -4004,6 +4280,7 @@ impl LayoutComponent {
                 component_style.height_units(),
                 component_style.base.flex_basis(),
                 component_style.flex_basis_units(),
+                component_style.base.hug_unbounded(),
             )
         })
         else {
@@ -4044,34 +4321,29 @@ impl LayoutComponent {
                 height_scale = self.effective_height_scale_type();
             }
         }
-        style.dimensions_mut()[YGDimension::Width] = YGValue::new(
-            if self.forced_width.is_nan() {
-                width.max(0.0)
+        // A content-sized axis that does not fill hugs its content. For an
+        // absolutely positioned box CSS `auto` already is that hug: shrink to
+        // fit, or stretch between two authored insets.
+        let size = |forced: f32, value: f32, units: YGUnit, scale: LayoutScaleType| {
+            if !forced.is_nan() {
+                Dimension::length(forced.max(0.0))
+            } else if units == YGUnit::Auto && scale != LayoutScaleType::Fill {
+                if absolute && !hug_unbounded {
+                    Dimension::auto()
+                } else {
+                    rive_hug_dimension(hug_unbounded)
+                }
             } else {
-                self.forced_width.max(0.0)
-            },
-            if self.forced_width.is_nan() {
-                width_units
-            } else {
-                YGUnit::Point
-            },
-        );
-        style.dimensions_mut()[YGDimension::Height] = YGValue::new(
-            if self.forced_height.is_nan() {
-                height.max(0.0)
-            } else {
-                self.forced_height.max(0.0)
-            },
-            if self.forced_height.is_nan() {
-                height_units
-            } else {
-                YGUnit::Point
-            },
-        );
+                rive_dimension(value.max(0.0), units)
+            }
+        };
+        style.size.width = size(self.forced_width, width, width_units, width_scale);
+        style.size.height = size(self.forced_height, height, height_units, height_scale);
+        let grow = |fraction: f32| if fraction.is_nan() { 0.0 } else { fraction };
         if context.parent_is_grid {
-            style.set_flex_grow(YGFloatOptional::new(0.0));
-            style.set_flex_shrink(YGFloatOptional::new(0.0));
-            style.set_align_self(if height_scale == LayoutScaleType::Fill {
+            style.flex_grow = 0.0;
+            style.flex_shrink = 0.0;
+            style.align_self = rive_align_self(if height_scale == LayoutScaleType::Fill {
                 YGAlign::Stretch
             } else {
                 YGAlign::Auto
@@ -4089,14 +4361,21 @@ impl LayoutComponent {
             };
             match main_scale {
                 LayoutScaleType::Fill => {
-                    style.set_flex_grow(YGFloatOptional::new(fraction));
-                    style.set_flex_shrink(YGFloatOptional::new(fraction));
-                    style.set_flex_basis(YGValue::new(flex_basis, flex_basis_units));
+                    style.flex_grow = grow(fraction);
+                    style.flex_shrink = grow(fraction);
+                    // Rive sizes an automatic basis to its content, bounded
+                    // by the space the container offers: `fit-content`.
+                    let basis = rive_dimension(flex_basis, flex_basis_units);
+                    style.flex_basis = if basis.is_auto() {
+                        Dimension::fit_content()
+                    } else {
+                        basis
+                    };
                 }
                 _ => {
-                    style.set_flex_grow(YGFloatOptional::new(0.0));
-                    style.set_flex_shrink(YGFloatOptional::new(0.0));
-                    style.set_flex_basis(YGValue::new(flex_basis, YGUnit::Auto));
+                    style.flex_grow = 0.0;
+                    style.flex_shrink = 0.0;
+                    style.flex_basis = Dimension::auto();
                 }
             }
             let cross_scale = if context.parent_is_row {
@@ -4104,7 +4383,7 @@ impl LayoutComponent {
             } else {
                 width_scale
             };
-            style.set_align_self(if cross_scale == LayoutScaleType::Fill {
+            style.align_self = rive_align_self(if cross_scale == LayoutScaleType::Fill {
                 YGAlign::Stretch
             } else {
                 YGAlign::Auto
@@ -4151,11 +4430,11 @@ impl AdvancingComponent for LayoutComponent {
     }
 }
 impl LayoutStyleApplier for LayoutComponent {
-    fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_base_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutComponent::apply_base_style(self, style, context);
     }
 
-    fn apply_container_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_container_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutComponent::apply_container_style(self, style, context);
     }
 }
@@ -4241,188 +4520,6 @@ mod packed_layout_tests {
     use super::*;
 
     #[test]
-    fn intrinsic_measure_axis_uses_inner_exact_size_and_clamps_bounded_offers() {
-        use taffy::style::AvailableSpace::{Definite, MaxContent, MinContent};
-        assert!(
-            intrinsic_measure_axis(Some(4.0), Definite(0.0)) == (0.0, LayoutMeasureMode::Exactly)
-        );
-        assert!(intrinsic_measure_axis(None, Definite(-4.0)) == (0.0, LayoutMeasureMode::AtMost));
-        assert!(
-            intrinsic_measure_axis(Some(4.0), Definite(-4.0)) == (0.0, LayoutMeasureMode::Exactly)
-        );
-        assert!(intrinsic_measure_axis(None, MinContent) == (0.0, LayoutMeasureMode::AtMost));
-        let (size, mode) = intrinsic_measure_axis(None, MaxContent);
-        assert!(size.is_nan());
-        assert!(mode == LayoutMeasureMode::Undefined);
-        assert!(intrinsic_measure_axis(Some(4.0), MaxContent) == (4.0, LayoutMeasureMode::Exactly));
-        assert!(intrinsic_measure_axis(None, Definite(f32::NAN)).0.is_nan());
-        let (size, mode) = intrinsic_measure_axis(None, Definite(-4.0));
-        use crate::mechanical_port::source::layout::layout_measure_mode::measure_mode_for_content;
-        assert!(measure_mode_for_content(mode, size, false) == LayoutMeasureMode::AtMost);
-        assert!(measure_mode_for_content(mode, size, true) == LayoutMeasureMode::Undefined);
-    }
-
-    #[test]
-    fn padded_taffy_leaf_measures_inner_exact_axes_but_keeps_outer_box() {
-        use taffy::style_helpers::length;
-        use taffy::{
-            geometry::{Rect, Size},
-            style::{AvailableSpace, Style},
-            tree::{LayoutInput, RunMode, SizingMode},
-        };
-        let style: Style = Style {
-            padding: Rect {
-                left: length(10.0),
-                right: length(10.0),
-                top: length(2.0),
-                bottom: length(2.0),
-            },
-            ..Style::default()
-        };
-        for (known, expected_inner, expected_outer) in [
-            (
-                Size {
-                    width: Some(100.0),
-                    height: None,
-                },
-                (80.0, LayoutMeasureMode::Exactly),
-                Size {
-                    width: 100.0,
-                    height: 12.0,
-                },
-            ),
-            (
-                Size {
-                    width: None,
-                    height: Some(80.0),
-                },
-                (76.0, LayoutMeasureMode::Exactly),
-                Size {
-                    width: 28.0,
-                    height: 80.0,
-                },
-            ),
-        ] {
-            let mut calls = 0;
-            let output = taffy::compute::compute_leaf_layout(
-                LayoutInput {
-                    run_mode: RunMode::ComputeSize,
-                    sizing_mode: SizingMode::InherentSize,
-                    known_dimensions: known,
-                    available_space: Size {
-                        width: AvailableSpace::MaxContent,
-                        height: AvailableSpace::MaxContent,
-                    },
-                    ..LayoutInput::HIDDEN
-                },
-                &style,
-                |_, _| 0.0,
-                |known, available| {
-                    calls += 1;
-                    let width = intrinsic_measure_axis(known.width, available.width);
-                    let height = intrinsic_measure_axis(known.height, available.height);
-                    assert!((if known.width.is_some() { width } else { height }) == expected_inner);
-                    // The production callback preserves outer known dimensions
-                    // only at this final projection, not in the intrinsic offer.
-                    Size {
-                        width: known.width.unwrap_or(8.0),
-                        height: known.height.unwrap_or(8.0),
-                    }
-                },
-            );
-            assert_eq!(calls, 1);
-            assert_eq!(output.size, expected_outer);
-        }
-    }
-
-    #[test]
-    fn rive_style_exact_axis_survives_hug_normalization_and_completed_reuse() {
-        use crate::mechanical_port::source::layout::layout_measure_mode::unbound_measure_mode;
-        use taffy::style_helpers::length;
-        use taffy::{
-            geometry::{Rect, Size},
-            style::{AvailableSpace, Style},
-            tree::RiveMeasureMetadata,
-        };
-        for horizontal in [true, false] {
-            let mut tree = taffy::TaffyTree::<()>::new();
-            tree.disable_rounding();
-            let node = tree
-                .new_leaf_with_context(
-                    Style {
-                        size: if horizontal {
-                            Size {
-                                width: length(100.0),
-                                height: taffy::style_helpers::auto(),
-                            }
-                        } else {
-                            Size {
-                                width: taffy::style_helpers::auto(),
-                                height: length(100.0),
-                            }
-                        },
-                        padding: Rect {
-                            left: length(10.0),
-                            right: length(10.0),
-                            top: length(10.0),
-                            bottom: length(10.0),
-                        },
-                        ..Style::default()
-                    },
-                    (),
-                )
-                .unwrap();
-            let mut calls = 0;
-            for bound in [150.0, 120.0] {
-                tree.compute_layout_with_measure_and_probe(
-                    node,
-                    Size {
-                        width: AvailableSpace::Definite(bound),
-                        height: AvailableSpace::Definite(bound),
-                    },
-                    |_, _, _| RiveMeasureMetadata {
-                        owner_direction: 0,
-                        normalization: 3,
-                    },
-                    |known, available, _, _, _, _| {
-                        calls += 1;
-                        let (value, mode) = if horizontal {
-                            intrinsic_measure_axis(known.width, available.width)
-                        } else {
-                            intrinsic_measure_axis(known.height, available.height)
-                        };
-                        assert_eq!(value, 80.0);
-                        // Hug removes AtMost only. A style-authored exact axis
-                        // must never reach the host as Undefined.
-                        assert!(unbound_measure_mode(mode) == LayoutMeasureMode::Exactly);
-                        Size {
-                            width: known.width.unwrap_or(8.0),
-                            height: known.height.unwrap_or(8.0),
-                        }
-                    },
-                )
-                .unwrap();
-                let size = tree.layout(node).unwrap().size;
-                assert_eq!(
-                    size,
-                    if horizontal {
-                        Size {
-                            width: 100.0,
-                            height: 28.0,
-                        }
-                    } else {
-                        Size {
-                            width: 28.0,
-                            height: 100.0,
-                        }
-                    }
-                );
-            }
-            assert_eq!(calls, 1);
-        }
-    }
-
-    #[test]
     fn registry_parametric_hole_change_invalidates_ancestor_layout() {
         use crate::mechanical_port::source::{
             core::{CoreArena, CoreHandle},
@@ -4463,7 +4560,9 @@ mod packed_layout_tests {
                 .on_added_dirty(&mut context)),
             Some(StatusCode::Ok)
         );
-        layout.with_downcast_mut::<LayoutComponent, _>(|owner| owner.layout_data.dirty = false);
+        layout.with_downcast_mut::<LayoutComponent, _>(|owner| {
+            owner.layout_data.clear_dirty_for_test()
+        });
         path.with_mut(|owner| {
             owner
                 .as_component_mut()
@@ -4478,14 +4577,16 @@ mod packed_layout_tests {
         ));
         assert!(
             layout
-                .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.dirty)
+                .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.is_dirty())
                 .unwrap()
         );
         assert!(
             path.with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::PATH))
                 .unwrap()
         );
-        layout.with_downcast_mut::<LayoutComponent, _>(|owner| owner.layout_data.dirty = false);
+        layout.with_downcast_mut::<LayoutComponent, _>(|owner| {
+            owner.layout_data.clear_dirty_for_test()
+        });
         assert!(CoreRegistry::set_bool_handle(
             &path,
             i32::from(PathBase::IS_HOLE_PROPERTY_KEY),
@@ -4493,7 +4594,7 @@ mod packed_layout_tests {
         ));
         assert!(
             !layout
-                .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.dirty)
+                .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.is_dirty())
                 .unwrap()
         );
     }
@@ -4514,7 +4615,11 @@ mod packed_layout_tests {
                     .as_component_mut()
                     .unwrap()
                     .set_dirt(ComponentDirt::NONE);
-                owner.as_layout_component_mut().unwrap().layout_data.dirty = false;
+                owner
+                    .as_layout_component_mut()
+                    .unwrap()
+                    .layout_data
+                    .clear_dirty_for_test();
             });
             text.with_mut(|owner| {
                 owner
@@ -4545,7 +4650,7 @@ mod packed_layout_tests {
             );
             assert!(
                 layout
-                    .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.dirty)
+                    .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.is_dirty())
                     .unwrap()
             );
         }

@@ -46,7 +46,9 @@ nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
 skrifa = "0.45.1"
-taffy = "=0.12.1"
+# Stock Taffy with CSS layout semantics. Layout deliberately diverges from
+# upstream Rive's Yoga (docs/PORTING.md, "Layout"); never patch it toward Yoga.
+taffy = { version = "=0.15.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "detailed_layout_info"] }
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 unicode-bidi = "0.3.18"
 unicode-script = "0.5.8"

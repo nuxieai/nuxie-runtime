@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::layout::layout_style_applier::{
-    YGDimension, YGDisplay, YGJustify, YGStyle, YGUnit, YGValue,
+    YGDisplay, YGJustify, YGUnit, rive_display, rive_justify_self, rive_size_limit,
 };
 use crate::mechanical_port::source::{
     generated::{
@@ -11,6 +11,7 @@ use crate::mechanical_port::source::{
         layout_style_applier::{LayoutStyleApplier, LayoutSyncContext},
     },
 };
+use taffy::prelude::Style;
 
 impl std::ops::Deref for LayoutSizingStyle {
     type Target = LayoutSizingStyleBase;
@@ -35,11 +36,11 @@ pub struct LayoutSizingStyle {
 }
 
 impl LayoutStyleApplier for LayoutSizingStyle {
-    fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_base_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutSizingStyle::apply_base_style(self, style, context);
     }
 
-    fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutSizingStyle::apply_item_style(self, style, context);
     }
 }
@@ -56,11 +57,11 @@ impl ComponentBaseCallbacks for LayoutSizingStyle {
     }
 }
 impl LayoutSizingStyle {
-    pub fn apply_sizing_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_sizing_base_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         self.apply_base_style(style, context);
     }
 
-    pub fn apply_sizing_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_sizing_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         self.apply_item_style(style, context);
     }
 
@@ -83,23 +84,26 @@ impl LayoutSizingStyle {
     pub fn min_height_units(&self) -> YGUnit {
         YGUnit::from(self.base.min_height_units_value())
     }
-    pub fn apply_base_style(&self, style: &mut YGStyle, _context: &LayoutSyncContext) {
+    pub fn apply_base_style(&self, style: &mut Style, _context: &LayoutSyncContext) {
         self.apply_base_style_with_display(style, self.display());
     }
-    pub(crate) fn apply_base_style_with_display(&self, style: &mut YGStyle, display: YGDisplay) {
-        style.set_display(display);
-        style.min_dimensions_mut()[YGDimension::Width] =
-            YGValue::new(self.base.min_width(), self.min_width_units());
-        style.min_dimensions_mut()[YGDimension::Height] =
-            YGValue::new(self.base.min_height(), self.min_height_units());
-        style.max_dimensions_mut()[YGDimension::Width] =
-            YGValue::new(self.base.max_width(), self.max_width_units());
-        style.max_dimensions_mut()[YGDimension::Height] =
-            YGValue::new(self.base.max_height(), self.max_height_units());
+    pub(crate) fn apply_base_style_with_display(&self, style: &mut Style, display: YGDisplay) {
+        style.display = rive_display(display);
+        style.min_size.width = rive_size_limit(self.base.min_width(), self.min_width_units());
+        style.min_size.height = rive_size_limit(self.base.min_height(), self.min_height_units());
+        style.max_size.width = rive_size_limit(self.base.max_width(), self.max_width_units());
+        style.max_size.height = rive_size_limit(self.base.max_height(), self.max_height_units());
     }
-    pub fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         if context.parent_is_stack {
             GridTrack::sync_stack_item_cell(style);
+        }
+        // Justification is a grid property in Rive. Taffy also honours it for
+        // an absolutely positioned flex child, where it would stop insets from
+        // stretching the box, so flex children keep `auto`.
+        if !context.parent_is_grid {
+            style.justify_self = None;
+            return;
         }
         GridTrack::sync_item_justify_self(
             style,
@@ -109,7 +113,7 @@ impl LayoutSizingStyle {
             context.container_justify_items,
         );
         if context.parent_is_grid && context.width_fills {
-            style.set_justify_self(YGJustify::Stretch);
+            style.justify_self = rive_justify_self(YGJustify::Stretch);
         }
     }
 }

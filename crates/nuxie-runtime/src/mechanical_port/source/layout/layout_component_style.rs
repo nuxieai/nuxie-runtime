@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::layout::layout_style_applier::{
-    YGAlign, YGDirection, YGDisplay, YGEdge, YGFlexDirection, YGFloatOptional, YGGutter, YGJustify,
-    YGOverflow, YGPositionType, YGStyle, YGUnit, YGValue, YGWrap,
+    YGAlign, YGDirection, YGDisplay, YGFlexDirection, YGJustify, YGOverflow, YGPositionType,
+    YGUnit, YGWrap, physical_edges, rive_align_content, rive_align_items, rive_direction,
+    rive_flex_direction, rive_flex_wrap, rive_inset, rive_justify_content, rive_justify_items,
+    rive_length, rive_margin, rive_position,
 };
 use crate::mechanical_port::source::{
     core::CoreHandle,
@@ -15,6 +17,7 @@ use crate::mechanical_port::source::{
     },
     layout_component::LayoutComponent,
 };
+use taffy::prelude::{Size, Style};
 
 impl std::ops::Deref for LayoutComponentStyle {
     type Target = LayoutComponentStyleBase;
@@ -46,16 +49,16 @@ pub struct LayoutComponentStyle {
 }
 
 impl LayoutStyleApplier for LayoutComponentStyle {
-    fn apply_base_style(&self, style: &mut YGStyle, _context: &LayoutSyncContext) {
+    fn apply_base_style(&self, style: &mut Style, _context: &LayoutSyncContext) {
         self.base
             .apply_base_style_with_display(style, self.display());
     }
 
-    fn apply_container_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_container_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutComponentStyle::apply_container_style(self, style, context);
     }
 
-    fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutComponentStyle::apply_item_style(self, style, context);
     }
 }
@@ -148,8 +151,8 @@ impl LayoutComponentStyle {
             .with_mut(|parent| parent.as_layout_component_mut().map(f))
             .flatten()
     }
-    fn apply_stack_alignment(style: &mut YGStyle, alignment: LayoutAlignmentType) {
-        style.set_justify_items(match alignment {
+    fn apply_stack_alignment(style: &mut Style, alignment: LayoutAlignmentType) {
+        style.justify_items = rive_justify_items(match alignment {
             LayoutAlignmentType::TopLeft
             | LayoutAlignmentType::CenterLeft
             | LayoutAlignmentType::BottomLeft
@@ -163,7 +166,7 @@ impl LayoutComponentStyle {
             | LayoutAlignmentType::BottomRight
             | LayoutAlignmentType::SpaceBetweenEnd => YGJustify::End,
         });
-        style.set_align_items(match alignment {
+        style.align_items = rive_align_items(match alignment {
             LayoutAlignmentType::TopLeft
             | LayoutAlignmentType::TopCenter
             | LayoutAlignmentType::TopRight
@@ -179,24 +182,11 @@ impl LayoutComponentStyle {
         });
     }
 
-    pub fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         self.base.apply_sizing_item_style(style, context);
-        style.set_position_type(self.position_type());
-        style.set_aspect_ratio(YGFloatOptional::new(if self.base.aspect_ratio() > 0.0 {
-            self.base.aspect_ratio()
-        } else {
-            f32::NAN
-        }));
-        let start = if context.is_ltr {
-            YGEdge::Left
-        } else {
-            YGEdge::Right
-        };
-        let end = if context.is_ltr {
-            YGEdge::Right
-        } else {
-            YGEdge::Left
-        };
+        style.position = rive_position(self.position_type());
+        style.aspect_ratio = (self.base.aspect_ratio() > 0.0).then_some(self.base.aspect_ratio());
+        // A layout root's margins are always lengths.
         let margin_unit = |unit| {
             if context.has_layout_parent {
                 unit
@@ -204,62 +194,54 @@ impl LayoutComponentStyle {
                 YGUnit::Point
             }
         };
-        style.margin_mut()[start] = YGValue::new(
-            self.base.margin_left(),
-            margin_unit(self.margin_left_units()),
+        style.margin = physical_edges(
+            context.is_ltr,
+            rive_margin(
+                self.base.margin_left(),
+                margin_unit(self.margin_left_units()),
+            ),
+            rive_margin(
+                self.base.margin_right(),
+                margin_unit(self.margin_right_units()),
+            ),
+            rive_margin(self.base.margin_top(), margin_unit(self.margin_top_units())),
+            rive_margin(
+                self.base.margin_bottom(),
+                margin_unit(self.margin_bottom_units()),
+            ),
         );
-        style.margin_mut()[end] = YGValue::new(
-            self.base.margin_right(),
-            margin_unit(self.margin_right_units()),
+        style.inset = physical_edges(
+            context.is_ltr,
+            rive_inset(self.base.position_left(), self.position_left_units()),
+            rive_inset(self.base.position_right(), self.position_right_units()),
+            rive_inset(self.base.position_top(), self.position_top_units()),
+            rive_inset(self.base.position_bottom(), self.position_bottom_units()),
         );
-        style.margin_mut()[YGEdge::Top] =
-            YGValue::new(self.base.margin_top(), margin_unit(self.margin_top_units()));
-        style.margin_mut()[YGEdge::Bottom] = YGValue::new(
-            self.base.margin_bottom(),
-            margin_unit(self.margin_bottom_units()),
-        );
-        style.position_mut()[start] =
-            YGValue::new(self.base.position_left(), self.position_left_units());
-        style.position_mut()[end] =
-            YGValue::new(self.base.position_right(), self.position_right_units());
-        style.position_mut()[YGEdge::Top] =
-            YGValue::new(self.base.position_top(), self.position_top_units());
-        style.position_mut()[YGEdge::Bottom] =
-            YGValue::new(self.base.position_bottom(), self.position_bottom_units());
     }
 
-    pub fn apply_container_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
-        let start = if context.is_ltr {
-            YGEdge::Left
-        } else {
-            YGEdge::Right
+    pub fn apply_container_style(&self, style: &mut Style, context: &LayoutSyncContext) {
+        style.flex_direction = rive_flex_direction(self.flex_direction());
+        style.flex_wrap = rive_flex_wrap(self.flex_wrap());
+        // CSS inherits direction; the context carries this node's resolved one.
+        style.direction = rive_direction(context.is_ltr);
+        style.gap = Size {
+            width: rive_length(self.base.gap_horizontal(), self.gap_horizontal_units()),
+            height: rive_length(self.base.gap_vertical(), self.gap_vertical_units()),
         };
-        let end = if context.is_ltr {
-            YGEdge::Right
-        } else {
-            YGEdge::Left
-        };
-        style.set_flex_direction(self.flex_direction());
-        style.set_flex_wrap(self.flex_wrap());
-        style.set_direction(self.direction());
-        style.gap_mut()[YGGutter::Column] =
-            YGValue::new(self.base.gap_horizontal(), self.gap_horizontal_units());
-        style.gap_mut()[YGGutter::Row] =
-            YGValue::new(self.base.gap_vertical(), self.gap_vertical_units());
-        style.border_mut()[start] = YGValue::new(self.base.border_left(), self.border_left_units());
-        style.border_mut()[end] = YGValue::new(self.base.border_right(), self.border_right_units());
-        style.border_mut()[YGEdge::Top] =
-            YGValue::new(self.base.border_top(), self.border_top_units());
-        style.border_mut()[YGEdge::Bottom] =
-            YGValue::new(self.base.border_bottom(), self.border_bottom_units());
-        style.padding_mut()[start] =
-            YGValue::new(self.base.padding_left(), self.padding_left_units());
-        style.padding_mut()[end] =
-            YGValue::new(self.base.padding_right(), self.padding_right_units());
-        style.padding_mut()[YGEdge::Top] =
-            YGValue::new(self.base.padding_top(), self.padding_top_units());
-        style.padding_mut()[YGEdge::Bottom] =
-            YGValue::new(self.base.padding_bottom(), self.padding_bottom_units());
+        style.border = physical_edges(
+            context.is_ltr,
+            rive_length(self.base.border_left(), self.border_left_units()),
+            rive_length(self.base.border_right(), self.border_right_units()),
+            rive_length(self.base.border_top(), self.border_top_units()),
+            rive_length(self.base.border_bottom(), self.border_bottom_units()),
+        );
+        style.padding = physical_edges(
+            context.is_ltr,
+            rive_length(self.base.padding_left(), self.padding_left_units()),
+            rive_length(self.base.padding_right(), self.padding_right_units()),
+            rive_length(self.base.padding_top(), self.padding_top_units()),
+            rive_length(self.base.padding_bottom(), self.padding_bottom_units()),
+        );
         if self.is_stack() {
             GridTrack::sync_stack_container_style(
                 style,
@@ -276,7 +258,7 @@ impl LayoutComponentStyle {
             LayoutCrossAlign, LayoutMainDistribute, container_alignment,
         };
         let alignment = container_alignment(self.alignment_type(), row);
-        style.set_justify_content(match alignment.main {
+        style.justify_content = rive_justify_content(match alignment.main {
             LayoutMainDistribute::Start => YGJustify::FlexStart,
             LayoutMainDistribute::Center => YGJustify::Center,
             LayoutMainDistribute::End => YGJustify::FlexEnd,
@@ -287,8 +269,8 @@ impl LayoutComponentStyle {
             LayoutCrossAlign::Center => YGAlign::Center,
             LayoutCrossAlign::End => YGAlign::FlexEnd,
         };
-        style.set_align_items(cross);
-        style.set_align_content(cross);
+        style.align_items = rive_align_items(cross);
+        style.align_content = rive_align_content(cross);
     }
 
     pub fn interpolator(&self) -> Option<CoreHandle> {

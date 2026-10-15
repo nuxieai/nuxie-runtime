@@ -128,10 +128,14 @@ fn content_that_cannot_shrink_still_grows_an_intrinsic_track() {
     assert_eq!(width(&fixture.named_layout("Child")), 600.0);
 }
 
+// Upstream pins Yoga's rule that a wrapping row has no min-content width
+// (Child 400). Nuxie lays out with CSS semantics (stock Taffy): a wrapping
+// flex container's min-content is its widest item's, so the rigid 600px item
+// floors the intrinsic track exactly as in `content_that_cannot_shrink...`.
 #[test]
-fn a_wrapping_child_gives_an_intrinsic_track_nothing_to_floor_at() {
+fn a_wrapping_child_floors_an_intrinsic_track_at_its_widest_item() {
     let fixture = Fixture::new("grid_min_content.riv", "WrapRigidGrid");
-    assert_eq!(width(&fixture.named_layout("Child")), 400.0);
+    assert_eq!(width(&fixture.named_layout("Child")), 600.0);
 }
 
 #[test]

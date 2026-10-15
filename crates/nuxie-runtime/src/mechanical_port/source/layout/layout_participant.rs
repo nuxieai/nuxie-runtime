@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::layout::layout_style_applier::{
-    YGAlign, YGDimension, YGDisplay, YGFloatOptional, YGJustify, YGStyle, YGUnit, YGValue,
+    YGAlign, YGDisplay, YGJustify, YGUnit, apply_flex_item_minimums, rive_align_self,
+    rive_dimension, rive_hug_dimension,
 };
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
@@ -19,6 +20,7 @@ use crate::mechanical_port::source::{
     layout_component::{Layout, LayoutAnimationData, LayoutComponent},
     math::{aabb::Aabb, vec2d::Vec2D},
 };
+use taffy::prelude::{Dimension, LengthPercentageAuto, Style};
 
 struct ParticipantAnimation {
     animated_layout: Layout,
@@ -229,32 +231,33 @@ impl LayoutParticipant {
         self.layout_data.take();
     }
 
-    pub fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_base_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         self.base.apply_sizing_base_style(style, context);
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let height_scale = LayoutScaleType::from(self.base.layout_height_scale_type());
         let width_fill = width_scale == LayoutScaleType::Fill;
         let height_fill = height_scale == LayoutScaleType::Fill;
-        style.dimensions_mut()[YGDimension::Width] = if width_scale == LayoutScaleType::Fixed {
-            YGValue::new(
+        let hug = rive_hug_dimension(self.base.hug_unbounded());
+        style.size.width = match width_scale {
+            LayoutScaleType::Fixed => rive_dimension(
                 self.base.width().max(0.0),
                 YGUnit::from(self.base.width_units_value()),
-            )
-        } else {
-            YGValue::new(f32::NAN, YGUnit::Auto)
+            ),
+            LayoutScaleType::Hug => hug,
+            _ => Dimension::auto(),
         };
-        style.dimensions_mut()[YGDimension::Height] = if height_scale == LayoutScaleType::Fixed {
-            YGValue::new(
+        style.size.height = match height_scale {
+            LayoutScaleType::Fixed => rive_dimension(
                 self.base.height().max(0.0),
                 YGUnit::from(self.base.height_units_value()),
-            )
-        } else {
-            YGValue::new(f32::NAN, YGUnit::Auto)
+            ),
+            LayoutScaleType::Hug => hug,
+            _ => Dimension::auto(),
         };
         if context.parent_is_grid {
-            style.set_flex_grow(YGFloatOptional::new(0.0));
-            style.set_flex_shrink(YGFloatOptional::new(0.0));
-            style.set_align_self(if height_fill {
+            style.flex_grow = 0.0;
+            style.flex_shrink = 0.0;
+            style.align_self = rive_align_self(if height_fill {
                 YGAlign::Stretch
             } else {
                 YGAlign::Auto
@@ -270,29 +273,34 @@ impl LayoutParticipant {
             } else {
                 self.base.fractional_height()
             };
-            style.set_flex_grow(YGFloatOptional::new(if main_fill { fraction } else { 0.0 }));
-            style.set_flex_shrink(YGFloatOptional::new(if main_fill { fraction } else { 0.0 }));
-            style.set_flex_basis(if main_fill {
-                YGValue::new(0.0, YGUnit::Point)
+            let grow = if main_fill && !fraction.is_nan() {
+                fraction
             } else {
-                YGValue::new(f32::NAN, YGUnit::Auto)
-            });
+                0.0
+            };
+            style.flex_grow = grow;
+            style.flex_shrink = grow;
+            style.flex_basis = if main_fill {
+                Dimension::length(0.0)
+            } else {
+                Dimension::auto()
+            };
             let cross_fill = if context.parent_is_row {
                 height_fill
             } else {
                 width_fill
             };
-            style.set_align_self(if cross_fill {
+            style.align_self = rive_align_self(if cross_fill {
                 YGAlign::Stretch
             } else {
                 YGAlign::Auto
             });
         }
         if width_fill && YGUnit::from(self.base.min_width_units_value()) == YGUnit::Undefined {
-            style.min_dimensions_mut()[YGDimension::Width] = YGValue::new(0.0, YGUnit::Point);
+            style.min_size.width = LengthPercentageAuto::length(0.0);
         }
         if height_fill && YGUnit::from(self.base.min_height_units_value()) == YGUnit::Undefined {
-            style.min_dimensions_mut()[YGDimension::Height] = YGValue::new(0.0, YGUnit::Point);
+            style.min_size.height = LengthPercentageAuto::length(0.0);
         }
     }
 
@@ -564,7 +572,7 @@ impl LayoutParticipant {
         let Some(data) = self.layout_data.as_deref_mut() else {
             return false;
         };
-        let mut style = std::mem::take(&mut data.style);
+        let mut style = data.take_style();
         let appliers = data.appliers.as_deref().cloned().unwrap_or_default();
         let this = self.base.handle();
         for pass in 0..4 {
@@ -586,9 +594,8 @@ impl LayoutParticipant {
                 }
             }
         }
-        let data = self.layout_data.as_deref_mut().unwrap();
-        data.style = style;
-        data.dirty = true;
+        apply_flex_item_minimums(&mut style, context.parent_is_grid);
+        self.layout_data.as_deref_mut().unwrap().set_style(style);
         true
     }
 
@@ -696,7 +703,7 @@ impl LayoutParticipant {
     pub fn mark_layout_node_dirty(&mut self, force: bool) {
         {
             if let Some(data) = self.layout_data.as_deref_mut() {
-                data.dirty = true;
+                data.mark_dirty();
             }
             if let Some(layout) = self.owning_layout_handle() {
                 LayoutComponent::mark_layout_node_dirty_occurrence(&layout, force);
@@ -707,7 +714,7 @@ impl LayoutParticipant {
         let layout = owner
             .with_downcast_mut::<Self, _>(|participant| {
                 if let Some(data) = participant.layout_data.as_deref_mut() {
-                    data.dirty = true;
+                    data.mark_dirty();
                 }
                 participant.owning_layout_handle()
             })
@@ -720,7 +727,7 @@ impl LayoutParticipant {
     }
     pub(crate) fn mark_layout_node_dirty_from_host(&mut self, host: &dyn CoreObject, force: bool) {
         if let Some(data) = self.layout_data.as_deref_mut() {
-            data.dirty = true;
+            data.mark_dirty();
         }
         // The source's owningLayout walk starts at this same active host.
         // Read its parent directly rather than borrowing its arena slot again.
@@ -1023,10 +1030,10 @@ impl LayoutParticipant {
 }
 
 impl LayoutStyleApplier for LayoutParticipant {
-    fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_base_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutParticipant::apply_base_style(self, style, context);
     }
-    fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         self.base.apply_sizing_item_style(style, context);
     }
 }

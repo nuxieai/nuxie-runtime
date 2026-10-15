@@ -238,7 +238,7 @@ struct OpaqueParticipant {
 impl nuxie_runtime::source::layout::layout_style_applier::LayoutStyleApplier for OpaqueParticipant {
     fn apply_base_style(
         &self,
-        _: &mut nuxie_runtime::source::layout::layout_style_applier::YGStyle,
+        _: &mut taffy::Style,
         _: &nuxie_runtime::source::layout::layout_style_applier::LayoutSyncContext,
     ) {
         if let Some(calls) = &self.style_calls {

@@ -119,7 +119,10 @@ impl Weight {
         world: &Mat2D,
         bone_transforms: &[f32],
     ) -> Vec2D {
-        let (mut xx, mut xy, mut yx, mut yy, mut tx, mut ty) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        // The six affine components accumulate lane by lane: each lane is the
+        // same fused multiply-add, in the same weight order, as source's
+        // scalar sums, so the compiler may run them as vector lanes.
+        let mut sum = [0.0_f32; 6];
         // Each bone's transform is six contiguous values; a trailing partial
         // transform is not a bone.
         let (transforms, _) = bone_transforms.as_chunks::<6>();
@@ -132,17 +135,14 @@ impl Weight {
             let normalized_weight = weight as f32 / 255.0;
             let bone_index = Self::encoded_weight_value(index_in_packed_values, indices);
             // Source reads one contiguous affine transform. Check its complete
-            // extent once, after the zero-weight gate, keeping the six fused
-            // accumulations in source order.
+            // extent once, after the zero-weight gate.
             let transform = &transforms[bone_index];
-            xx = transform[0].mul_add(normalized_weight, xx);
-            xy = transform[1].mul_add(normalized_weight, xy);
-            yx = transform[2].mul_add(normalized_weight, yx);
-            yy = transform[3].mul_add(normalized_weight, yy);
-            tx = transform[4].mul_add(normalized_weight, tx);
-            ty = transform[5].mul_add(normalized_weight, ty);
+            for (sum, &value) in sum.iter_mut().zip(transform) {
+                *sum = value.mul_add(normalized_weight, *sum);
+            }
         }
 
+        let [xx, xy, yx, yy, tx, ty] = sum;
         Mat2D::new(xx, xy, yx, yy, tx, ty) * (*world * in_point)
     }
 }

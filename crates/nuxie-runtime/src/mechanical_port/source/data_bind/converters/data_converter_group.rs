@@ -1,4 +1,5 @@
 use super::data_converter::{DataConverter, bind_converter_context};
+use super::data_converter_group_item::{DataConverterGroupItem, GroupItemCells};
 use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_context::RuntimeDataContextHandle,
@@ -38,6 +39,8 @@ pub trait GroupConverter {
 pub struct DataConverterGroup {
     pub base: DataConverterGroupBase,
     items: Vec<CoreHandle>,
+    // Each item's converter cells, in item order.
+    item_cells: Vec<std::rc::Rc<GroupItemCells>>,
 }
 
 impl Drop for DataConverterGroup {
@@ -52,7 +55,17 @@ impl Drop for DataConverterGroup {
 
 impl DataConverterGroup {
     pub fn add_item(&mut self, item: CoreHandle) {
+        // Anything but a group item has no converter, like empty cells.
+        let cells = item
+            .with_downcast::<DataConverterGroupItem, _>(|item| std::rc::Rc::clone(item.cells()))
+            .unwrap_or_default();
+        self.add_item_with_cells(item, cells);
+    }
+
+    /// add_item for an item that is borrowed now, given its cells.
+    pub(crate) fn add_item_with_cells(&mut self, item: CoreHandle, cells: std::rc::Rc<GroupItemCells>) {
         self.items.push(item);
+        self.item_cells.push(cells);
     }
 
     pub fn convert(
@@ -225,8 +238,9 @@ impl DataConverterGroup {
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
         let mut did_update = false;
-        for item in &self.items {
-            if let Some(converter) = item_converter(item) {
+        // Items whose converter may not advance would do nothing here.
+        for cells in &self.item_cells {
+            if let Some(converter) = cells.advancing_converter() {
                 if converter
                     .with_mut(|converter| {
                         converter

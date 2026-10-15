@@ -86,6 +86,50 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.15 candidate adds the video properties layer. Bindings, keyed
+animation and Lua now control a playing video through the same native
+properties. Loop (60004), muted (60005), volume (60006), rate (60007), loop
+start (60014), loop end (60015), paused (60016) and position (60017) are
+bindable and animatable while the video plays; writing position seeks.
+Duration (60018), ended (60019) and state (60020) are read only and notify
+bindings as decoder state and the media clock change. Keys 60008 to 60013 keep
+their starting-only meanings, and an invalid write keeps the prior value. The
+direct command path is cut: `nux_player_video_command` and
+`nux_video_sync_group_command` accept only the host decisions pause (1),
+suspend reason (6), reenter (7) and dispose (8) and return
+`NUX_STATUS_INVALID_ARGUMENT` for every other kind, and `nux_player_video_step`
+refuses decoder observation 7 (selected seek frame) the same way. A host report
+that play was blocked now sets paused to true and notifies bindings; writing
+false through the bound control retries play. The video schema declares loop
+and muted as bool, marks the live settings bindable and animatable, and adds
+keys 60016 to 60020. At load a default two-way paused binding takes the
+video's starting value, so autoplay wins; a file that chooses source-first for
+that binding lets the starting view-model value win. SDKs must adopt this
+release together with their matching source changes (iOS main from 92770f81;
+Android in [nuxie-android#196](https://github.com/nuxieai/nuxie-android/pull/196)).
+An SDK that still sends the removed command kinds cannot play video on this
+binary, and the new SDK sources need this binary.
+
+The candidate also carries the runtime performance campaign (a data-oriented
+component graph, shared property and paint cells, and reused draw lists and
+text shape plans) and upstream mirrors: the string template converter, deferred
+canvas sampling, angular gradients with their shader changes, data definitions
+and uint target guards, draw batching order, empty binding rejection, font
+codepoint coverage, ORE binding validation, reverse-state freezing, selectable
+drawable traversal, draw-target validation, async poll pacing, collapsed text
+runs and keyframe lookup, stateful scripted interpolators, nested artboard mesh
+hosts, cubic vertex weight guards and import slot ownership. It fixes
+single-pass draws losing their draw contents, hosts a video's mesh on the image
+it draws through, and gives text input and scroll physics one monotonic engine
+clock. Scripts can decode a trusted shader asset for native renderers. The
+upstream watermark pre-roll is removed; files that carry its manifest section
+still import. This is the first release whose archives are compiled through
+the repository's Bazel build. ABI v4 is retained with no symbol, struct or
+layout change; the export lists and layout oracle match v0.10.14. The generated
+header changes only in documentation comments, which now describe the refused
+command kinds and observation; every declaration is identical to v0.10.14.
+Existing release size ceilings remain unchanged pending measurement.
+
 The v0.10.14 candidate adds checked replacement of several values at once. The
 runtime checks a batch of value writes against the installed rules and groups
 as one replacement and applies every write or none, reporting the first

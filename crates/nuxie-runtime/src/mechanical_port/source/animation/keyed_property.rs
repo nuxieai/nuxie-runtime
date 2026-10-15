@@ -277,6 +277,12 @@ impl KeyedProperty {
             (None, None) => {
                 frame.handle.with(|keyframe| keyframe.keyframe_apply(object, property_key, mix, context));
             }
+            // A linear pair of double keyframes interpolates from its cells.
+            (Some(next), Some(_))
+                if !frame.cells.has_interpolator() && next.cells.double_value().is_some() =>
+            {
+                KeyFrameDouble::interpolate_stored(frame, next, &object, property_key, seconds, mix, context);
+            }
             (Some(next), _) => {
                 let next = next.handle.clone();
                 frame.handle.with(|keyframe| {

@@ -50,6 +50,7 @@ impl InterpolatingKeyFrame {
                 return StatusCode::MissingObject;
             }
             self.interpolator = Some(value);
+            self.base.base.cells().set_has_interpolator();
         }
         StatusCode::Ok
     }

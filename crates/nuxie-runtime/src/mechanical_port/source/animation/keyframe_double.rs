@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::interpolating_keyframe::KeyFrameValueContext,
+    animation::{interpolating_keyframe::KeyFrameValueContext, keyframe_cells::KeyFrameEntry},
     core::CoreHandle,
     generated::{animation::keyframe_double_base::KeyFrameDoubleBase, core_registry::CoreRegistry},
     math::FloatContract,
@@ -85,6 +85,40 @@ impl KeyFrameDouble {
             return true;
         }
         Self::apply_value(object, key, mix, effective_value())
+    }
+
+    /// apply_interpolation() from the double keyframe `from` to the double
+    /// keyframe `to` when `from` has no interpolator (so interpolation is
+    /// linear), read from their shared cells: the bound values, then the
+    /// times, then the accumulator or mix step, without borrowing either
+    /// keyframe.
+    pub(crate) fn interpolate_stored(
+        from: &KeyFrameEntry,
+        to: &KeyFrameEntry,
+        object: &CoreHandle,
+        key: i32,
+        current_time: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) -> bool {
+        let effective_value = |frame: &KeyFrameEntry| {
+            context
+                .and_then(|context| context.number_value(&frame.handle))
+                .or_else(|| frame.cells.double_value())
+                .expect("a double keyframe's cells hold its value")
+        };
+        let from_value = effective_value(from);
+        let to_value = effective_value(to);
+        let from_seconds = from.cells.seconds();
+        let factor = (current_time - from_seconds) / (to.cells.seconds() - from_seconds);
+        let value = interpolated_value(from_value, to_value, factor);
+        if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
+            accumulator
+                .borrow_mut()
+                .apply_double(object, key, mix, value);
+            return true;
+        }
+        Self::apply_value(object, key, mix, value)
     }
     pub fn apply_interpolation(
         &self,

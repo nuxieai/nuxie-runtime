@@ -1546,44 +1546,35 @@ impl NestedArtboard {
         elapsed_seconds: f32,
         flags: AdvanceFlags,
     ) -> bool {
-        let stopped = owner
-            .with(|owner| {
-                let owner = owner.as_nested_artboard().expect("NestedArtboard owner");
-                if owner.artboard_referencer.referenced_artboard().is_none() {
-                    return true;
-                }
-                if owner.is_collapsed() || owner.base.is_paused() {
-                    owner.inactive_change_sequence.mark_latest();
-                    return true;
-                }
-                false
-            })
-            .expect("live NestedArtboard owner");
-        if stopped {
-            return false;
-        }
-        owner.with_mut(|owner| {
-            let owner = owner
-                .as_nested_artboard_mut()
-                .expect("NestedArtboard owner");
-            if owner.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
-                owner.bind_stateful();
-            }
-        });
-        let mut keep_going = false;
-        let advance_nested =
-            flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == AdvanceFlags::ADVANCE_NESTED.0;
-        let (local_elapsed_seconds, quantize) = owner
+        // The stop checks, a pending stateful bind and the frame's local time
+        // share one borrow: nothing else runs between them.
+        let advance = owner
             .with_mut(|owner| {
                 let owner = owner
                     .as_nested_artboard_mut()
                     .expect("NestedArtboard owner");
-                (
+                if owner.artboard_referencer.referenced_artboard().is_none() {
+                    return None;
+                }
+                if owner.is_collapsed() || owner.base.is_paused() {
+                    owner.inactive_change_sequence.mark_latest();
+                    return None;
+                }
+                if owner.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
+                    owner.bind_stateful();
+                }
+                Some((
                     owner.calculate_local_elapsed_seconds(elapsed_seconds),
                     owner.base.quantize(),
-                )
+                ))
             })
             .expect("live NestedArtboard owner");
+        let Some((local_elapsed_seconds, quantize)) = advance else {
+            return false;
+        };
+        let mut keep_going = false;
+        let advance_nested =
+            flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == AdvanceFlags::ADVANCE_NESTED.0;
         let new_frame = flags.0 & AdvanceFlags::NEW_FRAME.0 == AdvanceFlags::NEW_FRAME.0;
         if local_elapsed_seconds == 0.0 && quantize >= 0.0 && new_frame {
             return true;

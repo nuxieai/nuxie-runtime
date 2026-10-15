@@ -1341,11 +1341,49 @@ def package_artifact(
     validate_size_report(report, budget, sha256_bytes(budget_bytes), archive, records)
 
 
+def release_notes(
+    metadata: dict[str, object],
+    build_inputs: object,
+    sizes: dict[str, object],
+) -> str:
+    """Render GitHub release notes from the qualified release evidence.
+
+    The configuration is read only after validate_build_inputs accepts it, so a
+    build-input schema change fails here, before a release draft exists.
+    """
+    configuration = validate_build_inputs(build_inputs)["configuration"]
+    measurements = sizes["measurements"]
+    lines = [
+        f"Nuxie Android runtime {metadata['artifactVersion']}",
+        "",
+        f"Source: `{metadata['buildSourceRevision']}`",
+        f"C ABI runtime: `{metadata['runtimeIdentity']}`",
+        "",
+        "Pinned release cut:",
+        "",
+        f"- Rust {configuration['rustToolchain']}",
+        f"- Bazel {configuration['bazel'].removeprefix('bazel ')} (`{configuration['bazelTarget']}`)",
+        f"- Android NDK {configuration['androidNdk']}",
+        f"- Android API {configuration['androidApiLevel']}",
+        f"- ABIs: {', '.join(metadata['android']['abis'])}",
+        f"- Features: {', '.join(metadata['android']['features'])}",
+        "",
+        f"Archive bytes: {measurements['archiveBytes']}",
+        f"Expanded bytes: {measurements['expandedBytes']}",
+        f"Archive SHA-256: `{metadata['artifact']['sha256']}`",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("release-tag")
+
+    notes = subparsers.add_parser("release-notes")
+    notes.add_argument("output", type=pathlib.Path)
+    notes.add_argument("--artifact-root", required=True, type=pathlib.Path)
 
     fingerprint = subparsers.add_parser("fingerprint")
     fingerprint.add_argument("--repo-root", type=pathlib.Path, default=REPO_ROOT)
@@ -1379,6 +1417,13 @@ def main(arguments: Sequence[str]) -> int:
     parsed = create_parser().parse_args(arguments)
     if parsed.command == "release-tag":
         print(RELEASE_TAG)
+    elif parsed.command == "release-notes":
+        root = parsed.artifact_root
+        parsed.output.write_text(release_notes(
+            json.loads((root / METADATA_NAME).read_text()),
+            json.loads((root / BUILD_INPUTS_NAME).read_text()),
+            json.loads((root / SIZE_REPORT_NAME).read_text()),
+        ))
     elif parsed.command == "fingerprint":
         print(contract_fingerprint(parsed.repo_root.resolve()))
     elif parsed.command == "inputs":

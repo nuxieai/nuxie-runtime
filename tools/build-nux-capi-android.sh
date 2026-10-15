@@ -208,6 +208,12 @@ python3 "${script_dir}/android_runtime_contract.py" verify \
     --repo-root "${repo_root}" \
     --artifact-root "${output_root}" \
     --ndk-root "${resolved_ndk_root}"
+# Render the publisher's release notes from this build's evidence now, so an
+# evidence schema change fails the build rather than a publish after tagging.
+release_notes_check="$(mktemp "${TMPDIR:-/tmp}/nuxie-android-release-notes.XXXXXX")"
+python3 "${script_dir}/android_runtime_contract.py" release-notes \
+    --artifact-root "${output_root}" "${release_notes_check}"
+rm -f "${release_notes_check}"
 
 printf 'Android archive: %s\nMetadata: %s\nBuild inputs: %s\nSizes: %s\n' \
     "${archive}" "${metadata}" "${published_inputs}" "${size_report}"

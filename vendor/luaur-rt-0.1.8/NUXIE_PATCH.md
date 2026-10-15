@@ -82,3 +82,11 @@
 - Touched files: `src/error.rs`, `src/callback.rs`, and
   `tests/error_position.rs`; workspace-patched execution is covered by
   `tools/luaur-rt-test-harness/tests/error_position.rs`.
+
+## App-data lookup hashing
+
+- The per-VM app-data store hashes its keys (a VM's global-state pointer and a
+  `TypeId`) with a one-word multiplicative hasher instead of SipHash. Hosts
+  look app data up on every script call; lookup results, borrow tracking and
+  the API are unchanged.
+- Touched file: `src/app_data.rs`.

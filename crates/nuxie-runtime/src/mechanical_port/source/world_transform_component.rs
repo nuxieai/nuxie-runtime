@@ -82,10 +82,33 @@ pub(crate) struct PlainTransform {
     // The type's own work after TransformComponent::update (a Shape's opacity
     // propagation to its paints).
     pub(crate) after: Option<fn(&CoreHandle, ComponentDirt)>,
+    // A Path's cells. The kernel runs only the path's transform-only updates
+    // (see `takes`); the path's own update handles the rest.
+    pub(crate) path: Option<Rc<crate::mechanical_port::source::shapes::path_cells::PathCells>>,
 }
 
 impl PlainTransform {
+    /// Whether this kernel runs an update with `dirt`. A Path's update adds
+    /// work only for Path or NSlicer dirt (its type's vertex prefix and the
+    /// rebuild), or for world-transform dirt under a deformer (the rebuild).
+    /// Every other update is TransformComponent::update after resetting the
+    /// path's shape notification gate, which the kernel runs.
+    #[inline]
+    pub(crate) fn takes(&self, dirt: ComponentDirt) -> bool {
+        match &self.path {
+            None => true,
+            Some(path) => {
+                !dirt.intersects(ComponentDirt::PATH | ComponentDirt::N_SLICER)
+                    && !(dirt.contains(ComponentDirt::WORLD_TRANSFORM) && path.has_deformer())
+            }
+        }
+    }
+
     pub(crate) fn update(&self, owner: &CoreHandle, dirt: ComponentDirt) {
+        if let Some(path) = &self.path {
+            // Path::update's prefix before TransformComponent::update.
+            path.reset_shape_notification();
+        }
         self.update_transform(dirt);
         if let Some(after) = self.after {
             after(owner, dirt);

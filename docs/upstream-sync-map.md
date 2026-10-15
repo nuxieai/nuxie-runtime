@@ -9,18 +9,29 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1b887eb61219d549bd59eb4cb879b957384fcc64`
+- LAST_SYNCED_SHA: `30454306ffcd0f360a122af1afa6e2295182abc5`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Seven upstream commits remain after this checkpoint at the fetched target.
-  All 242 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (264 after `5892bb05`); this
+  Six upstream commits remain after this checkpoint at the fetched target.
+  All 243 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (265 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `30454306`, integrated atop downstream `09c3eaa7fe`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. The translated renderer's member API is accessible to its internal
+  adapters; no new external Rust crate API is claimed. Source/manifest/pipeline
+  checks pass 39; generated build files, corpus metadata, changed-file formatting
+  and diff hygiene pass. Native renderer validation failed to build before any
+  tests executed because the host filesystem ran out of space. The queued
+  WebGPU/WebGL2 wasm32 compilation was cancelled for the same capacity blocker.
+  These are unavailable validation results, not passes or renderer regressions.
+  Native-editor arena retirement remains explicitly excluded. No new pixel,
+  hardware, Golden or Silver replay coverage is claimed.
 - Validation at `1b887eb6`, integrated atop downstream `35e3b96ded`:
   independent source-equivalence and separate Rust-integration reviews confirm
   the public header-visibility fix is already equivalent. No runtime source or
@@ -960,6 +971,7 @@ Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_co
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `30454306ffcd0f360a122af1afa6e2295182abc5` | Expose RenderContext::selectInterlockMode and route beginFrame through it, preserving capability checks and selection order. ViewModelInstance null initialization is already equivalent to Rust's default None. Native-editor ObjectArena retirement, diagnostic and reference-count hooks remain outside the admitted editor-arena profile established at d4fe1022; their retirement behavior is not claimed implemented. Duplicate includes and ownership comments require no runtime change. Private editor code absent from the public delta is not claimed imported. | — |
 | `1b887eb61219d549bd59eb4cb879b957384fcc64` | Already equivalent: the public change only exposes LayerState and StateTransition headers to C++ editor builds for the existing addScriptedInterpolators body. Both Rust modules and that method are unconditional; no runtime semantic change is needed. Private script undo/collaboration changes and tests mentioned in the commit message are absent from the public delta and are not claimed imported. | — |
 | `c63a5ba0486e6f6cc4f88dbb98b535f9db4ab382` | Translate the string-template converter, named/positional/sequential placeholders, configurable delimiter parsing, validated number formatting and shared thousands helper. Preserve argument import attachment, bind ownership/clone retargeting, dirty propagation, generated type/property dispatch and the testing converter accessor; retain the already-null Rust parent-bind initialization. Port the public unit tests and exact string_template.riv fixture. Formatting remains pure Rust at the approved host boundary. Private editor/RML/rive_native changes referenced by the commit message but absent from the public delta are not claimed imported. | — |
 | `536a4f7a3c2e5817d91fdf80f933fa0018750921` | Back a deferred canvas before resolving its image during paint mutations. Record canvasSample beside each canvas drawPath that samples a foreign image, capturing the handle at draw time; schedule its dependency without walking screen draws or tracking later paint state. Preserve the draw-filtered no-op replay and translate all four upstream regressions. The existing generic command decoder accounts for the redundant-command analysis addition; private .rive_head contents are not claimed imported. | — |

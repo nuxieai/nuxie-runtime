@@ -1,4 +1,3 @@
-use crate::mechanical_port::source::layout::layout_style_applier::YGStyle;
 use crate::mechanical_port::source::{
     component::ComponentDirt,
     container_component::ContainerComponent,
@@ -10,6 +9,7 @@ use crate::mechanical_port::source::{
         layout_style_applier::{LayoutStyleApplier, LayoutSyncContext},
     },
 };
+use taffy::prelude::Style;
 
 impl std::ops::Deref for GridItemPlacement {
     type Target = GridItemPlacementBase;
@@ -66,7 +66,7 @@ impl GridItemPlacement {
             parent.with_mut(|parent| parent.component_add_dependent(this));
         }
     }
-    pub fn apply_placement_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_placement_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         if context.parent_is_stack || !context.parent_is_grid {
             return;
         }
@@ -100,7 +100,7 @@ impl GridItemPlacement {
 }
 
 impl LayoutStyleApplier for GridItemPlacement {
-    fn apply_placement_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    fn apply_placement_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         GridItemPlacement::apply_placement_style(self, style, context);
     }
 }

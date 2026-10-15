@@ -72,10 +72,6 @@ luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 # libjpeg v9f component-scaling and integer-IDCT behavior.
 jpeg-decoder = { path = "vendor/jpeg-decoder-0.3.2-rive-v9f" }
 
-# Runtime layout parity fork: Taffy 0.12.1 with flex-grow arithmetic ordered
-# like the pinned Yoga owner so intermediate f32 rounding remains identical.
-taffy = { path = "vendor/taffy-0.12.1-rive-yoga-order" }
-
 # Runtime text parity fork: Skrifa 0.45.1 with composite offsets placed in the
 # same requested-em coordinate space as pinned HarfBuzz 13.1.1.
 skrifa = { path = "vendor/skrifa-0.45.1-rive-harfbuzz" }

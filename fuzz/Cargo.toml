@@ -52,7 +52,6 @@ debug = 1
 # propagate through path dependencies.
 [patch.crates-io]
 jpeg-decoder = { path = "../vendor/jpeg-decoder-0.3.2-rive-v9f" }
-taffy = { path = "../vendor/taffy-0.12.1-rive-yoga-order" }
 skrifa = { path = "../vendor/skrifa-0.45.1-rive-harfbuzz" }
 symphonia-bundle-flac = { path = "../vendor/symphonia-bundle-flac-0.5.5" }
 symphonia-bundle-mp3 = { path = "../vendor/symphonia-bundle-mp3-0.5.5" }

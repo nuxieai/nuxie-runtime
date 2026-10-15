@@ -65,8 +65,9 @@ copyright 2018 Visly Inc.
 
 Source: https://github.com/DioxusLabs/taffy
 
-Vendored with Nuxie changes in `vendor/taffy-0.12.1-rive-yoga-order`
-(crates.io `taffy` 0.12.1).
+Used unmodified from crates.io (`taffy` 0.15.0). A Nuxie-patched
+`vendor/taffy-0.12.1-rive-yoga-order` was vendored in this repository until
+2026-10-14; earlier release tags include it.
 
 ## jpeg-decoder
 

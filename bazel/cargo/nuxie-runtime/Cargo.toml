@@ -39,7 +39,7 @@ path = "lib.rs"
 "nuxie-render-api" = { "path" = "../nuxie-render-api" }
 "nuxie-schema" = { "path" = "../nuxie-schema" }
 "skrifa" = { "version" = "0.45.1", "path" = "../skrifa", "default-features" = false, "features" = ["__bazel_dependency_default"] }
-"taffy" = { "version" = "=0.12.1", "path" = "../taffy", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"taffy" = { "version" = "=0.15.0", "default-features" = false, "features" = ["std", "taffy_tree", "flexbox", "grid", "detailed_layout_info"] }
 "unicode-properties" = { "version" = "0.1.4", "default-features" = false, "features" = ["general-category"] }
 "unicode-bidi" = { "version" = "0.3.18" }
 "unicode-script" = { "version" = "0.5.8" }

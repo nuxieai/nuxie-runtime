@@ -1,9 +1,11 @@
 use crate::mechanical_port::source::layout::layout_style_applier::{
-    GridTrackList, YGGridLine, YGGridTrackSize, YGJustify, YGStyle, YGStyleSizeLength,
+    RiveTrackLength, YGJustify, rive_grid_line, rive_grid_span, rive_justify_items,
+    rive_justify_self, rive_template, rive_track,
 };
 use crate::mechanical_port::source::{
     container_component::ContainerComponent, generated::layout::grid_track_base::GridTrackBase,
 };
+use taffy::prelude::{GridPlacement, Style, TrackSizingFunction};
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -86,18 +88,18 @@ impl GridTrack {
         self.mark_layout_dirty();
     }
 
-    fn grid_size_length(kind: GridTrackSizeType, value: f32) -> YGStyleSizeLength {
+    fn grid_size_length(kind: GridTrackSizeType, value: f32) -> RiveTrackLength {
         match kind {
-            GridTrackSizeType::Points => YGStyleSizeLength::points(value),
-            GridTrackSizeType::Percent => YGStyleSizeLength::percent(value),
-            GridTrackSizeType::Fr => YGStyleSizeLength::stretch(value),
-            _ => YGStyleSizeLength::auto(),
+            GridTrackSizeType::Points => RiveTrackLength::Points(value),
+            GridTrackSizeType::Percent => RiveTrackLength::Percent(value),
+            GridTrackSizeType::Fr => RiveTrackLength::Fr(value),
+            _ => RiveTrackLength::Auto,
         }
     }
-    fn grid_track_size(track: &GridTrack) -> YGGridTrackSize {
+    fn grid_track_size(track: &GridTrack) -> TrackSizingFunction {
         let kind = GridTrackSizeType::from(track.base.track_type());
         if track.base.track_max_type() != 0 {
-            return YGGridTrackSize::minmax(
+            return rive_track(
                 Self::grid_size_length(kind, track.base.track_value()),
                 Self::grid_size_length(
                     GridTrackSizeType::from(track.base.track_max_type() - 1),
@@ -105,34 +107,37 @@ impl GridTrack {
                 ),
             );
         }
+        let value = track.base.track_value();
         match kind {
-            GridTrackSizeType::Points => YGGridTrackSize::length(track.base.track_value()),
-            GridTrackSizeType::Percent => YGGridTrackSize::percent(track.base.track_value()),
-            GridTrackSizeType::Fr => YGGridTrackSize::fr(track.base.track_value()),
-            _ => YGGridTrackSize::auto(),
+            GridTrackSizeType::Points => rive_track(
+                RiveTrackLength::Points(value),
+                RiveTrackLength::Points(value),
+            ),
+            GridTrackSizeType::Percent => rive_track(
+                RiveTrackLength::Percent(value),
+                RiveTrackLength::Percent(value),
+            ),
+            GridTrackSizeType::Fr => rive_track(RiveTrackLength::Auto, RiveTrackLength::Fr(value)),
+            _ => rive_track(RiveTrackLength::Auto, RiveTrackLength::Auto),
         }
     }
-    fn grid_line(cell: i32) -> YGGridLine {
+    fn grid_line(cell: i32) -> GridPlacement {
         if cell == 0 {
-            YGGridLine::auto()
+            GridPlacement::Auto
         } else {
-            YGGridLine::from_integer(if cell < 0 { cell - 1 } else { cell })
+            rive_grid_line(if cell < 0 { cell - 1 } else { cell })
         }
     }
-    fn grid_span(span: u32) -> YGGridLine {
+    fn grid_span(span: u32) -> GridPlacement {
         if span > 1 {
-            YGGridLine::span(span as i32)
+            rive_grid_span(span)
         } else {
-            YGGridLine::auto()
+            GridPlacement::Auto
         }
     }
 
-    pub fn sync_container_style(
-        style: &mut YGStyle,
-        owner: &ContainerComponent,
-        justify_items: u32,
-    ) {
-        let mut lists: [GridTrackList; 4] = Default::default();
+    pub fn sync_container_style(style: &mut Style, owner: &ContainerComponent, justify_items: u32) {
+        let mut lists: [Vec<TrackSizingFunction>; 4] = Default::default();
         for child in owner.children() {
             let Some((collection, track_size)) = child.with_downcast::<GridTrack, _>(|track| {
                 (track.base.collection(), Self::grid_track_size(track))
@@ -144,18 +149,19 @@ impl GridTrack {
             }
             lists[collection as usize].push(track_size);
         }
-        style.set_grid_template_columns(std::mem::take(&mut lists[0]));
-        style.set_grid_template_rows(std::mem::take(&mut lists[1]));
-        style.set_grid_auto_columns(std::mem::take(&mut lists[2]));
-        style.set_grid_auto_rows(std::mem::take(&mut lists[3]));
-        style.set_justify_items(YGJustify::from(justify_items));
+        style.grid_template_columns = rive_template(&lists[0]);
+        style.grid_template_rows = rive_template(&lists[1]);
+        style.grid_auto_columns = std::mem::take(&mut lists[2]);
+        style.grid_auto_rows = std::mem::take(&mut lists[3]);
+        style.justify_items = rive_justify_items(YGJustify::from(justify_items));
     }
-    pub fn sync_stack_container_style(style: &mut YGStyle, justify_items: u32) {
-        style.set_grid_template_columns(vec![YGGridTrackSize::fr(1.0)]);
-        style.set_grid_template_rows(vec![YGGridTrackSize::fr(1.0)]);
-        style.set_grid_auto_columns(Vec::new());
-        style.set_grid_auto_rows(Vec::new());
-        style.set_justify_items(YGJustify::from(justify_items));
+    pub fn sync_stack_container_style(style: &mut Style, justify_items: u32) {
+        let fill = rive_track(RiveTrackLength::Auto, RiveTrackLength::Fr(1.0));
+        style.grid_template_columns = rive_template(&[fill]);
+        style.grid_template_rows = rive_template(&[fill]);
+        style.grid_auto_columns = Vec::new();
+        style.grid_auto_rows = Vec::new();
+        style.justify_items = rive_justify_items(YGJustify::from(justify_items));
     }
     fn resolve_item_justify_self(value: u32, inline_hugs: bool, container: u32) -> YGJustify {
         if !inline_hugs {
@@ -173,38 +179,34 @@ impl GridTrack {
         }
     }
     pub fn sync_item_lines(
-        style: &mut YGStyle,
+        style: &mut Style,
         column: i32,
         row: i32,
         column_span: u32,
         row_span: u32,
     ) {
-        style.set_grid_column_start(Self::grid_line(column));
-        style.set_grid_column_end(Self::grid_span(column_span));
-        style.set_grid_row_start(Self::grid_line(row));
-        style.set_grid_row_end(Self::grid_span(row_span));
+        style.grid_column.start = Self::grid_line(column);
+        style.grid_column.end = Self::grid_span(column_span);
+        style.grid_row.start = Self::grid_line(row);
+        style.grid_row.end = Self::grid_span(row_span);
     }
-    pub fn sync_stack_item_cell(style: &mut YGStyle) {
-        style.set_grid_column_start(YGGridLine::from_integer(1));
-        style.set_grid_column_end(YGGridLine::auto());
-        style.set_grid_row_start(YGGridLine::from_integer(1));
-        style.set_grid_row_end(YGGridLine::auto());
+    pub fn sync_stack_item_cell(style: &mut Style) {
+        style.grid_column.start = rive_grid_line(1);
+        style.grid_column.end = GridPlacement::Auto;
+        style.grid_row.start = rive_grid_line(1);
+        style.grid_row.end = GridPlacement::Auto;
     }
     pub fn sync_item_justify_self(
-        style: &mut YGStyle,
+        style: &mut Style,
         value: u32,
         stack: bool,
         inline_hugs: bool,
         container: u32,
     ) {
-        if stack {
-            style.set_justify_self(YGJustify::from(value));
-            return;
-        }
-        style.set_justify_self(Self::resolve_item_justify_self(
-            value,
-            inline_hugs,
-            container,
-        ));
+        style.justify_self = rive_justify_self(if stack {
+            YGJustify::from(value)
+        } else {
+            Self::resolve_item_justify_self(value, inline_hugs, container)
+        });
     }
 }

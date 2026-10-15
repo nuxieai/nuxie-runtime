@@ -31,6 +31,16 @@ impl ShapePaintPath {
             ..Self::new(is_local)
         }
     }
+    /// Become what `with_fill_rule(source.is_local(), source.fill_rule())`
+    /// holding a clone of `source`'s raw path would be, reusing this path's
+    /// buffers.
+    pub(crate) fn reset_to_copy_of(&mut self, source: &ShapePaintPath) {
+        self.render_path_dirty = true;
+        self.render_path = None;
+        self.raw_path.clone_from(&source.raw_path);
+        self.is_local = source.is_local;
+        self.fill_rule = source.fill_rule;
+    }
     pub fn raw_path(&self) -> &RawPath {
         &self.raw_path
     }

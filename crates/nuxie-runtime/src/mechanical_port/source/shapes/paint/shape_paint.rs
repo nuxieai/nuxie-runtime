@@ -122,6 +122,9 @@ pub struct ShapePaint {
     has_paint_image: bool,
     is_fill: bool,
     script_paint_scope: Option<Rc<crate::scripting::ScriptPaint>>,
+    // The buffers of the last effect update's source snapshot, reused by the
+    // next update.
+    effect_source: ShapePaintPath,
 }
 
 impl ShapePaint {
@@ -147,6 +150,7 @@ impl ShapePaint {
             has_paint_image: false,
             is_fill: false,
             script_paint_scope: None,
+            effect_source: ShapePaintPath::default(),
         }
     }
 }
@@ -226,25 +230,32 @@ impl ShapePaint {
                 return;
             }
             self.effects_deferred = false;
-            let mut source = None;
+            // The snapshot reuses the previous update's buffers.
+            let mut source = std::mem::take(&mut self.effect_source);
+            let mut copied = false;
             parent.with_mut(|container| {
                 container.with_shape_paint_path_mut(kind, &mut |path| {
-                    let mut snapshot =
-                        ShapePaintPath::with_fill_rule(path.is_local(), path.fill_rule());
-                    *snapshot.mutable_raw_path() = path.raw_path().clone();
-                    source = Some(snapshot);
+                    source.reset_to_copy_of(path);
+                    copied = true;
                 });
             });
             // Effects consume immutable raw geometry. Release the container before
             // a scripted effect reads or edits that same parent TransformComponent.
-            let Some(source) = source else {
+            if !copied {
+                self.effect_source = source;
                 return;
-            };
-            // A paint snapshot is only needed inside an effect invocation.
-            // Ordinary Fill/Stroke updates never construct Lua PaintData upstream.
-            self.script_paint_scope = Some(Rc::new(crate::scripting::ScriptPaint::from_fresh(
-                self, stroke,
-            )));
+            }
+            // A paint snapshot is only needed inside a scripted effect's
+            // invocation. Ordinary Fill/Stroke updates never construct Lua
+            // PaintData upstream.
+            if self.effects_container.effects().iter().any(|effect| {
+                effect.occupied_core_type()
+                    == Some(crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::TYPE_KEY)
+            }) {
+                self.script_paint_scope = Some(Rc::new(
+                    crate::scripting::ScriptPaint::from_fresh(self, stroke),
+                ));
+            }
             let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
             for handle in self.effects_container.effects().iter().cloned() {
                 handle.with_mut(|effect| {
@@ -262,6 +273,7 @@ impl ShapePaint {
                 });
             }
             self.script_paint_scope = None;
+            self.effect_source = source;
         }
     }
 

@@ -1,13 +1,12 @@
-//! All eight cases from tests/unit_tests/runtime/manifest_asset_test.cpp at d8727299.
+//! Section framing cases from tests/unit_tests/runtime/manifest_asset_test.cpp
+//! at d8727299. Upstream's section 2 decoder is intentionally not ported, so
+//! that ID must be skipped like any other unknown section.
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::{
     RuntimeFactoryHandle,
     source::{
         assets::manifest_asset::ManifestAsset,
-        manifest_sections::{
-            ManifestSections, WATERMARK_FLAG_ENABLED, WATERMARK_SECTION_VERSION,
-            manifest_detail::append_var_uint,
-        },
+        manifest_sections::{ManifestSections, manifest_detail::append_var_uint},
     },
 };
 
@@ -23,11 +22,12 @@ fn write_section(out: &mut Vec<u8>, section: u64, payload: &[u8]) {
     out.extend_from_slice(payload);
 }
 
-fn watermark_payload(version: u64, flags: u64, artboard_index: u64) -> Vec<u8> {
+fn names_payload(id: u64, name: &[u8]) -> Vec<u8> {
     let mut payload = Vec::new();
-    write_var_uint(&mut payload, version);
-    write_var_uint(&mut payload, flags);
-    write_var_uint(&mut payload, artboard_index);
+    write_var_uint(&mut payload, 1);
+    write_var_uint(&mut payload, id);
+    write_var_uint(&mut payload, name.len() as u64);
+    payload.extend_from_slice(name);
     payload
 }
 
@@ -40,69 +40,35 @@ fn decode(asset: &mut ManifestAsset, bytes: &[u8]) -> bool {
 }
 
 #[test]
-fn a_manifest_with_no_sections_decodes_with_no_watermark() {
+fn a_manifest_with_no_sections_decodes() {
     let mut asset = ManifestAsset::default();
     assert!(decode(&mut asset, &[]));
-    assert!(!asset.has_watermark());
+    assert_eq!(asset.resolve_name(4), "");
 }
 
 #[test]
-fn the_watermark_section_decodes() {
+fn a_legacy_section_two_is_skipped_and_later_sections_still_decode() {
     let mut bytes = Vec::new();
+    // Version, flags, artboard index, then an appended field.
+    write_section(&mut bytes, 2, &[1, 1, 7, 0x2a]);
     write_section(
         &mut bytes,
-        ManifestSections::Watermark as u64,
-        &watermark_payload(1, 1, 7),
+        ManifestSections::Names as u64,
+        &names_payload(4, b"hi"),
     );
     let mut asset = ManifestAsset::default();
     assert!(decode(&mut asset, &bytes));
-    assert!(asset.has_watermark());
-    assert_eq!(asset.watermark_artboard_index(), 7);
-}
-
-#[test]
-fn a_cleared_enabled_flag_leaves_the_watermark_off() {
-    let mut bytes = Vec::new();
-    write_section(
-        &mut bytes,
-        ManifestSections::Watermark as u64,
-        &watermark_payload(1, 0, 7),
-    );
-    let mut asset = ManifestAsset::default();
-    assert!(decode(&mut asset, &bytes));
-    assert!(!asset.has_watermark());
-}
-
-#[test]
-fn trailing_bytes_in_the_watermark_section_are_skipped() {
-    let mut payload = watermark_payload(1, 1, 3);
-    payload.extend_from_slice(&[0x2a, 0x2b]);
-    let mut bytes = Vec::new();
-    write_section(&mut bytes, ManifestSections::Watermark as u64, &payload);
-    let mut asset = ManifestAsset::default();
-    assert!(decode(&mut asset, &bytes));
-    assert!(asset.has_watermark());
-    assert_eq!(asset.watermark_artboard_index(), 3);
-}
-
-#[test]
-fn an_unrecognized_watermark_version_is_ignored_not_fatal() {
-    let mut bytes = Vec::new();
-    write_section(
-        &mut bytes,
-        ManifestSections::Watermark as u64,
-        &watermark_payload(99, 1, 3),
-    );
-    let mut names = Vec::new();
-    write_var_uint(&mut names, 1);
-    write_var_uint(&mut names, 4);
-    write_var_uint(&mut names, 2);
-    names.extend_from_slice(b"hi");
-    write_section(&mut bytes, ManifestSections::Names as u64, &names);
-    let mut asset = ManifestAsset::default();
-    assert!(decode(&mut asset, &bytes));
-    assert!(!asset.has_watermark());
     assert_eq!(asset.resolve_name(4), "hi");
+
+    // Contents the retired decoder rejected are opaque bytes now.
+    let mut out_of_range = Vec::new();
+    append_var_uint(&mut out_of_range, 1);
+    append_var_uint(&mut out_of_range, 1);
+    append_var_uint(&mut out_of_range, 1u64 << 32);
+    let mut bytes = Vec::new();
+    write_section(&mut bytes, 2, &out_of_range);
+    let mut asset = ManifestAsset::default();
+    assert!(decode(&mut asset, &bytes));
 }
 
 #[test]
@@ -111,59 +77,29 @@ fn an_unknown_section_is_skipped_and_later_sections_still_decode() {
     write_section(&mut bytes, 99, &[1, 2, 3]);
     write_section(
         &mut bytes,
-        ManifestSections::Watermark as u64,
-        &watermark_payload(1, 1, 5),
+        ManifestSections::Names as u64,
+        &names_payload(4, b"hi"),
     );
     let mut asset = ManifestAsset::default();
     assert!(decode(&mut asset, &bytes));
-    assert!(asset.has_watermark());
-    assert_eq!(asset.watermark_artboard_index(), 5);
-}
-
-#[test]
-fn an_out_of_range_watermark_artboard_index_is_rejected() {
-    let mut payload = Vec::new();
-    append_var_uint(&mut payload, WATERMARK_SECTION_VERSION);
-    append_var_uint(&mut payload, WATERMARK_FLAG_ENABLED);
-    append_var_uint(&mut payload, 1u64 << 32);
-    let mut bytes = Vec::new();
-    write_section(&mut bytes, ManifestSections::Watermark as u64, &payload);
-    let mut asset = ManifestAsset::default();
-    assert!(!decode(&mut asset, &bytes));
-    assert!(!asset.has_watermark());
-
-    let mut ok_payload = Vec::new();
-    append_var_uint(&mut ok_payload, WATERMARK_SECTION_VERSION);
-    append_var_uint(&mut ok_payload, WATERMARK_FLAG_ENABLED);
-    append_var_uint(&mut ok_payload, u32::MAX as u64);
-    let mut ok_bytes = Vec::new();
-    write_section(
-        &mut ok_bytes,
-        ManifestSections::Watermark as u64,
-        &ok_payload,
-    );
-    let mut ok = ManifestAsset::default();
-    assert!(decode(&mut ok, &ok_bytes));
-    assert!(ok.has_watermark());
-    assert_eq!(ok.watermark_artboard_index(), u32::MAX);
+    assert_eq!(asset.resolve_name(4), "hi");
 }
 
 #[test]
 fn a_section_id_that_aliases_a_known_one_is_skipped() {
-    let payload = watermark_payload(WATERMARK_SECTION_VERSION, WATERMARK_FLAG_ENABLED, 7);
-    for aliased in [256, 257, 258] {
+    let payload = names_payload(4, b"hi");
+    for aliased in [256, 257] {
         let mut bytes = Vec::new();
         append_var_uint(&mut bytes, aliased);
         append_var_uint(&mut bytes, payload.len() as u64);
         bytes.extend_from_slice(&payload);
         let mut asset = ManifestAsset::default();
         assert!(decode(&mut asset, &bytes), "section id {aliased}");
-        assert!(!asset.has_watermark(), "section id {aliased}");
+        assert_eq!(asset.resolve_name(4), "", "section id {aliased}");
     }
     let mut real = Vec::new();
-    write_section(&mut real, ManifestSections::Watermark as u64, &payload);
+    write_section(&mut real, ManifestSections::Names as u64, &payload);
     let mut asset = ManifestAsset::default();
     assert!(decode(&mut asset, &real));
-    assert!(asset.has_watermark());
-    assert_eq!(asset.watermark_artboard_index(), 7);
+    assert_eq!(asset.resolve_name(4), "hi");
 }

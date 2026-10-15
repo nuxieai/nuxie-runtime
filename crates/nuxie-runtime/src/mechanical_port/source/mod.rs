@@ -51,6 +51,13 @@ pub mod drawable;
 pub(crate) mod draw_list;
 pub mod drawable_flag;
 pub(crate) mod engine_clock;
+/// Sets the monotonic clock for the whole engine, including text input and scrolling.
+#[cfg(all(
+    target_arch = "wasm32",
+    target_os = "unknown",
+    not(feature = "js-host-seed")
+))]
+pub use engine_clock::set_clock as set_engine_clock;
 pub mod enums;
 pub mod event;
 pub mod event_report;
@@ -138,5 +145,4 @@ pub mod typed_children;
 pub mod view_model_type;
 pub mod viewmodel;
 pub mod virtualizing_component;
-pub mod watermark;
 pub mod world_transform_component;

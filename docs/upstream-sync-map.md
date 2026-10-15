@@ -1381,6 +1381,14 @@ its policy behavior, including the documented private-address DNS gap; this is
 not a security qualification for app enablement. The Wasm guest-execution
 deferral remains unchanged.
 
+**SKIP:** on 2026-10-14 the user removed the watermark feature (the manifest
+section 2 decoder, the artboard pre-roll and its draw/advance hooks) as an
+intentional divergence; Nuxie never ships watermarked files. Skip upstream
+watermark commits and the watermark slices of mixed commits. The manifest
+parser skips section 2 like any unknown section. The engine clock it shared
+stays for text input and scroll physics. Historical rows above that mention
+the watermark are left as written.
+
 Port fixes and compatible features on supported runtime and renderer surfaces,
 even when they lack a corpus signal or appear in an "editor" commit. For mixed
 commits, retain applicable shared changes and explain the omitted portion.

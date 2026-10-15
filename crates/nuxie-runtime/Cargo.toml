@@ -26,8 +26,8 @@ test-script-signature = []
 # performance.now() through a JS host. Host-free wasm embedders (the cold
 # publisher) must stay import-free, so the JS seed is a default-on feature.
 # Also supplies the monotonic browser clock for the whole engine. Import-free
-# hosts install watermark::set_watermark_clock before file import, text-input
-# pointer-down, or instancing watermarked files.
+# hosts install source::set_engine_clock before file import or text-input
+# pointer-down.
 js-host-seed = ["dep:js-sys", "dep:wasm-bindgen"]
 default = ["js-host-seed"]
 

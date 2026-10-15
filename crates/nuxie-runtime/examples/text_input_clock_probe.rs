@@ -13,7 +13,7 @@ pub fn clock_probe_pointer_down_bytes(bytes: &[u8]) -> u32 {
         target_os = "unknown",
         not(feature = "js-host-seed")
     ))]
-    nuxie_runtime::source::watermark::set_watermark_clock(|| 1_000_000);
+    nuxie_runtime::source::set_engine_clock(|| 1_000_000);
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("factory");
     let file = File::import(bytes, retained, None, None, None).expect("fixture import");

@@ -363,9 +363,6 @@ pub struct Artboard {
     active_focus_manager: Option<RuntimeFocusManagerWeakHandle>,
     active_semantic_manager: Option<RuntimeSemanticManagerHandle>,
     semantic_boundary_node: Option<SemanticNodeRef>,
-    // Only File-vended top-level instances carry the pre-roll. Clone starts
-    // from Default and deliberately does not copy this owner.
-    watermark: Option<Rc<RefCell<crate::mechanical_port::source::watermark::Watermark>>>,
     #[cfg(feature = "tools")]
     external_parent_focus_node: Option<FocusNodeRef>,
     draw_order_change_counter: u8,
@@ -457,7 +454,6 @@ impl Default for Artboard {
             active_focus_manager: None,
             active_semantic_manager: None,
             semantic_boundary_node: None,
-            watermark: None,
             #[cfg(feature = "tools")]
             external_parent_focus_node: None,
             draw_order_change_counter: 0,
@@ -3498,51 +3494,9 @@ impl Artboard {
         )
     }
 
-    pub fn set_watermark(
-        &mut self,
-        watermark: Option<Box<crate::mechanical_port::source::watermark::Watermark>>,
-    ) {
-        self.watermark = watermark.map(|watermark| Rc::new(RefCell::new(*watermark)));
-    }
-
-    pub fn watermark(
-        &self,
-    ) -> Option<std::cell::Ref<'_, crate::mechanical_port::source::watermark::Watermark>> {
-        self.watermark.as_ref().map(|watermark| watermark.borrow())
-    }
-
-    pub fn advance_watermark(&mut self, elapsed_seconds: f32) -> bool {
-        let Some(watermark) = self.watermark.as_ref() else {
-            return false;
-        };
-        let playing = watermark.borrow_mut().advance(elapsed_seconds);
-        if !playing {
-            self.watermark = None;
-            return false;
-        }
-        true
-    }
-
     pub fn draw_handle(root: &CoreHandle, renderer: &mut Renderer) {
         let _runtime_receiver = root.runtime_artboard_instance();
         nuxie_render_api::increment_artboard_draw_frame_id();
-        // Nested draws enter draw_internal directly. A never-started watermark
-        // leaves non-state-machine playback drawing its own content.
-        let watermark = root
-            .with_downcast::<Artboard, _>(|artboard| {
-                artboard
-                    .watermark
-                    .as_ref()
-                    .filter(|watermark| watermark.borrow().is_playing())
-                    .cloned()
-            })
-            .flatten();
-        if let Some(watermark) = watermark {
-            if let Some(bounds) = root.with_downcast::<Artboard, _>(Artboard::bounds) {
-                watermark.borrow_mut().draw(renderer, &bounds);
-            }
-            return;
-        }
         // A standalone/root artboard is never cached as a bitmap: it is
         // already the top-level render target, and a host can skip drawing
         // entirely via did_change(). Only nested/instanced draws (which reach

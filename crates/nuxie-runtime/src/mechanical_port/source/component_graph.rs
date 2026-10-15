@@ -557,6 +557,9 @@ impl ComponentGraph {
         value: f32,
     ) -> Option<bool> {
         let input = TransformInput::from_key(property_key)?;
+        if !kernel_candidate(handle) {
+            return None;
+        }
         let (graph, order) = handle.component_graph()?;
         let kernel = graph.transforms.get(order as usize)?.as_ref()?;
         let (get, set) = input.accessors(kernel)?;
@@ -578,6 +581,9 @@ impl ComponentGraph {
     /// read from the member's cells; None where that returns None.
     pub(crate) fn get_plain_transform_double(handle: &CoreHandle, property_key: i32) -> Option<f32> {
         let input = TransformInput::from_key(property_key)?;
+        if !kernel_candidate(handle) {
+            return None;
+        }
         let (graph, order) = handle.component_graph()?;
         let kernel = graph.transforms.get(order as usize)?.as_ref()?;
         let (get, _) = input.accessors(kernel)?;
@@ -741,6 +747,36 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
         after,
         path,
     })
+}
+
+/// Whether `handle` occupies its slot as one of plain_transform's concrete
+/// types, read without a lease, so other types skip the graph lookup.
+#[inline]
+fn kernel_candidate(handle: &CoreHandle) -> bool {
+    use crate::mechanical_port::source::generated::{
+        bones::{bone_base::BoneBase, root_bone_base::RootBoneBase},
+        node_base::NodeBase,
+        shapes::{
+            ellipse_base::EllipseBase, points_path_base::PointsPathBase,
+            polygon_base::PolygonBase, rectangle_base::RectangleBase, shape_base::ShapeBase,
+            star_base::StarBase, triangle_base::TriangleBase,
+        },
+    };
+    matches!(
+        handle.occupied_core_type(),
+        Some(
+            NodeBase::TYPE_KEY
+                | BoneBase::TYPE_KEY
+                | RootBoneBase::TYPE_KEY
+                | ShapeBase::TYPE_KEY
+                | PointsPathBase::TYPE_KEY
+                | EllipseBase::TYPE_KEY
+                | RectangleBase::TYPE_KEY
+                | TriangleBase::TYPE_KEY
+                | PolygonBase::TYPE_KEY
+                | StarBase::TYPE_KEY
+        )
+    )
 }
 
 /// The concrete Path types whose update is Path::update (Node's transform

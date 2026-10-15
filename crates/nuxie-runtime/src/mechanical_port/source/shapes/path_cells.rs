@@ -188,6 +188,16 @@ impl PathCells {
 
     /// Path::onDirty for a path no caller has borrowed.
     pub(crate) fn on_dirty(&self, owner: &CoreHandle, dirt: ComponentDirt) {
+        self.on_dirty_with(|| owner, dirt);
+    }
+
+    /// on_dirty, reading the path's own handle only when it is needed.
+    #[inline]
+    pub(crate) fn on_dirty_with<'a>(
+        &self,
+        owner: impl FnOnce() -> &'a CoreHandle,
+        dirt: ComponentDirt,
+    ) {
         if has_dirt(
             dirt,
             ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
@@ -197,7 +207,7 @@ impl PathCells {
         // pathChanged may enter a renderer and retire this Path; the dirt add
         // below rechecks its liveness.
         if self.deferred.get() {
-            self.add_dirt(owner, ComponentDirt::PATH);
+            self.add_dirt(owner(), ComponentDirt::PATH);
         }
     }
 

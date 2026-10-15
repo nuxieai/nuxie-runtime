@@ -1,36 +1,36 @@
 struct VB {
-    xd: f32,
-    Ce: f32,
-    Hg: f32,
-    Ig: f32,
-    P6_: u32,
-    Ca: u32,
-    tg: u32,
-    ug: u32,
-    F8_: vec4<i32>,
-    zi: vec2<f32>,
-    De: vec2<f32>,
+    yd: f32,
+    Ee: f32,
+    Jg: f32,
+    Kg: f32,
+    S6_: u32,
+    Ea: u32,
+    vg: u32,
+    wg: u32,
+    H8_: vec4<i32>,
+    Bi: vec2<f32>,
+    Fe: vec2<f32>,
     q2_: u32,
-    Di: f32,
+    Fi: f32,
     w6_: u32,
     i3_: f32,
-    Ee: f32,
-    mg: u32,
+    Ge: f32,
+    og: u32,
     F3_: f32,
     G3_: f32,
-    Fe: f32,
-    wi: u32,
-    Ba: u32,
-    M8_: f32,
-    N8_: f32,
+    He: f32,
+    yi: u32,
+    Da: u32,
+    O8_: f32,
+    P8_: f32,
 }
 
-var<private> Z6_1: vec4<f32>;
-var<private> a7_1: vec4<f32>;
+var<private> d7_1: vec4<f32>;
+var<private> e7_1: vec4<f32>;
 var<private> m5_1: vec4<f32>;
-var<private> o8_1: u32;
+var<private> q8_1: u32;
 var<private> n5_1: vec3<f32>;
-var<private> Gi: vec4<u32>;
+var<private> Ii: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 
@@ -79,10 +79,10 @@ fn main_1() {
     var phi_1231_: vec4<u32>;
     var local_2: f32;
 
-    let _e43 = Z6_1;
+    let _e43 = d7_1;
     let _e44 = _e43.xy;
     let _e45 = _e43.zw;
-    let _e46 = a7_1;
+    let _e46 = e7_1;
     let _e47 = _e46.xy;
     let _e48 = _e46.zw;
     if any((_e44 != _e45)) {
@@ -105,7 +105,7 @@ fn main_1() {
     let _e76 = u32(_e75);
     let _e81 = f32((_e76 >> bitcast<u32>(10i)));
     let _e83 = m5_1[3u];
-    let _e84 = o8_1;
+    let _e84 = q8_1;
     let _e85 = (_e73 - _e81);
     let _e86 = (_e71 <= _e85);
     if _e86 {
@@ -348,18 +348,18 @@ fn main_1() {
         phi_1231_ = vec4<u32>(_e347.x, _e347.y, (((bitcast<u32>(i32(round((_e332 * 10430.378f)))) & 65535u) << bitcast<u32>(16i)) | _e386), _e347.w);
     }
     let _e396 = phi_1231_;
-    Gi = vec4<u32>(_e396.x, _e396.y, _e396.z, _e149);
+    Ii = vec4<u32>(_e396.x, _e396.y, _e396.z, _e149);
     return;
 }
 
 @fragment
-fn main(@location(0) Z6_: vec4<f32>, @location(1) a7_: vec4<f32>, @location(2) m5_: vec4<f32>, @location(4) @interpolate(flat, either) o8_: u32, @location(3) n5_: vec3<f32>) -> @location(0) vec4<u32> {
-    Z6_1 = Z6_;
-    a7_1 = a7_;
+fn main(@location(0) d7_: vec4<f32>, @location(1) e7_: vec4<f32>, @location(2) m5_: vec4<f32>, @location(4) @interpolate(flat, either) q8_: u32, @location(3) n5_: vec3<f32>) -> @location(0) vec4<u32> {
+    d7_1 = d7_;
+    e7_1 = e7_;
     m5_1 = m5_;
-    o8_1 = o8_;
+    q8_1 = q8_;
     n5_1 = n5_;
     main_1();
-    let _e11 = Gi;
+    let _e11 = Ii;
     return _e11;
 }

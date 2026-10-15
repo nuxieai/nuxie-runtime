@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/rhi.glsl.
  *
- * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
+ * Upstream source revision: ce891f526a3297f9498a3e524fce6385cf0f2f25
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/rhi.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "25000e26adba0e149561b026a25bcb229fe04b8467d5b1bc1c3704e8ef1b78c3";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 611;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 25435;
+    "737c9bca6c6cbb0e81c91125088cd3cac7ba658ff326f28cced3a097efb1ee68";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 617;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 25550;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_RHI_GLSL_SOURCE: &str = r###"/*
@@ -155,14 +155,14 @@ $typedef $uint ushort;
 #define DYNAMIC_SAMPLER_BLOCK_BEGIN
 #define DYNAMIC_SAMPLER_BLOCK_END
 
-#define TEXTURE_RGBA32UI(SET, IDX, NAME) uniform $Texture2D<uint4> NAME
-#define TEXTURE_RGBA32F(SET, IDX, NAME) uniform $Texture2D<float4> NAME
+#define TEXTURE_RGBA32UI(SET, IDX, NAME) $Texture2D<uint4> NAME
+#define TEXTURE_RGBA32F(SET, IDX, NAME) $Texture2D<float4> NAME
 #ifdef @SOURCE_TEXTURE_MSAA
-#define TEXTURE_RGBA8_MS(SET, IDX, NAME) uniform $Texture2DMS<half4> NAME
+#define TEXTURE_RGBA8_MS(SET, IDX, NAME) $Texture2DMS<half4> NAME
 #endif
-#define TEXTURE_RGBA8(SET, IDX, NAME) uniform $Texture2D<half4> NAME
-#define TEXTURE_R16F(SET, IDX, NAME) uniform $Texture2D<half> NAME
-#define TEXTURE_R16F_1D_ARRAY(SET, IDX, NAME) uniform $Texture2DArray<half> NAME
+#define TEXTURE_RGBA8(SET, IDX, NAME) $Texture2D<half4> NAME
+#define TEXTURE_R16F(SET, IDX, NAME) $Texture2D<half> NAME
+#define TEXTURE_R16F_1D_ARRAY(SET, IDX, NAME) $Texture2DArray<half> NAME
 #define SAMPLED_R16F_REF(NAME, SAMPLER_NAME)                                   \
     $Texture2D<half> NAME, $SamplerState SAMPLER_NAME
 #define SAMPLED_R16F(NAME, SAMPLER_NAME) NAME, SAMPLER_NAME
@@ -245,6 +245,8 @@ $typedef $uint ushort;
                     _sampleMask)
 
 #else
+// Dst color comes from a resolved copy of the framebuffer, refreshed at each
+// barrier.
 #define DST_COLOR_TEXTURE(NAME) $Texture2D NAME
 
 #define DST_COLOR_FETCH(NAME) NAME[_plsCoord]
@@ -255,18 +257,18 @@ $typedef $uint ushort;
 #define PLS_BLOCK_END
 
 #ifdef @ENABLE_TYPED_UAV_LOAD_STORE
-#define PLS_DECL4F(IDX, NAME) uniform PLS_TEX2D<UNORM half4> NAME
+#define PLS_DECL4F(IDX, NAME) PLS_TEX2D<UNORM half4> NAME
 #else
-#define PLS_DECL4F(IDX, NAME) uniform PLS_TEX2D<uint> NAME
+#define PLS_DECL4F(IDX, NAME) PLS_TEX2D<uint> NAME
 #endif
 #define PLS_DECL4F_READONLY PLS_DECL4F
-#define PLS_DECLUI(IDX, NAME) uniform PLS_TEX2D<uint> NAME
+#define PLS_DECLUI(IDX, NAME) PLS_TEX2D<uint> NAME
 
 #define PLS_LOADUI_UAV PLS_LOADUI
 #define PLS_STOREUI_UAV PLS_STOREUI
 
 #if $COMPILER_METAL || $FORCE_ATOMIC_BUFFER
-#define PLS_DECLUI_UAV(IDX, NAME) uniform $RWBuffer<uint> NAME
+#define PLS_DECLUI_UAV(IDX, NAME) $RWBuffer<uint> NAME
 #define PLS_LOADUI_UAV(PLANE) PLANE[_plsIdx]
 #define PLS_STOREUI_UAV(PLANE, VALUE) PLANE[_plsIdx] = VALUE
 #else
@@ -287,6 +289,10 @@ $typedef $uint ushort;
 #define PLS_STORE4F(PLANE, VALUE) PLANE[_plsCoord] = packUnorm4x8(VALUE)
 #endif
 #define PLS_STOREUI(PLANE, VALUE) PLANE[_plsCoord] = (VALUE)
+
+#define PLS_DECL4F_UAV PLS_DECL4F
+#define PLS_LOAD4F_UAV PLS_LOAD4F
+#define PLS_STORE4F_UAV PLS_STORE4F
 
 #if $COMPILER_METAL || $FORCE_ATOMIC_BUFFER
 INLINE uint pls_atomic_max($RWBuffer<uint> plane, uint _plsIdx, uint x)

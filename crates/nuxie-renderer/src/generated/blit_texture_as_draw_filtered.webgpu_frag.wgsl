@@ -1,43 +1,43 @@
 struct VB {
-    xd: f32,
-    Ce: f32,
-    Hg: f32,
-    Ig: f32,
-    P6_: u32,
-    Ca: u32,
-    tg: u32,
-    ug: u32,
-    F8_: vec4<i32>,
-    zi: vec2<f32>,
-    De: vec2<f32>,
+    yd: f32,
+    Ee: f32,
+    Jg: f32,
+    Kg: f32,
+    S6_: u32,
+    Ea: u32,
+    vg: u32,
+    wg: u32,
+    H8_: vec4<i32>,
+    Bi: vec2<f32>,
+    Fe: vec2<f32>,
     q2_: u32,
-    Di: f32,
+    Fi: f32,
     w6_: u32,
     i3_: f32,
-    Ee: f32,
-    mg: u32,
+    Ge: f32,
+    og: u32,
     F3_: f32,
     G3_: f32,
-    Fe: f32,
-    wi: u32,
-    Ba: u32,
-    M8_: f32,
-    N8_: f32,
+    He: f32,
+    yi: u32,
+    Da: u32,
+    O8_: f32,
+    P8_: f32,
 }
 
 @group(1) @binding(11)
 var IC: texture_2d<f32>;
 @group(1) @binding(13)
-var Eg: sampler;
+var Gg: sampler;
 var<private> l2_1: vec2<f32>;
-var<private> Gi: vec4<f32>;
+var<private> Ii: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 
 fn main_1() {
     let _e6 = l2_1;
-    let _e7 = textureSampleLevel(IC, Eg, _e6, 0f);
-    Gi = _e7;
+    let _e7 = textureSampleLevel(IC, Gg, _e6, 0f);
+    Ii = _e7;
     return;
 }
 
@@ -45,6 +45,6 @@ fn main_1() {
 fn main(@location(0) l2_: vec2<f32>) -> @location(0) vec4<f32> {
     l2_1 = l2_;
     main_1();
-    let _e3 = Gi;
+    let _e3 = Ii;
     return _e3;
 }

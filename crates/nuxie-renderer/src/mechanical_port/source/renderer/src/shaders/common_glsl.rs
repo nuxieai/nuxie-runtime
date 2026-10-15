@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/common.glsl.
  *
- * Upstream source revision: 0aadd4c65084a38dbeae3bd05814ead3f743ed77
+ * Upstream source revision: ce891f526a3297f9498a3e524fce6385cf0f2f25
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ee9d8efa482164ab747f47cf5c1beb0d43fada40a13e4b99473b5e00a1ce3e53";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 503;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 17400;
+    "c9b5e57dcb389c0de60665dbf591bfc82f4593dfb1cb793d0d0d0342968ebf11";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 510;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17559;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -521,6 +521,13 @@ INLINE half4 dst_color_fetch(half4x4 dstSamples, int sampleMask)
 }
 #endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL &&
        // !@FIXED_FUNCTION_COLOR_OUTPUT
+
+#ifdef @FRAGMENT
+INLINE half4 blend_src_over(half4 srcPremul, half4 dstPremul)
+{
+    return srcPremul + dstPremul * (1. - srcPremul.a);
+}
+#endif // @FRAGMENT
 "###;
 
 pub const PINNED_COMMON_SOURCE: &str = PINNED_COMMON_GLSL_SOURCE;

@@ -1,81 +1,81 @@
 struct VB {
-    xd: f32,
-    Ce: f32,
-    Hg: f32,
-    Ig: f32,
-    P6_: u32,
-    Ca: u32,
-    tg: u32,
-    ug: u32,
-    F8_: vec4<i32>,
-    zi: vec2<f32>,
-    De: vec2<f32>,
+    yd: f32,
+    Ee: f32,
+    Jg: f32,
+    Kg: f32,
+    S6_: u32,
+    Ea: u32,
+    vg: u32,
+    wg: u32,
+    H8_: vec4<i32>,
+    Bi: vec2<f32>,
+    Fe: vec2<f32>,
     q2_: u32,
-    Di: f32,
+    Fi: f32,
     w6_: u32,
     i3_: f32,
-    Ee: f32,
-    mg: u32,
+    Ge: f32,
+    og: u32,
     F3_: f32,
     G3_: f32,
-    Fe: f32,
-    wi: u32,
-    Ba: u32,
-    M8_: f32,
-    N8_: f32,
+    He: f32,
+    yi: u32,
+    Da: u32,
+    O8_: f32,
+    P8_: f32,
 }
 
-struct R4Pe {
+struct R4Re {
     r2_: array<u32>,
 }
 
-struct m0Pe {
+struct m0Re {
     r2_: array<u32>,
 }
 
-struct jg {
+struct lg {
     r2_: array<vec2<u32>>,
 }
 
-struct kg {
+struct mg {
     r2_: array<vec4<f32>>,
 }
 
-@id(0) override Xi: bool = true;
+@id(0) override Zi: bool = true;
 
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 @group(2) @binding(3)
-var<storage, read_write> R4_: R4Pe;
+var<storage, read_write> R4_: R4Re;
 @group(2) @binding(1)
-var<storage, read_write> m0_: m0Pe;
+var<storage, read_write> m0_: m0Re;
 @group(3) @binding(9)
-var ab: sampler;
+var db: sampler;
 @group(0) @binding(8)
-var XC: texture_2d<f32>;
+var ZC: texture_2d<f32>;
 @group(0) @binding(9)
-var YC: texture_2d<f32>;
+var AD: texture_2d<f32>;
 @group(1) @binding(11)
 var TB: texture_2d<f32>;
 @group(3) @binding(8)
-var O8_: sampler;
+var Q8_: sampler;
 @group(1) @binding(13)
 var U4_: sampler;
 @group(0) @binding(3)
-var<storage> VC: jg;
+var<storage> XC: lg;
 @group(0) @binding(4)
-var<storage> JB: kg;
-var<private> L1_: vec4<f32>;
+var<storage> JB: mg;
+var<private> N1_: vec4<f32>;
 
 fn main_1() {
     let _e25 = gl_FragCoord_1;
     let _e29 = bitcast<vec2<u32>>(vec2<i32>(floor(_e25.xy)));
-    let _e31 = j.P6_;
+    let _e31 = j.S6_;
     let _e60 = bitcast<i32>((((((_e29.y >> bitcast<u32>(5u)) * (((_e31 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e29.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e29.x & 28u) << bitcast<u32>(5u)) + ((_e29.y & 28u) << bitcast<u32>(2i)))) + (((_e29.y & 3u) << bitcast<u32>(2i)) + (_e29.x & 3u))));
-    let _e62 = j.ug;
+    let _e62 = j.wg;
     R4_.r2_[_e60] = _e62;
-    if Xi {
+    if Zi {
         m0_.r2_[_e60] = 0u;
     }
     discard;
@@ -85,6 +85,6 @@ fn main_1() {
 fn main(@builtin(position) gl_FragCoord: vec4<f32>) -> @location(0) vec4<f32> {
     gl_FragCoord_1 = gl_FragCoord;
     main_1();
-    let _e3 = L1_;
+    let _e3 = N1_;
     return _e3;
 }

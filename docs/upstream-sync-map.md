@@ -46,18 +46,37 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6fa2cccf37a5909824dc98311d8cf2d8327abbd4`
+- LAST_SYNCED_SHA: `ce891f526a3297f9498a3e524fce6385cf0f2f25`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Four upstream commits remain after this checkpoint at the fetched target.
-  All 245 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (267 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 246 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (268 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `ce891f52`, integrated atop downstream `afda479502`:
+  independent source-equivalence and subsequent Rust-integration reviews and
+  correction rereviews are clean. Integration found stale internal aliases in
+  the retained sampled-clip WebGPU bridge; corrected aliases restore its texture
+  binding and single color output. These supplemental clockwise shaders have no
+  current mechanical WebGPU consumer; this is generation-contract coverage,
+  not newly enabled host behavior. Full shader reproducibility passes for all
+  66 WGSL modules and 56 headers. Shared authority, retained GLSL, embedded GL
+  payloads and Vulkan headers were independently checked against upstream output.
+  Both browser renderers compile for wasm32-unknown-unknown. The native suite
+  passed 930 tests (11 ignored), including live Metal pixel/pipeline/golden cases;
+  its two failures were the unchanged UNIV-4801 fixture and a missed test-only
+  minified-name literal. The exact literal was corrected, independently
+  rereviewed, and its targeted rerun passes (one test); the full suite was not
+  rerun after that test-only correction. No assertion was weakened. An initial
+  native invocation incorrectly included WebGPU without Dawn linkage and failed
+  before tests; the corrected feature selection produced the results above.
+  Source/manifest/pipeline checks pass 39. No browser pixels, Android/Mali hardware,
+  new Vulkan hardware qualification or guest-Wasm execution coverage is claimed.
 - Validation at `6fa2cccf`, integrated atop downstream `bbfa0a9d09`:
   independent source-equivalence and subsequent Rust-integration reviews and
   correction rereviews are clean. Integration review corrected owning GL
@@ -1047,6 +1066,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ce891f526a3297f9498a3e524fce6385cf0f2f25` | Translate six shared shader owners: source-over blending, guarded UAV destination reads/writes and retained RHI declarations. Regenerate supported-backend shader inventories and exact minified-name consumers; restore the existing supplemental sampled-clip bridge's renamed aliases without enabling a new host path. Unreal-only wrappers, D3D testing aliases, Unreal deployment options and upstream-only golden launcher/filter changes have no shipped counterpart. The private .rive_head revision does not expose an additional implementation. | — |
 | `6fa2cccf37a5909824dc98311d8cf2d8327abbd4` | Translate GL async ubershader precreation: require KHR_parallel_shader_compile, preserve permutation order, exclude renderPassResolve outside atomics, queue without synchronous completion, and expose the existing generic queue operation in both Rust specializations. Enter the owning GL execution domain and restore the caller domain at the approved host boundary. Retain exact GL header/implementation snapshots. The .rive_head private revision is provenance, not an additional public implementation. | — |
 | `fa2cd6e38c6ab109a7feb6c814b55e4fa1f3d33c` | Translate artboard-backed PaintImage sources: per-host instancing and cycle/nesting limits, default playback, ordered advancement/update, data-context propagation, raster sizing/hysteresis and failure retry, renderer rerouting, lifetime and canvas identity. Register artboardId 487 and all advancing/referencer/host/update dispatch. Preserve editor-feature paint discovery. Rust occurrence entrypoints release parent borrows across child callbacks while retaining child host visibility. Translate all public runtime/canvas/pixel/GM/replay cases and retain the exact binding fixture and independent C++ golden provenance. No private editor implementation or guest execution is claimed. | — |
 | `30454306ffcd0f360a122af1afa6e2295182abc5` | Expose RenderContext::selectInterlockMode and route beginFrame through it, preserving capability checks and selection order. ViewModelInstance null initialization is already equivalent to Rust's default None. Native-editor ObjectArena retirement, diagnostic and reference-count hooks remain outside the admitted editor-arena profile established at d4fe1022; their retirement behavior is not claimed implemented. Duplicate includes and ownership comments require no runtime change. Private editor code absent from the public delta is not claimed imported. | — |

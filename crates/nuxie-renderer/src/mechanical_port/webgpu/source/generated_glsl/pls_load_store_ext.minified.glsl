@@ -14,9 +14,9 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140) uniform Kk{uniform highp vec4 Qi;}Ri;
+layout(binding=0,std140) uniform Mk{uniform highp vec4 Si;}Ti;
 #else
-uniform mediump vec4 AF;
+uniform mediump vec4 CF;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
@@ -25,7 +25,7 @@ __pixel_local_inEXT h2
 #else
 __pixel_local_outEXT h2
 #endif
-{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 I4;layout(r32ui) highp uint n8;};
+{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 I4;layout(r32ui) highp uint p8;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef LOAD_COLOR
 layout(location=0) inout mediump vec4 oc;
@@ -37,9 +37,9 @@ layout(location=0) out mediump vec4 oc;
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-n0=Ri.Qi;
+n0=Ti.Si;
 #else
-n0=AF;
+n0=CF;
 #endif
 #endif
 #ifdef LOAD_COLOR
@@ -50,7 +50,7 @@ n0=oc;
 #endif
 #endif
 #ifdef CLEAR_COVERAGE
-n8=0u;
+p8=0u;
 #endif
 #ifdef CLEAR_CLIP
 m0=0u;
@@ -60,6 +60,6 @@ oc=n0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 Si;void main(){Si=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 Ui;void main(){Ui=vec4(0,1,0,1);}
 #endif
 #endif

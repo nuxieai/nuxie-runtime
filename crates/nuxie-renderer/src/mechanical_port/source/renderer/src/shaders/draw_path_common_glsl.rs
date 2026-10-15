@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
+ * Upstream source revision: ce891f526a3297f9498a3e524fce6385cf0f2f25
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "6c7df10c9a8e2dad8f49ed22bc14b097aeab7c4500d34bb8b26f43fe556c7c0e";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 931;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 40140;
+    "bd2a678ccbc7caf4a303a2983101c8f4c6e4de28b21eb920b829deff0103b3a8";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 937;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 40275;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -84,11 +84,17 @@ TEXTURE_R16F(PER_FLUSH_BINDINGS_SET,
 TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
 // The Qualcomm compiler can't handle line breaks in #ifs.
 // clang-format off
-#if defined(@RENDER_MODE_DEPTH_STENCIL) && defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
+#if defined(@RENDER_MODE_DEPTH_STENCIL) && defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT) && !defined(@RENDER_TO_UAV)
 // clang-format on
 DST_COLOR_TEXTURE(@dstColorTexture);
 #endif
 FRAG_TEXTURE_BLOCK_END
+
+#ifdef @RENDER_TO_UAV
+PLS_BLOCK_BEGIN
+PLS_DECL4F_UAV(COLOR_PLANE_IDX, @dstColorUav);
+PLS_BLOCK_END
+#endif
 
 SAMPLER_LINEAR_WRAP(GRAD_TEXTURE_IDX, gradSampler)
 // Metal defines @VERTEX and @FRAGMENT at the same time, so yield to the vertex

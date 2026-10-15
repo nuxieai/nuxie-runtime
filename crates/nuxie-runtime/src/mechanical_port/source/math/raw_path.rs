@@ -115,12 +115,31 @@ impl RawPathCursor {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct RawPath {
     points: Vec<Vec2D>,
     verbs: Vec<PathVerb>,
     last_move_index: usize,
     contour_is_open: bool,
+}
+
+impl Clone for RawPath {
+    fn clone(&self) -> Self {
+        Self {
+            points: self.points.clone(),
+            verbs: self.verbs.clone(),
+            last_move_index: self.last_move_index,
+            contour_is_open: self.contour_is_open,
+        }
+    }
+
+    /// Copies into this path's existing buffers, reusing their capacity.
+    fn clone_from(&mut self, source: &Self) {
+        self.points.clone_from(&source.points);
+        self.verbs.clone_from(&source.verbs);
+        self.last_move_index = source.last_move_index;
+        self.contour_is_open = source.contour_is_open;
+    }
 }
 
 impl PartialEq for RawPath {

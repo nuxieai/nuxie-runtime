@@ -542,7 +542,7 @@ mod tests {
     fn complete_source_and_generated_input_denominators_are_frozen() {
         assert_eq!(
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
-            297
+            360
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 509);
         assert_eq!(GLSL_GLSL.as_bytes().len(), 10725);

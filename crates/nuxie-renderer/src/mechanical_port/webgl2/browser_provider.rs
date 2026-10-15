@@ -24,8 +24,8 @@ use super::gles3_decl::{
     GL_ARRAY_BUFFER_BINDING, GL_CURRENT_PROGRAM, GL_ELEMENT_ARRAY_BUFFER_BINDING,
     GL_FRAMEBUFFER_BINDING, GL_NUM_EXTENSIONS, GL_RENDERER, GL_RGBA, GL_UNIFORM_BUFFER_BINDING,
     GL_UNSIGNED_BYTE, GL_VERSION, GL_VERTEX_ARRAY_BINDING, GLCommand, GLContextLifecycleIngress,
-    GLExecutionProvider, GLFinalReleaseIngress, GLObjectKind, GLenum, GLfloat, GLint, GLuint,
-    WebGLShaderPixelLocalStorageEnableResult,
+    GLExecutionProvider, GLFinalReleaseIngress, GLObjectKind, GLbitfield, GLenum, GLfloat, GLint,
+    GLsync, GLuint, WebGLShaderPixelLocalStorageEnableResult,
 };
 
 thread_local! {
@@ -105,6 +105,7 @@ struct BrowserNames {
     renderbuffers: NameTable,
     samplers: NameTable,
     shaders: NameTable,
+    syncs: NameTable,
     textures: NameTable,
     vertex_arrays: NameTable,
     uniform_locations: NameTable,
@@ -143,6 +144,7 @@ impl BrowserNames {
         self.renderbuffers.clear();
         self.samplers.clear();
         self.shaders.clear();
+        self.syncs.clear();
         self.textures.clear();
         self.vertex_arrays.clear();
         self.uniform_locations.clear();
@@ -1320,6 +1322,34 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
         } else {
             self.names.shaders.insert(shader)
         }
+    }
+
+    fn fenceSync(&mut self, condition: GLenum, flags: GLbitfield) -> GLsync {
+        let sync = self.call("fenceSync", &[number(condition), number(flags)]);
+        if sync.is_null() || sync.is_undefined() {
+            0
+        } else {
+            self.names.syncs.insert(sync)
+        }
+    }
+
+    fn clientWaitSync(&mut self, sync: GLsync, flags: GLbitfield, timeout: u64) -> GLenum {
+        assert_eq!(timeout, 0, "WebGL fence waits only poll");
+        self.call(
+            "clientWaitSync",
+            &[
+                self.names.syncs.get(sync),
+                number(flags),
+                JsValue::from_f64(0.0),
+            ],
+        )
+        .as_f64()
+        .expect("WebGL clientWaitSync returns a GLenum") as GLenum
+    }
+
+    fn deleteSync(&mut self, sync: GLsync) {
+        let sync = self.names.syncs.remove(sync);
+        self.call("deleteSync", &[sync]);
     }
 
     fn getInteger(&mut self, parameter: GLenum) -> GLint {

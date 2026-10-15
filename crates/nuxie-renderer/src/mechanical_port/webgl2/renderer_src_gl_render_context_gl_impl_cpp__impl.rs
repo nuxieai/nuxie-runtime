@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 156368] = [(); PINNED_SOURCE.len()];
+const _: [(); 159556] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -431,44 +431,44 @@ fn storageTextureType(structure: gpu::StorageBufferStructure) -> GLenum {
 }
 
 impl TexelBufferRingWebGL {
-    fn new(
+    pub(crate) fn new(
         capacityInBytes: usize,
         structure: gpu::StorageBufferStructure,
         state: GLStateOwner,
         execution: GLExecutionStamp,
     ) -> Self {
         let storageCapacity = StorageTextureBufferSize(capacityInBytes, structure);
-        let mut owner = Self {
-            base: ManuallyDrop::new(BufferRing::new(storageCapacity)),
-            m_bufferStructure: structure,
-            m_state: ManuallyDrop::new(state),
-            m_textureID: 0,
-            rust_execution: ManuallyDrop::new(execution.clone()),
-        };
         execution.withCurrent(|| {
-            let (width, height) = StorageTextureSize(capacityInBytes, structure);
-            owner.m_textureID = generateGLObject(GLObjectKind::Texture);
-            recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
-            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, owner.m_textureID));
-            recordGLCommand(GLCommand::TexStorage2D {
-                target: GL_TEXTURE_2D,
-                levels: 1,
-                internal_format: storageTextureInternalFormat(structure),
-                width,
-                height,
-            });
-            glutils::SetTexture2DSamplingParams(
-                GL_NEAREST,
-                GL_NEAREST,
-                GL_CLAMP_TO_EDGE as GLint,
-                GL_CLAMP_TO_EDGE as GLint,
-            );
-            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
-        });
-        owner
+            let mut owner = Self {
+                base: ManuallyDrop::new(BufferRing::new(storageCapacity)),
+                m_bufferStructure: structure,
+                m_state: ManuallyDrop::new(state),
+                m_width: 0,
+                m_height: 0,
+                // C++ default-constructs every Texture before the constructor
+                // body clears those names to establish lazy storage slots.
+                m_textures: ManuallyDrop::new(std::array::from_fn(|_| GLTexture::new())),
+                rust_execution: ManuallyDrop::new(execution.clone()),
+            };
+            (owner.m_width, owner.m_height) = StorageTextureSize(capacityInBytes, structure);
+            for texture in owner.m_textures.iter_mut() {
+                texture.moveAssign(GLTexture::Zero());
+            }
+            owner
+        })
     }
 
-    fn bindToRenderContext(&self, bindingIdx: GLuint, bindingSize: usize, offset: usize) {
+    pub(crate) fn bindToRenderContext(
+        &mut self,
+        bindingIdx: GLuint,
+        bindingSize: usize,
+        offset: usize,
+        slot: usize,
+        reallocateTexture: bool,
+    ) {
+        assert!(slot == 0 || self.m_state.borrow().capabilities().avoidTexSubImage2DOnInFlightTextures);
+        assert!(!reallocateTexture || self.m_state.borrow().capabilities().avoidTexSubImage2DOnInFlightTextures);
+        assert!(slot < gpu::kBufferRingSize as usize);
         let (width, height) = StorageTextureSize(bindingSize, self.m_bufferStructure);
         let uploadSize = width as usize
             * height as usize
@@ -480,7 +480,25 @@ impl TexelBufferRingWebGL {
         let execution = (&*self.rust_execution).clone();
         execution.withCurrent(|| {
             recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0 + bindingIdx));
-            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, self.m_textureID));
+            if self.m_textures[slot].id() == 0 || reallocateTexture {
+                self.m_textures[slot].moveAssign(GLTexture::new());
+                recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, self.m_textures[slot].id()));
+                recordGLCommand(GLCommand::TexStorage2D {
+                    target: GL_TEXTURE_2D,
+                    levels: 1,
+                    internal_format: storageTextureInternalFormat(self.m_bufferStructure),
+                    width: self.m_width,
+                    height: self.m_height,
+                });
+                glutils::SetTexture2DSamplingParams(
+                    GL_NEAREST,
+                    GL_NEAREST,
+                    GL_CLAMP_TO_EDGE as GLint,
+                    GL_CLAMP_TO_EDGE as GLint,
+                );
+            } else {
+                recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, self.m_textures[slot].id()));
+            }
             recordGLCommand(GLCommand::TexSubImage2D {
                 target: GL_TEXTURE_2D,
                 level: 0,
@@ -513,8 +531,20 @@ impl BufferRingContract for TexelBufferRingWebGL {
 impl Drop for TexelBufferRingWebGL {
     fn drop(&mut self) {
         let execution = (&*self.rust_execution).clone();
-        let _ = execution
-            .withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteTexture(self.m_textureID)));
+        if execution.withDeleteCurrent(|| {
+            // C++ destroys array elements in reverse order. Enter the owning
+            // domain so dropping a replaced ring retires its names immediately.
+            for texture in self.m_textures.iter_mut().rev() {
+                unsafe { std::ptr::drop_in_place(texture) };
+            }
+        }).is_none() {
+            for texture in self.m_textures.iter_mut().rev() {
+                // A lost generation has no live GL names to delete. Release
+                // the old stamp without queuing names in a foreign domain.
+                drop(texture.0.takeObject());
+                unsafe { std::ptr::drop_in_place(texture) };
+            }
+        }
         unsafe {
             ManuallyDrop::drop(&mut self.m_state);
             ManuallyDrop::drop(&mut self.base);
@@ -598,6 +628,8 @@ fn newContextOwner(
         m_imageMeshVAO: ManuallyDrop::new(VAO::new()),
         m_emptyVAO: ManuallyDrop::new(VAO::new()),
         m_blitAsDrawProgram: ManuallyDrop::new(Program::Zero()),
+        m_polyfillBufferTextureFences: ManuallyDrop::new(std::array::from_fn(|_| glutils::Fence::default())),
+        m_polyfillBufferTextureIdx: 0,
         m_state: ManuallyDrop::new(state),
         m_testForAdvancedBlendError: false,
         rust_execution: ManuallyDrop::new(execution.clone()),
@@ -2305,7 +2337,11 @@ fn tryGetPipeline(
             let _ = advanceDrawProgram(
                 &mut pipeline,
                 context,
-                createType,
+                if props.shaderFeatures == ubershaderFeatures {
+                    PipelineCreateType::sync
+                } else {
+                    PipelineCreateType::r#async
+                },
                 props.drawType,
                 props.shaderFeatures,
                 props.interlockMode,
@@ -2481,6 +2517,8 @@ unsafe fn bindStorageBuffer(
     bindingIdx: GLuint,
     bindingSizeInBytes: usize,
     offsetInBytes: usize,
+    polyfillTextureSlot: usize,
+    reallocatePolyfillTexture: bool,
 ) {
     assert!(!bufferRing.is_null());
     assert_ne!(bindingSizeInBytes, 0);
@@ -2494,10 +2532,12 @@ unsafe fn bindStorageBuffer(
         };
     } else {
         unsafe {
-            (&*bufferRing.cast::<TexelBufferRingWebGL>()).bindToRenderContext(
+            (&mut *bufferRing.cast::<TexelBufferRingWebGL>()).bindToRenderContext(
                 bindingIdx,
                 bindingSizeInBytes,
                 offsetInBytes,
+                polyfillTextureSlot,
+                reallocatePolyfillTexture,
             )
         };
     }
@@ -2910,6 +2950,15 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 .expect("FlushUniforms size fits WebGL"),
         });
 
+        let fencePolyfilledBufferTextures = context.m_capabilities.avoidTexSubImage2DOnInFlightTextures
+            && !context.m_capabilities.ARB_shader_storage_buffer_object();
+        let mut polyfillBufferTextureSlot = 0;
+        let mut reallocatePolyfillBufferTextures = false;
+        if fencePolyfilledBufferTextures {
+            polyfillBufferTextureSlot = context.m_polyfillBufferTextureIdx;
+            reallocatePolyfillBufferTextures = !context.m_polyfillBufferTextureFences[polyfillBufferTextureSlot].poll();
+        }
+
         if desc.pathCount > 0 {
             bindStorageBuffer(
                 &context.m_capabilities,
@@ -2917,6 +2966,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 PATH_BUFFER_IDX,
                 desc.pathCount as usize * std::mem::size_of::<gpu::PathData>(),
                 desc.firstPath * std::mem::size_of::<gpu::PathData>(),
+                polyfillBufferTextureSlot,
+                reallocatePolyfillBufferTextures,
             );
             bindStorageBuffer(
                 &context.m_capabilities,
@@ -2924,6 +2975,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 PAINT_BUFFER_IDX,
                 desc.pathCount as usize * std::mem::size_of::<gpu::PaintData>(),
                 desc.firstPaint * std::mem::size_of::<gpu::PaintData>(),
+                polyfillBufferTextureSlot,
+                reallocatePolyfillBufferTextures,
             );
             bindStorageBuffer(
                 &context.m_capabilities,
@@ -2931,6 +2984,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 PAINT_AUX_BUFFER_IDX,
                 desc.pathCount as usize * std::mem::size_of::<gpu::PaintAuxData>(),
                 desc.firstPaintAux * std::mem::size_of::<gpu::PaintAuxData>(),
+                polyfillBufferTextureSlot,
+                reallocatePolyfillBufferTextures,
             );
         }
         if desc.contourCount > 0 {
@@ -2940,6 +2995,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 CONTOUR_BUFFER_IDX,
                 desc.contourCount as usize * std::mem::size_of::<gpu::ContourData>(),
                 desc.firstContour * std::mem::size_of::<gpu::ContourData>(),
+                polyfillBufferTextureSlot,
+                reallocatePolyfillBufferTextures,
             );
         }
 
@@ -3846,6 +3903,10 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             }
         }
 
+        if fencePolyfilledBufferTextures {
+            context.m_polyfillBufferTextureFences[context.m_polyfillBufferTextureIdx].insert();
+            context.m_polyfillBufferTextureIdx = (context.m_polyfillBufferTextureIdx + 1) % gpu::kBufferRingSize as usize;
+        }
         recordGLCommand(GLCommand::Flush);
         recordGLCommand(GLCommand::FrontFace(GL_CW));
     });
@@ -4048,6 +4109,7 @@ fn makeContextOwnerInCurrent(
     if capabilities.ANGLE_shader_pixel_local_storage() && renderer.contains("Direct3D11") {
         capabilities.avoidTexture2DArrayWithWebGLPLS = true;
     }
+    capabilities.avoidTexSubImage2DOnInFlightTextures = capabilities.isMali();
 
     let plsImpl = if !options.disablePixelLocalStorage
         && capabilities.ANGLE_shader_pixel_local_storage_coherent()
@@ -4306,6 +4368,9 @@ unsafe fn destroyContextSourceFields(context: &mut RenderContextGLImpl, currentG
 
     // Exact reverse declaration order for every nontrivial source field.
     unsafe { ManuallyDrop::drop(&mut context.m_state) };
+    for fence in context.m_polyfillBufferTextureFences.iter_mut().rev() {
+        unsafe { std::ptr::drop_in_place(fence) };
+    }
     unsafe { dropProgram(&mut context.m_blitAsDrawProgram, currentGeneration) };
     unsafe { dropVAO(&mut context.m_emptyVAO, currentGeneration) };
     unsafe { dropVAO(&mut context.m_imageMeshVAO, currentGeneration) };
@@ -4380,6 +4445,7 @@ impl Drop for RenderContextGLImpl {
 mod tests {
     include!("dynamic_msaa_flush_tests.rs");
     include!("async_ubershader_precreation_tests.rs");
+    include!("texel_buffer_ring_gl_tests.rs");
     use super::*;
 
     #[cfg(feature = "with-rive-tools")]
@@ -4556,8 +4622,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4006);
-        assert_eq!(PINNED_SOURCE.len(), 156368);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4075);
+        assert_eq!(PINNED_SOURCE.len(), 159556);
     }
 
     #[test]

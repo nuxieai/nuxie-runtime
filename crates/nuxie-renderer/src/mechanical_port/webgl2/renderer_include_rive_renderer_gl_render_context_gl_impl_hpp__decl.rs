@@ -5,7 +5,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use super::gl_state_decl::GLState;
-use super::gl_utils_decl::{Buffer, Framebuffer, Program, Shader, Texture as GLTexture, VAO};
+use super::gl_utils_decl::{Buffer, Fence, Framebuffer, Program, Shader, Texture as GLTexture, VAO};
 use super::gles3_decl::{
     GLCapabilities, GLExecutionProvider, GLExecutionStamp, GLenum, GLint, GLuint,
 };
@@ -405,12 +405,14 @@ pub(crate) struct TexelBufferRingWebGL {
     pub(crate) base: ManuallyDrop<BufferRing>,
     pub(crate) m_bufferStructure: StorageBufferStructure,
     pub(crate) m_state: ManuallyDrop<GLStateOwner>,
-    pub(crate) m_textureID: GLuint,
+    pub(crate) m_width: u32,
+    pub(crate) m_height: u32,
+    pub(crate) m_textures: ManuallyDrop<[GLTexture; crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kBufferRingSize as usize]>,
     pub(crate) rust_execution: ManuallyDrop<GLExecutionStamp>,
 }
 
 /// Exact source prefix: offset-zero RenderContextHelperImpl base followed by
-/// all forty RenderContextGLImpl fields in declaration order. The final two
+/// all forty-one RenderContextGLImpl fields in declaration order. The final two
 /// fields are clearly named Rust sidecars and are outside the frozen prefix.
 #[repr(C)]
 pub(crate) struct RenderContextGLImpl {
@@ -452,6 +454,8 @@ pub(crate) struct RenderContextGLImpl {
     pub(crate) m_imageMeshVAO: ManuallyDrop<VAO>,
     pub(crate) m_emptyVAO: ManuallyDrop<VAO>,
     pub(crate) m_blitAsDrawProgram: ManuallyDrop<Program>,
+    pub(crate) m_polyfillBufferTextureFences: ManuallyDrop<[Fence; crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kBufferRingSize as usize]>,
+    pub(crate) m_polyfillBufferTextureIdx: usize,
     pub(crate) m_state: ManuallyDrop<GLStateOwner>,
     pub(crate) m_testForAdvancedBlendError: bool,
 
@@ -552,16 +556,16 @@ pub(crate) fn MakeContextDefault(
 }
 
 pub(crate) const SOURCE_CONTEXT_OPTION_FIELD_COUNT: usize = 3;
-pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 39;
+pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 41;
 pub(crate) const SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_DRAW_SHADER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_DRAW_PROGRAM_FIELD_COUNT: usize = 8;
 pub(crate) const SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_PLS_IMPL_FIELD_COUNT: usize = 1;
-pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 57;
+pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 59;
 pub(crate) const RUST_RENDER_CONTEXT_SIDECAR_COUNT: usize = 2;
-const _: [(); 18547] = [(); PINNED_SOURCE.len()];
+const _: [(); 18933] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -598,16 +602,16 @@ mod tests {
 
     #[test]
     fn frozen_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 520);
+        assert_eq!(PINNED_SOURCE.lines().count(), 527);
         assert_eq!(SOURCE_CONTEXT_OPTION_FIELD_COUNT, 3);
-        assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 39);
+        assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 41);
         assert_eq!(SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT, 2);
         assert_eq!(SOURCE_DRAW_SHADER_FIELD_COUNT, 1);
         assert_eq!(SOURCE_DRAW_PROGRAM_FIELD_COUNT, 8);
         assert_eq!(SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT, 2);
         assert_eq!(SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT, 1);
         assert_eq!(SOURCE_PLS_IMPL_FIELD_COUNT, 1);
-        assert_eq!(SOURCE_FIELD_DENOMINATOR, 57);
+        assert_eq!(SOURCE_FIELD_DENOMINATOR, 59);
         assert_eq!(std::mem::offset_of!(RenderContextGLImpl, base), 0);
         assert!(
             std::mem::offset_of!(RenderContextGLImpl, rust_execution)

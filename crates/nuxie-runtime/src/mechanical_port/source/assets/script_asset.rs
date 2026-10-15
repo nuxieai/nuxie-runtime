@@ -186,6 +186,7 @@ impl OptionalScriptedMethods {
 
     const WANTS_POINTER_SCROLL_BIT: i32 = 1 << 21;
     pub const METHOD_MASK: u32 = (1 << 22) - 1;
+    pub const LEGACY_IMPLEMENTED_METHODS: u32 = (1 << 21) - 1;
 
     pub fn implemented_methods(&self) -> i32 {
         self.implemented_methods
@@ -215,6 +216,14 @@ impl OptionalScriptedMethods {
 
     pub fn advances(&self) -> bool {
         self.has(Self::ADVANCES_BIT)
+    }
+    pub fn wants_any_pointer(&self) -> bool {
+        self.has(
+            Self::WANTS_POINTER_DOWN_BIT
+                | Self::WANTS_POINTER_MOVE_BIT
+                | Self::WANTS_POINTER_UP_BIT
+                | Self::WANTS_POINTER_EXIT_BIT,
+        )
     }
     pub fn updates(&self) -> bool {
         self.has(Self::UPDATES_BIT)
@@ -370,6 +379,7 @@ pub struct ScriptAsset {
     script_registered: bool,
     bytecode: Vec<u8>,
     initted: bool,
+    needs_pointer_check: bool,
 }
 
 impl Default for ScriptAsset {
@@ -384,6 +394,7 @@ impl Default for ScriptAsset {
             script_registered: false,
             bytecode: Vec::new(),
             initted: false,
+            needs_pointer_check: false,
         }
     }
 }
@@ -594,6 +605,8 @@ impl ScriptAsset {
                     as i32,
             );
             self.warn_retired_draw_canvas();
+            self.needs_pointer_check = self.base.serialized_implemented_methods()
+                == OptionalScriptedMethods::LEGACY_IMPLEMENTED_METHODS;
             self.initted = true;
         }
         self.optional_methods.implemented_methods() as u32
@@ -610,6 +623,57 @@ impl ScriptAsset {
         }
     }
 
+    /// Runs only after ensureScriptInitialized succeeds, before user init or
+    /// input hydration. No asset/owner borrow crosses backend field lookup.
+    pub(crate) fn check_legacy_pointer_handlers_occurrence(
+        asset: &CoreHandle,
+        instance: &crate::scripting::RuntimeScriptInstanceHandle,
+    ) -> Result<Option<u32>, crate::scripting::ScriptError> {
+        use crate::scripting::ScriptMethod;
+        let Some(mut bits) = asset
+            .with_downcast::<Self, _>(|asset| {
+                asset
+                    .needs_pointer_check
+                    .then_some(asset.optional_methods.implemented_methods())
+            })
+            .flatten()
+        else {
+            return Ok(None);
+        };
+        for (method, bit) in [
+            (
+                ScriptMethod::PointerDown,
+                OptionalScriptedMethods::WANTS_POINTER_DOWN_BIT,
+            ),
+            (
+                ScriptMethod::PointerMove,
+                OptionalScriptedMethods::WANTS_POINTER_MOVE_BIT,
+            ),
+            (
+                ScriptMethod::PointerUp,
+                OptionalScriptedMethods::WANTS_POINTER_UP_BIT,
+            ),
+            (
+                ScriptMethod::PointerExit,
+                OptionalScriptedMethods::WANTS_POINTER_EXIT_BIT,
+            ),
+        ] {
+            if !instance.borrow_mut().has_method(method)? {
+                bits &= !bit;
+            }
+        }
+        asset
+            .with_downcast_mut::<Self, _>(|asset| {
+                asset.optional_methods.set_implemented_methods(bits);
+            })
+            .expect("retained ScriptAsset");
+        Ok(Some(bits as u32))
+    }
+
+    pub(crate) fn finish_legacy_pointer_check(&mut self) {
+        self.needs_pointer_check = false;
+    }
+
     /// Snapshot the asset before invoking the generator. User code may resolve
     /// the asset and its owning scripted occurrence through the real host.
     pub fn instantiate_for_occurrence(
@@ -620,20 +684,8 @@ impl ScriptAsset {
         let (vm, generator, file, methods) = asset.with_downcast_mut::<Self, _>(|asset| {
             let vm = asset.scripting_vm()?;
             let generator = asset.generator.clone()?;
-            if !asset.initted {
-                asset.optional_methods.set_implemented_methods(
-                    (asset.base.serialized_implemented_methods()
-                        & OptionalScriptedMethods::METHOD_MASK) as i32,
-                );
-                asset.warn_retired_draw_canvas();
-                asset.initted = true;
-            }
-            Some((
-                vm,
-                generator,
-                asset.file(),
-                asset.optional_methods.implemented_methods() as u32,
-            ))
+            let methods = asset.prepare_implemented_methods();
+            Some((vm, generator, asset.file(), methods))
         })??;
         let context = ScriptedObject::effective_data_context(owner);
         let context_present = context.is_some();

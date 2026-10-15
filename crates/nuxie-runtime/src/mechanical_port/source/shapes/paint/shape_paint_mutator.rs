@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
 use core::ops::{BitAnd, BitOr, BitOrAssign};
 use nuxie_render_api::RenderPaint;
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     rc::{Rc, Weak},
 };
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -33,7 +33,9 @@ impl BitAnd for MutatorFlags {
 }
 
 pub struct ShapePaintMutatorState {
-    pub flags: MutatorFlags,
+    // Shared with the paint this mutator initializes, which reads its
+    // visibility without borrowing the mutator.
+    flags: Rc<Cell<MutatorFlags>>,
     render_opacity: f32,
     render_paint: Weak<RefCell<Box<dyn RenderPaint>>>,
     component: Option<CoreHandle>,
@@ -41,13 +43,27 @@ pub struct ShapePaintMutatorState {
 impl Default for ShapePaintMutatorState {
     fn default() -> Self {
         Self {
-            flags: MutatorFlags::NONE,
+            flags: Rc::new(Cell::new(MutatorFlags::NONE)),
             render_opacity: 1.0,
             render_paint: Weak::new(),
             component: None,
         }
     }
 }
+impl ShapePaintMutatorState {
+    pub fn flags(&self) -> MutatorFlags {
+        self.flags.get()
+    }
+
+    pub fn set_flags(&self, flags: MutatorFlags) {
+        self.flags.set(flags);
+    }
+
+    pub(crate) fn flags_cell(&self) -> &Rc<Cell<MutatorFlags>> {
+        &self.flags
+    }
+}
+
 pub trait ShapePaintMutator {
     fn mutator_state(&self) -> &ShapePaintMutatorState;
     fn mutator_state_mut(&mut self) -> &mut ShapePaintMutatorState;
@@ -64,7 +80,8 @@ pub trait ShapePaintMutator {
         parent: Option<CoreHandle>,
         factory: Option<&RuntimeFactoryHandle>,
     ) -> StatusCode {
-        self.mutator_state_mut().flags = MutatorFlags::TRANSLUCENT | MutatorFlags::VISIBLE;
+        self.mutator_state_mut()
+            .set_flags(MutatorFlags::TRANSLUCENT | MutatorFlags::VISIBLE);
         self.mutator_state_mut().component = Some(component.clone());
         // The caller projects the component's artboard factory while it owns
         // the component borrow. Missing artboards and missing factories both
@@ -83,6 +100,10 @@ pub trait ShapePaintMutator {
                 if !paint.initialize_render_paint(component, factory) {
                     return StatusCode::InvalidObject;
                 }
+                paint
+                    .shape_paint()
+                    .cells()
+                    .bind_mutator_flags(Rc::clone(self.mutator_state().flags_cell()));
                 let render_paint = paint
                     .shape_paint()
                     .render_paint_handle()
@@ -106,10 +127,10 @@ pub trait ShapePaintMutator {
         self.mutator_state().component.clone()
     }
     fn is_translucent(&self) -> bool {
-        self.mutator_state().flags & MutatorFlags::TRANSLUCENT == MutatorFlags::TRANSLUCENT
+        self.mutator_state().flags() & MutatorFlags::TRANSLUCENT == MutatorFlags::TRANSLUCENT
     }
     fn is_visible(&self) -> bool {
-        self.mutator_state().flags & MutatorFlags::VISIBLE == MutatorFlags::VISIBLE
+        self.mutator_state().flags() & MutatorFlags::VISIBLE == MutatorFlags::VISIBLE
     }
     fn with_render_paint_mut<R>(
         &self,

@@ -11,7 +11,7 @@ use crate::mechanical_port::source::{
             effects_container::{EffectsContainer, EffectsContainerState},
             feather::Feather,
             paint_cells::PaintCells,
-            shape_paint_mutator::ShapePaintMutator,
+            shape_paint_mutator::{MutatorFlags, ShapePaintMutator},
             stroke_effect::{PathProvider, StrokeEffect},
         },
         path_flags::PathFlags,
@@ -798,6 +798,14 @@ impl ShapePaint {
     }
 
     pub fn mutator_is_visible(&self) -> bool {
+        // A settled mutator's loan would succeed and its release run nothing:
+        // read the flags it shared when it initialized this paint.
+        if let Some(mutator) = self.paint_mutator.as_ref()
+            && mutator.is_occupied_settled()
+            && let Some(flags) = self.cells.mutator_flags()
+        {
+            return flags & MutatorFlags::VISIBLE == MutatorFlags::VISIBLE;
+        }
         self.paint_mutator
             .as_ref()
             .and_then(|mutator| {

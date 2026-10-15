@@ -153,16 +153,17 @@ impl LinearGradient {
                 kind,
                 self.paints_in_world_space(),
             );
-            self.mutator.flags = MutatorFlags::NONE;
+            let mut flags = MutatorFlags::NONE;
             for color in &self.color_storage {
                 let opacity = color_opacity(*color);
                 if opacity > 0.0 {
-                    self.mutator.flags |= MutatorFlags::VISIBLE;
+                    flags |= MutatorFlags::VISIBLE;
                 }
                 if opacity < 1.0 {
-                    self.mutator.flags |= MutatorFlags::TRANSLUCENT;
+                    flags |= MutatorFlags::TRANSLUCENT;
                 }
             }
+            self.mutator.set_flags(flags);
         }
     }
 

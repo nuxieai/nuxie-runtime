@@ -20,6 +20,7 @@ use crate::mechanical_port::source::{
             shape_paint_path::ShapePaintPath,
             stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
             shape_paint::{RuntimeRenderPaintHandle, ShapePaintPathKind, ShapePaintType},
+            shape_paint_mutator::MutatorFlags,
         },
         path_flags::PathFlags,
         shape_paint_container::ContainerCells,
@@ -42,6 +43,9 @@ pub(crate) struct PaintCells {
     feather: RefCell<Option<(CoreHandle, Rc<FeatherCells>)>>,
     // Created once, when the paint mutator first initializes the paint.
     render_paint: OnceCell<RuntimeRenderPaintHandle>,
+    // The flags of the mutator that initialized the render paint, shared by
+    // that mutator.
+    mutator_flags: OnceCell<Rc<Cell<MutatorFlags>>>,
     // The paint's own Component dirt.
     dirt: Rc<SharedDirt>,
     // The container whose flag union includes this paint's flags.
@@ -77,6 +81,7 @@ impl PaintCells {
             has_feather: Cell::new(false),
             feather: RefCell::new(None),
             render_paint: OnceCell::new(),
+            mutator_flags: OnceCell::new(),
             dirt,
             container: RefCell::new(Weak::new()),
             is_visible,
@@ -336,6 +341,18 @@ impl PaintCells {
     }
 
     #[inline]
+    /// Share the flags of the mutator that just initialized the render paint.
+    pub(crate) fn bind_mutator_flags(&self, flags: Rc<Cell<MutatorFlags>>) {
+        assert!(
+            self.mutator_flags.set(flags).is_ok(),
+            "one mutator initializes a ShapePaint's render paint"
+        );
+    }
+
+    pub(crate) fn mutator_flags(&self) -> Option<MutatorFlags> {
+        self.mutator_flags.get().map(|flags| flags.get())
+    }
+
     pub(crate) fn render_paint(&self) -> Option<&RuntimeRenderPaintHandle> {
         self.render_paint.get()
     }

@@ -148,9 +148,39 @@ SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
     "rewards_demo",
 }
 
-SERIALIZED_RENDERING_APPROVED_ADAPTATION_DIVERGENCES = {
-    "collapse_data_binds-test_1",
+# Layout is a deliberate product divergence from upstream Rive (2026-10-14):
+# Nuxie lays out with stock Taffy and CSS semantics, not Rive's Yoga. Each
+# case whose first difference is caused by that solver change is listed with
+# the reason; its DIVERGENCES row still pins the exact first difference, so a
+# non-layout change that moves it fails validation.
+LAYOUT_DIVERGENCES: dict[str, str] = {
+    "collapse_data_binds-test_1": (
+        "a collapsed layout sibling shifts the following item 1.18px less than "
+        "Yoga does (the same difference the Taffy fork already carried)"
+    ),
+    "layout_aspect_ratio": (
+        "CSS sizing resolves the aspect-ratio box to 142x133 where Yoga keeps "
+        "the authored 2:1 ratio at 142x71 (the Taffy fork already produced 142x133)"
+    ),
+    "layout_text_match": (
+        "CSS fit-content keeps a hugging text box at its 300 max width; Yoga "
+        "shrinks it to the widest wrapped line (262.43)"
+    ),
+    "layout_text_match_7_3": (
+        "CSS fit-content keeps a hugging text box at its 300 max width; Yoga "
+        "shrinks it to the widest wrapped line (262.43)"
+    ),
 }
+
+
+def layout_divergence_note(silver_id: str, difference: str) -> str | None:
+    reason = LAYOUT_DIVERGENCES.get(silver_id)
+    if reason is None:
+        return None
+    return (
+        "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): "
+        f"{reason}; first difference: {difference}."
+    )
 
 PROVENANCE_UNKNOWN = {
     "interpolator": "No producer/reference exists in the pinned upstream runtime tests.",
@@ -187,8 +217,6 @@ EXACT = (
     "echo_show_demo",
     "focus_traversal_click_to_focus",
     "focus_traversal_data_bound",
-    "layout_text_match",
-    "layout_text_match_7_3",
     "text_layout_pre_7_3",
     "text_layout_7_3",
     "gamepad_inputs_test",
@@ -2381,6 +2409,8 @@ hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
 hittest_nested|frame 1, op 155 (save): expected save, got color
 hunter_x_demo|frame 0, op 5055 (addRawPath): expected 20 fields, got 22
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
+layout_text_match|frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)
+layout_text_match_7_3|frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
 rewards_demo|frame 0, op 1461 (addRawPath): expected 44 fields, got 46
 """.strip().splitlines()
@@ -3102,18 +3132,15 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             f"{silver_id} has executable actions but no Rust result classification"
                         )
                     status = "diverges"
-                    if silver_id in SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES:
+                    layout_note = layout_divergence_note(silver_id, difference)
+                    if layout_note is not None:
+                        note = layout_note
+                    elif silver_id in SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES:
                         note = (
                             "Narrow producer-build-mode divergence: the pinned upstream unit-test "
                             "silvers are built with --no_ffp_contract, while upstream production "
                             "defaults to -ffp-contract=on; first difference: "
                             f"{difference}."
-                        )
-                    elif silver_id in SERIALIZED_RENDERING_APPROVED_ADAPTATION_DIVERGENCES:
-                        note = (
-                            "Approved Yoga-to-Taffy layout-solver adaptation divergence; "
-                            "the translated layout owner matches pinned source at the solver "
-                            f"boundary; first difference: {difference}."
                         )
                     else:
                         note = (
@@ -3229,7 +3256,7 @@ def dynamic_producers() -> list[Producer]:
             if difference is None:
                 raise ValueError(f"{silver_id} has no Rust result classification")
             status = "diverges"
-            note = (
+            note = layout_divergence_note(silver_id, difference) or (
                 "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE "
                 f"actions; first difference: {difference}."
             )
@@ -3294,7 +3321,7 @@ def dynamic_producers() -> list[Producer]:
                 raise ValueError(f"{silver_id} has no Rust result classification")
             status = "diverges"
             actions = grid_actions
-            note = (
+            note = layout_divergence_note(silver_id, difference) or (
                 "Genuine Rust-vs-C++ divergence after replaying the pinned "
                 f"gridStackSilver helper actions; first difference: {difference}."
             )
@@ -3378,6 +3405,11 @@ def text_layout_producers(runtime_dir: Path) -> list[Producer]:
     for test_name, test_line, chunk in test_chunks(source):
         for match in calls.finditer(chunk):
             asset, silver_id = match.groups()
+            layout_note = (
+                layout_divergence_note(silver_id, DIVERGENCES[silver_id])
+                if silver_id in LAYOUT_DIVERGENCES
+                else None
+            )
             producers.append(Producer(
                 id=silver_id,
                 source=strip_asset_prefix(asset),
@@ -3391,12 +3423,12 @@ def text_layout_producers(runtime_dir: Path) -> list[Producer]:
                 view_model="bind-default-if-present",
                 sample_times=(0.0, 0.016),
                 actions=actions,
-                status="exact",
+                status="diverges" if layout_note else "exact",
                 producer_class="text-layout-dynamic",
                 provenance_file=relative,
                 provenance_test=test_name,
                 producer_line=test_line + chunk.count("\n", 0, match.start()),
-                note=(
+                note=layout_note or (
                     "Exact comparison contract for the five-frame checkTextLayoutSilver "
                     "helper at 4ca3b88a. Enrollment alone is not a validation result."
                 ),

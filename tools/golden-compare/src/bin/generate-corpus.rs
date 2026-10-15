@@ -80,6 +80,7 @@ fn generate(options: Options) -> Result<()> {
                 (previous.status == "unsupported-feature" && !feature.starts_with("type-key:"))
                     || feature.as_str() == "scripted-runner-only"
                     || feature.starts_with("scripted-status:")
+                    || feature.starts_with("layout-diverges:")
             }) {
                 if !features.contains(feature) {
                     features.push(feature.clone());
@@ -525,7 +526,7 @@ status = "diverges"
 divergence_signature = "line 1: rust `text=#a` vs c++ `text=#b`" # real comment
 scripted_divergence_signature = "line 2: rust `path=#c` vs c++ `path=#d`"
 semantic_divergence_signature = "line 3: rust `semantics value=2` vs c++ `semantics value=1`"
-features = ["scripted-status:diverges"]
+features = ["layout-diverges:CSS fit-content width", "scripted-status:diverges"]
 "#,
         )
         .unwrap();
@@ -551,6 +552,11 @@ features = ["scripted-status:diverges"]
         assert_eq!(
             gap.semantic_divergence_signature.as_deref(),
             Some("line 3: rust `semantics value=2` vs c++ `semantics value=1`")
+        );
+        assert!(
+            gap.features
+                .iter()
+                .any(|feature| feature == "layout-diverges:CSS fit-content width")
         );
 
         std::fs::remove_dir_all(test_dir).ok();

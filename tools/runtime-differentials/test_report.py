@@ -89,6 +89,27 @@ features = []
         self.assertFalse(ordinary["cases"][0]["executed"])
         self.assertTrue(scripted["cases"][0]["executed"])
 
+    def test_golden_report_names_the_layout_divergence_reason(self):
+        (self.runtime / "tests/unit_tests/assets/text.riv").write_bytes(b"text")
+        manifest = self.root / "corpus.toml"
+        manifest.write_text(
+            """
+[[file]]
+id = "text"
+path = "tests/unit_tests/assets/text.riv"
+status = "diverges"
+divergence_signature = "line 9: rust `a` vs c++ `b`"
+features = ["layout-diverges:CSS fit-content width"]
+"""
+        )
+
+        payload = report.build_golden_report(
+            manifest, self.runtime, self.root, "ordinary", "c" * 40, "d" * 40, []
+        )
+
+        self.assertEqual(payload["cases"][0]["outcome"], "divergent")
+        self.assertEqual(payload["cases"][0]["layout_divergence"], "CSS fit-content width")
+
     def test_golden_report_rejects_a_malformed_divergence_signature(self):
         fixture = self.runtime / "tests/unit_tests/assets/gap.riv"
         fixture.write_bytes(b"gap")

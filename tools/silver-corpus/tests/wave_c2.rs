@@ -20,6 +20,10 @@ fn runtime_root() -> PathBuf {
 }
 
 fn replay(id: &str) {
+    replay_result(id).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+}
+
+fn replay_result(id: &str) -> Result<(), silver_corpus::Difference> {
     let runtime = runtime_root();
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))
         .expect("read Silver corpus manifest");
@@ -40,7 +44,7 @@ fn replay(id: &str) {
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
     let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    compare_sriv(&expected, &actual).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    compare_sriv(&expected, &actual)
 }
 
 #[test]
@@ -73,10 +77,17 @@ fn wave_c2_layout_019_animation_component_list() {
     replay("layout_anim_component_list");
 }
 
+// Layout divergence (stock Taffy, CSS semantics): the aspect-ratio box solves
+// to 142x133 where Yoga keeps the authored 2:1 ratio (the Taffy fork already
+// did); the first difference is pinned so anything that moves it still fails.
 #[test]
-#[ignore = "expected-red: complete layout_aspect_ratio SRIV diverges from the pinned renderer stream"]
 fn wave_c2_layout_020_aspect_ratio() {
-    replay("layout_aspect_ratio");
+    let difference =
+        replay_result("layout_aspect_ratio").expect_err("layout divergence should remain present");
+    assert_eq!(
+        difference.to_string(),
+        "frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)"
+    );
 }
 
 #[test]

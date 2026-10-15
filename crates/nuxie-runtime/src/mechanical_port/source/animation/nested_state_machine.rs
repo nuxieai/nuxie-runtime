@@ -45,6 +45,16 @@ impl NestedStateMachine {
         let instance = artboard
             .upgrade()
             .and_then(|artboard| artboard.state_machine_instance_handle(animation_id));
+        Self::initialize_animation_handle_with_instance(owner, artboard, instance);
+    }
+
+    /// Retain nested focus/input setup when a host supplies the resolved
+    /// instance rather than selecting it by runtime animation index.
+    pub fn initialize_animation_handle_with_instance(
+        owner: &CoreHandle,
+        _artboard: RuntimeArtboardInstanceWeakHandle,
+        instance: Option<RuntimeStateMachineInstanceHandle>,
+    ) {
         owner
             .with_downcast_mut::<Self, _>(|owner| owner.instance = instance)
             .expect("live NestedStateMachine");

@@ -152,7 +152,7 @@ impl ScriptArtboard for NativeScriptArtboard {
             })
             .transpose()?;
         let artboard = Artboard::instance_from_handle(&self.owner.artboard.core_handle())
-            .ok_or_else(|| ScriptError::new("script artboard instance initialization failed"))?;
+            .ok_or_else(|| ScriptError::new("Could not instantiate artboard"))?;
         artboard.with_artboard_mut(|artboard| artboard.base.set_frame_origin(false));
         native_script_artboard(
             self.owner.file.clone(),

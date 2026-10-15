@@ -23,6 +23,11 @@ impl AnimationState {
         self.animation.clone()
     }
 
+    #[cfg(feature = "editor")]
+    pub fn set_animation_for_editor(&mut self, animation: Option<CoreHandle>) {
+        self.animation = animation;
+    }
+
     pub(crate) fn set_animation(&mut self, animation: Option<CoreHandle>) {
         self.animation = animation;
     }

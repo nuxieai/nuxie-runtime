@@ -22,6 +22,10 @@ impl ListenerInputTypeKeyboard {
             self.keyboard_inputs.push(input);
         }
     }
+    #[cfg(feature = "editor")]
+    pub fn clear_keyboard_inputs_for_editor(&mut self) {
+        self.keyboard_inputs.clear();
+    }
     pub fn key_phase_matches(key_phase: u32, pressed: bool, repeat: bool) -> bool {
         let mask = key_phase & 7;
         if mask == 0 {

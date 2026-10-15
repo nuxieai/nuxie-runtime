@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
         nested_animation::NestedAnimationBehavior,
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
     generated::animation::nested_linear_animation_base::NestedLinearAnimationBase,
 };
 
@@ -31,6 +32,16 @@ impl NestedLinearAnimation {
         let animation = artboard
             .with_artboard(|artboard| artboard.animation_handle_at(animation_id))
             .flatten();
+        self.initialize_animation_with_definition(artboard, animation);
+    }
+
+    /// The supplied definition need not be selected by this object's runtime
+    /// index; animation writes still target the supplied playback artboard.
+    pub fn initialize_animation_with_definition(
+        &mut self,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+        animation: Option<CoreHandle>,
+    ) {
         self.animation_instance =
             animation.map(|animation| LinearAnimationInstance::new(animation, artboard, 1.0));
     }

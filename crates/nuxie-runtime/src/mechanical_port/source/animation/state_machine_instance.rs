@@ -1043,40 +1043,40 @@ impl StateMachineLayerInstance {
             else {
                 continue;
             };
-            let state_to = transition
-                .with(|transition| transition.state_transition_state_to())
-                .flatten();
-            if !self.can_change_state(&state_to) {
-                continue;
-            }
+            // The target check, allowed and the weight writes run back to back
+            // on the transition, so they share one borrow of it.
+            let current = self
+                .current_state
+                .as_ref()
+                .map(RuntimeStateInstanceHandle::definition_ref);
+            let occurrence = &self.occurrence;
             let allowed = transition
                 .with_mut(|transition| {
-                    transition.state_transition_allowed(
-                        &from_instance,
-                        machine,
-                        self.occurrence.clone(),
-                    )
+                    let state_to = transition.state_transition_state_to();
+                    // can_change_state: a transition to the current state is skipped.
+                    if current == state_to.as_ref() {
+                        return None;
+                    }
+                    let allowed = transition
+                        .state_transition_allowed(&from_instance, machine, occurrence.clone())
+                        .expect("an authored transition exposes allowed behavior");
+                    if allowed == AllowTransition::Yes {
+                        let weight = transition
+                            .state_transition_random_weight()
+                            .expect("an authored StateTransition must expose random weight");
+                        transition.state_transition_set_evaluated_random_weight(weight);
+                        transition.state_transition_use_layer(machine, occurrence.clone());
+                    } else {
+                        transition.state_transition_set_evaluated_random_weight(0);
+                    }
+                    Some(allowed)
                 })
-                .flatten()
-                .expect("an authored transition exposes allowed behavior");
-            if allowed == AllowTransition::Yes {
-                let weight = transition
-                    .with(|transition| transition.state_transition_random_weight())
-                    .flatten()
-                    .expect("an authored StateTransition must expose random weight");
-                transition.with_mut(|transition| {
-                    transition.state_transition_set_evaluated_random_weight(weight);
-                });
-                transition.with_mut(|transition| {
-                    transition.state_transition_use_layer(machine, self.occurrence.clone());
-                });
-                return Some(transition);
-            }
-            transition.with_mut(|transition| {
-                transition.state_transition_set_evaluated_random_weight(0);
-            });
-            if allowed == AllowTransition::WaitingForExit {
-                self.waiting_for_exit = true;
+                .expect("live authored transition");
+            match allowed {
+                None => continue,
+                Some(AllowTransition::Yes) => return Some(transition),
+                Some(AllowTransition::WaitingForExit) => self.waiting_for_exit = true,
+                Some(_) => {}
             }
         }
         None

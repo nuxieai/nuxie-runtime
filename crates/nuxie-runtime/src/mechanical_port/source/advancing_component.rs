@@ -59,6 +59,13 @@ impl AdvancingComponentHandle {
             advance,
         }
     }
+
+    /// advanceComponent on the owner. The handle itself is not changed, so
+    /// a shared list of handles advances without copying them.
+    #[inline]
+    pub(crate) fn advance(&self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
+        (self.advance)(&self.owner, elapsed_seconds, flags)
+    }
 }
 
 impl AdvancingComponent for AdvancingComponentHandle {
@@ -68,7 +75,7 @@ impl AdvancingComponent for AdvancingComponentHandle {
             .expect("live advancing component")
     }
     fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
-        (self.advance)(&self.owner, elapsed_seconds, flags)
+        self.advance(elapsed_seconds, flags)
     }
 }
 

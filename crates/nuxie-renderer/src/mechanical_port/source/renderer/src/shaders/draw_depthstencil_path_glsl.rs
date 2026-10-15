@@ -1,10 +1,10 @@
 //! Exact pinned upstream shader source: renderer/src/shaders/draw_depthstencil_path.glsl.
 #![allow(dead_code)]
-pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_path.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "c8a758cbc337d9ef33cf22703bd41eabc5ab4a08323ff9ae3b65a610ef0951e4";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 563;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 22736;
+pub const PINNED_SOURCE_SHA256: &str = "77d59b98f60e3f17b2eb2b8d32c18dff38d52a251cd4d888961eb540138d9959";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 574;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 22971;
 pub const PINNED_DRAW_DEPTHSTENCIL_PATH_GLSL_SOURCE: &str = r###"/*
  * Copyright 2026 Rive
  */
@@ -552,7 +552,11 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 
 #if defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
     // Do the color portion of the blend mode in the shader.
+#ifdef @RENDER_TO_UAV
+    half4 dstColorPremul = PLS_LOAD4F_UAV(@dstColorUav);
+#else
     half4 dstColorPremul = DST_COLOR_FETCH(@dstColorTexture);
+#endif
     color.rgb = advanced_color_blend(color.rgb, dstColorPremul, blendMode);
     // Premultiply before the hardware srcOver portion of the blend equation.
     color.rgb *= color.a;
@@ -563,6 +567,13 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
                                             _fragCoord.xy,
                                             uniforms.ditherScale,
                                             uniforms.ditherBias);
+
+#ifdef @RENDER_TO_UAV
+    if (color.a != .0)
+    {
+        PLS_STORE4F_UAV(@dstColorUav, blend_src_over(color, dstColorPremul));
+    }
+#endif
 
     EMIT_FRAG_DATA(color);
 }

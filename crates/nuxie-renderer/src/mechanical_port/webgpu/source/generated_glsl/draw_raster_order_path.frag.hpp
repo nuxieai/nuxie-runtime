@@ -6,14 +6,14 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_raster_order_path_frag[] = R"===(#ifdef EB
-U1 C0(T2,n0);p1(k3,m0);C0(A6,I4);p1(i7,n8);V1 X1(IB){q(O0,f);
+E1 z0(x2,n0);q1(k3,m0);z0(A6,I4);q1(l7,p8);F1 X1(IB){q(P0,f);
 #ifdef GB
 q(U0,M);
 #endif
 #ifdef DB
-q(n1,d);
+q(o1,d);
 #else
-q(S,P2);
+q(S,Q2);
 #endif
 q(G0,d);
 #ifdef N
@@ -23,78 +23,78 @@ q(i2,D);
 q(V0,f);
 #endif
 #ifdef H
-q(P0,d);
+q(Q0,d);
 #endif
 #if!defined(DB)
-N2;
+O2;
 #endif
-D o5=unpackHalf2x16(j1(n8));d ia=o5.y;d w0=ia==G0?o5.x:J0(.0);
+D o5=unpackHalf2x16(k1(p8));d ka=o5.y;d w0=ka==G0?o5.x:J0(.0);
 #ifdef DB
-w0+=n1;g2(n8);
+w0+=o1;g2(p8);
 #else
-w0=Lj(w0,S m1);l1(n8,packHalf2x16(Q2(w0,G0)));
+w0=Nj(w0,S n1);m1(p8,packHalf2x16(R2(w0,G0)));
 #endif
 d n;
-#ifdef IE
-if(IE){n=fb(w0,J0(.0),J0(1.));}else
+#ifdef KE
+if(KE){n=ib(w0,J0(.0),J0(1.));}else
 #endif
 {n=abs(w0);
-#ifdef WC
-if(WC&&G0<.0){n=1.-J0(abs(fract(n*.5)*2.+-1.));}
+#ifdef YC
+if(YC&&G0<.0){n=1.-J0(abs(fract(n*.5)*2.+-1.));}
 #endif
 n=min(n,J0(1.));}
 #ifdef N
-if(N&&i2.x<.0){d y1=-i2.x;
-#ifdef CD
-if(CD){d e6=i2.y;if(e6!=.0){D W0=unpackHalf2x16(j1(m0));d e7=W0.y;d M4;if(e7!=y1){M4=e7==e6?W0.x:.0;
+if(N&&i2.x<.0){d A1=-i2.x;
+#ifdef ED
+if(ED){d e6=i2.y;if(e6!=.0){D W0=unpackHalf2x16(k1(m0));d h7=W0.y;d M4;if(h7!=A1){M4=h7==e6?W0.x:.0;
 #ifndef DB
-y0(I4,H0(M4,.0,.0,.0));
+x0(I4,H0(M4,.0,.0,.0));
 #endif
-}else{M4=Q0(I4).x;
+}else{M4=O0(I4).x;
 #ifndef DB
-M2(I4);
+N2(I4);
 #endif
 }n=min(n,M4);}}
 #endif
-l1(m0,packHalf2x16(Q2(n,y1)));M2(n0);}else
+m1(m0,packHalf2x16(R2(n,A1)));N2(n0);}else
 #endif
 {
 #ifdef N
-if(N){d y1=i2.x;if(y1!=.0){D W0=unpackHalf2x16(j1(m0));d e7=W0.y;n=(e7==y1)?min(W0.x,n):J0(.0);}}
+if(N){d A1=i2.x;if(A1!=.0){D W0=unpackHalf2x16(k1(m0));d h7=W0.y;n=(h7==A1)?min(W0.x,n):J0(.0);}}
 #endif
 #ifdef AB
 if(AB){d y5=B3(V4(V0));n=clamp(y5,J0(.0),n);}
 #endif
-i l=v8(
+i k=x8(
 #ifdef GB
 U0,
 #endif
 #ifdef H
-W2(P0),
+W2(Q0),
 #endif
-O0 m3);i z1;if(ia!=G0){z1=Q0(n0);
+P0 m3);i a1;if(ka!=G0){a1=O0(n0);
 #ifndef DB
-y0(I4,z1);
+x0(I4,a1);
 #endif
-}else{z1=Q0(I4);
+}else{a1=O0(I4);
 #ifndef DB
-M2(I4);
+N2(I4);
 #endif
-}bool Hf=false;
+}bool Jf=false;
 #ifdef GB
-Hf=GB&&U0.z<.0;
+Jf=GB&&U0.z<.0;
 #endif
-if(Hf){
+if(Jf){
 #ifdef GB
-uint Rj=uint(-U0.z-1.);d Sj=Kj(l,Rj);l=z1*mix(J0(1.),Sj,n);y0(n0,l);g2(m0);
+uint Tj=uint(-U0.z-1.);d Uj=Mj(k,Tj);k=a1*mix(J0(1.),Uj,n);x0(n0,k);g2(m0);
 #endif
 }else{
 #ifdef H
-if(H&&P0!=r6(U3)){l.xyz=N4(l.xyz,z1,W2(P0))*l.w;}
+if(H&&Q0!=r6(U3)){k.xyz=N4(k.xyz,a1,W2(Q0))*k.w;}
 #endif
-l*=n;d x3=l.w;l+=z1*(1.-x3);l.xyz=I2(l.xyz,x3,d0.xy,j.F3,j.G3);y0(n0,l);g2(m0);}}
+k*=n;d x3=k.w;k+=a1*(1.-x3);k.xyz=J2(k.xyz,x3,d0.xy,j.F3,j.G3);x0(n0,k);g2(m0);}}
 #if!defined(DB)
-O2;
+P2;
 #endif
 o2;}
 #endif

@@ -153,38 +153,38 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "EB";
-const GLSL_POST_INVERT_Y: &str = "MC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "SF";
-const GLSL_DRAW_PATH: &str = "PD";
+const GLSL_POST_INVERT_Y: &str = "NC";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
+const GLSL_DRAW_PATH: &str = "RD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "EE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "FE";
-const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "RC";
-const GLSL_CLEAR_COLOR: &str = "ZE";
-const GLSL_LOAD_COLOR: &str = "BF";
-const GLSL_STORE_COLOR: &str = "GE";
-const GLSL_CLEAR_COVERAGE: &str = "HE";
-const GLSL_CLEAR_CLIP: &str = "ZF";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "GE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "HE";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
+const GLSL_CLEAR_COLOR: &str = "BF";
+const GLSL_LOAD_COLOR: &str = "DF";
+const GLSL_STORE_COLOR: &str = "IE";
+const GLSL_CLEAR_COVERAGE: &str = "JE";
+const GLSL_CLEAR_CLIP: &str = "BG";
 const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
-const GLSL_ENABLE_EVEN_ODD: &str = "WC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "CD";
+const GLSL_ENABLE_EVEN_ODD: &str = "YC";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "ED";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
 const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
 const GLSL_TARGET_SPIRV: &str = "DC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "UF";
-const GLSL_PLS_IMPL_NONE: &str = "WF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "VF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "WF";
+const GLSL_PLS_IMPL_NONE: &str = "YF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "XF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "OE";
-const GLSL_DRAW_IMAGE_RECT: &str = "DD";
+const GLSL_DRAW_IMAGE: &str = "QE";
+const GLSL_DRAW_IMAGE_RECT: &str = "FD";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
-const GLSL_CLOCKWISE_FILL: &str = "IE";
+const GLSL_CLOCKWISE_FILL: &str = "KE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
@@ -4965,7 +4965,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            53_649
+            53_880
         );
     }
 

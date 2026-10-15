@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: f40c9dfe8a0c4accf3e963f48429e893798854a5
+ * Upstream source revision: ce891f526a3297f9498a3e524fce6385cf0f2f25
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "f11f2240fbc24785101f32e14c0ce903be128bada09c6deebe8d1a4a3a6a1171";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1187;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 41401;
+    "0df64a60397a12f5ecac5c0a0d342a5a4450bbfba4760d847deee41ab2b00cc4";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1186;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 41359;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -752,9 +752,8 @@ INLINE void blend_pls_color_src_over(half4 fragColorOut PLS_CONTEXT_DECL)
 #ifndef @PLS_BLEND_SRC_OVER
     if (fragColorOut.r + fragColorOut.g + fragColorOut.b + fragColorOut.a == .0)
         return;
-    float oneMinusSrcAlpha = 1. - fragColorOut.a;
-    if (oneMinusSrcAlpha != .0)
-        fragColorOut += PLS_LOAD4F(colorBuffer) * oneMinusSrcAlpha;
+    if (fragColorOut.a != 1.)
+        fragColorOut = blend_src_over(fragColorOut, PLS_LOAD4F(colorBuffer));
 #endif
     PLS_STORE4F(colorBuffer, fragColorOut);
 }

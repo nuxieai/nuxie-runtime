@@ -1,97 +1,97 @@
 struct VB {
-    xd: f32,
-    Ce: f32,
-    Hg: f32,
-    Ig: f32,
-    P6_: u32,
-    Ca: u32,
-    tg: u32,
-    ug: u32,
-    F8_: vec4<i32>,
-    zi: vec2<f32>,
-    De: vec2<f32>,
+    yd: f32,
+    Ee: f32,
+    Jg: f32,
+    Kg: f32,
+    S6_: u32,
+    Ea: u32,
+    vg: u32,
+    wg: u32,
+    H8_: vec4<i32>,
+    Bi: vec2<f32>,
+    Fe: vec2<f32>,
     q2_: u32,
-    Di: f32,
+    Fi: f32,
     w6_: u32,
     i3_: f32,
-    Ee: f32,
-    mg: u32,
+    Ge: f32,
+    og: u32,
     F3_: f32,
     G3_: f32,
-    Fe: f32,
-    wi: u32,
-    Ba: u32,
-    M8_: f32,
-    N8_: f32,
+    He: f32,
+    yi: u32,
+    Da: u32,
+    O8_: f32,
+    P8_: f32,
 }
 
-struct n0Pe {
+struct n0Re {
     r2_: array<u32>,
 }
 
-struct R4Pe {
+struct R4Re {
     r2_: array<u32>,
 }
 
-struct m0Pe {
+struct m0Re {
     r2_: array<u32>,
 }
 
-struct jg {
+struct lg {
     r2_: array<vec2<u32>>,
 }
 
-struct kg {
+struct mg {
     r2_: array<vec4<f32>>,
 }
 
-@id(12) override jj: bool = false;
-@id(13) override kj: bool = false;
-@id(0) override Xi: bool = true;
+@id(12) override lj: bool = false;
+@id(13) override mj: bool = false;
+@id(0) override Zi: bool = true;
 
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 @group(2) @binding(0)
-var<storage, read_write> n0_: n0Pe;
+var<storage, read_write> n0_: n0Re;
 @group(1) @binding(11)
 var TB: texture_2d<f32>;
 @group(2) @binding(3)
-var<storage, read_write> R4_: R4Pe;
+var<storage, read_write> R4_: R4Re;
 @group(2) @binding(1)
-var<storage, read_write> m0_: m0Pe;
+var<storage, read_write> m0_: m0Re;
 @group(3) @binding(9)
-var ab: sampler;
+var db: sampler;
 @group(0) @binding(8)
-var XC: texture_2d<f32>;
+var ZC: texture_2d<f32>;
 @group(0) @binding(9)
-var YC: texture_2d<f32>;
+var AD: texture_2d<f32>;
 @group(3) @binding(8)
-var O8_: sampler;
+var Q8_: sampler;
 @group(1) @binding(13)
 var U4_: sampler;
 @group(0) @binding(3)
-var<storage> VC: jg;
+var<storage> XC: lg;
 @group(0) @binding(4)
-var<storage> JB: kg;
+var<storage> JB: mg;
 
 fn main_1() {
     let _e28 = gl_FragCoord_1;
     let _e31 = vec2<i32>(floor(_e28.xy));
     let _e32 = bitcast<vec2<u32>>(_e31);
-    let _e34 = j.P6_;
+    let _e34 = j.S6_;
     let _e63 = bitcast<i32>((((((_e32.y >> bitcast<u32>(5u)) * (((_e34 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))));
-    if jj {
-        let _e65 = j.tg;
+    if lj {
+        let _e65 = j.vg;
         n0_.r2_[_e63] = pack4x8unorm(unpack4x8unorm(_e65));
     }
-    if kj {
+    if mj {
         let _e70 = textureLoad(TB, _e31, 0i);
         n0_.r2_[_e63] = pack4x8unorm(_e70);
     }
-    let _e75 = j.ug;
+    let _e75 = j.wg;
     R4_.r2_[_e63] = _e75;
-    if Xi {
+    if Zi {
         m0_.r2_[_e63] = 0u;
     }
     return;

@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::r#async::work_task::{DynWorkTask, WorkStatus};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[cfg(feature = "threading")]
@@ -385,6 +385,26 @@ pub fn rive_poll_async_work(max_callbacks: u32) -> u32 {
         }
     }
     processed
+}
+
+// Work callbacks hand their results to a scripting VM's own queue, delivered
+// on its Lua thread at a root poll. This counts those results across every VM
+// until each is taken or dropped, so a root poll with none queued and no work
+// pending knows no VM has anything to deliver without finding the VMs.
+static QUEUED_VM_COMPLETIONS: AtomicUsize = AtomicUsize::new(0);
+
+/// `count` results were queued for a VM's thread.
+pub fn vm_completions_queued(count: usize) {
+    QUEUED_VM_COMPLETIONS.fetch_add(count, Ordering::AcqRel);
+}
+
+/// `count` queued results were taken for delivery or dropped undelivered.
+pub fn vm_completions_taken(count: usize) {
+    QUEUED_VM_COMPLETIONS.fetch_sub(count, Ordering::AcqRel);
+}
+
+pub fn has_queued_vm_completions() -> bool {
+    QUEUED_VM_COMPLETIONS.load(Ordering::Acquire) != 0
 }
 
 pub fn rive_has_pending_async_work() -> bool {

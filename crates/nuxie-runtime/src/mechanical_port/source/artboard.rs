@@ -2327,6 +2327,10 @@ impl Artboard {
     }
 
     pub fn poll_async_work(&mut self) {
+        if Self::async_work_idle() {
+            crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
+            return;
+        }
         let mut vms = Vec::new();
         self.collect_async_work_vms(&mut vms);
         crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
@@ -2334,10 +2338,24 @@ impl Artboard {
     }
 
     pub fn poll_async_work_handle(root: &CoreHandle) {
+        if Self::async_work_idle() {
+            crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
+            return;
+        }
         let mut vms = Vec::new();
         root.with_downcast::<Artboard, _>(|artboard| artboard.collect_async_work_vms(&mut vms));
         crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
         Self::deliver_async_work(&vms);
+    }
+
+    /// No work is pending for this thread and no VM has a completion queued:
+    /// the poll runs no callbacks here and every VM's delivery would find
+    /// nothing, so the VMs need not be found.
+    fn async_work_idle() -> bool {
+        use crate::mechanical_port::source::r#async::work_pool::{
+            has_queued_vm_completions, rive_has_pending_async_work,
+        };
+        !has_queued_vm_completions() && !rive_has_pending_async_work()
     }
 
     fn deliver_async_work(vms: &[RuntimeScriptingVmHandle]) {

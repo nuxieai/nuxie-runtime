@@ -1371,65 +1371,17 @@ impl File {
 
     pub fn artboard_default(&self) -> Option<RuntimeArtboardInstanceHandle> {
         let source = self.artboard()?;
-        let instance = self.instance_artboard(Some(source.clone()))?;
-        self.attach_watermark(&instance, &source);
-        Some(instance)
+        self.instance_artboard(Some(source))
     }
 
     pub fn artboard_at(&self, index: usize) -> Option<RuntimeArtboardInstanceHandle> {
         let source = self.artboard_at_source(index)?;
-        let instance = self.instance_artboard(Some(source.clone()))?;
-        self.attach_watermark(&instance, &source);
-        Some(instance)
+        self.instance_artboard(Some(source))
     }
 
     pub fn artboard_named(&self, name: &str) -> Option<RuntimeArtboardInstanceHandle> {
         let source = self.artboard_named_source(name)?;
-        let instance = self.instance_artboard(Some(source.clone()))?;
-        self.attach_watermark(&instance, &source);
-        Some(instance)
-    }
-
-    fn attach_watermark(&self, instance: &RuntimeArtboardInstanceHandle, source: &CoreHandle) {
-        use crate::mechanical_port::source::{
-            assets::manifest_asset::ManifestAsset, watermark::Watermark,
-        };
-
-        let Some((enabled, index)) = self.manifest().and_then(|manifest| {
-            manifest.with_downcast::<ManifestAsset, _>(|manifest| {
-                (
-                    manifest.has_watermark(),
-                    manifest.watermark_artboard_index(),
-                )
-            })
-        }) else {
-            return;
-        };
-        // Zero is a valid index; only the enabled flag determines presence.
-        if !enabled {
-            return;
-        }
-        let Some(watermark_artboard) = self.artboard_at_source(index as usize) else {
-            return;
-        };
-        if &watermark_artboard == source {
-            return;
-        }
-        let Some(watermark_instance) = self.instance_artboard(Some(watermark_artboard)) else {
-            return;
-        };
-        let Some(state_machine) = watermark_instance
-            .default_state_machine()
-            .or_else(|| watermark_instance.state_machine_at(0))
-        else {
-            return;
-        };
-        instance.with_artboard_mut(|artboard| {
-            artboard.set_watermark(Some(Box::new(Watermark::new(
-                watermark_instance,
-                state_machine,
-            ))));
-        });
+        self.instance_artboard(Some(source))
     }
 
     pub fn bindable_artboard_named(&self, name: &str) -> Option<RuntimeBindableArtboardHandle> {

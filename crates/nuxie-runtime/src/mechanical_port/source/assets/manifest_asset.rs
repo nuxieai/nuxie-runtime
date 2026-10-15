@@ -1,19 +1,14 @@
 use std::collections::HashMap;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader,
-    data_resolver::DataResolver,
-    factory::RuntimeFactoryHandle,
-    generated::assets::manifest_asset_base::ManifestAssetBase,
-    manifest_sections::{ManifestSections, WATERMARK_FLAG_ENABLED, WATERMARK_SECTION_VERSION},
+    core::binary_reader::BinaryReader, data_resolver::DataResolver, factory::RuntimeFactoryHandle,
+    generated::assets::manifest_asset_base::ManifestAssetBase, manifest_sections::ManifestSections,
 };
 
 pub struct ManifestAsset {
     pub base: ManifestAssetBase,
     names: HashMap<i32, String>,
     paths: HashMap<i32, Vec<u32>>,
-    has_watermark: bool,
-    watermark_artboard_index: u32,
 }
 
 impl DataResolver for ManifestAsset {
@@ -32,8 +27,6 @@ impl Default for ManifestAsset {
             base: ManifestAssetBase::default(),
             names: HashMap::new(),
             paths: HashMap::new(),
-            has_watermark: false,
-            watermark_artboard_index: 0,
         }
     }
 }
@@ -88,34 +81,6 @@ impl ManifestAsset {
         true
     }
 
-    fn decode_watermark(&mut self, reader: &mut BinaryReader<'_>, section_size: u64) -> bool {
-        let section_start_remaining = reader.position().len();
-        let version = reader.read_var_uint64();
-        if reader.has_error() {
-            return false;
-        }
-        if version == WATERMARK_SECTION_VERSION {
-            let flags = reader.read_var_uint64();
-            if reader.has_error() {
-                return false;
-            }
-            let artboard_index = reader.read_var_uint_as::<u32>();
-            if reader.has_error() {
-                return false;
-            }
-            self.has_watermark = (flags & WATERMARK_FLAG_ENABLED) != 0;
-            self.watermark_artboard_index = artboard_index;
-        }
-        // Unknown versions retain the current state. Known versions permit
-        // appended fields, so consume all remaining bytes in either case.
-        let bytes_read = section_start_remaining - reader.position().len();
-        if bytes_read as u64 > section_size {
-            return false;
-        }
-        reader.read_bytes_length((section_size - bytes_read as u64) as usize);
-        !reader.has_error()
-    }
-
     pub fn decode(&mut self, bytes: &[u8], _factory: &RuntimeFactoryHandle) -> bool {
         if bytes.is_empty() {
             return true;
@@ -142,11 +107,6 @@ impl ManifestAsset {
                         return false;
                     }
                 }
-                value if value == ManifestSections::Watermark as u64 => {
-                    if !self.decode_watermark(&mut reader, section_size) {
-                        return false;
-                    }
-                }
                 _ => {
                     reader.read_bytes_length(section_size as usize);
                     if reader.has_error() {
@@ -164,14 +124,6 @@ impl ManifestAsset {
 
     pub fn file_extension(&self) -> &'static str {
         "man"
-    }
-
-    pub fn has_watermark(&self) -> bool {
-        self.has_watermark
-    }
-
-    pub fn watermark_artboard_index(&self) -> u32 {
-        self.watermark_artboard_index
     }
 
     pub fn resolve_name(&self, id: i32) -> &str {

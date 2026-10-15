@@ -72,9 +72,8 @@ thread_local! {
 
 /// Install the monotonic microsecond clock for an import-free Wasm embedder.
 ///
-/// Required before clock-driven runtime operations, including constructing a
-/// watermarked artboard in deterministic mode. The
-/// callback must use a consistent monotonic epoch for the entire lifetime of
+/// Required before clock-driven runtime operations such as text-input
+/// pointer-down and scroll physics. The callback must use a consistent monotonic epoch for the entire lifetime of
 /// every runtime instance. This explicit boundary keeps cold publisher modules free
 /// of JS imports without silently disabling the playback clock budget.
 #[cfg(all(
@@ -93,7 +92,7 @@ pub fn set_clock(clock: fn() -> i64) {
 ))]
 fn platform_now_micros() -> i64 {
     let clock = HOST_CLOCK.with(std::cell::Cell::get).expect(
-        "import-free Wasm runtime requires engine_clock::set_clock before clock-driven operations",
+        "import-free Wasm runtime requires source::set_engine_clock before clock-driven operations",
     );
     clock()
 }

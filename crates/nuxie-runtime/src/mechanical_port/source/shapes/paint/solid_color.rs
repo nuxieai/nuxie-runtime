@@ -75,12 +75,13 @@ impl SolidColor {
         let value = color_modulate_opacity(self.base.color_value() as u32, self.render_opacity());
         paint.borrow_mut().color(value);
         let opacity = color_opacity(value);
-        self.mutator.flags = MutatorFlags::NONE;
+        let mut flags = MutatorFlags::NONE;
         if opacity > 0.0 {
-            self.mutator.flags |= MutatorFlags::VISIBLE;
+            flags |= MutatorFlags::VISIBLE;
         } else if opacity < 1.0 {
-            self.mutator.flags |= MutatorFlags::TRANSLUCENT;
+            flags |= MutatorFlags::TRANSLUCENT;
         }
+        self.mutator.set_flags(flags);
         if let Some(artboard) = self.base.artboard_handle() {
             if let Some(dirty) = artboard.artboard_dirty_handle() {
                 dirty.changed();

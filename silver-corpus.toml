@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "8f06a91c7dad29a8cb1345535c0855de3ace4411"
+upstream_ref = "0f40af120fc3fec35add319d3334c09af6231457"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -1020,7 +1020,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_fonts_test.cpp"
 provenance_test = "Data bind font"
-producer_line = 73
+producer_line = 74
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

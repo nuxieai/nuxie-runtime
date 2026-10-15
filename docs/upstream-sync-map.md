@@ -46,18 +46,27 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8f06a91c7dad29a8cb1345535c0855de3ace4411`
+- LAST_SYNCED_SHA: `0f40af120fc3fec35add319d3334c09af6231457`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
+- Current target: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Zero upstream commits remain after this checkpoint at the fetched target.
-  All 249 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (271 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 250 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (272 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `0f40af12`, integrated atop downstream `4f64dfd304`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All three translated font-binding tests pass, including the pinned
+  Silver stream comparison and new null-base-font cache regression. The fixture
+  follows upstream's no-explicit-binding flow and normal asset invalidation.
+  Source/manifest/pipeline checks pass 39 after regenerating the manifest's
+  shifted upstream source line; generated build files are current. Full runtime
+  suites, browser execution and new hardware validation were not rerun for this
+  single platform-independent cache correction.
 - Validation at `8f06a91c`, integrated atop downstream `325b282ef7`:
   independent source-equivalence and subsequent fresh Rust-integration reviews
   are clean. Runtime units pass 408 with two existing ignores; editor-enabled
@@ -1120,6 +1129,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0f40af120fc3fec35add319d3334c09af6231457` | Clear TextStyle's cached variable font before returning when its base font is absent. Port the exact public font-asset-clearing regression, preserving normal invalidation and no explicit view-model binding. Regenerate the shifted Silver producer line. Private .rive_head contents are not claimed imported. | — |
 | `8f06a91c7dad29a8cb1345535c0855de3ace4411` | Translate supplied nested-animation definition/instance APIs with focus-before-input ordering, count/accessor transition traversal, standalone editor animation/keyboard helpers, paint identity deduplication and cloned view-model property metadata. Preserve exact artboard instantiation error and port the host-thread/context-replacement regression at the approved Rust ownership boundary; failed host hydration already constructs before publishing input. Missing-File completion is already weak-upgrade guarded; ordinary state-machine object iteration and no-arena composer/layout paths are equivalent. Native REV arena rebuilding/mounting, persistent (client,object) paths, mutation envelopes, coop validation, arena-only path-effect hydration, borrowed editor comparator/listener ownership and Lua instantiate/release/lifetime hooks remain excluded under d4fe1022. No dummy validation flags or native editor host were introduced. Private editor contents referenced by .rive_head are not claimed imported. | — |
 | `fdd555d62280db2f1d659b0d8fd821ed6a4d11f3` | Translate Mali storage-texture rotation: lazy ring slots, shared per-flush slot selection, replacement for pending or failed fences, zero-timeout polling, fence-before-flush advancement, and SSBO exclusion. Wire real browser sync objects with owning-context/generation-safe deletion; retain upstream constructor and reverse destruction order. Pending ubershaders advance synchronously by feature equality, specialized pipelines asynchronously; Vulkan has no override of the unchanged default no-op advancement. Port upstream rotation/reuse assertions at the documented recording-provider boundary and add lifetime/failure regressions. Private .rive_head contents are not claimed imported. | — |
 | `ce788b3b6b20aa641c20f320cd9ccce920648786` | Translate constant-time scripted-property untracking in live luaur and corresponding source owners: retained slot index, bounds/identity-guarded swap removal, moved-slot repair, owner/orphan registration and exact tag filtering. Preserve non-owning stable Rust identity and untrack-before-cleanup order. Port all three public stress/lifecycle tests without changing their counts or timing threshold. Private Dart editor wrapper-cache changes described in the message are absent from the public delta and are not claimed imported; existing runtime caching is unchanged. | — |

@@ -24,7 +24,7 @@ use crate::mechanical_port::source::{
     core::CoreObject,
     node::Node as NodeObject,
     shapes::{path_cells::PathCells, shape::Shape, shape_cells::ShapeCells},
-    world_transform_component::{PlainTransform, Translation},
+    world_transform_component::{PlainTransform, TransformCells, Translation},
 };
 use std::any::Any;
 
@@ -88,6 +88,66 @@ struct Node {
 /// Dependents are graph orders; this bit marks an index into `outside`
 /// (occurrences that are not graph members, such as DrawTargets).
 const OUTSIDE_DEPENDENT: u32 = 1 << 31;
+
+/// A transform input that a plain transform member's generated setter writes
+/// to its TransformCells.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransformInput {
+    NodeX,
+    NodeY,
+    RootBoneX,
+    RootBoneY,
+    Rotation,
+    ScaleX,
+    ScaleY,
+    Opacity,
+}
+
+impl TransformInput {
+    #[inline]
+    fn from_key(property_key: i32) -> Option<Self> {
+        use crate::mechanical_port::source::generated::{
+            bones::root_bone_base::RootBoneBase, node_base::NodeBase,
+            transform_component_base::TransformComponentBase,
+            world_transform_component_base::WorldTransformComponentBase,
+        };
+        let key = u16::try_from(property_key).ok()?;
+        Some(match key {
+            NodeBase::X_PROPERTY_KEY => Self::NodeX,
+            NodeBase::Y_PROPERTY_KEY => Self::NodeY,
+            RootBoneBase::X_PROPERTY_KEY => Self::RootBoneX,
+            RootBoneBase::Y_PROPERTY_KEY => Self::RootBoneY,
+            TransformComponentBase::ROTATION_PROPERTY_KEY => Self::Rotation,
+            TransformComponentBase::SCALE_X_PROPERTY_KEY => Self::ScaleX,
+            TransformComponentBase::SCALE_Y_PROPERTY_KEY => Self::ScaleY,
+            WorldTransformComponentBase::OPACITY_PROPERTY_KEY => Self::Opacity,
+            _ => return None,
+        })
+    }
+
+    /// This input's cell accessors on a member updated by `kernel`, if the
+    /// member's type has the property. Node (and Shape) own x/y under
+    /// NodeBase's keys, a RootBone under its own; a Bone has no position.
+    #[inline]
+    fn accessors(
+        self,
+        kernel: &PlainTransform,
+    ) -> Option<(fn(&TransformCells) -> f32, fn(&TransformCells, f32))> {
+        let owns_position =
+            |node: bool| kernel.translation == Translation::Own && kernel.node == node;
+        Some(match self {
+            Self::NodeX if owns_position(true) => (TransformCells::x, TransformCells::set_x),
+            Self::NodeY if owns_position(true) => (TransformCells::y, TransformCells::set_y),
+            Self::RootBoneX if owns_position(false) => (TransformCells::x, TransformCells::set_x),
+            Self::RootBoneY if owns_position(false) => (TransformCells::y, TransformCells::set_y),
+            Self::Rotation => (TransformCells::rotation, TransformCells::set_rotation),
+            Self::ScaleX => (TransformCells::scale_x, TransformCells::set_scale_x),
+            Self::ScaleY => (TransformCells::scale_y, TransformCells::set_scale_y),
+            Self::Opacity => (TransformCells::opacity, TransformCells::set_opacity),
+            _ => return None,
+        })
+    }
+}
 
 pub(crate) struct ComponentGraph {
     // Shared with each member's DirtBinding so Components read their own
@@ -477,6 +537,50 @@ impl ComponentGraph {
     #[inline(never)]
     fn add_dirt_outside(&self, dependent: u32, value: ComponentDirt) {
         self.outside[(dependent & !OUTSIDE_DEPENDENT) as usize].add_dirt(value, true);
+    }
+
+    /// Set a plain transform member's position, rotation, scale or opacity
+    /// without borrowing it. The generated setter's steps run in order on the
+    /// member's cells and node: the equality test and the cell write, then the
+    /// property's changed callback, then its property observers. The callback
+    /// is TransformComponent::markTransformDirty, or for opacity
+    /// WorldTransformComponent::opacityChanged.
+    ///
+    /// Returns None, having done nothing, when `handle` is not a live member
+    /// updated by the plain transform kernel, or when its type has no such
+    /// property under `property_key`. The caller then takes the generated
+    /// setter.
+    pub(crate) fn set_plain_transform_double(
+        handle: &CoreHandle,
+        property_key: i32,
+        value: f32,
+    ) -> Option<bool> {
+        let input = TransformInput::from_key(property_key)?;
+        let (graph, order) = handle.component_graph()?;
+        let kernel = graph.transforms.get(order as usize)?.as_ref()?;
+        let (get, set) = input.accessors(kernel)?;
+        let cells = &*kernel.cells;
+        if get(cells) == value {
+            return Some(true);
+        }
+        set(cells, value);
+        if input == TransformInput::Opacity {
+            graph.add_dirt(order, ComponentDirt::RENDER_OPACITY, true);
+        } else if graph.add_dirt(order, ComponentDirt::TRANSFORM, false) {
+            graph.add_dirt(order, ComponentDirt::WORLD_TRANSFORM, true);
+        }
+        handle.notify_property_changed(property_key as u16);
+        Some(true)
+    }
+
+    /// The generated getter of a property set_plain_transform_double sets,
+    /// read from the member's cells; None where that returns None.
+    pub(crate) fn get_plain_transform_double(handle: &CoreHandle, property_key: i32) -> Option<f32> {
+        let input = TransformInput::from_key(property_key)?;
+        let (graph, order) = handle.component_graph()?;
+        let kernel = graph.transforms.get(order as usize)?.as_ref()?;
+        let (get, _) = input.accessors(kernel)?;
+        Some(get(&kernel.cells))
     }
 
     /// Artboard::updateComponents over the graph. `depth` and the root's

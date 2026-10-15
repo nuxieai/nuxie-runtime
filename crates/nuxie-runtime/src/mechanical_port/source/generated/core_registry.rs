@@ -10442,6 +10442,16 @@ impl CoreRegistry {
             .copied()
             .unwrap_or(false)
         {
+            // A plain transform member's inputs are cells on its graph node.
+            if let Some(written) =
+                crate::mechanical_port::source::component_graph::ComponentGraph::set_plain_transform_double(
+                    handle,
+                    property_key,
+                    value,
+                )
+            {
+                return written;
+            }
             let mut completion = crate::source::core::PropertySetterCompletion::default();
             let written = handle
                 .with_mut(|object| {
@@ -10604,6 +10614,14 @@ impl CoreRegistry {
     }
 
     pub fn get_double_handle(handle: &CoreHandle, property_key: i32) -> Option<f32> {
+        if let Some(value) =
+            crate::mechanical_port::source::component_graph::ComponentGraph::get_plain_transform_double(
+                handle,
+                property_key,
+            )
+        {
+            return Some(value);
+        }
         handle.with_mut(|object| Self::get_double(object, property_key))
     }
 

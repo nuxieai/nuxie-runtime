@@ -50,12 +50,46 @@ enum DecodeCompletion {
     },
 }
 
+/// Completions the work pool delivered for one VM's Lua thread. Each counts
+/// toward the runtime's queued tally until it is taken or dropped, which lets
+/// a root poll skip finding VMs while none has anything queued.
+#[derive(Default)]
+struct CompletionQueue(VecDeque<DecodeCompletion>);
+
+impl CompletionQueue {
+    fn push_back(&mut self, completion: DecodeCompletion) {
+        self.0.push_back(completion);
+        nuxie_runtime::vm_completions_queued(1);
+    }
+
+    fn take_front(&mut self, limit: usize) -> Vec<DecodeCompletion> {
+        let count = self.0.len().min(limit);
+        let taken = self.0.drain(..count).collect();
+        nuxie_runtime::vm_completions_taken(count);
+        taken
+    }
+
+    fn front(&self) -> Option<&DecodeCompletion> {
+        self.0.front()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Drop for CompletionQueue {
+    fn drop(&mut self) {
+        nuxie_runtime::vm_completions_taken(self.0.len());
+    }
+}
+
 struct ImageDecodeTask {
     request_id: u64,
     decoder: Arc<dyn ScriptImageDecoder>,
     encoded: Mutex<Vec<u8>>,
     decoded: Mutex<Option<DecodedImageRgba>>,
-    completions: Arc<Mutex<VecDeque<DecodeCompletion>>>,
+    completions: Arc<Mutex<CompletionQueue>>,
 }
 
 impl ImageDecodeTask {
@@ -63,7 +97,7 @@ impl ImageDecodeTask {
         request_id: u64,
         decoder: Arc<dyn ScriptImageDecoder>,
         encoded: Vec<u8>,
-        completions: Arc<Mutex<VecDeque<DecodeCompletion>>>,
+        completions: Arc<Mutex<CompletionQueue>>,
     ) -> Self {
         Self {
             request_id,
@@ -128,7 +162,7 @@ pub(super) struct ImageDecodeRegistry {
     owner_id: u64,
     decoder: Arc<dyn ScriptImageDecoder>,
     pending: RefCell<HashMap<u64, PendingDecode>>,
-    completions: Arc<Mutex<VecDeque<DecodeCompletion>>>,
+    completions: Arc<Mutex<CompletionQueue>>,
 }
 
 impl ImageDecodeRegistry {
@@ -138,7 +172,7 @@ impl ImageDecodeRegistry {
             owner_id: WorkPool::next_owner_id(),
             decoder,
             pending: RefCell::new(HashMap::new()),
-            completions: Arc::new(Mutex::new(VecDeque::new())),
+            completions: Arc::new(Mutex::new(CompletionQueue::default())),
         }
     }
 
@@ -296,11 +330,7 @@ pub(super) fn poll_registry_completed(
     registry: Rc<ImageDecodeRegistry>,
     limit: usize,
 ) -> Result<bool> {
-    let completions = {
-        let mut queue = lock_unpoisoned(&registry.completions);
-        let count = queue.len().min(limit);
-        queue.drain(..count).collect::<Vec<_>>()
-    };
+    let completions = lock_unpoisoned(&registry.completions).take_front(limit);
     let mut settled = false;
     for completion in completions {
         let request_id = match &completion {

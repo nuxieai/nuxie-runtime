@@ -227,7 +227,7 @@ impl KeyedObject {
             return;
         };
         // InterpolatorHost::from, once for every property of this target.
-        let interpolator_host = KeyFrameInterpolator::host_from(object.clone());
+        let interpolator_host = KeyFrameInterpolator::host_of(&object);
         let properties = cells.properties();
         for property in properties.iter() {
             if !crate::mechanical_port::source::generated::core_registry::CoreRegistry::is_callback(
@@ -235,7 +235,7 @@ impl KeyedObject {
             ) {
                 KeyedProperty::apply_cells(
                     &property.cells,
-                    object.clone(),
+                    &object,
                     time,
                     mix,
                     context,

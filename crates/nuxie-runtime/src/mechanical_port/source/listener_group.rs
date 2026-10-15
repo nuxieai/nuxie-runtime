@@ -636,12 +636,9 @@ impl ListenerGroupProvider {
         };
         let listens = owner
             .with(|owner| {
-                owner.as_scripted_object().map(|scripted| {
-                    scripted.wants_pointer_down()
-                        || scripted.wants_pointer_up()
-                        || scripted.wants_pointer_move()
-                        || scripted.wants_pointer_exit()
-                })
+                owner
+                    .as_scripted_object()
+                    .map(|scripted| scripted.listens_to_pointer_events())
             })
             .flatten()
             .expect("a scripted listener provider retains ScriptedObject");

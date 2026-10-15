@@ -79,6 +79,44 @@ impl ScriptedDrawable {
         self.base.script_asset_id()
     }
 
+    pub fn wants_any_pointer(&self) -> bool {
+        self.scripted.wants_any_pointer()
+    }
+
+    /// Whether the running script can take pointer events. Checked at each hit,
+    /// since scripts with inputs may start only after the state machine is made.
+    pub fn has_pointer_handler(&self) -> bool {
+        self.scripted.scripting_vm().is_some()
+            && self.scripted.self_ref() != 0
+            && self
+                .scripted
+                .runtime_instance()
+                .is_some_and(|instance| instance.borrow_mut().script_lifetime_valid())
+            && self.wants_any_pointer()
+    }
+
+    pub fn has_pointer_handler_occurrence(owner: &CoreHandle) -> bool {
+        let Some((instance, wants_pointer)) = owner
+            .with(|owner| {
+                let drawable = owner.as_scripted_drawable()?;
+                if drawable.scripted.scripting_vm().is_none() || drawable.scripted.self_ref() == 0 {
+                    return None;
+                }
+                Some((
+                    drawable.scripted.runtime_instance()?,
+                    drawable.wants_any_pointer(),
+                ))
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        // Release the authored owner before consulting the backend's live-self
+        // check, the Rust host boundary for the retained VM and script lifetime.
+        let valid = instance.borrow_mut().script_lifetime_valid();
+        valid && wants_pointer
+    }
+
     pub fn did_hydrate_script_inputs(&mut self) {
         self.is_advance_active = true;
         self.add_scripted_dirt(ComponentDirt::PAINT, false);
@@ -445,23 +483,12 @@ impl HitScriptedDrawable {
     pub fn new(drawable: CoreHandle) -> Self {
         Self { drawable }
     }
-}
-impl crate::mechanical_port::source::animation::state_machine_instance::HitComponent
-    for HitScriptedDrawable
-{
-    fn component(&self) -> crate::mechanical_port::source::drawable::RuntimeDrawableOccurrence {
-        crate::mechanical_port::source::drawable::RuntimeDrawableOccurrence::Authored(
-            self.drawable.clone(),
-        )
-    }
-    fn hit_test(&self, _position: crate::mechanical_port::source::math::vec2d::Vec2D) -> bool {
-        true
-    }
-    fn hit_test_bounded(&self, position: Vec2D) -> bool {
+
+    /// Box test shared by pointer hits and scroll.
+    pub fn within_bounds(&self, position: Vec2D) -> bool {
         self.drawable
             .with(|drawable| {
                 let Some(layout) = drawable.as_scripted_layout() else {
-                    // A scripted node has no box of its own; everywhere, like hit_test.
                     return true;
                 };
                 let Some(size) = layout.layout_size() else {
@@ -473,6 +500,24 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
                 local.x >= 0.0 && local.y >= 0.0 && local.x <= size.x && local.y <= size.y
             })
             .unwrap_or(false)
+    }
+}
+impl crate::mechanical_port::source::animation::state_machine_instance::HitComponent
+    for HitScriptedDrawable
+{
+    fn component(&self) -> crate::mechanical_port::source::drawable::RuntimeDrawableOccurrence {
+        crate::mechanical_port::source::drawable::RuntimeDrawableOccurrence::Authored(
+            self.drawable.clone(),
+        )
+    }
+    fn hit_test(&self, _position: crate::mechanical_port::source::math::vec2d::Vec2D) -> bool {
+        ScriptedDrawable::has_pointer_handler_occurrence(&self.drawable)
+    }
+    fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        if !ScriptedDrawable::has_pointer_handler_occurrence(&self.drawable) {
+            return false;
+        }
+        self.within_bounds(position)
     }
     fn prepare_event(
         &self,
@@ -500,7 +545,7 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
             return false;
         };
         if is_layout {
-            return self.hit_test_bounded(position);
+            return self.within_bounds(position);
         }
         artboard
             .and_then(|artboard| {

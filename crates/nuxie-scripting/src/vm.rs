@@ -3266,6 +3266,8 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(false);
         }
         let table = self.live_table()?;
+        // ScriptingVM::hasMethod uses lua_getfield, including __index, and
+        // accepts only LUA_TFUNCTION (not merely a truthy/callable value).
         let value: Value = table
             .get(method.as_str())
             .map_err(|error| self.script_error(error))?;
@@ -4126,6 +4128,39 @@ mod context_init_tests {
     struct TruthyUserData;
 
     impl UserData for TruthyUserData {}
+
+    #[test]
+    fn has_method_checks_field_function_type_including_index_lookup() {
+        let lua = Lua::new();
+        let table: Table = lua
+            .load(
+                r#"return setmetatable({
+                    pointerDown = function() error("lookup must not call handler") end,
+                    pointerMove = true,
+                    pointerUp = setmetatable({}, {__call = function() end}),
+                }, {__index = {pointerExit = function() end}})"#,
+            )
+            .eval()
+            .unwrap();
+        let instance = LuaScriptInstance::new(table);
+        assert!(instance.has_method(ScriptMethod::PointerDown).unwrap());
+        assert!(!instance.has_method(ScriptMethod::PointerMove).unwrap());
+        assert!(!instance.has_method(ScriptMethod::PointerUp).unwrap());
+        assert!(instance.has_method(ScriptMethod::PointerExit).unwrap());
+        assert!(!instance.has_method(ScriptMethod::Advance).unwrap());
+
+        let failing: Table = lua
+            .load("return setmetatable({}, {__index = function() error('lookup failed') end})")
+            .eval()
+            .unwrap();
+        assert!(
+            LuaScriptInstance::new(failing)
+                .has_method(ScriptMethod::PointerDown)
+                .unwrap_err()
+                .to_string()
+                .contains("lookup failed")
+        );
+    }
 
     #[derive(Debug)]
     struct FailingPreparedArtboard {

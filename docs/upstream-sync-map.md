@@ -46,18 +46,33 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `113d1bcedcc387c92ee000f64a5d7d947b4229dc`
+- LAST_SYNCED_SHA: `e54bc92a625cee04f88d903822c4503cb44f3714`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 251 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (273 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 252 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (274 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `e54bc92a`, integrated atop downstream `1ae4dd47ac`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Source review corrected the test helper to use upstream's derived-aware
+  drawable access rather than a concrete downcast. Runtime units pass 408 with
+  two existing ignores; scripting units pass 364 with one existing ignore.
+  Both new legacy-hit fixture tests, both hidden-hit cases, 27 scroll-input
+  cases and seven scripted-scroll cases pass. The first scripted-scroll run
+  contained zero tests without upstream-test-seams; only the corrected seven-case
+  run is execution coverage. Real Lua lookup tests cover functions, missing and
+  nonfunction fields, inherited fields and errors. The exact upstream fixture
+  blob is d4e97d49ca5024c2a82f91797ac3ac90ce71efc5. Metadata checks pass 39;
+  generated manifest/build registration is current. Existing instance-level
+  borrowing remains an approved adapter boundary; arbitrary same-instance
+  callback reentry is not proven by these tests. Browser/device validation was
+  not rerun for this shared host/runtime change.
 - Validation at `113d1bce`, integrated atop downstream `0f7c9c5414`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean; source review corrected a historical comment's snapshot claim without
@@ -1146,6 +1161,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `e54bc92a625cee04f88d903822c4503cb44f3714` | Check the exact legacy serialized method sentinel once after successful script self creation, clear only absent down/move/up/exit handlers in order, recopy corrected bits to the occurrence, and retain them for later instances. Reuse live Lua field/function introspection and default unknown backends to present. Typed lookup failures preserve pending status and uncommitted bits. Gate pointer hits on current script lifetime and pointer handlers; retain independent scroll bounds and the broader upstream listener-registration mask. Port both exact legacy-hit fixture cases and add Lua lookup coverage. Private .rive_head contents are not claimed imported. | — |
 | `113d1bcedcc387c92ee000f64a5d7d947b4229dc` | Use cached RiveRenderPath bounds for scale/translation and retain raw-point mapping for rotation/skew. Translate transformed area as abs(determinant) times width times height in source order; update stale triangle-arithmetic expectations from pinned C++ expression evidence. Port the 200-path/seven-matrix exact bounds regression with documented portable PRNG sampling. Historical retained comments are labeled separately from the live owner revision. Private .rive_head contents are not claimed imported. | — |
 | `0f40af120fc3fec35add319d3334c09af6231457` | Clear TextStyle's cached variable font before returning when its base font is absent. Port the exact public font-asset-clearing regression, preserving normal invalidation and no explicit view-model binding. Regenerate the shifted Silver producer line. Private .rive_head contents are not claimed imported. | — |
 | `8f06a91c7dad29a8cb1345535c0855de3ace4411` | Translate supplied nested-animation definition/instance APIs with focus-before-input ordering, count/accessor transition traversal, standalone editor animation/keyboard helpers, paint identity deduplication and cloned view-model property metadata. Preserve exact artboard instantiation error and port the host-thread/context-replacement regression at the approved Rust ownership boundary; failed host hydration already constructs before publishing input. Missing-File completion is already weak-upgrade guarded; ordinary state-machine object iteration and no-arena composer/layout paths are equivalent. Native REV arena rebuilding/mounting, persistent (client,object) paths, mutation envelopes, coop validation, arena-only path-effect hydration, borrowed editor comparator/listener ownership and Lua instantiate/release/lifetime hooks remain excluded under d4fe1022. No dummy validation flags or native editor host were introduced. Private editor contents referenced by .rive_head are not claimed imported. | — |

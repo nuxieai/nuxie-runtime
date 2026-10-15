@@ -372,6 +372,28 @@ impl ScriptedObject {
                 })
                 .expect("the stateful owner remains live");
         }
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .and_then(|scripted| scripted.runtime_instance.clone())
+            })
+            .flatten()
+            .expect("successful script initialization retains its self table");
+        let methods = match ScriptAsset::check_legacy_pointer_handlers_occurrence(&asset, &instance)
+        {
+            Ok(methods) => methods,
+            Err(_) => return false,
+        };
+        if let Some(methods) = methods {
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_object_mut()
+                    .expect("a scripted owner keeps its type")
+                    .set_implemented_methods(methods);
+            });
+            asset.with_downcast_mut::<ScriptAsset, _>(ScriptAsset::finish_legacy_pointer_check);
+        }
         true
     }
 
@@ -731,7 +753,7 @@ impl ScriptedObject {
 
     pub fn set_artboard_input_occurrence(owner: &CoreHandle, name: String, source: CoreHandle) {
         use crate::mechanical_port::source::assets::script_asset::ScriptAsset;
-        use crate::scripting::{native_script_artboard, ScriptCoreString};
+        use crate::scripting::{ScriptCoreString, native_script_artboard};
         let state = owner
             .with(|owner| {
                 let scripted = owner.as_scripted_object()?;
@@ -1150,6 +1172,14 @@ impl ScriptedObject {
     }
     pub fn wants_text_input(&self) -> bool {
         self.implemented_methods & WANTS_TEXT_INPUT_BIT != 0
+    }
+    pub fn wants_any_pointer(&self) -> bool {
+        self.implemented_methods
+            & (WANTS_POINTER_DOWN_BIT
+                | WANTS_POINTER_MOVE_BIT
+                | WANTS_POINTER_UP_BIT
+                | WANTS_POINTER_EXIT_BIT)
+            != 0
     }
     pub fn wants_pointer_down(&self) -> bool {
         self.implemented_methods & WANTS_POINTER_DOWN_BIT != 0

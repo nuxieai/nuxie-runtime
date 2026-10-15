@@ -2271,7 +2271,10 @@ pub trait ScriptInstance {
         self.set_context_view_model(None)
     }
 
-    fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError>;
+    /// Backends unable to inspect a self table conservatively retain methods.
+    fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+        Ok(true)
+    }
 
     fn call_method(
         &mut self,

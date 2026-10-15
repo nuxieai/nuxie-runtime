@@ -14,6 +14,9 @@ pub(crate) struct KeyFrameCells {
     // Whether InterpolatingKeyFrame resolved an interpolator object; without
     // one, interpolation is linear.
     has_interpolator: Cell<bool>,
+    // The owning property's flag that its frame times need gathering again,
+    // shared once the frame joins that property.
+    times_stale: std::cell::OnceCell<std::rc::Rc<Cell<bool>>>,
 }
 
 impl Default for KeyFrameCells {
@@ -23,6 +26,7 @@ impl Default for KeyFrameCells {
             interpolation_type: Cell::new(0),
             double_value: Cell::new(None),
             has_interpolator: Cell::new(false),
+            times_stale: std::cell::OnceCell::new(),
         }
     }
 }
@@ -36,6 +40,9 @@ impl KeyFrameCells {
     #[inline]
     pub(crate) fn set_seconds(&self, seconds: f32) {
         self.seconds.set(seconds);
+        if let Some(stale) = self.times_stale.get() {
+            stale.set(true);
+        }
     }
 
     #[inline]
@@ -87,6 +94,10 @@ pub(crate) struct KeyedPropertyCells {
     // list until the first add, so such a rebuild must add at least one key,
     // as upstream apply requires a non-empty list anyway.
     frames: std::cell::RefCell<std::rc::Rc<[KeyFrameEntry]>>,
+    // The frames' times, contiguous for the frame search; gathered again
+    // when a frame joins or a frame's time changes.
+    times: std::cell::RefCell<Box<[f32]>>,
+    times_stale: std::rc::Rc<Cell<bool>>,
 }
 
 impl KeyedPropertyCells {
@@ -94,7 +105,31 @@ impl KeyedPropertyCells {
         Self {
             property_key: Cell::new(property_key),
             frames: std::cell::RefCell::new(std::rc::Rc::new([])),
+            times: std::cell::RefCell::new(Box::new([])),
+            times_stale: std::rc::Rc::new(Cell::new(true)),
         }
+    }
+
+    /// closest_frame_index over the current frames, searching their times.
+    #[inline]
+    pub(crate) fn closest_frame_index(&self, seconds: f32, offset: i32) -> i32 {
+        if self.times_stale.get() {
+            self.gather_times();
+        }
+        closest_time_index(&self.times.borrow(), seconds, offset)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn gather_times(&self) {
+        let times = self
+            .frames
+            .borrow()
+            .iter()
+            .map(|frame| frame.cells.seconds())
+            .collect();
+        *self.times.borrow_mut() = times;
+        self.times_stale.set(false);
     }
 
     #[inline]
@@ -121,20 +156,25 @@ impl KeyedPropertyCells {
 
     /// Replace the keyframes with the owning KeyedProperty's whole list.
     pub(crate) fn set_frames(&self, frames: std::rc::Rc<[KeyFrameEntry]>) {
+        // A frame joins one property; its time changes mark this one stale.
+        for frame in frames.iter() {
+            let _ = frame.cells.times_stale.set(std::rc::Rc::clone(&self.times_stale));
+        }
+        self.times_stale.set(true);
         *self.frames.borrow_mut() = frames;
     }
 }
 
-/// KeyedProperty::closestFrameIndex over a keyframe list.
-pub(crate) fn closest_frame_index(frames: &[KeyFrameEntry], seconds: f32, offset: i32) -> i32 {
+/// KeyedProperty::closestFrameIndex over the frames' times.
+fn closest_time_index(times: &[f32], seconds: f32, offset: i32) -> i32 {
     let mut start = 0;
-    let mut end = frames.len() as i32 - 1;
-    if seconds > frames[end as usize].cells.seconds() {
+    let mut end = times.len() as i32 - 1;
+    if seconds > times[end as usize] {
         return end + 1;
     }
     while start <= end {
         let mid = (start + end) >> 1;
-        let value = frames[mid as usize].cells.seconds();
+        let value = times[mid as usize];
         if value < seconds {
             start = mid + 1
         } else if value > seconds {

@@ -447,7 +447,7 @@ pub(super) fn call_path_effect_update(
     owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
 ) -> Result<Option<RenderRawPath>> {
     let lua = table.lua();
-    let function: luaur_rt::Function = table.get("update")?;
+    let function: luaur_rt::Function = table.get_field("update")?;
     let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
     let node = lua.create_userdata(LuaScriptedNode::new(node))?;
     let _property_owner = owner.map(|owner| {

@@ -46,18 +46,35 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `fa2cd6e38c6ab109a7feb6c814b55e4fa1f3d33c`
+- LAST_SYNCED_SHA: `6fa2cccf37a5909824dc98311d8cf2d8327abbd4`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Five upstream commits remain after this checkpoint at the fetched target.
-  All 244 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (266 after `5892bb05`); this
+  Four upstream commits remain after this checkpoint at the fetched target.
+  All 245 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (267 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `6fa2cccf`, integrated atop downstream `bbfa0a9d09`:
+  independent source-equivalence and subsequent Rust-integration reviews and
+  correction rereviews are clean. Integration review corrected owning GL
+  execution-scope entry/restoration. Native WebGL2 passes 111 tests, including
+  all three new precreation tests; one unchanged uniform-range fixture fails
+  because it expects offset 16 despite the already-merged upstream 256-byte
+  alignment rule. Source identity and ancestral history establish that baseline
+  failure, tracked in [UNIV-4801](https://universe.basis.dev/issue/UNIV-4801);
+  no separate baseline executable was run and no assertion was weakened.
+  Both browser renderers compile for wasm32-unknown-unknown. Source/manifest/
+  pipeline checks pass 39; generated build files and Silver manifest are current.
+  An initial native invocation omitted the existing webgl2-test-support feature
+  and failed before tests; the corrected invocation ran the suite. A stale
+  snapshot byte-count assertion was corrected to the exact upstream header size
+  and independently rereviewed. Final validation used frozen inputs.
+  No browser pixels, real parallel GL driver, new Vulkan hardware or guest-Wasm
+  execution coverage is claimed.
 - Validation at `fa2cd6e3`, integrated atop downstream `ba5a8cdf71`:
   independent source-equivalence and subsequent Rust-integration reviews and
   correction rereviews are clean. All eight translated non-canvas runtime
@@ -1030,6 +1047,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6fa2cccf37a5909824dc98311d8cf2d8327abbd4` | Translate GL async ubershader precreation: require KHR_parallel_shader_compile, preserve permutation order, exclude renderPassResolve outside atomics, queue without synchronous completion, and expose the existing generic queue operation in both Rust specializations. Enter the owning GL execution domain and restore the caller domain at the approved host boundary. Retain exact GL header/implementation snapshots. The .rive_head private revision is provenance, not an additional public implementation. | — |
 | `fa2cd6e38c6ab109a7feb6c814b55e4fa1f3d33c` | Translate artboard-backed PaintImage sources: per-host instancing and cycle/nesting limits, default playback, ordered advancement/update, data-context propagation, raster sizing/hysteresis and failure retry, renderer rerouting, lifetime and canvas identity. Register artboardId 487 and all advancing/referencer/host/update dispatch. Preserve editor-feature paint discovery. Rust occurrence entrypoints release parent borrows across child callbacks while retaining child host visibility. Translate all public runtime/canvas/pixel/GM/replay cases and retain the exact binding fixture and independent C++ golden provenance. No private editor implementation or guest execution is claimed. | — |
 | `30454306ffcd0f360a122af1afa6e2295182abc5` | Expose RenderContext::selectInterlockMode and route beginFrame through it, preserving capability checks and selection order. ViewModelInstance null initialization is already equivalent to Rust's default None. Native-editor ObjectArena retirement, diagnostic and reference-count hooks remain outside the admitted editor-arena profile established at d4fe1022; their retirement behavior is not claimed implemented. Duplicate includes and ownership comments require no runtime change. Private editor code absent from the public delta is not claimed imported. | — |
 | `1b887eb61219d549bd59eb4cb879b957384fcc64` | Already equivalent: the public change only exposes LayerState and StateTransition headers to C++ editor builds for the existing addScriptedInterpolators body. Both Rust modules and that method are unconditional; no runtime semantic change is needed. Private script undo/collaboration changes and tests mentioned in the commit message are absent from the public delta and are not claimed imported. | — |

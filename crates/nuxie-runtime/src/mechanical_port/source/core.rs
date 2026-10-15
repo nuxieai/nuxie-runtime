@@ -1129,6 +1129,38 @@ impl PartialEq for CoreHandle {
 
 impl Eq for CoreHandle {}
 
+/// Hashes a CoreHandle's identity words (arena address, slot index,
+/// generation) with a multiplicative mix. Identities are process-local, so
+/// SipHash's flooding resistance buys nothing for maps the runtime reads
+/// every frame.
+#[derive(Default)]
+pub(crate) struct CoreHandleHasher(u64);
+
+impl Hasher for CoreHandleHasher {
+    fn finish(&self) -> u64 {
+        // Spread the mixed words into the low bits (bucket index) as well as
+        // the high bits (control byte).
+        self.0 ^ (self.0 >> 32)
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u64(u64::from(byte));
+        }
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.write_u64(value as u64);
+    }
+}
+
+pub(crate) type CoreHandleMap<V> =
+    std::collections::HashMap<CoreHandle, V, std::hash::BuildHasherDefault<CoreHandleHasher>>;
+
 impl Hash for CoreHandle {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.identity.arena.as_ptr().hash(state);

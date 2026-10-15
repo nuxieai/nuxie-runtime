@@ -46,18 +46,35 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `0f40af120fc3fec35add319d3334c09af6231457`
+- LAST_SYNCED_SHA: `113d1bcedcc387c92ee000f64a5d7d947b4229dc`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 250 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (272 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 251 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (273 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `113d1bce`, integrated atop downstream `0f7c9c5414`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean; source review corrected a historical comment's snapshot claim without
+  changing behavior. Native renderer units pass 940 with 11 existing ignores;
+  the only failure remains UNIV-4801's unchanged WebGL uniform-range fixture.
+  All new bounds and revised area regressions pass. The bounds test retains
+  200 paths, seven matrices, one-to-eight cubics and exact comparisons; its
+  local portable PRNG is not a byte-identical libc-rand corpus. The obsolete
+  triangle-area expectations were replaced using the exact new expression and
+  pinned AABB/Mat2D headers under Apple clang 21 arm64, O0 and O2: exceptional
+  payload 0x7fffffff, inverted-height area 0xa7152264, and both translated and
+  untranslated thresholds 0x48800001. This isolated expression check is not a
+  full C++ renderer run. Both browser backends compile; metadata checks pass 39
+  and generated manifests/build files are current. An initial feature selector
+  was rejected before compilation; the manifest-correct renderer feature roots
+  were used for the reported result. No new Android, browser-execution or
+  vendor-specific hardware qualification is claimed.
 - Validation at `0f40af12`, integrated atop downstream `4f64dfd304`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All three translated font-binding tests pass, including the pinned
@@ -1129,6 +1146,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `113d1bcedcc387c92ee000f64a5d7d947b4229dc` | Use cached RiveRenderPath bounds for scale/translation and retain raw-point mapping for rotation/skew. Translate transformed area as abs(determinant) times width times height in source order; update stale triangle-arithmetic expectations from pinned C++ expression evidence. Port the 200-path/seven-matrix exact bounds regression with documented portable PRNG sampling. Historical retained comments are labeled separately from the live owner revision. Private .rive_head contents are not claimed imported. | — |
 | `0f40af120fc3fec35add319d3334c09af6231457` | Clear TextStyle's cached variable font before returning when its base font is absent. Port the exact public font-asset-clearing regression, preserving normal invalidation and no explicit view-model binding. Regenerate the shifted Silver producer line. Private .rive_head contents are not claimed imported. | — |
 | `8f06a91c7dad29a8cb1345535c0855de3ace4411` | Translate supplied nested-animation definition/instance APIs with focus-before-input ordering, count/accessor transition traversal, standalone editor animation/keyboard helpers, paint identity deduplication and cloned view-model property metadata. Preserve exact artboard instantiation error and port the host-thread/context-replacement regression at the approved Rust ownership boundary; failed host hydration already constructs before publishing input. Missing-File completion is already weak-upgrade guarded; ordinary state-machine object iteration and no-arena composer/layout paths are equivalent. Native REV arena rebuilding/mounting, persistent (client,object) paths, mutation envelopes, coop validation, arena-only path-effect hydration, borrowed editor comparator/listener ownership and Lua instantiate/release/lifetime hooks remain excluded under d4fe1022. No dummy validation flags or native editor host were introduced. Private editor contents referenced by .rive_head are not claimed imported. | — |
 | `fdd555d62280db2f1d659b0d8fd821ed6a4d11f3` | Translate Mali storage-texture rotation: lazy ring slots, shared per-flush slot selection, replacement for pending or failed fences, zero-timeout polling, fence-before-flush advancement, and SSBO exclusion. Wire real browser sync objects with owning-context/generation-safe deletion; retain upstream constructor and reverse destruction order. Pending ubershaders advance synchronously by feature equality, specialized pipelines asynchronously; Vulkan has no override of the unchanged default no-op advancement. Port upstream rotation/reuse assertions at the documented recording-provider boundary and add lifetime/failure regressions. Private .rive_head contents are not claimed imported. | — |

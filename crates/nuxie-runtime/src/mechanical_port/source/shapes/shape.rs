@@ -511,6 +511,9 @@ impl Shape {
         };
         self.path_composer.bind_shape(this);
         self.path_composer
+            .cells()
+            .bind_drawable_flags(self.base.share_drawable_flags());
+        self.path_composer
             .with_mut(|helper| helper.component.on_added_dirty_runtime(context))
     }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {

@@ -45,6 +45,8 @@ pub(crate) struct ShapeCells {
     world_length: Cell<f32>,
     local_bounds_clean: Cell<bool>,
     has_layout_participant: Cell<bool>,
+    // The installed Shape's DrawableBase drawableFlags storage.
+    drawable_flags: OnceCell<Rc<Cell<u16>>>,
 }
 
 impl ShapeCells {
@@ -67,6 +69,7 @@ impl ShapeCells {
             world_length: Cell::new(-1.0),
             local_bounds_clean: Cell::new(false),
             has_layout_participant: Cell::new(false),
+            drawable_flags: OnceCell::new(),
         }
     }
 
@@ -79,6 +82,42 @@ impl ShapeCells {
         if let Err(shape) = self.shape.set(shape) {
             debug_assert!(self.shape.get() == Some(&shape));
         }
+    }
+
+    /// The installed Shape's drawableFlags storage.
+    pub(crate) fn bind_drawable_flags(&self, flags: Rc<Cell<u16>>) {
+        let _ = self.drawable_flags.set(flags);
+    }
+
+    /// The bounds marking a PathComposer update owes its Shape
+    /// (Shape::markBoundsDirty when the measured geometry changed, else
+    /// markWorldBoundsDirty), done on these cells. False, having done
+    /// nothing, when the shape's own marking is needed: a layout participant
+    /// is told of measured geometry, or the flags are not bound.
+    pub(crate) fn mark_bounds_dirty_from_composer(
+        &self,
+        shape: &CoreHandle,
+        measured_geometry_changed: bool,
+    ) -> bool {
+        let Some(flags) = self.drawable_flags.get() else {
+            return false;
+        };
+        if measured_geometry_changed && self.has_layout_participant.get() {
+            return false;
+        }
+        // Shape::markWorldBoundsDirty: setDrawableFlags, then the world length.
+        let value = flags.get() & !crate::mechanical_port::source::drawable_flag::DrawableFlag::WORLD_BOUNDS_CLEAN.0;
+        if flags.get() != value {
+            flags.set(value);
+            shape.notify_property_changed(
+                crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY,
+            );
+        }
+        self.world_length.set(-1.0);
+        if measured_geometry_changed {
+            self.local_bounds_clean.set(false);
+        }
+        true
     }
 
     pub(crate) fn paths(&self) -> Rc<[ShapePath]> {

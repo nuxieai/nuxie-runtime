@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
 
 use crate::mechanical_port::source::{
     assets::file_asset_referencer::FileAssetReferencer, core::CoreHandle,
@@ -93,7 +97,7 @@ pub struct ScriptedObject {
     asset_id: u32,
     asset: Option<Rc<[u8]>>,
     inputs: HashMap<String, ScriptValue>,
-    tracked_properties: Vec<usize>,
+    tracked_properties: Vec<Weak<Cell<usize>>>,
     failed_script_property_cleanups: Vec<Rc<dyn Fn()>>,
     data_context: Option<RuntimeDataContextHandle>,
     in_update_phase: bool,
@@ -103,6 +107,37 @@ pub struct ScriptedObject {
     needs_update: bool,
     callback_update_requested: bool,
 }
+#[cfg(test)]
+mod property_tracking_tests {
+    use super::*;
+
+    #[test]
+    fn tracked_slots_swap_remove_with_identity_guard_without_owning_properties() {
+        let mut owner = ScriptedObject::default();
+        let properties: Vec<_> = (0..5).map(|_| Rc::new(Cell::new(0))).collect();
+        for (index, property) in properties.iter().enumerate() {
+            owner.add_tracked_property(property);
+            assert_eq!(property.get(), index);
+            assert_eq!(Rc::strong_count(property), 1);
+        }
+        owner.remove_tracked_property(&properties[1]);
+        assert_eq!(properties[4].get(), 1);
+        assert!(owner.tracked_properties()[1].ptr_eq(&Rc::downgrade(&properties[4])));
+        // The removed property retains its slot, now occupied by another one.
+        owner.remove_tracked_property(&properties[1]);
+        assert_eq!(owner.tracked_properties().len(), 4);
+        owner.remove_tracked_property(&properties[4]);
+        assert_eq!(properties[3].get(), 1);
+        owner.remove_tracked_property(&properties[2]);
+        owner.remove_tracked_property(&properties[2]); // out-of-range stale slot
+        assert_eq!(owner.tracked_properties().len(), 2);
+        owner.remove_tracked_property(&properties[0]);
+        assert_eq!(properties[3].get(), 0);
+        owner.remove_tracked_property(&properties[3]);
+        assert!(owner.tracked_properties().is_empty());
+    }
+}
+
 impl Default for ScriptedObject {
     fn default() -> Self {
         Self {
@@ -696,7 +731,7 @@ impl ScriptedObject {
 
     pub fn set_artboard_input_occurrence(owner: &CoreHandle, name: String, source: CoreHandle) {
         use crate::mechanical_port::source::assets::script_asset::ScriptAsset;
-        use crate::scripting::{ScriptCoreString, native_script_artboard};
+        use crate::scripting::{native_script_artboard, ScriptCoreString};
         let state = owner
             .with(|owner| {
                 let scripted = owner.as_scripted_object()?;
@@ -957,15 +992,25 @@ impl ScriptedObject {
         self.asset = a;
         self.disposed = false
     }
-    pub fn add_tracked_property(&mut self, p: usize) {
-        if p != 0 {
-            self.tracked_properties.push(p)
+    pub fn add_tracked_property(&mut self, property: &Rc<Cell<usize>>) {
+        property.set(self.tracked_properties.len());
+        self.tracked_properties.push(Rc::downgrade(property));
+    }
+    pub fn remove_tracked_property(&mut self, property: &Rc<Cell<usize>>) {
+        let index = property.get();
+        if index >= self.tracked_properties.len()
+            || !self.tracked_properties[index].ptr_eq(&Rc::downgrade(property))
+        {
+            return;
         }
+        let last = self.tracked_properties.last().unwrap().clone();
+        self.tracked_properties[index] = last.clone();
+        if let Some(last) = last.upgrade() {
+            last.set(index);
+        }
+        self.tracked_properties.pop();
     }
-    pub fn remove_tracked_property(&mut self, p: usize) {
-        self.tracked_properties.retain(|v| *v != p)
-    }
-    pub fn tracked_properties(&self) -> &[usize] {
+    pub fn tracked_properties(&self) -> &[Weak<Cell<usize>>] {
         &self.tracked_properties
     }
     pub fn self_ref(&self) -> i32 {

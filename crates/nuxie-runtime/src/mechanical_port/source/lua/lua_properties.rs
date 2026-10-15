@@ -93,14 +93,8 @@ impl ScriptedProperty {
             state,
             cached_value_ref: 0,
             listeners: Vec::new(),
-        }));
-        let delegate: ViewModelInstanceValueDelegateHandle =
-            Rc::new(RefCell::new(ScriptedPropertyDelegate {
-                runtime: runtime.clone(),
-            }));
-        let mut property = Self {
-            runtime,
-            delegate: Some(delegate.clone()),
+            track_index: Rc::new(std::cell::Cell::new(0)),
+            delegate: None,
             instance_value,
             owner: None,
             #[cfg(feature = "tools")]
@@ -108,8 +102,14 @@ impl ScriptedProperty {
             #[cfg(feature = "tools")]
             orphan_owner_tag: 0,
             disposed: false,
-        };
-        if let Some(value) = property.instance_value.as_ref() {
+        }));
+        let delegate: ViewModelInstanceValueDelegateHandle =
+            Rc::new(RefCell::new(ScriptedPropertyDelegate {
+                runtime: runtime.clone(),
+            }));
+        runtime.borrow_mut().delegate = Some(delegate.clone());
+        let mut property = Self { runtime };
+        if let Some(value) = property.instance_value() {
             value.with_mut(|value| {
                 if let Some(value) = value.as_view_model_instance_value_mut() {
                     value.add_delegate(&delegate);
@@ -117,16 +117,16 @@ impl ScriptedProperty {
             });
         }
         if let Some(context) = scripting_context(state) {
-            property.owner = context.current_scripted_object();
-            if let Some(owner) = property.owner.as_ref() {
-                let identity = Rc::as_ptr(&property.runtime) as usize;
-                owner.with_mut(|owner| owner.scripted_object_add_tracked_property(identity));
+            property.runtime.borrow_mut().owner = context.current_scripted_object();
+            if let Some(owner) = property.owner() {
+                let track_index = property.runtime.borrow().track_index.clone();
+                owner.with_mut(|owner| owner.scripted_object_add_tracked_property(&track_index));
             } else {
                 #[cfg(feature = "tools")]
                 {
                     context.track_orphan_scripted_property(&mut property);
-                    property.orphan_context = Some(context);
-                    property.orphan_owner_tag = context.orphan_owner_tag();
+                    property.runtime.borrow_mut().orphan_context = Some(context);
+                    property.runtime.borrow_mut().orphan_owner_tag = context.orphan_owner_tag();
                 }
             }
         }
@@ -154,29 +154,45 @@ impl ScriptedProperty {
     }
 
     pub fn dispose(&mut self) {
-        if self.disposed {
-            return;
-        }
-        self.disposed = true;
-        if let Some(owner) = self.owner.take() {
-            let identity = Rc::as_ptr(&self.runtime) as usize;
-            owner.with_mut(|owner| owner.scripted_object_remove_tracked_property(identity));
+        Self::dispose_runtime(&self.runtime);
+    }
+
+    pub fn dispose_runtime(runtime: &Rc<RefCell<ScriptedPropertyRuntime>>) {
+        let owner = {
+            let mut property = runtime.borrow_mut();
+            if property.disposed {
+                return;
+            }
+            property.disposed = true;
+            property.owner.take()
+        };
+        if let Some(owner) = owner {
+            let track_index = runtime.borrow().track_index.clone();
+            owner.with_mut(|owner| owner.scripted_object_remove_tracked_property(&track_index));
         }
         #[cfg(feature = "tools")]
-        if let Some(context) = self.orphan_context.take() {
-            unsafe { &mut *context }.untrack_orphan_scripted_property(self);
-        }
-        if let (Some(instance_value), Some(delegate)) =
-            (self.instance_value.take(), self.delegate.take())
         {
+            let context = runtime.borrow_mut().orphan_context.take();
+            if let Some(context) = context {
+                unsafe { &mut *context }.untrack_orphan_scripted_property(runtime);
+            }
+        }
+        let (instance_value, delegate) = {
+            let mut property = runtime.borrow_mut();
+            (property.instance_value.take(), property.delegate.take())
+        };
+        if let (Some(instance_value), Some(delegate)) = (instance_value, delegate) {
             instance_value.with_mut(|value| {
                 if let Some(value) = value.as_view_model_instance_value_mut() {
                     value.remove_delegate(&delegate);
                 }
             });
         }
-        self.clear_cached_value_ref();
-        self.clear_listeners();
+        let mut property = Self {
+            runtime: runtime.clone(),
+        };
+        property.clear_cached_value_ref();
+        property.clear_listeners();
     }
 
     pub fn value_changed(&mut self) {
@@ -276,7 +292,7 @@ impl ScriptedProperty {
     }
 
     pub fn owner(&self) -> Option<CoreHandle> {
-        self.owner.clone()
+        self.runtime.borrow().owner.clone()
     }
 }
 

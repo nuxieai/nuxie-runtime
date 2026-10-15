@@ -46,18 +46,35 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ce891f526a3297f9498a3e524fce6385cf0f2f25`
+- LAST_SYNCED_SHA: `ce788b3b6b20aa641c20f320cd9ccce920648786`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8f06a91c7dad29a8cb1345535c0855de3ace4411` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 246 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (268 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 247 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (269 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `ce788b3b`, integrated atop downstream `5b2837f46d`:
+  independent source-equivalence and subsequent fresh Rust-integration reviews
+  are clean. Runtime units pass 407 with two existing ignores; live scripting
+  units pass 361 with one existing ignore. All three translated upstream cases
+  pass, retaining 2,000/2,000/200,000 property counts and the strict two-second
+  sweep threshold. Supplemental tests cover cleanup reentry, dying weak identity,
+  moved-slot repair and stale-slot guards. The upstream unbound-number fixture
+  uses test-local Lua userdata retaining real production lifecycle state because
+  the host Number wrapper requires a bound model; numeric access is unexercised
+  upstream, and no registration/disposal algorithm is duplicated in the fixture.
+  Browser scripting and its runtime dependency compile for wasm32-unknown-unknown
+  with luau/tools. An initial selector applied luau to nuxie-runtime and was
+  rejected before compilation; the corrected package-scoped invocation passed.
+  Source/manifest/pipeline checks pass 39; generated build files are current.
+  Mirrored Lua VM modules remain inactive under the approved luaur boundary;
+  no compiled execution coverage for those modules, browser execution, new
+  device coverage or guest-Wasm execution is claimed.
 - Validation at `ce891f52`, integrated atop downstream `afda479502`:
   independent source-equivalence and subsequent Rust-integration reviews and
   correction rereviews are clean. Integration found stale internal aliases in
@@ -1066,6 +1083,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ce788b3b6b20aa641c20f320cd9ccce920648786` | Translate constant-time scripted-property untracking in live luaur and corresponding source owners: retained slot index, bounds/identity-guarded swap removal, moved-slot repair, owner/orphan registration and exact tag filtering. Preserve non-owning stable Rust identity and untrack-before-cleanup order. Port all three public stress/lifecycle tests without changing their counts or timing threshold. Private Dart editor wrapper-cache changes described in the message are absent from the public delta and are not claimed imported; existing runtime caching is unchanged. | — |
 | `ce891f526a3297f9498a3e524fce6385cf0f2f25` | Translate six shared shader owners: source-over blending, guarded UAV destination reads/writes and retained RHI declarations. Regenerate supported-backend shader inventories and exact minified-name consumers; restore the existing supplemental sampled-clip bridge's renamed aliases without enabling a new host path. Unreal-only wrappers, D3D testing aliases, Unreal deployment options and upstream-only golden launcher/filter changes have no shipped counterpart. The private .rive_head revision does not expose an additional implementation. | — |
 | `6fa2cccf37a5909824dc98311d8cf2d8327abbd4` | Translate GL async ubershader precreation: require KHR_parallel_shader_compile, preserve permutation order, exclude renderPassResolve outside atomics, queue without synchronous completion, and expose the existing generic queue operation in both Rust specializations. Enter the owning GL execution domain and restore the caller domain at the approved host boundary. Retain exact GL header/implementation snapshots. The .rive_head private revision is provenance, not an additional public implementation. | — |
 | `fa2cd6e38c6ab109a7feb6c814b55e4fa1f3d33c` | Translate artboard-backed PaintImage sources: per-host instancing and cycle/nesting limits, default playback, ordered advancement/update, data-context propagation, raster sizing/hysteresis and failure retry, renderer rerouting, lifetime and canvas identity. Register artboardId 487 and all advancing/referencer/host/update dispatch. Preserve editor-feature paint discovery. Rust occurrence entrypoints release parent borrows across child callbacks while retaining child host visibility. Translate all public runtime/canvas/pixel/GM/replay cases and retain the exact binding fixture and independent C++ golden provenance. No private editor implementation or guest execution is claimed. | — |

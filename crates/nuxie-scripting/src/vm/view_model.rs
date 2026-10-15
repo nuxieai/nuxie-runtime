@@ -23,6 +23,76 @@ use super::lua_main_ref::MainThreadRef;
 
 type ViewModelInstanceKey = (u8, usize, usize, u64);
 
+#[cfg(test)]
+#[path = "property_tracking_ce788_tests.rs"]
+mod property_tracking_ce788_tests;
+
+#[cfg(test)]
+mod property_tracking_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn cleanup_observes_untracked_property_without_retained_cleanup_borrow() {
+        let owner = ScriptedPropertyListenerOwner::default();
+        let state = Rc::new(ScriptedPropertyState::default());
+        track_scripted_property(&mut owner.properties.borrow_mut(), &state);
+        *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
+        let weak_state = Rc::downgrade(&state);
+        let properties = owner.properties.clone();
+        let calls = Rc::new(Cell::new(0));
+        let cleanup_calls = calls.clone();
+        *state.cleanup.borrow_mut() = Some(Box::new(move || {
+            assert!(properties.borrow().is_empty());
+            let state = weak_state.upgrade().unwrap();
+            assert!(state.owner_properties.borrow().upgrade().is_none());
+            assert!(state.cleanup.try_borrow_mut().unwrap().is_none());
+            cleanup_calls.set(cleanup_calls.get() + 1);
+            state.dispose();
+        }));
+        state.dispose();
+        state.dispose();
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn drop_untracks_dying_weak_identity_and_repairs_moved_slot() {
+        let owner = ScriptedPropertyListenerOwner::default();
+        let first = Rc::new(ScriptedPropertyState::default());
+        let last = Rc::new(ScriptedPropertyState::default());
+        for state in [&first, &last] {
+            track_scripted_property(&mut owner.properties.borrow_mut(), state);
+            *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
+        }
+        let dead = Rc::downgrade(&first);
+        drop(first);
+        assert!(dead.upgrade().is_none());
+        assert_eq!(owner.properties.borrow().len(), 1);
+        assert!(std::ptr::eq(
+            owner.properties.borrow()[0].as_ptr(),
+            Rc::as_ptr(&last)
+        ));
+        assert_eq!(last.track_index.get(), 0);
+        last.dispose();
+        assert!(owner.properties.borrow().is_empty());
+    }
+
+    #[test]
+    fn untracking_rejects_wrong_identity_and_out_of_bounds_slot() {
+        let state = Rc::new(ScriptedPropertyState::default());
+        let other = Rc::new(ScriptedPropertyState::default());
+        let mut properties = Vec::new();
+        track_scripted_property(&mut properties, &state);
+        untrack_scripted_property(&mut properties, &other);
+        assert_eq!(properties.len(), 1);
+        state.track_index.set(1);
+        untrack_scripted_property(&mut properties, &state);
+        assert_eq!(properties.len(), 1);
+        state.track_index.set(0);
+        untrack_scripted_property(&mut properties, &state);
+        assert!(properties.is_empty());
+    }
+}
+
 const PROPERTY_METATABLE_PATCHER: &str = "rive_property_metatable_patcher";
 const TRIGGER_MUTATING_METHODS: &[&str] = &["fire"];
 const LIST_MUTATING_METHODS: &[&str] = &[
@@ -45,11 +115,11 @@ enum TrackedScriptedPropertyWatch {
 
 /// Owns the listener-registration lifetime for one scripted-object occurrence.
 ///
-/// Pinned `ScriptedObject::scriptDispose` visits tracked properties in their
-/// registration order and immediately releases every listener registry pair.
+/// Pinned `ScriptedObject::scriptDispose` visits an unordered tracking list and
+/// immediately releases every listener registry pair.
 /// Keeping weak watch references here avoids extending the property userdata
 /// lifetime while still allowing the owning script instance to perform that
-/// ordered teardown before dropping its Lua table.
+/// teardown before dropping its Lua table.
 #[derive(Clone, Default)]
 pub(super) struct ScriptedPropertyListenerOwner {
     watches: Rc<RefCell<Vec<TrackedScriptedPropertyWatch>>>,
@@ -142,12 +212,37 @@ pub(crate) struct ScriptViewModelFrameContext {
 #[derive(Default)]
 struct ScriptedPropertyState {
     disposed: Cell<bool>,
+    track_index: Cell<usize>,
     owning_model: RefCell<Option<ScriptViewModel>>,
     owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
     orphan_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     orphan_owner_tag: Cell<u32>,
     cleanup: RefCell<Option<Box<dyn Fn()>>>,
+}
+
+fn track_scripted_property(
+    list: &mut Vec<Weak<ScriptedPropertyState>>,
+    property: &Rc<ScriptedPropertyState>,
+) {
+    property.track_index.set(list.len());
+    list.push(Rc::downgrade(property));
+}
+
+fn untrack_scripted_property(
+    list: &mut Vec<Weak<ScriptedPropertyState>>,
+    property: &ScriptedPropertyState,
+) {
+    let index = property.track_index.get();
+    // A dying Rc cannot upgrade its own weak reference. Compare its stable
+    // identity instead, matching the upstream pointer check in both paths.
+    if index >= list.len() || !std::ptr::eq(list[index].as_ptr(), property) {
+        return;
+    }
+    list.swap_remove(index);
+    if let Some(moved) = list.get(index).and_then(Weak::upgrade) {
+        moved.track_index.set(index);
+    }
 }
 
 impl ScriptedPropertyState {
@@ -170,41 +265,29 @@ impl ScriptedPropertyState {
         if self.disposed.replace(true) {
             return;
         }
-        if let Some(cleanup) = self.cleanup.borrow_mut().take() {
-            cleanup();
-        }
-        self.owning_model.borrow_mut().take();
         if let Some(properties) = self.owner_properties.borrow().upgrade() {
-            properties.borrow_mut().retain(|property| {
-                property
-                    .upgrade()
-                    .is_some_and(|property| !property.disposed())
-            });
+            untrack_scripted_property(&mut properties.borrow_mut(), self);
         }
         *self.owner_properties.borrow_mut() = Weak::new();
         *self.owner_watches.borrow_mut() = Weak::new();
         if let Some(orphans) = self.orphan_properties.borrow().upgrade() {
-            orphans.borrow_mut().retain(|property| {
-                property
-                    .upgrade()
-                    .is_some_and(|property| !property.disposed())
-            });
+            untrack_scripted_property(&mut orphans.borrow_mut(), self);
         }
         *self.orphan_properties.borrow_mut() = Weak::new();
+        let cleanup = self.cleanup.borrow_mut().take();
+        if let Some(cleanup) = cleanup {
+            cleanup();
+        }
+        self.owning_model.borrow_mut().take();
     }
 }
 
 impl Drop for ScriptedPropertyState {
     fn drop(&mut self) {
-        for tracker in [
-            self.owner_properties.get_mut(),
-            self.orphan_properties.get_mut(),
-        ] {
-            if let Some(tracker) = tracker.upgrade() {
-                tracker
-                    .borrow_mut()
-                    .retain(|property| property.strong_count() != 0);
-            }
+        let owner = self.owner_properties.get_mut().upgrade();
+        let orphans = self.orphan_properties.get_mut().upgrade();
+        for tracker in [owner, orphans].into_iter().flatten() {
+            untrack_scripted_property(&mut tracker.borrow_mut(), self);
         }
     }
 }
@@ -258,11 +341,6 @@ impl ScriptViewModelFrameContext {
                 property.dispose();
             }
         }
-        self.orphans.borrow_mut().retain(|property| {
-            property
-                .upgrade()
-                .is_some_and(|property| !property.disposed())
-        });
     }
 
     #[cfg(feature = "tools")]
@@ -279,11 +357,6 @@ impl ScriptViewModelFrameContext {
                 property.dispose();
             }
         }
-        self.orphans.borrow_mut().retain(|property| {
-            property
-                .upgrade()
-                .is_some_and(|property| !property.disposed())
-        });
     }
     pub(crate) fn for_lua(lua: &Lua) -> Self {
         if let Some(context) = lua
@@ -571,6 +644,22 @@ fn property_weak_key(pointer: *const std::ffi::c_void) -> luaur_rt::LightUserDat
     luaur_rt::LightUserData(pointer.cast_mut())
 }
 
+fn register_scripted_property(lua: &Lua, state: &Rc<ScriptedPropertyState>) {
+    let context = ScriptViewModelFrameContext::for_lua(lua);
+    if let Some(owner) = context.current_owner.borrow().clone() {
+        track_scripted_property(&mut owner.properties.borrow_mut(), state);
+        *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
+        *state.owner_watches.borrow_mut() = Rc::downgrade(&owner.watches);
+    } else {
+        #[cfg(feature = "tools")]
+        {
+            state.orphan_owner_tag.set(context.orphan_owner_tag.get());
+            track_scripted_property(&mut context.orphans.borrow_mut(), state);
+            *state.orphan_properties.borrow_mut() = Rc::downgrade(&context.orphans);
+        }
+    }
+}
+
 fn patch_property_userdata(
     lua: &Lua,
     model: ScriptViewModel,
@@ -585,19 +674,7 @@ fn patch_property_userdata(
     let patcher: Function = lua.named_registry_value(PROPERTY_METATABLE_PATCHER)?;
     let state = scripted_property_state(&property).expect("scripted property userdata");
     *state.owning_model.borrow_mut() = Some(model);
-    let context = ScriptViewModelFrameContext::for_lua(lua);
-    if let Some(owner) = context.current_owner.borrow().clone() {
-        owner.properties.borrow_mut().push(Rc::downgrade(&state));
-        *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
-        *state.owner_watches.borrow_mut() = Rc::downgrade(&owner.watches);
-    } else {
-        #[cfg(feature = "tools")]
-        {
-            state.orphan_owner_tag.set(context.orphan_owner_tag.get());
-            context.orphans.borrow_mut().push(Rc::downgrade(&state));
-            *state.orphan_properties.borrow_mut() = Rc::downgrade(&context.orphans);
-        }
-    }
+    register_scripted_property(lua, &state);
     const WEAK_PROPERTIES: &str = "rive_weak_scripted_properties";
     let weak_properties = match lua.named_registry_value::<Table>(WEAK_PROPERTIES) {
         Ok(table) => table,

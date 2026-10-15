@@ -6708,14 +6708,20 @@ pub trait CoreCapabilities: Any {
     {
         None
     }
-    fn scripted_object_add_tracked_property(&mut self, property: usize) -> bool {
+    fn scripted_object_add_tracked_property(
+        &mut self,
+        property: &std::rc::Rc<std::cell::Cell<usize>>,
+    ) -> bool {
         let Some(scripted) = self.as_scripted_object_mut() else {
             return false;
         };
         scripted.add_tracked_property(property);
         true
     }
-    fn scripted_object_remove_tracked_property(&mut self, property: usize) -> bool {
+    fn scripted_object_remove_tracked_property(
+        &mut self,
+        property: &std::rc::Rc<std::cell::Cell<usize>>,
+    ) -> bool {
         let Some(scripted) = self.as_scripted_object_mut() else {
             return false;
         };

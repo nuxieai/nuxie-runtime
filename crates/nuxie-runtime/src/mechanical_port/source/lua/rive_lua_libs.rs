@@ -1,7 +1,7 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
-    rc::Rc,
+    rc::{Rc, Weak},
     time::{Duration, Instant},
 };
 
@@ -83,10 +83,10 @@ pub use crate::mechanical_port::source::{
     },
 };
 
-pub use crate::mechanical_port::source::r#async::work_pool::WorkPool;
 pub use crate::mechanical_port::source::audio::{
     audio_engine::AudioEngine, audio_sound::AudioSoundRef, audio_source::AudioSource,
 };
+pub use crate::mechanical_port::source::r#async::work_pool::WorkPool;
 
 pub const MAX_C_STACK: i32 = 8_000;
 pub const LUA_GLOBALS_INDEX: i32 = -MAX_C_STACK - 2_002;
@@ -743,7 +743,10 @@ const ATOMS: &[LuaAtomName] = &[
         name: "gradient",
         atom: LuaAtoms::Gradient,
     },
-    LuaAtomName { name: "gradientTransform", atom: LuaAtoms::GradientTransform },
+    LuaAtomName {
+        name: "gradientTransform",
+        atom: LuaAtoms::GradientTransform,
+    },
     LuaAtomName {
         name: "color",
         atom: LuaAtoms::Color,
@@ -1760,7 +1763,8 @@ impl ScriptedPaint {
     }
     pub fn set_gradient_transform(&mut self, value: Mat2D) {
         self.data.set_gradient_transform(value);
-        self.render_paint.shader_transform(nuxie_render_api::Mat2D(*value.values()));
+        self.render_paint
+            .shader_transform(nuxie_render_api::Mat2D(*value.values()));
     }
 }
 
@@ -1879,10 +1883,7 @@ pub struct ScriptedPropertyRuntime {
     pub listeners: Vec<ScriptedListener>,
     pub state: *mut LuaState,
     pub cached_value_ref: i32,
-}
-
-pub struct ScriptedProperty {
-    pub runtime: Rc<RefCell<ScriptedPropertyRuntime>>,
+    pub track_index: Rc<Cell<usize>>,
     pub delegate: Option<ViewModelInstanceValueDelegateHandle>,
     pub owner: Option<CoreHandle>,
     #[cfg(feature = "tools")]
@@ -1893,21 +1894,61 @@ pub struct ScriptedProperty {
     pub instance_value: Option<CoreHandle>,
 }
 
+// Rust wrappers move before entering Lua userdata. Track their stable shared
+// state weakly, rather than keeping addresses of the movable wrappers.
+pub type ScriptedPropertyTrackingHandle = Weak<RefCell<ScriptedPropertyRuntime>>;
+
+pub fn track_scripted_property(
+    list: &mut Vec<ScriptedPropertyTrackingHandle>,
+    property: &Rc<RefCell<ScriptedPropertyRuntime>>,
+) {
+    property.borrow().track_index.set(list.len());
+    list.push(Rc::downgrade(property));
+}
+
+pub fn untrack_scripted_property(
+    list: &mut Vec<ScriptedPropertyTrackingHandle>,
+    property: &Rc<RefCell<ScriptedPropertyRuntime>>,
+) {
+    let index = property.borrow().track_index.get();
+    if index >= list.len() || !list[index].ptr_eq(&Rc::downgrade(property)) {
+        return;
+    }
+    let last = list.last().unwrap().clone();
+    list[index] = last.clone();
+    if let Some(last) = last.upgrade() {
+        last.borrow().track_index.set(index);
+    }
+    list.pop();
+}
+
+pub struct ScriptedProperty {
+    pub runtime: Rc<RefCell<ScriptedPropertyRuntime>>,
+}
+
 impl ScriptedProperty {
     pub fn state(&self) -> *mut LuaState {
         self.runtime.borrow().state
     }
 
     pub fn instance_value(&self) -> Option<CoreHandle> {
-        self.instance_value.clone()
+        self.runtime.borrow().instance_value.clone()
     }
 
     pub fn instance_value_mut(&mut self) -> Option<CoreHandle> {
-        self.instance_value.clone()
+        self.runtime.borrow().instance_value.clone()
     }
 
     pub fn disposed(&self) -> bool {
-        self.disposed
+        self.runtime.borrow().disposed
+    }
+
+    pub fn track_index(&self) -> usize {
+        self.runtime.borrow().track_index.get()
+    }
+
+    pub fn set_track_index(&mut self, value: usize) {
+        self.runtime.borrow().track_index.set(value);
     }
 
     pub fn cached_value_ref(&self) -> i32 {
@@ -2451,7 +2492,6 @@ impl ScopedAssetReference {
     }
 }
 
-
 /// GPU work inherited by a script call. Nested calls reclaim only their own work.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ScriptCallGpuScope {
@@ -2485,7 +2525,7 @@ pub struct ScriptingContextData {
     #[cfg(feature = "tools")]
     pub is_playing: bool,
     #[cfg(feature = "tools")]
-    pub orphan_scripted_properties: Vec<*mut ScriptedProperty>,
+    pub orphan_scripted_properties: Vec<ScriptedPropertyTrackingHandle>,
     #[cfg(feature = "tools")]
     pub orphan_owner_tag: u32,
     #[cfg(feature = "tools")]
@@ -2710,9 +2750,6 @@ pub trait ScriptingContext {
         self.data_mut().pending_modules.remove(registered);
     }
 
-
-
-
     fn set_render_context(&mut self, context: Option<&mut Factory>) {
         self.data_mut().render_context = context.map(|context| context as *mut Factory);
     }
@@ -2863,15 +2900,18 @@ pub trait ScriptingContext {
 
     #[cfg(feature = "tools")]
     fn track_orphan_scripted_property(&mut self, property: &mut ScriptedProperty) {
-        self.data_mut().orphan_scripted_properties.push(property);
+        track_scripted_property(
+            &mut self.data_mut().orphan_scripted_properties,
+            &property.runtime,
+        );
     }
 
     #[cfg(feature = "tools")]
-    fn untrack_orphan_scripted_property(&mut self, property: &mut ScriptedProperty) {
-        let pointer = property as *mut ScriptedProperty;
-        self.data_mut()
-            .orphan_scripted_properties
-            .retain(|candidate| *candidate != pointer);
+    fn untrack_orphan_scripted_property(
+        &mut self,
+        property: &Rc<RefCell<ScriptedPropertyRuntime>>,
+    ) {
+        untrack_scripted_property(&mut self.data_mut().orphan_scripted_properties, property);
     }
 
     #[cfg(feature = "tools")]
@@ -2881,9 +2921,11 @@ pub trait ScriptingContext {
         }
         let orphans = self.data().orphan_scripted_properties.clone();
         for property in orphans {
-            let property = unsafe { &mut *property };
-            if owner_tag.is_none() || owner_tag == Some(property.orphan_owner_tag) {
-                property.dispose();
+            let Some(property) = property.upgrade() else {
+                continue;
+            };
+            if owner_tag.is_none() || owner_tag == Some(property.borrow().orphan_owner_tag) {
+                ScriptedProperty::dispose_runtime(&property);
             }
         }
         if owner_tag.is_none() {

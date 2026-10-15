@@ -582,7 +582,7 @@ decode queue. Bidi and audio retain their separately tracked status below.
 
 | Subsystem | Crate | Present? | Version | Trait seam |
 |---|---|---|---|---|
-| Layout | `taffy` | **Yes** | 0.12.1 | `RuntimeLayoutEngine` (`draw.rs:4024`) |
+| Layout | `taffy` (stock, CSS semantics) | **Yes** | =0.15.0 | `layout/layout_tree.rs` (one persistent tree per layout root) |
 | Text shaping | `harfrust` + `skrifa`/`read-fonts` | **Yes** | harfrust 0.12, skrifa 0.44 | none (concrete in `text.rs`) |
 | Bidi | `unicode-bidi` | No | — | — |
 | Image decode | `nuxie-image-codec` (`png`/`jpeg-decoder`/`image-webp` + `moxcms`; ImageIO/CoreGraphics JPEG on macOS) | **Yes** | png 0.18, jpeg-decoder 0.3, image-webp 0.2.4, moxcms 0.8.1 | canonical `decode_image_rgba`; `Factory::decode_image`; `ScriptImageDecoder` (`lua_image_decode.rs`) |
@@ -591,17 +591,53 @@ decode queue. Bidi and audio retain their separately tracked status below.
 
 **Per-library gotchas actually discovered:**
 
-- **Taffy (layout).** No `yoga` dep exists; Yoga-via-FFI is only the *untriggered
-  fallback*. Files author against Yoga's React-Native-era quirks, so edge-case
-  layouts may diverge — those verify in `tolerant` mode. Real convention
-  mismatches captured in `draw.rs`: Yoga stores left/top parent-local and
-  composes through parent world transforms, so the artboard origin is applied
-  *exactly once* (`draw.rs:2082`); fill maps to stored units, not Yoga auto
-  (`draw.rs:2677`); non-explicit position edges are Yoga-undefined → Taffy `auto`,
-  not zero (`draw.rs:5327`); `TaffyTree::disable_rounding()` mirrors Yoga
-  point-scale. **Fence:** do not pin Taffy against Yoga behavior-by-behavior —
-  that is V1's mistake and a tripwire. Extend the hand-rolled flex fallback no
-  further; the next unsupported layout feature triggers full Taffy integration.
+- **Taffy (layout) — deliberate divergence from upstream Rive.** Layout is
+  *not* a parity target (Levi, 2026-10-14). Upstream Rive lays out with its
+  own Yoga fork; Nuxie uses stock crates.io Taffy with CSS semantics. Both
+  alternatives were rejected: the vendored Yoga-order Taffy fork (+3.5k lines,
+  growing faster than Yoga itself) and a port of Rive's Yoga. Do not patch
+  Taffy, or add solver-side workarounds, to recover Yoga's numbers.
+  - *Authored model → CSS.* `layout/layout_style_applier.rs` maps Rive's
+    authored values onto `taffy::Style` explicitly. `rive_default_style()`
+    states every Yoga default that differs from CSS (column direction,
+    `flex-shrink: 0`, `align-content: flex-start`, every node positioned so
+    absolute children stay with their parent); flex items get no automatic
+    minimum size (`apply_flex_item_minimums`), grid items keep CSS `auto`.
+    Percentages use Taffy's native 0..1 representation. Direction inherits as
+    in CSS. A layout root without an authored size fills its host's offer.
+    Rive's sizing modes are CSS sizing keywords: a bounded hug is
+    `fit-content`, `hugUnbounded` is `max-content`, Fill with an automatic
+    basis is `flex-basis: fit-content`, and an absolutely positioned hug stays
+    `auto` (shrink-to-fit, or stretch between two insets). `justify-self` is
+    a grid property in Rive and is left `auto` for flex children.
+  - *Persistent tree.* `layout/layout_tree.rs` keeps one Taffy tree per layout
+    root; each LayoutComponent/LayoutParticipant (hosted artboards included)
+    owns a stable node. Style appliers write the owner's style and queue its
+    node; a solve copies only changed styles, reconciles only changed child
+    lists, and lets Taffy's caches carry untouched subtrees. The queue lives
+    outside the tree, so a measure callback that runs script mid-solve and
+    dirties layout is picked up by the next solve. In debug builds,
+    `NUXIE_LAYOUT_VERIFY=<file>` re-solves every root from scratch and appends
+    each published layout that disagrees: incremental-state bugs, never CSS
+    differences.
+  - *Measurement.* Text, images, scripted layouts and intrinsically sized
+    leaves measure through Taffy's leaf measure function. CSS min- and
+    max-content requests both measure the content unbounded (Rive measurers
+    clamp to any bound they are offered).
+  - *Rive-only Yoga extensions.* Virtualized-grid contributions
+    (`YGNodeSetGridVirtualContributions`) are host-side Taffy-only grid items
+    that size each unrealized track as its item would. Stock Taffy clamps a
+    grid to 10,000 tracks per axis (CSS "overlarge grids"); Rive's Yoga
+    accepted any `int32` line, so tracks past 10,000 are not represented.
+  - *Gates.* Layout-caused golden, Silver and probe differences are classified
+    as layout divergences with a reason per entry; everything else stays
+    exact. Golden entries carry `layout-diverges:<reason>` with a pinned
+    `divergence_signature`; Silver ids sit in `LAYOUT_DIVERGENCES`
+    (`tools/silver-corpus/generate_manifest.py`) with a pinned first
+    difference. A change that moves a pinned difference fails the gate.
+    Upstream layout/Yoga changes are product decisions, not mechanical
+    translations (see `upstream-sync-map.md`, "Scope decisions").
+  `TaffyTree::disable_rounding()` keeps unrounded results.
 - **Skrifa (font outlines).** Its HarfBuzz conversion rotates contour start
   points — see 4.3. Missing Arabic fallback shaper for malformed fonts is a
   documented backlog gap (act only if a corpus file hits it). Legacy-kern is

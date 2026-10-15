@@ -14,6 +14,8 @@ the checkpoint, frozen destination, supported scope, and source-first method.
 3. Inspect the next complete diff, surrounding owners, tests, and dependencies.
    Port applicable changes, skip proven irrelevant/equivalent changes, and split
    mixed commits by actual source rather than title. Ask about major new scope.
+   Upstream layout/Yoga changes are product decisions, not translations: Nuxie
+   lays out with stock Taffy (CSS semantics); see "Scope decisions".
 4. Translate that delta and its relevant tests/assets. Do not load implement or
    TDD skills, restart a whole-runtime port, or restore superseded implementations.
 5. After translation, perform source-equivalence review, then a separate

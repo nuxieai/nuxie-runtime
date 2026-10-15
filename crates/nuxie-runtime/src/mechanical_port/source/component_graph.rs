@@ -12,6 +12,7 @@
 //! dirt shares a cell with its scheduling bits, and occurrences outside the
 //! order (DrawTargets, cycle remnants); those keep the occurrence-handle path.
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::mechanical_port::source::{
@@ -78,142 +79,19 @@ enum Update {
     Receiver,
 }
 
-mod nodes {
-    use super::{ComponentDirt, OnDirty, Update};
-    use std::cell::Cell;
-
-    /// Everything a cascade step and its onDirty read, in one record.
-    pub(super) struct Node {
-        // Written only through Nodes, which keeps the pending bits.
-        dirt: Cell<ComponentDirt>,
-        // Cleared when an authored member's occurrence retires.
-        pub(super) alive: Cell<bool>,
-        pub(super) update: Update,
-        // Component::m_collapsedRunSkip: the length of the collapsed run
-        // starting here, as markCollapsedRuns last measured it.
-        pub(super) collapsed_run_skip: Cell<u16>,
-        pub(super) dependents_start: u32,
-        pub(super) dependents_end: u32,
-        pub(super) on_dirty: OnDirty,
-    }
-
-    impl Node {
-        pub(super) fn new(
-            dirt: ComponentDirt,
-            on_dirty: OnDirty,
-            update: Update,
-            dependents_start: u32,
-            dependents_end: u32,
-        ) -> Self {
-            Self {
-                dirt: Cell::new(dirt),
-                alive: Cell::new(true),
-                update,
-                collapsed_run_skip: Cell::new(0),
-                dependents_start,
-                dependents_end,
-                on_dirty,
-            }
-        }
-
-        #[inline]
-        pub(super) fn dirt(&self) -> ComponentDirt {
-            self.dirt.get()
-        }
-    }
-
-    /// The members, with a pending bit each. Any write that leaves a member
-    /// with dirt sets its bit, and an outside member's bit (its dirt lives
-    /// with its occurrence) stays set, so the update walk visits just these
-    /// members, in graph order, instead of every member. The walk takes a
-    /// member's bit when it visits it.
-    pub(super) struct Nodes {
-        nodes: Box<[Node]>,
-        pending: Box<[Cell<u64>]>,
-    }
-
-    impl Nodes {
-        pub(super) fn new(nodes: Vec<Node>) -> Self {
-            let pending = (0..nodes.len().div_ceil(64)).map(|_| Cell::new(0)).collect();
-            let nodes = Self {
-                nodes: nodes.into_boxed_slice(),
-                pending,
-            };
-            for (i, node) in nodes.nodes.iter().enumerate() {
-                if node.on_dirty.is_outside() || node.dirt() != ComponentDirt::NONE {
-                    nodes.mark_pending(i);
-                }
-            }
-            nodes
-        }
-
-        #[inline]
-        pub(super) fn len(&self) -> usize {
-            self.nodes.len()
-        }
-
-        #[inline]
-        pub(super) fn get(&self, i: usize) -> Option<&Node> {
-            self.nodes.get(i)
-        }
-
-        pub(super) fn iter(&self) -> std::slice::Iter<'_, Node> {
-            self.nodes.iter()
-        }
-
-        #[inline]
-        pub(super) fn set_dirt(&self, i: usize, value: ComponentDirt) {
-            self.nodes[i].dirt.set(value);
-            if value != ComponentDirt::NONE {
-                self.mark_pending(i);
-            }
-        }
-
-        /// Clear member `i`'s dirt as its update begins.
-        #[inline]
-        pub(super) fn clear_dirt(&self, i: usize) {
-            self.nodes[i].dirt.set(ComponentDirt::NONE);
-        }
-
-        #[inline]
-        fn mark_pending(&self, i: usize) {
-            let word = &self.pending[i / 64];
-            word.set(word.get() | 1 << (i % 64));
-        }
-
-        /// The walk visits member `i`: take its bit, unless its dirt lives
-        /// outside the graph. A write during its update sets it again.
-        #[inline]
-        pub(super) fn take_pending(&self, i: usize) {
-            if !self.nodes[i].on_dirty.is_outside() {
-                let word = &self.pending[i / 64];
-                word.set(word.get() & !(1 << (i % 64)));
-            }
-        }
-
-        /// The first pending member at or after `from`.
-        #[inline]
-        pub(super) fn next_pending(&self, from: usize) -> Option<usize> {
-            let mut word = from / 64;
-            let mut bits = self.pending.get(word)?.get() & (u64::MAX << (from % 64));
-            while bits == 0 {
-                word += 1;
-                bits = self.pending.get(word)?.get();
-            }
-            Some(word * 64 + bits.trailing_zeros() as usize)
-        }
-    }
-
-    impl std::ops::Index<usize> for Nodes {
-        type Output = Node;
-
-        #[inline]
-        fn index(&self, i: usize) -> &Node {
-            &self.nodes[i]
-        }
-    }
+/// Everything a cascade step and its onDirty read, in one record.
+struct Node {
+    dirt: Cell<ComponentDirt>,
+    // Cleared when an authored member's occurrence retires.
+    alive: Cell<bool>,
+    update: Update,
+    // Component::m_collapsedRunSkip: the length of the collapsed run starting
+    // here, as markCollapsedRuns last measured it.
+    collapsed_run_skip: Cell<u16>,
+    dependents_start: u32,
+    dependents_end: u32,
+    on_dirty: OnDirty,
 }
-use nodes::{Node, Nodes};
 
 /// Dependents are graph orders; this bit marks an index into `outside`
 /// (occurrences that are not graph members, such as DrawTargets).
@@ -282,7 +160,7 @@ impl TransformInput {
 pub(crate) struct ComponentGraph {
     // Shared with each member's DirtBinding so Components read their own
     // dirt directly.
-    nodes: Rc<Nodes>,
+    nodes: Rc<[Node]>,
     dependents: Box<[u32]>,
     // Cold, per member: only real update work and fallbacks read these.
     update: Box<[Option<UpdateHandler>]>,
@@ -385,22 +263,24 @@ impl ComponentGraph {
                     }
                 });
             }
-            nodes.push(Node::new(
-                dirt[index],
-                on_dirty.next().expect("one onDirty per member"),
-                if transforms[index].is_some() {
+            nodes.push(Node {
+                dirt: Cell::new(dirt[index]),
+                alive: Cell::new(true),
+                on_dirty: on_dirty.next().expect("one onDirty per member"),
+                update: if transforms[index].is_some() {
                     Update::Transform
                 } else if update[index].is_some() {
                     Update::Handler
                 } else {
                     Update::Receiver
                 },
-                start,
-                dependents.len() as u32,
-            ));
+                collapsed_run_skip: Cell::new(0),
+                dependents_start: start,
+                dependents_end: dependents.len() as u32,
+            });
         }
         let graph = Rc::new(Self {
-            nodes: Rc::new(Nodes::new(nodes)),
+            nodes: Rc::from(nodes),
             dependents: dependents.into_boxed_slice(),
             update: update.into_boxed_slice(),
             transforms: transforms.into_boxed_slice(),
@@ -432,7 +312,7 @@ impl ComponentGraph {
         if node.on_dirty.is_outside() {
             return self.outside_member_dirt(i);
         }
-        node.dirt()
+        node.dirt.get()
     }
 
     /// The dirt of an outside member (the Artboard root), which lives with its
@@ -513,12 +393,12 @@ impl ComponentGraph {
     /// Member `index`'s Component dirt.
     #[inline]
     pub(crate) fn node_dirt(&self, index: u32) -> ComponentDirt {
-        self.nodes[index as usize].dirt()
+        self.nodes[index as usize].dirt.get()
     }
 
     #[inline]
     pub(crate) fn set_dirt(&self, index: u32, value: ComponentDirt) {
-        self.nodes.set_dirt(index as usize, value);
+        self.nodes[index as usize].dirt.set(value);
     }
 
     /// Artboard::onComponentDirty for a member: its graph order is its index.
@@ -538,7 +418,7 @@ impl ComponentGraph {
         // A retired member returns false too, and neither return has side
         // effects, so this check may go first. An outside member's dirt lives
         // with its occurrence, not here.
-        if !node.on_dirty.is_outside() && node.dirt().contains(value) {
+        if !node.on_dirty.is_outside() && node.dirt.get().contains(value) {
             return false;
         }
         self.add_new_dirt(index, value, recurse)
@@ -577,8 +457,8 @@ impl ComponentGraph {
         if !live {
             return false;
         }
-        let dirt = node.dirt() | value;
-        self.nodes.set_dirt(i, dirt);
+        let dirt = node.dirt.get() | value;
+        node.dirt.set(dirt);
         match &node.on_dirty {
             OnDirty::Noop => {}
             OnDirty::Handler(handler) => handler(self.authored(i), dirt),
@@ -633,14 +513,14 @@ impl ComponentGraph {
                 continue;
             };
             debug_assert!(!child.on_dirty.is_outside());
-            let dirt = child.dirt();
+            let dirt = child.dirt.get();
             if dirt.contains(value) {
                 continue;
             }
             // A live member with no onDirty work: Component::addDirt's write
             // and Artboard notification, without a call.
             if matches!(child.on_dirty, OnDirty::Noop) && child.alive.get() {
-                self.nodes.set_dirt(dependent as usize, dirt | value);
+                child.dirt.set(dirt | value);
                 self.notify_artboard(dependent);
             } else if !self.mark(dependent as usize, value) {
                 continue;
@@ -717,6 +597,7 @@ impl ComponentGraph {
         #[cfg(feature = "tools")]
         trace::event(self, 'W', 0, ComponentDirt::NONE, false);
         let dirty = &self.artboard;
+        let count = self.nodes.len();
         let mut step = 0;
         while step < 100 && dirty.has_component_dirt() {
             dirty.clear_components_dirt();
@@ -726,36 +607,31 @@ impl ComponentGraph {
                 #[cfg(any(test, feature = "testing"))]
                 self.verify_collapsed_runs();
             }
-            // Upstream visits every member in order; members without dirt do
-            // nothing there, so this visits only the pending ones, in order.
-            // Bits set during the pass ahead of the walk are reached in it.
-            let mut next = 0;
-            while let Some(i) = self.nodes.next_pending(next) {
+            let mut i = 0;
+            while i < count {
                 dirty.set_depth(i as u32);
                 if self.member_dirt(i).contains(ComponentDirt::COLLAPSED) {
                     // Collapsed members aren't updated and sit in long runs (a
                     // Solo's inactive options): skip the whole run. A collapse
                     // change during this pass makes the skips stale, so step
-                    // one by one until the next pass marks them again. The
-                    // write that uncollapses a member with dirt marks it.
-                    self.nodes.take_pending(i);
+                    // one by one until the next pass marks them again.
                     let skip = self.nodes[i].collapsed_run_skip.get();
                     if !dirty.collapsed_runs_dirty() && skip > 1 {
                         dirty.count_collapsed_run_skip();
-                        next = i + usize::from(skip);
+                        i += usize::from(skip);
                     } else {
-                        next = i + 1;
+                        i += 1;
                     }
                     continue;
                 }
                 if !self.update_entry(i) {
-                    next = i + 1;
+                    i += 1;
                     continue;
                 }
                 if dirty.depth() < i as u32 {
                     break;
                 }
-                next = i + 1;
+                i += 1;
             }
             step += 1;
         }
@@ -766,22 +642,21 @@ impl ComponentGraph {
         if node.on_dirty.is_outside() {
             return self.occurrences[i].update_if_dirty();
         }
-        self.nodes.take_pending(i);
         if node.on_dirty.is_helper() {
-            let dirt = node.dirt();
+            let dirt = node.dirt.get();
             if !needs_update(dirt) {
                 return false;
             }
-            self.nodes.clear_dirt(i);
+            node.dirt.set(ComponentDirt::NONE);
             self.occurrences[i].update_helper(dirt);
             return true;
         }
         assert!(node.alive.get(), "live component in dependency graph");
-        let dirt = node.dirt();
+        let dirt = node.dirt.get();
         if !needs_update(dirt) {
             return false;
         }
-        self.nodes.clear_dirt(i);
+        node.dirt.set(ComponentDirt::NONE);
         let handle = self.authored(i);
         match node.update {
             Update::Transform => {
@@ -935,19 +810,19 @@ fn needs_update(dirt: ComponentDirt) -> bool {
 /// One member's dirt in its graph's node array. The graph order doubles as the
 /// index; edges and order are fixed once the graph is built.
 pub(crate) struct DirtBinding {
-    nodes: Rc<Nodes>,
+    nodes: Rc<[Node]>,
     index: u32,
 }
 
 impl DirtBinding {
     #[inline]
     pub(crate) fn get(&self) -> ComponentDirt {
-        self.nodes[self.index as usize].dirt()
+        self.nodes[self.index as usize].dirt.get()
     }
 
     #[inline]
     pub(crate) fn set(&self, value: ComponentDirt) {
-        self.nodes.set_dirt(self.index as usize, value);
+        self.nodes[self.index as usize].dirt.set(value);
     }
 
     #[inline]
@@ -1047,7 +922,7 @@ pub mod trace {
                     let _ = writeln!(
                         recorder.out,
                         "N {kind} {} {} {}",
-                        node.dirt().0,
+                        node.dirt.get().0,
                         node.dependents_start,
                         node.dependents_end
                     );

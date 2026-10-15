@@ -3959,7 +3959,8 @@ impl Artboard {
         if !handle.is_occupied_settled() {
             return false;
         }
-        let Some(dirt) = handle.graph_dirt() else {
+        // A settled member's graph binding is the one recorded with the list.
+        let Some(dirt) = shape.dirt.as_ref().map(|dirt| dirt.get()) else {
             return false;
         };
         // A generated Drawable's prelude: Shape is neither a clip start nor a

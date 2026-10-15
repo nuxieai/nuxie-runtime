@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
-        keyframe_cells::{KeyFrameCells, KeyFrameEntry, KeyedPropertyCells, closest_frame_index},
+        keyframe_cells::{KeyFrameCells, KeyFrameEntry, KeyedPropertyCells},
         keyframe_double::KeyFrameDouble,
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
         keyframe_interpolator::KeyFrameInterpolator, linear_animation::LinearAnimation,
@@ -240,7 +240,7 @@ impl KeyedProperty {
         let searched = property.frames();
         assert!(!searched.is_empty());
         let frame_count = searched.len();
-        let index = closest_frame_index(&searched, seconds, 0);
+        let index = property.closest_frame_index(seconds, 0);
         let (frames, mix) = match interpolator_host {
             None => (searched, mix),
             Some(host) => {

@@ -307,15 +307,23 @@ impl ComponentGraph {
     }
 
     /// Member `i`'s Component dirt, wherever it lives.
-    #[inline]
+    #[inline(always)]
     fn member_dirt(&self, i: usize) -> ComponentDirt {
         let node = &self.nodes[i];
         if node.kind == Kind::Outside {
-            return self.occurrences[i]
-                .with_component(|component| component.dirt())
-                .unwrap_or(ComponentDirt::NONE);
+            return self.outside_member_dirt(i);
         }
         node.dirt.get()
+    }
+
+    /// The dirt of an outside member (the Artboard root), which lives with its
+    /// occurrence.
+    #[cold]
+    #[inline(never)]
+    fn outside_member_dirt(&self, i: usize) -> ComponentDirt {
+        self.occurrences[i]
+            .with_component(|component| component.dirt())
+            .unwrap_or(ComponentDirt::NONE)
     }
 
     /// The skip from a collapsed member at `index` to the end of its run of

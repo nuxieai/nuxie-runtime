@@ -1479,6 +1479,19 @@ browser renderers on `wasm32-unknown-unknown`. Do not introduce Yoga, an
 Emscripten product, runtime Naga, or legacy WGPU. These boundaries do not excuse
 omitting upstream lifecycle or observable behavior around an adapted library.
 
+Layout is a product divergence, not a translation target (decided 2026-10-14).
+Nuxie lays out with stock Taffy and CSS semantics; upstream Rive's Yoga fork is
+no longer an oracle for layout numbers. Treat an upstream change to Yoga, to
+`LayoutComponent`'s solve, or to layout-only fixtures as a product decision:
+summarize what it changes for authors, then ask whether to adopt the behavior
+through the CSS mapping (`layout_style_applier.rs`) or record it as skipped.
+Never patch Taffy toward Yoga. Non-layout behavior around layout (dirt,
+callbacks, participant lifecycle, scroll/virtualization models) stays a normal
+translation. When a translated non-layout change moves a golden/Silver/probe
+entry already classified as a layout divergence, restate the entry's pinned
+first difference and keep its reason; new layout-caused differences get a new
+classification with a reason, never a global tolerance.
+
 Ask before adding a substantial new architecture/backend or changing accepted
 payload support. Inspect format, bytecode, binding-map, generator, and dependency
 changes as producer/consumer contracts; do not update only one side or silently

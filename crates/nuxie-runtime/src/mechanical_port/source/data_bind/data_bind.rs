@@ -126,6 +126,34 @@ pub trait BindContainer {
     fn relink_data_context(&mut self) {}
 }
 
+/// The state a bind's advance tests before reaching its converter, shared
+/// with its container so a frame's advance passes over binds that cannot
+/// advance without borrowing them.
+#[derive(Default)]
+pub(crate) struct DataBindAdvanceCells {
+    // A source is bound.
+    bound: Cell<bool>,
+    collapsed: Cell<bool>,
+    has_converter: Cell<bool>,
+    // Whether the converter's type may advance, once asked; a converter that
+    // may not advance answers advance with false and changes nothing.
+    // Cleared whenever the converter changes.
+    converter_may_advance: Cell<Option<bool>>,
+}
+
+impl DataBindAdvanceCells {
+    /// DataBind::advance_handle's gate before it reaches the converter: a
+    /// bound source, not collapsed, and a converter not known never to
+    /// advance. A bind failing it answers false and changes nothing.
+    #[inline]
+    pub(crate) fn may_advance(&self) -> bool {
+        self.bound.get()
+            && !self.collapsed.get()
+            && self.has_converter.get()
+            && self.converter_may_advance.get() != Some(false)
+    }
+}
+
 pub struct DataBind {
     pub base: DataBindBase,
     flags_byte: u8,
@@ -135,10 +163,7 @@ pub struct DataBind {
     source: Option<CoreHandle>,
     context_value: Option<RuntimeBindContextValue>,
     converter: Option<CoreHandle>,
-    // Whether the converter's type may advance, once asked; a converter that
-    // may not advance answers advance with false and changes nothing.
-    // Cleared whenever the converter changes.
-    converter_may_advance: std::cell::Cell<Option<bool>>,
+    advance_cells: Rc<DataBindAdvanceCells>,
     container: Option<DataBindContainerOwner>,
     file: RuntimeFileWeakHandle,
     changed_callback: Option<fn()>,
@@ -167,7 +192,7 @@ impl Default for DataBind {
             source: None,
             context_value: None,
             converter: None,
-            converter_may_advance: std::cell::Cell::new(None),
+            advance_cells: Rc::default(),
             container: None,
             file: RuntimeFileWeakHandle::default(),
             changed_callback: None,
@@ -479,10 +504,11 @@ impl DataBind {
                 let bind = owner.as_data_bind().unwrap();
                 if bind.source.is_some()
                     && !bind.has_flag(COLLAPSED)
-                    && bind.converter_may_advance.get() != Some(false)
+                    && bind.advance_cells.converter_may_advance.get() != Some(false)
                 {
-                    bind.converter()
-                        .map(|converter| (converter, bind.converter_may_advance.get()))
+                    bind.converter().map(|converter| {
+                        (converter, bind.advance_cells.converter_may_advance.get())
+                    })
                 } else {
                     None
                 }
@@ -503,6 +529,7 @@ impl DataBind {
                 owner
                     .as_data_bind()
                     .unwrap()
+                    .advance_cells
                     .converter_may_advance
                     .set(Some(may_advance))
             });
@@ -535,6 +562,7 @@ impl DataBind {
         owner.with_mut(|owner| {
             let bind = owner.as_data_bind_mut().unwrap();
             bind.source = None;
+            bind.advance_cells.bound.set(false);
             bind.unsubscribe_target();
         });
         if let Some(converter) = owner
@@ -633,10 +661,13 @@ impl DataBind {
             });
         }
         self.source = Some(value);
+        self.advance_cells.bound.set(true);
     }
 
     pub fn clear_source(&mut self) {
-        if let Some(source) = self.source.take()
+        let source = self.source.take();
+        self.advance_cells.bound.set(false);
+        if let Some(source) = source
             && !self.binds_once()
             && let Some(bind) = self.handle()
         {
@@ -969,6 +1000,7 @@ impl DataBind {
             return None;
         }
         self.set_flag(COLLAPSED, collapsed);
+        self.advance_cells.collapsed.set(collapsed);
         (!collapsed && self.dirt != 0)
             .then(|| self.container.clone())
             .flatten()
@@ -1107,8 +1139,13 @@ impl DataBind {
     }
 
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {
-        self.converter_may_advance.set(None);
+        self.advance_cells.converter_may_advance.set(None);
+        self.advance_cells.has_converter.set(value.is_some());
         self.converter = value;
+    }
+
+    pub(crate) fn advance_cells(&self) -> &Rc<DataBindAdvanceCells> {
+        &self.advance_cells
     }
 
     pub fn set_file(&mut self, value: RuntimeFileWeakHandle) {

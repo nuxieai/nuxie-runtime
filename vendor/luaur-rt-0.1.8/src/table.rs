@@ -75,6 +75,43 @@ impl Table {
             let _stack = crate::stack_guard::StackGuard::new(state);
             self.reference.push(); // table
             lua.push_value(&k)?; // key
+            self.take_pushed_field(&lua)?
+        };
+        V::from_lua(value, &lua)
+    }
+
+    /// [`Table::get`] for a string key, mirroring `lua_getfield`: the key is
+    /// pushed straight onto the stack rather than first becoming a
+    /// registry-owned [`LuaString`](crate::LuaString).
+    pub fn get_field<V: FromLua>(&self, field: &str) -> Result<V> {
+        let lua = self.lua();
+        let state = lua.state();
+        let value = unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.push(); // table
+            lua_pushlstring(state, field.as_ptr() as *const c_char, field.len())
+                .expect("allocation failed in an infallible Lua string constructor");
+            self.take_pushed_field(&lua)?
+        };
+        V::from_lua(value, &lua)
+    }
+
+    /// Pop the pushed `[table, key]` and return `table[key]` as `lua_gettable`
+    /// reads it. A table without a metatable has no `__index`, so its raw
+    /// value is the result and the read cannot raise; only a table with a
+    /// metatable needs the protected call that catches a raising metamethod.
+    unsafe fn take_pushed_field(&self, lua: &Lua) -> Result<Value> {
+        let state = lua.state();
+        unsafe {
+            let has_metatable =
+                lua_getmetatable(state, -2).map_err(|error| crate::error::Error::from_vm(error))?;
+            if has_metatable == 0 {
+                lua_rawget(state, -2); // [table, key] -> [table, value]
+                let v = lua.value_from_stack(-1)?;
+                lua_pop(state, 2).expect("shrinking the stack cannot fail"); // value + table
+                return Ok(v);
+            }
+            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // the metatable
             let status =
                 protected_gettable(state).map_err(|error| crate::error::Error::from_vm(error))?;
             if status != 0 {
@@ -82,9 +119,8 @@ impl Table {
             }
             let v = lua.value_from_stack(-1)?;
             lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop the result value
-            v
-        };
-        V::from_lua(value, &lua)
+            Ok(v)
+        }
     }
 
     /// Look up a table field and call it with a fixed zero-result contract.

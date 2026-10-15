@@ -68,6 +68,12 @@ impl Scene {
         Self::from_fixture(&fixture::fixture(0, timeline), timeline)
     }
     fn from_fixture(bytes: &[u8], timeline: bool) -> Self {
+        let scene = Self::unsettled(bytes, timeline);
+        scene.step(0.0);
+        scene.observe(0, 0, 0.0);
+        scene
+    }
+    fn unsettled(bytes: &[u8], timeline: bool) -> Self {
         let mut scene = Self {
             file: import(bytes),
             artboard: ptr::null_mut(),
@@ -101,8 +107,6 @@ impl Scene {
                 ok(nux_player_new_default(scene.artboard, &mut scene.player));
             }
         }
-        scene.step(0.0);
-        scene.observe(0, 0, 0.0);
         scene
     }
     fn step(&self, seconds: f32) {
@@ -138,6 +142,51 @@ impl Drop for Scene {
             nux_view_model_instance_free(self.values);
             nux_artboard_instance_free(self.artboard);
             nux_file_free(self.file);
+        }
+    }
+}
+
+#[test]
+fn an_initial_bound_play_write_reaches_the_decoder() {
+    let s = Scene::unsettled(&fixture::fixture(0, false), false);
+    // A control write made before the first player step must use the fixture's
+    // source-first binding, just like later writes from this control.
+    s.boolean(c"paused", false);
+    assert_eq!(s.value(2).1, 0);
+    assert!(s.observe(1, 0, 12.5).contains(&(0, 0.0, 0)));
+}
+
+#[test]
+fn two_way_paused_load_uses_the_authored_binding_order() {
+    for autoplay in [false, true] {
+        for source_first in [false, true] {
+            // The source and the video deliberately disagree at load.
+            let source_paused = autoplay;
+            let expected_paused = if source_first {
+                source_paused
+            } else {
+                !autoplay
+            };
+            let s = Scene::from_fixture(
+                &fixture::load_fixture(autoplay, source_paused, source_first),
+                false,
+            );
+            assert_eq!(s.value(2).1, u32::from(expected_paused));
+            assert_eq!(s.value(6).1, u32::from(expected_paused));
+            let actions = s.observe(1, 0, 12.5);
+            assert_eq!(actions.contains(&(0, 0.0, 0)), !expected_paused);
+            if !expected_paused {
+                s.observe(2, 0, 0.0);
+                s.step(0.0);
+                assert_eq!(s.value(2).1, 0);
+                assert_eq!(s.value(6).1, 0);
+            }
+            // The initial winner does not prevent later control writes.
+            s.boolean(c"paused", !expected_paused);
+            assert!(
+                s.observe(0, 0, 0.0)
+                    .contains(&(if expected_paused { 0 } else { 1 }, 0.0, 0,))
+            );
         }
     }
 }

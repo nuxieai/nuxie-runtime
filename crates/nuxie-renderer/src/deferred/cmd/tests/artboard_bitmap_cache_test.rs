@@ -18,7 +18,7 @@ use super::super::{
     command_stream::CommandReader,
     deferred_replayer::*,
     deferred_session::{DeferredSession, SegmentTarget},
-    render_commands::{RenderCmd, TransformPod, payload_size_of},
+    render_commands::{payload_size_of, RenderCmd, TransformPod},
 };
 use super::render_context_null::*;
 use super::*;
@@ -86,7 +86,7 @@ fn max_dim_caps_a_fixed_size_raster_uniformly() {
         .unwrap_or_else(|e| e.into_inner());
     use nuxie_runtime::source::{
         math::aabb::Aabb,
-        offscreen_raster::{RasterPlan, plan_fixed_raster_size},
+        offscreen_raster::{plan_fixed_raster_size, RasterPlan},
     };
     let mut plan = RasterPlan::default();
     assert!(plan_fixed_raster_size(
@@ -185,10 +185,18 @@ fn rotating_at_a_noninteger_view_scale_keeps_one_raster_size() {
 
 // std::min/std::max argument order, so a NaN behaves as it does upstream.
 fn cpp_min(a: f32, b: f32) -> f32 {
-    if b < a { b } else { a }
+    if b < a {
+        b
+    } else {
+        a
+    }
 }
 fn cpp_max(a: f32, b: f32) -> f32 {
-    if a < b { b } else { a }
+    if a < b {
+        b
+    } else {
+        a
+    }
 }
 
 fn expected_dim(natural: f32, resolution: f32) -> u32 {

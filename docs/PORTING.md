@@ -51,6 +51,31 @@ Use [PARITY_WORKFLOW.md](PARITY_WORKFLOW.md): complete mechanical translation,
 source-equivalence review, Rust-integration review, then existing validation.
 There is no owner-family ledger, test-first gate, or promotion process.
 
+## Native font fallback boundary
+
+`nux_font_set_fallback_proc` exposes the existing process hook. The SDK
+selects the platform font and returns a borrowed C handle; shaped runs retain
+the native font independently. Ordinary byte and stable-file fonts preserve
+their existing shaping, metrics, color layers and outline behavior.
+
+`nux_font_new_with_outline` adds the host equivalent of upstream's first
+`CoreTextHBFont::getPath` attempt at `daf55385:font_hb_apple.mm:468-492`.
+It asks a plain C callback for a normalized path only when the ordinary
+outline is empty. The iOS SDK owns CoreText, the selected native font and
+size2048/y-inversion conversion. Callback context retention, the bounded
+command sink and C handle validation are our host safety machinery.
+
+The second CoreText-shaped attempt remains absent. The source-first list of
+native answers and the emoji source trace are recorded in
+[upstream-sync-map.md](upstream-sync-map.md#known-apple-font-boundary-gap).
+For the selected iOS26.5 emjc Apple emoji, that trace predicts the same blank
+row upstream. It is not a direct upstream simulator rendering verdict.
+Current device qualification belongs to
+[UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
+
+The pre-existing scoped `with_host_fallback_proc` remains for editor hosts
+that supply font bytes. The native SDK default uses the process hook.
+
 ## 1. Ownership & Type Mappings
 
 ### 1.1 `rcp<T>` / reference counting → `CoreArena` ownership

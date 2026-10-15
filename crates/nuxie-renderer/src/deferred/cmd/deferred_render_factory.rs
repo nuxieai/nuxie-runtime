@@ -15,8 +15,8 @@ use std::{
     collections::HashMap,
     rc::{Rc, Weak},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
     },
 };
 

@@ -2,8 +2,8 @@
 use super::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::{
     bind_group_layout::{
-        NativeSlotScope, makeBindGroupLayoutFromBindingMap, validatePipelineDesc,
-        validateStageLimits,
+        makeBindGroupLayoutFromBindingMap, validatePipelineDesc, validateStageLimits,
+        NativeSlotScope,
     },
     binding_map::{
         BindingMap, Entry, ResourceKind, TextureSampleType, TextureSamplerPair, TextureViewDim,
@@ -212,10 +212,9 @@ fn an_entry_the_layout_lacks_is_refused() {
         ..Default::default()
     };
     assert!(ctx.makeBindGroup(&desc).is_none());
-    assert!(
-        ctx.lastError()
-            .contains("@binding(1): the layout has no sampler")
-    );
+    assert!(ctx
+        .lastError()
+        .contains("@binding(1): the layout has no sampler"));
 }
 
 #[test]
@@ -278,10 +277,8 @@ fn samplers_fill_only_bindings_of_their_own_type() {
     assert!(sampler_error(&mut ctx, filtering, &linear).is_empty());
     assert!(sampler_error(&mut ctx, filtering, &compare).contains("binds a comparison sampler"));
     let comparison = entry(0, BindingKind::comparisonSampler);
-    assert!(
-        sampler_error(&mut ctx, comparison, &SamplerDesc::default())
-            .contains("has no compare function")
-    );
+    assert!(sampler_error(&mut ctx, comparison, &SamplerDesc::default())
+        .contains("has no compare function"));
     assert!(sampler_error(&mut ctx, comparison, &linear_compare).is_empty());
 }
 
@@ -289,99 +286,83 @@ fn samplers_fill_only_bindings_of_their_own_type() {
 fn a_view_fills_only_entries_its_format_can_be_read_as() {
     let mut ctx = DeferredOreContext::new(ReplayCaps::default());
     let r32 = view_of(&mut ctx, TextureFormat::r32float, 1, TextureAspect::all);
-    assert!(
-        texture_error(&mut ctx, float_texture(0), &r32)
-            .contains("cannot read this view's format as a float texture")
-    );
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(
-                0,
-                SampleType::floatUnfilterable,
-                TextureViewDimension::texture2D
-            ),
-            &r32
-        )
-        .is_empty()
-    );
+    assert!(texture_error(&mut ctx, float_texture(0), &r32)
+        .contains("cannot read this view's format as a float texture"));
+    assert!(texture_error(
+        &mut ctx,
+        texture(
+            0,
+            SampleType::floatUnfilterable,
+            TextureViewDimension::texture2D
+        ),
+        &r32
+    )
+    .is_empty());
     let depth = view_of(&mut ctx, TextureFormat::depth32float, 1, TextureAspect::all);
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(0, SampleType::depth, TextureViewDimension::texture2D),
-            &depth
-        )
-        .is_empty()
-    );
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(
-                0,
-                SampleType::floatUnfilterable,
-                TextureViewDimension::texture2D
-            ),
-            &depth
-        )
-        .is_empty()
-    );
+    assert!(texture_error(
+        &mut ctx,
+        texture(0, SampleType::depth, TextureViewDimension::texture2D),
+        &depth
+    )
+    .is_empty());
+    assert!(texture_error(
+        &mut ctx,
+        texture(
+            0,
+            SampleType::floatUnfilterable,
+            TextureViewDimension::texture2D
+        ),
+        &depth
+    )
+    .is_empty());
     assert!(texture_error(&mut ctx, float_texture(0), &depth).contains("as a float texture"));
     let color = view_of(&mut ctx, TextureFormat::rgba8unorm, 1, TextureAspect::all);
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(0, SampleType::depth, TextureViewDimension::texture2D),
-            &color
-        )
-        .contains("as a depth texture")
-    );
+    assert!(texture_error(
+        &mut ctx,
+        texture(0, SampleType::depth, TextureViewDimension::texture2D),
+        &color
+    )
+    .contains("as a depth texture"));
     let both = view_of(
         &mut ctx,
         TextureFormat::depth24plusStencil8,
         1,
         TextureAspect::all,
     );
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(0, SampleType::depth, TextureViewDimension::texture2D),
-            &both
-        )
-        .contains("both depth and stencil")
-    );
+    assert!(texture_error(
+        &mut ctx,
+        texture(0, SampleType::depth, TextureViewDimension::texture2D),
+        &both
+    )
+    .contains("both depth and stencil"));
     let depth_only = view_of(
         &mut ctx,
         TextureFormat::depth24plusStencil8,
         1,
         TextureAspect::depthOnly,
     );
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(0, SampleType::depth, TextureViewDimension::texture2D),
-            &depth_only
-        )
-        .is_empty()
-    );
+    assert!(texture_error(
+        &mut ctx,
+        texture(0, SampleType::depth, TextureViewDimension::texture2D),
+        &depth_only
+    )
+    .is_empty());
 }
 
 #[test]
 fn a_view_matches_the_declared_dimension_and_sample_count() {
     let mut ctx = DeferredOreContext::new(ReplayCaps::default());
     let flat = view_of(&mut ctx, TextureFormat::rgba8unorm, 1, TextureAspect::all);
-    assert!(
-        texture_error(
-            &mut ctx,
-            texture(
-                0,
-                SampleType::floatFilterable,
-                TextureViewDimension::array2D
-            ),
-            &flat
-        )
-        .contains("binds a 2d view where the shader declares a 2d array")
-    );
+    assert!(texture_error(
+        &mut ctx,
+        texture(
+            0,
+            SampleType::floatFilterable,
+            TextureViewDimension::array2D
+        ),
+        &flat
+    )
+    .contains("binds a 2d view where the shader declares a 2d array"));
     let msaa = view_of(&mut ctx, TextureFormat::rgba8unorm, 4, TextureAspect::all);
     assert!(texture_error(&mut ctx, float_texture(0), &msaa).contains("binds a multisampled view"));
 }
@@ -508,10 +489,8 @@ fn a_pipeline_cannot_sample_an_unfilterable_texture_with_filtering() {
         );
         error
     };
-    assert!(
-        validate(SampleType::floatUnfilterable, false)
-            .contains("@binding(1): the layout declares this texture unfilterable")
-    );
+    assert!(validate(SampleType::floatUnfilterable, false)
+        .contains("@binding(1): the layout declares this texture unfilterable"));
     assert!(validate(SampleType::floatUnfilterable, true).is_empty());
     assert!(validate(SampleType::floatFilterable, false).is_empty());
 }

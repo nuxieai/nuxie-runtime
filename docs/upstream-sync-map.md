@@ -7,6 +7,43 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_completion`, `set_double_with_completion`, `get_bool`, `get_double`, `property_field_id` and `object_supports_property` route keys 60004 through 60020 to Video.
 
+## Known Apple font boundary gap
+
+The host outline addition mirrors the first `CoreTextHBFont::getPath`
+attempt at `daf55385:font_hb_apple.mm:468-492`: read the ordinary outline,
+then ask the host only if it is empty. `nux_font_new_with_outline` adds a
+plain C command sink. The iOS SDK retains its selected CTFont at size2048,
+inverts y and divides by2048, matching upstream `apply_element`. The runtime
+converts quadratics to cubic paths. Ordinary byte/file font creation retains
+its existing behavior. As with upstream `HBFont::withOptions`, option variants
+are plain HB fonts and do not retain host outline recovery. Callback retention,
+validation, the bounded command sink, and C handle safety are our host machinery.
+
+Upstream also provides CoreText tables and units-per-em at construction, and
+on its second attempt (`useSystemShaper=true`) shapes with CTTypesetter and
+CTRun. Those native answers include glyph IDs, string indices, advances,
+forced bidi embedding level, visual reversal for RTL, and zero offsets. Its
+system-shaped path is asked from CoreText before HarfBuzz. The current host
+outline addition implements the first-attempt outline recovery. The second
+CoreText-shaped attempt is still absent and must not be claimed as parity.
+Metrics, coverage, weights, feature/axis queries and color layers inherit
+HBFont in the pinned native subclass.
+
+For the selected iOS26.5 Apple Color Emoji face, the retained probe establishes
+emjc payloads in every sbix strike and nil CoreText glyph paths. The pinned
+runtime uses rive-app/harfbuzz rive_13.1.1. Its sbix reference_png requests
+png-space, rejects a different graphicType and returns an empty blob.
+HBFont::isColorGlyph then returns false. Text::updateRenderStyles reads
+getPath; both the HarfBuzz outline and CoreText outline are empty. Even if a
+color command were emitted, empty color layers cause drawColorGlyph to return.
+Therefore the source trace predicts no emoji ink upstream in this exact case.
+This is source evidence, not a direct upstream simulator rendering verdict.
+No emjc decoder or new bitmap path was invented. A real fix needs a separately
+scoped Apple rasterization/bitmap boundary and image positioning/scale/color
+qualification, or a compatible upstream decoder.
+
+Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
+
 ## Current checkpoint
 
 - LAST_SYNCED_SHA: `30454306ffcd0f360a122af1afa6e2295182abc5`

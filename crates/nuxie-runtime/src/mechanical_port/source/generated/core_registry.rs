@@ -4773,8 +4773,12 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
-fn as_string_template_argument(&self)->Option<&crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { None }
-fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument> { None }
+    fn as_string_template_argument(&self)->Option<&crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument>{
+        None
+    }
+    fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_bind::converters::string_template::string_template_argument::StringTemplateArgument>{
+        None
+    }
 
     fn as_blend_state_transition(
         &self,
@@ -6141,7 +6145,9 @@ fn as_string_template_argument_mut(&mut self)->Option<&mut crate::source::data_b
         // Formula token subclasses inherit FormulaToken::import, which
         // registers each token with the active formula importer before the
         // formula's output queue is calculated.
-        if let Some(argument) = self.as_string_template_argument_mut() { return Some(argument.import(stack)); }
+        if let Some(argument) = self.as_string_template_argument_mut() {
+            return Some(argument.import(stack));
+        }
         if let Some(token) = self.as_formula_token_mut() {
             return Some(token.import(stack));
         }

@@ -255,6 +255,22 @@ rust_test(
 )
 
 rust_test(
+    name = "nux-capi__test_font_fallbacks",
+    crate_name = "font_fallbacks",
+    crate_root = "tests/font_fallbacks.rs",
+    srcs = _test_sources,
+    compile_data = _compile_data,
+    data = _compile_data + [],
+    edition = "2024",
+    version = "0.10.15",
+    crate_features = ["default"],
+    deps = [":nux-capi__test"] + select({"//bazel:android": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-project-data:nuxie-project-data__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-video-host:nuxie-video-host__test", "//crates/nuxie:nuxie__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/nux-capi"), "//bazel:ios": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-project-data:nuxie-project-data__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-video-host:nuxie-video-host__test", "//crates/nuxie:nuxie__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["objc2", "objc2-core-foundation", "objc2-metal", "objc2-quartz-core", "serde_json", "sha2"], package_name = "bazel/cargo/nux-capi"), "//bazel:linux": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-project-data:nuxie-project-data__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-video-host:nuxie-video-host__test", "//crates/nuxie:nuxie__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/nux-capi"), "//bazel:macos": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-project-data:nuxie-project-data__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-video-host:nuxie-video-host__test", "//crates/nuxie:nuxie__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["objc2", "objc2-core-foundation", "objc2-metal", "objc2-quartz-core", "serde_json", "sha2"], package_name = "bazel/cargo/nux-capi"), "//bazel:windows": ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-project-data:nuxie-project-data__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-video-host:nuxie-video-host__test", "//crates/nuxie:nuxie__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/nux-capi"), "//conditions:default": []}) + [":nux-capi__test__build_script"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nux-capi"),
+    rustc_env = dict(dict({"CARGO_PKG_NAME": "nux-capi"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
+    lint_config = ":cargo_lints",
+)
+
+rust_test(
     name = "nux-capi__test_global_view_models",
     crate_name = "global_view_models",
     crate_root = "tests/global_view_models.rs",

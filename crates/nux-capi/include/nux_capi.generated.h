@@ -40,6 +40,8 @@
 
 #define NUX_FILE_ASSET_PROVIDER_VIDEO_PLAYBACK (1 << 2)
 
+#define NUX_FONT_MAX_BYTES ((256 * 1024) * 1024)
+
 #define NUX_HOST_COMMANDS_PER_STEP_HARD_MAX 4096
 
 #define NUX_HOST_COMMAND_BYTES_PER_STEP_HARD_MAX ((32 * 1024) * 1024)
@@ -577,6 +579,18 @@ typedef struct NuxCapiResult NuxCapiResult;
 typedef struct NuxFile NuxFile;
 
 /**
+ * Immutable font, usable on any thread. The engine retains callback answers
+ * independently of the C handle. Do not free while a callback is returning it.
+ */
+typedef struct NuxFont NuxFont;
+
+/**
+ * A mapped file coverage probe, affine to its creation thread. Promotion
+ * transfers its mapping to a font; further coverage queries return false.
+ */
+typedef struct NuxFontFileProbe NuxFontFileProbe;
+
+/**
  * Product-neutral selected player. This surface establishes selection,
  * ownership, and metadata; playback operations are exposed separately.
  */
@@ -1036,6 +1050,70 @@ typedef struct NuxValueRule {
   struct NuxStringView code;
   struct NuxStringView message;
 } NuxValueRule;
+
+typedef struct NuxFontAxisCoord {
+  /**
+   * Big-endian OpenType tag, for example 0x77676874 for wght.
+   */
+  uint32_t axis;
+  float value;
+} NuxFontAxisCoord;
+
+/**
+ * One font face. Supply exactly one of bytes or immutable_path.
+ * Byte storage is borrowed for font creation and copied once. A path is
+ * UTF-8, without a terminating NUL. Its trusted local file must remain
+ * immutable and available until this font and all its variants die.
+ * Never supply authored, removable or network files through the mapped path.
+ * struct_size must cover the ABI-v4 prefix; appended fields are ignored.
+ * Coordinates are borrowed only for creation and have a fixed element stride;
+ * face_index and coordinates select a collection face.
+ */
+typedef struct NuxFontSource {
+  uint32_t struct_size;
+  struct NuxByteView bytes;
+  struct NuxStringView immutable_path;
+  uint32_t face_index;
+  const struct NuxFontAxisCoord *coords;
+  size_t coord_count;
+} NuxFontSource;
+
+/**
+ * Emit one normalized, y-down path command synchronously. Verbs: 0 move,
+ * 1 line, 2 quadratic, 3 cubic, 4 close. Points has 2/2/4/6/0 floats.
+ * The sink and its context expire when get_path returns.
+ */
+typedef void (*NuxFontOutlineSink)(void*, uint8_t, const float*);
+
+/**
+ * Host callbacks are copied at creation. Context ownership transfers only on
+ * success and release runs once after the last retained host font dies,
+ * possibly on any thread. get_path may run concurrently; callbacks and context
+ * must be thread-safe, must not unwind, and must not reenter the font API.
+ * struct_size must cover the ABI-v4 prefix; appended fields are ignored.
+ */
+typedef struct NuxFontOutlineCallbacks {
+  uint32_t struct_size;
+  void *user_data;
+  void (*get_path)(void*,
+                   uint16_t,
+                   const struct NuxFontAxisCoord*,
+                   size_t,
+                   NuxFontOutlineSink,
+                   void*);
+  void (*release)(void*);
+} NuxFontOutlineCallbacks;
+
+/**
+ * Return a borrowed font handle, or NULL to end the fallback walk. Called on
+ * the shaping thread, with the first missing character, zero-based retry index
+ * and asking font's weight. The engine retains the returned font. The provider
+ * must be thread-safe and must terminate its retry walk.
+ */
+typedef const struct NuxFont *(*NuxFontFallbackProc)(void *user_data,
+                                                     uint32_t missing,
+                                                     uint32_t fallback_index,
+                                                     uint16_t weight);
 
 /**
  * Read-only caller-sized focus state for a state-machine player.
@@ -2411,6 +2489,60 @@ NuxStatus nux_file_set_value_rules_with_result(struct NuxFile *file,
 
 NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
                                       struct NuxViewModelCatalog **out_catalog);
+
+NuxStatus nux_font_free(struct NuxFont *font);
+
+NuxStatus nux_font_has_glyph(const struct NuxFont *font, uint32_t character, bool *out_has_glyph);
+
+/**
+ * Decode copied bytes or map a trusted immutable file, with collection face
+ * and optional axis coordinates. All input views are borrowed for this call.
+ */
+NuxStatus nux_font_new(const struct NuxFontSource *source, struct NuxFont **out_font);
+
+/**
+ * Decode a host font with empty-outline recovery, mirroring upstream's
+ * first CoreTextHBFont attempt. File shaping, metrics and nonempty outlines
+ * remain unchanged. This does not install a process fallback hook.
+ */
+NuxStatus nux_font_new_with_outline(const struct NuxFontSource *source,
+                                    const struct NuxFontOutlineCallbacks *callbacks,
+                                    struct NuxFont **out_font);
+
+/**
+ * Map a trusted stable font file for nominal coverage. The same immutable
+ * local-file lifetime contract as NuxFontSource applies, including derived fonts.
+ */
+NuxStatus nux_font_probe_file(struct NuxStringView path,
+                              uint32_t face_index,
+                              struct NuxFontFileProbe **out_probe);
+
+NuxStatus nux_font_probe_free(struct NuxFontFileProbe *probe);
+
+NuxStatus nux_font_probe_has_glyph(const struct NuxFontFileProbe *probe,
+                                   uint32_t character,
+                                   bool *out_has_glyph);
+
+NuxStatus nux_font_probe_make_font(struct NuxFontFileProbe *probe, struct NuxFont **out_font);
+
+/**
+ * Set the engine's process-wide fallback hook; NULL clears it. Applies to all
+ * files, including files already open when next reshaped. Callback and context
+ * must remain valid until replacement completes. Replacement from inside its
+ * callback returns REENTRANT_CALL. Other replacement waits for current C
+ * callbacks to return. The hook may call font APIs, but not other C entry points.
+ */
+NuxStatus nux_font_set_fallback_proc(NuxFontFallbackProc _callback, void *_user_data);
+
+/**
+ * Copy at the requested weight only when the font has a wght axis; fixed
+ * fonts retain their own weight, as in the upstream Android system provider.
+ * A weighted copy of a variable host-outline font is a plain font without
+ * outline recovery; a fixed host font is returned as is.
+ */
+NuxStatus nux_font_with_weight(const struct NuxFont *font,
+                               uint16_t weight,
+                               struct NuxFont **out_font);
 
 /**
  * Acknowledge that an exact occurrence revision was successfully presented.

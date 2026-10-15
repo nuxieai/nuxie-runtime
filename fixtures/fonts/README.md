@@ -47,3 +47,21 @@ descent `-500`. The native geometry test uses these font-table values as an
 independent baseline oracle (24 px font, top origin), rather than asking the
 runtime to calculate its own expected result. This is not a replacement for the
 open single-glyph-font empty-input regression.
+
+## Native fallback fixture
+
+`ibm-plex-sans-arabic.ttf` is the unmodified IBM Plex Sans Arabic Regular face
+used by upstream Rive's fallback font tests. It is copied from
+`tests/unit_tests/assets/fonts/IBMPlexSansArabic-Regular.ttf` at Rive pin
+`3ccf0d9d7c2cf8bee0553245acaffe21ae3314b6`. Byte length: 226004;
+SHA-256: `1118a402b5eabda347c416e49391bdc156836abfc0aca93ae9f1fbddfab2af28`. No subsetting or font-table changes.
+
+It supplies the Arabic letters in `مرحبا` while the Latin-only Roboto input
+fixture deliberately does not. The native regression uses this local file,
+without an external upstream checkout or network dependency.
+
+The font metadata identifies Copyright2019 IBM Corp. and SIL OFL1.1.
+The [IBM license](https://raw.githubusercontent.com/IBM/plex/master/LICENSE.txt) is retained with normalized LF line endings and trailing whitespace in
+`LICENSE-IBM-PLEX.txt` (SHA-256 `d741e57d5f865e294df801f96b7b5161a88b211df65887e4358d271c9fc5fb4f`).
+This public test font is separate from the private platform reference fonts,
+which are never committed or bundled.

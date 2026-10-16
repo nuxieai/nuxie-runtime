@@ -16,8 +16,8 @@
 //!
 //! An apply computes each value from the arrays exactly as the cells path
 //! would, and writes it to the same place in the same order. Whatever the
-//! arrays do not cover (keyframes other than doubles, interpolators, bound
-//! keyframe values, blend accumulators, interpolation hosts) takes the cells
+//! arrays do not cover (keyframes other than doubles, scripted
+//! interpolators, bound keyframe values, blend accumulators) takes the cells
 //! path for that property.
 
 use std::{cell::Cell, rc::Rc};
@@ -207,18 +207,15 @@ impl CompiledObject {
             if track.callback {
                 continue;
             }
-            match &interpolator_host {
-                None => track.apply(&object, time, mix, context),
-                Some(host) => KeyedProperty::apply_cells(
-                    &track.property,
-                    &object,
-                    time,
-                    mix,
-                    context,
-                    &*artboard,
-                    Some(host),
-                ),
-            }
+            // KeyedProperty::apply_cells under a host: the host's hook,
+            // asked per property in order, may take the whole value. The
+            // hook reads only the host's layout animation and the key, so
+            // the frames it leaves are the ones compiled.
+            let mix = match &interpolator_host {
+                Some(host) if artboard.overrides_keyed_interpolation(host, track.property_key) => 1.0,
+                _ => mix,
+            };
+            track.apply(&object, time, mix, context);
         }
     }
 
@@ -265,8 +262,8 @@ impl Track {
         }
     }
 
-    /// KeyedProperty::apply_cells for a target without an interpolation
-    /// host, from the arrays.
+    /// KeyedProperty::apply_cells from the arrays, at `mix` after any
+    /// interpolation host's override.
     #[inline]
     fn apply(&self, object: &CoreHandle, seconds: f32, mix: f32, context: Option<&dyn KeyFrameValueContext>) {
         assert!(!self.times.is_empty());

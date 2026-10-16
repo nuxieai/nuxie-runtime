@@ -356,6 +356,13 @@ impl RawTextInput {
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
+    /// Shape the text again on the next update although none of its inputs
+    /// changed: for a host whose font fallbacks changed under the same font.
+    /// Nuxie addition; upstream has no reshape hook for a fallback change.
+    pub fn invalidate_shape(&mut self) {
+        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+    }
+
     pub fn paragraph_spacing(&self) -> f32 {
         self.paragraph_spacing
     }

@@ -207,12 +207,11 @@ REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'fram
 
 LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its '
                              '273-wide host instead of extending beyond it.',
- 'artboard_list_overrides_vertical': "CSS automatic minimums preserve the vertical list row's "
-                                     "700-wide content contribution rather than Yoga's 500 "
-                                     'allocation.',
- 'bankcard': "CSS automatic minimums preserve the populated card's content width; its rounded clip "
-             'point moves from 810 to 826.94385, with the original clipping and gradient code '
-             'unchanged.',
+ 'artboard_list_overrides_vertical': 'CSS automatic minimums sum seven 100-wide child artboards to '
+                                     'a 700-wide content floor instead of the old 500 allocation.',
+ 'bankcard': 'CSS automatic minimums keep the lower content row at 740.94385 plus two 63-point '
+             'padding edges, making the card 866.94385 instead of 850. Its 40-point corner leaves '
+             'the first clip point at 826.94385 instead of 810.',
  'collapsing_elements': 'CSS flex-shrink 1 lets the nested Fixed 500 box fit its 33.33 percent '
                         'host, 499.95004, instead of keeping the full 500.',
  'component_list_child_origin': "CSS flex-shrink 1 lets a Fixed child artboard fit the list row's "
@@ -224,9 +223,9 @@ LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets t
  'db_health_tracker': 'CSS automatic minimums propagate the nested Artboard Measure width 10000 '
                       'through its containers: panel width 1008 becomes 10174 and the padded '
                       'ancestor 1048 becomes 10214.',
- 'global_view_models_scripting_test': 'CSS automatic minimums keep the view-model-bound card at '
-                                      'its content contribution instead of the old zero-minimum '
-                                      'allocation; its first path point moves from 945 to 980.',
+ 'global_view_models_scripting_test': 'CSS automatic minimums preserve the Main artboard width 500 '
+                                      'plus the GlobalName list width 480, or 980, instead of '
+                                      'squeezing their parent to 945.',
  'hittest_ab1_grand_parent': 'CSS min-height:auto keeps the nested 572-high content above the '
                              '208.60547 column offer; flex-shrink 1 reduces the leading Fixed 100 '
                              'box to zero and moves the following item from y 100 to zero.',
@@ -235,8 +234,8 @@ LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets t
                        '572.',
  'number_to_list_nested_children': 'CSS automatic minimums keep the nested list row at its 61 '
                                    "content height rather than Yoga's 59.791016 allocation.",
- 'reset_phase_multi_main': "CSS automatic minimums propagate the nested list child's 186 content "
-                           'width into its background instead of the old 180 allocation.',
+ 'reset_phase_multi_main': 'CSS automatic minimums preserve three 62-wide nested child artboards, '
+                           'or 186, instead of squeezing their background to 180.',
  'scroll_threshold-all-scroll': 'CSS automatic minimums preserve the 1500 content width rather '
                                 'than the 500 viewport allocation; inside it, Fixed bases 500 and '
                                 '1500 shrink proportionally to 375 and 1125. Scroll dispatch is '

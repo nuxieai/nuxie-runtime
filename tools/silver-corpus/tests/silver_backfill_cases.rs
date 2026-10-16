@@ -1,3 +1,6 @@
+#[path = "support/browser_layout.rs"]
+mod browser_layout;
+
 use silver_corpus::{Execution, compare_sriv, parse_sriv, read_manifest, resolve_expected};
 use std::path::{Path, PathBuf};
 
@@ -62,7 +65,8 @@ fn compare_case(id: &str, runtime: &Path) -> anyhow::Result<()> {
     let expected_bytes = std::fs::read(&expected_path)?;
     let expected = parse_sriv(&expected_bytes)?;
     let actual = parse_sriv(actual.bytes())?;
-    compare_sriv(&expected, &actual).map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
+    browser_layout::reviewed_result(id, compare_sriv(&expected, &actual))
+        .map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
 }
 
 #[test]

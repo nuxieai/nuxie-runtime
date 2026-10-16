@@ -45,25 +45,40 @@ pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
 }
 
 /// Called after the unbounded measure populated Text's measured-shape cache.
-pub(crate) fn host_min_content_width(host: &CoreHandle) -> Option<f32> {
+pub(crate) fn host_min_content_width(host: &CoreHandle, known_height: Option<f32>) -> Option<f32> {
     use crate::mechanical_port::source::shapes::image::Image;
     host.with_mut(|object| {
         if object.as_intrinsically_sizeable_mut().is_none() {
             return Some(0.0);
         }
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Some(
-                image
-                    .measure_layout(
-                        f32::NAN,
-                        LayoutMeasureMode::Undefined,
-                        f32::NAN,
-                        LayoutMeasureMode::Undefined,
-                    )
-                    .x,
-            );
+            return Some(transferred_image_minimum(
+                image.width(),
+                image.height(),
+                known_height,
+            ));
         }
         object.as_text_mut()?.layout_min_content_width()
+    })
+    .flatten()
+}
+
+/// CSS replaced items use the smaller content and transferred suggestions.
+/// The cross size is already clamped and reduced to the content box by Taffy.
+fn transferred_image_minimum(main: f32, cross: f32, known_cross: Option<f32>) -> f32 {
+    known_cross
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .filter(|_| cross > 0.0)
+        .map_or(main, |value| main.min(value * main / cross))
+}
+
+pub(crate) fn host_min_content_height(host: &CoreHandle, known_width: Option<f32>) -> Option<f32> {
+    use crate::source::shapes::image::Image;
+    host.with(|object| {
+        object
+            .as_any()
+            .downcast_ref::<Image>()
+            .map(|image| transferred_image_minimum(image.height(), image.width(), known_width))
     })
     .flatten()
 }

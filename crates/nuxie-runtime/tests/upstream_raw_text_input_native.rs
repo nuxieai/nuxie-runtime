@@ -1,5 +1,6 @@
 //! Original 17 cases plus the seven alignment cases added by 7098a7c8.
-//! Authority: Rive 4ac7b32798da0482e441ef09304dc3b480ed3ee5.
+//! Authority: Rive 4ac7b32798da0482e441ef09304dc3b480ed3ee5. The last case
+//! covers invalidate_shape, a Nuxie addition.
 //!
 //! RawTextInput's upstream TESTING measure counter is exposed by the native
 //! tools feature. Text shaping, cursor editing, and history use the live owners.
@@ -12,7 +13,7 @@ use nuxie_runtime::source::{
     text::{
         cursor::{Cursor, CursorPosition},
         font_hb::HbFont,
-        raw_text_input::{CursorBoundary, RawTextInput},
+        raw_text_input::{CursorBoundary, Flags, RawTextInput},
         text_engine::{FontRef, TextAlign, TextDirection, TextSizing, VerticalTextAlign},
     },
 };
@@ -453,6 +454,38 @@ fn obscured_toggle_re_resolves_cursor_lines() {
     input.update(&factory);
     assert_eq!(input.cursor().end().line_index(), 1);
     assert!(input.cursor_visual_position().found());
+}
+
+// Nuxie addition: a host whose font fallbacks changed asks for shaping again
+// without changing the font or the text.
+#[test]
+fn invalidate_shape_reshapes_unchanged_text_on_the_next_update() {
+    let factory = retained_factory();
+    let reshaped = Flags::ShapeDirty | Flags::SelectionDirty;
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(72.0);
+    input.insert("hello");
+    assert_eq!(input.update(&factory) & reshaped, reshaped);
+    input.measure(800.0, 800.0);
+    let measured = input.measure_count;
+    assert_eq!(
+        input.update(&factory) & reshaped,
+        0,
+        "clean text is not shaped again"
+    );
+    input.measure(800.0, 800.0);
+    assert_eq!(input.measure_count, measured, "nor measured again");
+    // The same font is no change, so only the explicit invalidation reshapes,
+    // refreshes the selection and measures again.
+    input.set_font(input.font());
+    assert_eq!(input.update(&factory) & reshaped, 0);
+    input.invalidate_shape();
+    assert_eq!(input.update(&factory) & reshaped, reshaped);
+    input.measure(800.0, 800.0);
+    assert_eq!(input.measure_count, measured + 1);
+    assert_eq!(input.update(&factory) & reshaped, 0);
+    assert_eq!(input.text(), "hello");
 }
 
 fn load_font(relative_path: &str) -> FontRef {

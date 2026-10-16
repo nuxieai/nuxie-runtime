@@ -11,7 +11,6 @@ use crate::mechanical_port::source::{
     },
 };
 use nuxie_render_api::{RenderPaint, Renderer};
-use std::collections::BTreeMap;
 #[derive(Clone, Copy, PartialEq)]
 struct Opacity(f32);
 impl Eq for Opacity {}
@@ -25,10 +24,53 @@ impl Ord for Opacity {
         self.0.total_cmp(&other.0)
     }
 }
+
+/// The glyph paths of each opacity, ordered by opacity as the source's
+/// std::map orders them. A style holds a handful at most, so a sorted vector
+/// keeps the map's order and lookups without its tree walks.
+#[derive(Default)]
+struct OpacityPaths(Vec<(Opacity, ShapePaintPath)>);
+
+impl OpacityPaths {
+    fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// The path of `opacity`, inserted empty in order when absent.
+    fn entry_or_default(&mut self, opacity: Opacity) -> &mut ShapePaintPath {
+        let index = match self.0.binary_search_by(|(key, _)| key.cmp(&opacity)) {
+            Ok(index) => index,
+            Err(index) => {
+                self.0.insert(index, (opacity, ShapePaintPath::default()));
+                index
+            }
+        };
+        &mut self.0[index].1
+    }
+
+    fn get_mut(&mut self, opacity: Opacity) -> Option<&mut ShapePaintPath> {
+        self.0
+            .binary_search_by(|(key, _)| key.cmp(&opacity))
+            .ok()
+            .map(|index| &mut self.0[index].1)
+    }
+
+    fn all_opaque(&self) -> bool {
+        self.0.iter().all(|(opacity, _)| opacity.0 == 1.0)
+    }
+
+    fn iter_mut(&mut self) -> impl Iterator<Item = (Opacity, &mut ShapePaintPath)> {
+        self.0.iter_mut().map(|(opacity, path)| (*opacity, path))
+    }
+}
 pub struct TextStylePaint {
     pub base: TextStylePaintBase,
     pub paints: ShapePaintContainer,
-    opacity_paths: BTreeMap<Opacity, ShapePaintPath>,
+    opacity_paths: OpacityPaths,
     paint_pool: Vec<Box<dyn RenderPaint>>,
     path: ShapePaintPath,
     has_contents: bool,
@@ -39,7 +81,7 @@ impl TextStylePaint {
         Self {
             base: TextStylePaintBase::default(),
             paints: ShapePaintContainer::default(),
-            opacity_paths: BTreeMap::new(),
+            opacity_paths: OpacityPaths::default(),
             paint_pool: Vec::new(),
             path: ShapePaintPath::default(),
             has_contents: false,
@@ -63,8 +105,7 @@ impl TextStylePaint {
         if opacity > 0.0 {
             self.path.add_path_clockwise(raw, None);
             self.opacity_paths
-                .entry(Opacity(opacity))
-                .or_default()
+                .entry_or_default(Opacity(opacity))
                 .add_path_clockwise(raw, None);
         }
         !had
@@ -86,7 +127,7 @@ impl TextStylePaint {
         };
         // Every opacity drawn at full: no pooled paint needs the paint's own
         // applyTo, so a plain paint can draw from its cells.
-        let only_full_opacity = self.opacity_paths.keys().all(|opacity| opacity.0 == 1.0);
+        let only_full_opacity = self.opacity_paths.all_opaque();
         // The paint list can't change while this style is borrowed.
         let paints = self.paints.cells().paints();
         for paint in paints.iter() {
@@ -100,7 +141,7 @@ impl TextStylePaint {
                     continue;
                 }
                 paint.cells.apply_blend_mode(blend, additive_amount);
-                if let Some(path) = self.opacity_paths.get_mut(&Opacity(1.0)) {
+                if let Some(path) = self.opacity_paths.get_mut(Opacity(1.0)) {
                     let handle = &paint.handle;
                     // The glyph path's own fill rule: no paint fill rule.
                     paint.cells.draw_plain(renderer, path, *world, true, None, &|| {
@@ -142,7 +183,7 @@ impl TextStylePaint {
                 }
                 let fill_rule = paint.fill_rule();
                 paint.shape_paint_mut().blend_mode(blend, additive_amount);
-                if let Some(path) = self.opacity_paths.get_mut(&Opacity(1.0)) {
+                if let Some(path) = self.opacity_paths.get_mut(Opacity(1.0)) {
                     paint.shape_paint_mut().draw_with_active_container(
                         renderer,
                         path,
@@ -167,7 +208,7 @@ impl TextStylePaint {
                     }
                 }
                 let mut index = 0;
-                for (opacity, path) in &mut self.opacity_paths {
+                for (opacity, path) in self.opacity_paths.iter_mut() {
                     if opacity.0 == 1.0 {
                         continue;
                     }

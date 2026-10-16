@@ -668,3 +668,45 @@ fn css_fit_content_participant_baseline_origin_publishes_height() {
         "{after:?} != {expected}"
     );
 }
+
+#[test]
+fn css_fit_content_fallback_font_keeps_the_full_offer() {
+    use crate::source::text_engine::{Font, FontRef, fallback_calls, with_host_fallback_proc};
+    thread_local! {
+        static FONT: std::cell::RefCell<Option<FontRef>> = const { std::cell::RefCell::new(None) };
+    }
+    fn pick(missing: u32, index: u32, _: &dyn Font) -> Option<FontRef> {
+        (index == 0 && missing == 0x3297)
+            .then(|| FONT.with(|slot| slot.borrow().clone()))
+            .flatten()
+    }
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            FONT.with(|slot| slot.replace(None));
+        }
+    }
+    let root = std::path::PathBuf::from(std::env::var_os("RIVE_RUNTIME_DIR").unwrap());
+    let primary = HbFont::decode(&std::fs::read(root.join(
+        "tests/unit_tests/assets/fonts/Inter_28pt-Bold.ttf",
+    )).unwrap()).unwrap();
+    let fallback = HbFont::decode(&std::fs::read(root.join(
+        "tests/unit_tests/assets/TwemojiMozilla.subset.ttf",
+    )).unwrap()).unwrap();
+    // U+3297 is a color glyph in the pinned emoji subset, absent from Inter.
+    assert!(!primary.has_glyph(0x3297));
+    assert!(fallback.has_glyph(0x3297));
+    FONT.with(|slot| slot.replace(Some(fallback)));
+    let _restore = Restore;
+    with_host_fallback_proc(pick, || {
+        for participant in [false, true] {
+            let f = Fixture::new_host("Cross-plane ㊗ experience is active", 338.0, false, participant);
+            let before = fallback_calls();
+            assert!(natural_size(&f).x > 338.0);
+            assert!(fallback_calls() > before, "the title must exercise fallback shaping");
+            // The widest word is experience, 145.4414px, and max-content
+            // exceeds 338px. CSS min(max-content, max(min-content, 338)) = 338.
+            assert_width(&f, 338.0);
+        }
+    });
+}

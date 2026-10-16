@@ -41,6 +41,14 @@ impl GroupItemCells {
     /// The converter, unless it may not advance. A converter that may not
     /// advance has DataConverter's advance, which does nothing.
     pub(crate) fn advancing_converter(&self) -> Option<CoreHandle> {
+        // A cached answer was given for the current converter (changing it
+        // forgets the answer), so a known non-advancing converter needs no
+        // handle.
+        match self.may_advance.get() {
+            Some(false) => return None,
+            Some(true) => return self.converter(),
+            None => {}
+        }
         let converter = self.converter()?;
         let may_advance = self.may_advance.get().unwrap_or_else(|| {
             let may_advance = converter

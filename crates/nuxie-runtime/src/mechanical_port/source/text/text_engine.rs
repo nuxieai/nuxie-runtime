@@ -263,7 +263,7 @@ pub struct ColorGlyphLayer {
     pub start_angle: f32,
     pub end_angle: f32,
     pub radial_transform: crate::mechanical_port::source::math::mat2d::Mat2D,
-    pub image_bytes: Vec<u8>,
+    pub image_bytes: Arc<[u8]>,
     pub image_width: u32,
     pub image_height: u32,
     pub image_bearing_x: f32,
@@ -289,7 +289,7 @@ impl Default for ColorGlyphLayer {
             start_angle: 0.0,
             end_angle: 0.0,
             radial_transform: crate::mechanical_port::source::math::mat2d::Mat2D::default(),
-            image_bytes: Vec::new(),
+            image_bytes: Arc::from([]),
             image_width: 0,
             image_height: 0,
             image_bearing_x: 0.0,
@@ -372,15 +372,40 @@ pub trait Font: Any + Send + Sync {
         false
     }
 
-    /// Additive host picture decision; native fonts retain their ordinary query.
-    fn is_color_glyph_with_text(&self, glyph: GlyphId, _cluster: &[Unichar]) -> bool {
-        self.is_color_glyph(glyph)
+    /// Cluster-aware native/host colour query for the logical cluster leader.
+    /// Use GlyphRun::glyph_render_kind when querying a shaped glyph, so a
+    /// follower cannot request a second picture. Glyph-only queries stay native.
+    fn is_color_glyph_with_text(&self, glyph: GlyphId, cluster: &[Unichar]) -> bool {
+        self.is_color_glyph(glyph) || self.host_picture_layer(glyph, cluster).is_some()
     }
 
-    /// Whether an already-resolved glyph uses the additive host picture.
-    /// Does not ask the host or change ordinary native glyph decisions.
-    fn has_host_picture(&self, _glyph: GlyphId) -> bool {
-        false
+    /// Resolve the additive host answer for this exact glyph and cluster.
+    /// Native colour glyphs and glyph zero never ask the host.
+    fn host_picture_layer(
+        &self,
+        _glyph: GlyphId,
+        _cluster: &[Unichar],
+    ) -> Option<Arc<ColorGlyphLayer>> {
+        None
+    }
+
+    fn get_color_layers_with_text(
+        &self,
+        glyph: GlyphId,
+        cluster: &[Unichar],
+        out: &mut Vec<ColorGlyphLayer>,
+        foreground: ColorInt,
+    ) -> usize {
+        let count = self.get_color_layers(glyph, out, foreground);
+        if count != 0 {
+            return count;
+        }
+        if let Some(layer) = self.host_picture_layer(glyph, cluster) {
+            out.push((*layer).clone());
+            1
+        } else {
+            0
+        }
     }
 
     fn get_color_layers(
@@ -577,6 +602,13 @@ pub struct TextRun {
     pub level: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GlyphRenderKind {
+    Outline,
+    Color,
+    Suppressed,
+}
+
 #[derive(Clone)]
 pub struct GlyphRun {
     pub font: Option<FontRef>,
@@ -586,7 +618,10 @@ pub struct GlyphRun {
     pub glyphs: Vec<GlyphId>,
     pub text_indices: Vec<u32>,
     /// Retained only for host-picture fonts, before fallback/ellipsis slicing.
-    pub cluster_texts: Vec<Vec<Unichar>>,
+    pub cluster_texts: Vec<Arc<[Unichar]>>,
+    /// Original logical leader, retained when fallback/ellipsis slices a run.
+    pub cluster_leaders: Vec<GlyphId>,
+    pub cluster_leader_flags: Vec<bool>,
     pub advances: Vec<f32>,
     pub xpos: Vec<f32>,
     pub offsets: Vec<Vec2D>,
@@ -612,6 +647,8 @@ impl GlyphRun {
             glyphs: vec![0; glyph_count],
             text_indices: vec![0; glyph_count],
             cluster_texts: Vec::new(),
+            cluster_leaders: Vec::new(),
+            cluster_leader_flags: Vec::new(),
             advances: vec![0.0; glyph_count],
             xpos: vec![0.0; glyph_count + 1],
             offsets: vec![Vec2D::default(); glyph_count],
@@ -637,6 +674,8 @@ impl GlyphRun {
             glyphs,
             text_indices,
             cluster_texts: Vec::new(),
+            cluster_leaders: Vec::new(),
+            cluster_leader_flags: Vec::new(),
             advances,
             xpos,
             offsets,
@@ -650,7 +689,30 @@ impl GlyphRun {
     pub fn cluster_text(&self, glyph_index: usize) -> &[Unichar] {
         self.cluster_texts
             .get(glyph_index)
-            .map_or(&[], Vec::as_slice)
+            .map_or(&[], AsRef::as_ref)
+    }
+
+    /// A host picture replaces all glyphs in its cluster from this font.
+    /// Other glyphs keep their original shaping, advances and metrics.
+    pub fn glyph_render_kind(&self, index: usize) -> GlyphRenderKind {
+        let font = self.font.as_ref().expect("shaped run retains its font");
+        if let Some(&leader) = self.cluster_leaders.get(index) {
+            if font
+                .host_picture_layer(leader, self.cluster_text(index))
+                .is_some()
+            {
+                return if self.cluster_leader_flags[index] {
+                    GlyphRenderKind::Color
+                } else {
+                    GlyphRenderKind::Suppressed
+                };
+            }
+        }
+        if font.is_color_glyph(self.glyphs[index]) {
+            GlyphRenderKind::Color
+        } else {
+            GlyphRenderKind::Outline
+        }
     }
 
     pub fn dir(&self) -> TextDirection {

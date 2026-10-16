@@ -113,8 +113,39 @@ pub fn draw_color_glyph_layer(
     renderer.restore();
 }
 
-pub(crate) type ColorGlyphImageCache =
-    Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>;
+pub(crate) struct ColorGlyphImageCacheEntry {
+    pub(crate) font: FontRef,
+    pub(crate) glyph_id: u16,
+    pub(crate) cluster_text: Vec<u32>,
+    images: Vec<(Option<Rc<dyn nuxie_render_api::RenderImage>>, Mat2D)>,
+}
+impl ColorGlyphImageCacheEntry {
+    pub(crate) fn matches(&self, font: &FontRef, glyph_id: u16, cluster: &[u32]) -> bool {
+        std::sync::Arc::ptr_eq(&self.font, font)
+            && self.glyph_id == glyph_id
+            && self.cluster_text == cluster
+    }
+}
+pub(crate) type ColorGlyphImageCache = Vec<ColorGlyphImageCacheEntry>;
+
+fn draw_cached_images(
+    renderer: &mut Renderer,
+    images: &[(Option<Rc<dyn nuxie_render_api::RenderImage>>, Mat2D)],
+    opacity: f32,
+) {
+    for (image, placement) in images {
+        let Some(image) = image else { continue };
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(*placement.values()));
+        renderer.draw_image(
+            Some(image.as_ref()),
+            ImageSampler::LINEAR_CLAMP,
+            BlendMode::SrcOver,
+            opacity,
+        );
+        renderer.restore();
+    }
+}
 
 // Shared by Text, RawText and the additive text-field color-glyph route.
 #[allow(clippy::too_many_arguments)]
@@ -124,61 +155,94 @@ pub(crate) fn draw_color_glyph(
     image_cache: &mut ColorGlyphImageCache,
     font: FontRef,
     glyph_id: u16,
+    cluster: &[u32],
     transform: Mat2D,
     foreground_color: ColorInt,
     opacity: f32,
     world_transform: Mat2D,
 ) {
-    let mut layers = Vec::new();
-    if font.get_color_layers(glyph_id, &mut layers, foreground_color) == 0 {
+    draw_color_glyph_with_factory(
+        renderer,
+        || factory.clone(),
+        image_cache,
+        font,
+        glyph_id,
+        cluster,
+        transform,
+        foreground_color,
+        opacity,
+        world_transform,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_color_glyph_with_factory(
+    renderer: &mut Renderer,
+    factory: impl FnOnce() -> crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    image_cache: &mut ColorGlyphImageCache,
+    font: FontRef,
+    glyph_id: u16,
+    cluster: &[u32],
+    transform: Mat2D,
+    foreground_color: ColorInt,
+    opacity: f32,
+    world_transform: Mat2D,
+) {
+    if let Some(cached) = image_cache
+        .iter()
+        .find(|entry| entry.matches(&font, glyph_id, cluster))
+    {
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(
+            *(world_transform * transform).values(),
+        ));
+        draw_cached_images(renderer, &cached.images, opacity);
+        renderer.restore();
         return;
     }
+    let mut layers = Vec::new();
+    if font.get_color_layers_with_text(glyph_id, cluster, &mut layers, foreground_color) == 0 {
+        return;
+    }
+    // A glyph with no drawable layers needs no factory (for example CBDT format 19).
+    let factory = factory();
     renderer.save();
     renderer.transform(nuxie_render_api::Mat2D(
         *(world_transform * transform).values(),
     ));
+    let only_images = layers.iter().all(|layer| {
+        layer.paint_type == crate::mechanical_port::source::text_engine::ColorGlyphPaintType::Image
+    });
+    let mut images = Vec::new();
     for mut layer in layers {
         if layer.paint_type
             == crate::mechanical_port::source::text_engine::ColorGlyphPaintType::Image
         {
-            let image = if let Some((_, _, image)) =
-                image_cache.iter().find(|(cached_font, cached_glyph, _)| {
-                    std::sync::Arc::ptr_eq(cached_font, &font) && *cached_glyph == glyph_id
-                }) {
-                image.clone()
-            } else {
-                let image = factory
-                    .with_factory_mut(|factory| factory.decode_image(&layer.image_bytes))
-                    .ok()
-                    .map(Rc::<dyn nuxie_render_api::RenderImage>::from);
-                image_cache.push((font.clone(), glyph_id, image.clone()));
-                image
-            };
-            let Some(image) = image else {
-                continue;
-            };
-            renderer.save();
-            renderer.transform(nuxie_render_api::Mat2D(
-                *Mat2D::new(
-                    layer.image_extent_x / layer.image_width as f32,
-                    0.0,
-                    0.0,
-                    layer.image_extent_y / layer.image_height as f32,
-                    layer.image_bearing_x,
-                    layer.image_bearing_y,
-                )
-                .values(),
-            ));
-            renderer.draw_image(
-                Some(image.as_ref()),
-                ImageSampler::LINEAR_CLAMP,
-                BlendMode::SrcOver,
-                opacity,
+            let image = factory
+                .with_factory_mut(|factory| factory.decode_image(&layer.image_bytes))
+                .ok()
+                .map(Rc::<dyn nuxie_render_api::RenderImage>::from);
+            let placement = Mat2D::new(
+                layer.image_extent_x / layer.image_width as f32,
+                0.0,
+                0.0,
+                layer.image_extent_y / layer.image_height as f32,
+                layer.image_bearing_x,
+                layer.image_bearing_y,
             );
-            renderer.restore();
+            images.push((image, placement));
+            draw_cached_images(renderer, &images[images.len() - 1..], opacity);
         } else {
             draw_color_glyph_layer(renderer, &factory, &mut layer, opacity);
         }
+    }
+    if only_images {
+        image_cache.push(ColorGlyphImageCacheEntry {
+            font,
+            glyph_id,
+            cluster_text: cluster.to_vec(),
+            images,
+        });
     }
     renderer.restore();
 }
@@ -516,6 +580,7 @@ enum TextDrawCommand {
     ColorGlyph {
         font: FontRef,
         glyph_id: u16,
+        cluster_text: std::sync::Arc<[u32]>,
         transform: Mat2D,
         foreground_color: ColorInt,
         opacity: f32,
@@ -1287,7 +1352,6 @@ impl Text {
             self.styled_text = styled;
             self.ordered_lines.clear();
             self.ellipsis_run = GlyphRun::default();
-            self.emoji_image_cache.clear();
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::PAINT) {
             self.build_render_styles();
@@ -1638,6 +1702,7 @@ impl Text {
         self.clear_render_styles();
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
+            self.emoji_image_cache.clear();
             return;
         }
 
@@ -1781,12 +1846,8 @@ impl Text {
                         .with(TextValueRun::style)
                         .flatten()
                         .expect("TextValueRun style");
-                    if run
-                        .font
-                        .as_ref()
-                        .expect("shaped text retains its font")
-                        .is_color_glyph_with_text(glyph_id, run.cluster_text(index))
-                    {
+                    match run.glyph_render_kind(index) {
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Color => {
                         let foreground_color = style
                             .with_downcast::<TextStylePaint, _>(TextStylePaint::foreground_color)
                             .unwrap_or(0xff000000);
@@ -1797,11 +1858,13 @@ impl Text {
                                 .expect("shaped text retains its font")
                                 .clone(),
                             glyph_id,
+                            cluster_text: run.cluster_text(index).into(),
                             transform: path_transform,
                             foreground_color,
                             opacity,
                         });
-                    } else {
+                        }
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Outline => {
                         let path = run
                             .font
                             .as_ref()
@@ -1821,6 +1884,8 @@ impl Text {
                             self.draw_commands
                                 .push(TextDrawCommand::Style(style.clone()));
                         }
+                        }
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {}
                     }
                     let background = style
                         .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
@@ -1903,6 +1968,12 @@ impl Text {
                 y_offset += self.bounds.height() - info.total_height * scale;
             }
         }
+        self.emoji_image_cache.retain(|entry| {
+            self.draw_commands.iter().any(|command| {
+                matches!(command, TextDrawCommand::ColorGlyph { font, glyph_id, cluster_text, .. }
+                if entry.matches(font, *glyph_id, cluster_text))
+            })
+        });
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
         // A solve that already measured this shape needs no second solve.
@@ -1970,6 +2041,7 @@ impl Text {
                 TextDrawCommand::ColorGlyph {
                     font,
                     glyph_id,
+                    cluster_text,
                     transform,
                     foreground_color,
                     opacity,
@@ -1977,6 +2049,7 @@ impl Text {
                     renderer,
                     font.clone(),
                     *glyph_id,
+                    &cluster_text.clone(),
                     *transform,
                     *foreground_color,
                     *opacity,
@@ -1994,22 +2067,24 @@ impl Text {
         renderer: &mut Renderer,
         font: FontRef,
         glyph_id: u16,
+        cluster: &[u32],
         transform: Mat2D,
         foreground_color: ColorInt,
         opacity: f32,
         world_transform: Mat2D,
     ) {
-        let factory = self
-            .base
-            .with_artboard(|artboard| artboard.factory())
-            .flatten()
-            .expect("Text requires its Artboard renderer factory");
-        draw_color_glyph(
+        let base = &self.base;
+        draw_color_glyph_with_factory(
             renderer,
-            &factory,
+            || {
+                base.with_artboard(|artboard| artboard.factory())
+                    .flatten()
+                    .expect("Text requires its Artboard renderer factory")
+            },
             &mut self.emoji_image_cache,
             font,
             glyph_id,
+            cluster,
             transform,
             foreground_color,
             opacity,
@@ -2692,5 +2767,188 @@ mod settled_text_value_tests {
             .extend([runtime_run("first"), runtime_run(""), runtime_run("second")]);
 
         assert_eq!(text.settled_text_value(), "firstsecond");
+    }
+}
+
+#[cfg(test)]
+mod color_image_cache_tests {
+    use super::*;
+    use crate::mechanical_port::source::text_engine::{
+        Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, LineMetrics,
+    };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    struct LayerCountingFont {
+        base: FontBase,
+        extractions: AtomicUsize,
+        image: Option<ColorGlyphLayer>,
+    }
+    impl LayerCountingFont {
+        fn new(image: Option<ColorGlyphLayer>) -> Arc<Self> {
+            Arc::new(Self {
+                base: FontBase::new(LineMetrics {
+                    ascent: -1.0,
+                    descent: 0.0,
+                    cap_height: 1.0,
+                    x_height: 1.0,
+                }),
+                extractions: AtomicUsize::new(0),
+                image,
+            })
+        }
+    }
+    impl Font for LayerCountingFont {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn base(&self) -> &FontBase {
+            &self.base
+        }
+        fn get_axis_count(&self) -> u16 {
+            0
+        }
+        fn get_axis(&self, _: u16) -> Axis {
+            unreachable!()
+        }
+        fn get_axis_value(&self, _: u32) -> f32 {
+            0.0
+        }
+        fn get_weight(&self) -> u16 {
+            400
+        }
+        fn is_italic(&self) -> bool {
+            false
+        }
+        fn features(&self) -> Vec<u32> {
+            Vec::new()
+        }
+        fn has_glyph(&self, _: u32) -> bool {
+            true
+        }
+        fn codepoints(&self) -> Vec<u32> {
+            vec![65]
+        }
+        fn get_feature_value(&self, _: u32) -> u32 {
+            0
+        }
+        fn with_options(&self, _: &[Coord], _: &[Feature]) -> FontRef {
+            unreachable!()
+        }
+        fn get_path(&self, _: u16) -> RawPath {
+            RawPath::default()
+        }
+        fn on_shape_text(&self, _: &[u32], _: &[TextRun], _: i32) -> Vec<Paragraph> {
+            unreachable!()
+        }
+        fn get_color_layers(&self, _: u16, out: &mut Vec<ColorGlyphLayer>, _: ColorInt) -> usize {
+            self.extractions.fetch_add(1, Ordering::SeqCst);
+            if let Some(image) = &self.image {
+                out.push(image.clone());
+                1
+            } else {
+                0
+            }
+        }
+    }
+
+    #[test]
+    fn cached_image_draw_skips_layer_extraction_and_factory_lookup() {
+        let png = [
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+            8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 248, 15, 4,
+            0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+        ];
+        let font = LayerCountingFont::new(Some(ColorGlyphLayer {
+            paint_type: ColorGlyphPaintType::Image,
+            image_bytes: Arc::from(png),
+            image_width: 1,
+            image_height: 1,
+            image_bearing_x: 0.125,
+            image_bearing_y: -0.875,
+            image_extent_x: 1.0,
+            image_extent_y: 1.0,
+            ..Default::default()
+        }));
+        let recording = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = recording.make_renderer();
+        let mut factory = nuxie_render_api::PersistentFactory::new(recording);
+        let handle = crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let mut cache = Vec::new();
+        draw_color_glyph(
+            &mut renderer,
+            &handle,
+            &mut cache,
+            font.clone(),
+            1,
+            &[65],
+            Mat2D::default(),
+            0xff000000,
+            1.0,
+            Mat2D::default(),
+        );
+        assert_eq!(font.extractions.load(Ordering::SeqCst), 1);
+        draw_color_glyph_with_factory(
+            &mut renderer,
+            || panic!("cached image needs no factory"),
+            &mut cache,
+            font.clone(),
+            1,
+            &[65],
+            Mat2D::default(),
+            0xff000000,
+            1.0,
+            Mat2D::default(),
+        );
+        assert_eq!(font.extractions.load(Ordering::SeqCst), 1);
+        // A different cluster sharing this glyph needs its own decoded answer.
+        draw_color_glyph(
+            &mut renderer,
+            &handle,
+            &mut cache,
+            font.clone(),
+            1,
+            &[66],
+            Mat2D::default(),
+            0xff000000,
+            1.0,
+            Mat2D::default(),
+        );
+        assert_eq!(font.extractions.load(Ordering::SeqCst), 2);
+        let stream = factory.borrow().stream();
+        assert_eq!(
+            stream
+                .lines()
+                .filter(|line| line.starts_with("decodeImage "))
+                .count(),
+            2
+        );
+        assert_eq!(
+            stream
+                .lines()
+                .filter(|line| line.starts_with("drawImage "))
+                .count(),
+            3
+        );
+    }
+
+    #[test]
+    fn text_empty_color_layers_return_before_artboard_factory_lookup() {
+        let font = LayerCountingFont::new(None);
+        let mut text = Text::default(); // Deliberately unattached: no renderer factory.
+        let mut renderer = nuxie_render_api::NullRenderer::new();
+        text.draw_color_glyph(
+            &mut renderer,
+            font.clone(),
+            1,
+            &[65],
+            Mat2D::default(),
+            0xff000000,
+            1.0,
+            Mat2D::default(),
+        );
+        assert_eq!(font.extractions.load(Ordering::SeqCst), 1);
     }
 }

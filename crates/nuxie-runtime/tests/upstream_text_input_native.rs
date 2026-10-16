@@ -1851,11 +1851,95 @@ fn text_input_delayed_click_without_advancing_places_a_caret() {
     );
 }
 
+thread_local! {
+    static FIELD_COLOR_FALLBACK: std::cell::RefCell<Option<nuxie_runtime::source::text_engine::FontRef>> = const { std::cell::RefCell::new(None) };
+}
+
+fn with_field_color_fallback<R>(
+    font: nuxie_runtime::source::text_engine::FontRef,
+    work: impl FnOnce() -> R,
+) -> R {
+    use nuxie_runtime::source::text_engine::{Font, FontRef, with_host_fallback_proc};
+    fn pick(_: u32, index: u32, _: &dyn Font) -> Option<FontRef> {
+        (index == 0)
+            .then(|| FIELD_COLOR_FALLBACK.with(|font| font.borrow().clone()))
+            .flatten()
+    }
+    struct Restore(Option<FontRef>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            FIELD_COLOR_FALLBACK.with(|font| *font.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(FIELD_COLOR_FALLBACK.with(|slot| slot.replace(Some(font))));
+    with_host_fallback_proc(pick, work)
+}
+
+// Follow renderer save/restore semantics so every outline and every color-layer
+// path is checked, including the layers' nested transform saves.
+fn path_clip_states(stream: &str) -> Vec<bool> {
+    let mut clipped = false;
+    let mut stack = Vec::new();
+    let mut draws = Vec::new();
+    for line in stream.lines() {
+        if line == "save" {
+            stack.push(clipped);
+        } else if line == "restore" {
+            clipped = stack.pop().expect("balanced renderer saves");
+        } else if line.starts_with("clipPath ") {
+            clipped = true;
+        } else if line.starts_with("drawPath ") {
+            draws.push(clipped);
+        }
+    }
+    assert!(stack.is_empty(), "{stream}");
+    draws
+}
+
+fn field_draw_colors(stream: &str) -> Vec<String> {
+    stream
+        .lines()
+        .filter(|line| line.starts_with("drawPath "))
+        .map(|line| {
+            line.split("color=")
+                .nth(1)
+                .unwrap()
+                .split(',')
+                .next()
+                .unwrap()
+                .to_owned()
+        })
+        .collect()
+}
+
+fn assert_recorded_transform(stream: &str, expected: [f32; 6]) {
+    assert!(
+        stream
+            .lines()
+            .filter_map(|line| {
+                let matrix = line.strip_prefix("transform matrix=[")?.strip_suffix(']')?;
+                Some(
+                    matrix
+                        .split(',')
+                        .map(|value| value.parse::<f32>().unwrap())
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .any(|actual| actual.len() == 6
+                && actual
+                    .iter()
+                    .zip(expected)
+                    .all(|(a, b)| (a - b).abs() < 0.001)),
+        "missing transform {expected:?}: {stream}"
+    );
+}
+
 #[test]
-fn imported_text_and_selected_draw_routes_keep_color_glyphs_inside_world_clip() {
+fn imported_field_outlines_and_colors_share_unclipped_world_and_selection_routes() {
     use nuxie_runtime::source::{
         generated::text::text_input_selected_text_base::TextInputSelectedTextBase,
         math::mat2d::Mat2D,
+        shapes::paint::{fill::Fill, solid_color::SolidColor},
         text::{
             font_hb::HbFont, text_input_selected_text::TextInputSelectedText,
             text_input_text::TextInputText,
@@ -1875,13 +1959,19 @@ fn imported_text_and_selected_draw_routes_keep_color_glyphs_inside_world_clip() 
     .unwrap();
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    let emoji = HbFont::decode(
-        &std::fs::read(
-            PathBuf::from(root).join("tests/unit_tests/assets/NotoColorEmojiCOLRv1.subset.ttf"),
+    let font = |name| {
+        HbFont::decode(
+            &std::fs::read(
+                PathBuf::from(&root)
+                    .join("tests/unit_tests/assets")
+                    .join(name),
+            )
+            .unwrap(),
         )
-        .unwrap(),
-    )
-    .unwrap();
+        .unwrap()
+    };
+    let emoji = font("NotoColorEmojiCOLRv1.subset.ttf");
+    let latin = font("RobotoFlex.ttf");
     let factory = with_input(&input, |input| {
         input
             .base
@@ -1889,91 +1979,212 @@ fn imported_text_and_selected_draw_routes_keep_color_glyphs_inside_world_clip() 
             .flatten()
     })
     .unwrap();
-    with_input(&input, |input| {
-        input
-            .base
-            .set_world_transform(Mat2D::new(2.0, 0.0, 0.0, 3.0, 17.0, 29.0));
-        let raw = input.raw_text_input();
-        raw.set_font(Some(emoji));
-        raw.set_text("😀".into());
-        raw.set_sizing(TextSizing::Fixed);
-        raw.set_max_width(100.0);
-        raw.set_max_height(100.0);
-        raw.set_overflow(TextOverflow::Clipped);
-        raw.update(&factory);
-        assert!(raw.text_path().empty());
-    });
-    let mut recording = RecordingFactory::new();
-    let mut renderer = recording.make_renderer();
-    text.with_downcast_mut::<TextInputText, _>(|text| text.draw(&mut renderer));
-    let normal = recording.stream();
-    assert!(
-        normal
-            .lines()
-            .filter(|line| line.starts_with("drawPath "))
-            .count()
-            > 1,
-        "{normal}"
-    );
-    let world = normal.find("transform matrix=[2,0,0,3,17,29]").unwrap();
-    let clip = normal.find("clipPath ").unwrap();
-    let glyph = normal[clip..].find("drawPath ").unwrap() + clip;
-    assert!(world < clip && clip < glyph, "{normal}");
+    with_field_color_fallback(emoji, || {
+        let glyph_transform = with_input(&input, |input| {
+            input
+                .base
+                .set_world_transform(Mat2D::new(2.0, 0.0, 0.0, 3.0, 17.0, 29.0));
+            let raw = input.raw_text_input();
+            raw.set_font(Some(latin));
+            raw.set_font_size(64.0);
+            raw.set_text("A😀B".into());
+            raw.set_sizing(TextSizing::Fixed);
+            raw.set_max_width(1.0);
+            raw.set_max_height(1000.0);
+            raw.set_overflow(TextOverflow::Clipped);
+            raw.update(&factory);
+            assert!(
+                !raw.text_path().empty(),
+                "the fixture must contain real Latin outlines"
+            );
+            assert!(
+                raw.text_path().raw_path().bounds().right() > 1.0,
+                "Latin must overflow the fixed field"
+            );
+            let shape = raw.shape();
+            // Find the emoji in the actual wrapped line, with the same layout
+            // equation used by the old outline route.
+            let y = shape.vertical_offset();
+            let mut result = None;
+            for (line_index, line) in shape.paragraph_lines()[0].iter().enumerate() {
+                let mut x = line.start_x;
+                for (run, index) in &shape.ordered_lines()[line_index] {
+                    let index = index as usize;
+                    if run.text_indices[index] == 1 {
+                        result = Some([
+                            2.0 * run.size,
+                            0.0,
+                            0.0,
+                            3.0 * run.size,
+                            17.0 + 2.0 * (x + run.offsets[index].x),
+                            29.0 + 3.0 * (y + line.baseline + run.offsets[index].y),
+                        ]);
+                    }
+                    x += run.advances[index];
+                }
+            }
+            result.expect("the shaped fixture contains the emoji")
+        });
+        let mut recording = RecordingFactory::new();
+        let mut renderer = recording.make_renderer();
+        text.with_downcast_mut::<TextInputText, _>(|text| text.draw(&mut renderer));
+        let normal = recording.stream();
+        let colors = field_draw_colors(&normal);
+        assert!(colors.len() > 2, "outline plus color layers: {normal}");
+        assert!(
+            colors[1..].iter().any(|color| color != &colors[0]),
+            "native emoji colors: {normal}"
+        );
+        assert!(
+            path_clip_states(&normal).iter().all(|clipped| !clipped),
+            "{normal}"
+        );
+        assert_recorded_transform(&normal, [2.0, 0.0, 0.0, 3.0, 17.0, 29.0]);
+        assert_recorded_transform(&normal, glyph_transform);
 
-    with_input(&input, |input| {
-        let raw = input.raw_text_input();
-        raw.set_separate_selection_text(true);
-        raw.set_cursor(Cursor::new(
-            CursorPosition::unresolved(0),
-            CursorPosition::unresolved(1),
-        ));
-        raw.update(&factory);
-        assert!(raw.text_path().empty());
-        assert!(raw.selected_text_path().empty());
+        with_input(&input, |input| {
+            let raw = input.raw_text_input();
+            raw.set_separate_selection_text(true);
+            raw.set_cursor(Cursor::new(
+                CursorPosition::unresolved(0),
+                CursorPosition::unresolved(3),
+            ));
+            raw.update(&factory);
+            assert!(raw.text_path().empty());
+            assert!(
+                !raw.selected_text_path().empty(),
+                "selected Latin still has outlines"
+            );
+        });
+        recording.clear();
+        text.with_downcast_mut::<TextInputText, _>(|text| text.draw(&mut renderer));
+        assert_eq!(
+            field_draw_colors(&recording.stream()).len(),
+            1,
+            "normal owner draws no selected emoji"
+        );
+        recording.clear();
+        // Mutator setters walk their authored parents. Release the drawable
+        // borrow before changing the foreground, as a normal property edit does.
+        let foregrounds = text
+            .with_downcast::<TextInputText, _>(|text| {
+                text.base
+                    .base
+                    .paints
+                    .shape_paints()
+                    .iter()
+                    .filter_map(|paint| {
+                        paint
+                            .with_downcast::<Fill, _>(|fill| fill.base.paint())
+                            .flatten()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap();
+        for foreground in foregrounds {
+            foreground.with_downcast_mut::<SolidColor, _>(|color| {
+                color.set_color_value(0xffabcdefu32 as i32);
+            });
+        }
+        text.with_downcast_mut::<TextInputText, _>(|text| {
+            let mut selected = TextInputSelectedText {
+                base: TextInputSelectedTextBase {
+                    base: std::mem::take(&mut text.base.base),
+                },
+            };
+            selected.draw(&mut renderer);
+            text.base.base = selected.base.base;
+        });
+        let selected = recording.stream();
+        let selected_colors = field_draw_colors(&selected);
+        assert_eq!(selected_colors[0], "0xffabcdef");
+        assert_ne!(colors[0], selected_colors[0]);
+        assert_eq!(
+            colors[1..],
+            selected_colors[1..],
+            "selection preserves native colors and layer order"
+        );
+        assert!(
+            path_clip_states(&selected).iter().all(|clipped| !clipped),
+            "{selected}"
+        );
+        assert_recorded_transform(&selected, [2.0, 0.0, 0.0, 3.0, 17.0, 29.0]);
+        assert_recorded_transform(&selected, glyph_transform);
     });
-    recording.clear();
-    text.with_downcast_mut::<TextInputText, _>(|text| text.draw(&mut renderer));
-    let unselected = recording.stream();
-    assert!(
-        !unselected.contains("clipPath "),
-        "the normal drawable must not redraw selected emoji: {unselected}"
-    );
-    recording.clear();
-    text.with_downcast_mut::<TextInputText, _>(|text| {
-        // Exercise the selected owner's concrete draw entry point with the same
-        // imported drawable base (paints, parent, factory and world transform).
-        let mut selected = TextInputSelectedText {
-            base: TextInputSelectedTextBase {
-                base: std::mem::take(&mut text.base.base),
-            },
-        };
-        selected.draw(&mut renderer);
-        text.base.base = selected.base.base;
-    });
-    let selected = recording.stream();
-    assert!(
-        selected.contains("transform matrix=[2,0,0,3,17,29]"),
-        "{selected}"
-    );
-    assert!(selected.contains("clipPath "), "{selected}");
-    // Color glyph layer traversal is identical before/after selection, even
-    // though the outline paint owner and selected outline path differ.
-    let colors = |stream: &str| {
-        stream
-            .lines()
-            .filter(|line| line.starts_with("drawPath "))
-            .filter_map(|line| line.split("color=").nth(1))
-            .map(|color| color.split(',').next().unwrap().to_owned())
-            .collect::<Vec<_>>()
+}
+
+#[test]
+fn direct_field_overflow_clip_covers_both_outlines_and_color_layers() {
+    use nuxie_runtime::source::{
+        math::mat2d::Mat2D,
+        text::{font_hb::HbFont, raw_text_input::RawTextInput},
+        text_engine::{TextOverflow, TextSizing},
     };
-    assert!(!colors(&normal).is_empty());
-    assert_eq!(colors(&normal), colors(&selected));
-    assert!(
-        selected
-            .lines()
-            .filter(|line| line.starts_with("drawPath "))
-            .count()
-            > 1,
-        "{selected}"
-    );
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let font = |name| {
+        HbFont::decode(
+            &std::fs::read(
+                PathBuf::from(&root)
+                    .join("tests/unit_tests/assets")
+                    .join(name),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    with_field_color_fallback(font("NotoColorEmojiCOLRv1.subset.ttf"), || {
+        let mut input = RawTextInput::new();
+        input.set_font(Some(font("RobotoFlex.ttf")));
+        input.set_font_size(64.0);
+        input.set_text("A😀B".into());
+        input.set_sizing(TextSizing::Fixed);
+        input.set_max_width(1.0);
+        input.set_max_height(1000.0);
+        input.set_overflow(TextOverflow::Clipped);
+        let recording = RecordingFactory::new();
+        let mut renderer = recording.make_renderer();
+        let mut recording_factory = PersistentFactory::new(recording);
+        let factory = RuntimeFactoryHandle::from_factory(&mut recording_factory).unwrap();
+        input.update(&factory);
+        assert!(!input.text_path().empty());
+        assert!(
+            input.text_path().raw_path().bounds().right() > 1.0,
+            "Latin must overflow the fixed field"
+        );
+        let mut outline = factory.with_factory_mut(|f| f.make_render_paint());
+        outline.color(0xff123456);
+        let mut selection = factory.with_factory_mut(|f| f.make_render_paint());
+        let mut cursor = factory.with_factory_mut(|f| f.make_render_paint());
+        input.draw(
+            &factory,
+            &mut renderer,
+            &Mat2D::default(),
+            outline.as_mut(),
+            selection.as_mut(),
+            cursor.as_mut(),
+        );
+        let stream = recording_factory.borrow().stream();
+        let colors = field_draw_colors(&stream);
+        assert!(colors.len() > 3, "{stream}");
+        assert_eq!(colors[0], "0xff123456", "outline precedes emoji layers");
+        assert!(
+            colors[1..colors.len() - 1]
+                .iter()
+                .any(|color| color != &colors[0] && color != "0xff000000"),
+            "emoji retains native color: {stream}"
+        );
+        assert!(
+            path_clip_states(&stream).iter().all(|clipped| *clipped),
+            "{stream}"
+        );
+        assert_eq!(
+            stream
+                .lines()
+                .filter(|line| line.starts_with("clipPath "))
+                .count(),
+            1,
+            "one shared overflow clip: {stream}"
+        );
+    });
 }

@@ -1118,9 +1118,13 @@ typedef void (*NuxFontPictureSink)(void*, const struct NuxFontPicture*);
  * possibly on any thread. get_path and get_picture may run on any thread,
  * concurrently; callbacks and context must be thread-safe, must not unwind,
  * and must not reenter the font API. At least one callback must be supplied.
- * get_picture is asked only when native colour drawing is unavailable, once
- * per glyph; an absent answer is also cached. Cluster code points are borrowed
- * for the call. Native COLR and readable PNG pictures take precedence.
+ * get_picture is asked only when native colour drawing is unavailable, for
+ * the first glyph in each cluster's shaping (logical) order. Glyph 0 is never
+ * requested. Cluster code points are borrowed for the call. Present and absent
+ * answers are cached by (glyph id, complete cluster text), per font variant;
+ * with_options variants have independent answer caches. When a picture is
+ * supplied, the same cluster's remaining glyphs from this font draw nothing.
+ * Native COLR and readable PNG pictures take precedence.
  * struct_size must cover the ABI-v4 prefix through release. get_picture is
  * optional and read only when struct_size covers it; future fields are ignored.
  */

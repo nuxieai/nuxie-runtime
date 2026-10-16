@@ -139,9 +139,47 @@ pub(crate) struct DataBindAdvanceCells {
     // may not advance answers advance with false and changes nothing.
     // Cleared whenever the converter changes.
     converter_may_advance: Cell<Option<bool>>,
+    // The gate epoch of the container listing this bind, bumped whenever an
+    // input above changes.
+    container_gate: std::cell::RefCell<Option<std::rc::Rc<Cell<u64>>>>,
 }
 
 impl DataBindAdvanceCells {
+    /// List these cells in a container whose gate epoch is `gate`.
+    pub(crate) fn attach(&self, gate: &std::rc::Rc<Cell<u64>>) {
+        *self.container_gate.borrow_mut() = Some(std::rc::Rc::clone(gate));
+    }
+
+    fn gate_changed(&self) {
+        if let Some(gate) = self.container_gate.borrow().as_ref() {
+            gate.set(gate.get().wrapping_add(1));
+        }
+    }
+
+    fn set_bound(&self, value: bool) {
+        if self.bound.replace(value) != value {
+            self.gate_changed();
+        }
+    }
+
+    fn set_collapsed(&self, value: bool) {
+        if self.collapsed.replace(value) != value {
+            self.gate_changed();
+        }
+    }
+
+    fn set_has_converter(&self, value: bool) {
+        if self.has_converter.replace(value) != value {
+            self.gate_changed();
+        }
+    }
+
+    fn set_converter_may_advance(&self, value: Option<bool>) {
+        if self.converter_may_advance.replace(value) != value {
+            self.gate_changed();
+        }
+    }
+
     /// DataBind::advance_handle's gate before it reaches the converter: a
     /// bound source, not collapsed, and a converter not known never to
     /// advance. A bind failing it answers false and changes nothing.
@@ -530,8 +568,7 @@ impl DataBind {
                     .as_data_bind()
                     .unwrap()
                     .advance_cells
-                    .converter_may_advance
-                    .set(Some(may_advance))
+                    .set_converter_may_advance(Some(may_advance))
             });
             if !may_advance {
                 return false;
@@ -562,7 +599,7 @@ impl DataBind {
         owner.with_mut(|owner| {
             let bind = owner.as_data_bind_mut().unwrap();
             bind.source = None;
-            bind.advance_cells.bound.set(false);
+            bind.advance_cells.set_bound(false);
             bind.unsubscribe_target();
         });
         if let Some(converter) = owner
@@ -661,12 +698,12 @@ impl DataBind {
             });
         }
         self.source = Some(value);
-        self.advance_cells.bound.set(true);
+        self.advance_cells.set_bound(true);
     }
 
     pub fn clear_source(&mut self) {
         let source = self.source.take();
-        self.advance_cells.bound.set(false);
+        self.advance_cells.set_bound(false);
         if let Some(source) = source
             && !self.binds_once()
             && let Some(bind) = self.handle()
@@ -1000,7 +1037,7 @@ impl DataBind {
             return None;
         }
         self.set_flag(COLLAPSED, collapsed);
-        self.advance_cells.collapsed.set(collapsed);
+        self.advance_cells.set_collapsed(collapsed);
         (!collapsed && self.dirt != 0)
             .then(|| self.container.clone())
             .flatten()
@@ -1139,8 +1176,8 @@ impl DataBind {
     }
 
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {
-        self.advance_cells.converter_may_advance.set(None);
-        self.advance_cells.has_converter.set(value.is_some());
+        self.advance_cells.set_converter_may_advance(None);
+        self.advance_cells.set_has_converter(value.is_some());
         self.converter = value;
     }
 

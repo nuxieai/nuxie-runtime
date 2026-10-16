@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Cell, Ref, RefCell},
     rc::{Rc, Weak},
 };
 
@@ -228,6 +228,13 @@ struct DataBindContainerState {
     data_binds: Vec<CoreHandle>,
     // Each bind's advance cells, in data_binds order.
     advance_cells: Vec<Rc<DataBindAdvanceCells>>,
+    // Bumped whenever a listed bind's advance gate inputs or this list
+    // change; the binds' cells share it.
+    gate_epoch: Rc<Cell<u64>>,
+    // The indices of binds whose advance gate was open at gate epoch
+    // `candidates_epoch`; every other bind's gate was closed then.
+    advance_candidates: Vec<u32>,
+    candidates_epoch: Option<u64>,
     dirty: Vec<CoreHandle>,
     queues: Sidecar<DataBindQueues>,
     data_context: Option<RuntimeDataContextHandle>,
@@ -415,7 +422,57 @@ impl DataBindContainer {
             return false;
         }
         let mut updated = false;
-        for index in 0..count {
+        // While no gate input or bind list changes, a bind whose gate was
+        // closed when the candidates were gathered would still be skipped:
+        // visit only the candidates. Once anything changes, the rest of the
+        // walk reads each gate as it reaches it.
+        let gate = Rc::clone(&self.0.borrow().gate_epoch);
+        let epoch = gate.get();
+        let candidates = {
+            let mut state = self.0.borrow_mut();
+            if state.candidates_epoch != Some(epoch) {
+                let open = state
+                    .advance_cells
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, cells)| cells.may_advance())
+                    .map(|(index, _)| index as u32)
+                    .collect();
+                state.advance_candidates = open;
+                state.candidates_epoch = Some(epoch);
+            }
+            // In use: a nested walk of this container gathers its own.
+            state.candidates_epoch = None;
+            std::mem::take(&mut state.advance_candidates)
+        };
+        let mut next = 0;
+        for &candidate in &candidates {
+            if gate.get() != epoch {
+                break;
+            }
+            let index = candidate as usize;
+            next = index + 1;
+            let bind = {
+                let state = self.0.borrow();
+                let Some(cells) = state.advance_cells.get(index) else {
+                    break;
+                };
+                if !cells.may_advance() {
+                    continue;
+                }
+                state.data_binds[index].clone()
+            };
+            updated |= DataBind::advance_handle(&bind, elapsed);
+        }
+        if gate.get() == epoch {
+            let mut state = self.0.borrow_mut();
+            if state.candidates_epoch.is_none() {
+                state.advance_candidates = candidates;
+                state.candidates_epoch = Some(epoch);
+            }
+            return updated;
+        }
+        for index in next..count {
             // Keep the retained source list in place. The handle clone only
             // extends this entry's lifetime while advance can call back into
             // the runtime; it is not a snapshot of the full object list. A
@@ -444,6 +501,7 @@ impl DataBindContainer {
         let mut index = 0;
         while index < state.data_binds.len() {
             if &state.data_binds[index] == bind {
+                bump(&state.gate_epoch);
                 state.data_binds.remove(index);
                 state.advance_cells.remove(index);
             } else {
@@ -496,6 +554,8 @@ impl DataBindContainer {
                 .with(|object| object.as_data_bind().map(|bind| Rc::clone(bind.advance_cells())))
                 .flatten()
                 .unwrap_or_default();
+            bump(&state.gate_epoch);
+            cells.attach(&state.gate_epoch);
             state.data_binds.push(bind.clone());
             state.advance_cells.push(cells);
         }
@@ -659,6 +719,7 @@ impl DataBindContainer {
             {
                 if index != to_source {
                     let mut state = self.0.borrow_mut();
+                    bump(&state.gate_epoch);
                     state.data_binds.swap(to_source, index);
                     state.advance_cells.swap(to_source, index);
                 }
@@ -790,4 +851,10 @@ mod processing_notification_tests {
         container.update_data_binds(false);
         assert!(!container.is_processing_data_binds());
     }
+}
+
+/// A container's advance gate changed.
+#[inline]
+fn bump(gate: &Cell<u64>) {
+    gate.set(gate.get().wrapping_add(1));
 }

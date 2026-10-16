@@ -1,5 +1,9 @@
 //! Headless native product root for the exact Vulkan translation.
 
+#[cfg(test)]
+#[path = "vulkan_bootstrap_enumeration_test.rs"]
+mod vulkan_bootstrap_enumeration_test;
+
 #[cfg(feature = "native-ore-vulkan-experimental")]
 use std::any::Any;
 use std::ffi::{CStr, CString, c_void};
@@ -165,6 +169,7 @@ impl VulkanProductBackend {
                 // Core features require both the instance request and device support.
                 instance_api_version.min(properties.api_version),
                 surface_extensions_enabled,
+                true, // The product starts offscreen; Android presentation is optional.
             )?;
         #[cfg(not(target_os = "android"))]
         let _ = hardware_buffer_import;
@@ -857,7 +862,22 @@ impl VulkanProductBackend {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static TESTING_VK_GET_INSTANCE_PROC_ADDR: std::cell::Cell<Option<vk::PFN_vkGetInstanceProcAddr>> = const { std::cell::Cell::new(None) };
+}
+
 fn load_vulkan_entry() -> Result<ash::Entry, RendererError> {
+    #[cfg(test)]
+    if let Some(get_instance_proc_addr) = TESTING_VK_GET_INSTANCE_PROC_ADDR.with(|slot| slot.get())
+    {
+        // Test loader functions live for the entire process, like a loaded library.
+        return Ok(unsafe {
+            ash::Entry::from_static_fn(ash::StaticFn {
+                get_instance_proc_addr,
+            })
+        });
+    }
     match unsafe { ash::Entry::load() } {
         Ok(entry) => Ok(entry),
         Err(system_error) => {
@@ -1203,14 +1223,51 @@ unsafe fn destroy_target_resources(device: &ash::Device, resources: &TargetResou
     }
 }
 
+// Unlike ash's convenience enumeration, upstream makes exactly two calls and
+// treats VK_INCOMPLETE as failure instead of retrying. Failed counts are never used.
+fn enumerate_bootstrap_properties<T: Default + Clone>(
+    mut enumerate: impl FnMut(*mut u32, *mut T) -> vk::Result,
+) -> Result<Vec<T>, (bool, vk::Result)> {
+    let mut count = 0;
+    let result = enumerate(&mut count, core::ptr::null_mut());
+    if result != vk::Result::SUCCESS {
+        return Err((true, result));
+    }
+    let mut properties = vec![T::default(); count as usize];
+    let result = enumerate(&mut count, properties.as_mut_ptr());
+    if result != vk::Result::SUCCESS {
+        return Err((false, result));
+    }
+    Ok(properties)
+}
+
 fn create_instance(
     entry: &ash::Entry,
 ) -> Result<(ash::Instance, vk::PFN_vkGetInstanceProcAddr, u32, bool), RendererError> {
     let application_name = CString::new("Nuxie exact Vulkan renderer").unwrap();
-    let supported =
-        unsafe { entry.enumerate_instance_extension_properties(None) }.map_err(|error| {
-            RendererError::Adapter(format!("enumerate Vulkan extensions: {error:?}"))
-        })?;
+    let supported = enumerate_bootstrap_properties(|count, properties| unsafe {
+        (entry.fp_v1_0().enumerate_instance_extension_properties)(
+            core::ptr::null(),
+            count,
+            properties,
+        )
+    })
+    .map_err(|(count, error)| {
+        RendererError::Adapter(format!(
+            "{} Vulkan instance extensions: {error:?}",
+            if count { "query count of" } else { "enumerate" }
+        ))
+    })?;
+    // Layer enumeration is required even when this host enables no layers.
+    let _layers = enumerate_bootstrap_properties(|count, properties| unsafe {
+        (entry.fp_v1_0().enumerate_instance_layer_properties)(count, properties)
+    })
+    .map_err(|(count, error)| {
+        RendererError::Adapter(format!(
+            "{} Vulkan instance layers: {error:?}",
+            if count { "query count of" } else { "enumerate" }
+        ))
+    })?;
     let portability = CString::new("VK_KHR_portability_enumeration").unwrap();
     let has_portability = supported.iter().any(|property| unsafe {
         CStr::from_ptr(property.extension_name.as_ptr()) == portability.as_c_str()
@@ -1296,6 +1353,7 @@ fn create_device(
     queue_family_index: u32,
     api_version: u32,
     surface_extensions_enabled: bool,
+    headless: bool,
 ) -> Result<(ash::Device, VulkanFeatures, bool, bool), RendererError> {
     let supported_features = unsafe { instance.get_physical_device_features(physical_device) };
     let requested_features = vk::PhysicalDeviceFeatures::default()
@@ -1308,12 +1366,25 @@ fn create_device(
         .texture_compression_bc(supported_features.texture_compression_bc != 0)
         .texture_compression_astc_ldr(supported_features.texture_compression_astc_ldr != 0)
         .texture_compression_etc2(supported_features.texture_compression_etc2 != 0);
-    let supported_extensions =
-        unsafe { instance.enumerate_device_extension_properties(physical_device) }.map_err(
-            |error| {
-                RendererError::Adapter(format!("enumerate Vulkan device extensions: {error:?}"))
-            },
-        )?;
+    let supported_extensions = enumerate_bootstrap_properties(|count, properties| unsafe {
+        (instance.fp_v1_0().enumerate_device_extension_properties)(
+            physical_device,
+            core::ptr::null(),
+            count,
+            properties,
+        )
+    })
+    .unwrap_or_else(|(count, error)| {
+        eprintln!(
+            "{} Vulkan device extensions: {error:?}; continuing without device extensions.",
+            if count {
+                "Failed to query count of"
+            } else {
+                "Failed to enumerate"
+            }
+        );
+        Vec::new()
+    });
     let supports = |name: &CStr| {
         supported_extensions
             .iter()
@@ -1327,6 +1398,12 @@ fn create_device(
     let has_portability = supports(&portability);
     if has_portability {
         extensions.push(portability.as_ptr());
+    }
+    if !headless {
+        if !supports(ash::khr::swapchain::NAME) {
+            return Err(RendererError::Unsupported("VK_KHR_swapchain"));
+        }
+        extensions.push(ash::khr::swapchain::NAME.as_ptr());
     }
     let selected_raster_extension = if supports(&raster_order) {
         Some(raster_order.as_c_str())
@@ -1364,10 +1441,10 @@ fn create_device(
     let presentation_extensions_enabled =
         presentation_advertised && presentation_features.swapchain_maintenance1 != 0;
     if presentation_extensions_enabled {
-        extensions.extend([
-            ash::khr::swapchain::NAME.as_ptr(),
-            ash::ext::swapchain_maintenance1::NAME.as_ptr(),
-        ]);
+        if headless {
+            extensions.push(ash::khr::swapchain::NAME.as_ptr());
+        }
+        extensions.push(ash::ext::swapchain_maintenance1::NAME.as_ptr());
     }
     // Android video frames arrive in hardware buffers the renderer imports
     // and converts from YUV; without this support video frames fail.

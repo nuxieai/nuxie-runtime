@@ -387,6 +387,15 @@ impl RenderCanvasFrame for NativeMetalRenderCanvasFrame {
             .finish_canvas(unsafe { &mut *self.source.get() })
             .map_err(|error| RenderCanvasError::new(error.to_string()))
     }
+
+    unsafe fn finish_with_resources(
+        self: Box<Self>,
+        resources: nuxie_render_api::RenderCanvasFlushResources,
+    ) -> Result<(), RenderCanvasError> {
+        let mut mechanical = self.execution_guard.borrow_mut();
+        unsafe { mechanical.finish_canvas_with_resources(&mut *self.source.get(), resources) }
+            .map_err(|error| RenderCanvasError::new(error.to_string()))
+    }
 }
 
 impl Renderer for NativeMetalRenderCanvasFrame {

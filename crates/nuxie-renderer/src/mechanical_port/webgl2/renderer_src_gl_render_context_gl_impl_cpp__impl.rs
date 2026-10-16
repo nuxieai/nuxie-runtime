@@ -993,7 +993,8 @@ pub(crate) fn invalidateGLState(context: &mut RenderContextGLImpl) {
 pub(crate) fn scrubStateAfterOre(context: &mut RenderContextGLImpl) {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
-        // RIVE_WEBGL replays both renderers on one ordered context.
+        // Some MSAA drivers need Ore's FBO work flushed before our next flush.
+        recordGLCommand(GLCommand::Flush);
         for unit in 0..=DEFAULT_BINDINGS_SET_SIZE {
             recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0 + unit));
             recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));

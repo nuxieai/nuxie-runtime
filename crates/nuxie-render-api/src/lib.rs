@@ -2960,6 +2960,33 @@ pub trait Renderer {
 pub trait RenderCanvasFrame: Renderer {
     fn renderer(&mut self) -> &mut dyn Renderer;
     fn finish(self: Box<Self>) -> Result<(), RenderCanvasError>;
+
+    /// Finish into a host-owned command buffer instead of submitting a new one.
+    ///
+    /// # Safety
+    /// A nonnull command buffer must belong to this canvas's backend/context
+    /// and remain valid through recording. The host must submit it and retain
+    /// the context and referenced resources until GPU completion. Frame serials
+    /// must describe that submission and genuinely completed prior work.
+    unsafe fn finish_with_resources(
+        self: Box<Self>,
+        resources: RenderCanvasFlushResources,
+    ) -> Result<(), RenderCanvasError> {
+        if resources != RenderCanvasFlushResources::default() {
+            return Err(RenderCanvasError::new(
+                "this canvas frame does not accept host GPU resources",
+            ));
+        }
+        self.finish()
+    }
+}
+
+/// HostFrameSink::canvasFlushResources without the canvas-owned target.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RenderCanvasFlushResources {
+    pub external_command_buffer: *mut core::ffi::c_void,
+    pub current_frame_number: u64,
+    pub safe_frame_number: u64,
 }
 
 /// Requested canvas-frame policy, mirroring `HostFrameSink::FrameMode`.

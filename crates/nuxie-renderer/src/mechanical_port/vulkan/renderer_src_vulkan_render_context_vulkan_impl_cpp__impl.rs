@@ -2128,6 +2128,22 @@ pub(crate) unsafe fn updateLiveRenderTargetVulkanLastAccess(
     target.updateLastAccess(access);
 }
 
+/// Applies the source virtual image-access barrier without returning a target
+/// borrow through the retained, clonable owner.
+///
+/// # Safety
+/// `target` must be retained and exclusively operated for this call, with the
+/// original allocation provenance for one of the two tagged complete types.
+pub(crate) unsafe fn accessLiveRenderTargetVulkanImage(
+    target: NonNull<RenderTarget>,
+    command_buffer: vk::CommandBuffer,
+    access: ImageAccess,
+    action: ImageAccessAction,
+) -> vk::Image {
+    let mut target = unsafe { LiveRenderTargetVulkan::fromTarget(target) };
+    target.accessTargetImage(command_buffer, access, action)
+}
+
 unsafe fn target_impl(desc: &FlushDescriptor) -> LiveRenderTargetVulkan {
     let target = desc.renderTarget.expect("Vulkan flush render target");
     // SAFETY: FlushDescriptor's source contract keeps its Vulkan target live

@@ -18,7 +18,7 @@ use super::ore_texture_vulkan_decl::TextureViewVulkan;
 use super::ore_texture_vulkan_decl::TextureVulkan;
 use super::ore_vulkan_dsl::{createDSLFromLayoutDesc, kVkMaxBindingsPerGroup};
 use super::render_target_vulkan_decl::RetainedRenderTargetVulkan;
-use super::vkutil_decl::Texture2D;
+use super::vkutil_decl::{ImageAccess, ImageAccessAction, Texture2D};
 use crate::mechanical_port::source::include::rive::refcnt_hpp::ref_rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use ash::vk;
@@ -1356,6 +1356,43 @@ pub(crate) fn beginRenderPass(
 ) -> Option<Box<dyn RenderPassApi>> {
     assert!(desc.colorCount <= 4);
 
+    // Rive may have drawn into a wrapped target since Ore last saw it. Use
+    // Rive's tracker as the source of the barrier into this pass.
+    fn acquireRiveTarget(
+        context: &mut ContextVulkan,
+        renderTarget: Option<&RetainedRenderTargetVulkan>,
+        textureHandle: &AnyResourceHandle,
+        preserveContents: bool,
+    ) {
+        let (Some(renderTarget), Some(texture)) =
+            (renderTarget, textureHandle.downcast_ref::<TextureVulkan>())
+        else {
+            return;
+        };
+        renderTarget.clone().accessTargetImage(
+            context.m_vkCommandBuffer,
+            ImageAccess {
+                pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                accessMask: vk::AccessFlags::COLOR_ATTACHMENT_READ
+                    | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            },
+            if preserveContents {
+                ImageAccessAction::preserveContents
+            } else {
+                ImageAccessAction::invalidateContents
+            },
+        );
+        texture
+            .m_vkLayout
+            .set(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+        // A queued sampled transition would undo this barrier before the pass.
+        // finish() leaves sampled targets readable.
+        context
+            .m_vkPendingInitialTransitions
+            .retain(|transition| !transition.texture.ptr_eq(textureHandle));
+    }
+
     let pass = RenderPassVulkan::new(context);
     let mut state = pass.borrowState();
     state.m_vkCmdBuf = context.m_vkCommandBuffer;
@@ -1403,6 +1440,12 @@ pub(crate) fn beginRenderPass(
                 state.m_vkResolveTargets[index].image = resolveTexture.m_vkImage;
                 state.m_vkResolveTargets[index].texture = Some(resolveTextureHandle.clone());
                 resolveTexture.vkMarkWritten(resolveView.baseMipLevel(), resolveView.baseLayer());
+                acquireRiveTarget(
+                    context,
+                    resolveView.m_vkRenderTarget.as_ref(),
+                    resolveTextureHandle,
+                    false,
+                );
             }
             state.m_vkResolveTargets[index].range =
                 resolveView.vkAttachmentRange(vk::ImageAspectFlags::COLOR);
@@ -1421,6 +1464,12 @@ pub(crate) fn beginRenderPass(
         state.m_vkColorRanges[index] = view.vkAttachmentRange(vk::ImageAspectFlags::COLOR);
         state.m_vkColorRenderTargets[index] = view.m_vkRenderTarget.clone();
         state.m_vkColorTextures[index] = Some(textureHandle.clone());
+        acquireRiveTarget(
+            context,
+            view.m_vkRenderTarget.as_ref(),
+            textureHandle,
+            key.colorLoadOps[index] == LoadOp::load,
+        );
         if key.colorLoadOps[index] == LoadOp::load {
             context.vkQueueTransitionToLayout(
                 textureHandle,

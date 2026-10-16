@@ -93,9 +93,22 @@ struct RenderContextNull {
     base: RenderContextHelperImpl,
     stats: Rc<RefCell<FlushStats>>,
     features: Rc<Cell<u32>>,
+    command_spy: Rc<RefCell<CommandBufferSpy>>,
+    own_command_buffer: u8,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CommandBufferSpy {
+    pub made: usize,
+    pub committed: usize,
+    pub last_flush: FlushResources,
 }
 impl RenderContextNull {
-    fn new(stats: Rc<RefCell<FlushStats>>, features: Rc<Cell<u32>>) -> Self {
+    fn new(
+        stats: Rc<RefCell<FlushStats>>,
+        features: Rc<Cell<u32>>,
+        command_spy: Rc<RefCell<CommandBufferSpy>>,
+    ) -> Self {
         let mut base = RenderContextImpl::default();
         base.m_platformFeatures.supportsRasterOrderingMode = true;
         base.m_platformFeatures.supportsAtomicMode = true;
@@ -106,6 +119,8 @@ impl RenderContextNull {
             base: RenderContextHelperImpl::new(base),
             stats,
             features,
+            command_spy,
+            own_command_buffer: 0,
         }
     }
 }
@@ -133,6 +148,16 @@ impl RenderContextHelperBufferFactoryContract for RenderContextNull {
     }
 }
 impl RenderContextHelperBackendContract for RenderContextNull {
+    fn makeCommandBuffer(&mut self) -> *mut c_void {
+        self.command_spy.borrow_mut().made += 1;
+        core::ptr::from_mut(&mut self.own_command_buffer).cast()
+    }
+    unsafe fn commitCommandBuffer(&mut self, _: *mut c_void) {
+        self.command_spy.borrow_mut().committed += 1;
+    }
+    unsafe fn postFlush(&mut self, resources: &FlushResources) {
+        self.command_spy.borrow_mut().last_flush = *resources;
+    }
     fn makeRenderBuffer(
         &mut self,
         t: SourceBufferType,
@@ -218,8 +243,12 @@ pub struct NullBackend {
     target: rcp<RenderTarget>,
     width: u32,
     height: u32,
+    command_spy: Rc<RefCell<CommandBufferSpy>>,
 }
 impl NullBackend {
+    pub fn command_buffer_spy(&self) -> CommandBufferSpy {
+        *self.command_spy.borrow()
+    }
     pub fn frame_descriptor(&self) -> FrameDescriptor {
         *self.context.frameDescriptor()
     }
@@ -237,14 +266,19 @@ impl NullBackend {
         stats: Rc<RefCell<FlushStats>>,
         features: Rc<Cell<u32>>,
     ) -> Self {
-        let mut context =
-            RenderContext::from_impl(Box::new(RenderContextNull::new(stats, features)));
+        let command_spy = Rc::new(RefCell::new(CommandBufferSpy::default()));
+        let mut context = RenderContext::from_impl(Box::new(RenderContextNull::new(
+            stats,
+            features,
+            command_spy.clone(),
+        )));
         crate::exact_source_adapter::install_bitmap_decoder(context.as_mut());
         Self {
             context,
             target: make_rcp(|| RenderTarget::new(width, height)),
             width,
             height,
+            command_spy,
         }
     }
     pub fn flush(&mut self) {

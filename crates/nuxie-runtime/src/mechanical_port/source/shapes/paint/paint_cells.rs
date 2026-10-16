@@ -45,7 +45,7 @@ pub(crate) struct PaintCells {
     render_paint: OnceCell<RuntimeRenderPaintHandle>,
     // The flags of the mutator that initialized the render paint, shared by
     // that mutator.
-    mutator_flags: OnceCell<Rc<Cell<MutatorFlags>>>,
+    mutator_flags: OnceCell<(CoreHandle, Rc<Cell<MutatorFlags>>)>,
     // The paint's own Component dirt.
     dirt: Rc<SharedDirt>,
     // The container whose flag union includes this paint's flags.
@@ -139,6 +139,8 @@ impl PaintCells {
 
     /// ShapePaint::draw for a plain paint as a Shape draws it (its own fill
     /// rule, no override paint): the same renderer calls, from these cells.
+    /// Inlined into each drawing loop, where it is the per-paint body.
+    #[inline(always)]
     pub(crate) fn draw_plain(
         &self,
         renderer: &mut dyn nuxie_render_api::Renderer,
@@ -342,15 +344,26 @@ impl PaintCells {
 
     #[inline]
     /// Share the flags of the mutator that just initialized the render paint.
-    pub(crate) fn bind_mutator_flags(&self, flags: Rc<Cell<MutatorFlags>>) {
+    pub(crate) fn bind_mutator_flags(&self, mutator: CoreHandle, flags: Rc<Cell<MutatorFlags>>) {
         assert!(
-            self.mutator_flags.set(flags).is_ok(),
+            self.mutator_flags.set((mutator, flags)).is_ok(),
             "one mutator initializes a ShapePaint's render paint"
         );
     }
 
     pub(crate) fn mutator_flags(&self) -> Option<MutatorFlags> {
-        self.mutator_flags.get().map(|flags| flags.get())
+        self.mutator_flags.get().map(|(_, flags)| flags.get())
+    }
+
+    /// ShapePaintMutator::isVisible from the flags the mutator shared, while a
+    /// loan of that mutator would succeed and its release run nothing; None
+    /// when the mutator has to be borrowed to answer.
+    #[inline]
+    pub(crate) fn settled_mutator_is_visible(&self) -> Option<bool> {
+        let (mutator, flags) = self.mutator_flags.get()?;
+        mutator
+            .is_occupied_settled()
+            .then(|| flags.get() & MutatorFlags::VISIBLE == MutatorFlags::VISIBLE)
     }
 
     pub(crate) fn render_paint(&self) -> Option<&RuntimeRenderPaintHandle> {

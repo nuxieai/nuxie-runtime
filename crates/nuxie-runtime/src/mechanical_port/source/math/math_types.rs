@@ -17,14 +17,18 @@ pub fn ieee_float_divide(a: f32, b: f32) -> f32 {
 }
 
 /// Reinterpret the source bytes as `Dst`, matching pinned C++ `bit_cast`.
+/// This also supports constant evaluation, like upstream's builtin-bit-cast path.
 ///
 /// # Safety
 ///
 /// Every bit pattern in `source` must be a valid `Dst` value. C++ constrains
 /// this operation through its trivially-copyable type system; Rust's `Copy`
 /// bound alone does not make arbitrary destination bit patterns valid.
-pub unsafe fn bit_cast<Dst: Copy, Src: Copy>(source: Src) -> Dst {
-    assert_eq!(size_of::<Dst>(), size_of::<Src>());
+pub const unsafe fn bit_cast<Dst: Copy, Src: Copy>(source: Src) -> Dst {
+    assert!(
+        size_of::<Dst>() == size_of::<Src>(),
+        "sizes of both types must match"
+    );
     let mut destination = MaybeUninit::<Dst>::uninit();
     unsafe {
         core::ptr::copy_nonoverlapping(

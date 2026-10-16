@@ -46,18 +46,36 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e54bc92a625cee04f88d903822c4503cb44f3714`
+- LAST_SYNCED_SHA: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` (refreshed 2026-10-15 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 252 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (274 after `5892bb05`); this
+  No upstream commits remain after this checkpoint at the fetched target.
+  All 253 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (275 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `e8d647fd`, integrated atop downstream `ea6475e4ba`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean after explicitly excluding ARM32. Stable Rust 1.94.1 does not expose
+  ARM32 neon/fp-armv8 cfgs even with those codegen features enabled; the owner
+  now rejects that unshipped target rather than silently selecting wrong math.
+  Its retained ARM32 branches are not executable/validated support; future
+  enablement needs explicit target wiring and validation. Apple Silicon runtime
+  units pass 408 with two existing ignores; translated SIMD cases pass 27 and
+  strict SIMD cases pass 14, including hardware reciprocal-square-root estimates
+  at the unchanged upstream tolerance. The constant bit-cast assertion compiles.
+  Browser runtime compilation passes; metadata checks pass 39 and generated
+  manifest/build files are current. Portable random samples retain upstream
+  counts/scales but are not libc-rand-identical. GVec4x4 is safe Rust storage,
+  not a generic native-vector ABI claim. x86 execution, Android devices and
+  browser pixels were not rerun. The renderer tuple-only edit needs no caller
+  migration here; this does not certify its preexisting scalar helper's math:
+  NaN clamping differs, and FMA requires the documented compiler-contraction
+  context. No full renderer or golden sweep was rerun for this delta.
 - Validation at `e54bc92a`, integrated atop downstream `1ae4dd47ac`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Source review corrected the test helper to use upstream's derived-aware
@@ -1161,6 +1179,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` | Translate bitmask, fast min/max, integer-conversion rounding, hardware-only reciprocal-square-root estimates, named four-column matrix loads/transposes and const bit-cast; migrate existing Rust tuple callers and port the complete public test delta. The renderer's tuple-only syntax delta has no corresponding live tuple caller. ARM32 source branches are retained but explicitly unsupported under the pinned stable toolchain; no ARM32 performance or execution claim. Supplemental mask/transpose/const checks are labeled separately from upstream tests. Private .rive_head contents are not claimed imported. | — |
 | `e54bc92a625cee04f88d903822c4503cb44f3714` | Check the exact legacy serialized method sentinel once after successful script self creation, clear only absent down/move/up/exit handlers in order, recopy corrected bits to the occurrence, and retain them for later instances. Reuse live Lua field/function introspection and default unknown backends to present. Typed lookup failures preserve pending status and uncommitted bits. Gate pointer hits on current script lifetime and pointer handlers; retain independent scroll bounds and the broader upstream listener-registration mask. Port both exact legacy-hit fixture cases and add Lua lookup coverage. Private .rive_head contents are not claimed imported. | — |
 | `113d1bcedcc387c92ee000f64a5d7d947b4229dc` | Use cached RiveRenderPath bounds for scale/translation and retain raw-point mapping for rotation/skew. Translate transformed area as abs(determinant) times width times height in source order; update stale triangle-arithmetic expectations from pinned C++ expression evidence. Port the 200-path/seven-matrix exact bounds regression with documented portable PRNG sampling. Historical retained comments are labeled separately from the live owner revision. Private .rive_head contents are not claimed imported. | — |
 | `0f40af120fc3fec35add319d3334c09af6231457` | Clear TextStyle's cached variable font before returning when its base font is absent. Port the exact public font-asset-clearing regression, preserving normal invalidation and no explicit view-model binding. Regenerate the shifted Silver producer line. Private .rive_head contents are not claimed imported. | — |

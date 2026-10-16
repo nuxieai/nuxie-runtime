@@ -294,7 +294,7 @@ fn wave_c4_simd_023_load4x4f() {
     let matrix = [
         0.0, 4.0, 8.0, 12.0, 1.0, 5.0, 9.0, 13.0, 2.0, 6.0, 10.0, 14.0, 3.0, 7.0, 11.0, 15.0,
     ];
-    let (a, b, c, d) = simd::load4x4f(&matrix);
+    let [a, b, c, d] = simd::load4x4f(&matrix).cols;
     assert_eq!(a.data, [0.0, 1.0, 2.0, 3.0]);
     assert_eq!(b.data, [4.0, 5.0, 6.0, 7.0]);
     assert_eq!(c.data, [8.0, 9.0, 10.0, 11.0]);

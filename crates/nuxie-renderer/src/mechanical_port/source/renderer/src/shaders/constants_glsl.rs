@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: c73593c3a868f87b5dcd328432255db33e3e2266
+ * Upstream source revision: 1c75867de17587c541ad2d7ca88b10577b033bd2
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c73593c3a868f87b5dcd328432255db33e3e2266";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1c75867de17587c541ad2d7ca88b10577b033bd2";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "98875523b3c485c348f6ffcc8151c1bbb762bc32d9ab132438accc9fc0db5507";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 419;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18339;
+    "dec9bab13e0c98a3fd315c3411e0de8d3eed43273818f4c5205b455c429f4897";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 421;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18427;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -152,10 +152,11 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 
 // Flags for specifying the join type.
 #define JOIN_TYPE_MASK (7u << 26u)
-#define MITER_CLIP_JOIN_CONTOUR_FLAG (5u << 26u)
-#define MITER_REVERT_JOIN_CONTOUR_FLAG (4u << 26u)
-#define BEVEL_JOIN_CONTOUR_FLAG (3u << 26u)
-#define ROUND_JOIN_CONTOUR_FLAG (2u << 26u)
+#define MITER_CLIP_JOIN_CONTOUR_FLAG (6u << 26u)
+#define MITER_REVERT_JOIN_CONTOUR_FLAG (5u << 26u)
+#define BEVEL_JOIN_CONTOUR_FLAG (4u << 26u)
+#define ROUND_JOIN_CONTOUR_FLAG (3u << 26u)
+#define FULL_ROUND_JOIN_CONTOUR_FLAG (2u << 26u)
 #define FEATHER_JOIN_CONTOUR_FLAG (1u << 26u)
 
 // When a join is being used to emulate a stroke cap, the shader emits

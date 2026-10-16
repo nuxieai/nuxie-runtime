@@ -25,7 +25,7 @@ D o5=unpackHalf2x16(k1(p8));d ka=o5.y;d w0=ka==G0?o5.x:J0(.0);
 #ifdef DB
 w0+=o1;g2(p8);
 #else
-w0=Nj(w0,S n1);m1(p8,packHalf2x16(R2(w0,G0)));
+w0=Oj(w0,S n1);m1(p8,packHalf2x16(R2(w0,G0)));
 #endif
 d n;
 #ifdef KE
@@ -56,7 +56,7 @@ m1(m0,packHalf2x16(R2(n,A1)));N2(n0);}else
 if(N){d A1=i2.x;if(A1!=.0){D W0=unpackHalf2x16(k1(m0));d h7=W0.y;n=(h7==A1)?min(W0.x,n):J0(.0);}}
 #endif
 #ifdef AB
-if(AB){d y5=B3(V4(V0));n=clamp(y5,J0(.0),n);}
+if(AB){d y5=C3(V4(V0));n=clamp(y5,J0(.0),n);}
 #endif
 i k=x8(
 #ifdef GB
@@ -79,13 +79,13 @@ Jf=GB&&U0.z<.0;
 #endif
 if(Jf){
 #ifdef GB
-uint Tj=uint(-U0.z-1.);d Uj=Mj(k,Tj);k=a1*mix(J0(1.),Uj,n);x0(n0,k);g2(m0);
+uint Uj=uint(-U0.z-1.);d Vj=Nj(k,Uj);k=a1*mix(J0(1.),Vj,n);x0(n0,k);g2(m0);
 #endif
 }else{
 #ifdef H
 if(H&&Q0!=r6(U3)){k.xyz=N4(k.xyz,a1,W2(Q0))*k.w;}
 #endif
-k*=n;d x3=k.w;k+=a1*(1.-x3);k.xyz=J2(k.xyz,x3,d0.xy,j.F3,j.G3);x0(n0,k);g2(m0);}}
+k*=n;d y3=k.w;k+=a1*(1.-y3);k.xyz=J2(k.xyz,y3,d0.xy,j.G3,j.H3);x0(n0,k);g2(m0);}}
 #if!defined(DB)
 P2;
 #endif

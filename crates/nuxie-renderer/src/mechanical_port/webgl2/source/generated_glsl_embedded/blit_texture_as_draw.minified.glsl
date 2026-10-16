@@ -6,7 +6,7 @@ k2
 #ifdef BB
 q4 r4 Y4 Z4 e1(f0) f1 y1(PF,f0,B,F,r){c F2;F2.x=(F&1)==0?-1.:1.;F2.y=(F&2)==0?-1.:1.;
 #ifdef KD
-V(l2,c);l2.x=F2.x*.5+.5;l2.y=F2.y*-.5+.5;Z(l2);
+V(l2,c);l2.x=F2.x*.5+.5;l2.y=F2.y*-.5+.5;a0(l2);
 #endif
 f I=f(F2,0,1);z1(I);}
 #endif

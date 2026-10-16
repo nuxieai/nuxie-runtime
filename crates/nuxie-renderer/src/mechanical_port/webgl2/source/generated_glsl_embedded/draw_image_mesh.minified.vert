@@ -1,5 +1,5 @@
 #ifdef BB
-e1(C3) K(0,c,PC);f1 e1(T3) K(1,c,QC);f1 e1(D1) K(sa,f,ZB);K(ta,f,SB);K(ua,f,PB);K(va,uint,AC);K(wa,uint,BC);K(xa,uint,CC);K(ya,uint,MC);K(Ga,f,HC);f1
+e1(D3) K(0,c,PC);f1 e1(T3) K(1,c,QC);f1 e1(D1) K(sa,f,ZB);K(ta,f,SB);K(ua,f,PB);K(va,uint,AC);K(wa,uint,BC);K(xa,uint,CC);K(ya,uint,MC);K(Ga,f,HC);f1
 #endif
 v2 F0 W(0,c,d6);
 #ifdef N
@@ -14,7 +14,7 @@ h3 W(4,P,L1);
 #endif
 k2
 #ifdef BB
-q4 r4 k7(RB,C3,D3,T3,j3,D1,j0,F){L(F,D3,PC,c);L(F,j3,QC,c);L(r,j0,ZB,f);L(r,j0,SB,f);L(r,j0,PB,f);L(r,j0,AC,uint);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,MC,uint);L(r,j0,HC,f);V(d6,c);
+q4 r4 k7(RB,D3,E3,T3,j3,D1,j0,F){L(F,E3,PC,c);L(F,j3,QC,c);L(r,j0,ZB,f);L(r,j0,SB,f);L(r,j0,PB,f);L(r,j0,AC,uint);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,MC,uint);L(r,j0,HC,f);V(d6,c);
 #ifdef N
 V(f4,d);
 #endif
@@ -49,16 +49,16 @@ V1=unpackUnorm4x8(AC);
 #ifdef H
 L1=U1(CC);
 #endif
-Z(d6);
+a0(d6);
 #ifdef N
-Z(f4);
+a0(f4);
 #endif
 #if defined(AB)&&!defined(CB)
-Z(V0);
+a0(V0);
 #endif
-Z(V1);
+a0(V1);
 #ifdef H
-Z(L1);
+a0(L1);
 #endif
 z1(I);}
 #endif

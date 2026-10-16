@@ -119,11 +119,11 @@
 #ifdef DC
 #define V6(e0,g,a) layout(set=e0,binding=g) uniform mediump sampler a;
 #ifdef TF
-#define a4(R5,a) layout(set=Fh,binding=R5) uniform mediump sampler a;
+#define a4(R5,a) layout(set=Gh,binding=R5) uniform mediump sampler a;
 #define M6 a4
-#define w4(a) V6(B5,Eh,a)
+#define w4(a) V6(B5,Fh,a)
 #else
-#define a4(R5,a) layout(set=r3,binding=R5) uniform mediump sampler a;
+#define a4(R5,a) layout(set=v3,binding=R5) uniform mediump sampler a;
 #define M6 a4
 #define w4(a) V6(B5,v4,a)
 #endif
@@ -147,7 +147,7 @@
 #define h8(q0,p,o,f2) T5(q0,p,o,f2)
 #define K6(e0,g,a) N5(e0,g,a)
 #define B7(a,p,E,W6,T9,c1) n2(a,p,c(E,T9),c1)
-#define Gi(e0,g,a) i5(e0,g,a)
+#define Hi(e0,g,a) i5(e0,g,a)
 #define c4
 #define n1
 #define r1(a,o) texelFetch(a,o,0)
@@ -160,9 +160,9 @@
 #define k4
 #define l4
 #ifdef UF
-#define j6(g,J1,a) i5(r3,g,a)
-#define j5(g,J1,a) Gi(r3,g,a)
-#define k6(g,J1,a) U6(r3,g,a)
+#define j6(g,J1,a) i5(v3,g,a)
+#define j5(g,J1,a) Hi(v3,g,a)
+#define k6(g,J1,a) U6(v3,g,a)
 #define p0(a,E0) r1(a,g0((E0)&Wd,(E0)>>Vd))
 #define x5(a,E0) r1(a,g0((E0)&Wd,(E0)>>Vd)).xy
 #else
@@ -178,7 +178,7 @@
 #define Qe(a,E0) a.r2[E0]
 #define j8(a,E0,E) atomicMax(a.r2[E0],E)
 #define dc(a,E0,E) atomicAdd(a.r2[E0],E)
-#define Hi(a,E0,E) atomicOr(a.r2[E0],E)
+#define Ii(a,E0,E) atomicOr(a.r2[E0],E)
 #endif
 #ifdef ND
 #define X1(a) void main(){g0 G=ivec2(floor(d0));int L0=int(N9(uvec2(G),(j.S6+(Eb-1u))&~(Eb-1u)));
@@ -355,15 +355,15 @@ uniform highp int HE;
 #define h5
 #define y1(a,f0,B,M2,C6) void main(){int M2=gc;int C6=l8;
 #define F8(a,f0,B,D1,j0,M2,C6) y1(a,f0,B,M2,C6)
-#define k7(a,C3,D3,T3,j3,D1,j0,M2) y1(a,C3,D3,M2,C6)
+#define k7(a,D3,E3,T3,j3,D1,j0,M2) y1(a,D3,E3,M2,C6)
 #define V(a,k0)
-#define Z(a)
+#define a0(a)
 #define q(a,k0)
 #define z1(X0) gl_Position=X0;}
-#define V2(K1,a) layout(location=0) out K1 Ii;void main()
+#define V2(K1,a) layout(location=0) out K1 Ji;void main()
 #define X6(K1,a) V2(K1,a)
 #define Y6 gl_FrontFacing
-#define L2(C) Ii=C
+#define L2(C) Ji=C
 #define d0 gl_FragCoord.xy
 #define n7
 #define m3
@@ -377,7 +377,7 @@ uniform highp int HE;
 #ifndef H2
 #define H2(a) layout(location=0) out i N1;X1(a)
 #endif
-#define E3 o2
+#define F3 o2
 #if defined(DC)&&!defined(WE)
 #ifdef VE
 #define O5(a) layout(input_attachment_index=0,binding=x2,set=K3) uniform mediump subpassInputMS a
@@ -387,12 +387,12 @@ uniform highp int HE;
 #define M5(a) subpassLoad(a)
 #endif
 #else
-#define O5(a) q3(r3,Dh,a)
+#define O5(a) q3(v3,Eh,a)
 #define M5(a) texelFetch(a,ivec2(floor(d0.xy)),0)
 #endif
 #define C0(A,J) ((A)*(J))
 precision highp float;precision highp int;
 #if LC<310
-e i Ji(uint u){O v1=O(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(v1)*(1./255.);}
-#define unpackUnorm4x8 Ji
+e i Ki(uint u){O v1=O(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(v1)*(1./255.);}
+#define unpackUnorm4x8 Ki
 #endif

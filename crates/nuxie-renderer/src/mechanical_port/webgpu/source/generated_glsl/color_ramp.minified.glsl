@@ -19,7 +19,7 @@ V(y7,i);int f9=F>>1;float x=float(f9<=1?JC.x&0xffffu:JC.x>>16)/65536.;float bb=(
 #ifdef POST_INVERT_Y
 I.y=-I.y;
 #endif
-Z(y7);z1(I);}
+a0(y7);z1(I);}
 #endif
 #ifdef FRAGMENT
 V3 W3 V2(i,RF){q(y7,i);L2(y7);}

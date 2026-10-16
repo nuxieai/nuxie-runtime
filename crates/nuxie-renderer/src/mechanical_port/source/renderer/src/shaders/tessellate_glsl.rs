@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/tessellate.glsl.
  *
- * Upstream source revision: 7aa93402a27c800db8a36acc8672612c100ea9b1
+ * Upstream source revision: 1c75867de17587c541ad2d7ca88b10577b033bd2
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "7aa93402a27c800db8a36acc8672612c100ea9b1";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1c75867de17587c541ad2d7ca88b10577b033bd2";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "df9c6087f6dac668a3e274862ed34fb1df19c9a88bea87f4ccd93410cee7dd2b";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 617;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 27235;
+    "1899b1bda75733ac02a97b1169969ee76e7cc5edc09ba2bd5c580a619155018d";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 618;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 27327;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_TESSELLATE_GLSL_SOURCE: &str = r###"/*
@@ -396,7 +396,8 @@ FRAG_DATA_MAIN(uint4, @tessellateFragmentMain)
             // standing in for a cap.
             contourIDWithFlags &= ~JOIN_TYPE_MASK;
         }
-        else
+        else if ((contourIDWithFlags & JOIN_TYPE_MASK) !=
+                 FULL_ROUND_JOIN_CONTOUR_FLAG)
         {
             contourIDWithFlags |= radsPerPolarSegment < .0
                                       ? LEFT_JOIN_CONTOUR_FLAG

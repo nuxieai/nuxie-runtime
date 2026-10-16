@@ -8,18 +8,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -40,7 +40,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Zi: bool = true;
+@id(0) override aj: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> ZB_1: vec4<f32>;
@@ -71,7 +71,7 @@ fn main_1() {
     let _e44 = QC_1;
     let _e45 = HC_1;
     d6_ = ((_e44 * _e45.zw) + _e45.xy);
-    if Zi {
+    if aj {
         let _e50 = BC_1;
         let _e52 = j.w6_;
         if (_e50 == 0u) {

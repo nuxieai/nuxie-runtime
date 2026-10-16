@@ -20,18 +20,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -49,13 +49,13 @@ struct R4Re_1 {
     r2_: array<atomic<u32>>,
 }
 
-@id(7) override gj: bool = true;
-@id(6) override fj: bool = true;
-@id(4) override dj: bool = true;
-@id(0) override Zi: bool = true;
-@id(1) override aj: bool = true;
-@id(2) override bj: bool = true;
-@id(3) override cj: bool = true;
+@id(7) override hj: bool = true;
+@id(6) override gj: bool = true;
+@id(4) override ej: bool = true;
+@id(0) override aj: bool = true;
+@id(1) override bj: bool = true;
+@id(2) override cj: bool = true;
+@id(3) override dj: bool = true;
 
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
@@ -125,8 +125,8 @@ fn main_1() {
     let _e103 = bitcast<vec2<u32>>(vec2<i32>(floor(_e100)));
     let _e105 = j.S6_;
     let _e134 = bitcast<i32>((((((_e103.y >> bitcast<u32>(5u)) * (((_e105 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e103.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e103.x & 28u) << bitcast<u32>(5u)) + ((_e103.y & 28u) << bitcast<u32>(2i)))) + (((_e103.y & 3u) << bitcast<u32>(2i)) + (_e103.x & 3u))));
-    phi_1593_ = cj;
-    if cj {
+    phi_1593_ = dj;
+    if dj {
         let _e135 = S_1;
         phi_1593_ = (_e135.x < -1.5f);
     }
@@ -137,8 +137,8 @@ fn main_1() {
         let _e222 = textureSampleLevel(AD, db, vec2<f32>((1f - _e212.y), 0f), 0f);
         phi_4327_ = ((1f - _e216.x) - _e222.x);
     } else {
-        phi_1606_ = cj;
-        if cj {
+        phi_1606_ = dj;
+        if dj {
             let _e140 = S_1;
             phi_1606_ = (_e140.y < -1.5f);
         }
@@ -195,8 +195,8 @@ fn main_1() {
         phi_4330_ = _e244;
         if ((_e247.x & 768u) != 0u) {
             let _e251 = abs(_e244);
-            phi_2111_ = dj;
-            if dj {
+            phi_2111_ = ej;
+            if ej {
                 phi_2111_ = ((_e247.x & 512u) != 0u);
             }
             let _e255 = phi_2111_;
@@ -210,7 +210,7 @@ fn main_1() {
         let _e265 = phi_4330_;
         let _e266 = clamp(_e265, 0f, 1f);
         phi_4334_ = _e266;
-        if Zi {
+        if aj {
             let _e268 = (_e247.x >> bitcast<u32>(16u));
             phi_4335_ = _e266;
             if (_e268 != 0u) {
@@ -227,8 +227,8 @@ fn main_1() {
             phi_4334_ = _e282;
         }
         let _e284 = phi_4334_;
-        phi_2148_ = aj;
-        if aj {
+        phi_2148_ = bj;
+        if bj {
             phi_2148_ = ((_e247.x & 1024u) != 0u);
         }
         let _e288 = phi_2148_;
@@ -244,9 +244,9 @@ fn main_1() {
         let _e319 = phi_4339_;
         let _e320 = (_e247.x & 15u);
         let _e323 = ((_e247.x >> bitcast<u32>(4i)) & 15u);
-        let _e325 = (bj && (_e323 != 0u));
+        let _e325 = (cj && (_e323 != 0u));
         if (_e320 <= 1u) {
-            let _e405 = (Zi && (_e320 == 0u));
+            let _e405 = (aj && (_e320 == 0u));
             phi_5283_ = 0u;
             if _e405 {
                 phi_5283_ = (_e247.y | pack2x16float(vec2<f32>(_e319, 0f)));
@@ -421,7 +421,7 @@ fn main_1() {
                         break;
                     }
                     case 12: {
-                        if fj {
+                        if gj {
                             let _e534 = local_2;
                             let _e535 = clamp(_e534, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                             local_2 = _e535;
@@ -435,7 +435,7 @@ fn main_1() {
                         break;
                     }
                     case 13: {
-                        if fj {
+                        if gj {
                             let _e485 = local_2;
                             let _e486 = clamp(_e485, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                             local_2 = _e486;
@@ -449,7 +449,7 @@ fn main_1() {
                         break;
                     }
                     case 14: {
-                        if fj {
+                        if gj {
                             let _e459 = local_2;
                             let _e460 = clamp(_e459, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                             local_2 = _e460;
@@ -461,7 +461,7 @@ fn main_1() {
                         break;
                     }
                     case 15: {
-                        if fj {
+                        if gj {
                             let _e433 = local_2;
                             let _e434 = clamp(_e433, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                             local_2 = _e434;
@@ -494,9 +494,9 @@ fn main_1() {
     let _e773 = phi_5314_;
     let _e775 = phi_5307_;
     let _e776 = _e775.xyz;
-    let _e779 = j.F3_;
-    let _e781 = j.G3_;
-    if (gj && (_e775.w != 0f)) {
+    let _e779 = j.G3_;
+    let _e781 = j.H3_;
+    if (hj && (_e775.w != 0f)) {
         phi_5309_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e99.x) + (0.00583715f * _e99.y))))) * _e779) + _e781)) + _e776);
     } else {
         phi_5309_ = _e776;

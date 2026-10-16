@@ -8,18 +8,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -37,11 +37,11 @@ struct Bf_1 {
     r2_: array<atomic<u32>>,
 }
 
-@id(7) override gj: bool = true;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
-@id(1) override aj: bool = true;
-@id(0) override Zi: bool = true;
+@id(7) override hj: bool = true;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
+@id(1) override bj: bool = true;
+@id(0) override aj: bool = true;
 
 @group(0) @binding(0)
 var<uniform> j: VB;
@@ -61,7 +61,7 @@ var<private> Q0_1: f32;
 var<private> P0_1: vec4<f32>;
 var<private> o1_1: f32;
 var<private> L4_1: vec2<f32>;
-var<private> z3_1: vec2<u32>;
+var<private> A3_1: vec2<u32>;
 var<private> V0_1: vec4<f32>;
 var<private> i2_1: vec2<f32>;
 @group(2) @binding(1)
@@ -114,7 +114,7 @@ fn main_1() {
     let _e101 = P0_1;
     switch bitcast<i32>(0u) {
         default: {
-            let _e104 = (bj && (u32(_e98) != 0u));
+            let _e104 = (cj && (u32(_e98) != 0u));
             if (_e101.w >= 0f) {
                 phi_1630_ = _e101;
             } else {
@@ -161,8 +161,8 @@ fn main_1() {
                 phi_1630_ = _e164;
             }
             let _e166 = phi_1630_;
-            phi_1028_ = hj;
-            if hj {
+            phi_1028_ = ij;
+            if ij {
                 phi_1028_ = (_e100.z < 0f);
             }
             let _e170 = phi_1028_;
@@ -171,8 +171,8 @@ fn main_1() {
                 phi_1634_ = _e172;
                 break;
             }
-            phi_1043_ = hj;
-            if hj {
+            phi_1043_ = ij;
+            if ij {
                 phi_1043_ = (_e100.z > 0f);
             }
             let _e176 = phi_1043_;
@@ -201,18 +201,18 @@ fn main_1() {
     let _e198 = phi_1634_;
     let _e199 = o1_1;
     let _e200 = L4_1;
-    let _e203 = z3_1[1u];
-    let _e205 = z3_1[0u];
+    let _e203 = A3_1[1u];
+    let _e205 = A3_1[0u];
     let _e206 = vec2<u32>(floor(_e200));
     phi_1636_ = 1f;
-    if aj {
+    if bj {
         let _e234 = V0_1;
         let _e237 = min(_e234.xy, _e234.zw);
         phi_1636_ = min(min(_e237.x, _e237.y), 1f);
     }
     let _e243 = phi_1636_;
-    phi_810_ = Zi;
-    if Zi {
+    phi_810_ = aj;
+    if aj {
         let _e245 = i2_1[0u];
         phi_810_ = (_e245 != 0f);
     }
@@ -298,10 +298,10 @@ fn main_1() {
     }
     let _e339 = phi_1660_;
     phi_1671_ = f32();
-    if gj {
-        let _e341 = j.F3_;
-        let _e343 = j.G3_;
-        if gj {
+    if hj {
+        let _e341 = j.G3_;
+        let _e343 = j.H3_;
+        if hj {
             phi_1661_ = ((fract((52.982918f * fract(((0.06711056f * _e62.x) + (0.00583715f * _e62.y))))) * _e341) + _e343);
         } else {
             phi_1661_ = 0f;
@@ -312,7 +312,7 @@ fn main_1() {
     let _e357 = phi_1671_;
     let _e358 = (_e198 * _e339);
     let _e359 = _e358.xyz;
-    if (gj && (_e358.w != 0f)) {
+    if (hj && (_e358.w != 0f)) {
         phi_1694_ = (vec3(_e357) + _e359);
     } else {
         phi_1694_ = _e359;
@@ -326,14 +326,14 @@ fn main_1() {
 }
 
 @fragment
-fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(9) U0_: vec3<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(0) P0_: vec4<f32>, @location(1) @interpolate(flat, either) o1_: f32, @location(8) L4_: vec2<f32>, @location(7) @interpolate(flat, either) z3_: vec2<u32>, @location(5) V0_: vec4<f32>, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(3) @interpolate(flat, either) G0_: f32) -> @location(0) vec4<f32> {
+fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(9) U0_: vec3<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(0) P0_: vec4<f32>, @location(1) @interpolate(flat, either) o1_: f32, @location(8) L4_: vec2<f32>, @location(7) @interpolate(flat, either) A3_: vec2<u32>, @location(5) V0_: vec4<f32>, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(3) @interpolate(flat, either) G0_: f32) -> @location(0) vec4<f32> {
     gl_FragCoord_1 = gl_FragCoord;
     U0_1 = U0_;
     Q0_1 = Q0_;
     P0_1 = P0_;
     o1_1 = o1_;
     L4_1 = L4_;
-    z3_1 = z3_;
+    A3_1 = A3_;
     V0_1 = V0_;
     i2_1 = i2_;
     G0_1 = G0_;

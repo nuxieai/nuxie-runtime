@@ -21,7 +21,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef BF
 #if __VERSION__>=310
-layout(binding=0,std140) uniform Mk{uniform highp vec4 Si;}Ti;
+layout(binding=0,std140) uniform Nk{uniform highp vec4 Ti;}Ui;
 #else
 uniform mediump vec4 CF;
 #endif
@@ -44,7 +44,7 @@ layout(location=0) out mediump vec4 oc;
 void main(){
 #ifdef BF
 #if __VERSION__>=310
-n0=Ti.Si;
+n0=Ui.Ti;
 #else
 n0=CF;
 #endif
@@ -67,7 +67,7 @@ oc=n0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 Ui;void main(){Ui=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 Vi;void main(){Vi=vec4(0,1,0,1);}
 #endif
 #endif
 )===";

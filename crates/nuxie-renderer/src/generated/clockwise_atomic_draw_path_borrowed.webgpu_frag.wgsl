@@ -8,18 +8,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -33,7 +33,7 @@ struct Bf_1 {
     r2_: array<atomic<u32>>,
 }
 
-@id(3) override cj: bool = true;
+@id(3) override dj: bool = true;
 
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
@@ -41,7 +41,7 @@ var AD: texture_2d<f32>;
 var db: sampler;
 var<private> S_1: vec4<f32>;
 var<private> L4_1: vec2<f32>;
-var<private> z3_1: vec2<u32>;
+var<private> A3_1: vec2<u32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 @group(0) @binding(6)
@@ -76,8 +76,8 @@ fn main_1() {
             if (_e48.y >= 0f) {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_536_ = cj;
-                        if cj {
+                        phi_536_ = dj;
+                        if dj {
                             phi_536_ = (_e48.x < -1.5f);
                         }
                         let _e119 = phi_536_;
@@ -98,8 +98,8 @@ fn main_1() {
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_599_ = cj;
-                        if cj {
+                        phi_599_ = dj;
+                        if dj {
                             phi_599_ = (_e48.y < -1.5f);
                         }
                         let _e55 = phi_599_;
@@ -143,8 +143,8 @@ fn main_1() {
     let _e136 = phi_861_;
     let _e137 = L4_1;
     let _e139 = vec2<u32>(floor(_e137));
-    let _e141 = z3_1[1u];
-    let _e143 = z3_1[0u];
+    let _e141 = A3_1[1u];
+    let _e143 = A3_1[0u];
     let _e174 = u32(((abs(_e136) * 1024f) + 0.5f));
     let _e176 = j.q2_;
     let _e178 = (_e176 | (262144u - _e174));
@@ -156,10 +156,10 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(2) S: vec4<f32>, @location(8) L4_: vec2<f32>, @location(7) @interpolate(flat, either) z3_: vec2<u32>, @location(0) P0_: vec4<f32>, @location(3) @interpolate(flat, either) G0_: f32, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(5) V0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) U0_: vec3<f32>) {
+fn main(@location(2) S: vec4<f32>, @location(8) L4_: vec2<f32>, @location(7) @interpolate(flat, either) A3_: vec2<u32>, @location(0) P0_: vec4<f32>, @location(3) @interpolate(flat, either) G0_: f32, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(5) V0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) U0_: vec3<f32>) {
     S_1 = S;
     L4_1 = L4_;
-    z3_1 = z3_;
+    A3_1 = A3_;
     P0_1 = P0_;
     G0_1 = G0_;
     i2_1 = i2_;

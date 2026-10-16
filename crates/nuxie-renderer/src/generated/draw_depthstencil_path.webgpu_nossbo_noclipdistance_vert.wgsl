@@ -8,18 +8,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -41,8 +41,8 @@ struct VertexOutput {
 
 @id(15) override N7_: bool = false;
 @id(16) override he: bool = false;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 @group(0) @binding(7)
@@ -278,7 +278,7 @@ fn main_1() {
             phi_1357_ = _e261;
             phi_1346_ = _e265;
             phi_1333_ = _e261;
-            if (_e276 > 134217728u) {
+            if (_e276 > 201326592u) {
                 let _e281 = f32((_e248.z & 65535u));
                 let _e282 = (_e281 * 0.000015259022f);
                 let _e286 = sqrt(max((1f - (_e282 * _e282)), 0f));
@@ -288,14 +288,14 @@ fn main_1() {
                 }
                 let _e290 = phi_1321_;
                 let _e295 = (mat2x2<f32>(vec2<f32>(_e282, _e290), vec2<f32>(-(_e290), _e282)) * _e261);
-                let _e296 = (_e276 == 201326592u);
+                let _e296 = (_e276 == 268435456u);
                 phi_636_ = _e296;
                 if !(_e296) {
-                    phi_636_ = ((_e276 != 335544320u) && (_e282 < 0.25f));
+                    phi_636_ = ((_e276 != 402653184u) && (_e282 < 0.25f));
                 }
                 let _e302 = phi_636_;
                 let _e304 = ((_e246 & 2097152u) != 0u);
-                if (_e276 == 335544320u) {
+                if (_e276 == 402653184u) {
                     phi_1338_ = (_e261 + _e295);
                 } else {
                     phi_1339_ = _e261;
@@ -357,7 +357,7 @@ fn main_1() {
         let _e366 = textureLoad(XC, vec2<i32>(bitcast<i32>((_e152.z & 255u)), bitcast<i32>((_e156 >> bitcast<u32>(8i)))), 0i);
         let _e368 = (_e366.x & 15u);
         phi_1414_ = false;
-        if bj {
+        if cj {
             let _e371 = ((_e366.x >> bitcast<u32>(4i)) & 15u);
             Q0_ = f32(_e371);
             phi_1414_ = (_e371 != 0u);
@@ -387,8 +387,8 @@ fn main_1() {
             let _e425 = phi_1412_;
             P0_ = vec4<f32>(_e411.x, _e411.y, _e425, (((_e122 * -0.5f) - 0.25f) - round((bitcast<f32>(_e366.y) * 255f))));
         }
-        phi_893_ = hj;
-        if hj {
+        phi_893_ = ij;
+        if ij {
             phi_893_ = ((_e366.x & 2048u) != 0u);
         }
         let _e435 = phi_893_;

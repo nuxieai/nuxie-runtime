@@ -1,4 +1,4 @@
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -12,18 +12,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -44,7 +44,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
@@ -57,12 +57,12 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Zi: bool = true;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
+@id(0) override aj: bool = true;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
 
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(0)
 var<uniform> j: VB;
 var<private> gl_VertexIndex_1: i32;
@@ -82,7 +82,7 @@ var UB: texture_2d<u32>;
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(3) @binding(9)
 var db: sampler;
 
@@ -99,11 +99,11 @@ fn main_1() {
     let _e58 = KB.r2_[((_e53 * 4u) + 2u)];
     let _e60 = _e50.xy;
     let _e62 = bitcast<vec3<f32>>(_e58.yzw);
-    let _e68 = j.Bi;
+    let _e68 = j.Ci;
     T2_ = (((_e60 * _e62.x) + _e62.yz) * _e68);
     let _e72 = XC.r2_[_e53];
     let _e74 = (_e72.x & 15u);
-    if Zi {
+    if aj {
         let _e75 = (_e74 == 0u);
         if _e75 {
             phi_752_ = _e72.y;
@@ -126,7 +126,7 @@ fn main_1() {
         let _e92 = phi_754_;
         f4_ = _e92;
     }
-    if bj {
+    if cj {
         Q0_ = f32(((_e72.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e74 == 1u) {
@@ -145,8 +145,8 @@ fn main_1() {
         let _e131 = phi_761_;
         P0_ = vec4<f32>(_e117.x, _e117.y, _e131, (-0.75f - round((bitcast<f32>(_e72.y) * 255f))));
     }
-    phi_416_ = hj;
-    if hj {
+    phi_416_ = ij;
+    if ij {
         phi_416_ = ((_e72.x & 2048u) != 0u);
     }
     let _e141 = phi_416_;

@@ -7,11 +7,11 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -33,18 +33,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -60,18 +60,18 @@ struct VertexOutput {
 
 @id(15) override N7_: bool = false;
 @id(16) override he: bool = false;
-@id(1) override aj: bool = true;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
+@id(1) override bj: bool = true;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
 @group(0) @binding(7)
 var UB: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(4)
 var<storage> JB: mg;
 var<private> P0_: vec4<f32>;
@@ -295,7 +295,7 @@ fn main_1() {
             phi_1375_ = _e246;
             phi_1364_ = _e250;
             phi_1351_ = _e246;
-            if (_e261 > 134217728u) {
+            if (_e261 > 201326592u) {
                 let _e266 = f32((_e233.z & 65535u));
                 let _e267 = (_e266 * 0.000015259022f);
                 let _e271 = sqrt(max((1f - (_e267 * _e267)), 0f));
@@ -305,14 +305,14 @@ fn main_1() {
                 }
                 let _e275 = phi_1339_;
                 let _e280 = (mat2x2<f32>(vec2<f32>(_e267, _e275), vec2<f32>(-(_e275), _e267)) * _e246);
-                let _e281 = (_e261 == 201326592u);
+                let _e281 = (_e261 == 268435456u);
                 phi_661_ = _e281;
                 if !(_e281) {
-                    phi_661_ = ((_e261 != 335544320u) && (_e267 < 0.25f));
+                    phi_661_ = ((_e261 != 402653184u) && (_e267 < 0.25f));
                 }
                 let _e287 = phi_661_;
                 let _e289 = ((_e231 & 2097152u) != 0u);
-                if (_e261 == 335544320u) {
+                if (_e261 == 402653184u) {
                     phi_1356_ = (_e246 + _e280);
                 } else {
                     phi_1357_ = _e246;
@@ -367,7 +367,7 @@ fn main_1() {
         phi_1385_ = ((_e166 * _e340) + _e172);
     }
     let _e344 = phi_1385_;
-    if aj {
+    if bj {
         let _e345 = (_e153 * 8u);
         let _e349 = JB.r2_[(_e345 + 2u)];
         let _e360 = JB.r2_[(_e345 + 3u)];
@@ -392,7 +392,7 @@ fn main_1() {
         let _e392 = XC.r2_[_e153];
         let _e394 = (_e392.x & 15u);
         phi_1436_ = false;
-        if bj {
+        if cj {
             let _e397 = ((_e392.x >> bitcast<u32>(4i)) & 15u);
             Q0_ = f32(_e397);
             phi_1436_ = (_e397 != 0u);
@@ -421,8 +421,8 @@ fn main_1() {
             let _e443 = phi_1434_;
             P0_ = vec4<f32>(_e429.x, _e429.y, _e443, (((_e123 * -0.5f) - 0.25f) - round((bitcast<f32>(_e392.y) * 255f))));
         }
-        phi_883_ = hj;
-        if hj {
+        phi_883_ = ij;
+        if ij {
             phi_883_ = ((_e392.x & 2048u) != 0u);
         }
         let _e453 = phi_883_;

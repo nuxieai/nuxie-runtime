@@ -17,18 +17,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -43,8 +43,8 @@ struct VertexOutput {
     @location(4) @interpolate(flat, either) member_3: u32,
 }
 
-@id(0) override Zi: bool = true;
-@id(1) override aj: bool = true;
+@id(0) override aj: bool = true;
+@id(1) override bj: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -75,7 +75,7 @@ fn main_1() {
     let _e49 = QC_1;
     let _e50 = HC_1;
     d6_ = ((_e49 * _e50.zw) + _e50.xy);
-    if Zi {
+    if aj {
         let _e55 = BC_1;
         let _e57 = j.w6_;
         if (_e55 == 0u) {
@@ -86,7 +86,7 @@ fn main_1() {
         let _e64 = phi_408_;
         f4_ = _e64;
     }
-    if aj {
+    if bj {
         let _e65 = SB_1;
         if any((_e65 != vec4<f32>(0f, 0f, 0f, 0f))) {
             let _e77 = ((mat2x2<f32>(vec2<f32>(_e65.x, _e65.y), vec2<f32>(_e65.z, _e65.w)) * _e48) + _e46.zw);

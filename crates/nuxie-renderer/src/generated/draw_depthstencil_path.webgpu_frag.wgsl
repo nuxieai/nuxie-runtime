@@ -8,29 +8,29 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
 }
 
-@id(7) override gj: bool = true;
-@id(6) override fj: bool = true;
-@id(15) override oj: bool = false;
-@id(16) override pj: bool = false;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
+@id(7) override hj: bool = true;
+@id(6) override gj: bool = true;
+@id(15) override pj: bool = false;
+@id(16) override qj: bool = false;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
 
 var<private> Q0_1: f32;
 var<private> P0_1: vec4<f32>;
@@ -48,7 +48,7 @@ var U4_: sampler;
 @group(0) @binding(12)
 var MD: texture_2d<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
-var<private> Ii: vec4<f32>;
+var<private> Ji: vec4<f32>;
 @group(3) @binding(9)
 var db: sampler;
 @group(0) @binding(9)
@@ -76,7 +76,7 @@ fn main_1() {
 
     let _e65 = Q0_1;
     let _e66 = u32(_e65);
-    let _e68 = (bj && (_e66 != 0u));
+    let _e68 = (cj && (_e66 != 0u));
     let _e70 = P0_1[3u];
     if (_e70 >= 0f) {
         let _e148 = P0_1;
@@ -119,11 +119,11 @@ fn main_1() {
         let _e117 = textureSampleLevel(ZC, Q8_, _e116, 0f);
         switch bitcast<i32>(0u) {
             default: {
-                if oj {
+                if pj {
                     phi_2995_ = true;
                     break;
                 }
-                if pj {
+                if qj {
                     phi_2995_ = true;
                     break;
                 }
@@ -146,8 +146,8 @@ fn main_1() {
         phi_3013_ = _e147;
     }
     let _e150 = phi_3013_;
-    phi_975_ = hj;
-    if hj {
+    phi_975_ = ij;
+    if ij {
         let _e152 = U0_1[2u];
         phi_975_ = (_e152 > 0f);
     }
@@ -288,7 +288,7 @@ fn main_1() {
             break;
         }
         case 12: {
-            if fj {
+            if gj {
                 let _e293 = local_2;
                 let _e294 = clamp(_e293, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e294;
@@ -302,7 +302,7 @@ fn main_1() {
             break;
         }
         case 13: {
-            if fj {
+            if gj {
                 let _e244 = local_2;
                 let _e245 = clamp(_e244, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e245;
@@ -316,7 +316,7 @@ fn main_1() {
             break;
         }
         case 14: {
-            if fj {
+            if gj {
                 let _e218 = local_2;
                 let _e219 = clamp(_e218, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e219;
@@ -328,7 +328,7 @@ fn main_1() {
             break;
         }
         case 15: {
-            if fj {
+            if gj {
                 let _e192 = local_2;
                 let _e193 = clamp(_e192, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e193;
@@ -353,9 +353,9 @@ fn main_1() {
     let _e517 = vec4<f32>(_e511.x, _e511.y, _e499.z, _e511.w);
     let _e518 = _e517.xyz;
     let _e519 = gl_FragCoord_1;
-    let _e521 = j.F3_;
-    let _e523 = j.G3_;
-    if (gj && (_e177.w != 0f)) {
+    let _e521 = j.G3_;
+    let _e523 = j.H3_;
+    if (hj && (_e177.w != 0f)) {
         phi_3537_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e519.x) + (0.00583715f * _e519.y))))) * _e521) + _e523)) + _e518);
     } else {
         phi_3537_ = _e518;
@@ -363,7 +363,7 @@ fn main_1() {
     let _e539 = phi_3537_;
     let _e545 = vec4<f32>(_e539.x, _e517.y, _e517.z, _e517.w);
     let _e551 = vec4<f32>(_e545.x, _e539.y, _e545.z, _e545.w);
-    Ii = vec4<f32>(_e551.x, _e551.y, _e539.z, _e551.w);
+    Ji = vec4<f32>(_e551.x, _e551.y, _e539.z, _e551.w);
     return;
 }
 
@@ -374,6 +374,6 @@ fn main(@location(1) @interpolate(flat, either) Q0_: f32, @location(0) P0_: vec4
     U0_1 = U0_;
     gl_FragCoord_1 = gl_FragCoord;
     main_1();
-    let _e9 = Ii;
+    let _e9 = Ji;
     return _e9;
 }

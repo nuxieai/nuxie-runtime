@@ -1,8 +1,8 @@
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -16,18 +16,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -56,9 +56,9 @@ struct VertexOutput {
 @group(0) @binding(7)
 var UB: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(0)
 var<uniform> j: VB;
 var<private> gl_VertexIndex_1: i32;
@@ -323,7 +323,7 @@ fn main_1() {
         let _e350 = vec4<f32>(_e347.x, _e347.y, 0f, 0f);
         phi_2440_ = _e339;
         phi_2426_ = _e350;
-        if (_e179 > 134217728u) {
+        if (_e179 > 201326592u) {
             let _e356 = f32((_e176.z & 65535u));
             let _e357 = (_e356 * 0.000015259022f);
             let _e361 = sqrt(max((1f - (_e357 * _e357)), 0f));
@@ -335,10 +335,10 @@ fn main_1() {
             let _e370 = (mat2x2<f32>(vec2<f32>(_e357, _e365), vec2<f32>(-(_e365), _e357)) * _e294);
             let _e371 = (_e115 * _e370);
             let _e379 = ((abs(_e371.x) + abs(_e371.y)) * (1f / dot(_e371, _e371)));
-            let _e380 = (_e179 == 335544320u);
+            let _e380 = (_e179 == 402653184u);
             phi_1644_ = _e380;
             if !(_e380) {
-                phi_1644_ = ((_e179 == 268435456u) && (_e357 >= 0.25f));
+                phi_1644_ = ((_e179 == 335544320u) && (_e357 >= 0.25f));
             }
             let _e386 = phi_1644_;
             if _e386 {
@@ -449,7 +449,7 @@ fn main_1() {
     let _e574 = phi_2472_;
     let _e576 = phi_2466_;
     let _e578 = phi_2442_;
-    let _e584 = j.yi;
+    let _e584 = j.zi;
     let _e587 = select(_e574.xy, vec2<f32>(1f, -1f), vec2((_e584 != 0u)));
     let _e593 = vec4<f32>(_e587.x, _e574.y, _e574.z, _e574.w);
     S = vec4<f32>(_e593.x, _e587.y, _e593.z, _e593.w);

@@ -33,7 +33,7 @@ use crate::mechanical_port::source::{
     text_engine::{
         FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
         TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWordBreak, TextWrap,
-        VerticalTextAlign,
+        VerticalTextAlign, fallback_calls, fallback_state,
     },
     viewmodel::{
         symbol_type::SymbolType,
@@ -166,6 +166,40 @@ impl StyledText {
     pub fn swap_runs(&mut self, other: &mut Vec<TextRun>) {
         std::mem::swap(&mut self.runs, other);
     }
+
+    /// Whether shaping this reads exactly what shaping `unichars` over `runs`
+    /// reads: the same code points and runs, fonts by identity and sizes by bits.
+    fn shapes_like(&self, unichars: &[u32], runs: &[TextRun]) -> bool {
+        self.value == unichars
+            && self.runs.len() == runs.len()
+            && self.runs.iter().zip(runs).all(|(a, b)| {
+                let same_font = match (&a.font, &b.font) {
+                    (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+                    (None, None) => true,
+                    _ => false,
+                };
+                same_font
+                    && a.size.to_bits() == b.size.to_bits()
+                    && a.line_height.to_bits() == b.line_height.to_bits()
+                    && a.letter_spacing.to_bits() == b.letter_spacing.to_bits()
+                    && a.unichar_count == b.unichar_count
+                    && a.script == b.script
+                    && a.style_id == b.style_id
+                    && a.level == b.level
+            })
+    }
+}
+
+/// The paragraphs Text::measure last shaped and what it shaped them from.
+/// Layout measures a text several times per solve with the same styled text;
+/// reshaping it would produce these same paragraphs.
+struct MeasuredShape {
+    unichars: Vec<u32>,
+    runs: Vec<TextRun>,
+    // fallback_state() when shaped. A shaping that called the fallback is not
+    // kept: what the callback returns may change.
+    fallback: (bool, bool),
+    shape: Vec<Paragraph>,
 }
 pub struct TextBoundsInfo {
     pub min_y: f32,
@@ -577,6 +611,7 @@ pub struct Text {
     emoji_image_cache: Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>,
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
+    measured_shape: Option<Box<MeasuredShape>>,
 }
 
 impl Default for Text {
@@ -613,6 +648,7 @@ impl Default for Text {
             emoji_image_cache: Vec::new(),
             draw_commands: Vec::new(),
             value_run_listeners: Vec::new(),
+            measured_shape: None,
         }
     }
 }
@@ -1123,12 +1159,17 @@ impl Text {
 
             let mut styled = std::mem::take(&mut self.styled_text);
             if self.make_styled(&mut styled, true, font_scale) {
-                let runs = styled.runs();
-                self.shape = runs[0]
-                    .font
-                    .as_ref()
-                    .expect("shaped text retains its font")
-                    .shape_text(styled.unichars(), runs, 0);
+                self.shape = match self.take_measured_shape(&styled) {
+                    Some(shape) => shape,
+                    None => {
+                        let runs = styled.runs();
+                        runs[0]
+                            .font
+                            .as_ref()
+                            .expect("shaped text retains its font")
+                            .shape_text(styled.unichars(), runs, 0)
+                    }
+                };
                 self.lines = Self::break_lines(
                     &self.shape,
                     if self.effective_sizing() == TextSizing::AutoWidth
@@ -2117,6 +2158,19 @@ impl Text {
             self.mark_shape_dirty_layout(false);
         }
     }
+    /// The paragraphs the last measure shaped from exactly what `styled`
+    /// shapes, taken so an update shaping the same text needn't shape it again.
+    fn take_measured_shape(&mut self, styled: &StyledText) -> Option<Vec<Paragraph>> {
+        let measured = self.measured_shape.take()?;
+        if measured.fallback == fallback_state()
+            && styled.shapes_like(&measured.unichars, &measured.runs)
+        {
+            return Some(measured.shape);
+        }
+        self.measured_shape = Some(measured);
+        None
+    }
+
     fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {
         // During the solve, the participant's authored axis types are already
         // available, but control_size has not supplied the resolved slot yet.
@@ -2146,12 +2200,42 @@ impl Text {
             return Vec2D::default();
         }
         let paragraph_space = self.base.paragraph_spacing() * font_scale;
-        let runs = styled.runs();
-        let shape = runs[0]
-            .font
-            .as_ref()
-            .expect("shaped text retains its font")
-            .shape_text(styled.unichars(), runs, 0);
+        // Shape only what the last measure didn't already shape.
+        let fallback = fallback_state();
+        let (measured, keep) = match self.measured_shape.take() {
+            Some(measured)
+                if measured.fallback == fallback
+                    && styled.shapes_like(&measured.unichars, &measured.runs) =>
+            {
+                (measured, true)
+            }
+            previous => {
+                let calls = fallback_calls();
+                let runs = styled.runs();
+                let shape = runs[0]
+                    .font
+                    .as_ref()
+                    .expect("shaped text retains its font")
+                    .shape_text(styled.unichars(), runs, 0);
+                // Refill the previous record's storage rather than allocating.
+                let mut measured = previous.unwrap_or_else(|| {
+                    Box::new(MeasuredShape {
+                        unichars: Vec::new(),
+                        runs: Vec::new(),
+                        fallback,
+                        shape: Vec::new(),
+                    })
+                });
+                measured.unichars.clear();
+                measured.unichars.extend_from_slice(styled.unichars());
+                measured.runs.clear();
+                measured.runs.extend_from_slice(runs);
+                measured.fallback = fallback;
+                measured.shape = shape;
+                (measured, fallback_calls() == calls)
+            }
+        };
+        let shape = &measured.shape;
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
                 TextWrap::NoWrap
@@ -2159,7 +2243,7 @@ impl Text {
                 self.wrap()
             };
         let lines = Self::break_lines(
-            &shape,
+            shape,
             fit_width,
             self.align(),
             measuring_wrap,
@@ -2200,7 +2284,7 @@ impl Text {
         }
         let (top_trim, bottom_trim) = compute_vertical_trim(
             &lines,
-            &shape,
+            shape,
             self.vertical_trim_top(),
             self.vertical_trim_bottom(),
         );
@@ -2219,6 +2303,9 @@ impl Text {
             TextSizing::Unknown(_) => Vec2D::default(),
         };
         self.styled_text = styled;
+        if keep {
+            self.measured_shape = Some(measured);
+        }
         Vec2D::new(max.x.min(bounds.x), max.y.min(bounds.y))
     }
     pub fn align_value_changed(&mut self) {

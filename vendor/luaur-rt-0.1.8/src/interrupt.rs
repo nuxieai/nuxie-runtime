@@ -18,7 +18,8 @@
 //! * `Err(e)`                 — raises `e` as a Lua error via `lua_error`.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+
+use crate::app_data::WordMap;
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
@@ -39,8 +40,8 @@ type InterruptFn = Box<dyn Fn(&Lua) -> Result<VmState> + 'static>;
 thread_local! {
     /// Per-VM interrupt closure, keyed by the `global_State` pointer (stable for
     /// the lifetime of the VM and shared by all of its threads).
-    static INTERRUPTS: RefCell<HashMap<*mut core::ffi::c_void, InterruptFn>> =
-        RefCell::new(HashMap::new());
+    static INTERRUPTS: RefCell<WordMap<*mut core::ffi::c_void, InterruptFn>> =
+        RefCell::new(WordMap::default());
 }
 
 /// The `global_State` pointer for `state` — the per-VM key shared by all

@@ -24,7 +24,6 @@
 
 use std::any::TypeId;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use crate::callback::{create_callback_function, BoxedCallback};
@@ -36,7 +35,7 @@ use crate::table::Table;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::value::Value;
 
-type UserDataMetatableCache = HashMap<TypeId, c_int>;
+type UserDataMetatableCache = crate::app_data::WordMap<TypeId, c_int>;
 
 #[inline]
 unsafe fn vm_key(state: *mut lua_State) -> usize {
@@ -46,13 +45,13 @@ unsafe fn vm_key(state: *mut lua_State) -> usize {
 #[cfg(feature = "send")]
 mod metatable_store {
     use super::UserDataMetatableCache;
-    use std::collections::HashMap;
+    use crate::app_data::WordMap;
     use std::sync::{LazyLock, Mutex};
 
-    static STORE: LazyLock<Mutex<HashMap<usize, UserDataMetatableCache>>> =
-        LazyLock::new(|| Mutex::new(HashMap::new()));
+    static STORE: LazyLock<Mutex<WordMap<usize, UserDataMetatableCache>>> =
+        LazyLock::new(|| Mutex::new(WordMap::default()));
 
-    pub(super) fn with<R>(f: impl FnOnce(&mut HashMap<usize, UserDataMetatableCache>) -> R) -> R {
+    pub(super) fn with<R>(f: impl FnOnce(&mut WordMap<usize, UserDataMetatableCache>) -> R) -> R {
         let mut guard = STORE.lock().unwrap_or_else(|error| error.into_inner());
         f(&mut guard)
     }
@@ -61,15 +60,15 @@ mod metatable_store {
 #[cfg(not(feature = "send"))]
 mod metatable_store {
     use super::UserDataMetatableCache;
+    use crate::app_data::WordMap;
     use std::cell::RefCell;
-    use std::collections::HashMap;
 
     thread_local! {
-        static STORE: RefCell<HashMap<usize, UserDataMetatableCache>> =
-            RefCell::new(HashMap::new());
+        static STORE: RefCell<WordMap<usize, UserDataMetatableCache>> =
+            RefCell::new(WordMap::default());
     }
 
-    pub(super) fn with<R>(f: impl FnOnce(&mut HashMap<usize, UserDataMetatableCache>) -> R) -> R {
+    pub(super) fn with<R>(f: impl FnOnce(&mut WordMap<usize, UserDataMetatableCache>) -> R) -> R {
         STORE.with(|store| f(&mut store.borrow_mut()))
     }
 }

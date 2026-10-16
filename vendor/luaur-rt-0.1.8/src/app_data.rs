@@ -29,7 +29,7 @@ use crate::sys::lua_State;
 /// or a `TypeId`. Hot callbacks look app data up on every script call, and
 /// SipHash's flooding resistance buys nothing for process-local keys.
 #[derive(Default)]
-struct WordHasher(u64);
+pub(crate) struct WordHasher(u64);
 
 impl Hasher for WordHasher {
     fn finish(&self) -> u64 {
@@ -54,7 +54,7 @@ impl Hasher for WordHasher {
     }
 }
 
-type WordMap<K, V> = HashMap<K, V, BuildHasherDefault<WordHasher>>;
+pub(crate) type WordMap<K, V> = HashMap<K, V, BuildHasherDefault<WordHasher>>;
 
 /// One entry: a value behind a `RefCell` so per-type borrows can be tracked,
 /// shared via `Rc` so a returned guard can outlive a borrow of the outer map.

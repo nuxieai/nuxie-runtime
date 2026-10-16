@@ -88,7 +88,7 @@ pub const LAYOUT_DIVERGENCES: &[LayoutDivergence] = &[
     },
     LayoutDivergence {
         fixture: "s20__flex-row__none__layout-component__fill__y-hug__k-max-over-host__sibling-fills__leaf-text__over",
-        reason: "layout-diverges:CSS fit-content supplies the unbreakable content basis; stock Taffy flex shrink shares the 200 row as 185.7699 and 14.230129.",
+        reason: "layout-diverges:Taffy shrink with this runtime's zero flex-item minimum shares the 200 row as 185.7699 and 14.230129 from bases 652.734375 and 50; pure CSS min-width:auto would floor the text at 260.",
         first_difference: "Subject.world[4]: 14.230129 != 40",
         pins: &[
             ScalarPin {
@@ -155,7 +155,7 @@ pub const LAYOUT_DIVERGENCES: &[LayoutDivergence] = &[
     },
     LayoutDivergence {
         fixture: "s20__flex-row__none__layout-component__fill__y-hug__k-max-over-host__sibling-fills__leaf-text__over__unbounded",
-        reason: "layout-diverges:Width is Fill, so hugUnbounded only unbounds the Hug height; the CSS content basis still shrinks to 185.7699 beside the 14.230129 sibling.",
+        reason: "layout-diverges:Width is Fill, so hugUnbounded only unbounds height; Taffy shrink with the runtime's zero flex-item minimum gives 185.7699 beside 14.230129 from bases 652.734375 and 50; pure CSS min-width:auto floors the text at 260.",
         first_difference: "Subject.world[4]: 14.230129 != 40",
         pins: &[
             ScalarPin {

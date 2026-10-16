@@ -681,10 +681,38 @@ reviewed_layout_divergences = [{records}]
     }
 
     #[test]
+    fn layout_review_cannot_credit_a_missing_case() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        // Preserve the entry count, lane count and complete baseline coverage.
+        // The reviewed ID alone disappears, rather than an unrelated validator
+        // rejecting a shortened corpus before the missing-review guard runs.
+        let case = &mut manifest.cases[0];
+        let old_path = fixture.root.join(&case.expected);
+        case.id = "renamed-000".to_owned();
+        case.expected = "tests/unit_tests/silvers/renamed-000.sriv".to_owned();
+        fs::rename(old_path, fixture.root.join(&case.expected)).unwrap();
+        let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("reviewed layout case is missing: case-000")
+        );
+    }
+
+    #[test]
     fn layout_review_cannot_credit_an_unsupported_case() {
         let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
         manifest.cases[0].status = Status::UnsupportedFeature;
-        manifest.cases[0].note = "Unsupported feature: test".to_owned();
-        assert!(validate_manifest(&manifest, &fixture.root).is_err());
+        // Keep a valid CSS review note and a valid unsupported-feature note.
+        // Only the executable runtime divergence guard must reject this case.
+        manifest.cases[0].note = manifest.cases[0]
+            .note
+            .replace("CSS content minimum", "Unsupported feature: fixture");
+        let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must remain an executable runtime divergence")
+        );
     }
 }

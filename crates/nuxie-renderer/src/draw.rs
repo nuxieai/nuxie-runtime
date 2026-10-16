@@ -743,20 +743,25 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     };
     let feather_join_segments = ((polar_segments_per_radian * std::f32::consts::PI).ceil() + 4.0)
         .clamp(6.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32;
-    // Match C++ PathDraw::initForMidpointFan's path-wide sizing while retaining
-    // the largest allocation in the frame scratch. A stroked cubic can produce
-    // at most three convex/180-degree pieces and two cusp rotations.
-    let prepared_capacity = contours
-        .iter()
-        .map(|contour| {
-            contour
-                .curves
-                .len()
-                .checked_mul(5)
-                .expect("stroke preparation capacity overflow")
-        })
-        .max()
-        .unwrap_or(0);
+    // Source sizes storage from cached verb counts. Our combined records also
+    // hold lines and their rotations (C++ keeps those outside its curve slots).
+    // Include a possible implicit closing line for every contour, not merely
+    // explicit close verbs. This boundary also accepts quads, converted to
+    // cubics by stroke_contours instead of by the upstream path factory.
+    let cubic_count = path
+        .verb_count(PathVerb::Cubic)
+        .checked_add(path.verb_count(PathVerb::Quad))
+        .expect("stroke cubic capacity overflow");
+    let line_capacity = path
+        .verb_count(PathVerb::Line)
+        .checked_add(contour_count)
+        .expect("stroke line capacity overflow");
+    // Each cubic needs at most three pieces. Cusp and authored join rotations
+    // live in those same records, so they need no additional record slots.
+    let prepared_capacity = cubic_count
+        .checked_mul(3)
+        .and_then(|count| count.checked_add(line_capacity))
+        .expect("stroke preparation capacity overflow");
     let pending_capacity = prepared_capacity
         .checked_add(1)
         .expect("stroke pending capacity overflow")
@@ -766,12 +771,11 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     #[cfg(test)]
     let pending_capacity_before = pending.capacity();
     prepared.reserve(prepared_capacity);
+    // The Rust re-chop zip retains a zero-chop record for each line too.
     chops.reserve(
-        contours
-            .iter()
-            .map(|contour| contour.curves.len())
-            .max()
-            .unwrap_or(0),
+        cubic_count
+            .checked_add(line_capacity)
+            .expect("stroke chop capacity overflow"),
     );
     pending.reserve(pending_capacity);
     #[cfg(test)]
@@ -934,7 +938,9 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                 if index == 0 && !contour.closed {
                     pending.push((
                         [cubic[3], cubic[2], cubic[1], cubic[0]],
-                        curve.tangents[0],
+                        // Source derives the cap from the emitted cubic,
+                        // including rounded controls when it came from a line.
+                        cubic_tangents(cubic)[0],
                         0,
                         0,
                         cap_segments,
@@ -1261,11 +1267,7 @@ fn feather_max_screen_radius() -> f32 {
 }
 
 fn stroke_contours(path: &RawPath, contours: &mut Vec<StrokeContour>) -> Option<usize> {
-    let contour_count = path
-        .verbs()
-        .iter()
-        .filter(|verb| **verb == PathVerb::Move)
-        .count();
+    let contour_count = path.verb_count(PathVerb::Move);
     if contours.capacity() < contour_count {
         contours.reserve(contour_count - contours.len());
     }

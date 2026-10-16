@@ -1,7 +1,7 @@
 use super::aabb::Aabb;
 use super::bezier_utils::EvalCubic;
 use super::mat2d::Mat2D;
-use super::path_types::{PathDirection, PathVerb, path_verb_to_point_count};
+use super::path_types::{PATH_VERB_COUNT, PathDirection, PathVerb, path_verb_to_point_count};
 use super::simd::{self, Float2, Float4};
 use super::vec2d::Vec2D;
 
@@ -120,6 +120,7 @@ pub struct RawPath {
     points: Vec<Vec2D>,
     verbs: Vec<PathVerb>,
     last_move_index: usize,
+    verb_counts: [usize; PATH_VERB_COUNT],
     contour_is_open: bool,
 }
 
@@ -129,6 +130,7 @@ impl Clone for RawPath {
             points: self.points.clone(),
             verbs: self.verbs.clone(),
             last_move_index: self.last_move_index,
+            verb_counts: self.verb_counts,
             contour_is_open: self.contour_is_open,
         }
     }
@@ -138,6 +140,7 @@ impl Clone for RawPath {
         self.points.clone_from(&source.points);
         self.verbs.clone_from(&source.verbs);
         self.last_move_index = source.last_move_index;
+        self.verb_counts = source.verb_counts;
         self.contour_is_open = source.contour_is_open;
     }
 }
@@ -151,11 +154,13 @@ impl PartialEq for RawPath {
 impl RawPath {
     /// Upstream trusted-span constructor; bookkeeping stays default.
     pub fn from_slices(verbs: &[PathVerb], points: &[Vec2D]) -> Self {
-        Self {
+        let mut path = Self {
             verbs: verbs.to_vec(),
             points: points.to_vec(),
             ..Self::default()
-        }
+        };
+        path.recount_verbs();
+        path
     }
     pub const COARSE_AREA_TOLERANCE: f32 = 8.0;
     pub fn empty(&self) -> bool {
@@ -173,10 +178,11 @@ impl RawPath {
     /// Borrow the original path buffers at the renderer boundary, without
     /// replaying geometry or changing contour construction state.
     pub fn as_render_path_ref(&self) -> nuxie_render_api::RawPathRef<'_> {
-        nuxie_render_api::RawPathRef::new(&self.verbs, bytemuck::cast_slice(&self.points))
-    }
-    pub fn verbs_mut(&mut self) -> &mut [PathVerb] {
-        &mut self.verbs
+        nuxie_render_api::RawPathRef::with_verb_counts(
+            &self.verbs,
+            bytemuck::cast_slice(&self.points),
+            self.verb_counts,
+        )
     }
     pub fn verbs_u8(&self) -> &[u8] {
         // SAFETY: PathVerb is `repr(u8)`, so each initialized enum occupies
@@ -213,11 +219,18 @@ impl RawPath {
         let maxes = simd::max(maxes.xy(), maxes.zw());
         Aabb::new(mins.x(), mins.y(), maxes.x(), maxes.y())
     }
-    pub fn count_move_tos(&self) -> usize {
-        self.verbs
-            .iter()
-            .filter(|verb| **verb == PathVerb::Move)
-            .count()
+    pub fn verb_count(&self, verb: PathVerb) -> usize {
+        self.verb_counts[verb as usize]
+    }
+    fn push_verb(&mut self, verb: PathVerb) {
+        self.verbs.push(verb);
+        self.verb_counts[verb as usize] += 1;
+    }
+    fn recount_verbs(&mut self) {
+        self.verb_counts.fill(0);
+        for &verb in &self.verbs {
+            self.verb_counts[verb as usize] += 1;
+        }
     }
     pub fn inject_implicit_move_if_needed(&mut self) {
         if !self.contour_is_open {
@@ -233,27 +246,27 @@ impl RawPath {
         self.contour_is_open = true;
         self.last_move_index = self.points.len();
         self.points.push(point);
-        self.verbs.push(PathVerb::Move);
+        self.push_verb(PathVerb::Move);
     }
     pub fn line_to_point(&mut self, point: Vec2D) {
         self.inject_implicit_move_if_needed();
         self.points.push(point);
-        self.verbs.push(PathVerb::Line);
+        self.push_verb(PathVerb::Line);
     }
     pub fn quad_to_points(&mut self, control: Vec2D, end: Vec2D) {
         self.inject_implicit_move_if_needed();
         self.points.push(control);
         self.points.push(end);
-        self.verbs.push(PathVerb::Quad);
+        self.push_verb(PathVerb::Quad);
     }
     pub fn cubic_to_points(&mut self, control1: Vec2D, control2: Vec2D, end: Vec2D) {
         self.inject_implicit_move_if_needed();
         self.points.extend([control1, control2, end]);
-        self.verbs.push(PathVerb::Cubic);
+        self.push_verb(PathVerb::Cubic);
     }
     pub fn close(&mut self) {
         if self.contour_is_open {
-            self.verbs.push(PathVerb::Close);
+            self.push_verb(PathVerb::Close);
             self.contour_is_open = false;
         }
     }
@@ -263,6 +276,7 @@ impl RawPath {
     pub fn swap(&mut self, other: &mut Self) {
         core::mem::swap(&mut self.points, &mut other.points);
         core::mem::swap(&mut self.verbs, &mut other.verbs);
+        core::mem::swap(&mut self.verb_counts, &mut other.verb_counts);
     }
     pub fn reset(&mut self) {
         self.points.clear();
@@ -270,15 +284,18 @@ impl RawPath {
         self.verbs.clear();
         self.verbs.shrink_to_fit();
         self.contour_is_open = false;
+        self.verb_counts.fill(0);
     }
     pub fn rewind(&mut self) {
         self.points.clear();
         self.verbs.clear();
         self.contour_is_open = false;
+        self.verb_counts.fill(0);
     }
     pub fn transform(&self, matrix: Mat2D) -> Self {
         let mut path = Self {
             verbs: self.verbs.clone(),
+            verb_counts: self.verb_counts,
             points: vec![Vec2D::default(); self.points.len()],
             ..Self::default()
         };
@@ -453,6 +470,9 @@ impl RawPath {
         let initial_verb_count = self.verbs.len();
         let initial_point_count = self.points.len();
         self.verbs.extend_from_slice(&source.verbs);
+        for index in 0..PATH_VERB_COUNT {
+            self.verb_counts[index] += source.verb_counts[index];
+        }
         if let Some(matrix) = matrix {
             let start = self.points.len();
             self.points
@@ -479,7 +499,7 @@ impl RawPath {
         let initial_verb_count = self.verbs.len();
         self.verbs.reserve(source.verbs.len());
         debug_assert_eq!(source.verbs.first(), Some(&PathVerb::Move));
-        self.verbs.push(PathVerb::Move);
+        self.push_verb(PathVerb::Move);
         let mut closed = false;
         for (reverse_index, verb) in source.verbs.iter().rev().copied().enumerate() {
             if verb == PathVerb::Close {
@@ -489,11 +509,11 @@ impl RawPath {
                 continue;
             }
             if verb == PathVerb::Move && closed {
-                self.verbs.push(PathVerb::Close);
+                self.push_verb(PathVerb::Close);
                 closed = false;
             }
             if reverse_index + 1 != source.verbs.len() {
-                self.verbs.push(verb);
+                self.push_verb(verb);
             } else {
                 debug_assert_eq!(verb, PathVerb::Move);
             }
@@ -548,6 +568,8 @@ impl RawPath {
                 }
                 dst_verb += 1;
                 dst_point += advance;
+            } else {
+                self.verb_counts[verb as usize] -= 1;
             }
             point_index += advance;
         }

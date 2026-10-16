@@ -699,6 +699,18 @@ pub enum PathVerb {
     Close = 5,
 }
 
+pub const PATH_VERB_COUNT: usize = PathVerb::Close as usize + 1;
+
+const fn count_path_verbs(verbs: &[PathVerb]) -> [usize; PATH_VERB_COUNT] {
+    let mut counts = [0; PATH_VERB_COUNT];
+    let mut index = 0;
+    while index < verbs.len() {
+        counts[verbs[index] as usize] += 1;
+        index += 1;
+    }
+    counts
+}
+
 /// Borrowed geometry for the source `const RawPath&` renderer boundary.
 ///
 /// The owner guarantees that the verb and point arrays are self-consistent.
@@ -707,11 +719,30 @@ pub enum PathVerb {
 pub struct RawPathRef<'a> {
     verbs: &'a [PathVerb],
     points: &'a [Vec2D],
+    verb_counts: [usize; PATH_VERB_COUNT],
 }
 
 impl<'a> RawPathRef<'a> {
     pub const fn new(verbs: &'a [PathVerb], points: &'a [Vec2D]) -> Self {
-        Self { verbs, points }
+        Self::with_verb_counts(verbs, points, count_path_verbs(verbs))
+    }
+
+    /// Borrow an owner's geometry and its matching cached counts.
+    /// The caller must supply counts belonging to these exact verb buffers.
+    pub const fn with_verb_counts(
+        verbs: &'a [PathVerb],
+        points: &'a [Vec2D],
+        verb_counts: [usize; PATH_VERB_COUNT],
+    ) -> Self {
+        Self {
+            verbs,
+            points,
+            verb_counts,
+        }
+    }
+
+    pub const fn verb_count(self, verb: PathVerb) -> usize {
+        self.verb_counts[verb as usize]
     }
 
     pub const fn verbs(self) -> &'a [PathVerb] {
@@ -738,6 +769,7 @@ fn next_raw_path_mutation_id() -> u64 {
 pub struct RawPath {
     verbs: Vec<PathVerb>,
     points: Vec<Vec2D>,
+    verb_counts: [usize; PATH_VERB_COUNT],
     // Pinned `RawPath` keeps contour construction state separately from its
     // verb and point arrays. Bulk operations intentionally do not infer or
     // update either field.
@@ -828,6 +860,7 @@ impl RawPath {
     /// self-consistency invariant; do not normalize its verbs or contours.
     pub fn from_verbs_and_points(verbs: Vec<PathVerb>, points: Vec<Vec2D>) -> Self {
         Self {
+            verb_counts: count_path_verbs(&verbs),
             verbs,
             points,
             last_move_idx: 0,
@@ -840,6 +873,7 @@ impl RawPath {
         Self {
             verbs: Vec::new(),
             points: Vec::new(),
+            verb_counts: [0; PATH_VERB_COUNT],
             last_move_idx: 0,
             contour_open: false,
             mutation_id: next_raw_path_mutation_id(),
@@ -865,7 +899,11 @@ impl RawPath {
     }
 
     pub fn as_ref(&self) -> RawPathRef<'_> {
-        RawPathRef::new(&self.verbs, &self.points)
+        RawPathRef::with_verb_counts(&self.verbs, &self.points, self.verb_counts)
+    }
+
+    pub fn verb_count(&self, verb: PathVerb) -> usize {
+        self.verb_counts[verb as usize]
     }
 
     /// Coarse control-point bounds, matching C++ `RawPath::bounds()`.
@@ -958,6 +996,7 @@ impl RawPath {
         self.verbs.clear();
         self.points.clear();
         self.contour_open = false;
+        self.verb_counts.fill(0);
         self.verbs.reserve(verbs);
         self.points.reserve(points);
         build(&mut RawPathBuilder { raw_path: self });
@@ -968,6 +1007,7 @@ impl RawPath {
         self.verbs.clear();
         self.points.clear();
         self.contour_open = false;
+        self.verb_counts.fill(0);
     }
 
     /// Pinned `RawPath::reset`: clear geometry and release its allocations.
@@ -980,14 +1020,16 @@ impl RawPath {
         self.points.clear();
         self.points.shrink_to_fit();
         self.contour_open = false;
+        self.verb_counts.fill(0);
     }
 
-    /// Pinned `RawPath::swap` swaps only the geometry vectors. Contour
+    /// Pinned `RawPath::swap` swaps the geometry vectors and verb counts. Contour
     /// bookkeeping belongs to each destination object and is deliberately not
     /// exchanged.
     pub fn swap(&mut self, other: &mut Self) {
         std::mem::swap(&mut self.verbs, &mut other.verbs);
         std::mem::swap(&mut self.points, &mut other.points);
+        std::mem::swap(&mut self.verb_counts, &mut other.verb_counts);
         self.mark_mutated();
         other.mark_mutated();
     }
@@ -1144,6 +1186,9 @@ impl RawPath {
         }
         self.mark_mutated();
         self.verbs.extend_from_slice(path.verbs);
+        for (count, source_count) in self.verb_counts.iter_mut().zip(path.verb_counts) {
+            *count += source_count;
+        }
         if let Some(transform) = transform {
             let initial_point_count = self.points.len();
             self.points.resize(
@@ -1185,7 +1230,7 @@ impl RawPath {
         // Reverse the verbs while moving each close from the end of its
         // original contour to the end of the reversed contour.
         self.verbs.reserve(path.verbs.len());
-        self.verbs.push(PathVerb::Move);
+        self.push_verb(PathVerb::Move);
         let mut closed = false;
         for (index, verb) in path.verbs.iter().enumerate().rev() {
             if *verb == PathVerb::Close {
@@ -1195,7 +1240,7 @@ impl RawPath {
             }
 
             if *verb == PathVerb::Move && closed {
-                self.verbs.push(PathVerb::Close);
+                self.push_verb(PathVerb::Close);
                 closed = false;
             }
 
@@ -1204,7 +1249,7 @@ impl RawPath {
                 break;
             }
 
-            self.verbs.push(*verb);
+            self.push_verb(*verb);
         }
         debug_assert!(!closed, "every close verb must have a preceding move verb");
 
@@ -1260,6 +1305,8 @@ impl RawPath {
                 }
                 destination_verb += 1;
                 destination_point += point_count;
+            } else {
+                self.verb_counts[verb as usize] -= 1;
             }
             source_point += point_count;
         }
@@ -1296,18 +1343,24 @@ impl RawPath {
     }
 
     #[inline]
+    fn push_verb(&mut self, verb: PathVerb) {
+        self.verbs.push(verb);
+        self.verb_counts[verb as usize] += 1;
+    }
+
+    #[inline]
     fn move_untracked(&mut self, point: Vec2D) {
         self.contour_open = true;
         self.last_move_idx = self.points.len();
         self.points.push(point);
-        self.verbs.push(PathVerb::Move);
+        self.push_verb(PathVerb::Move);
     }
 
     #[inline]
     fn line_untracked(&mut self, point: Vec2D) {
         self.inject_implicit_move_if_needed();
         self.points.push(point);
-        self.verbs.push(PathVerb::Line);
+        self.push_verb(PathVerb::Line);
     }
 
     #[inline]
@@ -1315,20 +1368,20 @@ impl RawPath {
         self.inject_implicit_move_if_needed();
         self.points.push(control);
         self.points.push(end);
-        self.verbs.push(PathVerb::Quad);
+        self.push_verb(PathVerb::Quad);
     }
 
     #[inline]
     fn cubic_untracked(&mut self, control0: Vec2D, control1: Vec2D, end: Vec2D) {
         self.inject_implicit_move_if_needed();
         self.points.extend([control0, control1, end]);
-        self.verbs.push(PathVerb::Cubic);
+        self.push_verb(PathVerb::Cubic);
     }
 
     #[inline]
     fn close_untracked(&mut self) {
         if self.contour_open {
-            self.verbs.push(PathVerb::Close);
+            self.push_verb(PathVerb::Close);
             self.contour_open = false;
         }
     }
@@ -6246,6 +6299,113 @@ mod tests {
         assert!(rebuilt.points().is_empty());
         assert_ne!(rebuilt.mutation_id(), populated_snapshot.mutation_id());
         assert_eq!(populated_snapshot, expected);
+    }
+
+    #[test]
+    fn raw_path_verb_counts_track_every_mutation() {
+        // Upstream raw_path_test.cpp, with consuming Rust moves represented
+        // by take and API geometry adapters spelled out where needed.
+        fn check(path: &RawPath) {
+            for verb in [
+                PathVerb::Move,
+                PathVerb::Line,
+                PathVerb::Quad,
+                PathVerb::Cubic,
+                PathVerb::Close,
+            ] {
+                let expected = path.verbs().iter().filter(|&&v| v == verb).count();
+                assert_eq!(path.verb_count(verb), expected);
+                assert_eq!(path.as_ref().verb_count(verb), expected);
+                assert_eq!(
+                    RawPathRef::new(path.verbs(), path.points()).verb_count(verb),
+                    expected
+                );
+            }
+        }
+
+        let mut path = RawPath::new();
+        check(&path);
+        path.line_to(1.0, 1.0);
+        path.quad_to(2.0, 2.0, 3.0, 0.0);
+        path.cubic_to(4.0, 4.0, 5.0, 4.0, 6.0, 0.0);
+        path.close();
+        path.close();
+        path.add_rect(Aabb::new(0.0, 0.0, 10.0, 10.0));
+        path.add_oval(Aabb::new(0.0, 0.0, 10.0, 10.0));
+        let poly = [
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(5.0, 0.0),
+            Vec2D::new(5.0, 5.0),
+        ];
+        path.add_poly(&poly, true);
+        path.add_poly(&poly, false);
+        // RawPath::quadToCubic's exact construction through this API's cubic.
+        let start = *path.points().last().unwrap();
+        let control = Vec2D::new(7.0, 7.0);
+        let end = Vec2D::new(8.0, 0.0);
+        let c0 = Vec2D::lerp(start, control, 2.0 / 3.0);
+        let c1 = Vec2D::lerp(end, control, 2.0 / 3.0);
+        path.cubic_to(c0.x, c0.y, c1.x, c1.y, end.x, end.y);
+        check(&path);
+        assert_eq!(path.verb_count(PathVerb::Move), 5);
+
+        let mut copy = path.clone();
+        check(&copy);
+        let mut transformed = RawPath::new();
+        transformed.add_path_with_transform(&path, Mat2D([2.0, 0.0, 0.0, 2.0, 1.0, 1.0]));
+        check(&transformed);
+        check(&RawPath::from_verbs_and_points(
+            path.verbs().to_vec(),
+            path.points().to_vec(),
+        ));
+        copy.add_path(&path, Mat2D::IDENTITY);
+        check(&copy);
+        // Upstream self-append first makes this same snapshot to avoid aliasing.
+        copy.add_path(&copy.clone(), Mat2D::IDENTITY);
+        check(&copy);
+        copy.add_path_backwards(&path, Mat2D::IDENTITY);
+        check(&copy);
+
+        let mut degenerate = RawPath::new();
+        degenerate.move_to(1.0, 1.0);
+        degenerate.line_to(1.0, 1.0);
+        degenerate.cubic_to(1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        degenerate.line_to(2.0, 2.0);
+        degenerate.close();
+        copy.add_path_backwards_with_transform(&degenerate, Mat2D::IDENTITY);
+        check(&copy);
+        degenerate.prune_empty_segments();
+        check(&degenerate);
+        assert_eq!(degenerate.verb_count(PathVerb::Cubic), 0);
+        copy.swap(&mut degenerate);
+        check(&copy);
+        check(&degenerate);
+        let mut moved = std::mem::take(&mut degenerate);
+        check(&moved);
+        check(&degenerate);
+        assert_eq!(degenerate.verb_count(PathVerb::Move), 0);
+        degenerate = std::mem::take(&mut moved);
+        check(&degenerate);
+        check(&moved);
+        path.rewind();
+        check(&path);
+        copy.reset();
+        check(&copy);
+
+        // Host builder and borrowed append maintain the same count invariant.
+        path.rebuild(4, 4, |builder| {
+            builder.move_to(0.0, 0.0);
+            builder.quad_to(1.0, 1.0, 2.0, 0.0);
+            builder.line_to(3.0, 0.0);
+            builder.close();
+        });
+        check(&path);
+        copy.add_path_view(path.as_ref());
+        check(&copy);
+        copy.clone_from(&degenerate);
+        check(&copy);
+        path.rebuild(0, 0, |_| {});
+        check(&path);
     }
 
     #[test]

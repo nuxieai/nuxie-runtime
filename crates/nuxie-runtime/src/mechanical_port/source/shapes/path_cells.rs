@@ -237,13 +237,20 @@ impl PathCells {
         shape.cells.path_changed(&shape.handle);
     }
 
+    #[inline]
     fn add_dirt(&self, owner: &CoreHandle, value: ComponentDirt) {
         if self
             .dirt
             .with_graph(|graph, index| graph.add_dirt(index, value, false))
             .is_none()
         {
-            ComponentOccurrenceHandle::Authored(owner.clone()).add_dirt(value, false);
+            Self::add_dirt_outside(owner, value);
         }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn add_dirt_outside(owner: &CoreHandle, value: ComponentDirt) {
+        ComponentOccurrenceHandle::Authored(owner.clone()).add_dirt(value, false);
     }
 }

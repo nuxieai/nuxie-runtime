@@ -463,19 +463,13 @@ impl ComponentGraph {
         if node.on_dirty.is_outside() {
             return self.occurrences[i].add_dirt(value, recurse);
         }
-        if !self.mark_out_of_line(i, value) {
+        if !self.mark(i, value) {
             return false;
         }
         if recurse && node.dependents_start != node.dependents_end {
             self.cascade(index, value);
         }
         true
-    }
-
-    /// mark, for a member reached outside a cascade.
-    #[inline(never)]
-    fn mark_out_of_line(&self, i: usize, value: ComponentDirt) -> bool {
-        self.mark(i, value)
     }
 
     /// Component::addDirt's own work for member `i` once its duplicate-bit

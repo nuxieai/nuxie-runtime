@@ -455,6 +455,201 @@ fn raw_text_draws_colrv1_gradient_layers_with_gradient_shaders() {
     );
 }
 
+// These numbers are computed from the pinned HarfBuzz sbix.hh get_png_extents,
+// CBDT.hh get_extents, and hb-font.hh scale_glyph_extents, then Rive's
+// paint_image gInvScale. The existing C++ probe does not expose image extents.
+fn harfbuzz_bitmap_asset(relative: &str) -> Vec<u8> {
+    let root = std::env::var_os("RIVE_HARFBUZZ_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(
+            "/Users/levi/dev/worktrees/rive-runtime-pin-183df53f/dependencies/rive-app_harfbuzz_rive_13.1.1",
+        ));
+    std::fs::read(root.join(relative)).expect("pinned HarfBuzz bitmap font")
+}
+
+fn table_offset(bytes: &[u8], tag: &[u8; 4]) -> usize {
+    let count = u16::from_be_bytes(bytes[4..6].try_into().unwrap()) as usize;
+    (0..count)
+        .map(|index| 12 + index * 16)
+        .find_map(|offset| {
+            (&bytes[offset..offset + 4] == tag).then(|| {
+                u32::from_be_bytes(bytes[offset + 8..offset + 12].try_into().unwrap()) as usize
+            })
+        })
+        .expect("font table")
+}
+
+fn sbix_strike(bytes: &[u8], index: usize) -> usize {
+    let table = table_offset(bytes, b"sbix");
+    table
+        + u32::from_be_bytes(
+            bytes[table + 8 + index * 4..table + 12 + index * 4]
+                .try_into()
+                .unwrap(),
+        ) as usize
+}
+
+fn sbix_glyph(bytes: &[u8], strike: usize, glyph: usize) -> usize {
+    strike
+        + u32::from_be_bytes(
+            bytes[strike + 4 + glyph * 4..strike + 8 + glyph * 4]
+                .try_into()
+                .unwrap(),
+        ) as usize
+}
+
+fn image_extents(layer: &ColorGlyphLayer) -> [f32; 4] {
+    assert_eq!(layer.paint_type, ColorGlyphPaintType::Image);
+    [
+        layer.image_bearing_x,
+        layer.image_bearing_y,
+        layer.image_extent_x,
+        layer.image_extent_y,
+    ]
+}
+
+#[test]
+fn sbix_picture_uses_top_edge_and_ignores_glyf_outer_bearings() {
+    let bytes = harfbuzz_bitmap_asset("test/api/fonts/chromacheck-sbix.ttf");
+    let font = font(&bytes);
+    let layers = color_layers(&font, 1, 0xff000000);
+    assert_eq!(layers.len(), 1);
+    assert_eq!((layers[0].image_width, layers[0].image_height), (300, 300));
+    assert_eq!(image_extents(&layers[0]), [0.0, -1.0, 1.0, 1.0]);
+}
+
+#[test]
+fn sbix_picture_chooses_largest_strike_and_rounds_font_unit_endpoints() {
+    let bytes = harfbuzz_bitmap_asset("test/fuzzing/fonts/sbix.ttf");
+    let font = font(&bytes);
+    let layers = color_layers(&font, 1, 0xff000000);
+    assert_eq!(layers.len(), 1);
+    assert_eq!((layers[0].image_width, layers[0].image_height), (632, 737));
+    assert_eq!(
+        image_extents(&layers[0]),
+        [0.0, -1475.0 / 2048.0, 1264.0 / 2048.0, 1475.0 / 2048.0]
+    );
+    // Repeated extraction must retain exactly the same rounded placement.
+    assert_eq!(
+        image_extents(&color_layers(&font, 1, 0xffffffff)[0]),
+        image_extents(&layers[0])
+    );
+}
+
+#[test]
+fn sbix_picture_does_not_fall_back_when_largest_strike_lacks_glyph() {
+    let mut bytes = harfbuzz_bitmap_asset("test/fuzzing/fonts/sbix.ttf");
+    let strike = sbix_strike(&bytes, 8);
+    let next = bytes[strike + 12..strike + 16].to_vec();
+    bytes[strike + 8..strike + 12].copy_from_slice(&next);
+    let font = font(&bytes);
+    assert!(!font.is_color_glyph(1));
+    assert!(color_layers(&font, 1, 0xff000000).is_empty());
+    assert!(font.is_color_glyph(2));
+}
+
+#[test]
+fn sbix_picture_keeps_first_strike_when_largest_ppem_ties() {
+    let mut bytes = harfbuzz_bitmap_asset("test/fuzzing/fonts/sbix.ttf");
+    let strike = sbix_strike(&bytes, 7);
+    bytes[strike..strike + 2].copy_from_slice(&1024u16.to_be_bytes());
+    let layers = color_layers(&font(&bytes), 1, 0xff000000);
+    assert_eq!((layers[0].image_width, layers[0].image_height), (316, 369));
+}
+
+#[test]
+fn sbix_dupe_uses_target_picture_and_target_offsets() {
+    let mut bytes = harfbuzz_bitmap_asset("test/fuzzing/fonts/sbix.ttf");
+    let strike = sbix_strike(&bytes, 8);
+    let glyph = sbix_glyph(&bytes, strike, 1);
+    bytes[glyph..glyph + 4].copy_from_slice(&[0, 80, 0, 90]);
+    bytes[glyph + 4..glyph + 8].copy_from_slice(b"dupe");
+    bytes[glyph + 8..glyph + 10].copy_from_slice(&2u16.to_be_bytes());
+    let font = font(&bytes);
+    let source = color_layers(&font, 1, 0xff000000);
+    let target = color_layers(&font, 2, 0xff000000);
+    assert_eq!(source.len(), 1);
+    assert_eq!((source[0].image_width, source[0].image_height), (630, 737));
+    assert_eq!(source[0].image_bytes, target[0].image_bytes);
+    assert_eq!(image_extents(&source[0]), image_extents(&target[0]));
+}
+
+#[test]
+fn sbix_dupe_cycle_stops_without_a_picture() {
+    let mut bytes = harfbuzz_bitmap_asset("test/fuzzing/fonts/sbix.ttf");
+    let strike = sbix_strike(&bytes, 8);
+    let glyph = sbix_glyph(&bytes, strike, 1);
+    bytes[glyph + 4..glyph + 8].copy_from_slice(b"dupe");
+    bytes[glyph + 8..glyph + 10].copy_from_slice(&1u16.to_be_bytes());
+    let font = font(&bytes);
+    assert!(!font.is_color_glyph(1));
+    assert!(color_layers(&font, 1, 0xff000000).is_empty());
+}
+
+#[test]
+fn sbix_picture_applies_signed_origin_offsets_before_two_stage_rounding() {
+    let mut bytes = harfbuzz_bitmap_asset("test/api/fonts/chromacheck-sbix.ttf");
+    let strike = sbix_strike(&bytes, 0);
+    let glyph = sbix_glyph(&bytes, strike, 1);
+    bytes[glyph..glyph + 2].copy_from_slice(&(-1i16).to_be_bytes());
+    bytes[glyph + 2..glyph + 4].copy_from_slice(&(-1i16).to_be_bytes());
+    let layers = color_layers(&font(&bytes), 1, 0xff000000);
+    // roundf(-800/300)=-3; fixed 2048/800 scaling maps -3 to -8,
+    // and roundf(299*800/300)=797 maps to 2040.
+    assert_eq!(
+        image_extents(&layers[0]),
+        [-8.0 / 2048.0, -2040.0 / 2048.0, 1.0, 1.0]
+    );
+}
+
+#[test]
+fn cbdt_picture_preserves_harfbuzz_rounding_order_for_nonstandard_upem() {
+    let mut bytes = harfbuzz_bitmap_asset("test/api/fonts/chromacheck-cbdt.ttf");
+    let head = table_offset(&bytes, b"head");
+    bytes[head + 18..head + 20].copy_from_slice(&1000u16.to_be_bytes());
+    let layers = color_layers(&font(&bytes), 1, 0xff000000);
+    assert_eq!(layers.len(), 1);
+    assert_eq!((layers[0].image_width, layers[0].image_height), (80, 80));
+    // Pixel 80 -> fixed 2048/1000 scaling =164 -> roundf(164*1000/80)=2050.
+    assert_eq!(
+        image_extents(&layers[0]),
+        [0.0, -2050.0 / 2048.0, 2050.0 / 2048.0, 2050.0 / 2048.0]
+    );
+}
+
+#[test]
+fn cbdt_png_length_is_clamped_to_table_after_validating_indexed_entry() {
+    let mut bytes = harfbuzz_bitmap_asset("test/api/fonts/chromacheck-cbdt.ttf");
+    let baseline = color_layers(&font(&bytes), 1, 0xff000000);
+    let cblc = table_offset(&bytes, b"CBLC");
+    // Keep the fixed metrics+PNG-length header indexed, but leave the PNG
+    // bytes outside the entry. HB's reference_png sub-blob uses table bounds.
+    bytes[cblc + 76..cblc + 80].copy_from_slice(&9u32.to_be_bytes());
+    let font = font(&bytes);
+    assert!(font.is_color_glyph(1));
+    let layers = color_layers(&font, 1, 0xff000000);
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].image_bytes, baseline[0].image_bytes);
+    assert_eq!(image_extents(&layers[0]), image_extents(&baseline[0]));
+}
+
+#[test]
+fn cbdt_unsupported_index_format_two_is_not_a_native_color_glyph() {
+    let mut bytes = harfbuzz_bitmap_asset("test/api/fonts/chromacheck-cbdt.ttf");
+    let cblc = table_offset(&bytes, b"CBLC");
+    // Convert the single format-1 index to a valid format-2 index. skrifa
+    // supports it, but the pinned HB get_image_data supports only 1 and 3.
+    bytes.extend_from_slice(&[0; 4]);
+    bytes[40..44].copy_from_slice(&84u32.to_be_bytes()); // CBLC directory length
+    bytes[cblc + 12..cblc + 16].copy_from_slice(&28u32.to_be_bytes());
+    bytes[cblc + 64..cblc + 66].copy_from_slice(&2u16.to_be_bytes());
+    bytes[cblc + 72..cblc + 76].copy_from_slice(&97u32.to_be_bytes());
+    bytes[cblc + 76..cblc + 84].copy_from_slice(&[80, 80, 0, 80, 80, 0, 0, 0]);
+    let font = font(&bytes);
+    assert!(!font.is_color_glyph(1));
+    assert!(color_layers(&font, 1, 0xff000000).is_empty());
+}
+
 // UNIV-4921 additive host picture boundary. A 1x1 raster represents one em;
 // dimensions describe pixels, bearings/extents describe normalized geometry.
 fn host_picture() -> nuxie_runtime::source::text::font_hb::HostGlyphPicture {

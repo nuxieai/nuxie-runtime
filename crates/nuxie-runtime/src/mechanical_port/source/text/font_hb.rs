@@ -647,9 +647,7 @@ impl HbFont {
         }
         let font = self.outline_font();
         let id = OutlineGlyphId::new(glyph as u32);
-        font.color_glyphs().get(id).is_some() || font.bitmap_strikes()
-            .glyph_for_size(Size::unscaled(), id)
-            .is_some_and(|bitmap| matches!(bitmap.data, skrifa::bitmap::BitmapData::Png(bytes) if !bytes.is_empty()))
+        font.color_glyphs().get(id).is_some() || native_png_exists(&font, glyph)
     }
 
     fn cached_picture(&self, glyph: GlyphId) -> Option<HostGlyphPicture> {
@@ -899,26 +897,8 @@ impl Font for HbFont {
             }
         }
         if layers.is_empty() && self.face.has_png {
-            if let Some(bitmap) = font.bitmap_strikes().glyph_for_size(Size::unscaled(), id) {
-                if let skrifa::bitmap::BitmapData::Png(bytes) = bitmap.data {
-                    if !bytes.is_empty() {
-                        let units = font
-                            .metrics(Size::unscaled(), LocationRef::from(&location))
-                            .units_per_em as f32;
-                        let mut layer = ColorGlyphLayer::default();
-                        layer.paint_type = ColorGlyphPaintType::Image;
-                        layer.image_bytes = bytes.to_vec();
-                        layer.image_width = bitmap.width;
-                        layer.image_height = bitmap.height;
-                        layer.image_bearing_x =
-                            bitmap.bearing_x / units + bitmap.inner_bearing_x / bitmap.ppem_x;
-                        layer.image_bearing_y =
-                            -bitmap.bearing_y / units - bitmap.inner_bearing_y / bitmap.ppem_y;
-                        layer.image_extent_x = bitmap.width as f32 / bitmap.ppem_x;
-                        layer.image_extent_y = bitmap.height as f32 / bitmap.ppem_y;
-                        layers.push(layer);
-                    }
-                }
+            if let Some(layer) = png_color_layer(&font, glyph) {
+                layers.push(layer);
             }
         }
         if layers.is_empty() {
@@ -950,6 +930,243 @@ impl Font for HbFont {
     fn on_shape_text(&self, text: &[Unichar], runs: &[TextRun], direction: i32) -> Vec<Paragraph> {
         self.on_shape_text_native(text, runs, direction)
     }
+}
+
+#[derive(Clone)]
+struct PngGlyph<'a> {
+    bytes: &'a [u8],
+    width: u32,
+    height: u32,
+    extents: [i32; 4],
+}
+
+// hb_font_t::scale_glyph_extents uses fixed 16.16 em_mult on signed 16-bit
+// endpoints, including its narrowing and asymmetric half rounding.
+fn scale_bitmap_extents(extents: [i32; 4], upem: u16) -> [i32; 4] {
+    // changed() keeps UPEM as float, so the fixed multiplier division rounds
+    // in f32 before its conversion to int64_t.
+    let mult = ((i64::from(STANDARD_SCALE) << 16) as f32 / f32::from(upem)) as i64;
+    let scale = |value: i32| ((i64::from(value as i16) * mult + 32768) >> 16) as i32;
+    let [x, y, width, height] = extents;
+    let x1 = scale(x);
+    let y1 = scale(y);
+    [x1, y1, scale(x + width) - x1, scale(y + height) - y1]
+}
+
+fn sbix_picture<'a>(
+    font: &OutlineFont<'a>,
+    glyph: GlyphId,
+) -> Option<(skrifa::raw::tables::sbix::GlyphData<'a>, u16)> {
+    let table = font.sbix().ok()?;
+    if table.version() == 0 {
+        return None;
+    }
+    // Rive leaves x/y_ppem unset. HarfBuzz chooses the first largest strike
+    // before looking up the glyph, never a smaller strike containing it.
+    let strikes = table.strikes();
+    let mut strike = strikes.get(0).ok()?;
+    for index in 1..strikes.len() {
+        let candidate = strikes.get(index).ok()?;
+        if candidate.ppem() > strike.ppem() {
+            strike = candidate;
+        }
+    }
+    if strike.ppem() == 0 {
+        return None;
+    }
+    let mut id = OutlineGlyphId::new(u32::from(glyph));
+    let mut retries = 8;
+    let picture = loop {
+        let data = strike.glyph_data(id).ok()??;
+        if data.graphic_type() != skrifa::Tag::new(b"dupe") {
+            break data;
+        }
+        if retries == 0 {
+            return None;
+        }
+        retries -= 1;
+        let target = u16::from_be_bytes(data.data().get(..2)?.try_into().ok()?);
+        id = OutlineGlyphId::new(u32::from(target));
+    };
+    if picture.graphic_type() != skrifa::Tag::new(b"png ") {
+        return None;
+    }
+    if picture.data().is_empty() {
+        return None;
+    }
+    Some((picture, strike.ppem()))
+}
+
+fn sbix_png<'a>(font: &OutlineFont<'a>, glyph: GlyphId, upem: u16) -> Option<PngGlyph<'a>> {
+    let (picture, ppem) = sbix_picture(font, glyph)?;
+    let bytes = picture.data();
+    // blob->as<PNGHeader> returns the zero Null header for a short payload.
+    // Otherwise get_png_extents rejects dimensions >= 64K.
+    let (width, height) = if bytes.len() >= 29 {
+        (
+            u32::from_be_bytes(bytes.get(16..20)?.try_into().ok()?),
+            u32::from_be_bytes(bytes.get(20..24)?.try_into().ok()?),
+        )
+    } else {
+        (0, 0)
+    };
+    if width >= 65536 || height >= 65536 {
+        return None;
+    }
+    let scale = f32::from(upem) / f32::from(ppem);
+    let extents = [
+        i32::from(picture.origin_offset_x()),
+        i32::from(picture.origin_offset_y()) + height as i32,
+        width as i32,
+        -(height as i32),
+    ]
+    .map(|value| (value as f32 * scale).round() as i32);
+    Some(PngGlyph {
+        bytes,
+        width,
+        height,
+        extents: scale_bitmap_extents(extents, upem),
+    })
+}
+
+fn cbdt_strike(font: &OutlineFont<'_>) -> Option<skrifa::raw::tables::bitmap::BitmapSize> {
+    let location = font.cblc().ok()?;
+    let sizes = location.bitmap_sizes();
+    let mut strike = sizes.first()?;
+    for candidate in &sizes[1..] {
+        if candidate.ppem_x().max(candidate.ppem_y()) > strike.ppem_x().max(strike.ppem_y()) {
+            strike = candidate;
+        }
+    }
+    (strike.ppem_x() != 0 && strike.ppem_y() != 0).then_some(*strike)
+}
+
+fn cbdt_picture_bytes(data: &[u8], entry_size: usize, format: u16) -> Option<&[u8]> {
+    let header = match format {
+        17 => 5,
+        18 => 8,
+        19 => 0,
+        _ => return None,
+    };
+    // HB first validates the indexed entry and its fixed header, then creates
+    // a sub-blob clamped to the entire CBDT table, not the indexed entry.
+    data.get(..entry_size)?.get(..header + 4)?;
+    let length = u32::from_be_bytes(data.get(header..header + 4)?.try_into().ok()?) as usize;
+    let payload = data.get(header + 4..)?;
+    let bytes = payload.get(..length.min(payload.len()))?;
+    (!bytes.is_empty()).then_some(bytes)
+}
+
+fn cbdt_glyph_location(
+    table: &skrifa::raw::tables::cblc::Cblc<'_>,
+    strike: &skrifa::raw::tables::bitmap::BitmapSize,
+    glyph: GlyphId,
+) -> Option<skrifa::raw::tables::bitmap::BitmapLocation> {
+    let id = OutlineGlyphId::new(u32::from(glyph));
+    let list = strike.index_subtable_list(table.offset_data()).ok()?;
+    let record = list
+        .index_subtable_records()
+        .iter()
+        .find(|record| (record.first_glyph_index()..=record.last_glyph_index()).contains(&id))?;
+    let subtable = record.index_subtable(list.offset_data()).ok()?;
+    // Pinned HarfBuzz IndexSubtable::get_image_data implements only 1/3.
+    // skrifa also implements 2/4/5; do not expand upstream's file behavior.
+    if !matches!(subtable.index_format(), 1 | 3) {
+        return None;
+    }
+    strike.location(table.offset_data(), id).ok()
+}
+
+fn native_png_exists(font: &OutlineFont<'_>, glyph: GlyphId) -> bool {
+    // isColorGlyph asks reference_png, which accepts even format-19 CBDT and
+    // short PNG payloads whose extents the paint route cannot read.
+    let cbdt = || -> Option<()> {
+        let location = font.cblc().ok()?;
+        let table = font.cbdt().ok()?;
+        if table.major_version() == 0 {
+            return None;
+        }
+        let strike = cbdt_strike(font)?;
+        let entry = cbdt_glyph_location(&location, &strike, glyph)?;
+        let data = table.offset_data().as_bytes().get(entry.data_offset..)?;
+        cbdt_picture_bytes(data, entry.data_size, entry.format)?;
+        Some(())
+    };
+    cbdt().is_some() || sbix_picture(font, glyph).is_some()
+}
+
+fn cbdt_png<'a>(font: &OutlineFont<'a>, glyph: GlyphId, upem: u16) -> Option<PngGlyph<'a>> {
+    let location = font.cblc().ok()?;
+    let table = font.cbdt().ok()?;
+    if table.major_version() == 0 {
+        return None;
+    }
+    let strike = cbdt_strike(font)?;
+    let glyph_location = cbdt_glyph_location(&location, &strike, glyph)?;
+    // Pinned CBDT supports metrics only in formats 17/18 (not 19).
+    if !matches!(glyph_location.format, 17 | 18) {
+        return None;
+    }
+    let data = table
+        .offset_data()
+        .as_bytes()
+        .get(glyph_location.data_offset..)?;
+    let bytes = cbdt_picture_bytes(data, glyph_location.data_size, glyph_location.format)?;
+    // BigGlyphMetrics inherits the same first five horizontal metrics as
+    // SmallGlyphMetrics; format 18 only appends vertical metrics.
+    let height = u32::from(*data.first()?);
+    let width = u32::from(*data.get(1)?);
+    let x = i32::from(*data.get(2)? as i8);
+    let y = i32::from(*data.get(3)? as i8);
+    // HarfBuzz scales metric endpoints first, then converts each rounded
+    // component by upem/strike_ppem; preserve this order even for non-2048 UPEM.
+    let extents = scale_bitmap_extents([x, y, width as i32, -(height as i32)], upem);
+    let x_scale = f32::from(upem) / f32::from(strike.ppem_x());
+    let y_scale = f32::from(upem) / f32::from(strike.ppem_y());
+    Some(PngGlyph {
+        bytes,
+        width,
+        height,
+        extents: [
+            (extents[0] as f32 * x_scale).round() as i32,
+            (extents[1] as f32 * y_scale).round() as i32,
+            (extents[2] as f32 * x_scale).round() as i32,
+            (extents[3] as f32 * y_scale).round() as i32,
+        ],
+    })
+}
+
+fn png_glyph<'a>(font: &OutlineFont<'a>, glyph: GlyphId) -> Option<PngGlyph<'a>> {
+    let upem = font.head().map(|head| head.units_per_em()).unwrap_or(1000);
+    let upem = if (16..=16384).contains(&upem) {
+        upem
+    } else {
+        1000
+    };
+    let sbix = sbix_png(font, glyph, upem);
+    // hb_ot_paint_glyph tries CBDT before sbix, whereas glyph extents prefer
+    // sbix. Keep those independent priorities for fonts containing both.
+    let mut picture = cbdt_png(font, glyph, upem).or_else(|| sbix.clone())?;
+    if let Some(sbix) = sbix {
+        picture.extents = sbix.extents;
+    }
+    Some(picture)
+}
+
+fn png_color_layer(font: &OutlineFont<'_>, glyph: GlyphId) -> Option<ColorGlyphLayer> {
+    let picture = png_glyph(font, glyph)?;
+    let [x, y, width, height] = picture.extents;
+    Some(ColorGlyphLayer {
+        paint_type: ColorGlyphPaintType::Image,
+        image_bytes: picture.bytes.to_vec(),
+        image_width: picture.width,
+        image_height: picture.height,
+        image_bearing_x: x as f32 * INVERSE_SCALE,
+        image_bearing_y: -y as f32 * INVERSE_SCALE,
+        image_extent_x: width as f32 * INVERSE_SCALE,
+        image_extent_y: -height as f32 * INVERSE_SCALE,
+        ..ColorGlyphLayer::default()
+    })
 }
 
 fn make_line_metrics(font: &OutlineFont<'_>, location: LocationRef<'_>) -> LineMetrics {

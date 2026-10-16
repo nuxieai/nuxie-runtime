@@ -232,21 +232,6 @@ fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);
 }
 #[test]
-fn css_fit_content_hug_in_a_row_still_does_not_shrink_beside_a_sibling() {
-    let f = Fixture::new(TITLE, 338.0, true);
-    let sibling = layout(&f.arena, Some(&f.root), Some(56.0), false);
-    LayoutComponent::sync_style_occurrence(&sibling);
-    LayoutComponent::sync_layout_children_occurrence(&f.root);
-    // UNIV-4844: the preserved hug flex-shrink:0 gets 338, while the
-    // browser default flex-shrink:1 would share the row and get 282.
-    assert_eq!(
-        f.label
-            .with_downcast::<LayoutComponent, _>(|l| l.layout_style().flex_shrink),
-        Some(0.0)
-    );
-    assert_width(&f, 338.0);
-}
-#[test]
 fn css_fit_content_participant_uses_the_same_text_minimum_and_offer() {
     for (offer, expected) in [(338.0, 338.0), (40.0, 145.4414)] {
         assert_width(&Fixture::new_host(TITLE, offer, false, true), expected);
@@ -725,3 +710,309 @@ fn css_fit_content_fallback_font_keeps_the_full_offer() {
         }
     });
 }
+
+// UNIV-4844: CSS flex arithmetic, exercised through real text and layout owners.
+fn row_icon(f: &Fixture, width: f32, minimum: f32, gap: f32) -> CoreHandle {
+    let icon = layout(&f.arena, Some(&f.root), Some(width), false);
+    // The icon has intrinsic content. A fixed child supplies its automatic
+    // minimum without imposing an explicit minimum on the flex item itself.
+    let content = layout(&f.arena, Some(&icon), Some(minimum), false);
+    LayoutComponent::sync_style_occurrence(&content);
+    LayoutComponent::sync_style_occurrence(&icon);
+    LayoutComponent::sync_layout_children_occurrence(&icon);
+    f.root
+        .with_downcast_mut::<LayoutComponent, _>(|root| {
+            root.with_style_mut(|s| {
+                s.base.set_gap_horizontal_value(gap);
+                s.base
+                    .set_gap_horizontal_units_value_value(YGUnit::Point as u8);
+            });
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.root);
+    LayoutComponent::sync_layout_children_occurrence(&f.root);
+    icon
+}
+fn solved(owner: &CoreHandle) -> Layout {
+    owner
+        .with(|o| {
+            if let Some(l) = o.as_layout_component() {
+                l.layout_data.solved_layout
+            } else {
+                o.as_any()
+                    .downcast_ref::<LayoutParticipant>()
+                    .unwrap()
+                    .native_layout_data()
+                    .unwrap()
+                    .solved_layout
+            }
+        })
+        .unwrap()
+}
+fn add_label(f: &Fixture, content: &str, participant: bool) -> CoreHandle {
+    let style = f
+        .run
+        .with_downcast::<TextValueRun, _>(|r| r.style())
+        .flatten()
+        .unwrap();
+    let mut run = TextValueRun::default();
+    run.base.set_text_value(content.into());
+    run.set_style(style);
+    let run = f.arena.insert(run);
+    let mut text = Text::default();
+    text.add_run(run.clone());
+    let text = f.arena.insert(text);
+    attach(&f.arena, &text, &run);
+    let label = if participant {
+        attach(&f.arena, &f.root, &text);
+        let mut p = LayoutParticipant::default();
+        p.base
+            .set_layout_width_scale_type_value(LayoutScaleType::Hug as u8);
+        p.base
+            .set_layout_height_scale_type_value(LayoutScaleType::Hug as u8);
+        p.base.set_width_units_value_value(YGUnit::Auto as u8);
+        p.base.set_height_units_value_value(YGUnit::Auto as u8);
+        let p = f.arena.insert(p);
+        attach(&f.arena, &text, &p);
+        let mut context = ParentContext {
+            arena: &f.arena,
+            parent: text,
+        };
+        assert_eq!(
+            LayoutParticipant::on_added_clean_occurrence(&p, &mut context),
+            StatusCode::Ok
+        );
+        p
+    } else {
+        let label = layout(&f.arena, Some(&f.root), None, false);
+        attach(&f.arena, &label, &text);
+        LayoutComponent::sync_style_occurrence(&label);
+        LayoutComponent::sync_layout_children_occurrence(&label);
+        label
+    };
+    LayoutComponent::sync_layout_children_occurrence(&f.root);
+    label
+}
+macro_rules! row_hosts {
+    ($component:ident, $participant:ident, $body:expr) => {
+        #[test]
+        fn $component() {
+            ($body)(false);
+        }
+        #[test]
+        fn $participant() {
+            ($body)(true);
+        }
+    };
+}
+row_hosts!(
+    css_row_shrink_label_beside_icon,
+    css_row_shrink_participant_beside_icon,
+    |participant| {
+        let f = Fixture::new_host(TITLE, 338.0, true, participant);
+        row_icon(&f, 40.0, 40.0, 16.0);
+        // 402 screen - 64 padding - 40 icon - 16 gap = 282.
+        assert_width(&f, 282.0);
+        let bounds = f.solve();
+        // Two 36px lines, minus the pinned 1.69824px metric trim.
+        assert!((bounds.height() - 70.30176).abs() < 0.001, "{bounds:?}");
+    }
+);
+row_hosts!(
+    css_row_shrink_short_label,
+    css_row_shrink_participant_short_label,
+    |participant| {
+        let f = Fixture::new_host("Unlock premium", 338.0, true, participant);
+        row_icon(&f, 40.0, 40.0, 16.0);
+        assert_width(&f, 214.29297);
+        assert!((f.solve().height() - 34.301754).abs() < 0.001);
+    }
+);
+row_hosts!(
+    css_row_shrink_longest_word_floor,
+    css_row_shrink_participant_longest_word_floor,
+    |participant| {
+        let f = Fixture::new_host(TITLE, 160.0, true, participant);
+        let icon = row_icon(&f, 40.0, 40.0, 16.0);
+        // 104px remains, but min-width:auto preserves the 145.4414px word.
+        assert_width(&f, 145.4414);
+        assert!((solved(&icon).width() - 40.0).abs() < 0.001);
+        assert!(f.solve().width() + solved(&icon).width() + 16.0 > 160.0);
+    }
+);
+row_hosts!(
+    css_row_shrink_weighted_hugs,
+    css_row_shrink_participant_weighted_hugs,
+    |participant| {
+        let f = Fixture::new_host("x x x", 120.0, true, participant);
+        let second = add_label(&f, "x x x x x", participant);
+        // Independent unbounded Rive measurements give the flex bases. CSS
+        // distributes negative free space in proportion to shrink * base size.
+        let first_base = natural_size(&f).x;
+        let control = Fixture::new("x x x x x", 338.0, false);
+        let second_base = natural_size(&control).x;
+        let expected = 120.0 * first_base / (first_base + second_base);
+        assert!(first_base + second_base > 120.0);
+        assert_width(&f, expected);
+        assert!(
+            (solved(&second).width() - (120.0 - expected)).abs() < 0.001,
+            "{:?}",
+            solved(&second)
+        );
+    }
+);
+row_hosts!(
+    css_row_shrink_fixed_box_to_content_floor,
+    css_row_shrink_participant_fixed_box_to_content_floor,
+    |participant| {
+        let f = Fixture::new_host("experience", 200.0, true, participant);
+        let fixed = row_icon(&f, 200.0, 80.0, 0.0);
+        assert_width(&f, 145.4414);
+        // Its width is a flex basis, not a no-shrink promise. The 80px
+        // automatic minimum then freezes it, so the pair overflows 200px.
+        assert!(
+            (solved(&fixed).width() - 80.0).abs() < 0.001,
+            "{:?}",
+            solved(&fixed)
+        );
+    }
+);
+row_hosts!(
+    css_row_shrink_fill_keeps_fraction,
+    css_row_shrink_participant_fill_keeps_fraction,
+    |participant| {
+        let f = Fixture::new_host("experience", 338.0, true, participant);
+        f.label
+            .with_mut(|o| {
+                if let Some(l) = o.as_layout_component_mut() {
+                    l.base.set_fractional_width_value(2.0);
+                    l.with_style_mut(|s| {
+                        s.base
+                            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    });
+                } else {
+                    let p = o.as_any_mut().downcast_mut::<LayoutParticipant>().unwrap();
+                    p.base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    p.base.set_fractional_width_value(2.0);
+                }
+            })
+            .unwrap();
+        if participant {
+            LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+        } else {
+            LayoutComponent::sync_style_occurrence(&f.label);
+        }
+        row_icon(&f, 40.0, 40.0, 16.0);
+        assert_width(&f, 282.0);
+    }
+);
+row_hosts!(
+    css_row_shrink_column_height_floor,
+    css_row_shrink_participant_column_height_floor,
+    |participant| {
+        let f = Fixture::new_host("experience", 338.0, false, participant);
+        f.root
+            .with_downcast_mut::<LayoutComponent, _>(|r| {
+                r.base.set_height_value(100.0);
+                r.with_style_mut(|s| {
+                    s.base
+                        .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                    s.base.set_height_units_value_value(YGUnit::Point as u8);
+                });
+            })
+            .unwrap();
+        let fixed = layout(&f.arena, Some(&f.root), Some(40.0), false);
+        fixed
+            .with_downcast_mut::<LayoutComponent, _>(|l| {
+                l.base.set_height_value(100.0);
+                l.with_style_mut(|s| {
+                    s.base
+                        .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                    s.base.set_height_units_value_value(YGUnit::Point as u8);
+                });
+            })
+            .unwrap();
+        LayoutComponent::sync_style_occurrence(&fixed);
+        LayoutComponent::sync_style_occurrence(&f.root);
+        LayoutComponent::sync_layout_children_occurrence(&f.root);
+        // The text freezes at its one-line content height; the empty fixed
+        // box shrinks from its 100px basis into the remaining height.
+        assert!(
+            (f.solve().height() - 34.301754).abs() < 0.001,
+            "{:?}",
+            f.solve()
+        );
+        assert!(
+            (solved(&fixed).height() - 65.69824).abs() < 0.001,
+            "{:?}",
+            solved(&fixed)
+        );
+    }
+);
+
+row_hosts!(
+    css_row_shrink_fixed_text_uses_content_minimum,
+    css_row_shrink_fixed_participant_uses_content_minimum,
+    |participant| {
+        let f = Fixture::new_host(TITLE, 200.0, true, participant);
+        f.label
+            .with_mut(|o| {
+                if let Some(l) = o.as_layout_component_mut() {
+                    l.base.set_width_value(200.0);
+                    l.with_style_mut(|s| {
+                        s.base
+                            .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                        s.base.set_width_units_value_value(YGUnit::Point as u8);
+                    });
+                } else {
+                    let p = o.as_any_mut().downcast_mut::<LayoutParticipant>().unwrap();
+                    p.base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                    p.base.set_width_units_value_value(YGUnit::Point as u8);
+                    p.base.set_width_value(200.0);
+                }
+            })
+            .unwrap();
+        if participant {
+            LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+        } else {
+            LayoutComponent::sync_style_occurrence(&f.label);
+        }
+        row_icon(&f, 80.0, 80.0, 0.0);
+        // min(200px specified width, 145.4414px min-content) is the automatic
+        // floor. A fixed width must neither disable shrink nor force min-content.
+        assert_width(&f, 145.4414);
+    }
+);
+
+row_hosts!(
+    css_row_shrink_fill_word_floor,
+    css_row_shrink_participant_fill_word_floor,
+    |participant| {
+        let f = Fixture::new_host(TITLE, 160.0, true, participant);
+        f.label
+            .with_mut(|o| {
+                if let Some(l) = o.as_layout_component_mut() {
+                    l.base.set_fractional_width_value(2.0);
+                    l.with_style_mut(|s| {
+                        s.base
+                            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    });
+                } else {
+                    let p = o.as_any_mut().downcast_mut::<LayoutParticipant>().unwrap();
+                    p.base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    p.base.set_fractional_width_value(2.0);
+                }
+            })
+            .unwrap();
+        if participant {
+            LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+        } else {
+            LayoutComponent::sync_style_occurrence(&f.label);
+        }
+        row_icon(&f, 40.0, 40.0, 16.0);
+        assert_width(&f, 145.4414);
+    }
+);

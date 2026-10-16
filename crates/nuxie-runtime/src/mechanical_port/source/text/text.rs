@@ -1212,7 +1212,7 @@ impl Text {
             self.emoji_image_cache.clear();
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::PAINT) {
-            self.build_render_styles_with_layout_dirt(false);
+            self.build_render_styles();
         } else if value.intersects(ComponentDirt::RENDER_OPACITY) {
             for style in &mut self.render_styles {
                 style.with_downcast_mut::<TextStylePaint, _>(|style| {
@@ -1557,10 +1557,6 @@ impl Text {
     }
 
     pub fn build_render_styles(&mut self) {
-        self.build_render_styles_with_layout_dirt(true);
-    }
-
-    fn build_render_styles_with_layout_dirt(&mut self, intrinsic: bool) {
         self.clear_render_styles();
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
@@ -1831,13 +1827,9 @@ impl Text {
         }
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
-        if intrinsic {
-            // PATH updates can include shape modifiers and typography.
-            self.base.mark_layout_node_dirty();
-        } else {
-            // Paint-only updates retain participant intrinsic measurements.
-            self.base.mark_layout_ancestors_dirty();
-        }
+        // PAINT dirt includes paragraph spacing and origin changes, which
+        // affect measurement. Match upstream's unconditional layout dirt.
+        self.base.mark_layout_node_dirty();
         for run in &mut self.all_runs {
             run.with_mut(|run| {
                 if run.is_hit_target() {

@@ -622,9 +622,10 @@ decode queue. Bidi and audio retain their separately tracked status below.
     differences. Host intrinsic dirt also invalidates a child participant's
     measurement cache: a Text participant now follows text and typography
     changes, fixing a stale-width bug in the former ancestor-only walk.
-    Paint-only text updates still notify layout ancestors but retain the
-    participant's intrinsic cache. PATH updates retain invalidation because
-    shape modifiers can change typography.
+    Text render-style rebuilds also invalidate the participant on PAINT dirt,
+    as upstream does: paragraph spacing and Baseline origin can change height.
+    A re-measure with unchanged glyph inputs reuses the cached shape, including
+    its min-content probe, so ordinary paint frames do not reshape text.
   - *Measurement.* Text, images, scripted layouts and intrinsically sized
     leaves measure through Taffy's leaf measure function. For a definite
     inline offer without a known width and with an auto or sizing-keyword

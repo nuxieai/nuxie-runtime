@@ -12,6 +12,16 @@ use crate::source::{
     text::{font_hb::HbFont, text::Text, text_style::TextStyle, text_value_run::TextValueRun},
 };
 
+thread_local! {
+    static HOST_MEASURES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+pub(super) fn note_host_measure() {
+    HOST_MEASURES.with(|count| count.set(count.get() + 1));
+}
+fn host_measure_count() -> usize {
+    HOST_MEASURES.with(std::cell::Cell::get)
+}
+
 struct ParentContext<'a> {
     arena: &'a CoreArena,
     parent: CoreHandle,
@@ -192,7 +202,6 @@ impl Fixture {
 }
 fn assert_width(f: &Fixture, expected: f32) {
     let bounds = f.solve();
-    println!("expected={expected} box={bounds:?}");
     assert!(
         (bounds.width() - expected).abs() < 0.001,
         "{bounds:?} != width {expected}"
@@ -317,7 +326,6 @@ fn css_fit_content_retained_tree_tracks_text_changes_and_resizing() {
                 std::fs::copy(source, destination).unwrap();
             }
         }
-        println!("fresh-solve verification: zero mismatches for text changes and resizing");
     }
 }
 
@@ -362,7 +370,6 @@ fn css_fit_content_column_max_width_controls_wrapped_height() {
     LayoutComponent::sync_style_occurrence(&sibling);
     LayoutComponent::sync_layout_children_occurrence(&f.root);
     let bounds = f.solve();
-    println!("max-width column: {bounds:?}");
     assert!((bounds.width() - 260.0).abs() < 0.001, "{bounds:?}");
     assert!((bounds.height() - 70.30176).abs() < 0.001, "{bounds:?}");
     assert!(
@@ -389,6 +396,7 @@ fn css_fit_content_participant_paint_frames_reuse_shaping() {
         f.solve();
         let settled = HbFont::test_shape_count();
         for _ in 0..4 {
+            let measures = host_measure_count();
             f.text
                 .with_downcast_mut::<Text, _>(|text| {
                     text.mark_paint_dirty();
@@ -396,9 +404,11 @@ fn css_fit_content_participant_paint_frames_reuse_shaping() {
                 })
                 .unwrap();
             assert_width(&f, 338.0);
+            // PAINT includes size-affecting properties, so each frame must
+            // remeasure. Unchanged glyph inputs must still reuse the shape.
+            assert!(host_measure_count() > measures, "PAINT must remeasure");
         }
         let paint = HbFont::test_shape_count() - settled;
-        println!("real shaping: initial={initial}, four paint-only frames={paint}");
         assert_eq!(paint, 0, "paint-only frames must reuse shaping");
         assert_eq!(
             initial, 1,
@@ -610,15 +620,19 @@ fn css_fit_content_participant_paragraph_spacing_publishes_height() {
     let f = Fixture::new_host("experience\nexperience", 338.0, false, true);
     let before = f.solve();
     assert!((before.height() - 70.30176).abs() < 0.001, "{before:?}");
-    f.text.with_downcast_mut::<Text, _>(|text| {
-        text.update_after_transform_super(ComponentDirt::PATH);
-    }).unwrap();
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+        })
+        .unwrap();
     f.solve();
-    f.text.with_downcast_mut::<Text, _>(|text| {
-        assert!(text.base.set_paragraph_spacing_value(20.0));
-        text.paragraph_spacing_changed();
-        text.update_after_transform_super(ComponentDirt::PAINT);
-    }).unwrap();
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            assert!(text.base.set_paragraph_spacing_value(20.0));
+            text.paragraph_spacing_changed();
+            text.update_after_transform_super(ComponentDirt::PAINT);
+        })
+        .unwrap();
     let after = f.solve();
     // One inter-paragraph gap adds 20px to two 36px lines, minus the
     // same 1.69824px font metric trim as the initial measure.
@@ -630,19 +644,27 @@ fn css_fit_content_participant_baseline_origin_publishes_height() {
     use crate::source::component::ComponentDirt;
     let f = Fixture::new_host("experience\nexperience", 338.0, false, true);
     assert!((f.solve().height() - 70.30176).abs() < 0.001);
-    f.text.with_downcast_mut::<Text, _>(|text| {
-        text.update_after_transform_super(ComponentDirt::PATH);
-    }).unwrap();
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+        })
+        .unwrap();
     f.solve();
-    f.text.with_downcast_mut::<Text, _>(|text| {
-        assert!(text.base.set_origin_value_value(1));
-        text.origin_value_changed();
-        text.update_after_transform_super(ComponentDirt::PAINT);
-    }).unwrap();
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            assert!(text.base.set_origin_value_value(1));
+            text.origin_value_changed();
+            text.update_after_transform_super(ComponentDirt::PAINT);
+        })
+        .unwrap();
     // Direct Rive measurement supplies the unchanged Baseline metrics;
     // the regression concerns publishing them through the retained participant.
     let expected = natural_size(&f).y;
-    assert!(expected < 70.30176, "Baseline moves the first baseline to zero");
+    // First baseline is 27.125px: 70.30176 - 27.125 = 43.176754.
+    assert!((expected - 43.176754).abs() < 0.001);
     let after = f.solve();
-    assert!((after.height() - expected).abs() < 0.001, "{after:?} != {expected}");
+    assert!(
+        (after.height() - expected).abs() < 0.001,
+        "{after:?} != {expected}"
+    );
 }

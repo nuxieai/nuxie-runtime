@@ -3109,6 +3109,8 @@ impl LayoutComponent {
             height: f32,
             height_mode: LayoutMeasureMode,
         ) -> Vec2D {
+            #[cfg(test)]
+            layout_fit_content_tests::note_host_measure();
             host.with_mut(|object| {
                 object
                     .as_intrinsically_sizeable_mut()

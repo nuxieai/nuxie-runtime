@@ -2606,6 +2606,19 @@ void apply_runtime_artboard_advances(rive::ArtboardInstance* artboard,
     }
 }
 
+#ifdef WITH_RIVE_SCRIPTING
+// This probe lane builds only the pinned native Luau backend. ScriptedObject
+// now exposes that backend instead of a direct lua_State accessor.
+lua_State* scripted_state(rive::ScriptedObject* object)
+{
+    if (object == nullptr || object->backend() == nullptr)
+    {
+        return nullptr;
+    }
+    return static_cast<rive::ScriptingVM*>(object->backend())->state();
+}
+#endif
+
 std::vector<size_t> runtime_script_advance_attempts(
     rive::ArtboardInstance* artboard)
 {
@@ -2618,12 +2631,12 @@ std::vector<size_t> runtime_script_advance_attempts(
     for (auto object : artboard->objects())
     {
         auto scripted = rive::ScriptedObject::from(object);
-        if (scripted == nullptr || scripted->state() == nullptr ||
+        if (scripted == nullptr || scripted_state(scripted) == nullptr ||
             scripted->self() == 0)
         {
             continue;
         }
-        auto state = scripted->state();
+        auto state = scripted_state(scripted);
         rive::rive_lua_pushRef(state, scripted->self());
         lua_getfield(state, -1, "_nuxieProbeAdvanceAttempts");
         attempts.push_back(lua_isnumber(state, -1)
@@ -4078,11 +4091,11 @@ struct RuntimeScriptSnapshotOrdinals
     {
 #ifdef WITH_RIVE_SCRIPTING
         if (object == nullptr || object->self() == 0 ||
-            object->state() == nullptr)
+            scripted_state(object) == nullptr)
         {
             return false;
         }
-        auto state = object->state();
+        auto state = scripted_state(object);
         rive::rive_lua_pushRef(state, object->self());
         const void* table = lua_topointer(state, -1);
         rive::rive_lua_pop(state, 1);
@@ -4129,11 +4142,11 @@ struct RuntimeScriptSnapshotOrdinals
     {
 #ifdef WITH_RIVE_SCRIPTING
         if (object == nullptr || object->self() == 0 ||
-            object->state() == nullptr)
+            scripted_state(object) == nullptr)
         {
             return false;
         }
-        auto state = object->state();
+        auto state = scripted_state(object);
         rive::rive_lua_pushRef(state, object->self());
         lua_getfield(state, -1, inputName.c_str());
         auto scriptedViewModel = static_cast<rive::ScriptedViewModel*>(

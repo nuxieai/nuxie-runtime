@@ -175,7 +175,7 @@ if with_audio then
     defines({ 'WITH_RIVE_AUDIO', 'EXTERNAL_RIVE_AUDIO_ENGINE', 'MA_NO_DEVICE_IO', 'MA_NO_RESOURCE_MANAGER' })
 end
 if with_scripting then
-    defines({ 'WITH_RIVE_SCRIPTING', 'RIVE_DECODERS', 'HYDRO_SIGN_VERIFY_ONLY=1' })
+    defines({ 'WITH_RIVE_SCRIPTING', 'WITH_RIVE_SCRIPTING_LUAU', 'RIVE_DECODERS', 'HYDRO_SIGN_VERIFY_ONLY=1' })
     forceincludes({ 'rive_luau.hpp' })
 end
 

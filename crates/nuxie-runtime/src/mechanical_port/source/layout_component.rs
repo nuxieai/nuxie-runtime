@@ -4763,3 +4763,7 @@ mod packed_layout_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "layout_fit_content_tests.rs"]
+mod layout_fit_content_tests;

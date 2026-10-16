@@ -1718,10 +1718,45 @@ impl LayoutComponent {
         }
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
         let world = self.shape_world_transform();
-        let mut paint_index = 0;
-        while let Some(paint) = self.paints.shape_paints().get(paint_index).cloned() {
-            paint_index += 1;
-            paint.with_mut(|paint| {
+        // The paint list can't change while this LayoutComponent is borrowed.
+        let paints = self.paints.cells().paints();
+        for paint in paints.iter() {
+            // A plain paint whose loan, and its mutator's, would succeed and run
+            // nothing draws from its cells, as a Shape's plain paints do.
+            if paint.cells.is_plain()
+                && paint.handle.is_occupied_settled()
+                && let Some(mutator_visible) = paint.cells.settled_mutator_is_visible()
+            {
+                // ShapePaint::shouldDraw.
+                if !(paint.cells.is_visible() && mutator_visible) {
+                    continue;
+                }
+                let fill_rule = paint.cells.fill_rule();
+                let path = match paint.cells.path_kind() {
+                    ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
+                        self.local_path()
+                    }
+                    ShapePaintPathKind::World => self.world_path(),
+                };
+                let Some(mut path) = path else {
+                    continue;
+                };
+                let handle = &paint.handle;
+                paint.cells.draw_plain(renderer, &mut path, world, true, fill_rule, &|| {
+                    // The factory the paint's own draw would read.
+                    handle
+                        .with(|object| {
+                            object
+                                .as_component()
+                                .and_then(|component| component.with_artboard(|artboard| artboard.factory()))
+                                .flatten()
+                        })
+                        .flatten()
+                        .expect("a drawing ShapePaint has its imported Artboard factory")
+                });
+                continue;
+            }
+            paint.handle.with_mut(|paint| {
                 let Some(paint) = paint.as_shape_paint_behavior_mut() else {
                     return;
                 };

@@ -97,13 +97,13 @@ pub trait ShapePaintMutator {
                 let Some(paint) = parent.as_shape_paint_behavior_mut() else {
                     return StatusCode::MissingObject;
                 };
-                if !paint.initialize_render_paint(component, factory) {
+                if !paint.initialize_render_paint(component.clone(), factory) {
                     return StatusCode::InvalidObject;
                 }
                 paint
                     .shape_paint()
                     .cells()
-                    .bind_mutator_flags(Rc::clone(self.mutator_state().flags_cell()));
+                    .bind_mutator_flags(component, Rc::clone(self.mutator_state().flags_cell()));
                 let render_paint = paint
                     .shape_paint()
                     .render_paint_handle()

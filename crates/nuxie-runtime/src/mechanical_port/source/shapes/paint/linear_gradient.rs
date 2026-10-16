@@ -20,6 +20,7 @@ use crate::mechanical_port::source::{
 pub(crate) enum GradientKind {
     Linear,
     Radial,
+    Angular,
 }
 
 #[derive(Default)]
@@ -265,6 +266,7 @@ impl LinearGradient {
             GradientKind::Linear => {
                 factory.make_linear_gradient(start.x, start.y, end.x, end.y, colors, stops)
             }
+            GradientKind::Angular => factory.make_angular_gradient(colors, stops),
             GradientKind::Radial => factory.make_radial_gradient(
                 start.x,
                 start.y,
@@ -274,6 +276,12 @@ impl LinearGradient {
             ),
         });
         paint.shader(Some(shader.as_ref()));
+        if matches!(kind, GradientKind::Angular) {
+            let transform = Mat2D::from_translate(self.base.transform_x(), self.base.transform_y())
+                * Mat2D::from_rotation(self.base.transform_rotation())
+                * Mat2D::from_scale(self.base.transform_scale_x(), self.base.transform_scale_y());
+            paint.shader_transform(nuxie_render_api::Mat2D(*transform.values()));
+        }
     }
 
     pub fn mark_gradient_dirty(&mut self) {

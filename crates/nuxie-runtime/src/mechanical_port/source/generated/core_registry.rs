@@ -2825,6 +2825,11 @@ impl crate::mechanical_port::source::core::CoreType
 {
     const TYPE_KEY: u16 = crate::mechanical_port::source::generated::shapes::paint::radial_gradient_base::RadialGradientBase::TYPE_KEY;
 }
+impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient
+{
+    const TYPE_KEY: u16 = crate::mechanical_port::source::generated::shapes::paint::angular_gradient_base::AngularGradientBase::TYPE_KEY;
+}
 
 impl crate::mechanical_port::source::core::CoreType
     for crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint
@@ -3924,6 +3929,7 @@ pub enum CoreConcreteType {
     DashPath,
     LinearGradient,
     RadialGradient,
+    AngularGradient,
     Dash,
     Stroke,
     SolidColor,
@@ -4380,6 +4386,11 @@ pub enum CoreField {
     LinearGradientOpacity,
     LinearGradientStartX,
     LinearGradientStartY,
+    LinearGradientTransformX,
+    LinearGradientTransformY,
+    LinearGradientTransformRotation,
+    LinearGradientTransformScaleX,
+    LinearGradientTransformScaleY,
     ListFollowPathConstraintDistanceEnd,
     ListFollowPathConstraintDistanceOffset,
     ListPathListSource,
@@ -8399,6 +8410,11 @@ const fn double_core_field(property_key: i32) -> Option<CoreField> {
             34 => Some(CoreField::LinearGradientEndX),
             35 => Some(CoreField::LinearGradientEndY),
             46 => Some(CoreField::LinearGradientOpacity),
+            1103 => Some(CoreField::LinearGradientTransformX),
+            1104 => Some(CoreField::LinearGradientTransformY),
+            1105 => Some(CoreField::LinearGradientTransformRotation),
+            1106 => Some(CoreField::LinearGradientTransformScaleX),
+            1107 => Some(CoreField::LinearGradientTransformScaleY),
             692 => Some(CoreField::DashLength),
             47 => Some(CoreField::StrokeThickness),
             39 => Some(CoreField::GradientStopPosition),
@@ -8515,7 +8531,7 @@ const fn double_core_field(property_key: i32) -> Option<CoreField> {
     }
 }
 
-const DOUBLE_KEY_LIMIT: usize = 1072;
+const DOUBLE_KEY_LIMIT: usize = 1108;
 
 /// `double_core_field` for every key below DOUBLE_KEY_LIMIT.
 static DOUBLE_CORE_FIELDS: [Option<CoreField>; DOUBLE_KEY_LIMIT] = {
@@ -8910,6 +8926,7 @@ impl CoreRegistry {
             506 => CoreConcreteType::DashPath,
             22 => CoreConcreteType::LinearGradient,
             17 => CoreConcreteType::RadialGradient,
+            1089 => CoreConcreteType::AngularGradient,
             507 => CoreConcreteType::Dash,
             24 => CoreConcreteType::Stroke,
             18 => CoreConcreteType::SolidColor,
@@ -11164,6 +11181,11 @@ impl CoreRegistry {
             34 => 2,
             35 => 2,
             46 => 2,
+            1103 => 2,
+            1104 => 2,
+            1105 => 2,
+            1106 => 2,
+            1107 => 2,
             692 => 2,
             47 => 2,
             39 => 2,
@@ -11824,6 +11846,11 @@ impl CoreRegistry {
             34 => 22,
             35 => 22,
             46 => 22,
+            1103 => 22,
+            1104 => 22,
+            1105 => 22,
+            1106 => 22,
+            1107 => 22,
             692 => 507,
             47 => 24,
             39 => 19,
@@ -38222,6 +38249,31 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::OPACITY_PROPERTY_KEY);
                 }
             }
+            CoreField::LinearGradientTransformX => {
+                if self.base.set_transform_x_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformY => {
+                if self.base.set_transform_y_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformRotation => {
+                if self.base.set_transform_rotation_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_ROTATION_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformScaleX => {
+                if self.base.set_transform_scale_x_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformScaleY => {
+                if self.base.set_transform_scale_y_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_Y_PROPERTY_KEY);
+                }
+            }
             _ => {}
         }
     }
@@ -38268,6 +38320,11 @@ impl CoreRegistryObject
             CoreField::LinearGradientEndX => self.base.end_x(),
             CoreField::LinearGradientEndY => self.base.end_y(),
             CoreField::LinearGradientOpacity => self.base.opacity(),
+            CoreField::LinearGradientTransformX => self.base.transform_x(),
+            CoreField::LinearGradientTransformY => self.base.transform_y(),
+            CoreField::LinearGradientTransformRotation => self.base.transform_rotation(),
+            CoreField::LinearGradientTransformScaleX => self.base.transform_scale_x(),
+            CoreField::LinearGradientTransformScaleY => self.base.transform_scale_y(),
             _ => 0.0,
         }
     }
@@ -38426,6 +38483,31 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::OPACITY_PROPERTY_KEY);
                 }
             }
+            CoreField::LinearGradientTransformX => {
+                if self.base.base.base.set_transform_x_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformY => {
+                if self.base.base.base.set_transform_y_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformRotation => {
+                if self.base.base.base.set_transform_rotation_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_ROTATION_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformScaleX => {
+                if self.base.base.base.set_transform_scale_x_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformScaleY => {
+                if self.base.base.base.set_transform_scale_y_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_Y_PROPERTY_KEY);
+                }
+            }
             _ => {}
         }
     }
@@ -38472,6 +38554,210 @@ impl CoreRegistryObject
             CoreField::LinearGradientEndX => self.base.base.base.end_x(),
             CoreField::LinearGradientEndY => self.base.base.base.end_y(),
             CoreField::LinearGradientOpacity => self.base.base.base.opacity(),
+            CoreField::LinearGradientTransformX => self.base.base.base.transform_x(),
+            CoreField::LinearGradientTransformY => self.base.base.base.transform_y(),
+            CoreField::LinearGradientTransformRotation => self.base.base.base.transform_rotation(),
+            CoreField::LinearGradientTransformScaleX => self.base.base.base.transform_scale_x(),
+            CoreField::LinearGradientTransformScaleY => self.base.base.base.transform_scale_y(),
+            _ => 0.0,
+        }
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+impl CoreRegistryObject
+    for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient
+{
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::shapes::paint::angular_gradient_base::AngularGradientBase::is_type_of(type_key)
+    }
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        match field {
+            CoreField::ComponentParentId => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_parent_id_value(value)
+                {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        match field {
+            CoreField::ComponentName => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_name_value(value)
+                {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        match field {
+            CoreField::LinearGradientStartX => {
+                if self.base.base.base.set_start_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::start_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::START_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientStartY => {
+                if self.base.base.base.set_start_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::start_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::START_Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientEndX => {
+                if self.base.base.base.set_end_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::end_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::END_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientEndY => {
+                if self.base.base.base.set_end_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::end_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::END_Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientOpacity => {
+                if self.base.base.base.set_opacity_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::opacity_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::OPACITY_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformX => {
+                if self.base.base.base.set_transform_x_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformY => {
+                if self.base.base.base.set_transform_y_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformRotation => {
+                if self.base.base.base.set_transform_rotation_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_ROTATION_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformScaleX => {
+                if self.base.base.base.set_transform_scale_x_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::LinearGradientTransformScaleY => {
+                if self.base.base.base.set_transform_scale_y_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_Y_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::ComponentName => self.base.base.base.base.base.base.base.name().to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        match field {
+            CoreField::LinearGradientStartX => self.base.base.base.start_x(),
+            CoreField::LinearGradientStartY => self.base.base.base.start_y(),
+            CoreField::LinearGradientEndX => self.base.base.base.end_x(),
+            CoreField::LinearGradientEndY => self.base.base.base.end_y(),
+            CoreField::LinearGradientOpacity => self.base.base.base.opacity(),
+            CoreField::LinearGradientTransformX => self.base.base.base.transform_x(),
+            CoreField::LinearGradientTransformY => self.base.base.base.transform_y(),
+            CoreField::LinearGradientTransformRotation => self.base.base.base.transform_rotation(),
+            CoreField::LinearGradientTransformScaleX => self.base.base.base.transform_scale_x(),
+            CoreField::LinearGradientTransformScaleY => self.base.base.base.transform_scale_y(),
             _ => 0.0,
         }
     }
@@ -38497,6 +38783,38 @@ impl crate::mechanical_port::source::core::CoreObject
     }
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::radial_gradient_base::RadialGradientBase::is_type_of(type_key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        Some(Box::new(self.base.clone_into()))
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.base.base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::shapes::paint::angular_gradient_base::AngularGradientBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::shapes::paint::angular_gradient_base::AngularGradientBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::shapes::paint::angular_gradient_base::AngularGradientBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
         Some(Box::new(self.base.clone_into()))
@@ -70677,6 +70995,87 @@ impl CoreCapabilities
         Some(&mut self.base.base.base.base)
     }
 }
+impl CoreCapabilities
+    for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient
+{
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
+    fn component_on_dirty_is_noop(&self) -> bool {
+        true
+    }
+    fn as_shape_paint_mutator(
+        &self,
+    ) -> Option<
+        &dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator,
+    > {
+        Some(self)
+    }
+    fn as_shape_paint_mutator_mut(&mut self) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator>{
+        Some(self)
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient::build_dependencies(&mut self.base.base);
+        true
+    }
+    fn component_update(
+        &mut self,
+        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(value);
+        true
+    }
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(
+            crate::mechanical_port::source::component::Component::validate(
+                &mut self.base.base.base.base.base.base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_on_added_dirty(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient::on_added_dirty(&mut self.base.base, context))
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::component::Component::import(
+                &mut self.base.base.base.base.base.base,
+                stack,
+            ),
+        )
+    }
+
+    fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
+        Some(&self.base.base.base.base.base.base)
+    }
+    fn as_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::component::Component> {
+        Some(&mut self.base.base.base.base.base.base)
+    }
+    fn as_container_component(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::container_component::ContainerComponent> {
+        Some(&self.base.base.base.base)
+    }
+    fn as_container_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
+        Some(&mut self.base.base.base.base)
+    }
+}
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash::Dash {
     fn component_on_dirty(
         &mut self,
@@ -82966,8 +83365,24 @@ impl crate::mechanical_port::source::generated::shapes::paint::linear_gradient_b
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
 }
+impl crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient {
+    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed);
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
+    }
+}
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
     for crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base.base.base.base.base.base,
+            property_key,
+        )
+    }
+}
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient
 {
     fn notify_property_changed(&mut self, property_key: u16) {
         crate::mechanical_port::source::core::Core::notify_property_changed(
@@ -87347,6 +87762,7 @@ impl CoreRegistry {
             506 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::dash_path::DashPath>::default())),
             22 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient>::default())),
             17 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient>::default())),
+            1089 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient>::default())),
             507 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::dash::Dash>::default())),
             24 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::stroke::Stroke>::default())),
             18 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::solid_color::SolidColor>::default())),

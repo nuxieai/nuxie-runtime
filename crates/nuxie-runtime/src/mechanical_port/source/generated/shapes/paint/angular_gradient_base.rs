@@ -1,0 +1,52 @@
+use crate::mechanical_port::source::{
+    shapes::paint::angular_gradient::AngularGradient,
+    shapes::paint::linear_gradient::LinearGradient,
+};
+
+pub struct AngularGradientBase {
+    pub base: LinearGradient,
+}
+
+impl Default for AngularGradientBase {
+    fn default() -> Self {
+        Self {
+            base: LinearGradient::default(),
+        }
+    }
+}
+
+impl AngularGradientBase {
+    pub const TYPE_KEY: u16 = 1089;
+
+    pub fn is_type_of(type_key: u16) -> bool {
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
+    }
+    pub fn core_type(&self) -> u16 {
+        Self::TYPE_KEY
+    }
+    pub fn clone_into(&self) -> AngularGradient {
+        let mut cloned = AngularGradient::default();
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
+        cloned
+    }
+}
+
+impl std::ops::Deref for AngularGradientBase {
+    type Target = LinearGradient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AngularGradientBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -1,10 +1,14 @@
 use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
     generated::shapes::paint::{
-        color_channels_base::ColorChannels, gradient_stop_base::GradientStopBase,
-        linear_gradient_base::LinearGradientBase, radial_gradient_base::RadialGradientBase,
+        angular_gradient_base::AngularGradientBase, color_channels_base::ColorChannels,
+        gradient_stop_base::GradientStopBase, linear_gradient_base::LinearGradientBase,
+        radial_gradient_base::RadialGradientBase,
     },
-    shapes::paint::{linear_gradient::LinearGradient, radial_gradient::RadialGradient},
+    shapes::paint::{
+        angular_gradient::AngularGradient, linear_gradient::LinearGradient,
+        radial_gradient::RadialGradient,
+    },
 };
 impl std::ops::Deref for GradientStop {
     type Target = GradientStopBase;
@@ -34,10 +38,17 @@ impl GradientStop {
             return None;
         }
         // C++ as<LinearGradient>() projects the inherited owner, including
-        // RadialGradientBase::Super. An exact Any downcast rejects radial stops.
+        // RadialGradientBase::Super and AngularGradientBase::Super.
         let is_radial = parent.is_type_of(RadialGradientBase::TYPE_KEY);
+        let is_angular = parent.is_type_of(AngularGradientBase::TYPE_KEY);
         parent.with_mut(|parent| {
-            if is_radial {
+            if is_angular {
+                let angular = parent
+                    .as_any_mut()
+                    .downcast_mut::<AngularGradient>()
+                    .expect("native AngularGradient owner");
+                f(&mut angular.base.base)
+            } else if is_radial {
                 let radial = parent
                     .as_any_mut()
                     .downcast_mut::<RadialGradient>()

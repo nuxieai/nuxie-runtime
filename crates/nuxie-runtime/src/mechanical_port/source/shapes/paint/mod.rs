@@ -1,3 +1,4 @@
+pub mod angular_gradient;
 pub mod artboard_paint_source;
 pub mod blend_mode;
 pub mod color;

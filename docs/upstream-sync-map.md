@@ -46,18 +46,35 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `269ebcab3016e68340bb1427b720712213066eaf`
+- LAST_SYNCED_SHA: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` (refreshed 2026-10-16 by the daily upstream sync).
+- Current target: `5551696a826ff546775fffe46ca78824b1f1dc51` (refreshed 2026-10-16 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
   One upstream commit remains after this checkpoint at the fetched target.
-  All 259 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (281 after `5892bb05`); this
+  All 260 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (282 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `16332c8e`, integrated atop downstream `78423a6f93`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean; the test-feature-gating finding was fixed and rereviewed. Runtime
+  units pass 434 with two existing ignores; the new supplemental angular
+  import/clone/paint test and both existing gradient-stop tests pass. Runtime
+  wasm32-unknown-unknown compilation passes. Metadata checks pass 39; schema
+  and Bazel registration were regenerated and the Silver manifest is current.
+  Fresh pinned ordinary Golden passes 363 exact entries and verifies one
+  existing divergence; scripted Golden passes 361 exact entries and verifies
+  three existing divergences, each across 364 entries. Runtime Silver passes
+  its existing classifications: 85 byte-exact, 119 epsilon, 10 divergences and
+  17 unsupported cases. Schema validation retains 19 known header-comparison
+  failures (UNIV-3729) and a stale aggregate-count assertion (expects 358;
+  the pre-change schema already had 362, now 363). No assertions or tolerances
+  were relaxed. The public delta provides no angular-gradient asset or tests:
+  supplemental tests verify real import and factory/paint calls, not a new
+  pixel comparison. Private editor/Dart/RML changes are not claimed imported.
 - Validation at `269ebcab`, integrated atop downstream `0d460f0328`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All four translated loader test groups pass, including 10 instance
@@ -1259,6 +1276,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` | Translate AngularGradient type 1089 with complete LinearGradient inheritance, registry, clone/import and paint dispatch. Add transform keys 1103–1107 with exact defaults and notification-only equality-guarded setters; assign the angular shader followed by left-associated translation × rotation × scale. Linear/radial rendering stays unchanged. Reconcile publicly evidenced schema metadata and preserve Nuxie Video hooks. Add labeled supplemental coverage; no public tests/assets or private editor/Dart/protocol/RML contents are claimed imported. | — |
 | `269ebcab3016e68340bb1427b720712213066eaf` | Use exact two-call SUCCESS-only instance extension/layer enumeration and stop before using failed counts; treat INCOMPLETE as failure. Device enumeration failures log and continue with an empty list, retaining headless creation and rejecting required missing swapchains. Preserve existing offscreen startup and optional Android presentation. Port all public loader cases through production helpers with scoped thread-local fake dispatch and initialized Rust counts. Stack poisoning/environment mutation are unnecessary at this Rust boundary. No new fallback or private .rive_head contents imported. | — |
 | `5e3de3857d6ae9e019f94da507f6385b96fbf3c3` | Prepare decoded paint images through the frame-sink hook; track pending paints and retry before resource replay creates version aliases. Preserve ordered removal, generation-safe destruction, canvas exclusion and stored sampler/matrix. Port both complete lazy-image regressions. Existing direct Rust decoded-image owners retain default preparation. Private web mesh-buffer changes, web sink override, browser tests and .rive_head contents are absent from the public delta and not claimed imported. | — |
 | `f2aa739e3ec4922c22ea34e4b6bce1653ea21106` | Forward host canvas command buffers and frame serials without local submission, preserving own-buffer fallback and no-active-canvas ordering. Add an explicit unsafe Rust submission/lifetime contract and port both upstream spy tests. Flush GL before state scrubbing. Acquire wrapped Vulkan targets through Rive's access tracker with exact load preservation and remove all pending sampled transitions for that texture identity. Concrete Rust hosts retain default resources; private Android override and .rive_head contents are absent from the public delta and not claimed imported. | — |

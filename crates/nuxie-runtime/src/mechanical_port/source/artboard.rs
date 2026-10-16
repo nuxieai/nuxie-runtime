@@ -323,10 +323,18 @@ impl DrawRangeState {
         }
     }
 
+    /// The cached answer inline in each listed step; the fresh read out of
+    /// line.
+    #[inline(always)]
     fn has_visitor(&mut self, root: &CoreHandle) -> bool {
-        if let Some(has_visitor) = self.has_visitor {
-            return has_visitor;
+        match self.has_visitor {
+            Some(has_visitor) => has_visitor,
+            None => self.read_has_visitor(root),
         }
+    }
+
+    #[inline(never)]
+    fn read_has_visitor(&mut self, root: &CoreHandle) -> bool {
         let has_visitor = match self.runtime_receiver.as_ref() {
             Some(receiver) => receiver.with_artboard(|instance| instance.draw_visitor.is_some()),
             None => root
@@ -3992,10 +4000,19 @@ impl Artboard {
         };
         let mut index = 0;
         while let Some(entry) = list.entries.get(index) {
-            // A listed Shape draws from its cells against the entry's handle.
+            // A listed Shape draws from its cells against the entry's handle; a
+            // listed Text takes its range step from its cells and one borrow
+            // to draw.
             if state.pending_clip_operations.is_empty()
-                && let (Some(shape), Some(handle)) = (entry.shape.as_ref(), entry.authored())
-                && Self::draw_listed_shape(root, renderer, handle, shape, &mut state)
+                && let (Some(listed), Some(handle)) = (entry.listed.as_ref(), entry.authored())
+                && match listed {
+                    crate::mechanical_port::source::draw_list::ListedDraw::Shape(shape) => {
+                        Self::draw_listed_shape(root, renderer, handle, shape, &mut state)
+                    }
+                    crate::mechanical_port::source::draw_list::ListedDraw::Text(text) => {
+                        Self::draw_listed_text(root, renderer, handle, text, &mut state)
+                    }
+                }
             {
                 if links.version() != list.version || !handle.is_occupied_settled() {
                     let next = RuntimeDrawableOccurrence::Authored(handle.clone())
@@ -4063,6 +4080,43 @@ impl Artboard {
                 .flatten()
                 .expect("a drawing ShapePaint has its imported Artboard factory")
         });
+        true
+    }
+
+    /// The range step for a listed Text: the generated prelude from its cells
+    /// (an authored Text is no clip start or end, and Drawable::willDraw is
+    /// !isHidden()), the visitor check, then its draw under one borrow.
+    /// Returns false, having done nothing, when the step must borrow the text
+    /// to decide. Kept out of line: the listed loop is the Shape fast path.
+    #[inline(never)]
+    fn draw_listed_text(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        handle: &CoreHandle,
+        text: &crate::mechanical_port::source::draw_list::TextDraw,
+        state: &mut DrawRangeState,
+    ) -> bool {
+        // A loan of the text would succeed and its release would run nothing.
+        if !handle.is_occupied_settled() {
+            return false;
+        }
+        // A settled member's graph binding is the one recorded with the list.
+        let Some(dirt) = text.dirt.as_ref().map(|dirt| dirt.get()) else {
+            return false;
+        };
+        let hidden = text.drawable.is_flagged_hidden()
+            || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
+        if hidden || state.empty_clips > 0 {
+            return true;
+        }
+        // An authored drawable has no layer mask operation.
+        if state.has_visitor(root) && text.drawable.has_custom_properties() {
+            return false;
+        }
+        handle.with_mut(|owner| owner.drawable_draw(renderer));
+        // The text's own draw ran: read the visitor afresh, as after any
+        // borrowed step.
+        state.has_visitor = None;
         true
     }
 

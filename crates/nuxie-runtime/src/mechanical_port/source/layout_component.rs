@@ -2588,6 +2588,9 @@ impl LayoutComponent {
                     // even when the solver has already fixed the inline slot.
                     let intrinsic_width = inputs.known_dimensions.width.is_none()
                         && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
+                    let width_limits = crate::mechanical_port::source::layout::layout_tree::content_width_limits(
+                        style, inputs.parent_size,
+                    );
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
@@ -2599,6 +2602,7 @@ impl LayoutComponent {
                                 known,
                                 available,
                                 intrinsic_width,
+                                width_limits,
                             ),
                             None => taffy::prelude::Size::ZERO,
                         },
@@ -2715,6 +2719,9 @@ impl LayoutComponent {
                     // even when the solver has already fixed the inline slot.
                     let intrinsic_width = inputs.known_dimensions.width.is_none()
                         && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
+                    let width_limits = crate::mechanical_port::source::layout::layout_tree::content_width_limits(
+                        style, inputs.parent_size,
+                    );
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
@@ -2726,6 +2733,7 @@ impl LayoutComponent {
                                 known,
                                 space,
                                 intrinsic_width,
+                                width_limits,
                             ),
                             None => Size::ZERO,
                         },
@@ -3081,6 +3089,7 @@ impl LayoutComponent {
         known: taffy::prelude::Size<Option<f32>>,
         available: taffy::prelude::Size<taffy::prelude::AvailableSpace>,
         intrinsic_width: bool,
+        width_limits: (Option<f32>, Option<f32>),
     ) -> taffy::prelude::Size<f32> {
         use crate::mechanical_port::source::layout::{
             layout_measure_mode::unbound_measure_mode,
@@ -3138,6 +3147,7 @@ impl LayoutComponent {
                     measure_fit_content(
                         (offer(width, width_mode), width_mode),
                         (offer(height, height_mode), height_mode),
+                        width_limits,
                         || {
                             intrinsic_width
                                 .then(|| host_min_content_width(&host))
@@ -3167,6 +3177,7 @@ impl LayoutComponent {
                 measure_fit_content(
                     (width, width_mode),
                     (height, height_mode),
+                    width_limits,
                     || {
                         if !intrinsic_width {
                             return None;

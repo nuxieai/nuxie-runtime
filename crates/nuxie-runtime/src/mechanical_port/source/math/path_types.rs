@@ -9,7 +9,7 @@ pub enum PathDirection {
     Clockwise,
     Counterclockwise,
 }
-pub use nuxie_render_api::PathVerb;
+pub use nuxie_render_api::{PATH_VERB_COUNT, PathVerb};
 
 pub fn path_verb_to_point_count(verb: PathVerb) -> usize {
     match verb {

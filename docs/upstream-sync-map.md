@@ -46,18 +46,33 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e7124f18b96e11fde64a14c48138c8b4c80d2acc`
+- LAST_SYNCED_SHA: `183df53fbdfa36441b90a06130cd1d68a87c3ce4`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` (refreshed 2026-10-16 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Five upstream commits remain after this checkpoint at the fetched target.
-  All 255 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (277 after `5892bb05`); this
+  Four upstream commits remain after this checkpoint at the fetched target.
+  All 256 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (278 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `183df53f`, integrated atop downstream `f0303f3e8c`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Render API units pass 38; runtime units pass 432 with 2 existing ignores;
+  translated RawPath integration tests pass 2; metadata checks pass 39. Renderer
+  units pass 942 with 11 existing ignores and only known UNIV-4801 failing.
+  All three stroke-position GMs pass unchanged exact pixel comparisons, including
+  the two expanded 480x1920 fixtures. New pristine and approved-adapted C++
+  captures have verified source, toolchain, adapter and PNG provenance at
+  `/private/tmp/nuxie-oct16-183df-gms.4HE0LC`; existing FMA/coverage adaptations
+  remain explicit. The new zigzag exposed a preexisting initial-cap translation
+  error: Rust used the original line tangent instead of the emitted cubic's
+  rounded control tangent. The source correction passed both rereviews and
+  eliminated the stable 2/21-pixel differences without tolerance changes.
+  Both wasm32-unknown-unknown browser backends compile on the final bytes.
+  No new Android, other vendor-hardware or browser pixel coverage is claimed.
 - Validation at `e7124f18`, integrated atop downstream `291a8a027c`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean after preserving the new SIMD block's separate product/reduction
@@ -1212,6 +1227,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `183df53fbdfa36441b90a06130cd1d68a87c3ce4` | Cache per-verb counts through every mutation and ownership path in both RawPath owners; carry counts through borrowed views, remove mutable verb access, and use cached counts for renderer reservations with the existing combined-record representation and implicit closes. Port the complete mutation-count test and expanded long-zigzag GM fixtures with fresh provenance-bound C++ captures. Correct the initial cap's preexisting tangent translation error exposed by the new fixture. Skia accessor edits have no live Rust backend and are inapplicable; private .rive_head contents are not claimed imported. | — |
 | `e7124f18b96e11fde64a14c48138c8b4c80d2acc` | Translate the cubic convex-under-180-degree and nondegenerate-line early-out in both runtime and renderer owners. Preserve separate SIMD products/reduction, ordered C++ min/max NaN and tie behavior, exact EPSILON, sequential zero-edge substitutions and untouched output slots on early return. The existing solver remains unchanged. No new upstream tests occur in the public delta; private .rive_head contents are not claimed imported. | — |
 | `1c75867de17587c541ad2d7ca88b10577b033bd2` | Collapse cusp slivers onto exact shared endpoints and emit n+1 cubics with full-round cusp joins. Retain chop parameters and re-chop at emission; preserve adjacent tangent pairing, polar counts, shared spokes, cap ordering and retained Rust scratch ownership. Translate the new join encoding and full-round shader branch across all supported generated backends. Update existing cusp expectations and label supplemental collapse coverage; no new upstream unit tests occur in the public delta. Private .rive_head contents are not claimed imported. | — |
 | `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` | Translate bitmask, fast min/max, integer-conversion rounding, hardware-only reciprocal-square-root estimates, named four-column matrix loads/transposes and const bit-cast; migrate existing Rust tuple callers and port the complete public test delta. The renderer's tuple-only syntax delta has no corresponding live tuple caller. ARM32 source branches are retained but explicitly unsupported under the pinned stable toolchain; no ARM32 performance or execution claim. Supplemental mask/transpose/const checks are labeled separately from upstream tests. Private .rive_head contents are not claimed imported. | — |

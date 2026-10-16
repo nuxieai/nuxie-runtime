@@ -1,8 +1,8 @@
 provenance_schema=1
 renderer_implementation=cpp-native-metal-approved-fma-and-coverage-adaptations
 capture_tool=upstream-gms
-build_command=DEPENDENCIES=/Users/levi/dev/worktrees/rive-runtime-october06/dependencies PREMAKE_PATH=<isolated-archive>/build premake5 gmake2 --config=release --out=out/oct06-gms --with_rive_canvas --with_rive_text (from tests); make -C out/oct06-gms -j18 CC=/usr/bin/clang CXX=/usr/bin/clang++ gms
-capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-adapted --backend metal --headless --match stroke_position --output <evidence>/adapted -p1 --verbose
+build_command=DEPENDENCIES=/private/tmp/nuxie-oct15-canvas-gms.2z1UCJ/dependency-cache PREMAKE_PATH=<upstream>/build <upstream>/build/dependencies/premake-core/bin/v5.0.0-beta7_release/premake5 gmake2 --config=release --out=out/oct16-183df-gms --with_rive_canvas --with_rive_text --with_rive_layout (from tests); make -C out/oct16-183df-gms -j2 CC=/usr/bin/clang CXX=/usr/bin/clang++ gms
+capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-adapted --backend metal --headless --match stroke_position_shapes --output <evidence>/adapted -p1 --verbose
 backend=metal
 adapter_vendor=apple
 adapter_device=Apple M5 Max
@@ -10,33 +10,33 @@ adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
 metal_api_validation=enabled
 case_id=stroke_position_shapes
 gm_source=tests/gm/stroke_position_shapes.cpp
-gm_source_sha256=2274cf5144f33a714de0eef1f164089db097b9321f64095740dcf25db25f922e
-runtime_revision=7aa93402a27c800db8a36acc8672612c100ea9b1
-source_materialization=git archive of pinned revision; upstream tracked bytes unchanged
+gm_source_sha256=b94e376f885a9c3f87ad35ac3c21cf97fb9ea255364a8f9881c0e31fe16d911f
+runtime_revision=183df53fbdfa36441b90a06130cd1d68a87c3ce4
+source_materialization=pinned git checkout /private/tmp/rive-upstream-oct15; tracked bytes unchanged; isolated tests/out/oct16-183df-gms and copied current shaders with only the two approved adaptations
 cpp_compiler=Apple clang version 21.0.0 (clang-2100.3.34.2)
 metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
-xcode_version=27.0
-xcode_build=27A266a
-capture_binary_sha256=296aece3c87677a2ab83ed622897c29215991be19cfd8ff4713a56902eb917a4
-png_sha256=48596f744ed3a25201c89b9e7b9ff968b7daff33a4aab0b415db3e2a2fc7d8ec
-shader_regeneration_command=PYTHONHASHSEED=0 make -C <evidence>/shaders-adapted -j8 OUT=<evidence>/tests/out/oct06-gms/include/generated/shaders FLAGS="-p /Users/levi/dev/worktrees/rive-runtime-october06/dependencies/dabeaz_ply_3.11" rive_pls_macosx_metallib; make -C <evidence>/tests/out/oct06-gms -j18 CC=/usr/bin/clang CXX=/usr/bin/clang++ gms
+xcode_version=27.1
+xcode_build=27A9275
+capture_binary_sha256=e53e787e330ae7c6dcc7fb7eae5139211d0cbca0db336e1317306fbd3b8caaab
+png_sha256=d94fbc651c1adeea30518b7f7925493ed6970387d527199b180215f2ba60d69b
+shader_regeneration_command=PYTHONHASHSEED=0 make -C <evidence>/shaders-adapted -j4 OUT=<upstream>/tests/out/oct16-183df-gms/include/generated/shaders FLAGS="-p /private/tmp/nuxie-oct15-canvas-gms.2z1UCJ/dependency-cache/dabeaz_ply_3.11" rive_pls_macosx_metallib; make -C <upstream>/tests/out/oct16-183df-gms -j4 CC=/usr/bin/clang CXX=/usr/bin/clang++ gms
 approved_fma_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
 fma_adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
 upstream_fragment_shader_sha256=f2485e48efb969f0df1d4d8eb5a127c3839d19108242ba897a1656e37bbf8253
 adapted_fragment_shader_sha256=2376c212f296a666ab66858ed49270ca789ee0826a677f94437e864bb9813f04
 approved_coverage_adaptation_commit=a07db8d3ec50af8eb940db4af788fbbfad74b626
 coverage_adaptation=draw_path.vert selects float4 COVERAGE_TYPE and preserves coverages before interpolation when ENABLE_FEATHER or METAL; both guards and comment match the existing Rust shader literal
-upstream_vertex_shader_sha256=0975678982bb41fb41da031a50449e23e3ae5d58120b830e3a326f2f03121d96
-adapted_vertex_shader_sha256=1dd36aa09a813bfaf9d6dd9de7af7951756fc05cd52a8ea52b2eb616238faa15
+upstream_vertex_shader_sha256=a711a9e5894e149852785b746d347f3dec78e35c555859ba09d0fde196575f2b
+adapted_vertex_shader_sha256=d11c82b89e248af67885f974d57c64fdc3e954f78dfc481b1f6a87e89279f4d5
 pristine_capture_file=stroke_position_shapes.pristine.png
-pristine_capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-pristine --backend metal --headless --match stroke_position --output <evidence>/pristine -p1 --verbose
-pristine_capture_binary_sha256=db04d99bb464105c7bb7401dafbd0ed76b23578cb1b817f705a3c67e445870f5
-pristine_png_sha256=0ad79234bad30ccaea683b45604737f770ec222c6126f9fb5f44d8725eb75ffa
-pristine_comparison=11059 differing pixels, maximum channel delta 1; compares pristine C++ to approved-adapted C++ only
-evidence_directory=/private/tmp/nuxie-oct06-gm.eaoUMC
+pristine_capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-pristine --backend metal --headless --match stroke_position_shapes --output <evidence>/pristine -p1 --verbose
+pristine_capture_binary_sha256=56ad47aeac21fa967fef1783b189c2efe79301ed6dc651cfde815b216ca2dfcc
+pristine_png_sha256=a2003fe754f9bc29e362edb6159c8d7065b5e21e2babec1574f6582eefa20b1e
+pristine_comparison=12970 differing pixels, maximum channel delta 1; compares pristine C++ to approved-adapted C++ only
+evidence_directory=/private/tmp/nuxie-oct16-183df-gms.4HE0LC
 frame=0
 frame_width=480
-frame_height=1440
+frame_height=1920
 clear_color=0xffffffff
 mode=raster-ordering
 shader_compilation_mode=always-synchronous

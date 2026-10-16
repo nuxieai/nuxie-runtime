@@ -16,6 +16,15 @@ fn open_zigzag() -> RawPath {
     p.line_to(136., 120.);
     p
 }
+// Exercises reservation for joins caused by implicit closes.
+fn long_zigzag() -> RawPath {
+    let mut p = RawPath::new();
+    p.move_to(20., 65.);
+    for i in 1..=8 {
+        p.line_to(20. + 15. * i as f32, if i % 2 != 0 { 100. } else { 65. });
+    }
+    p
+}
 fn notched_square() -> RawPath {
     let mut p = RawPath::new();
     p.move_to(30., 30.);
@@ -80,11 +89,12 @@ const POSITIONS: [StrokePosition; 3] = [
     StrokePosition::Outside,
 ];
 fn draw_shapes_by_join(f: &mut dyn Factory, r: &mut dyn Renderer, feather: f32) {
-    background(f, r, 9. * CELL);
+    background(f, r, 12. * CELL);
     let shapes = [
         f.make_render_path(open_zigzag(), FillRule::NonZero),
         f.make_render_path(notched_square(), FillRule::NonZero),
         f.make_render_path(square_with_hole(), FillRule::EvenOdd),
+        f.make_render_path(long_zigzag(), FillRule::NonZero),
     ];
     for (s, shape) in shapes.iter().enumerate() {
         for (j, join) in [StrokeJoin::Miter, StrokeJoin::Round, StrokeJoin::Bevel]
@@ -159,13 +169,13 @@ fn check(name: &str, height: u32, draw: impl Fn(&mut dyn Factory, &mut dyn Rende
 }
 #[test]
 fn stroke_position_shapes() {
-    check("stroke_position_shapes", 1440, |f, r| {
+    check("stroke_position_shapes", 1920, |f, r| {
         draw_shapes_by_join(f, r, 0.)
     });
 }
 #[test]
 fn stroke_position_shapes_feathered() {
-    check("stroke_position_shapes_feathered", 1440, |f, r| {
+    check("stroke_position_shapes_feathered", 1920, |f, r| {
         draw_shapes_by_join(f, r, 6.)
     });
 }

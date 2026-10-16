@@ -1212,7 +1212,7 @@ impl Text {
             self.emoji_image_cache.clear();
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::PAINT) {
-            self.build_render_styles();
+            self.build_render_styles_with_layout_dirt(false);
         } else if value.intersects(ComponentDirt::RENDER_OPACITY) {
             for style in &mut self.render_styles {
                 style.with_downcast_mut::<TextStylePaint, _>(|style| {
@@ -1557,6 +1557,10 @@ impl Text {
     }
 
     pub fn build_render_styles(&mut self) {
+        self.build_render_styles_with_layout_dirt(true);
+    }
+
+    fn build_render_styles_with_layout_dirt(&mut self, intrinsic: bool) {
         self.clear_render_styles();
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
@@ -1827,7 +1831,13 @@ impl Text {
         }
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
-        self.base.mark_layout_node_dirty();
+        if intrinsic {
+            // PATH updates can include shape modifiers and typography.
+            self.base.mark_layout_node_dirty();
+        } else {
+            // Paint-only updates retain participant intrinsic measurements.
+            self.base.mark_layout_ancestors_dirty();
+        }
         for run in &mut self.all_runs {
             run.with_mut(|run| {
                 if run.is_hit_target() {
@@ -2169,6 +2179,30 @@ impl Text {
         }
         self.measured_shape = Some(measured);
         None
+    }
+
+    /// Layout adapter query after an unbounded measure. Read its cached shape;
+    /// never shape again or change the direct Rive measurement protocol.
+    pub(crate) fn layout_min_content_width(&self) -> Option<f32> {
+        if self.styled_text.empty() {
+            return Some(0.0);
+        }
+        let shape = &self.measured_shape.as_ref()?.shape;
+        // CSS break-word emergency breaks do not reduce min-content.
+        let word_break = if self.word_break() == TextWordBreak::BreakAll {
+            TextWordBreak::BreakAll
+        } else {
+            TextWordBreak::Normal
+        };
+        let lines = Self::break_lines(shape, 0.0, TextAlign::Left, self.wrap(), word_break);
+        Some(
+            shape
+                .iter()
+                .zip(&lines)
+                .fold(0.0f32, |minimum, (paragraph, lines)| {
+                    minimum.max(GlyphLine::compute_max_width(lines, &paragraph.runs))
+                }),
+        )
     }
 
     fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {

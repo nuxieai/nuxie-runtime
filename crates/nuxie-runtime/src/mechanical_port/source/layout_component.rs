@@ -2588,9 +2588,11 @@ impl LayoutComponent {
                     // even when the solver has already fixed the inline slot.
                     let intrinsic_width = inputs.known_dimensions.width.is_none()
                         && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
-                    let width_limits = crate::mechanical_port::source::layout::layout_tree::content_width_limits(
-                        style, inputs.parent_size,
-                    );
+                    let width_limits =
+                        crate::mechanical_port::source::layout::layout_tree::content_width_limits(
+                            style,
+                            inputs.parent_size,
+                        );
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
@@ -2719,9 +2721,11 @@ impl LayoutComponent {
                     // even when the solver has already fixed the inline slot.
                     let intrinsic_width = inputs.known_dimensions.width.is_none()
                         && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
-                    let width_limits = crate::mechanical_port::source::layout::layout_tree::content_width_limits(
-                        style, inputs.parent_size,
-                    );
+                    let width_limits =
+                        crate::mechanical_port::source::layout::layout_tree::content_width_limits(
+                            style,
+                            inputs.parent_size,
+                        );
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
@@ -3093,7 +3097,9 @@ impl LayoutComponent {
     ) -> taffy::prelude::Size<f32> {
         use crate::mechanical_port::source::layout::{
             layout_measure_mode::unbound_measure_mode,
-            layout_participant::{LayoutParticipant, host_min_content_width},
+            layout_participant::{
+                LayoutParticipant, host_min_content_width, host_supports_min_content_width,
+            },
             layout_tree::{measure_axis, measure_fit_content},
         };
         fn measure_host(
@@ -3148,11 +3154,8 @@ impl LayoutComponent {
                         (offer(width, width_mode), width_mode),
                         (offer(height, height_mode), height_mode),
                         width_limits,
-                        || {
-                            intrinsic_width
-                                .then(|| host_min_content_width(&host))
-                                .flatten()
-                        },
+                        intrinsic_width && host_supports_min_content_width(&host),
+                        || host_min_content_width(&host),
                         |width, width_mode, height, height_mode| {
                             measure_host(&host, width, width_mode, height, height_mode)
                         },
@@ -3178,10 +3181,12 @@ impl LayoutComponent {
                     (width, width_mode),
                     (height, height_mode),
                     width_limits,
+                    intrinsic_width
+                        && children
+                            .iter()
+                            .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
+                            .all(host_supports_min_content_width),
                     || {
-                        if !intrinsic_width {
-                            return None;
-                        }
                         children
                             .iter()
                             .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))

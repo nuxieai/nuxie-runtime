@@ -24,6 +24,18 @@ use crate::mechanical_port::source::text_engine::{
     fallback_proc_enabled, note_fallback_call,
 };
 
+// Test-only observation of real shaping, scoped to each test thread.
+#[cfg(test)]
+thread_local! {
+    static TEST_SHAPE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+impl HbFont {
+    pub(crate) fn test_shape_count() -> usize {
+        TEST_SHAPE_CALLS.with(std::cell::Cell::get)
+    }
+}
+
 const STANDARD_SCALE: i32 = 2048;
 const INVERSE_SCALE: f32 = 1.0 / STANDARD_SCALE as f32;
 const KERN_TAG: u32 = u32::from_be_bytes(*b"kern");
@@ -1090,6 +1102,8 @@ impl HbFont {
         text_runs: &[TextRun],
         text_direction_flag: i32,
     ) -> Vec<Paragraph> {
+        #[cfg(test)]
+        TEST_SHAPE_CALLS.with(|calls| calls.set(calls.get() + 1));
         let mut paragraphs = Vec::new();
         let mut text_index = 0usize;
         let mut run_index = 0usize;

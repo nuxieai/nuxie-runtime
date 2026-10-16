@@ -544,19 +544,28 @@ impl StateMachineLayerInstance {
         {
             return false;
         }
-        let (serial, source, has_binds) = machine
+        // The change serial first, from the dirty state the machine shares
+        // with its artboard: while other layers keep writing, it alone
+        // answers, without borrowing the artboard.
+        let serial = match &machine.settling.row {
+            Some(dirty) => dirty.change_serial(),
+            None => machine
+                .artboard_instance
+                .with_artboard(|artboard| artboard.change_serial())
+                .expect("a state machine retains its ArtboardInstance"),
+        };
+        if serial != pose_since {
+            return false;
+        }
+        let (source, has_binds) = machine
             .artboard_instance
             .with_artboard(|artboard| {
                 (
-                    artboard.change_serial(),
                     artboard.artboard_source_handle(),
                     artboard.has_key_frame_source_binds(),
                 )
             })
             .expect("a state machine retains its ArtboardInstance");
-        if serial != pose_since {
-            return false;
-        }
         if source.as_ref().map_or(has_binds, |source| {
             source
                 .with_downcast::<Artboard, _>(Artboard::has_key_frame_source_binds)

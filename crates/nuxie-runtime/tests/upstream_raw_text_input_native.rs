@@ -1509,3 +1509,99 @@ fn input_outline_only_emoji_is_byte_for_byte_legacy_outline() {
         2
     );
 }
+
+#[test]
+fn input_host_picture_passes_cluster_and_reuses_image_after_selection_changes() {
+    use nuxie_runtime::source::{math::mat2d::Mat2D, text::font_hb::HostGlyphPicture};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let callback_calls = calls.clone();
+    let plain = load_font("assets/RobotoFlex.ttf");
+    let host = plain
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(move |_, cluster| {
+            if cluster != [65] {
+                return None;
+            }
+            callback_calls.fetch_add(1, Ordering::Relaxed);
+            Some(HostGlyphPicture {
+                png: vec![
+                    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0,
+                    0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156,
+                    99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0, 73, 69, 78,
+                    68, 174, 66, 96, 130,
+                ],
+                width: 1,
+                height: 1,
+                bearing_x: 0.125,
+                bearing_y: -0.875,
+                extent_x: 1.0,
+                extent_y: 1.0,
+            })
+        }));
+    let host_lifetime = Arc::downgrade(&host);
+    let recording = RecordingFactory::new();
+    let mut renderer = recording.make_renderer();
+    let mut factory = PersistentFactory::new(recording);
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let mut input = RawTextInput::new();
+    input.set_font(Some(host));
+    input.set_text("AA".into());
+    input.set_separate_selection_text(true);
+    input.update(&retained);
+    assert!(input.text_path().empty());
+    let mut text = retained.with_factory_mut(|factory| factory.make_render_paint());
+    let mut selection = retained.with_factory_mut(|factory| factory.make_render_paint());
+    let mut cursor = retained.with_factory_mut(|factory| factory.make_render_paint());
+    for selected in [false, true] {
+        if selected {
+            input.set_cursor(Cursor::new(
+                CursorPosition::unresolved(0),
+                CursorPosition::unresolved(2),
+            ));
+            input.update(&retained);
+            assert!(input.selected_text_path().empty());
+        }
+        input.draw(
+            &retained,
+            &mut renderer,
+            &Mat2D::default(),
+            text.as_mut(),
+            selection.as_mut(),
+            cursor.as_mut(),
+        );
+    }
+    input.set_font(Some(plain));
+    input.update(&retained);
+    assert!(
+        host_lifetime.upgrade().is_none(),
+        "font replacement must evict obsolete cached images and fonts"
+    );
+    let stream = factory.borrow().stream();
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|line| line.starts_with("decodeImage "))
+            .count(),
+        1,
+        "{stream}"
+    );
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|line| line.starts_with("drawImage "))
+            .count(),
+        4,
+        "{stream}"
+    );
+    assert!(
+        stream.contains("transform matrix=[1,0,0,1,0.125,-0.875]"),
+        "{stream}"
+    );
+}

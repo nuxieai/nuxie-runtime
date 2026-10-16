@@ -724,6 +724,7 @@ fn process_hook_and_host_outline_draw_a_known_square() {
         user_data: ptr::null_mut(),
         get_path: Some(square),
         release: None,
+        get_picture: None,
     };
     let mut font = ptr::null_mut();
     unsafe {

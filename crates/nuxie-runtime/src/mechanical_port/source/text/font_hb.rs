@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use harfrust::{
@@ -311,6 +311,23 @@ fn shaping_features(
 /// Host outline recovery for an otherwise ordinary decoded font.
 pub type HostGlyphOutline = Arc<dyn Fn(GlyphId, &[Coord]) -> RawPath + Send + Sync>;
 
+/// Host-rasterized PNG in em units, using ColorGlyphLayer's y-down bearings.
+/// `bearing_y` is minus the top edge's height above the baseline.
+#[derive(Clone, Debug)]
+pub struct HostGlyphPicture {
+    pub png: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub bearing_x: f32,
+    pub bearing_y: f32,
+    pub extent_x: f32,
+    pub extent_y: f32,
+}
+
+pub type HostGlyphPictures =
+    Arc<dyn Fn(GlyphId, &[Unichar]) -> Option<HostGlyphPicture> + Send + Sync>;
+type PictureAnswer = Arc<OnceLock<Option<HostGlyphPicture>>>;
+
 /// The HBFont owner retains Rive's run/fallback/color semantics. Only its
 /// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
 /// and unicode-bidi supplies paragraph levels. No C font or bidi pointer lives
@@ -318,6 +335,8 @@ pub type HostGlyphOutline = Arc<dyn Fn(GlyphId, &[Coord]) -> RawPath + Send + Sy
 pub struct HbFont {
     base: FontBase,
     host_outline: Option<HostGlyphOutline>,
+    host_pictures: Option<HostGlyphPictures>,
+    host_picture_cache: Mutex<HashMap<GlyphId, PictureAnswer>>,
     bytes: FontBytes,
     face_index: u32,
     // The face's shaping caches and shape plans, shared by every variant
@@ -576,6 +595,8 @@ impl HbFont {
         Self {
             base: FontBase::new(line_metrics),
             host_outline: None,
+            host_pictures: None,
+            host_picture_cache: Mutex::new(HashMap::new()),
             bytes,
             face_index,
             face,
@@ -600,7 +621,45 @@ impl HbFont {
             self.feature_values.clone(),
         );
         font.host_outline = Some(outline);
+        font.host_pictures = self.host_pictures.clone();
         Arc::new(font)
+    }
+
+    /// Install an additive picture source. Native COLR/readable PNG always wins.
+    /// Answers (including None) are retained per glyph; the first cluster wins.
+    /// Callbacks can run concurrently for distinct glyphs and must not reenter.
+    pub fn with_host_pictures(&self, pictures: HostGlyphPictures) -> FontRef {
+        let mut font = Self::with_face_options(
+            self.bytes.clone(),
+            self.face_index,
+            Some(Arc::clone(&self.face)),
+            self.axis_values.clone(),
+            self.feature_values.clone(),
+        );
+        font.host_outline = self.host_outline.clone();
+        font.host_pictures = Some(pictures);
+        Arc::new(font)
+    }
+
+    fn native_color_glyph(&self, glyph: GlyphId) -> bool {
+        if !(self.face.has_color_layers || self.face.has_color_paint || self.face.has_png) {
+            return false;
+        }
+        let font = self.outline_font();
+        let id = OutlineGlyphId::new(glyph as u32);
+        font.color_glyphs().get(id).is_some() || font.bitmap_strikes()
+            .glyph_for_size(Size::unscaled(), id)
+            .is_some_and(|bitmap| matches!(bitmap.data, skrifa::bitmap::BitmapData::Png(bytes) if !bytes.is_empty()))
+    }
+
+    fn cached_picture(&self, glyph: GlyphId) -> Option<HostGlyphPicture> {
+        let answer = self
+            .host_picture_cache
+            .lock()
+            .unwrap()
+            .get(&glyph)
+            .cloned()?;
+        answer.get().and_then(Clone::clone)
     }
 
     pub fn shape_fallback_run(
@@ -615,11 +674,10 @@ impl HbFont {
         let glyph_run = shape_run(&text[text_start as usize..], text_run, text_start);
         if let Some(index) = glyph_run.glyphs.iter().position(|glyph| *glyph == 0) {
             let missing = text[glyph_run.text_indices[index] as usize];
-            let fallback =
-                fallback_proc().and_then(|callback| {
-                    note_fallback_call();
-                    callback(missing, fallback_index, self)
-                });
+            let fallback = fallback_proc().and_then(|callback| {
+                note_fallback_call();
+                callback(missing, fallback_index, self)
+            });
             if let Some(fallback_font) = fallback {
                 let fallback_hb = fallback_font
                     .as_any()
@@ -733,13 +791,17 @@ impl Font for HbFont {
         for feature in features {
             values.insert(feature.tag, feature.value);
         }
-        Arc::new(Self::with_face_options(
+        let mut font = Self::with_face_options(
             self.bytes.clone(),
             self.face_index,
             Some(Arc::clone(&self.face)),
             axes,
             values,
-        ))
+        );
+        // Keep upstream's plain-HB outline variant policy. Pictures are our
+        // opt-in host extension and survive derived shaping variants.
+        font.host_pictures = self.host_pictures.clone();
+        Arc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
         let font = self.outline_font();
@@ -761,14 +823,33 @@ impl Font for HbFont {
         self.face.has_color_layers || self.face.has_color_paint || self.face.has_png
     }
     fn is_color_glyph(&self, glyph: GlyphId) -> bool {
-        if !self.has_color_glyphs() {
+        self.native_color_glyph(glyph) || self.has_host_picture(glyph)
+    }
+    fn is_color_glyph_with_text(&self, glyph: GlyphId, cluster: &[Unichar]) -> bool {
+        if self.native_color_glyph(glyph) {
+            return true;
+        }
+        let Some(source) = &self.host_pictures else {
+            return false;
+        };
+        let answer = self
+            .host_picture_cache
+            .lock()
+            .unwrap()
+            .entry(glyph)
+            .or_insert_with(|| Arc::new(OnceLock::new()))
+            .clone();
+        answer.get_or_init(|| source(glyph, cluster)).is_some()
+    }
+    fn has_host_picture(&self, glyph: GlyphId) -> bool {
+        if self.host_pictures.is_none() {
             return false;
         }
-        let font = self.outline_font();
-        let id = OutlineGlyphId::new(glyph as u32);
-        font.color_glyphs().get(id).is_some() || font.bitmap_strikes()
-            .glyph_for_size(Size::unscaled(), id)
-            .is_some_and(|bitmap| matches!(bitmap.data, skrifa::bitmap::BitmapData::Png(bytes) if !bytes.is_empty()))
+        self.host_picture_cache
+            .lock()
+            .unwrap()
+            .get(&glyph)
+            .is_some_and(|answer| answer.get().is_some_and(Option::is_some))
     }
     fn get_color_layers(
         &self,
@@ -776,7 +857,7 @@ impl Font for HbFont {
         out: &mut Vec<ColorGlyphLayer>,
         foreground: ColorInt,
     ) -> usize {
-        if !self.has_color_glyphs() {
+        if !self.has_color_glyphs() && self.host_pictures.is_none() {
             return 0;
         }
         if let Some(cached) = self.color_layer_cache.lock().unwrap().get(&glyph).cloned() {
@@ -838,6 +919,21 @@ impl Font for HbFont {
                         layers.push(layer);
                     }
                 }
+            }
+        }
+        if layers.is_empty() {
+            if let Some(picture) = self.cached_picture(glyph) {
+                layers.push(ColorGlyphLayer {
+                    paint_type: ColorGlyphPaintType::Image,
+                    image_bytes: picture.png,
+                    image_width: picture.width,
+                    image_height: picture.height,
+                    image_bearing_x: picture.bearing_x,
+                    image_bearing_y: picture.bearing_y,
+                    image_extent_x: picture.extent_x,
+                    image_extent_y: picture.extent_y,
+                    ..Default::default()
+                });
             }
         }
         if layers.is_empty() {
@@ -1008,6 +1104,25 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
             positions[source].x_offset as f32 * scale,
             -positions[source].y_offset as f32 * scale,
         );
+    }
+    if font.host_pictures.is_some() {
+        let mut boundaries: Vec<_> = run
+            .text_indices
+            .iter()
+            .map(|i| (*i - text_offset) as usize)
+            .collect();
+        boundaries.push(text_run.unichar_count as usize);
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        run.cluster_texts = run
+            .text_indices
+            .iter()
+            .map(|index| {
+                let start = (*index - text_offset) as usize;
+                let end = boundaries[boundaries.binary_search(&start).unwrap() + 1];
+                text[start..end].to_vec()
+            })
+            .collect();
     }
     run.xpos[count] = 0.0;
     run
@@ -1300,6 +1415,9 @@ fn extract_subset(original: &GlyphRun, start: usize, end: usize) -> GlyphRun {
         original.xpos[start..=end].to_vec(),
         original.offsets[start..end].to_vec(),
     );
+    if !original.cluster_texts.is_empty() {
+        subset.cluster_texts = original.cluster_texts[start..end].to_vec();
+    }
     subset.font = original.font.clone();
     subset.size = original.size;
     subset.line_height = original.line_height;

@@ -70,7 +70,34 @@ native answers and the emoji source trace are recorded in
 [upstream-sync-map.md](upstream-sync-map.md#known-apple-font-boundary-gap).
 For the selected iOS26.5 emjc Apple emoji, that trace predicts the same blank
 row upstream. It is not a direct upstream simulator rendering verdict.
-Current device qualification belongs to
+UNIV-4921 adds `HbFont::with_host_pictures` and the optional, size-gated
+`NuxFontOutlineCallbacks::get_picture` after `release`. This is our
+**host-glyph-pictures** addition, not emjc decoding or CoreText shaping parity.
+It takes copied PNG bytes, pixel dimensions and normalized em bearings/extents;
+C `top` is positive above the baseline and maps to negative Rust `bearing_y`.
+Native COLR/readable PNG takes precedence. The first answer (Some or None) is
+cached per glyph, using all code points in the shaped cluster. Callback context
+may be called on any thread concurrently, must not reenter or unwind, and
+outlives all retained fonts/variants. The C sink limits PNGs to 4 MiB and each
+encoded/reported side to 1024 pixels, validates matching dimensions and finite
+metrics, and refuses repeated sink calls. Pictures compose with host outlines;
+picture sources survive options, while the existing outline variant policy
+above remains upstream behavior.
+
+The **text-input-colour-glyphs** addition records colour glyphs separately from
+both field outline paths and draws native/host layers after outline paints
+inside overflow clipping, including selected-text and direct RawTextInput
+routes. Foreground/opacity follow upstream Text: first solid Fill, else black,
+and modifier opacity (one for fields without modifiers). Direct write-only
+RenderPaint callers use black. Selection keeps colour. Cursor/selection geometry,
+line metrics, hit testing and non-colour glyph paths retain upstream behavior.
+The **raw-text-host-pictures** addition uses Text's retained image decoder only
+for host pictures; native RawText layer traversal remains pinned behavior.
+
+The sbix/CBDT placement fix follows HarfBuzz's selected strike, origins, extents
+and rounding and is a parity correction. Keep it separate from these additions.
+The iOS, Android and Preview hosts still need to supply their platform pictures
+or compatible emoji font. Current device qualification belongs to
 [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
 
 The pre-existing scoped `with_host_fallback_proc` remains for editor hosts

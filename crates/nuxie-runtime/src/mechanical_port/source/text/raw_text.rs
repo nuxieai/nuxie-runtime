@@ -1,4 +1,6 @@
-use super::text::{StyledText, Text, draw_color_glyph_layer};
+use super::text::{
+    ColorGlyphImageCache, StyledText, Text, draw_color_glyph, draw_color_glyph_layer,
+};
 use super::{glyph_lookup::GlyphLookup, text_layout_view::TextLayoutView};
 use std::{cell::RefCell, rc::Rc};
 
@@ -70,6 +72,7 @@ pub struct RawText {
     bounds: Aabb,
     clip_render_path: Option<ShapePaintPath>,
     draw_commands: Vec<DrawCommand>,
+    emoji_image_cache: RefCell<ColorGlyphImageCache>,
 }
 impl RawText {
     #[doc(hidden)]
@@ -136,6 +139,7 @@ impl RawText {
             bounds: Aabb::default(),
             clip_render_path: None,
             draw_commands: Vec::new(),
+            emoji_image_cache: RefCell::new(Vec::new()),
         }
     }
     pub fn empty(&self) -> bool {
@@ -446,6 +450,7 @@ impl RawText {
         }
         self.render_styles.clear();
         self.draw_commands.clear();
+        self.emoji_image_cache.borrow_mut().clear();
         self.ordered_lines.clear();
         self.line_directions.clear();
         self.line_glyph_counts.clear();
@@ -581,7 +586,7 @@ impl RawText {
                         .font
                         .as_ref()
                         .expect("shaped text retains its font")
-                        .is_color_glyph(run.glyphs[i])
+                        .is_color_glyph_with_text(run.glyphs[i], run.cluster_text(i))
                     {
                         self.draw_commands.push(DrawCommand::Color {
                             font: run
@@ -669,7 +674,7 @@ impl RawText {
                 } => {
                     self.draw_color_glyph(
                         renderer,
-                        font.as_ref(),
+                        font.clone(),
                         *glyph_id,
                         transform,
                         *foreground_color,
@@ -684,11 +689,27 @@ impl RawText {
     fn draw_color_glyph(
         &self,
         renderer: &mut dyn Renderer,
-        font: &dyn Font,
+        font: FontRef,
         glyph_id: u16,
         transform: &Mat2D,
         foreground_color: ColorInt,
     ) {
+        if font.has_host_picture(glyph_id) {
+            draw_color_glyph(
+                renderer,
+                &self.factory,
+                &mut self.emoji_image_cache.borrow_mut(),
+                font,
+                glyph_id,
+                *transform,
+                foreground_color,
+                1.0,
+                Mat2D::default(),
+            );
+            return;
+        }
+        // Preserve upstream RawText's native layer traversal exactly. Only the
+        // additive host picture enters Text's image decoder/cache above.
         let mut layers = Vec::new();
         if font.get_color_layers(glyph_id, &mut layers, foreground_color) == 0 {
             return;

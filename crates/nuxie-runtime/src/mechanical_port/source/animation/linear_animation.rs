@@ -22,11 +22,187 @@ use crate::mechanical_port::source::{
 #[cfg(test)]
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 fn positive_mod(value: f32, range: f32) -> f32 {
     debug_assert!(range > 0.0);
     crate::mechanical_port::source::math::math_types::positive_mod(value, range)
+}
+
+/// A LinearAnimation's authored timing properties (the storage its generated
+/// setters write) and whether it may report keyed callbacks, shared with its
+/// instances so they read these without borrowing the animation.
+pub(crate) struct LinearAnimationCells {
+    has_keyed_callbacks: Cell<bool>,
+    fps: Cell<u32>,
+    duration: Cell<u32>,
+    speed: Cell<f32>,
+    loop_value: Cell<u32>,
+    work_start: Cell<u32>,
+    work_end: Cell<u32>,
+    enable_work_area: Cell<bool>,
+    quantize: Cell<bool>,
+}
+
+impl Default for LinearAnimationCells {
+    fn default() -> Self {
+        Self {
+            has_keyed_callbacks: Cell::new(true),
+            fps: Cell::new(60),
+            duration: Cell::new(60),
+            speed: Cell::new(1.0),
+            loop_value: Cell::new(0),
+            work_start: Cell::new(u32::MAX),
+            work_end: Cell::new(u32::MAX),
+            enable_work_area: Cell::new(false),
+            quantize: Cell::new(false),
+        }
+    }
+}
+
+impl LinearAnimationCells {
+    #[inline]
+    pub(crate) fn has_keyed_callbacks(&self) -> bool {
+        self.has_keyed_callbacks.get()
+    }
+    #[inline]
+    pub(crate) fn fps(&self) -> u32 {
+        self.fps.get()
+    }
+    #[inline]
+    pub(crate) fn set_fps(&self, value: u32) {
+        self.fps.set(value);
+    }
+    #[inline]
+    pub(crate) fn duration(&self) -> u32 {
+        self.duration.get()
+    }
+    #[inline]
+    pub(crate) fn set_duration(&self, value: u32) {
+        self.duration.set(value);
+    }
+    #[inline]
+    pub(crate) fn speed(&self) -> f32 {
+        self.speed.get()
+    }
+    #[inline]
+    pub(crate) fn set_speed(&self, value: f32) {
+        self.speed.set(value);
+    }
+    #[inline]
+    pub(crate) fn loop_value(&self) -> u32 {
+        self.loop_value.get()
+    }
+    #[inline]
+    pub(crate) fn set_loop_value(&self, value: u32) {
+        self.loop_value.set(value);
+    }
+    #[inline]
+    pub(crate) fn work_start(&self) -> u32 {
+        self.work_start.get()
+    }
+    #[inline]
+    pub(crate) fn set_work_start(&self, value: u32) {
+        self.work_start.set(value);
+    }
+    #[inline]
+    pub(crate) fn work_end(&self) -> u32 {
+        self.work_end.get()
+    }
+    #[inline]
+    pub(crate) fn set_work_end(&self, value: u32) {
+        self.work_end.set(value);
+    }
+    #[inline]
+    pub(crate) fn enable_work_area(&self) -> bool {
+        self.enable_work_area.get()
+    }
+    #[inline]
+    pub(crate) fn set_enable_work_area(&self, value: bool) {
+        self.enable_work_area.set(value);
+    }
+    #[inline]
+    pub(crate) fn quantize(&self) -> bool {
+        self.quantize.get()
+    }
+    #[inline]
+    pub(crate) fn set_quantize(&self, value: bool) {
+        self.quantize.set(value);
+    }
+
+    /// LinearAnimationBase::copy's property copy.
+    pub(crate) fn copy_from(&self, other: &Self) {
+        self.fps.set(other.fps());
+        self.duration.set(other.duration());
+        self.speed.set(other.speed());
+        self.loop_value.set(other.loop_value());
+        self.work_start.set(other.work_start());
+        self.work_end.set(other.work_end());
+        self.enable_work_area.set(other.enable_work_area());
+        self.quantize.set(other.quantize());
+    }
+
+    pub(crate) fn loop_kind(&self) -> Loop {
+        Loop::from(self.loop_value())
+    }
+    pub(crate) fn start_seconds(&self) -> f32 {
+        (if self.enable_work_area() {
+            self.work_start() as f32
+        } else {
+            0.0
+        }) / self.fps() as f32
+    }
+    pub(crate) fn end_seconds(&self) -> f32 {
+        (if self.enable_work_area() {
+            self.work_end()
+        } else {
+            self.duration()
+        }) as f32
+            / self.fps() as f32
+    }
+    pub(crate) fn start_time(&self) -> f32 {
+        if self.speed() >= 0.0 {
+            self.start_seconds()
+        } else {
+            self.end_seconds()
+        }
+    }
+    pub(crate) fn start_time_with_multiplier(&self, m: f32) -> f32 {
+        if self.speed() * m >= 0.0 {
+            self.start_seconds()
+        } else {
+            self.end_seconds()
+        }
+    }
+    pub(crate) fn end_time(&self) -> f32 {
+        if self.speed() >= 0.0 {
+            self.end_seconds()
+        } else {
+            self.start_seconds()
+        }
+    }
+    pub(crate) fn duration_seconds(&self) -> f32 {
+        (self.end_seconds() - self.start_seconds()).abs()
+    }
+    pub(crate) fn global_to_local_seconds(&self, seconds: f32) -> f32 {
+        match self.loop_kind() {
+            Loop::OneShot => seconds + self.start_time(),
+            Loop::Loop => positive_mod(seconds, self.duration_seconds()) + self.start_time(),
+            Loop::PingPong => {
+                let local = positive_mod(seconds, self.duration_seconds());
+                let direction = (seconds / self.duration_seconds()) as i32 % 2;
+                if direction == 0 {
+                    local + self.start_time()
+                } else {
+                    self.end_time() - local
+                }
+            }
+            _ => unreachable!("source globalToLocalSeconds requires a named loop value"),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -141,7 +317,7 @@ impl LinearAnimationOwner {
         from_pong: bool,
     ) {
         #[cfg(not(feature = "editor"))]
-        if !self.with(|animation| animation.has_keyed_callbacks) {
+        if !self.with(LinearAnimation::has_keyed_callbacks) {
             return;
         }
         let (starting_time, objects, cells) = self.with(|animation| {
@@ -169,7 +345,6 @@ impl LinearAnimationOwner {
 
 pub struct LinearAnimation {
     pub base: LinearAnimationBase,
-    has_keyed_callbacks: bool,
     is_static_pose: bool,
     first_key_frame: u16,
     last_key_frame: u16,
@@ -182,7 +357,6 @@ impl Default for LinearAnimation {
     fn default() -> Self {
         Self {
             base: LinearAnimationBase::default(),
-            has_keyed_callbacks: true,
             is_static_pose: false,
             first_key_frame: 0,
             last_key_frame: u16::MAX,
@@ -192,8 +366,11 @@ impl Default for LinearAnimation {
     }
 }
 impl LinearAnimation {
+    pub fn has_keyed_callbacks(&self) -> bool {
+        self.base.cells().has_keyed_callbacks()
+    }
     pub fn set_has_keyed_callbacks(&mut self, value: bool) {
-        self.has_keyed_callbacks = value;
+        self.base.cells().has_keyed_callbacks.set(value);
     }
 
     pub fn applies_key_frame_values_at(&self, mut seconds: f32) -> bool {
@@ -326,62 +503,28 @@ impl LinearAnimation {
         self.base.base.base.base.import(stack)
     }
     pub fn loop_kind(&self) -> Loop {
-        Loop::from(self.base.loop_value())
+        self.base.cells().loop_kind()
     }
     pub fn start_seconds(&self) -> f32 {
-        (if self.base.enable_work_area() {
-            self.base.work_start() as f32
-        } else {
-            0.0
-        }) / self.base.fps() as f32
+        self.base.cells().start_seconds()
     }
     pub fn end_seconds(&self) -> f32 {
-        (if self.base.enable_work_area() {
-            self.base.work_end()
-        } else {
-            self.base.duration()
-        }) as f32
-            / self.base.fps() as f32
+        self.base.cells().end_seconds()
     }
     pub fn start_time(&self) -> f32 {
-        if self.base.speed() >= 0.0 {
-            self.start_seconds()
-        } else {
-            self.end_seconds()
-        }
+        self.base.cells().start_time()
     }
     pub fn start_time_with_multiplier(&self, m: f32) -> f32 {
-        if self.base.speed() * m >= 0.0 {
-            self.start_seconds()
-        } else {
-            self.end_seconds()
-        }
+        self.base.cells().start_time_with_multiplier(m)
     }
     pub fn end_time(&self) -> f32 {
-        if self.base.speed() >= 0.0 {
-            self.end_seconds()
-        } else {
-            self.start_seconds()
-        }
+        self.base.cells().end_time()
     }
     pub fn duration_seconds(&self) -> f32 {
-        (self.end_seconds() - self.start_seconds()).abs()
+        self.base.cells().duration_seconds()
     }
     pub fn global_to_local_seconds(&self, seconds: f32) -> f32 {
-        match self.loop_kind() {
-            Loop::OneShot => seconds + self.start_time(),
-            Loop::Loop => positive_mod(seconds, self.duration_seconds()) + self.start_time(),
-            Loop::PingPong => {
-                let local = positive_mod(seconds, self.duration_seconds());
-                let direction = (seconds / self.duration_seconds()) as i32 % 2;
-                if direction == 0 {
-                    local + self.start_time()
-                } else {
-                    self.end_time() - local
-                }
-            }
-            _ => unreachable!("source globalToLocalSeconds requires a named loop value"),
-        }
+        self.base.cells().global_to_local_seconds(seconds)
     }
     pub fn get_object(&self, i: usize) -> Option<CoreHandle> {
         self.keyed_objects.view().get(i).cloned()
@@ -398,7 +541,7 @@ impl LinearAnimation {
         from_pong: bool,
     ) {
         #[cfg(not(feature = "editor"))]
-        if !self.has_keyed_callbacks {
+        if !self.has_keyed_callbacks() {
             return;
         }
         let start = self.start_time_with_multiplier(speed_direction);
@@ -459,13 +602,13 @@ mod tests {
         let animation = arena.insert(LinearAnimation::default());
         assert!(
             animation
-                .with_downcast::<LinearAnimation, _>(|v| v.has_keyed_callbacks)
+                .with_downcast::<LinearAnimation, _>(LinearAnimation::has_keyed_callbacks)
                 .unwrap()
         );
         let importer = LinearAnimationImporter::new(animation.clone());
         assert!(
             !animation
-                .with_downcast::<LinearAnimation, _>(|v| v.has_keyed_callbacks)
+                .with_downcast::<LinearAnimation, _>(LinearAnimation::has_keyed_callbacks)
                 .unwrap()
         );
         let mut stack = ImportStack::default();
@@ -493,7 +636,7 @@ mod tests {
                 Some(StatusCode::Ok)
             );
             assert_eq!(
-                animation.with_downcast::<LinearAnimation, _>(|v| v.has_keyed_callbacks),
+                animation.with_downcast::<LinearAnimation, _>(LinearAnimation::has_keyed_callbacks),
                 Some(expected)
             );
         }

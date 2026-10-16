@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    animation::animation::Animation, animation::linear_animation::LinearAnimation,
+    animation::animation::Animation,
+    animation::linear_animation::{LinearAnimation, LinearAnimationCells},
     core::binary_reader::BinaryReader,
 };
 
@@ -12,28 +13,15 @@ pub trait LinearAnimationBaseCallbacks:
 
 pub struct LinearAnimationBase {
     pub base: Animation,
-    fps: u32,
-    duration: u32,
-    speed: f32,
-    loop_value: u32,
-    work_start: u32,
-    work_end: u32,
-    enable_work_area: bool,
-    quantize: bool,
+    // The timing properties' storage, shared with the animation's instances.
+    cells: std::rc::Rc<LinearAnimationCells>,
 }
 
 impl Default for LinearAnimationBase {
     fn default() -> Self {
         Self {
             base: Animation::default(),
-            fps: 60,
-            duration: 60,
-            speed: 1.0,
-            loop_value: 0,
-            work_start: u32::MAX,
-            work_end: u32::MAX,
-            enable_work_area: false,
-            quantize: false,
+            cells: std::rc::Rc::new(LinearAnimationCells::default()),
         }
     }
 }
@@ -59,8 +47,11 @@ impl LinearAnimationBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn cells(&self) -> &std::rc::Rc<LinearAnimationCells> {
+        &self.cells
+    }
     pub fn fps(&self) -> u32 {
-        self.fps
+        self.cells.fps()
     }
     pub fn set_fps(&mut self, value: u32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
         if !self.set_fps_value(value) {
@@ -70,14 +61,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_fps_value(&mut self, value: u32) -> bool {
-        if self.fps == value {
+        if self.cells.fps() == value {
             return false;
         }
-        self.fps = value;
+        self.cells.set_fps(value);
         true
     }
     pub fn duration(&self) -> u32 {
-        self.duration
+        self.cells.duration()
     }
     pub fn set_duration(&mut self, value: u32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
         if !self.set_duration_value(value) {
@@ -91,14 +82,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_duration_value(&mut self, value: u32) -> bool {
-        if self.duration == value {
+        if self.cells.duration() == value {
             return false;
         }
-        self.duration = value;
+        self.cells.set_duration(value);
         true
     }
     pub fn speed(&self) -> f32 {
-        self.speed
+        self.cells.speed()
     }
     pub fn set_speed(&mut self, value: f32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
         if !self.set_speed_value(value) {
@@ -108,14 +99,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
-        if self.speed == value {
+        if self.cells.speed() == value {
             return false;
         }
-        self.speed = value;
+        self.cells.set_speed(value);
         true
     }
     pub fn loop_value(&self) -> u32 {
-        self.loop_value
+        self.cells.loop_value()
     }
     pub fn set_loop_value(
         &mut self,
@@ -132,14 +123,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_loop_value_value(&mut self, value: u32) -> bool {
-        if self.loop_value == value {
+        if self.cells.loop_value() == value {
             return false;
         }
-        self.loop_value = value;
+        self.cells.set_loop_value(value);
         true
     }
     pub fn work_start(&self) -> u32 {
-        self.work_start
+        self.cells.work_start()
     }
     pub fn set_work_start(
         &mut self,
@@ -156,14 +147,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_work_start_value(&mut self, value: u32) -> bool {
-        if self.work_start == value {
+        if self.cells.work_start() == value {
             return false;
         }
-        self.work_start = value;
+        self.cells.set_work_start(value);
         true
     }
     pub fn work_end(&self) -> u32 {
-        self.work_end
+        self.cells.work_end()
     }
     pub fn set_work_end(&mut self, value: u32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
         if !self.set_work_end_value(value) {
@@ -176,14 +167,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_work_end_value(&mut self, value: u32) -> bool {
-        if self.work_end == value {
+        if self.cells.work_end() == value {
             return false;
         }
-        self.work_end = value;
+        self.cells.set_work_end(value);
         true
     }
     pub fn enable_work_area(&self) -> bool {
-        self.enable_work_area
+        self.cells.enable_work_area()
     }
     pub fn set_enable_work_area(
         &mut self,
@@ -200,14 +191,14 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_enable_work_area_value(&mut self, value: bool) -> bool {
-        if self.enable_work_area == value {
+        if self.cells.enable_work_area() == value {
             return false;
         }
-        self.enable_work_area = value;
+        self.cells.set_enable_work_area(value);
         true
     }
     pub fn quantize(&self) -> bool {
-        self.quantize
+        self.cells.quantize()
     }
     pub fn set_quantize(&mut self, value: bool, callbacks: &mut impl LinearAnimationBaseCallbacks) {
         if !self.set_quantize_value(value) {
@@ -220,10 +211,10 @@ impl LinearAnimationBase {
     }
 
     pub(crate) fn set_quantize_value(&mut self, value: bool) -> bool {
-        if self.quantize == value {
+        if self.cells.quantize() == value {
             return false;
         }
-        self.quantize = value;
+        self.cells.set_quantize(value);
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl LinearAnimationBaseCallbacks) -> LinearAnimation {
@@ -232,14 +223,7 @@ impl LinearAnimationBase {
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl LinearAnimationBaseCallbacks) {
-        self.fps = object.fps;
-        self.duration = object.duration;
-        self.speed = object.speed;
-        self.loop_value = object.loop_value;
-        self.work_start = object.work_start;
-        self.work_end = object.work_end;
-        self.enable_work_area = object.enable_work_area;
-        self.quantize = object.quantize;
+        self.cells.copy_from(&object.cells);
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -250,35 +234,35 @@ impl LinearAnimationBase {
     ) -> bool {
         match property_key {
             Self::FPS_PROPERTY_KEY => {
-                self.fps = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_fps(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::DURATION_PROPERTY_KEY => {
-                self.duration = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_duration(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::SPEED_PROPERTY_KEY => {
-                self.speed = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.cells.set_speed(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             Self::LOOP_VALUE_PROPERTY_KEY => {
-                self.loop_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_loop_value(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::WORK_START_PROPERTY_KEY => {
-                self.work_start = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_work_start(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::WORK_END_PROPERTY_KEY => {
-                self.work_end = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cells.set_work_end(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::ENABLE_WORK_AREA_PROPERTY_KEY => {
-                self.enable_work_area = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.cells.set_enable_work_area(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
                 true
             }
             Self::QUANTIZE_PROPERTY_KEY => {
-                self.quantize = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.cells.set_quantize(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

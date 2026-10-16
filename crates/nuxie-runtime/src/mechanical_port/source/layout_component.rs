@@ -3140,11 +3140,34 @@ impl LayoutComponent {
             known.width.is_none() && available.width == taffy::prelude::AvailableSpace::MinContent;
         let (width, width_mode) = measure_axis(known.width, available.width);
         let (height, height_mode) = measure_axis(known.height, available.height);
+        let layout_parent = owner
+            .with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    layout.layout_parent_handle()
+                } else {
+                    object
+                        .as_any()
+                        .downcast_ref::<LayoutParticipant>()
+                        .and_then(LayoutParticipant::owning_layout_handle)
+                }
+            })
+            .flatten();
+        let parent_is_grid = layout_parent
+            .and_then(|parent| {
+                parent.with(|object| {
+                    object
+                        .as_layout_component()
+                        .and_then(|layout| layout.with_style(LayoutComponentStyle::is_grid))
+                })
+            })
+            .flatten()
+            .unwrap_or(false);
         // An unimplemented minimum is zero, as before automatic minima were
         // enabled. An unbounded Rive answer is max-content, not a substitute
         // minimum. Keep this query-time decision live when host modes change.
         let minimum_contract = |mut measured: Vec2D, supports: bool| {
-            if !supports {
+            // Grid and stack items retain their existing CSS auto contribution.
+            if !supports && !parent_is_grid {
                 if known.width.is_none()
                     && available.width == taffy::prelude::AvailableSpace::MinContent
                 {

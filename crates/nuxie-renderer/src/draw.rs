@@ -1361,6 +1361,47 @@ pub(crate) fn cubic_tangents(curve: [Vec2D; 4]) -> [Vec2D; 2] {
 
 pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool) {
     const TESS_EPSILON: f32 = 1.0 / 1024.0;
+    const MATH_EPSILON: f32 = 1.0 / 4096.0;
+    let e01 = subtract(points[1], points[0]);
+    let e12 = subtract(points[2], points[1]);
+    let e23 = subtract(points[3], points[2]);
+    // SIMD computes both product lanes before reducing; do not fuse them.
+    let simd_cross = |a: Vec2D, b: Vec2D| a.x * b.y - a.y * b.x;
+    let simd_length_squared = |edge: Vec2D| edge.x * edge.x + edge.y * edge.y;
+    let mut c01x12 = simd_cross(e01, e12);
+    let mut c12x23 = simd_cross(e12, e23);
+    let mut c01x23 = simd_cross(e01, e23);
+    let e01_is_zero = e01.x == 0.0 && e01.y == 0.0;
+    let e23_is_zero = e23.x == 0.0 && e23.y == 0.0;
+
+    // A zero first or last edge leaves only one relevant triangle turn.
+    if e01_is_zero {
+        c01x12 = c12x23;
+        c01x23 = c12x23;
+    }
+    if e23_is_zero {
+        c12x23 = c01x12;
+        c01x23 = c01x12;
+    }
+
+    // std::min/max keep the first operand on unordered comparisons and ties.
+    let cpp_min = |a: f32, b: f32| if b < a { b } else { a };
+    let cpp_max = |a: f32, b: f32| if a < b { b } else { a };
+    let turn_min = cpp_min(cpp_min(c01x12, c12x23), c01x23);
+    let turn_max = cpp_max(cpp_max(c01x12, c12x23), c01x23);
+    let max_edge_length_squared = cpp_max(
+        cpp_max(simd_length_squared(e01), simd_length_squared(e12)),
+        simd_length_squared(e23),
+    );
+    let turn_threshold = MATH_EPSILON * max_edge_length_squared;
+
+    // Same winding for all edge pairs means convex and less than 180 degrees.
+    let is_convex = turn_min > turn_threshold || turn_max < -turn_threshold;
+    let is_line = e01_is_zero && e23_is_zero && (e12.x != 0.0 || e12.y != 0.0);
+    if is_convex || is_line {
+        return (Vec::new(), false);
+    }
+
     let c_vector = subtract(points[1], points[0]);
     let d = subtract(points[2], points[1]);
     let e = subtract(points[3], points[0]);

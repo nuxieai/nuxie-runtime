@@ -173,6 +173,44 @@ pub fn find_cubic_convex_180_chops(
         f32::from_bits(IEEE_ONE_MINUS_2_EPSILON),
         1.0 - 2.0 * TESS_EPSILON
     );
+    let e01 = points[1] - points[0];
+    let e12 = points[2] - points[1];
+    let e23 = points[3] - points[2];
+    // SIMD computes both product lanes before reducing; do not fuse them.
+    let simd_cross = |a: Vec2D, b: Vec2D| a.x * b.y - a.y * b.x;
+    let simd_length_squared = |edge: Vec2D| edge.x * edge.x + edge.y * edge.y;
+    let mut c01x12 = simd_cross(e01, e12);
+    let mut c12x23 = simd_cross(e12, e23);
+    let mut c01x23 = simd_cross(e01, e23);
+    let e01_is_zero = e01.x == 0.0 && e01.y == 0.0;
+    let e23_is_zero = e23.x == 0.0 && e23.y == 0.0;
+
+    // A zero first or last edge leaves only one relevant triangle turn.
+    if e01_is_zero {
+        c01x12 = c12x23;
+        c01x23 = c12x23;
+    }
+    if e23_is_zero {
+        c12x23 = c01x12;
+        c01x23 = c01x12;
+    }
+
+    let turn_min = cpp_min(cpp_min(c01x12, c12x23), c01x23);
+    let turn_max = cpp_max(cpp_max(c01x12, c12x23), c01x23);
+    let max_edge_length_squared = cpp_max(
+        cpp_max(simd_length_squared(e01), simd_length_squared(e12)),
+        simd_length_squared(e23),
+    );
+    let turn_threshold = math_types::EPSILON * max_edge_length_squared;
+
+    // Same winding for all edge pairs means convex and less than 180 degrees.
+    let is_convex = turn_min > turn_threshold || turn_max < -turn_threshold;
+    let is_line = e01_is_zero && e23_is_zero && (e12.x != 0.0 || e12.y != 0.0);
+    if is_convex || is_line {
+        *are_cusps = false;
+        return 0;
+    }
+
     let coeffs = CubicCoeffs::new(points);
     let mut a = Vec2D::cross(coeffs.a, coeffs.b);
     let mut b_over_minus_2 = -0.5 * Vec2D::cross(coeffs.a, coeffs.c);

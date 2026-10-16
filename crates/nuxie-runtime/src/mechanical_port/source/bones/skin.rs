@@ -8,6 +8,7 @@ use crate::mechanical_port::source::{
     },
     math::mat2d::Mat2D,
     status_code::StatusCode,
+    world_transform_component::TransformCells,
 };
 
 struct SilentSkinCallbacks;
@@ -22,6 +23,10 @@ pub struct Skin {
     pub base: SkinBase,
     world_transform: Mat2D,
     tendons: Vec<CoreHandle>,
+    // Per tendon, as build_dependencies found them: its bone's transform
+    // cells (where the bone's world transform lives) and its inverse bind.
+    // A tendon resolves its bone and inverse bind once, when added.
+    tendon_binds: Vec<(std::rc::Rc<TransformCells>, Mat2D)>,
     bone_transforms: Option<Vec<f32>>,
     skinnable: Option<CoreHandle>,
 }
@@ -32,6 +37,7 @@ impl Default for Skin {
             base: SkinBase::default(),
             world_transform: Mat2D::identity(),
             tendons: Vec::new(),
+            tendon_binds: Vec::new(),
             bone_transforms: None,
             skinnable: None,
         }
@@ -192,25 +198,8 @@ impl Skin {
             .as_mut()
             .expect("buildDependencies initializes the bone transform buffer");
         let mut transform_index = 6;
-        for tendon_handle in &self.tendons {
-            let bone_handle = tendon_handle
-                .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
-                    |tendon| tendon.bone(),
-                )
-                .flatten()
-                .expect("Tendon::onAddedDirty resolves its Bone before update");
-            let (bone_world, inverse_bind) = (
-                bone_handle
-                    .with(|bone| bone.as_bone().map(|bone| bone.base.world_transform()))
-                    .flatten()
-                    .expect("a Tendon Bone handle must remain a Bone"),
-                tendon_handle
-                    .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
-                        |tendon| *tendon.inverse_bind(),
-                    )
-                    .expect("a retained Tendon must remain a Tendon"),
-            );
-            let world = bone_world * inverse_bind;
+        for (bone, inverse_bind) in &self.tendon_binds {
+            let world = bone.world() * *inverse_bind;
             for coefficient in world.values() {
                 bone_transforms[transform_index] = *coefficient;
                 transform_index += 1;
@@ -261,6 +250,18 @@ impl Skin {
                 )
                 .flatten()
                 .expect("Tendon::onAddedDirty resolves its Bone before dependency building");
+            let (bone_cells, inverse_bind) = (
+                bone_handle
+                    .with(|bone| bone.as_bone().map(|bone| std::rc::Rc::clone(bone.base.cells())))
+                    .flatten()
+                    .expect("a Tendon Bone handle must remain a Bone"),
+                tendon_handle
+                    .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
+                        |tendon| *tendon.inverse_bind(),
+                    )
+                    .expect("a retained Tendon must remain a Tendon"),
+            );
+            self.tendon_binds.push((bone_cells, inverse_bind));
             bone_handle
                 .with_mut(|bone| {
                     bone.as_component_mut()

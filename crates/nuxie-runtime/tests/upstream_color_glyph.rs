@@ -7,7 +7,10 @@
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     factory::RuntimeFactoryHandle,
-    text::{font_hb::HbFont, raw_text::RawText},
+    text::{
+        font_hb::{HbFont, HostPictureScope},
+        raw_text::RawText,
+    },
     text_engine::{
         ColorGlyphLayer, ColorGlyphPaintType, Font, FontRef, Paragraph, TextRun, TextSizing,
         with_host_fallback_proc,
@@ -683,11 +686,14 @@ fn host_picture_answers_are_once_per_glyph_and_cluster_across_threads() {
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(move |_, cluster| {
-            count.fetch_add(1, Ordering::SeqCst);
-            assert_eq!(cluster, &[u32::from('A')]);
-            Some(host_picture())
-        }));
+        .with_host_pictures(
+            Arc::new(move |_, cluster| {
+                count.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(cluster, &[u32::from('A')]);
+                Some(host_picture())
+            }),
+            HostPictureScope::Cluster,
+        );
     std::thread::scope(|scope| {
         for _ in 0..8 {
             let host = host.clone();
@@ -709,10 +715,13 @@ fn host_picture_answers_are_once_per_glyph_and_cluster_across_threads() {
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(move |_, _| {
-            count.fetch_add(1, Ordering::SeqCst);
-            None
-        }));
+        .with_host_pictures(
+            Arc::new(move |_, _| {
+                count.fetch_add(1, Ordering::SeqCst);
+                None
+            }),
+            HostPictureScope::Cluster,
+        );
     assert!(!absent.is_color_glyph_with_text(glyph, &[65]));
     assert!(!absent.is_color_glyph_with_text(glyph, &[66]));
     assert!(!absent.is_color_glyph_with_text(glyph, &[66]));
@@ -735,14 +744,20 @@ fn native_color_never_asks_host_and_host_sources_compose() {
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(|_, _| panic!("native COLR wins")));
+        .with_host_pictures(
+            Arc::new(|_, _| panic!("native COLR wins")),
+            HostPictureScope::Cluster,
+        );
     assert!(hosted.is_color_glyph_with_text(2, &[0x1f600]));
     assert_eq!(color_layers(&hosted, 2, 0xff000000).len(), 10);
     let plain = font(&regular_bytes());
     for picture_first in [false, true] {
         let hb = plain.as_any().downcast_ref::<HbFont>().unwrap();
         let first = if picture_first {
-            hb.with_host_pictures(Arc::new(|_, _| Some(host_picture())))
+            hb.with_host_pictures(
+                Arc::new(|_, _| Some(host_picture())),
+                HostPictureScope::Cluster,
+            )
         } else {
             hb.with_host_outline(Arc::new(|_, _| Default::default()))
         };
@@ -750,7 +765,10 @@ fn native_color_never_asks_host_and_host_sources_compose() {
         let both = if picture_first {
             hb.with_host_outline(Arc::new(|_, _| Default::default()))
         } else {
-            hb.with_host_pictures(Arc::new(|_, _| Some(host_picture())))
+            hb.with_host_pictures(
+                Arc::new(|_, _| Some(host_picture())),
+                HostPictureScope::Cluster,
+            )
         };
         assert!(both.is_color_glyph_with_text(7, &[65]));
         assert!(
@@ -768,7 +786,7 @@ fn host_cluster_text_retains_ligatures_combining_marks_and_rtl() {
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(|_, _| None));
+        .with_host_pictures(Arc::new(|_, _| None), HostPictureScope::Cluster);
     for text in ["ffi", "A\u{301}", "אב", "A\nB"] {
         let paragraphs = shape(&host, text);
         let points: Vec<u32> = text.chars().map(u32::from).collect();
@@ -805,10 +823,13 @@ fn raw_text_draws_host_images_and_reuses_decoded_image() {
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(|_, cluster| {
-            assert_eq!(cluster, &[65]);
-            Some(host_picture())
-        }));
+        .with_host_pictures(
+            Arc::new(|_, cluster| {
+                assert_eq!(cluster, &[65]);
+                Some(host_picture())
+            }),
+            HostPictureScope::Cluster,
+        );
     let recording = RecordingFactory::new();
     let mut renderer = recording.make_renderer();
     let mut factory = PersistentFactory::new(recording);
@@ -866,7 +887,10 @@ fn ordinary_text_draws_host_picture_from_retained_shaped_cluster() {
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(|_, cluster| (cluster == [65]).then(host_picture)));
+        .with_host_pictures(
+            Arc::new(|_, cluster| (cluster == [65]).then(host_picture)),
+            HostPictureScope::Cluster,
+        );
     for style in board.with_artboard(|b| b.find_all_handles::<TextStyle>()) {
         let asset = style.insert_sibling(FontAsset::default()).unwrap();
         FontAsset::set_font_occurrence(&asset, Some(host.clone()));
@@ -940,10 +964,13 @@ fn ordinary_text_reuses_images_across_rebuilds_and_releases_replaced_host_fonts(
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(move |_, cluster| {
-            let _keep_context = &context;
-            (cluster == [65]).then(host_picture)
-        }));
+        .with_host_pictures(
+            Arc::new(move |_, cluster| {
+                let _keep_context = &context;
+                (cluster == [65]).then(host_picture)
+            }),
+            HostPictureScope::Cluster,
+        );
     let weak = Arc::downgrade(&host);
     let mut font_assets = Vec::new();
     for style in board.with_artboard(|b| b.find_all_handles::<TextStyle>()) {
@@ -1061,7 +1088,7 @@ fn unjoined_emoji_outline_font() -> FontRef {
 }
 
 #[test]
-fn host_clusters_replace_vs16_skin_tone_and_unjoined_zwj_once_in_every_text_owner() {
+fn host_picture_scopes_draw_unjoined_clusters_in_every_text_owner() {
     use nuxie_runtime::{
         File,
         source::{
@@ -1077,153 +1104,193 @@ fn host_clusters_replace_vs16_skin_tone_and_unjoined_zwj_once_in_every_text_owne
     };
     use std::sync::{Arc, Mutex};
     let plain = unjoined_emoji_outline_font();
-    for text in ["❤️", "👍🏽", "👩\u{200d}💻"] {
-        let points: Vec<_> = text.chars().map(u32::from).collect();
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let queried = calls.clone();
-        let expected = points.clone();
-        let host = plain
-            .as_any()
-            .downcast_ref::<HbFont>()
-            .unwrap()
-            .with_host_pictures(Arc::new(move |glyph, cluster| {
-                assert_ne!(glyph, 0);
-                if cluster == [0x200b] {
-                    return None;
-                } // RawTextInput sentinel.
-                assert_eq!(cluster, expected);
-                queried.lock().unwrap().push((glyph, cluster.to_vec()));
-                Some(host_picture())
-            }));
-        let paragraphs = shape(&host, text);
-        let runs: Vec<_> = paragraphs.iter().flat_map(|p| &p.runs).collect();
-        assert_eq!(runs.len(), 1, "fixture sequence must share one shaped run");
-        let run = runs[0];
-        assert!(
-            run.glyphs.len() > 1,
-            "must exercise an unjoined multi-glyph cluster: {text}"
-        );
-        assert!(run.glyphs.iter().all(|id| *id != 0));
-        assert!(run.text_indices.iter().all(|i| *i == 0));
-        assert_eq!(
-            run.glyph_render_kind(run.glyphs.len() - 1),
-            GlyphRenderKind::Suppressed
-        );
-        assert_eq!(run.glyph_render_kind(0), GlyphRenderKind::Color);
-        for i in 1..run.glyphs.len() {
-            assert_eq!(run.glyph_render_kind(i), GlyphRenderKind::Suppressed);
-        }
-        // Reading a follower first must still query the leader, never its space id.
-        assert_eq!(calls.lock().unwrap().len(), 1);
-        assert_eq!(calls.lock().unwrap()[0].0, run.glyphs[0]);
-
-        let recording = RecordingFactory::new();
-        let mut renderer = recording.make_renderer();
-        let mut factory = PersistentFactory::new(recording);
-        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
-        let mut raw = RawText::new(retained.clone());
-        raw.append(text, None, host.clone(), 32.0, -1.0, 0.0, 0xff123456);
-        raw.render(&mut renderer, None);
-        assert_eq!(raw.debug_command_kinds(), ["color"]);
-        let stream = factory.borrow().stream();
-        assert_eq!(
-            stream
-                .lines()
-                .filter(|l| l.starts_with("drawImage "))
-                .count(),
-            1,
-            "{stream}"
-        );
-        assert!(
-            !stream.lines().any(|l| l.starts_with("drawPath ")),
-            "suppressed followers must not add outlines"
-        );
-        let mut input = RawTextInput::new();
-        input.set_font(Some(host.clone()));
-        input.set_text(text.into());
-        input.update(&retained);
-        assert!(input.text_path().empty());
-        assert!(input.selected_text_path().empty());
-        let mut text_paint = retained.with_factory_mut(|f| f.make_render_paint());
-        let mut selection_paint = retained.with_factory_mut(|f| f.make_render_paint());
-        let mut cursor_paint = retained.with_factory_mut(|f| f.make_render_paint());
-        let before = factory
-            .borrow()
-            .stream()
-            .lines()
-            .filter(|l| l.starts_with("drawImage "))
-            .count();
-        input.draw(
-            &retained,
-            &mut renderer,
-            &Default::default(),
-            text_paint.as_mut(),
-            selection_paint.as_mut(),
-            cursor_paint.as_mut(),
-        );
-        assert_eq!(
-            factory
-                .borrow()
-                .stream()
-                .lines()
-                .filter(|l| l.starts_with("drawImage "))
-                .count(),
-            before + 1
-        );
-        let file = File::import(&asset("new_text.riv"), retained, None, None, None).unwrap();
-        let board = file.with_file(File::artboard_default).unwrap();
-        let owner = board.with_artboard(|b| b.find_all_handles::<Text>())[0].clone();
-        for style in board.with_artboard(|b| b.find_all_handles::<TextStyle>()) {
-            let asset = style.insert_sibling(FontAsset::default()).unwrap();
-            FontAsset::set_font_occurrence(&asset, Some(host.clone()));
-            TextStyle::set_asset_occurrence(&style, Some(asset));
-        }
-        // Clear every imported Text so no unrelated cluster reaches this host.
-        for t in board.with_artboard(|b| b.find_all_handles::<Text>()) {
-            for (i, r) in t
-                .with_downcast::<Text, _>(|t| t.runs().to_vec())
+    for scope in [HostPictureScope::Glyph, HostPictureScope::Cluster] {
+        for text in ["❤️", "👍🏽", "👩\u{200d}💻"] {
+            let points: Vec<_> = text.chars().map(u32::from).collect();
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let queried = calls.clone();
+            let expected = points.clone();
+            let outlines = plain.clone();
+            let host = plain
+                .as_any()
+                .downcast_ref::<HbFont>()
                 .unwrap()
-                .iter()
-                .enumerate()
-            {
-                let TextValueRunHandle::Core(r) = r else {
-                    panic!("imported")
-                };
-                CoreRegistry::set_string_handle(
-                    r,
-                    i32::from(TextValueRunBase::TEXT_PROPERTY_KEY),
-                    if t == owner && i == 0 {
-                        text.into()
+                .with_host_pictures(
+                    Arc::new(move |glyph, cluster| {
+                        assert_ne!(glyph, 0);
+                        if cluster == [0x200b] {
+                            return None;
+                        } // RawTextInput sentinel.
+                        assert_eq!(cluster, expected);
+                        queried.lock().unwrap().push((glyph, cluster.to_vec()));
+                        (scope == HostPictureScope::Cluster || !outlines.get_path(glyph).empty())
+                            .then(host_picture)
+                    }),
+                    scope,
+                );
+            let paragraphs = shape(&host, text);
+            let runs: Vec<_> = paragraphs.iter().flat_map(|p| &p.runs).collect();
+            assert_eq!(runs.len(), 1, "fixture sequence must share one shaped run");
+            let run = runs[0];
+            assert!(
+                run.glyphs.len() > 1,
+                "must exercise an unjoined multi-glyph cluster: {text}"
+            );
+            assert!(run.glyphs.iter().all(|id| *id != 0));
+            assert!(run.text_indices.iter().all(|i| *i == 0));
+            let expected_images = if scope == HostPictureScope::Cluster {
+                1
+            } else {
+                run.glyphs
+                    .iter()
+                    .filter(|&&glyph| !plain.get_path(glyph).empty())
+                    .count()
+            };
+            let expected_queries = if scope == HostPictureScope::Cluster {
+                1
+            } else {
+                run.glyphs
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+            };
+            // Query the follower first, including VS16/ZWJ's no-ink glyph.
+            for i in (0..run.glyphs.len()).rev() {
+                let expected = if scope == HostPictureScope::Cluster {
+                    if i == 0 {
+                        GlyphRenderKind::Color
                     } else {
-                        String::new()
-                    },
+                        GlyphRenderKind::Suppressed
+                    }
+                } else if plain.get_path(run.glyphs[i]).empty() {
+                    GlyphRenderKind::Outline
+                } else {
+                    GlyphRenderKind::Color
+                };
+                assert_eq!(run.glyph_render_kind(i), expected, "{scope:?} {text}");
+            }
+            assert_eq!(calls.lock().unwrap().len(), expected_queries);
+            if scope == HostPictureScope::Cluster {
+                assert_eq!(calls.lock().unwrap()[0].0, run.glyphs[0]);
+            }
+
+            let recording = RecordingFactory::new();
+            let mut renderer = recording.make_renderer();
+            let mut factory = PersistentFactory::new(recording);
+            let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+            let mut raw = RawText::new(retained.clone());
+            raw.append(text, None, host.clone(), 32.0, -1.0, 0.0, 0xff123456);
+            raw.render(&mut renderer, None);
+            assert_eq!(
+                raw.debug_command_kinds()
+                    .iter()
+                    .filter(|&&kind| kind == "color")
+                    .count(),
+                expected_images
+            );
+            let stream = factory.borrow().stream();
+            assert_eq!(
+                stream
+                    .lines()
+                    .filter(|l| l.starts_with("drawImage "))
+                    .count(),
+                expected_images,
+                "{stream}"
+            );
+            if scope == HostPictureScope::Cluster {
+                assert!(
+                    !stream.lines().any(|l| l.starts_with("drawPath ")),
+                    "suppressed followers must not add outlines"
                 );
             }
-        }
-        board.update_pass(true);
-        let before = factory
-            .borrow()
-            .stream()
-            .lines()
-            .filter(|l| l.starts_with("drawImage "))
-            .count();
-        owner
-            .with_downcast_mut::<Text, _>(|t| t.draw(&mut renderer))
-            .unwrap();
-        assert_eq!(
-            factory
+            let mut input = RawTextInput::new();
+            input.set_font(Some(host.clone()));
+            input.set_text(text.into());
+            input.update(&retained);
+            assert!(input.text_path().empty());
+            assert!(input.selected_text_path().empty());
+            let mut text_paint = retained.with_factory_mut(|f| f.make_render_paint());
+            let mut selection_paint = retained.with_factory_mut(|f| f.make_render_paint());
+            let mut cursor_paint = retained.with_factory_mut(|f| f.make_render_paint());
+            let before = factory
                 .borrow()
                 .stream()
                 .lines()
                 .filter(|l| l.starts_with("drawImage "))
-                .count(),
-            before + 1
-        );
-        assert_eq!(
-            calls.lock().unwrap().len(),
-            1,
-            "owners share one per-key answer"
-        );
+                .count();
+            input.draw(
+                &retained,
+                &mut renderer,
+                &Default::default(),
+                text_paint.as_mut(),
+                selection_paint.as_mut(),
+                cursor_paint.as_mut(),
+            );
+            assert_eq!(
+                factory
+                    .borrow()
+                    .stream()
+                    .lines()
+                    .filter(|l| l.starts_with("drawImage "))
+                    .count(),
+                before + expected_images
+            );
+            let file = File::import(&asset("new_text.riv"), retained, None, None, None).unwrap();
+            let board = file.with_file(File::artboard_default).unwrap();
+            let owner = board.with_artboard(|b| b.find_all_handles::<Text>())[0].clone();
+            for style in board.with_artboard(|b| b.find_all_handles::<TextStyle>()) {
+                let asset = style.insert_sibling(FontAsset::default()).unwrap();
+                FontAsset::set_font_occurrence(&asset, Some(host.clone()));
+                TextStyle::set_asset_occurrence(&style, Some(asset));
+            }
+            // Clear every imported Text so no unrelated cluster reaches this host.
+            for t in board.with_artboard(|b| b.find_all_handles::<Text>()) {
+                for (i, r) in t
+                    .with_downcast::<Text, _>(|t| t.runs().to_vec())
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                {
+                    let TextValueRunHandle::Core(r) = r else {
+                        panic!("imported")
+                    };
+                    CoreRegistry::set_string_handle(
+                        r,
+                        i32::from(TextValueRunBase::TEXT_PROPERTY_KEY),
+                        if t == owner && i == 0 {
+                            text.into()
+                        } else {
+                            String::new()
+                        },
+                    );
+                }
+            }
+            board.update_pass(true);
+            let before = factory
+                .borrow()
+                .stream()
+                .lines()
+                .filter(|l| l.starts_with("drawImage "))
+                .count();
+            owner
+                .with_downcast_mut::<Text, _>(|t| t.draw(&mut renderer))
+                .unwrap();
+            assert_eq!(
+                factory
+                    .borrow()
+                    .stream()
+                    .lines()
+                    .filter(|l| l.starts_with("drawImage "))
+                    .count(),
+                before + expected_images
+            );
+            assert_eq!(
+                calls.lock().unwrap().len(),
+                expected_queries,
+                "owners share cached answers"
+            );
+        }
     }
 }
 
@@ -1237,13 +1304,16 @@ fn host_zero_is_never_queried_and_shared_glyphs_keep_distinct_cluster_answers() 
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(move |glyph, cluster| {
-            assert_ne!(glyph, 0);
-            observed.lock().unwrap().push((glyph, cluster.to_vec()));
-            let mut p = host_picture();
-            p.extent_x = cluster.len() as f32;
-            Some(p)
-        }));
+        .with_host_pictures(
+            Arc::new(move |glyph, cluster| {
+                assert_ne!(glyph, 0);
+                observed.lock().unwrap().push((glyph, cluster.to_vec()));
+                let mut p = host_picture();
+                p.extent_x = cluster.len() as f32;
+                Some(p)
+            }),
+            HostPictureScope::Cluster,
+        );
     assert!(!host.is_color_glyph_with_text(0, &[0x1f9e1]));
     assert!(!host.is_color_glyph_with_text(0, &[0x1f4a9]));
     assert!(calls.lock().unwrap().is_empty());
@@ -1272,21 +1342,23 @@ fn picture_backed_face_is_chosen_by_vs16_forced_fallback() {
     let fallback = unjoined_emoji_outline_font();
     assert!(!primary.has_color_glyphs());
     assert!(!fallback.has_color_glyphs());
-    let pictures = fallback
-        .as_any()
-        .downcast_ref::<HbFont>()
-        .unwrap()
-        .with_host_pictures(Arc::new(|_, _| Some(host_picture())));
-    assert!(pictures.has_color_glyphs());
-    with_fallback(pictures.clone(), || {
-        let p = shape(&primary, "❤️");
-        assert!(
-            p[0].runs
-                .iter()
-                .any(|r| Arc::ptr_eq(r.font.as_ref().unwrap(), &pictures)),
-            "VS16 must select the host-picture face"
-        );
-    });
+    for scope in [HostPictureScope::Glyph, HostPictureScope::Cluster] {
+        let pictures = fallback
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .with_host_pictures(Arc::new(|_, _| Some(host_picture())), scope);
+        assert!(pictures.has_color_glyphs());
+        with_fallback(pictures.clone(), || {
+            let p = shape(&primary, "❤️");
+            assert!(
+                p[0].runs
+                    .iter()
+                    .any(|r| Arc::ptr_eq(r.font.as_ref().unwrap(), &pictures)),
+                "VS16 must select the host-picture face"
+            );
+        });
+    }
 }
 
 #[test]
@@ -1299,7 +1371,7 @@ fn cbdt_and_cblc_accept_only_major_versions_two_and_three() {
             let f = font(&bytes);
             assert_eq!(
                 f.has_color_glyphs(),
-                matches!(major, 2 | 3),
+                tag == b"CBLC" || matches!(major, 2 | 3),
                 "{tag:?} face capability major {major}"
             );
             assert_eq!(
@@ -1308,6 +1380,114 @@ fn cbdt_and_cblc_accept_only_major_versions_two_and_three() {
                 "{tag:?} major {major}"
             );
             assert_eq!(!color_layers(&f, 1, 0).is_empty(), matches!(major, 2 | 3));
+        }
+    }
+}
+
+#[test]
+fn host_answer_caches_bound_positive_and_absent_answers_per_variant() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let plain = unjoined_emoji_outline_font();
+    for scope in [HostPictureScope::Glyph, HostPictureScope::Cluster] {
+        for positive in [false, true] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let counter = calls.clone();
+            let host = plain
+                .as_any()
+                .downcast_ref::<HbFont>()
+                .unwrap()
+                .with_host_pictures(
+                    Arc::new(move |glyph, _| {
+                        assert_ne!(glyph, 0);
+                        counter.fetch_add(1, Ordering::Relaxed);
+                        positive.then(host_picture)
+                    }),
+                    scope,
+                );
+            let first = host.host_picture_layer(1, &[65, 0]);
+            let weak = first.as_ref().map(Arc::downgrade);
+            assert!(host.host_picture_layer(1, &[65, 0]).is_some() == positive);
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+            drop(first);
+            for index in 1..=4096 {
+                let glyph = if scope == HostPictureScope::Glyph {
+                    index as u16 + 1
+                } else {
+                    1
+                };
+                host.host_picture_layer(glyph, &[65, index]);
+            }
+            assert_eq!(calls.load(Ordering::Relaxed), 4097);
+            if let Some(weak) = weak {
+                assert!(weak.upgrade().is_none(), "eviction releases the PNG layer");
+            }
+            host.host_picture_layer(1, &[65, 0]);
+            assert_eq!(
+                calls.load(Ordering::Relaxed),
+                4098,
+                "evicted answers are requested again"
+            );
+            let variant = host.with_options(&[], &[]);
+            assert_eq!(variant.host_picture_scope(), Some(scope));
+            variant.host_picture_layer(1, &[65, 0]);
+            assert_eq!(
+                calls.load(Ordering::Relaxed),
+                4099,
+                "variants have independent caches"
+            );
+        }
+    }
+}
+
+#[test]
+fn glyph_scope_reaches_ink_after_a_missing_or_hidden_cluster_leader() {
+    use nuxie_runtime::source::text_engine::GlyphRenderKind;
+    use std::sync::{Arc, Mutex};
+    let plain = unjoined_emoji_outline_font();
+    let original = shape(&plain, "❤️");
+    let emoji = original[0].runs[0].glyphs[0];
+    let space = original[0].runs[0].glyphs[1];
+    assert!(!plain.get_path(emoji).empty());
+    assert!(plain.get_path(space).empty());
+    // Construct the shaped edge case directly so its missing/hidden leader
+    // cannot be optimized out by a particular fixture font's shaping tables.
+    for scope in [HostPictureScope::Glyph, HostPictureScope::Cluster] {
+        for leader in [0, space] {
+            let queries = Arc::new(Mutex::new(Vec::new()));
+            let observed = queries.clone();
+            let host = plain
+                .as_any()
+                .downcast_ref::<HbFont>()
+                .unwrap()
+                .with_host_pictures(
+                    Arc::new(move |glyph, cluster| {
+                        assert_ne!(glyph, 0);
+                        assert_eq!(cluster, [0x2764, 0xfe0f]);
+                        observed.lock().unwrap().push(glyph);
+                        (glyph == emoji).then(host_picture)
+                    }),
+                    scope,
+                );
+            let mut run = shape(&host, "❤️")[0].runs[0].clone();
+            run.glyphs = vec![leader, emoji];
+            run.cluster_leaders = vec![leader; 2];
+            run.cluster_leader_flags = vec![true, false];
+            assert_eq!(run.glyph_render_kind(0), GlyphRenderKind::Outline);
+            assert_eq!(
+                run.glyph_render_kind(1),
+                if scope == HostPictureScope::Glyph {
+                    GlyphRenderKind::Color
+                } else {
+                    GlyphRenderKind::Outline
+                }
+            );
+            assert_eq!(
+                queries.lock().unwrap().contains(&emoji),
+                scope == HostPictureScope::Glyph
+            );
         }
     }
 }

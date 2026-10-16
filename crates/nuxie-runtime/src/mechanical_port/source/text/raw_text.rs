@@ -39,7 +39,7 @@ enum DrawCommand {
     Color {
         font: FontRef,
         glyph_id: u16,
-        cluster_text: Vec<u32>,
+        cluster_text: std::sync::Arc<[u32]>,
         transform: Mat2D,
         foreground_color: ColorInt,
     },
@@ -592,7 +592,7 @@ impl RawText {
                                 .expect("shaped text retains its font")
                                 .clone(),
                             glyph_id: run.glyphs[i],
-                            cluster_text: run.cluster_text(i).to_vec(),
+                            cluster_text: run.cluster_text_arc(i),
                             transform,
                             foreground_color: self.styles[style].foreground_color,
                         });

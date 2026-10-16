@@ -326,12 +326,13 @@ impl RawTextFont {
     pub fn has_color_glyphs(&self) -> bool {
         self.native.has_color_glyphs()
     }
-    /// Query native colour tables without guessing a host picture's cluster.
+    /// Query native colour tables independently of host picture answers.
     /// Use `is_color_glyph_with_text` for glyphs from shaped host-picture runs.
     pub fn is_color_glyph(&self, glyph: u32) -> bool {
         self.native.is_color_glyph(glyph as u16)
     }
-    /// Query the logical cluster leader using its complete shaped cluster text.
+    /// Query a glyph with its complete shaped cluster as context. Cluster-scoped
+    /// sources require the logical leader; glyph-scoped sources accept each glyph.
     /// Run consumers use GlyphRun::glyph_render_kind to suppress followers.
     pub fn is_color_glyph_with_text(&self, glyph: u32, cluster: &[u32]) -> bool {
         self.native.is_color_glyph_with_text(glyph as u16, cluster)
@@ -343,7 +344,8 @@ impl RawTextFont {
             .get_color_layers(glyph as u16, &mut layers, foreground);
         Self::wrap_color_layers(layers)
     }
-    /// Retrieve the logical cluster leader's layers using its complete cluster text.
+    /// Retrieve layers using the complete shaped cluster as context. Cluster-scoped
+    /// sources require the logical leader; glyph-scoped sources accept each glyph.
     pub fn color_layers_with_text(
         &self,
         glyph: u32,
@@ -656,7 +658,10 @@ impl<'factory> RawText<'factory> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::{text::font_hb::HostGlyphPicture, text_engine::TextRun};
+    use crate::source::{
+        text::font_hb::{HostGlyphPicture, HostPictureScope},
+        text_engine::TextRun,
+    };
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -669,23 +674,26 @@ mod tests {
             .as_any()
             .downcast_ref::<HbFont>()
             .unwrap()
-            .with_host_pictures(Arc::new(move |_, cluster| {
-                counter.fetch_add(1, Ordering::SeqCst);
-                (cluster == [65]).then(|| HostGlyphPicture {
-                    png: vec![
-                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
-                        0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
-                        120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0,
-                        73, 69, 78, 68, 174, 66, 96, 130,
-                    ],
-                    width: 1,
-                    height: 1,
-                    bearing_x: 0.0,
-                    bearing_y: -1.0,
-                    extent_x: 1.0,
-                    extent_y: 1.0,
-                })
-            }));
+            .with_host_pictures(
+                Arc::new(move |_, cluster| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    (cluster == [65]).then(|| HostGlyphPicture {
+                        png: vec![
+                            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+                            1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68,
+                            65, 84, 120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43,
+                            0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+                        ],
+                        width: 1,
+                        height: 1,
+                        bearing_x: 0.0,
+                        bearing_y: -1.0,
+                        extent_x: 1.0,
+                        extent_y: 1.0,
+                    })
+                }),
+                HostPictureScope::Cluster,
+            );
         let run = TextRun {
             font: Some(base.clone()),
             size: 20.0,

@@ -1547,7 +1547,10 @@ fn input_outline_only_emoji_is_byte_for_byte_legacy_outline() {
 
 #[test]
 fn input_host_picture_suppresses_cluster_followers_and_reuses_image_after_selection_changes() {
-    use nuxie_runtime::source::{math::mat2d::Mat2D, text::font_hb::HostGlyphPicture};
+    use nuxie_runtime::source::{
+        math::mat2d::Mat2D,
+        text::font_hb::{HostGlyphPicture, HostPictureScope},
+    };
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -1559,26 +1562,29 @@ fn input_host_picture_suppresses_cluster_followers_and_reuses_image_after_select
         .as_any()
         .downcast_ref::<HbFont>()
         .unwrap()
-        .with_host_pictures(Arc::new(move |_, cluster| {
-            if cluster != [65, 0xfe0f] {
-                return None;
-            }
-            callback_calls.fetch_add(1, Ordering::Relaxed);
-            Some(HostGlyphPicture {
-                png: vec![
-                    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0,
-                    0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156,
-                    99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0, 73, 69, 78,
-                    68, 174, 66, 96, 130,
-                ],
-                width: 1,
-                height: 1,
-                bearing_x: 0.125,
-                bearing_y: -0.875,
-                extent_x: 1.0,
-                extent_y: 1.0,
-            })
-        }));
+        .with_host_pictures(
+            Arc::new(move |_, cluster| {
+                if cluster != [65, 0xfe0f] {
+                    return None;
+                }
+                callback_calls.fetch_add(1, Ordering::Relaxed);
+                Some(HostGlyphPicture {
+                    png: vec![
+                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+                        0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
+                        120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0,
+                        73, 69, 78, 68, 174, 66, 96, 130,
+                    ],
+                    width: 1,
+                    height: 1,
+                    bearing_x: 0.125,
+                    bearing_y: -0.875,
+                    extent_x: 1.0,
+                    extent_y: 1.0,
+                })
+            }),
+            HostPictureScope::Cluster,
+        );
     let host_lifetime = Arc::downgrade(&host);
     let recording = RecordingFactory::new();
     let mut renderer = recording.make_renderer();

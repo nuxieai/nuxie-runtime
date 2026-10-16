@@ -1,6 +1,9 @@
 use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex, OnceLock},
+    collections::{HashMap, HashSet, VecDeque},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicU8, Ordering},
+    },
 };
 
 use harfrust::{
@@ -18,6 +21,7 @@ use unicode_script::UnicodeScript;
 
 use crate::mechanical_port::source::math::{mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D};
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
+pub use crate::mechanical_port::source::text_engine::HostPictureScope;
 use crate::mechanical_port::source::text_engine::{
     Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, FontRef, GlyphId,
     GlyphRun, GradientStop, LineMetrics, Paragraph, TextRun, Unichar, fallback_proc,
@@ -328,6 +332,43 @@ pub type HostGlyphPictures =
     Arc<dyn Fn(GlyphId, &[Unichar]) -> Option<HostGlyphPicture> + Send + Sync>;
 type PictureAnswer = Arc<OnceLock<Option<Arc<ColorGlyphLayer>>>>;
 
+const HOST_PICTURE_CACHE_CAPACITY: usize = 4096;
+
+/// FIFO eviction bounds both positive and absent answers. Borrowed slice
+/// lookup allocates only on a miss; the queue shares the map's key storage.
+#[derive(Default)]
+struct HostPictureCache {
+    answers: HashMap<GlyphId, HashMap<Arc<[Unichar]>, PictureAnswer>>,
+    order: VecDeque<(GlyphId, Arc<[Unichar]>)>,
+}
+impl HostPictureCache {
+    fn answer(&mut self, glyph: GlyphId, cluster: &[Unichar]) -> PictureAnswer {
+        if let Some(answer) = self
+            .answers
+            .get(&glyph)
+            .and_then(|answers| answers.get(cluster))
+        {
+            return answer.clone();
+        }
+        if self.order.len() == HOST_PICTURE_CACHE_CAPACITY {
+            let (old_glyph, old_cluster) = self.order.pop_front().unwrap();
+            let answers = self.answers.get_mut(&old_glyph).unwrap();
+            answers.remove(old_cluster.as_ref());
+            if answers.is_empty() {
+                self.answers.remove(&old_glyph);
+            }
+        }
+        let cluster: Arc<[Unichar]> = cluster.into();
+        let answer = Arc::new(OnceLock::new());
+        self.answers
+            .entry(glyph)
+            .or_default()
+            .insert(cluster.clone(), answer.clone());
+        self.order.push_back((glyph, cluster));
+        answer
+    }
+}
+
 /// The HBFont owner retains Rive's run/fallback/color semantics. Only its
 /// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
 /// and unicode-bidi supplies paragraph levels. No C font or bidi pointer lives
@@ -336,7 +377,8 @@ pub struct HbFont {
     base: FontBase,
     host_outline: Option<HostGlyphOutline>,
     host_pictures: Option<HostGlyphPictures>,
-    host_picture_cache: Mutex<HashMap<(GlyphId, Vec<Unichar>), PictureAnswer>>,
+    host_picture_scope: HostPictureScope,
+    host_picture_cache: Mutex<HostPictureCache>,
     bytes: FontBytes,
     face_index: u32,
     // The face's shaping caches and shape plans, shared by every variant
@@ -358,6 +400,9 @@ struct HbFace {
     has_color_layers: bool,
     has_color_paint: bool,
     has_png: bool,
+    // 0 unknown, 1 outline, 2 colour. Table classification is immutable and
+    // shared by every variant; relaxed atomics avoid a hot-path face mutex.
+    native_color_glyphs: Box<[AtomicU8]>,
     palette_colors: Vec<skrifa::color::Color>,
     suppress_legacy_kern: bool,
 }
@@ -552,13 +597,7 @@ impl HbFont {
         let face = face.unwrap_or_else(|| {
             let has_color_layers = outline.colr().is_ok();
             let has_color_paint = outline.colr().is_ok_and(|colr| colr.version() >= 1);
-            let has_png = outline.sbix().is_ok()
-                || (outline
-                    .cbdt()
-                    .is_ok_and(|table| matches!(table.major_version(), 2 | 3))
-                    && outline
-                        .cblc()
-                        .is_ok_and(|table| matches!(table.major_version(), 2 | 3)));
+            let has_png = font_has_png_data(&outline);
             let palette_colors = if has_color_layers || has_color_paint {
                 outline
                     .color_palettes()
@@ -574,6 +613,9 @@ impl HbFont {
                 has_color_layers,
                 has_color_paint,
                 has_png,
+                native_color_glyphs: std::iter::repeat_with(|| AtomicU8::new(0))
+                    .take(usize::from(u16::MAX) + 1)
+                    .collect(),
                 palette_colors,
                 // Pinned Rive HarfBuzz is compiled with HB_NO_LEGACY. HarfRust
                 // has no equivalent build switch, so suppress only its legacy
@@ -602,7 +644,8 @@ impl HbFont {
             base: FontBase::new(line_metrics),
             host_outline: None,
             host_pictures: None,
-            host_picture_cache: Mutex::new(HashMap::new()),
+            host_picture_scope: HostPictureScope::Glyph,
+            host_picture_cache: Mutex::new(HostPictureCache::default()),
             bytes,
             face_index,
             face,
@@ -628,14 +671,21 @@ impl HbFont {
         );
         font.host_outline = Some(outline);
         font.host_pictures = self.host_pictures.clone();
+        font.host_picture_scope = self.host_picture_scope;
         Arc::new(font)
     }
 
     /// Install an additive picture source. Native COLR/readable PNG always wins.
-    /// Answers (including None) are retained per (glyph, cluster text), with
-    /// an independent cache for each font variant. Glyph zero is never asked.
+    /// Glyph scope caches by glyph; Cluster scope caches by (glyph, full text)
+    /// and replaces this font's entire cluster. Each variant has its own FIFO
+    /// cache of up to 4096 answers, including None; eviction permits requery.
+    /// Glyph zero is never asked. Glyph hosts ignore no-ink glyphs themselves.
     /// Callbacks can run concurrently for distinct keys and must not reenter.
-    pub fn with_host_pictures(&self, pictures: HostGlyphPictures) -> FontRef {
+    pub fn with_host_pictures(
+        &self,
+        pictures: HostGlyphPictures,
+        scope: HostPictureScope,
+    ) -> FontRef {
         let mut font = Self::with_face_options(
             self.bytes.clone(),
             self.face_index,
@@ -645,6 +695,7 @@ impl HbFont {
         );
         font.host_outline = self.host_outline.clone();
         font.host_pictures = Some(pictures);
+        font.host_picture_scope = scope;
         Arc::new(font)
     }
 
@@ -652,9 +703,17 @@ impl HbFont {
         if !(self.face.has_color_layers || self.face.has_color_paint || self.face.has_png) {
             return false;
         }
+        let cached = &self.face.native_color_glyphs[usize::from(glyph)];
+        match cached.load(Ordering::Relaxed) {
+            1 => return false,
+            2 => return true,
+            _ => {}
+        }
         let font = self.outline_font();
         let id = OutlineGlyphId::new(glyph as u32);
-        font.color_glyphs().get(id).is_some() || native_png_exists(&font, glyph)
+        let color = font.color_glyphs().get(id).is_some() || native_png_exists(&font, glyph);
+        cached.store(if color { 2 } else { 1 }, Ordering::Relaxed);
+        color
     }
 
     pub fn shape_fallback_run(
@@ -796,6 +855,7 @@ impl Font for HbFont {
         // Keep upstream's plain-HB outline variant policy. Pictures are our
         // opt-in host extension and survive derived shaping variants.
         font.host_pictures = self.host_pictures.clone();
+        font.host_picture_scope = self.host_picture_scope;
         Arc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
@@ -823,22 +883,27 @@ impl Font for HbFont {
     fn is_color_glyph(&self, glyph: GlyphId) -> bool {
         self.native_color_glyph(glyph)
     }
+    fn host_picture_scope(&self) -> Option<HostPictureScope> {
+        self.host_pictures.as_ref().map(|_| self.host_picture_scope)
+    }
     fn host_picture_layer(
         &self,
         glyph: GlyphId,
         cluster: &[Unichar],
     ) -> Option<Arc<ColorGlyphLayer>> {
+        let source = self.host_pictures.as_ref()?;
         if glyph == 0 || self.native_color_glyph(glyph) {
             return None;
         }
-        let source = self.host_pictures.as_ref()?;
+        let key_text = match self.host_picture_scope {
+            HostPictureScope::Glyph => &[][..],
+            HostPictureScope::Cluster => cluster,
+        };
         let answer = self
             .host_picture_cache
             .lock()
             .unwrap()
-            .entry((glyph, cluster.to_vec()))
-            .or_insert_with(|| Arc::new(OnceLock::new()))
-            .clone();
+            .answer(glyph, key_text);
         answer
             .get_or_init(|| {
                 source(glyph, cluster).map(|picture| {
@@ -923,6 +988,46 @@ impl Font for HbFont {
     fn on_shape_text(&self, text: &[Unichar], runs: &[TextRun], direction: i32) -> Vec<Paragraph> {
         self.on_shape_text_native(text, runs, direction)
     }
+}
+
+// hb_ot_color_has_png reads sanitized CBDT/sbix has_data, independently of
+// whether a glyph can actually be extracted. CBLC participates only in lookup.
+fn font_has_png_data(font: &OutlineFont<'_>) -> bool {
+    let cbdt = font.table_data(skrifa::Tag::new(b"CBDT"));
+    if cbdt.is_some_and(|table| cbdt_has_data(table.as_bytes())) {
+        return true;
+    }
+    let num_glyphs = font.maxp().map_or(0, |maxp| u32::from(maxp.num_glyphs()));
+    font.table_data(skrifa::Tag::new(b"sbix"))
+        .is_some_and(|table| sbix_has_data(table.as_bytes(), num_glyphs))
+}
+
+fn cbdt_has_data(data: &[u8]) -> bool {
+    // Pinned CBDT::sanitize checks only the four-byte version header and its
+    // major version. The sanitized table's has_data tests that major != 0.
+    data.len() >= 4 && matches!(u16::from_be_bytes([data[0], data[1]]), 2 | 3)
+}
+
+fn sbix_has_data(data: &[u8], num_glyphs: u32) -> bool {
+    // Pinned sbix::sanitize checks its eight-byte header, nonzero version,
+    // complete strike-offset array, and each non-null SBIXStrike. A strike
+    // needs its four-byte header plus num_glyphs + 1 shallow image offsets;
+    // individual glyph image data and ppem are deliberately not checked here.
+    if data.len() < 8 || u16::from_be_bytes([data[0], data[1]]) == 0 {
+        return false;
+    }
+    let count = u32::from_be_bytes(data[4..8].try_into().unwrap()) as usize;
+    let Some(offsets_end) = count.checked_mul(4).and_then(|size| size.checked_add(8)) else {
+        return false;
+    };
+    let Some(offsets) = data.get(8..offsets_end) else {
+        return false;
+    };
+    let strike_size = (u64::from(num_glyphs) + 1) * 4 + 4;
+    offsets.chunks_exact(4).all(|bytes| {
+        let offset = u32::from_be_bytes(bytes.try_into().unwrap());
+        offset == 0 || u64::from(offset) + strike_size <= data.len() as u64
+    })
 }
 
 #[derive(Clone)]
@@ -1929,6 +2034,51 @@ impl skrifa::color::ColorPainter for PaintState<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn png_capability_uses_sanitized_cbdt_version_header() {
+        for major in [0u16, 1, 2, 3, 4, u16::MAX] {
+            let mut data = Vec::from(major.to_be_bytes());
+            // Minor version is unconstrained by the pinned sanitizer.
+            data.extend_from_slice(&u16::MAX.to_be_bytes());
+            assert_eq!(cbdt_has_data(&data), matches!(major, 2 | 3));
+            for length in 0..4 {
+                assert!(!cbdt_has_data(&data[..length]));
+            }
+        }
+    }
+
+    #[test]
+    fn png_capability_sanitizes_sbix_without_requiring_picture_data() {
+        let mut data = vec![0, 1, 0, 0, 0, 0, 0, 0];
+        assert!(sbix_has_data(&data, 2), "header-only version one has data");
+        data[1] = 2;
+        assert!(sbix_has_data(&data, 2), "future nonzero versions accepted");
+        data[1] = 0;
+        assert!(!sbix_has_data(&data, 2), "version zero has no data");
+        data[1] = 1;
+        for length in 0..8 {
+            assert!(!sbix_has_data(&data[..length], 2));
+        }
+        data[7] = 1;
+        assert!(!sbix_has_data(&data, 2), "missing strike offset");
+        data.extend_from_slice(&0u32.to_be_bytes());
+        assert!(sbix_has_data(&data, 2), "null strike is sanitized");
+        data[8..12].copy_from_slice(&12u32.to_be_bytes());
+        assert!(!sbix_has_data(&data, 2), "missing strike header");
+        data.extend_from_slice(&[0; 4]);
+        assert!(!sbix_has_data(&data, 2), "missing shallow glyph offsets");
+        data.extend_from_slice(&[0xff; 12]);
+        assert!(
+            sbix_has_data(&data, 2),
+            "zero ppem and unusable glyph image offsets still have data"
+        );
+        assert!(!sbix_has_data(&data[..27], 2));
+        data[8..12].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(!sbix_has_data(&data, 2), "invalid strike offset");
+        data[4..8].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(!sbix_has_data(&data, 2), "invalid strike-offset count");
+    }
 
     // Supplemental coverage for the new API; upstream added no test cases.
     // Reuse the retained tiny font, replacing only its cmap table.

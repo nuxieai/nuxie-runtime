@@ -4397,6 +4397,69 @@ impl LayoutComponent {
         self.layout_data.add_applier(applier);
     }
     pub fn apply_container_style(&self, style: &mut Style, _context: &LayoutSyncContext) {
+        use crate::source::{
+            constraints::{
+                draggable_constraint::DraggableConstraintDirection,
+                scrolling::scroll_constraint::ScrollConstraint,
+            },
+            layout::layout_style_applier::YGOverflow,
+        };
+        use taffy::Overflow;
+        // Drawing clip only cuts paint. CSS overflow:clip keeps the content
+        // minimum, while authored hidden/scroll establish a scroll container.
+        let overflow = match self
+            .with_style(LayoutComponentStyle::overflow)
+            .unwrap_or_default()
+        {
+            YGOverflow::Hidden => Overflow::Hidden,
+            YGOverflow::Scroll => Overflow::Scroll,
+            YGOverflow::Visible if self.base.clip() => Overflow::Clip,
+            YGOverflow::Visible => Overflow::Visible,
+        };
+        style.overflow = taffy::geometry::Point {
+            x: overflow,
+            y: overflow,
+        };
+        // A ScrollConstraint is parented to content; content's parent is its
+        // viewport. Infer scrollability from that same relationship as Rive.
+        for content in self.children() {
+            let directions = content
+                .with(|object| {
+                    object.as_layout_component().map(|content| {
+                        content
+                            .children()
+                            .iter()
+                            .filter_map(|child| {
+                                child.with_downcast::<ScrollConstraint, _>(
+                                    ScrollConstraint::direction,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .flatten()
+                .unwrap_or_default();
+            for direction in directions {
+                if direction != DraggableConstraintDirection::Vertical {
+                    style.overflow.x = Overflow::Scroll;
+                }
+                if direction != DraggableConstraintDirection::Horizontal {
+                    style.overflow.y = Overflow::Scroll;
+                }
+            }
+        }
+        // CSS computes visible to auto and clip to hidden when the other axis
+        // scrolls. Taffy represents auto's layout semantics as Scroll; no
+        // scrollbar space is reserved and Rive still owns drawing and input.
+        if style.overflow.x == Overflow::Scroll || style.overflow.y == Overflow::Scroll {
+            for axis in [&mut style.overflow.x, &mut style.overflow.y] {
+                *axis = match *axis {
+                    Overflow::Visible => Overflow::Scroll,
+                    Overflow::Clip => Overflow::Hidden,
+                    other => other,
+                };
+            }
+        }
         let justify = self.with_style(|component_style| {
             (!component_style.is_stack()).then_some(component_style.base.justify_items_value())
         });

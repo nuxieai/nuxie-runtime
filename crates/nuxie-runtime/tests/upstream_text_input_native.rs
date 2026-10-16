@@ -1850,3 +1850,130 @@ fn text_input_delayed_click_without_advancing_places_a_caret() {
         "a click outside upstream's 500 ms window places a caret"
     );
 }
+
+#[test]
+fn imported_text_and_selected_draw_routes_keep_color_glyphs_inside_world_clip() {
+    use nuxie_runtime::source::{
+        generated::text::text_input_selected_text_base::TextInputSelectedTextBase,
+        math::mat2d::Mat2D,
+        text::{
+            font_hb::HbFont, text_input_selected_text::TextInputSelectedText,
+            text_input_text::TextInputText,
+        },
+        text_engine::{TextOverflow, TextSizing},
+    };
+    let (_file, artboard, input) = input_fixture();
+    artboard.advance_default(0.0);
+    let text = with_input(&input, |input| {
+        input
+            .base
+            .children()
+            .iter()
+            .find(|child| child.is_type_of(TextInputText::TYPE_KEY))
+            .cloned()
+    })
+    .unwrap();
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let emoji = HbFont::decode(
+        &std::fs::read(
+            PathBuf::from(root).join("tests/unit_tests/assets/NotoColorEmojiCOLRv1.subset.ttf"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let factory = with_input(&input, |input| {
+        input
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+    })
+    .unwrap();
+    with_input(&input, |input| {
+        input
+            .base
+            .set_world_transform(Mat2D::new(2.0, 0.0, 0.0, 3.0, 17.0, 29.0));
+        let raw = input.raw_text_input();
+        raw.set_font(Some(emoji));
+        raw.set_text("😀".into());
+        raw.set_sizing(TextSizing::Fixed);
+        raw.set_max_width(100.0);
+        raw.set_max_height(100.0);
+        raw.set_overflow(TextOverflow::Clipped);
+        raw.update(&factory);
+        assert!(raw.text_path().empty());
+    });
+    let mut recording = RecordingFactory::new();
+    let mut renderer = recording.make_renderer();
+    text.with_downcast_mut::<TextInputText, _>(|text| text.draw(&mut renderer));
+    let normal = recording.stream();
+    assert!(
+        normal
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .count()
+            > 1,
+        "{normal}"
+    );
+    let world = normal.find("transform matrix=[2,0,0,3,17,29]").unwrap();
+    let clip = normal.find("clipPath ").unwrap();
+    let glyph = normal[clip..].find("drawPath ").unwrap() + clip;
+    assert!(world < clip && clip < glyph, "{normal}");
+
+    with_input(&input, |input| {
+        let raw = input.raw_text_input();
+        raw.set_separate_selection_text(true);
+        raw.set_cursor(Cursor::new(
+            CursorPosition::unresolved(0),
+            CursorPosition::unresolved(1),
+        ));
+        raw.update(&factory);
+        assert!(raw.text_path().empty());
+        assert!(raw.selected_text_path().empty());
+    });
+    recording.clear();
+    text.with_downcast_mut::<TextInputText, _>(|text| text.draw(&mut renderer));
+    let unselected = recording.stream();
+    assert!(
+        !unselected.contains("clipPath "),
+        "the normal drawable must not redraw selected emoji: {unselected}"
+    );
+    recording.clear();
+    text.with_downcast_mut::<TextInputText, _>(|text| {
+        // Exercise the selected owner's concrete draw entry point with the same
+        // imported drawable base (paints, parent, factory and world transform).
+        let mut selected = TextInputSelectedText {
+            base: TextInputSelectedTextBase {
+                base: std::mem::take(&mut text.base.base),
+            },
+        };
+        selected.draw(&mut renderer);
+        text.base.base = selected.base.base;
+    });
+    let selected = recording.stream();
+    assert!(
+        selected.contains("transform matrix=[2,0,0,3,17,29]"),
+        "{selected}"
+    );
+    assert!(selected.contains("clipPath "), "{selected}");
+    // Color glyph layer traversal is identical before/after selection, even
+    // though the outline paint owner and selected outline path differ.
+    let colors = |stream: &str| {
+        stream
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .filter_map(|line| line.split("color=").nth(1))
+            .map(|color| color.split(',').next().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert!(!colors(&normal).is_empty());
+    assert_eq!(colors(&normal), colors(&selected));
+    assert!(
+        selected
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .count()
+            > 1,
+        "{selected}"
+    );
+}

@@ -5,7 +5,10 @@ use crate::mechanical_port::source::{
     math::mat2d::Mat2D,
     renderer::Renderer,
     shapes::{
-        paint::{shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath},
+        paint::{
+            fill::Fill, shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath,
+            solid_color::SolidColor,
+        },
         shape_paint_container::ShapePaintContainer,
     },
     status_code::StatusCode,
@@ -76,6 +79,48 @@ impl TextInputDrawable {
             });
         }
     }
+    // Our additive text-field color route. Outline paints keep their existing
+    // traversal; foreground lookup matches TextStylePaint::foreground_color.
+    pub(crate) fn draw_text(
+        &mut self,
+        renderer: &mut Renderer,
+        input: &mut super::raw_text_input::RawTextInput,
+        world: Mat2D,
+        selected: bool,
+    ) {
+        let path = if selected {
+            input.selected_text_path()
+        } else {
+            input.text_path()
+        };
+        self.draw_with_path(renderer, Some(path), world);
+        if !input.has_color_glyphs(Some(selected)) {
+            return;
+        }
+        let foreground = self
+            .paints
+            .shape_paints()
+            .iter()
+            .find_map(|paint| {
+                paint
+                    .with_downcast::<Fill, _>(|fill| {
+                        fill.base.paint().and_then(|mutator| {
+                            mutator.with_downcast::<SolidColor, _>(|color| {
+                                color.base.color_value() as u32
+                            })
+                        })
+                    })
+                    .flatten()
+            })
+            .unwrap_or(0xff000000);
+        let factory = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+            .expect("TextInputDrawable requires its imported renderer factory");
+        input.draw_color_glyphs(&factory, renderer, world, Some(selected), foreground, 1.0);
+    }
+
     pub fn will_draw(&self) -> bool {
         self.base.will_draw() && self.base.render_opacity() != 0.0
     }

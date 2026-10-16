@@ -64,8 +64,9 @@ impl TextInputSelectedText {
                 .as_text_input_mut()
                 .expect("TextInputDrawable parent");
             let world = parent.base.world_transform();
-            let path = Some(parent.raw_text_input().selected_text_path());
-            self.base.base.draw_with_path(renderer, path, world);
+            self.base
+                .base
+                .draw_text(renderer, parent.raw_text_input(), world, true);
         });
     }
 }

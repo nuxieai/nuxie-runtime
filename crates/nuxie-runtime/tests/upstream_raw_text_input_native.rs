@@ -1342,3 +1342,170 @@ fn clear_selection_collapses_to_the_selection_end() {
     text_input.clear_selection();
     assert_cursor(text_input.cursor(), 7, 7);
 }
+
+thread_local! {
+    static COLOR_INPUT_FALLBACK: std::cell::RefCell<Option<FontRef>> = const { std::cell::RefCell::new(None) };
+}
+
+fn with_color_input_fallback<R>(font: FontRef, work: impl FnOnce() -> R) -> R {
+    use nuxie_runtime::source::text_engine::{Font, with_host_fallback_proc};
+    fn pick(_: u32, index: u32, _: &dyn Font) -> Option<FontRef> {
+        (index == 0)
+            .then(|| COLOR_INPUT_FALLBACK.with(|font| font.borrow().clone()))
+            .flatten()
+    }
+    struct Restore(Option<FontRef>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            COLOR_INPUT_FALLBACK.with(|font| *font.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(COLOR_INPUT_FALLBACK.with(|slot| slot.replace(Some(font))));
+    with_host_fallback_proc(pick, work)
+}
+
+// The pre-extension outline result, including clockwise contour normalization.
+// Comparing its vertices by f32 bits catches any change to Latin or mono emoji.
+fn legacy_input_outline(input: &RawTextInput, only_latin: bool) -> Vec<u32> {
+    use nuxie_runtime::source::{
+        math::mat2d::Mat2D, shapes::paint::shape_paint_path::ShapePaintPath,
+    };
+    let mut path = ShapePaintPath::default();
+    let shape = input.shape();
+    let line = &shape.paragraph_lines()[0][0];
+    let mut x = line.start_x;
+    for (run, index) in &shape.ordered_lines()[0] {
+        let index = index as usize;
+        let font = run.font.as_ref().unwrap();
+        if !only_latin || !font.is_color_glyph(run.glyphs[index]) {
+            let mut glyph = font.get_path(run.glyphs[index]);
+            glyph.transform_in_place(Mat2D::new(
+                run.size,
+                0.0,
+                0.0,
+                run.size,
+                x + run.offsets[index].x,
+                shape.vertical_offset() + line.baseline + run.offsets[index].y,
+            ));
+            path.add_path_clockwise(&glyph, None);
+        }
+        x += run.advances[index];
+    }
+    outline_bits(path.raw_path())
+}
+
+fn outline_bits(path: &nuxie_runtime::source::math::raw_path::RawPath) -> Vec<u32> {
+    path.verbs_u8()
+        .iter()
+        .map(|verb| *verb as u32)
+        .chain(
+            path.points()
+                .iter()
+                .flat_map(|point| [point.x.to_bits(), point.y.to_bits()]),
+        )
+        .collect()
+}
+
+fn draw_input_recording(input: &mut RawTextInput) -> String {
+    use nuxie_runtime::source::math::mat2d::Mat2D;
+    let recording = RecordingFactory::new();
+    let mut renderer = recording.make_renderer();
+    let mut factory = PersistentFactory::new(recording);
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    input.update(&retained);
+    let mut text = retained.with_factory_mut(|factory| factory.make_render_paint());
+    let mut selection = retained.with_factory_mut(|factory| factory.make_render_paint());
+    let mut cursor = retained.with_factory_mut(|factory| factory.make_render_paint());
+    input.draw(
+        &retained,
+        &mut renderer,
+        &Mat2D::default(),
+        text.as_mut(),
+        selection.as_mut(),
+        cursor.as_mut(),
+    );
+    factory.borrow().stream()
+}
+
+#[test]
+fn input_fallback_color_emoji_draws_layers_and_preserves_latin_outline_bits() {
+    let emoji = load_font("assets/NotoColorEmojiCOLRv1.subset.ttf");
+    with_color_input_fallback(emoji, || {
+        let mut input = RawTextInput::new();
+        input.set_font(Some(load_font("assets/RobotoFlex.ttf")));
+        input.set_text("A😀B".into());
+        let stream = draw_input_recording(&mut input);
+        assert_eq!(
+            outline_bits(input.text_path().raw_path()),
+            legacy_input_outline(&input, true)
+        );
+        assert!(!input.text_path().empty());
+        assert!(
+            stream
+                .lines()
+                .filter(|line| line.starts_with("drawPath "))
+                .count()
+                > 2,
+            "{stream}"
+        );
+
+        input.set_separate_selection_text(true);
+        input.set_cursor(Cursor::new(
+            CursorPosition::unresolved(1),
+            CursorPosition::unresolved(2),
+        ));
+        let selected_stream = draw_input_recording(&mut input);
+        assert!(
+            input.selected_text_path().empty(),
+            "selected emoji must retain its own colors"
+        );
+        assert_eq!(
+            outline_bits(input.text_path().raw_path()),
+            legacy_input_outline(&input, true)
+        );
+        assert!(
+            selected_stream
+                .lines()
+                .filter(|line| line.starts_with("drawPath "))
+                .count()
+                > 3
+        );
+    });
+}
+
+#[test]
+fn input_outline_only_emoji_is_byte_for_byte_legacy_outline() {
+    let root = std::env::var_os("RIVE_HARFBUZZ_DIR").map(PathBuf::from).unwrap_or_else(|| {
+        PathBuf::from("/Users/levi/dev/worktrees/rive-runtime-pin-183df53f/dependencies/rive-app_harfbuzz_rive_13.1.1")
+    });
+    let font = HbFont::decode(
+        &std::fs::read(root.join("test/api/fonts/Zycon.ttf"))
+            .expect("HarfBuzz outline emoji fixture"),
+    )
+    .unwrap();
+    assert!(!font.has_color_glyphs());
+    let mut input = RawTextInput::new();
+    input.set_font(Some(font));
+    input.set_text("🌝".into());
+    let stream = draw_input_recording(&mut input);
+    let (run, glyph) = (&input.shape().ordered_lines()[0])
+        .into_iter()
+        .next()
+        .unwrap();
+    assert_ne!(
+        run.glyphs[glyph as usize], 0,
+        "fixture must map the emoji, not .notdef"
+    );
+    assert!(!input.text_path().empty());
+    assert_eq!(
+        outline_bits(input.text_path().raw_path()),
+        legacy_input_outline(&input, false)
+    );
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .count(),
+        2
+    );
+}

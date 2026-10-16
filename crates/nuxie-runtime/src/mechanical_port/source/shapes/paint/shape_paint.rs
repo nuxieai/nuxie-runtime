@@ -127,6 +127,30 @@ pub struct ShapePaint {
     effect_source: ShapePaintPath,
 }
 
+/// ShapePaint::blendMode's authored value as the renderer's blend mode.
+pub(crate) fn blend_mode_for_value(value: u8) -> BlendMode {
+    match value {
+        3 => BlendMode::SrcOver,
+        12 => BlendMode::Additive,
+        14 => BlendMode::Screen,
+        15 => BlendMode::Overlay,
+        16 => BlendMode::Darken,
+        17 => BlendMode::Lighten,
+        18 => BlendMode::ColorDodge,
+        19 => BlendMode::ColorBurn,
+        20 => BlendMode::HardLight,
+        21 => BlendMode::SoftLight,
+        22 => BlendMode::Difference,
+        23 => BlendMode::Exclusion,
+        24 => BlendMode::Multiply,
+        25 => BlendMode::Hue,
+        26 => BlendMode::Saturation,
+        27 => BlendMode::Color,
+        28 => BlendMode::Luminosity,
+        value => panic!("invalid blend mode {value}"),
+    }
+}
+
 impl ShapePaint {
     pub(crate) fn new(paint_type: ShapePaintType) -> Self {
         let mut base = ShapePaintBase::default();
@@ -135,6 +159,7 @@ impl ShapePaint {
             paint_type,
             base.share_dirt(),
             base.share_is_visible(),
+            base.share_blend(),
             path_provider,
         ));
         Self {
@@ -313,26 +338,7 @@ impl ShapePaint {
         self.base.blend_mode_value() == 127
     }
     pub fn authored_blend_mode(&self) -> BlendMode {
-        match self.base.blend_mode_value() {
-            3 => BlendMode::SrcOver,
-            12 => BlendMode::Additive,
-            14 => BlendMode::Screen,
-            15 => BlendMode::Overlay,
-            16 => BlendMode::Darken,
-            17 => BlendMode::Lighten,
-            18 => BlendMode::ColorDodge,
-            19 => BlendMode::ColorBurn,
-            20 => BlendMode::HardLight,
-            21 => BlendMode::SoftLight,
-            22 => BlendMode::Difference,
-            23 => BlendMode::Exclusion,
-            24 => BlendMode::Multiply,
-            25 => BlendMode::Hue,
-            26 => BlendMode::Saturation,
-            27 => BlendMode::Color,
-            28 => BlendMode::Luminosity,
-            value => panic!("invalid blend mode {value}"),
-        }
+        blend_mode_for_value(self.base.blend_mode_value())
     }
     pub fn blend_mode(&mut self, parent_value: BlendMode, parent_additive_amount: u8) {
         let inherits = self.inherits_blend_mode();

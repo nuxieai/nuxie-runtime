@@ -52,6 +52,8 @@ pub(crate) struct PaintCells {
     container: RefCell<Weak<ContainerCells>>,
     // ShapePaintBase's isVisible storage.
     is_visible: Rc<Cell<bool>>,
+    // ShapePaintBase's blendModeValue and additiveAmount storage.
+    blend: Rc<PaintBlendCells>,
     // Stroke's thickness and transformAffectsStroke, Fill's fillRule; their
     // owning properties' storage writes them.
     thickness: Cell<f32>,
@@ -66,11 +68,47 @@ pub(crate) struct PaintCells {
     has_modulated_image: Cell<bool>,
 }
 
+/// ShapePaintBase's blendModeValue and additiveAmount storage, shared with
+/// the paint's cells so a draw applies its blend without borrowing it.
+pub(crate) struct PaintBlendCells {
+    mode_value: Cell<u8>,
+    additive_amount: Cell<u8>,
+}
+
+impl Default for PaintBlendCells {
+    fn default() -> Self {
+        Self {
+            mode_value: Cell::new(127),
+            additive_amount: Cell::new(255),
+        }
+    }
+}
+
+impl PaintBlendCells {
+    #[inline]
+    pub(crate) fn mode_value(&self) -> u8 {
+        self.mode_value.get()
+    }
+    #[inline]
+    pub(crate) fn set_mode_value(&self, value: u8) {
+        self.mode_value.set(value);
+    }
+    #[inline]
+    pub(crate) fn additive_amount(&self) -> u8 {
+        self.additive_amount.get()
+    }
+    #[inline]
+    pub(crate) fn set_additive_amount(&self, value: u8) {
+        self.additive_amount.set(value);
+    }
+}
+
 impl PaintCells {
     pub(crate) fn new(
         paint_type: ShapePaintType,
         dirt: Rc<SharedDirt>,
         is_visible: Rc<Cell<bool>>,
+        blend: Rc<PaintBlendCells>,
         provider: PathProvider,
     ) -> Self {
         Self {
@@ -85,6 +123,7 @@ impl PaintCells {
             dirt,
             container: RefCell::new(Weak::new()),
             is_visible,
+            blend,
             thickness: Cell::new(1.0),
             transform_affects_stroke: Cell::new(true),
             fill_rule: Cell::new(0),
@@ -353,6 +392,30 @@ impl PaintCells {
 
     pub(crate) fn mutator_flags(&self) -> Option<MutatorFlags> {
         self.mutator_flags.get().map(|(_, flags)| flags.get())
+    }
+
+    /// ShapePaint::blendMode: the paint's own blend, or its parent's when it
+    /// inherits, applied to its render paint.
+    pub(crate) fn apply_blend_mode(
+        &self,
+        parent_value: nuxie_render_api::BlendMode,
+        parent_additive_amount: u8,
+    ) {
+        let inherits = self.blend.mode_value() == 127;
+        let mode = if inherits {
+            parent_value
+        } else {
+            super::shape_paint::blend_mode_for_value(self.blend.mode_value())
+        };
+        let amount = if inherits {
+            parent_additive_amount
+        } else {
+            self.blend.additive_amount()
+        };
+        let render_paint = self.render_paint().expect("initialized paint");
+        let mut render_paint = render_paint.borrow_mut();
+        render_paint.blend_mode(mode);
+        render_paint.additiveness(super::blend_mode::additiveness_for(mode, amount));
     }
 
     /// ShapePaintMutator::isVisible from the flags the mutator shared, while a

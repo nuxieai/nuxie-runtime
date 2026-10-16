@@ -84,9 +84,55 @@ impl TextStylePaint {
                 &base.parent_handle().expect("TextStylePaint parent is Text"),
             )
         };
-        let mut paint_index = 0;
-        while let Some(handle) = self.paints.shape_paints().get(paint_index).cloned() {
-            paint_index += 1;
+        // Every opacity drawn at full: no pooled paint needs the paint's own
+        // applyTo, so a plain paint can draw from its cells.
+        let only_full_opacity = self.opacity_paths.keys().all(|opacity| opacity.0 == 1.0);
+        // The paint list can't change while this style is borrowed.
+        let paints = self.paints.cells().paints();
+        for paint in paints.iter() {
+            if only_full_opacity
+                && paint.cells.is_plain()
+                && paint.handle.is_occupied_settled()
+                && let Some(mutator_visible) = paint.cells.settled_mutator_is_visible()
+            {
+                // ShapePaint::shouldDraw.
+                if !(paint.cells.is_visible() && mutator_visible) {
+                    continue;
+                }
+                paint.cells.apply_blend_mode(blend, additive_amount);
+                if let Some(path) = self.opacity_paths.get_mut(&Opacity(1.0)) {
+                    let handle = &paint.handle;
+                    // The glyph path's own fill rule: no paint fill rule.
+                    paint.cells.draw_plain(renderer, path, *world, true, None, &|| {
+                        // The factory the paint's own draw would read.
+                        handle
+                            .with(|object| {
+                                object
+                                    .as_component()
+                                    .and_then(|component| {
+                                        component.with_artboard(|artboard| artboard.factory())
+                                    })
+                                    .flatten()
+                            })
+                            .flatten()
+                            .expect("a drawing ShapePaint has its imported Artboard factory")
+                    });
+                }
+                // The pool grows as the paint's own draw grows it.
+                if self.paint_pool.len() < self.opacity_paths.len() {
+                    let factory = self
+                        .base
+                        .with_artboard(|artboard| artboard.factory())
+                        .flatten()
+                        .expect("TextStylePaint requires its imported renderer factory");
+                    while self.paint_pool.len() < self.opacity_paths.len() {
+                        self.paint_pool
+                            .push(factory.with_factory_mut(|factory| factory.make_render_paint()));
+                    }
+                }
+                continue;
+            }
+            let handle = &paint.handle;
             handle.with_mut(|object| {
                 let Some(paint) = object.as_shape_paint_behavior_mut() else {
                     return;

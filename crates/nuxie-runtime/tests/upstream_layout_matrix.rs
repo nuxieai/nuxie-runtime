@@ -1,6 +1,9 @@
 //! Data-driven translation of runtime/layout_matrix_test.cpp at 78b07a3f.
 #![cfg(feature = "tools")]
 
+#[path = "support/css_layout_matrix.rs"]
+mod css_layout_matrix;
+
 use nuxie_render_api as render;
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
@@ -362,6 +365,7 @@ fn the_generated_layout_matrix_conforms() {
     assert!(!paths.is_empty());
     let mut checked = 0;
     let mut known_defects_confirmed = 0;
+    let mut layout_divergences_seen = 0;
     let mut assets_attempted = 0;
     let mut assets_resolved = 0;
     let mut unknown_fields = Vec::new();
@@ -404,6 +408,8 @@ fn the_generated_layout_matrix_conforms() {
             let container = artboard
                 .with_artboard(|a| a.find_handle::<LayoutComponent>("Container"))
                 .unwrap_or_else(|| artboard.core_handle());
+            let layout_divergence = css_layout_matrix::divergence(&manifest.fixture);
+            let mut first_difference = None;
             for check in manifest.checks {
                 let context = format!("{} {}.{}", manifest.fixture, check.component, check.field);
                 let component = artboard
@@ -431,15 +437,45 @@ fn the_generated_layout_matrix_conforms() {
                     }
                 } else {
                     for (i, (&a, &e)) in actual.iter().zip(&check.values).enumerate() {
-                        if !approx(a, e) {
-                            failures.push(format!("{context}[{i}]: {a} != {e}"));
+                        if !approx(a, e) && first_difference.is_none() {
+                            first_difference = Some(format!(
+                                "{}.{}[{i}]: {a} != {e}",
+                                check.component, check.field
+                            ));
+                        }
+                        let expected = css_layout_matrix::expected(
+                            layout_divergence,
+                            &check.component,
+                            &check.field,
+                            i,
+                            e,
+                        );
+                        if !approx(a, expected) {
+                            failures.push(format!("{context}[{i}]: {a} != {expected} (C++ {e})"));
                         }
                     }
                 }
                 checked += 1;
             }
+            if let Some(divergence) = layout_divergence {
+                layout_divergences_seen += 1;
+                if first_difference.as_deref() != Some(divergence.first_difference) {
+                    failures.push(format!(
+                        "layout first difference moved: {}: {:?} != {:?}",
+                        manifest.fixture, first_difference, divergence.first_difference
+                    ));
+                }
+                eprintln!(
+                    "{}: {}: {}",
+                    divergence.reason, manifest.fixture, divergence.first_difference
+                );
+            }
         }
     }
+    assert_eq!(
+        layout_divergences_seen,
+        css_layout_matrix::LAYOUT_DIVERGENCES.len()
+    );
     assert!(checked > 0);
     eprintln!(
         "layout matrix: {} files, {checked} fields checked, {} unknown fields, {known_defects_confirmed} known defects, {assets_resolved}/{assets_attempted} referenced assets resolved",

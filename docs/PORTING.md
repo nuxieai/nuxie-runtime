@@ -648,7 +648,10 @@ decode queue. Bidi and audio retain their separately tracked status below.
     exact. Golden entries carry `layout-diverges:<reason>` with a pinned
     `divergence_signature`; Silver ids sit in `LAYOUT_DIVERGENCES`
     (`tools/silver-corpus/generate_manifest.py`) with a pinned first
-    difference. A change that moves a pinned difference fails the gate.
+    difference. Matrix probe differences live in
+    `tests/support/css_layout_matrix.rs`, with the original C++ values, every
+    changed scalar, a CSS reason per case and an exact first difference.
+    A change that moves a pinned difference fails the gate.
     Upstream layout/Yoga changes are product decisions, not mechanical
     translations (see `upstream-sync-map.md`, "Scope decisions").
   `TaffyTree::disable_rounding()` keeps unrounded results.

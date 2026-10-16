@@ -281,6 +281,9 @@ pub struct StateMachineLayerInstance {
     // for the state definitions last asked.
     any_reads_inputs: Option<(CoreHandle, bool)>,
     current_reads_inputs: Option<(CoreHandle, bool)>,
+    // The pose serial and keyed-data epoch at which is_frozen last found this
+    // layer frozen (see is_frozen).
+    frozen_at: Cell<Option<(u32, u64)>>,
 }
 
 #[derive(Clone)]
@@ -346,6 +349,7 @@ impl Default for StateMachineLayerInstance {
             settled_on_inputs: Rc::new(Cell::new(false)),
             any_reads_inputs: None,
             current_reads_inputs: None,
+            frozen_at: Cell::new(None),
             hold_animation: None,
             hold_time: 0.0,
         }
@@ -487,8 +491,58 @@ impl StateMachineLayerInstance {
             || self.hold_animation.is_some()
             || (self.transition.is_some() && !self.transition_completed)
         {
+            self.frozen_at.set(None);
             return false;
         }
+        // A frozen layer does not advance, and its state, animation and
+        // transition change only through paths that unsettle it, so while it
+        // stays settled, the artboard's change serial stays at the pose it
+        // rests on, and no keyed data changes, the last answer stands.
+        let key = (pose_since, super::compiled_animation::keyed_data_epoch());
+        if self.frozen_at.get() == Some(key) && Self::change_serial(machine) == pose_since {
+            #[cfg(any(test, feature = "testing"))]
+            assert!(
+                self.is_frozen_settled(machine, pose_since),
+                "a layer found frozen at this pose no longer is"
+            );
+            return true;
+        }
+        let frozen = self.is_frozen_settled(machine, pose_since);
+        self.frozen_at
+            .set((frozen && self.transition_answer_is_stable()).then_some(key));
+        frozen
+    }
+
+    /// The artboard's change serial, from the dirty state the machine shares
+    /// with it.
+    fn change_serial(machine: &StateMachineInstance) -> u32 {
+        match &machine.settling.row {
+            Some(dirty) => dirty.change_serial(),
+            None => machine
+                .artboard_instance
+                .with_artboard(|artboard| artboard.change_serial())
+                .expect("a state machine retains its ArtboardInstance"),
+        }
+    }
+
+    /// Whether is_pose_in_place's transition check gives the same answer each
+    /// time: a scripted interpolator is asked again every time.
+    fn transition_answer_is_stable(&self) -> bool {
+        self.transition.as_ref().is_none_or(|transition| {
+            transition
+                .with(|transition| transition.state_transition_interpolator())
+                .flatten()
+                .is_none_or(|interpolator| {
+                    interpolator
+                        .with_mut(|interpolator| interpolator.keyframe_interpolator_is_scripted())
+                        .flatten()
+                        == Some(false)
+                })
+        })
+    }
+
+    /// is_frozen past its checks of the layer's own fields.
+    fn is_frozen_settled(&self, machine: &StateMachineInstance, pose_since: u32) -> bool {
         let Some(current) = &self.current_state else {
             return false;
         };
@@ -553,14 +607,7 @@ impl StateMachineLayerInstance {
         // The change serial first, from the dirty state the machine shares
         // with its artboard: while other layers keep writing, it alone
         // answers, without borrowing the artboard.
-        let serial = match &machine.settling.row {
-            Some(dirty) => dirty.change_serial(),
-            None => machine
-                .artboard_instance
-                .with_artboard(|artboard| artboard.change_serial())
-                .expect("a state machine retains its ArtboardInstance"),
-        };
-        if serial != pose_since {
+        if Self::change_serial(machine) != pose_since {
             return false;
         }
         let (source, has_binds) = machine

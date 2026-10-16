@@ -53,7 +53,7 @@ pub(crate) fn keyed_data_changed() {
 }
 
 #[inline]
-fn keyed_data_epoch() -> u64 {
+pub(crate) fn keyed_data_epoch() -> u64 {
     KEYED_DATA_EPOCH.with(Cell::get)
 }
 

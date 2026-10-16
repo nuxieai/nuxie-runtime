@@ -801,6 +801,19 @@ impl CoreHandle {
     {
         self.slot()?.data_bind_container.borrow().clone()
     }
+    /// This slot's binding container, read without a lease or a copy;
+    /// `read` must run no callbacks.
+    #[inline]
+    pub(crate) fn with_data_bind_container<R>(
+        &self,
+        read: impl FnOnce(&crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer) -> R,
+    ) -> Option<R> {
+        let slot = &self.identity.slot;
+        if slot.generation.get() != slot.hot.identity_generation {
+            return None;
+        }
+        slot.data_bind_container.borrow().as_ref().map(read)
+    }
     pub fn set_data_bind_container(
         &self,
         container: crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer,

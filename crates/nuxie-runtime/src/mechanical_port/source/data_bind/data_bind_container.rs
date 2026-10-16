@@ -531,6 +531,17 @@ impl DataBindContainer {
         }
     }
 
+    /// Whether update_data_binds has binds to visit: persisting, queued to
+    /// source, or dirty. Without any it returns having changed nothing but
+    /// its StateMachine owner's processing notification.
+    pub(crate) fn has_update_work(&self) -> bool {
+        let state = self.0.borrow();
+        !state.dirty.is_empty()
+            || state.queues.get().is_some_and(|queues| {
+                !queues.persisting.is_empty() || !queues.dirty_to_source.is_empty()
+            })
+    }
+
     pub fn update_data_binds(&self, apply_target_to_source: bool) {
         {
             let state = self.0.borrow();

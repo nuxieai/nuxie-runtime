@@ -4766,10 +4766,19 @@ impl StateMachineInstance {
         }
     }
 
+    /// The artboard's draw order counter, from the dirty state it shares.
+    fn artboard_draw_order_change_counter(&self) -> Option<u8> {
+        match &self.settling.row {
+            Some(dirty) => Some(dirty.draw_order_change_counter()),
+            None => self
+                .artboard_instance
+                .with_artboard(|artboard| artboard.draw_order_change_counter()),
+        }
+    }
+
     pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
         let counter = self
-            .artboard_instance
-            .with_artboard(|artboard| artboard.draw_order_change_counter())
+            .artboard_draw_order_change_counter()
             .expect("a state machine retains its ArtboardInstance");
         if self.draw_order_change_counter != counter {
             self.draw_order_change_counter = counter;
@@ -4811,10 +4820,13 @@ impl StateMachineInstance {
         // Compare against the previous advance's start, including writes by
         // earlier layers in this advance, and capture before applying binds.
         let pose_since = self.advance_change_serial;
-        self.advance_change_serial = self
-            .artboard_instance
-            .with_artboard(|artboard| artboard.change_serial())
-            .expect("a state machine retains its ArtboardInstance");
+        self.advance_change_serial = match &self.settling.row {
+            Some(dirty) => dirty.change_serial(),
+            None => self
+                .artboard_instance
+                .with_artboard(|artboard| artboard.change_serial())
+                .expect("a state machine retains its ArtboardInstance"),
+        };
         self.data_bind_container.update_data_binds(false);
         // Upstream iterates the retained layer array in place. Retain one
         // handle at a time so the Rust owner borrow ends before advance can
@@ -4879,10 +4891,7 @@ impl StateMachineInstance {
         if self.needs_advance.get()
             || self.settling.binds_pending.get()
             || self.data_bind_container.has_data_bind_work()
-            || self
-                .artboard_instance
-                .with_artboard(|artboard| artboard.draw_order_change_counter())
-                != Some(self.draw_order_change_counter)
+            || self.artboard_draw_order_change_counter() != Some(self.draw_order_change_counter)
         {
             return QuietState::Busy;
         }

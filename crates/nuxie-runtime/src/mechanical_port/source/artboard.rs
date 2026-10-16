@@ -96,6 +96,9 @@ struct ArtboardDirtyState {
     did_change: Cell<bool>,
     change_serial: Cell<u32>,
     content_revision: Cell<u64>,
+    // Bumped (wrapping) each time the draw order is sorted; state machines
+    // read it to re-sort their hit components.
+    draw_order_change_counter: Cell<u8>,
     host: RefCell<Option<ArtboardHostAttachment>>,
     quiet_host_row: Cell<u32>,
 }
@@ -123,6 +126,7 @@ impl Default for RuntimeArtboardDirtyHandle {
             did_change: Cell::new(true),
             change_serial: Cell::new(0),
             content_revision: Cell::new(1),
+            draw_order_change_counter: Cell::new(0),
             host: RefCell::new(None),
             quiet_host_row: Cell::new(u32::MAX),
         }))
@@ -148,6 +152,10 @@ impl RuntimeArtboardDirtyHandle {
     }
     pub fn change_serial(&self) -> u32 {
         self.0.change_serial.get()
+    }
+
+    pub(crate) fn draw_order_change_counter(&self) -> u8 {
+        self.0.draw_order_change_counter.get()
     }
 
     fn increment_change_serial(&self) {
@@ -416,7 +424,6 @@ pub struct Artboard {
     semantic_boundary_node: Option<SemanticNodeRef>,
     #[cfg(feature = "tools")]
     external_parent_focus_node: Option<FocusNodeRef>,
-    draw_order_change_counter: u8,
     #[cfg(feature = "tools")]
     artboard_id: u16,
     // The file source and every descendant instance share this independent
@@ -507,7 +514,6 @@ impl Default for Artboard {
             semantic_boundary_node: None,
             #[cfg(feature = "tools")]
             external_parent_focus_node: None,
-            draw_order_change_counter: 0,
             #[cfg(feature = "tools")]
             artboard_id: 0,
             #[cfg(feature = "tools")]
@@ -1019,7 +1025,7 @@ impl Artboard {
     }
 
     pub fn draw_order_change_counter(&self) -> u8 {
-        self.draw_order_change_counter
+        self.dirty_state.draw_order_change_counter()
     }
 
     pub fn first_drawable(&self) -> Option<RuntimeDrawableOccurrence> {
@@ -1628,11 +1634,8 @@ impl Artboard {
 
     fn sort_draw_order(&mut self) {
         let _relinking = self.draw_links.relinking();
-        self.draw_order_change_counter = if self.draw_order_change_counter == u8::MAX {
-            0
-        } else {
-            self.draw_order_change_counter + 1
-        };
+        let counter = &self.dirty_state.0.draw_order_change_counter;
+        counter.set(if counter.get() == u8::MAX { 0 } else { counter.get() + 1 });
         for target in &self.draw_targets {
             target.with_downcast_mut::<DrawTarget, _>(|target| {
                 target.first = None;
@@ -2991,7 +2994,14 @@ impl Artboard {
                 ArtboardComponentList::update_data_binds_occurrence(host);
             }
         }
-        crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone()).update_data_binds(apply_target_to_source);
+        // With nothing persisting, queued or dirty, the root's own container
+        // updates nothing, and an Authored owner is notified of nothing.
+        if root.with_data_bind_container(
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer::has_update_work,
+        ) != Some(false)
+        {
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone()).update_data_binds(apply_target_to_source);
+        }
     }
 
     pub fn advance_data_binds_handle(root: &CoreHandle, elapsed: f32) -> bool {

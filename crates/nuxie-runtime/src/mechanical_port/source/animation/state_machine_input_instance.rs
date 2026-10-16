@@ -48,7 +48,7 @@ impl InputInstanceNotifier {
     fn value_changed(&self, index: u64) {
         self.needs_advance.set(true);
         if let Some(machine) = &self.machine {
-            machine.wake_row();
+            machine.input_changed();
         }
         #[cfg(feature = "tools")]
         if let Some(machine) = self.machine.as_ref() {

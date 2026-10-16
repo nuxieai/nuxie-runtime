@@ -1,5 +1,6 @@
-//! Direct translations of all five cases in upstream 3330baec
-//! tests/unit_tests/runtime/settled_layers_test.cpp.
+//! Translations of all five cases in upstream 3330baec
+//! tests/unit_tests/runtime/settled_layers_test.cpp; the input case is adapted
+//! because inputs settle here (see its comment).
 #![cfg(feature = "testing")]
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
@@ -127,8 +128,11 @@ fn view_model_conditions_settle_until_a_bound_value_changes() {
     assert_eq!(position(&shape), (350.0, 350.0));
 }
 
+// Upstream searches states that read state machine inputs on every advance.
+// Here every input change notifies its machine, which unsettles its layers, so
+// those states settle like view-model conditions and still see each change.
 #[test]
-fn states_reading_state_machine_inputs_are_always_searched() {
+fn states_reading_state_machine_inputs_settle_until_an_input_changes() {
     let file = read_file("state_machine_triggers.riv");
     let artboard = instance(&file, "main");
     let machine = artboard.state_machine_named("State Machine 1").unwrap();
@@ -138,7 +142,7 @@ fn states_reading_state_machine_inputs_are_always_searched() {
         .expect("idle state");
     let skips = StateMachineInstance::settled_layer_skips();
     idle(&machine);
-    assert_eq!(StateMachineInstance::settled_layer_skips(), skips);
+    assert!(StateMachineInstance::settled_layer_skips() > skips);
     assert_eq!(
         machine.with_instance_mut(|machine| machine.layer_state(0)),
         Some(idle_state.clone())

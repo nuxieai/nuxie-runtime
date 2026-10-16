@@ -46,11 +46,26 @@ fn is_tracked_condition(condition: Option<CoreHandle>, untracked: &HashSet<CoreH
         animation::transition_viewmodel_condition::TransitionViewModelCondition,
         generated::animation::transition_viewmodel_condition_base::TransitionViewModelConditionBase,
     };
+    use crate::mechanical_port::source::generated::animation::{
+        transition_bool_condition_base::TransitionBoolConditionBase,
+        transition_number_condition_base::TransitionNumberConditionBase,
+        transition_trigger_condition_base::TransitionTriggerConditionBase,
+    };
     let Some(condition) = condition else {
         return false;
     };
-    if condition.core_type() != Some(TransitionViewModelConditionBase::TYPE_KEY) {
-        return false;
+    match condition.core_type() {
+        // An input condition reads only its machine's input values (and a
+        // trigger's used layers). Every change to those notifies the machine,
+        // which unsettles its layers; a trigger's reset after the advance only
+        // turns its conditions false.
+        Some(
+            TransitionBoolConditionBase::TYPE_KEY
+            | TransitionNumberConditionBase::TYPE_KEY
+            | TransitionTriggerConditionBase::TYPE_KEY,
+        ) => return true,
+        Some(TransitionViewModelConditionBase::TYPE_KEY) => {}
+        _ => return false,
     }
     condition
         .with_downcast::<TransitionViewModelCondition, _>(|condition| {

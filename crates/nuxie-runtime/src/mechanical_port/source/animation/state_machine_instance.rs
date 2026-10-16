@@ -158,7 +158,8 @@ struct LayerSettling {
     binds_pending: Cell<bool>,
     any_settled: Cell<bool>,
     destroying: Cell<bool>,
-    layers: RefCell<Vec<Rc<Cell<bool>>>>,
+    // Each layer's settled flag, and whether its settled search read inputs.
+    layers: RefCell<Vec<(Rc<Cell<bool>>, Rc<Cell<bool>>)>>,
     row: Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle>,
 }
 impl LayerSettling {
@@ -172,8 +173,21 @@ impl LayerSettling {
     fn unsettle(&self) {
         self.wake_row();
         if self.any_settled.replace(false) {
-            for layer in self.layers.borrow().iter() {
-                layer.set(false);
+            for (settled, _) in self.layers.borrow().iter() {
+                settled.set(false);
+            }
+        }
+    }
+
+    /// An input changed: only the layers whose settled search read inputs
+    /// may now take a transition.
+    fn unsettle_input_readers(&self) {
+        self.wake_row();
+        if self.any_settled.get() {
+            for (settled, on_inputs) in self.layers.borrow().iter() {
+                if on_inputs.get() {
+                    settled.set(false);
+                }
             }
         }
     }
@@ -259,6 +273,9 @@ pub struct StateMachineLayerInstance {
     state_machine_changed_on_advance: bool,
     waiting_for_exit: bool,
     settled: Rc<Cell<bool>>,
+    // The settled search read state machine inputs: an input change
+    // unsettles the layer, and it never freezes (see is_frozen).
+    settled_on_inputs: Rc<Cell<bool>>,
 }
 
 #[derive(Clone)]
@@ -321,6 +338,7 @@ impl Default for StateMachineLayerInstance {
             state_machine_changed_on_advance: false,
             waiting_for_exit: false,
             settled: Rc::new(Cell::new(false)),
+            settled_on_inputs: Rc::new(Cell::new(false)),
             hold_animation: None,
             hold_time: 0.0,
         }
@@ -456,7 +474,11 @@ impl StateMachineLayerInstance {
     }
 
     fn is_frozen(&self, machine: &StateMachineInstance, pose_since: u32) -> bool {
+        // A layer settled on inputs still advances in full every frame, as
+        // upstream advances every layer that reads inputs; only its
+        // transition search is skipped.
         if !self.settled.get()
+            || self.settled_on_inputs.get()
             || self.mix != 1.0
             || self.animation_reset.is_some()
             || self.hold_animation.is_some()
@@ -786,10 +808,57 @@ impl StateMachineLayerInstance {
             && Self::is_settle_safe(self.any_state_instance.as_ref())
             && Self::is_settle_safe(self.current_state.as_ref())
         {
+            self.settled_on_inputs.set(
+                Self::reads_inputs(self.any_state_instance.as_ref())
+                    || Self::reads_inputs(self.current_state.as_ref()),
+            );
             self.settled.set(true);
             machine.settling.any_settled.set(true);
         }
         false
+    }
+
+    /// Whether a transition search from `state` reads state machine inputs:
+    /// an enabled transition has an input condition (StateMachine's
+    /// classify_state skips disabled ones too).
+    fn reads_inputs(state: Option<&RuntimeStateInstanceHandle>) -> bool {
+        use crate::mechanical_port::source::generated::animation::{
+            transition_bool_condition_base::TransitionBoolConditionBase,
+            transition_number_condition_base::TransitionNumberConditionBase,
+            transition_trigger_condition_base::TransitionTriggerConditionBase,
+        };
+        let Some(state) = state else {
+            return false;
+        };
+        let transitions = state
+            .definition()
+            .with(|state| {
+                (0..state.layer_state_transition_count().unwrap_or(0))
+                    .filter_map(|i| state.layer_state_transition(i))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        transitions.iter().any(|transition| {
+            transition
+                .with(|transition| {
+                    transition.as_state_transition().is_some_and(|transition| {
+                        !transition.is_disabled()
+                            && (0..transition.condition_count())
+                                .filter_map(|i| transition.condition(i))
+                                .any(|condition| {
+                                    matches!(
+                                        condition.core_type(),
+                                        Some(
+                                            TransitionBoolConditionBase::TYPE_KEY
+                                                | TransitionNumberConditionBase::TYPE_KEY
+                                                | TransitionTriggerConditionBase::TYPE_KEY
+                                        )
+                                    )
+                                })
+                    })
+                })
+                .unwrap_or(false)
+        })
     }
 
     fn is_settle_safe(state: Option<&RuntimeStateInstanceHandle>) -> bool {
@@ -3136,6 +3205,13 @@ impl RuntimeStateMachineInstanceWeakHandle {
             settling.unsettle();
         }
     }
+    /// An input's value changed: layers whose settled search read inputs
+    /// may now take a transition.
+    pub(crate) fn input_changed(&self) {
+        if let Some(settling) = self.settling.upgrade() {
+            settling.unsettle_input_readers();
+        }
+    }
     pub fn upgrade(&self) -> Option<RuntimeStateMachineInstanceHandle> {
         self.parts.upgrade().map(RuntimeStateMachineInstanceHandle)
     }
@@ -3405,7 +3481,10 @@ impl StateMachineInstance {
                         .settling
                         .layers
                         .borrow_mut()
-                        .push(layer_instance.settled.clone());
+                        .push((
+                            layer_instance.settled.clone(),
+                            layer_instance.settled_on_inputs.clone(),
+                        ));
                 });
                 instance.layers.push(layer_instance);
             }

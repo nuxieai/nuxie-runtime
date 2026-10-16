@@ -417,19 +417,18 @@ impl DataBindContainer {
     }
 
     pub fn advance_data_binds(&self, elapsed: f32) -> bool {
-        let count = self.0.borrow().data_binds.len();
-        if count == 0 {
-            return false;
-        }
-        let mut updated = false;
         // While no gate input or bind list changes, a bind whose gate was
         // closed when the candidates were gathered would still be skipped:
-        // visit only the candidates. Once anything changes, the rest of the
-        // walk reads each gate as it reaches it.
-        let gate = Rc::clone(&self.0.borrow().gate_epoch);
-        let epoch = gate.get();
-        let candidates = {
+        // visit only the candidates (none: every gate is closed). Once
+        // anything changes, the rest of the walk reads each gate as it
+        // reaches it.
+        let (count, gate, epoch, candidates) = {
             let mut state = self.0.borrow_mut();
+            let count = state.data_binds.len();
+            if count == 0 {
+                return false;
+            }
+            let epoch = state.gate_epoch.get();
             if state.candidates_epoch != Some(epoch) {
                 let open = state
                     .advance_cells
@@ -441,10 +440,19 @@ impl DataBindContainer {
                 state.advance_candidates = open;
                 state.candidates_epoch = Some(epoch);
             }
+            if state.advance_candidates.is_empty() {
+                return false;
+            }
             // In use: a nested walk of this container gathers its own.
             state.candidates_epoch = None;
-            std::mem::take(&mut state.advance_candidates)
+            (
+                count,
+                Rc::clone(&state.gate_epoch),
+                epoch,
+                std::mem::take(&mut state.advance_candidates),
+            )
         };
+        let mut updated = false;
         let mut next = 0;
         for &candidate in &candidates {
             if gate.get() != epoch {

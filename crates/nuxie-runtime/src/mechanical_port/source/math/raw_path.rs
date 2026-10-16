@@ -276,6 +276,11 @@ impl RawPath {
         self.verbs.clear();
         self.contour_is_open = false;
     }
+    /// Whether rewind would leave this path as it is.
+    #[inline]
+    pub(crate) fn is_rewound(&self) -> bool {
+        self.points.is_empty() && self.verbs.is_empty() && !self.contour_is_open
+    }
     pub fn transform(&self, matrix: Mat2D) -> Self {
         let mut path = Self {
             verbs: self.verbs.clone(),

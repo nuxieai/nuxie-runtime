@@ -441,6 +441,24 @@ impl PaintCells {
         );
     }
 
+    /// Whether invalidate_effects would change nothing: the paint has no
+    /// feather or other effects, its effect paths are all as rewound as
+    /// their invalidation leaves them, and it still has the Path dirt its
+    /// last invalidation added. What remains is its stroke render paint's
+    /// invalidation, which only a draw consumes, and the Path dirt add,
+    /// which returns before cascading.
+    #[inline]
+    pub(crate) fn invalidation_holds(&self) -> bool {
+        !self.has_other_effects.get()
+            && !self.has_feather.get()
+            && self.dirt.get().contains(ComponentDirt::PATH)
+            && self
+                .effect_paths
+                .borrow()
+                .iter()
+                .all(|(_, paths)| crate::mechanical_port::source::shapes::paint::stroke_effect::effect_paths_hold(paths))
+    }
+
     /// ShapePaint::invalidateEffects() as pathChanged runs it on each of the
     /// container's paints: rewind the effects' paths, then invalidateRendering.
     /// A feather or an effect with its own invalidation takes the general path.

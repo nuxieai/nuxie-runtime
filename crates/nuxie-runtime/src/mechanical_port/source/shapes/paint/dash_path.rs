@@ -32,6 +32,9 @@ impl EffectPath for DashEffectPath {
     fn invalidate_effect(&mut self) {
         self.path.borrow_mut().rewind();
     }
+    fn invalidation_holds(&self) -> bool {
+        self.path.borrow().is_rewound()
+    }
     fn path(&mut self) -> Option<Rc<RefCell<ShapePaintPath>>> {
         Some(self.path.clone())
     }

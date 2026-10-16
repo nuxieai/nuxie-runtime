@@ -325,6 +325,10 @@ impl ShapeCells {
         if !shape.is_occupied() {
             return;
         }
+        // Each step below would leave its state as it is.
+        if self.path_change_holds() {
+            return;
+        }
         self.add_composer_dirt(ComponentDirt::PATH, true);
         // The composer's dependents may retire the shape.
         if !shape.is_occupied() {
@@ -350,6 +354,22 @@ impl ShapeCells {
         if shape.is_occupied() {
             self.paints.invalidate_stroke_effects();
         }
+    }
+
+    /// Whether every invalidation path_changed makes still holds, so another
+    /// would change nothing: the composer still has Path dirt in its graph
+    /// (the add returns before cascading), the length and bounds are still
+    /// invalid, and each paint's invalidation would only repeat its stroke
+    /// invalidation and Path dirt (ContainerCells::invalidations_hold). A
+    /// layout participant's or a constraint's steps always run.
+    #[inline]
+    fn path_change_holds(&self) -> bool {
+        !self.has_layout_participant.get()
+            && !self.transform.has_constraints()
+            && self.world_length.get() == -1.0
+            && !self.local_bounds_clean.get()
+            && self.composer_dirt.graph_dirt().is_some_and(|dirt| dirt.contains(ComponentDirt::PATH))
+            && self.paints.invalidations_hold()
     }
 
     fn add_composer_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {

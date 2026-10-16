@@ -38,6 +38,11 @@ impl PathProvider {
 }
 pub trait EffectPath {
     fn invalidate_effect(&mut self) {}
+    /// Whether invalidate_effect would leave this effect path as it is.
+    /// Effect paths that cannot tell answer false.
+    fn invalidation_holds(&self) -> bool {
+        false
+    }
     fn path(&mut self) -> Option<Rc<RefCell<ShapePaintPath>>> {
         None
     }
@@ -52,7 +57,11 @@ pub trait EffectPath {
     }
 }
 pub struct EmptyEffectPath;
-impl EffectPath for EmptyEffectPath {}
+impl EffectPath for EmptyEffectPath {
+    fn invalidation_holds(&self) -> bool {
+        true
+    }
+}
 
 /// An effect's paths, one per PathProvider. Shared with the parent paint's
 /// cells for effects whose invalidation only rewinds them.
@@ -92,6 +101,12 @@ impl StrokeEffectState {
     pub fn provider_identities(&self) -> Vec<u64> {
         self.effect_paths.borrow().keys().copied().collect()
     }
+}
+
+/// Whether invalidate_effect_paths(paths, None) would leave every path as it is.
+#[inline]
+pub(crate) fn effect_paths_hold(paths: &EffectPaths) -> bool {
+    paths.borrow().values().all(|path| path.invalidation_holds())
 }
 
 pub(crate) fn invalidate_effect_paths(paths: &EffectPaths, provider: Option<&PathProvider>) {

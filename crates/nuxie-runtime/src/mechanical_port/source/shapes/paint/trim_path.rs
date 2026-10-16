@@ -48,6 +48,9 @@ impl EffectPath for TrimEffectPath {
         self.path.borrow_mut().rewind();
         self.contours.clear();
     }
+    fn invalidation_holds(&self) -> bool {
+        self.contours.is_empty() && self.path.borrow().is_rewound()
+    }
     fn path(&mut self) -> Option<Rc<RefCell<ShapePaintPath>>> {
         Some(self.path.clone())
     }

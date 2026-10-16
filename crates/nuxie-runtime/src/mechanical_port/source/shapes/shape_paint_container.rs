@@ -97,6 +97,13 @@ impl ContainerCells {
         !(self.path_flags() & flags).is_empty()
     }
 
+    /// Whether invalidate_stroke_effects would change nothing: every paint's
+    /// invalidation still holds (PaintCells::invalidation_holds).
+    #[inline]
+    pub(crate) fn invalidations_hold(&self) -> bool {
+        self.paints.borrow().iter().all(|paint| paint.cells.invalidation_holds())
+    }
+
     /// ShapePaintContainer::invalidateStrokeEffects().
     pub(crate) fn invalidate_stroke_effects(&self) {
         let paints = Rc::clone(&self.paints.borrow());

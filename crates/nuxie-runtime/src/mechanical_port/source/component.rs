@@ -959,6 +959,12 @@ impl SharedDirt {
             .map(|binding| (Rc::clone(&binding.graph), binding.dirt.index()))
     }
 
+    /// This member's dirt in its bound graph; None before the graph binds it.
+    #[inline]
+    pub(crate) fn graph_dirt(&self) -> Option<ComponentDirt> {
+        self.graph.get().map(|binding| binding.dirt.get())
+    }
+
     /// Run `use_graph` with the bound graph and this member's index. The
     /// binding only changes when a graph is built, never during its cascades.
     pub(crate) fn with_graph<R>(

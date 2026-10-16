@@ -60,6 +60,11 @@ impl ShapePaintPath {
         self.raw_path.rewind();
         self.render_path_dirty = true;
     }
+    /// Whether rewind would leave this path as it is.
+    #[inline]
+    pub(crate) fn is_rewound(&self) -> bool {
+        self.render_path_dirty && self.raw_path.is_rewound()
+    }
     pub fn rewind_as(&mut self, is_local: bool, fill_rule: FillRule) {
         self.is_local = is_local;
         self.fill_rule = fill_rule;

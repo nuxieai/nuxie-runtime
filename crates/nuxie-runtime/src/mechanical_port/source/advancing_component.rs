@@ -20,6 +20,8 @@ pub trait AdvancingComponent {
 pub struct AdvancingComponentHandle {
     owner: CoreHandle,
     advance: fn(&CoreHandle, f32, AdvanceFlags) -> bool,
+    // A LayoutComponent's shared flags, read before its advance borrows it.
+    layout: Option<crate::mechanical_port::source::layout_component::LayoutDrawFlags>,
 }
 
 impl AdvancingComponentHandle {
@@ -45,11 +47,15 @@ impl AdvancingComponentHandle {
             .unwrap_or(false)
         {
             advance_scripted_drawable
-        } else if component
-            .with(|owner| owner.as_layout_component().is_some())
-            .unwrap_or(false)
+        } else if let Some(flags) = component
+            .with(|owner| owner.as_layout_component().map(|layout| layout.draw_flags()))
+            .flatten()
         {
-            advance_layout_component
+            return Self {
+                owner: component.clone(),
+                advance: advance_layout_component,
+                layout: Some(flags),
+            };
         } else {
             advance_dynamic
         };
@@ -57,6 +63,7 @@ impl AdvancingComponentHandle {
         Self {
             owner: component.clone(),
             advance,
+            layout: None,
         }
     }
 
@@ -64,12 +71,29 @@ impl AdvancingComponentHandle {
     /// a shared list of handles advances without copying them.
     #[inline]
     pub(crate) fn advance(&self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
+        // A layout without its animation has no interpolation to advance:
+        // LayoutComponent::advanceComponent's loan would answer false and its
+        // release run nothing.
+        if let Some(layout) = &self.layout
+            && !layout.has_animation()
+            && self.owner.is_occupied_settled()
+        {
+            return false;
+        }
         (self.advance)(&self.owner, elapsed_seconds, flags)
     }
 }
 
 impl AdvancingComponent for AdvancingComponentHandle {
     fn quiet_state(&self) -> QuietState {
+        // LayoutComponent::quiet_state is Quiet without the layout animation,
+        // and its loan's release would run nothing.
+        if let Some(layout) = &self.layout
+            && !layout.has_animation()
+            && self.owner.is_occupied_settled()
+        {
+            return QuietState::Quiet;
+        }
         self.owner
             .with(|owner| owner.advancing_component_quiet_state())
             .expect("live advancing component")

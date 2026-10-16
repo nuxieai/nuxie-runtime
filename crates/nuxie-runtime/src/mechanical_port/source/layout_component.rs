@@ -217,12 +217,23 @@ pub(crate) enum LayoutComponentFlags {
     ForceDrawableProxy = 1 << 12,
     ClipSaved = 1 << 13,
     StyleDisplayHidden = 1 << 14,
+    // The layout animation exists (ensure_animation made it; it is never
+    // dropped), so interpolation can be pending.
+    HasAnimation = 1 << 15,
 }
 
 /// A LayoutComponent's flags, shared with the component.
+#[derive(Clone)]
 pub(crate) struct LayoutDrawFlags(Rc<Cell<u16>>);
 
 impl LayoutDrawFlags {
+    /// Whether the layout animation exists; without it, advanceComponent's
+    /// interpolation test is false.
+    #[inline]
+    pub(crate) fn has_animation(&self) -> bool {
+        self.0.get() & LayoutComponentFlags::HasAnimation as u16 != 0
+    }
+
     /// isCollapsed's style half: the style's display is none.
     #[inline]
     pub(crate) fn style_display_hidden(&self) -> bool {
@@ -3827,6 +3838,7 @@ impl LayoutComponent {
         })
     }
     fn ensure_animation(&mut self) -> &mut LayoutAnimation {
+        self.set_layout_flag(LayoutComponentFlags::HasAnimation, true);
         self.animation.get_or_insert_with(|| {
             let data = LayoutAnimationData {
                 from: self.layout,

@@ -64,6 +64,15 @@ impl OnDirty {
     fn is_helper(&self) -> bool {
         matches!(self, Self::Composer(_) | Self::Helper)
     }
+
+    /// An onDirty that never reads the Artboard's notification state (its
+    /// dirt bits, depth, revision, change flag or quiet row): the vector
+    /// cells' handlers. A cascade may hold the member's notification past it
+    /// with the others it holds, since those notifications commute.
+    #[inline]
+    fn ignores_artboard_notifications(&self) -> bool {
+        matches!(self, Self::Path(_) | Self::SkinnedPath(..) | Self::Composer(_))
+    }
 }
 
 /// How an authored member updates, so the update walk reads only the column
@@ -503,6 +512,16 @@ impl ComponentGraph {
     /// continues into its dependents). Only members that gain dirt get here.
     #[inline(always)]
     fn mark(&self, i: usize, value: ComponentDirt) -> bool {
+        if !self.mark_unnotified(i, value) {
+            return false;
+        }
+        self.notify_artboard(i as u32);
+        true
+    }
+
+    /// mark without the Artboard notification, which the caller makes.
+    #[inline(always)]
+    fn mark_unnotified(&self, i: usize, value: ComponentDirt) -> bool {
         let node = &self.nodes[i];
         let live = if node.on_dirty.is_helper() {
             self.occurrences[i].is_live_helper()
@@ -536,7 +555,6 @@ impl ComponentGraph {
             OnDirty::Helper => self.occurrences[i].on_dirty_helper(dirt),
             OnDirty::Outside => unreachable!("outside occurrences keep their own path"),
         }
-        self.notify_artboard(i as u32);
         true
     }
 
@@ -595,6 +613,13 @@ impl ComponentGraph {
             // with its Artboard notification held until other code can run.
             if matches!(child.on_dirty, OnDirty::Noop) && child.alive.get() {
                 child.dirt.set(dirt | value);
+                pending.add(dependent);
+            } else if child.on_dirty.ignores_artboard_notifications() {
+                // Its onDirty can't tell the held notifications from made
+                // ones: hold its own with them.
+                if !self.mark_unnotified(dependent as usize, value) {
+                    continue;
+                }
                 pending.add(dependent);
             } else {
                 pending.flush(&self.artboard);

@@ -340,11 +340,11 @@ pub(crate) fn measure_fit_content(
                     height.0,
                     height.1,
                 );
+                // Upstream text returns the widest wrapped line even for an
+                // exact offer. The CSS box keeps the chosen inline size.
                 // Preserve the intrinsic flex basis: ContentSize intentionally
                 // ignores min/max on its main axis. Taffy clamps the box later;
                 // its block size must already use that final wrapping width.
-                // Upstream text returns the widest wrapped line even for an
-                // exact offer. The CSS box keeps the chosen inline size.
                 measured.x = inline;
                 return measured;
             }

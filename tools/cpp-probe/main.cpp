@@ -2611,11 +2611,16 @@ void apply_runtime_artboard_advances(rive::ArtboardInstance* artboard,
 // now exposes that backend instead of a direct lua_State accessor.
 lua_State* scripted_state(rive::ScriptedObject* object)
 {
+#ifdef WITH_RIVE_SCRIPTING_LUAU
     if (object == nullptr || object->backend() == nullptr)
     {
         return nullptr;
     }
     return static_cast<rive::ScriptingVM*>(object->backend())->state();
+#else
+    (void)object;
+    return nullptr;
+#endif
 }
 #endif
 

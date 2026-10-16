@@ -11,7 +11,7 @@
 //! mid-solve (and dirties layout) only appends to it; the next solve picks
 //! the change up.
 use crate::mechanical_port::source::{
-    core::CoreHandle, layout::layout_measure_mode::LayoutMeasureMode,
+    core::CoreHandle, layout::layout_measure_mode::LayoutMeasureMode, math::vec2d::Vec2D,
 };
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use taffy::{
@@ -270,6 +270,38 @@ pub fn measure_axis(known: Option<f32>, available: AvailableSpace) -> (f32, Layo
             (f32::NAN, LayoutMeasureMode::Undefined)
         }
     }
+}
+
+/// Answer a bounded intrinsic inline-size offer using CSS fit-content:
+/// min(max-content, max(min-content, stretch-fit)). Taffy passes content-box
+/// offers here, so its solver still owns padding, borders and size limits.
+/// A host without a meaningful minimum keeps its existing measurement protocol.
+/// Exact and unbounded axes, including hugUnbounded, do not take this path.
+pub(crate) fn measure_fit_content(
+    width: (f32, LayoutMeasureMode),
+    height: (f32, LayoutMeasureMode),
+    minimum: impl FnOnce() -> Option<f32>,
+    mut measure: impl FnMut(f32, LayoutMeasureMode, f32, LayoutMeasureMode) -> Vec2D,
+) -> Vec2D {
+    if width.1 == LayoutMeasureMode::AtMost && width.0.is_finite() {
+        if let Some(minimum) = minimum().filter(|minimum| minimum.is_finite()) {
+            let maximum = measure(
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+            );
+            if maximum.x.is_finite() {
+                let inline = maximum.x.min(minimum.max(width.0));
+                let mut measured = measure(inline, LayoutMeasureMode::Exactly, height.0, height.1);
+                // Upstream text returns the widest wrapped line even for an
+                // exact offer. The CSS box keeps the chosen inline size.
+                measured.x = inline;
+                return measured;
+            }
+        }
+    }
+    measure(width.0, width.1, height.0, height.1)
 }
 
 fn resolve_percent(value: ExpandedLengthPercentageAuto, owner: f32) -> Option<f32> {

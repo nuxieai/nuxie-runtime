@@ -115,7 +115,7 @@ impl Fixture {
         .unwrap();
         let asset = arena.insert(FontAsset::default());
         let font_root = std::env::var_os("RIVE_RUNTIME_DIR")
-            .unwrap_or_else(|| "/Users/levi/dev/worktrees/rive-runtime-pin-e8d647fd".into());
+            .expect("set RIVE_RUNTIME_DIR to the pinned upstream fixture checkout");
         let font = std::fs::read(
             std::path::PathBuf::from(font_root)
                 .join("tests/unit_tests/assets/fonts/Inter_28pt-Bold.ttf"),
@@ -240,4 +240,101 @@ fn css_fit_content_participant_uses_the_same_text_minimum_and_offer() {
     for (offer, expected) in [(338.0, 338.0), (40.0, 145.4414)] {
         assert_width(&Fixture::new_host(TITLE, offer, false, true), expected);
     }
+}
+
+#[test]
+fn css_fit_content_retained_tree_tracks_text_changes_and_resizing() {
+    if let Some(report) = std::env::var_os("NUXIE_LAYOUT_VERIFY") {
+        assert!(
+            cfg!(debug_assertions),
+            "fresh-solve verification needs debug assertions"
+        );
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(report)
+            .expect("fresh-solve report must be writable");
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(std::env::var_os("NUXIE_LAYOUT_VERIFY").unwrap())
+            .unwrap();
+        writeln!(file, "verification enabled").unwrap();
+    }
+    for participant in [false, true] {
+        let f = Fixture::new_host(TITLE, 338.0, false, participant);
+        assert_width(&f, 338.0);
+        // A settled second solve must retain the same result.
+        assert_width(&f, 338.0);
+        f.run
+            .with_downcast_mut::<TextValueRun, _>(|run| {
+                run.set_bound_text("Unlock premium".into());
+            })
+            .unwrap();
+        assert_width(&f, 214.29297);
+        f.run
+            .with_downcast_mut::<TextValueRun, _>(|run| {
+                run.set_bound_text(TITLE.into());
+            })
+            .unwrap();
+        f.root
+            .with_downcast_mut::<LayoutComponent, _>(|root| {
+                root.base.set_width_value(264.0);
+            })
+            .unwrap();
+        LayoutComponent::sync_style_occurrence(&f.root);
+        assert_width(&f, 200.0);
+        let expected_height = f
+            .text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.measure_layout(
+                    200.0,
+                    LayoutMeasureMode::Exactly,
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                )
+                .y
+            })
+            .unwrap();
+        assert!((f.solve().height() - expected_height).abs() < 0.001);
+        f.root
+            .with_downcast_mut::<LayoutComponent, _>(|root| {
+                root.base.set_width_value(104.0);
+            })
+            .unwrap();
+        LayoutComponent::sync_style_occurrence(&f.root);
+        assert_width(&f, 145.4414);
+    }
+    if let Some(report) = std::env::var_os("NUXIE_LAYOUT_VERIFY") {
+        let contents = std::fs::read_to_string(&report).unwrap();
+        assert!(!contents.contains("mismatch:"), "{contents}");
+        if let Some(outputs) = std::env::var_os("TEST_UNDECLARED_OUTPUTS_DIR") {
+            let source = std::path::PathBuf::from(report);
+            let destination = std::path::PathBuf::from(outputs).join("layout-verify.jsonl");
+            if source.canonicalize().ok() != destination.canonicalize().ok() {
+                std::fs::copy(source, destination).unwrap();
+            }
+        }
+        println!("fresh-solve verification: zero mismatches for text changes and resizing");
+    }
+}
+
+#[test]
+fn css_fit_content_does_not_change_wrapping_in_a_fixed_inline_slot() {
+    let f = Fixture::new(TITLE, 338.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|label| {
+            label.base.set_width_value(40.0);
+            label.with_style_mut(|style| {
+                style
+                    .base
+                    .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                style.base.set_width_units_value_value(YGUnit::Point as u8);
+            });
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_width(&f, 40.0);
+    // The fixed slot still uses upstream emergency word wrapping at 40px.
+    assert!((f.solve().height() - 502.30176).abs() < 0.001);
 }

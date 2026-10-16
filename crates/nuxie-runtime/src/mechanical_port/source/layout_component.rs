@@ -2584,14 +2584,22 @@ impl LayoutComponent {
                     let measured = context
                         .filter(|context| context.measured)
                         .map(|context| (context.owner.clone(), context.kind));
+                    // PerformLayout omits known dimensions in the leaf callback,
+                    // even when the solver has already fixed the inline slot.
+                    let intrinsic_width = inputs.known_dimensions.width.is_none()
+                        && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
                         |_, _| 0.0,
                         |known, available| match &measured {
-                            Some((owner, kind)) => {
-                                Self::measure_layout_node(owner, *kind, known, available)
-                            }
+                            Some((owner, kind)) => Self::measure_layout_node(
+                                owner,
+                                *kind,
+                                known,
+                                available,
+                                intrinsic_width,
+                            ),
                             None => taffy::prelude::Size::ZERO,
                         },
                     )
@@ -2703,14 +2711,22 @@ impl LayoutComponent {
                     let measured = context
                         .filter(|context| context.2)
                         .map(|context| (context.0.clone(), context.1));
+                    // PerformLayout omits known dimensions in the leaf callback,
+                    // even when the solver has already fixed the inline slot.
+                    let intrinsic_width = inputs.known_dimensions.width.is_none()
+                        && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
                         |_, _| 0.0,
                         |known, space| match &measured {
-                            Some((owner, kind)) => {
-                                Self::measure_layout_node(owner, *kind, known, space)
-                            }
+                            Some((owner, kind)) => Self::measure_layout_node(
+                                owner,
+                                *kind,
+                                known,
+                                space,
+                                intrinsic_width,
+                            ),
                             None => Size::ZERO,
                         },
                     )
@@ -3064,10 +3080,12 @@ impl LayoutComponent {
         kind: LayoutNodeKind,
         known: taffy::prelude::Size<Option<f32>>,
         available: taffy::prelude::Size<taffy::prelude::AvailableSpace>,
+        intrinsic_width: bool,
     ) -> taffy::prelude::Size<f32> {
         use crate::mechanical_port::source::layout::{
-            layout_measure_mode::unbound_measure_mode, layout_participant::LayoutParticipant,
-            layout_tree::measure_axis,
+            layout_measure_mode::unbound_measure_mode,
+            layout_participant::{LayoutParticipant, host_min_content_width},
+            layout_tree::{measure_axis, measure_fit_content},
         };
         fn measure_host(
             host: &CoreHandle,
@@ -3117,12 +3135,17 @@ impl LayoutComponent {
                     return taffy::prelude::Size::ZERO;
                 };
                 host.map(|host| {
-                    measure_host(
-                        &host,
-                        offer(width, width_mode),
-                        width_mode,
-                        offer(height, height_mode),
-                        height_mode,
+                    measure_fit_content(
+                        (offer(width, width_mode), width_mode),
+                        (offer(height, height_mode), height_mode),
+                        || {
+                            intrinsic_width
+                                .then(|| host_min_content_width(&host))
+                                .flatten()
+                        },
+                        |width, width_mode, height, height_mode| {
+                            measure_host(&host, width, width_mode, height, height_mode)
+                        },
                     )
                 })
                 .unwrap_or_default()
@@ -3141,16 +3164,33 @@ impl LayoutComponent {
                 };
                 let width = offer(width, width_mode);
                 let height = offer(height, height_mode);
-                let mut measured = Vec2D::default();
-                for child in children {
-                    if child.is_type_of(LayoutComponentBase::TYPE_KEY) {
-                        continue;
-                    }
-                    let next = measure_host(&child, width, width_mode, height, height_mode);
-                    measured.x = measured.x.max(next.x);
-                    measured.y = measured.y.max(next.y);
-                }
-                measured
+                measure_fit_content(
+                    (width, width_mode),
+                    (height, height_mode),
+                    || {
+                        if !intrinsic_width {
+                            return None;
+                        }
+                        children
+                            .iter()
+                            .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
+                            .try_fold(0.0f32, |minimum, child| {
+                                host_min_content_width(child).map(|next| minimum.max(next))
+                            })
+                    },
+                    |width, width_mode, height, height_mode| {
+                        let mut measured = Vec2D::default();
+                        for child in &children {
+                            if child.is_type_of(LayoutComponentBase::TYPE_KEY) {
+                                continue;
+                            }
+                            let next = measure_host(child, width, width_mode, height, height_mode);
+                            measured.x = measured.x.max(next.x);
+                            measured.y = measured.y.max(next.y);
+                        }
+                        measured
+                    },
+                )
             }
         };
         taffy::prelude::Size {

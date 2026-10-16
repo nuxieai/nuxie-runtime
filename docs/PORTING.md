@@ -621,9 +621,23 @@ decode queue. Bidi and audio retain their separately tracked status below.
     each published layout that disagrees: incremental-state bugs, never CSS
     differences.
   - *Measurement.* Text, images, scripted layouts and intrinsically sized
-    leaves measure through Taffy's leaf measure function. CSS min- and
-    max-content requests both measure the content unbounded (Rive measurers
-    clamp to any bound they are offered).
+    leaves measure through Taffy's leaf measure function. For a definite
+    inline offer without a known width, hosts that supply an intrinsic minimum
+    answer with CSS fit-content:
+    `min(max-content size, max(min-content size, stretch-fit size))`
+    ([CSS Box Sizing 3](https://www.w3.org/TR/css-sizing-3/#fit-content-size)).
+    The adapter measures max-content unbounded, chooses that inline size,
+    then measures block size at exactly that width. AutoWidth text with an
+    ordinary overflow supplies its minimum from Rive-shaped runs and normal
+    word boundaries (cluster boundaries for break-all); the zero-bound Rive
+    measurement itself clamps its return to zero. Images use their natural
+    width for both intrinsic sizes. Hosts without a meaningful minimum keep
+    their current protocol, including text input, authored text boxes, fitted
+    fonts, scripted layouts, shapes, nested artboards, n-slices and joysticks.
+    Exact widths and unbounded hugs keep their existing measurement modes.
+    CSS MinContent requests still measure unbounded, like MaxContent; changing
+    intrinsic grid/flex contributions is a separate follow-up. The upstream
+    text measurer is unchanged.
   - *Rive-only Yoga extensions.* Virtualized-grid contributions
     (`YGNodeSetGridVirtualContributions`) are host-side Taffy-only grid items
     that size each unrealized track as its item would. Stock Taffy clamps a

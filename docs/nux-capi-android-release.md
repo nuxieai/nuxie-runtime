@@ -63,12 +63,62 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.13 release candidate
+## Immutable v0.4.14 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.13 candidate adds the video properties layer. Bindings, keyed
+The v0.4.14 candidate contains everything on main since v0.4.13, through
+`2739b89493`, including [UNIV-4921 / #1084](https://github.com/nuxieai/nuxie-runtime/pull/1084).
+Colour emoji and other colour glyphs now draw in editable text fields, including
+multi-glyph clusters and fallback fonts. Hosts can provide cached PNG glyph
+pictures alongside outlines through the optional `get_picture` callback appended
+to `NuxFontOutlineCallbacks`. Native colour takes precedence; host answers are
+cached per glyph and font variant with a bounded 4096-entry FIFO. Bitmap `sbix`
+and CBDT placement follows HarfBuzz bearings and extents, with guarded `sbix`
+reads and colour classification sized for the font's glyph count. PNG answers
+are copied synchronously, limited to 4 MiB and 1024 pixels per side, and require
+finite em-space metrics. Callback threading, lifetime and cache rules are in
+`nux_capi.generated.h`; hosts must follow them when adopting pictures.
+
+ABI v4 and every existing export are retained. `NuxFontOutlineCallbacks` grows
+from 32 to 40 bytes on the supported 64-bit targets, with the old prefix through
+`release` unchanged; the runtime reads `get_picture` only when `struct_size`
+covers it. `NuxFontPicture` and its sink are new public types. Existing hosts
+using the old callback prefix remain accepted. There are no new C entrypoints.
+The Rust `RawTextInput::invalidate_shape` hook lets a host refresh changed font
+fallbacks without changing text or undo history.
+
+The rest of this cut includes:
+
+- CSS fit-content text measurement (UNIV-4743): capped hug text wraps before
+  height measurement, intrinsic widths reuse cached shapes, paint dirt
+  remeasures text participants, and fallback fonts preserve fit-content sizing.
+  Layout continues to use stock Taffy/CSS semantics and can differ from Rive.
+- Runtime and Luau performance work: fewer graph and property borrows, shared
+  artboard hosts and advance inputs, inline transform/path/paint/text/dirt
+  reads, contiguous keyframe searches, reused shape measurements and paint
+  buffers, faster word-keyed maps and script field lookup, and skipped idle
+  async, converter and binding walks. The pending-members-only update walk was
+  reverted; the final code skips clean members during the ordinary walk.
+- Upstream full-round cusp joins, cubic-chop early-out, cached path verb counts,
+  host-canvas submission and target barriers, delayed paint-image retries,
+  exact Vulkan bootstrap enumeration failure handling, angular-gradient
+  objects, and text measurement and font reuse.
+- In-band shaders use their file's script authority, scripted `quadTo` paths
+  fill as cubics, and Bazel names the shared scene builder correctly. Probe
+  and gate checks pin the Luau ABI, guard its native backend cast, and
+  fingerprint the staged Silver validator; layout regression tests cover
+  fit-content matrices, capped height and runtime minimums.
+
+Release size ceilings remain unchanged pending candidate measurement. The Android
+archive and every packaged file are checked against the committed release maxima;
+its C ABI runtime version is 0.10.16.
+The full change list is `git log android-runtime-v0.4.13..2739b89493`.
+
+## Inherited v0.4.13 release
+
+The inherited v0.4.13 release adds the video properties layer. Bindings, keyed
 animation and Lua now control a playing video through the same native
 properties. Loop (60004), muted (60005), volume (60006), rate (60007), loop
 start (60014), loop end (60015), paused (60016) and position (60017) are
@@ -237,9 +287,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.13 <full-source-sha>
-git push origin android-runtime-v0.4.13
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.13
+git tag android-runtime-v0.4.14 <full-source-sha>
+git push origin android-runtime-v0.4.14
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.14
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

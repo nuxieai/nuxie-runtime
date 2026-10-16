@@ -1,5 +1,5 @@
 {
-  "checksum": "ca2951da8bd00ca12ca6fd0be8544b17c93ed6455c57fec9876b968deee2d32e",
+  "checksum": "894d483752981cdd37af1d3640efb7723d202f5b6c7c0cf3fb07d93bf67ef481",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5830,7 +5830,7 @@
       ],
       "version": "0.7.6"
     },
-    "nux-apple-product-extension 0.10.15": {
+    "nux-apple-product-extension 0.10.16": {
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
@@ -5859,9 +5859,9 @@
           }
         }
       ],
-      "version": "0.10.15"
+      "version": "0.10.16"
     },
-    "nux-capi 0.10.15": {
+    "nux-capi 0.10.16": {
       "build_script_attrs": {
         "deps": [
           {
@@ -6016,7 +6016,7 @@
           }
         }
       ],
-      "version": "0.10.15"
+      "version": "0.10.16"
     },
     "nuxie 0.1.0": {
       "common_attrs": {
@@ -13476,8 +13476,8 @@
     "luaur-rt 0.1.8": "bazel/native-tools-cargo/luaur-rt",
     "luaur-rt-test-harness 0.1.0": "bazel/native-tools-cargo/luaur-rt-test-harness",
     "luaur-vm 0.1.8": "bazel/native-tools-cargo/luaur-vm",
-    "nux-apple-product-extension 0.10.15": "bazel/native-tools-cargo/nux-apple-product-extension",
-    "nux-capi 0.10.15": "bazel/native-tools-cargo/nux-capi",
+    "nux-apple-product-extension 0.10.16": "bazel/native-tools-cargo/nux-apple-product-extension",
+    "nux-capi 0.10.16": "bazel/native-tools-cargo/nux-capi",
     "nuxie 0.1.0": "bazel/native-tools-cargo/nuxie",
     "nuxie-audio 0.1.0": "bazel/native-tools-cargo/nuxie-audio",
     "nuxie-binary 0.1.0": "bazel/native-tools-cargo/nuxie-binary",

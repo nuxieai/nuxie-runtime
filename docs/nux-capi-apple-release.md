@@ -86,7 +86,56 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.10.15 candidate adds the video properties layer. Bindings, keyed
+The v0.10.16 candidate contains everything on main since v0.10.15, through
+`2739b89493`, including [UNIV-4921 / #1084](https://github.com/nuxieai/nuxie-runtime/pull/1084).
+Colour emoji and other colour glyphs now draw in editable text fields, including
+multi-glyph clusters and fallback fonts. Hosts can provide cached PNG glyph
+pictures alongside outlines through the optional `get_picture` callback appended
+to `NuxFontOutlineCallbacks`. Native colour takes precedence; host answers are
+cached per glyph and font variant with a bounded 4096-entry FIFO. Bitmap `sbix`
+and CBDT placement follows HarfBuzz bearings and extents, with guarded `sbix`
+reads and colour classification sized for the font's glyph count. PNG answers
+are copied synchronously, limited to 4 MiB and 1024 pixels per side, and require
+finite em-space metrics. Callback threading, lifetime and cache rules are in
+`nux_capi.generated.h`; hosts must follow them when adopting pictures.
+
+ABI v4 and every existing export are retained. `NuxFontOutlineCallbacks` grows
+from 32 to 40 bytes on the supported 64-bit targets, with the old prefix through
+`release` unchanged; the runtime reads `get_picture` only when `struct_size`
+covers it. `NuxFontPicture` and its sink are new public types. Existing hosts
+using the old callback prefix remain accepted. There are no new C entrypoints.
+The Rust `RawTextInput::invalidate_shape` hook lets a host refresh changed font
+fallbacks without changing text or undo history.
+
+The rest of this cut includes:
+
+- CSS fit-content text measurement (UNIV-4743): capped hug text wraps before
+  height measurement, intrinsic widths reuse cached shapes, paint dirt
+  remeasures text participants, and fallback fonts preserve fit-content sizing.
+  Layout continues to use stock Taffy/CSS semantics and can differ from Rive.
+- Runtime and Luau performance work: fewer graph and property borrows, shared
+  artboard hosts and advance inputs, inline transform/path/paint/text/dirt
+  reads, contiguous keyframe searches, reused shape measurements and paint
+  buffers, faster word-keyed maps and script field lookup, and skipped idle
+  async, converter and binding walks. The pending-members-only update walk was
+  reverted; the final code skips clean members during the ordinary walk.
+- Upstream full-round cusp joins, cubic-chop early-out, cached path verb counts,
+  host-canvas submission and target barriers, delayed paint-image retries,
+  exact Vulkan bootstrap enumeration failure handling, angular-gradient
+  objects, and text measurement and font reuse.
+- In-band shaders use their file's script authority, scripted `quadTo` paths
+  fill as cubics, and Bazel names the shared scene builder correctly. Probe
+  and gate checks pin the Luau ABI, guard its native backend cast, and
+  fingerprint the staged Silver validator; layout regression tests cover
+  fit-content matrices, capped height and runtime minimums.
+
+Release size ceilings remain unchanged pending candidate measurement. Both Apple
+archives are checked against the committed release maxima.
+The full change list is `git log apple-runtime-v0.10.15..2739b89493`.
+
+## Inherited v0.10.15 release
+
+The inherited v0.10.15 release adds the video properties layer. Bindings, keyed
 animation and Lua now control a playing video through the same native
 properties. Loop (60004), muted (60005), volume (60006), rate (60007), loop
 start (60014), loop end (60015), paused (60016) and position (60017) are

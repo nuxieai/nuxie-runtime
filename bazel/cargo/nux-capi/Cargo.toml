@@ -1,7 +1,7 @@
 # Generated dependency metadata. Rust sources stay in their owning package.
 [package]
 name = "nux-capi"
-version = "0.10.15"
+version = "0.10.16"
 edition = "2024"
 autobins = false
 autoexamples = false

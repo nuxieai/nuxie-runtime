@@ -884,7 +884,8 @@ pub(crate) struct DirtBinding {
 }
 
 impl DirtBinding {
-    #[inline]
+    // Read once per listed drawable; a call costs more than the read.
+    #[inline(always)]
     pub(crate) fn get(&self) -> ComponentDirt {
         self.nodes[self.index as usize].dirt.get()
     }

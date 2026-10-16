@@ -25,8 +25,8 @@ use crate::mechanical_port::source::{
         },
         layout_style_applier::{
             LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDirection, YGDisplay,
-            YGFlexDirection, YGPositionType, YGUnit, apply_flex_item_minimums, rive_align_self,
-            rive_dimension, rive_hug_dimension,
+            YGFlexDirection, YGPositionType, YGUnit, rive_align_self, rive_dimension,
+            rive_hug_dimension,
         },
         layout_tree::{LayoutNodeKind, LayoutTree},
     },
@@ -1029,7 +1029,6 @@ impl LayoutComponent {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
             layout.apply_virtual_grid_placement(&mut style);
-            apply_flex_item_minimums(&mut style, context.parent_is_grid);
             layout.layout_data.set_style(style);
         });
         for (child, provider) in Self::layout_providers_occurrence(owner) {
@@ -2241,7 +2240,6 @@ impl LayoutComponent {
             }
         }
         self.apply_virtual_grid_placement(&mut taffy_style);
-        apply_flex_item_minimums(&mut taffy_style, context.parent_is_grid);
         self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
             let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
@@ -3127,6 +3125,10 @@ impl LayoutComponent {
                 value
             }
         };
+        // Min-content is a content contribution even for a Fixed item:
+        // Taffy caps its automatic minimum by the specified size itself.
+        let min_content =
+            known.width.is_none() && available.width == taffy::prelude::AvailableSpace::MinContent;
         let (width, width_mode) = measure_axis(known.width, available.width);
         let (height, height_mode) = measure_axis(known.height, available.height);
         let measured = match kind {
@@ -3156,7 +3158,8 @@ impl LayoutComponent {
                         (offer(width, width_mode), width_mode),
                         (offer(height, height_mode), height_mode),
                         width_limits,
-                        intrinsic_width && host_supports_min_content_width(&host),
+                        min_content,
+                        (intrinsic_width || min_content) && host_supports_min_content_width(&host),
                         || host_min_content_width(&host),
                         |width, width_mode, height, height_mode| {
                             measure_host(&host, width, width_mode, height, height_mode)
@@ -3183,7 +3186,8 @@ impl LayoutComponent {
                     (width, width_mode),
                     (height, height_mode),
                     width_limits,
-                    intrinsic_width
+                    min_content,
+                    (intrinsic_width || min_content)
                         && children
                             .iter()
                             .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
@@ -4499,7 +4503,7 @@ impl LayoutComponent {
                 }
                 _ => {
                     style.flex_grow = 0.0;
-                    style.flex_shrink = 0.0;
+                    style.flex_shrink = 1.0;
                     style.flex_basis = Dimension::auto();
                 }
             }

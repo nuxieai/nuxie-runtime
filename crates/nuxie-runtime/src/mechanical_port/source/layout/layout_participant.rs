@@ -1,6 +1,5 @@
 use crate::mechanical_port::source::layout::layout_style_applier::{
-    YGAlign, YGDisplay, YGJustify, YGUnit, apply_flex_item_minimums, rive_align_self,
-    rive_dimension, rive_hug_dimension,
+    YGAlign, YGDisplay, YGJustify, YGUnit, rive_align_self, rive_dimension, rive_hug_dimension,
 };
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
@@ -20,7 +19,7 @@ use crate::mechanical_port::source::{
     layout_component::{Layout, LayoutAnimationData, LayoutComponent},
     math::{aabb::Aabb, vec2d::Vec2D},
 };
-use taffy::prelude::{Dimension, LengthPercentageAuto, Style};
+use taffy::prelude::{Dimension, Style};
 
 /// Check capability without invoking a measurer, especially scripted hosts.
 pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
@@ -32,7 +31,11 @@ pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
         object.as_intrinsically_sizeable_mut().is_none()
             || object.as_any().is::<Image>()
             || object.as_text_mut().is_some_and(|text| {
-                text.effective_sizing() == TextSizing::AutoWidth
+                // A Fixed or Fill participant owns the width and reports an
+                // effective AutoHeight mode. Its authored AutoWidth text still
+                // supplies the same intrinsic word minimum.
+                (text.effective_sizing() == TextSizing::AutoWidth
+                    || (text.layout_owns_width() && text.sizing() == TextSizing::AutoWidth))
                     && text.overflow() != TextOverflow::FitFontSize
             })
     })
@@ -334,7 +337,7 @@ impl LayoutParticipant {
                 0.0
             };
             style.flex_grow = grow;
-            style.flex_shrink = grow;
+            style.flex_shrink = if main_fill { grow } else { 1.0 };
             style.flex_basis = if main_fill {
                 Dimension::length(0.0)
             } else {
@@ -350,12 +353,6 @@ impl LayoutParticipant {
             } else {
                 YGAlign::Auto
             });
-        }
-        if width_fill && YGUnit::from(self.base.min_width_units_value()) == YGUnit::Undefined {
-            style.min_size.width = LengthPercentageAuto::length(0.0);
-        }
-        if height_fill && YGUnit::from(self.base.min_height_units_value()) == YGUnit::Undefined {
-            style.min_size.height = LengthPercentageAuto::length(0.0);
         }
     }
 
@@ -649,7 +646,6 @@ impl LayoutParticipant {
                 }
             }
         }
-        apply_flex_item_minimums(&mut style, context.parent_is_grid);
         self.layout_data.as_deref_mut().unwrap().set_style(style);
         true
     }

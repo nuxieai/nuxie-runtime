@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     core::CoreHandle,
     layout::{
-        layout_style_applier::{LayoutSyncContext, apply_flex_item_minimums, rive_default_style},
+        layout_style_applier::{LayoutSyncContext, rive_default_style},
         layout_tree::LayoutNodeLink,
     },
     layout_component::Layout,
@@ -28,9 +28,7 @@ pub struct LayoutData {
 
 impl Default for LayoutData {
     fn default() -> Self {
-        let mut style = rive_default_style();
-        // An unstyled node keeps Yoga's lack of an automatic minimum size.
-        apply_flex_item_minimums(&mut style, false);
+        let style = rive_default_style();
         Self {
             #[cfg(feature = "tools")]
             children: Vec::new(),

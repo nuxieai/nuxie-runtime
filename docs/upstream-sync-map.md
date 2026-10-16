@@ -46,18 +46,29 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `183df53fbdfa36441b90a06130cd1d68a87c3ce4`
+- LAST_SYNCED_SHA: `f2aa739e3ec4922c22ea34e4b6bce1653ea21106`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` (refreshed 2026-10-16 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Four upstream commits remain after this checkpoint at the fetched target.
-  All 256 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (278 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 257 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (279 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `f2aa739e`, integrated atop downstream `2f12e1d6cd`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Renderer units pass 944 with 11 existing ignores and only known
+  UNIV-4801 failing; both new upstream canvas command-buffer spy tests pass.
+  Both wasm32-unknown-unknown browser backends compile, as do Apple Metal and
+  aarch64-linux-android Vulkan C API libraries. Metadata checks pass 39 and
+  the Silver manifest is current. Supplied command buffers have an explicit
+  unsafe host lifetime/submission contract. Concrete Rust hosts still return
+  default resources: the private Android override is absent from the public
+  delta, so Android stall elimination is not claimed. No new Android/Vulkan
+  device execution or browser pixel coverage is claimed.
 - Validation at `183df53f`, integrated atop downstream `f0303f3e8c`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Render API units pass 38; runtime units pass 432 with 2 existing ignores;
@@ -1227,6 +1238,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f2aa739e3ec4922c22ea34e4b6bce1653ea21106` | Forward host canvas command buffers and frame serials without local submission, preserving own-buffer fallback and no-active-canvas ordering. Add an explicit unsafe Rust submission/lifetime contract and port both upstream spy tests. Flush GL before state scrubbing. Acquire wrapped Vulkan targets through Rive's access tracker with exact load preservation and remove all pending sampled transitions for that texture identity. Concrete Rust hosts retain default resources; private Android override and .rive_head contents are absent from the public delta and not claimed imported. | — |
 | `183df53fbdfa36441b90a06130cd1d68a87c3ce4` | Cache per-verb counts through every mutation and ownership path in both RawPath owners; carry counts through borrowed views, remove mutable verb access, and use cached counts for renderer reservations with the existing combined-record representation and implicit closes. Port the complete mutation-count test and expanded long-zigzag GM fixtures with fresh provenance-bound C++ captures. Correct the initial cap's preexisting tangent translation error exposed by the new fixture. Skia accessor edits have no live Rust backend and are inapplicable; private .rive_head contents are not claimed imported. | — |
 | `e7124f18b96e11fde64a14c48138c8b4c80d2acc` | Translate the cubic convex-under-180-degree and nondegenerate-line early-out in both runtime and renderer owners. Preserve separate SIMD products/reduction, ordered C++ min/max NaN and tie behavior, exact EPSILON, sequential zero-edge substitutions and untouched output slots on early return. The existing solver remains unchanged. No new upstream tests occur in the public delta; private .rive_head contents are not claimed imported. | — |
 | `1c75867de17587c541ad2d7ca88b10577b033bd2` | Collapse cusp slivers onto exact shared endpoints and emit n+1 cubics with full-round cusp joins. Retain chop parameters and re-chop at emission; preserve adjacent tangent pairing, polar counts, shared spokes, cap ordering and retained Rust scratch ownership. Translate the new join encoding and full-round shader branch across all supported generated backends. Update existing cusp expectations and label supplemental collapse coverage; no new upstream unit tests occur in the public delta. Private .rive_head contents are not claimed imported. | — |

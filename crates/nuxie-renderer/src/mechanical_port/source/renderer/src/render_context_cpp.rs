@@ -5197,18 +5197,32 @@ impl RenderContext {
         &mut self,
         canvas: &mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
     ) {
-        let command_buffer = self.m_impl.contract_mut().makeCommandBuffer();
-        let resources = FlushResources {
-            renderTarget: canvas.renderTarget(),
-            externalCommandBuffer: command_buffer,
-            ..FlushResources::default()
-        };
-        unsafe { self.flushExecutable(&resources) };
         unsafe {
-            self.m_impl
-                .contract_mut()
-                .commitCommandBuffer(command_buffer)
+            self.finishRenderCanvasWithResourcesExecutable(canvas, FlushResources::default(), true)
         };
+    }
+
+    /// HostFrameSink::endCanvasContent. The caller retains and submits any
+    /// supplied external command buffer; otherwise this context owns submission.
+    ///
+    /// # Safety
+    /// The command buffer and retirement serials must belong to this context;
+    /// the host retains all GPU dependencies through completion.
+    pub unsafe fn finishRenderCanvasWithResourcesExecutable(
+        &mut self,
+        canvas: &mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+        mut resources: FlushResources,
+        use_external_command_buffer: bool,
+    ) {
+        resources.renderTarget = canvas.renderTarget();
+        if resources.externalCommandBuffer.is_null() && use_external_command_buffer {
+            let command_buffer = self.m_impl.contract_mut().makeCommandBuffer();
+            resources.externalCommandBuffer = command_buffer;
+            unsafe { self.flushExecutable(&resources) };
+            unsafe { self.m_impl.contract_mut().commitCommandBuffer(command_buffer) };
+        } else {
+            unsafe { self.flushExecutable(&resources) };
+        }
     }
 
     #[cfg(any(

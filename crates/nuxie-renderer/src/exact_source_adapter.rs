@@ -1173,12 +1173,30 @@ impl<B: ExactSourceBackend> RenderCanvasFrame for ExactSourceRenderCanvasFrame<B
     }
 
     fn finish(self: Box<Self>) -> Result<(), RenderCanvasError> {
+        unsafe { self.finish_with_resources(nuxie_render_api::RenderCanvasFlushResources::default()) }
+    }
+
+    unsafe fn finish_with_resources(
+        self: Box<Self>,
+        resources: nuxie_render_api::RenderCanvasFlushResources,
+    ) -> Result<(), RenderCanvasError> {
         let mut backend = self.backend.borrow_mut();
         let context = unsafe { Pin::get_unchecked_mut(backend.context_mut()) };
         // SAFETY: this frame retains the nonnull source canvas returned by the
         // same context and has exclusive finish ownership of the active frame.
         let canvas = unsafe { &mut *self.source.get() };
-        context.finishRenderCanvasExecutable(canvas);
+        unsafe {
+            context.finishRenderCanvasWithResourcesExecutable(
+                canvas,
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::FlushResources {
+                    externalCommandBuffer: resources.external_command_buffer,
+                    currentFrameNumber: resources.current_frame_number,
+                    safeFrameNumber: resources.safe_frame_number,
+                    ..Default::default()
+                },
+                true,
+            );
+        }
         Ok(())
     }
 }

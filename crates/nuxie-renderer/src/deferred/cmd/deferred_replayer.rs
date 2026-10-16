@@ -58,6 +58,12 @@ pub trait DeferredFrameSink {
         None
     }
     fn end_canvas_content(&mut self) {}
+    /// HostFrameSink's open frame command buffer and retirement serials.
+    /// The host owns submission and must uphold RenderCanvasFrame's unsafe
+    /// finish_with_resources contract when passing a nonnull buffer.
+    fn canvas_flush_resources(&mut self) -> RenderCanvasFlushResources {
+        RenderCanvasFlushResources::default()
+    }
     /// Prepare a foreign image for sampling on this replay device. Returning
     /// None drops its dependent make when a lazy upload is not ready.
     fn prep_foreign_image(&mut self, image: Rc<dyn RenderImage>) -> Option<Rc<dyn RenderImage>> {

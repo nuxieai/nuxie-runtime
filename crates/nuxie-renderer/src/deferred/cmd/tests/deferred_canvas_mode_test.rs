@@ -120,6 +120,92 @@ fn a_sink_can_open_a_canvas_frame_in_its_own_mode() {
     frame.finish().unwrap();
 }
 
+// f2aa739e: HostFrameSink keeps the host's command identity and frame serials,
+// and only creates/commits a command when the host supplies none.
+struct FrameCommandBufferSink {
+    base: CanvasModeSink,
+    command_buffer: *mut core::ffi::c_void,
+    canvas_frame: Option<Box<dyn RenderCanvasFrame>>,
+}
+
+impl DeferredFrameSink for FrameCommandBufferSink {
+    fn factory(&mut self) -> PersistentFactoryContext {
+        self.base.factory()
+    }
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        self.base.render_context()
+    }
+    fn ore_context(&mut self) -> Option<OreContextHandle> {
+        None
+    }
+    fn begin_screen_frame(&mut self, _: u64) -> Option<RendererOwner> {
+        None
+    }
+    fn canvas_flush_resources(&mut self) -> RenderCanvasFlushResources {
+        if self.command_buffer.is_null() {
+            RenderCanvasFlushResources::default()
+        } else {
+            RenderCanvasFlushResources {
+                external_command_buffer: self.command_buffer,
+                current_frame_number: 7,
+                safe_frame_number: 5,
+            }
+        }
+    }
+    fn end_canvas_content(&mut self) {
+        if let Some(frame) = self.canvas_frame.take() {
+            let resources = self.canvas_flush_resources();
+            // The null backend only records identity; the test retains its
+            // opaque command token until after the consumed frame finishes.
+            unsafe { frame.finish_with_resources(resources) }.unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_canvas_records_into_the_hosts_open_frame_command_buffer() {
+    let mut token = 0u8;
+    let command_buffer = core::ptr::from_mut(&mut token).cast();
+    let mut sink = FrameCommandBufferSink {
+        base: CanvasModeSink::new(),
+        command_buffer,
+        canvas_frame: None,
+    };
+    sink.canvas_frame = Some(begin_canvas_content(&mut sink));
+    sink.end_canvas_content();
+    sink.base
+        .factory
+        .borrow()
+        .with_backend_mut_for_test(|backend| {
+            let spy = backend.command_buffer_spy();
+            assert_eq!(spy.made, 0);
+            assert_eq!(spy.committed, 0);
+            assert_eq!(spy.last_flush.externalCommandBuffer, command_buffer);
+            assert_eq!(spy.last_flush.currentFrameNumber, 7);
+            assert_eq!(spy.last_flush.safeFrameNumber, 5);
+        });
+}
+
+#[test]
+fn a_canvas_submits_its_own_command_buffer_when_the_host_has_none() {
+    let mut sink = FrameCommandBufferSink {
+        base: CanvasModeSink::new(),
+        command_buffer: core::ptr::null_mut(),
+        canvas_frame: None,
+    };
+    sink.canvas_frame = Some(begin_canvas_content(&mut sink));
+    sink.end_canvas_content();
+    sink.base
+        .factory
+        .borrow()
+        .with_backend_mut_for_test(|backend| {
+            let spy = backend.command_buffer_spy();
+            assert_eq!(spy.made, 1);
+            assert_eq!(spy.committed, 1);
+            assert!(!spy.last_flush.externalCommandBuffer.is_null());
+        });
+}
+
 // 625454e3: TestingWindow forwards inkbleed independently; RenderContext
 // accepts it only for single-sample depth/stencil frames.
 #[test]

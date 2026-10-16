@@ -1582,6 +1582,37 @@ impl MechanicalRenderContext {
         Ok(())
     }
 
+    /// The host owns submission/completion of a supplied command buffer and
+    /// retains this pinned context until its callbacks have finished.
+    pub(super) unsafe fn finish_canvas_with_resources(
+        &mut self,
+        canvas: &mut RenderCanvas,
+        resources: nuxie_render_api::RenderCanvasFlushResources,
+    ) -> Result<(), RendererError> {
+        if resources.external_command_buffer.is_null() {
+            self.flush_and_commit(
+                canvas.renderTarget(),
+                resources.current_frame_number,
+                resources.safe_frame_number,
+            )?;
+        } else {
+            let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+            unsafe {
+                context.finishRenderCanvasWithResourcesExecutable(
+                    canvas,
+                    FlushResources {
+                        externalCommandBuffer: resources.external_command_buffer,
+                        currentFrameNumber: resources.current_frame_number,
+                        safeFrameNumber: resources.safe_frame_number,
+                        ..Default::default()
+                    },
+                    true,
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn flush_and_commit(
         &mut self,
         render_target: *mut RenderTarget,

@@ -58,6 +58,24 @@ pub(crate) struct RetainedRenderTargetVulkan {
 }
 
 impl RetainedRenderTargetVulkan {
+    pub(crate) fn accessTargetImage(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        access: ImageAccess,
+        action: ImageAccessAction,
+    ) -> vk::Image {
+        // SAFETY: the retained owner keeps the complete allocation live. The
+        // narrow virtual dispatch returns only the image, never a target borrow.
+        unsafe {
+            super::render_context_vulkan_impl::accessLiveRenderTargetVulkanImage(
+                self.target,
+                command_buffer,
+                access,
+                action,
+            )
+        }
+    }
+
     pub(crate) fn targetLastAccess(&self) -> ImageAccess {
         // The retained complete allocation remains live; no borrow escapes.
         unsafe {

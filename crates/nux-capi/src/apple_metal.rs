@@ -982,7 +982,10 @@ impl DeferredFrameSink for AppleMetalFrameSink<'_> {
     fn end_canvas_content(&mut self) {
         let frame = self.canvas.borrow_mut().take();
         if let Some(ReplayFrame::Canvas(frame)) = frame {
-            if let Err(error) = frame.finish() {
+            let resources = self.canvas_flush_resources();
+            // This host's hook returns default resources. An override must
+            // retain and submit its same-context command buffer through completion.
+            if let Err(error) = unsafe { frame.finish_with_resources(resources) } {
                 self.failure.get_or_insert_with(|| {
                     ApiFailure::new(NuxStatus::RuntimeError, error.to_string())
                 });

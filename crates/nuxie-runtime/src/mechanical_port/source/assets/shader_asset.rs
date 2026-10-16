@@ -57,17 +57,40 @@ impl ShaderAsset {
     }
 
     pub fn decode(&mut self, data: &[u8], _factory: &RuntimeFactoryHandle) -> bool {
+        self.decode_envelope(data, false)
+    }
+
+    /// Decode in-band shader bytes the host authorized with the file that
+    /// carries them, exactly as `ScriptAsset::decode_with_host_authorization`
+    /// does for that file's scripts. Upstream verifies a file's in-band Luau
+    /// bytecode and RSTB blobs as one group, so the authority that admits a
+    /// file's scripts admits its shaders too.
+    ///
+    /// # Safety
+    /// The caller must have authorized execution of these exact original
+    /// in-band bytes. A capability for another artifact, or bytes substituted
+    /// by an external asset loader, does not satisfy this requirement.
+    pub unsafe fn decode_with_host_authorization(
+        &mut self,
+        data: &[u8],
+        _factory: &RuntimeFactoryHandle,
+    ) -> bool {
+        self.decode_envelope(data, true)
+    }
+
+    fn decode_envelope(&mut self, data: &[u8], host_authorized: bool) -> bool {
         let envelope = SignedContentHeader::new(data);
         if !envelope.is_valid() {
             return false;
         }
         self.encoded_payload = data.to_vec();
         self.base.set_verified(
-            envelope.is_signed()
-                && crate::source::importers::text_asset_importer::verifies_content_signature(
-                    envelope.signature(),
-                    envelope.content(),
-                ),
+            host_authorized
+                || (envelope.is_signed()
+                    && crate::source::importers::text_asset_importer::verifies_content_signature(
+                        envelope.signature(),
+                        envelope.content(),
+                    )),
         );
         self.refusal_logged = false;
         self.bytes = envelope.content().to_vec();
@@ -98,6 +121,12 @@ impl ShaderAsset {
         }
         self.indexed = self.index();
         self.indexed
+    }
+
+    /// Whether this file refused the shader's content because its signature
+    /// did not verify, so `rstb` is empty although content was decoded.
+    pub fn refused(&self) -> bool {
+        !self.indexed && !self.bytes.is_empty() && !self.accepted()
     }
 
     pub fn finish_import(&mut self) {
@@ -238,5 +267,36 @@ impl ShaderAsset {
             return &[];
         }
         &self.pairs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+    /// An unsigned envelope around an RSTB table with no variants.
+    const UNSIGNED_RSTB: [u8; 9] = [0, 0x42, 0x54, 0x53, 0x52, 4, 0, 0, 0];
+
+    #[test]
+    fn host_authorized_in_band_bytes_are_admitted_like_the_files_scripts() {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        // A file that requires signed scripts refuses unsigned shader bytes in
+        // every build, so it shows what host authorization changes.
+        let mut plain = ShaderAsset::default();
+        plain.imported_with(true);
+        assert!(plain.decode(&UNSIGNED_RSTB, &factory));
+        assert!(!plain.base.verified());
+        assert!(plain.rstb().is_empty());
+        assert!(plain.refused());
+
+        let mut authorized = ShaderAsset::default();
+        authorized.imported_with(true);
+        // SAFETY: the test owns these exact in-band bytes.
+        assert!(unsafe { authorized.decode_with_host_authorization(&UNSIGNED_RSTB, &factory) });
+        assert!(authorized.base.verified());
+        assert_eq!(authorized.rstb(), &UNSIGNED_RSTB[1..]);
+        assert!(!authorized.refused());
     }
 }

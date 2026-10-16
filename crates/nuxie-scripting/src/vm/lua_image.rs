@@ -289,6 +289,37 @@ pub(super) fn report_image_lookup_miss(lua: &Lua, name: &str, undecoded: bool) {
     logging.print_warning(message.as_bytes());
 }
 
+#[derive(Clone, Default)]
+struct ShaderLookupReports(Rc<RefCell<BTreeSet<(String, String)>>>);
+
+/// Report a nil `context:shader(name)` once per name and reason through the
+/// VM log, so a host can show why a GPU drawable drew nothing. Upstream
+/// returns nil silently; the line is observability only.
+pub(crate) fn report_shader_lookup_miss(lua: &Lua, name: &str, reason: &str) {
+    let reports = match lua.app_data_ref::<ShaderLookupReports>() {
+        Some(reports) => reports.clone(),
+        None => {
+            let reports = ShaderLookupReports::default();
+            lua.set_app_data(reports.clone());
+            reports
+        }
+    };
+    if !reports
+        .0
+        .borrow_mut()
+        .insert((name.to_owned(), reason.to_owned()))
+    {
+        return;
+    }
+    let Some(logging) = lua
+        .app_data_ref::<LoggingScriptingContext>()
+        .map(|logging| logging.clone())
+    else {
+        return;
+    };
+    logging.print_warning(format!("context:shader(\"{name}\") is nil: {reason}").as_bytes());
+}
+
 pub(super) fn create_asset_image(lua: &Lua, image: ScriptImage) -> Result<Option<AnyUserData>> {
     ScriptedImage::from_asset(lua, image)
         .map(|image| lua.create_userdata(image))

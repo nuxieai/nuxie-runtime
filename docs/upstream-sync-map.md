@@ -49,11 +49,18 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 - **host-glyph-pictures**: `HbFont::with_host_pictures` and the appended
   `NuxFontOutlineCallbacks::get_picture` opt a font into platform PNG answers.
-  Native COLR/readable PNG wins. Both present and absent answers are retained
-  by (glyph id, complete shaped cluster text), independently per font variant.
-  Only the cluster's first glyph in logical shaping order is requested, never
-  glyph 0. A picture suppresses the same font's remaining cluster glyphs.
-  Host-only cluster metadata is captured before fallback/ellipsis slices.
+  Native COLR/readable PNG wins. Rust sources declare `HostPictureScope::Glyph`
+  or `HostPictureScope::Cluster`; the C callback always uses glyph scope.
+  Glyph scope requests every nonzero glyph without native colour, keyed by
+  glyph id. Cluster code points are context only; the first context seen supplies
+  the cached answer. Every component can draw; hosts return None for spaces and
+  hidden glyphs without ink. Cluster scope requests only the cluster's first glyph
+  in logical shaping order, keyed by (glyph id, complete cluster text); a picture
+  suppresses the same font's remaining cluster glyphs. Neither scope requests
+  glyph 0. Present and absent answers share a 4096-entry FIFO cache independently
+  per font variant; evicted entries may be requested again. Both scopes count as
+  colour capability for VS16 fallback. Host-only cluster metadata is captured
+  before fallback/ellipsis slices.
   Pictures compose with empty-outline recovery; option variants retain the
   picture source with a fresh answer cache, while preserving upstream's policy
   that plain HB variants do not retain host outline recovery.

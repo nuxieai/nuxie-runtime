@@ -1,6 +1,6 @@
-use super::text::{ColorGlyphImageCache, draw_color_glyph};
+use super::text::{ColorGlyphImageCache, color_glyph_cache_key, draw_color_glyph};
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use crate::mechanical_port::source::factory::RuntimeFactoryHandle;
 use crate::mechanical_port::source::math::aabb::Aabb;
@@ -120,7 +120,7 @@ impl Not for Delineator {
 struct InputColorGlyph {
     font: FontRef,
     glyph_id: u16,
-    cluster_text: Vec<Unichar>,
+    cluster_text: std::sync::Arc<[Unichar]>,
     transform: Mat2D,
     selected: bool,
 }
@@ -726,7 +726,7 @@ impl RawTextInput {
                             self.color_glyphs.push(InputColorGlyph {
                                 font: font.clone(),
                                 glyph_id,
-                                cluster_text: run.cluster_text(glyph_index).to_vec(),
+                                cluster_text: run.cluster_text_arc(glyph_index),
                                 transform,
                                 selected,
                             });
@@ -750,10 +750,19 @@ impl RawTextInput {
             }
             y += self.paragraph_spacing;
         }
+        let active_color_keys: HashSet<_> = self
+            .color_glyphs
+            .iter()
+            .map(|active| {
+                color_glyph_cache_key(&active.font, active.glyph_id, &active.cluster_text)
+            })
+            .collect();
         self.emoji_image_cache.retain(|entry| {
-            self.color_glyphs
-                .iter()
-                .any(|active| entry.matches(&active.font, active.glyph_id, &active.cluster_text))
+            active_color_keys.contains(&color_glyph_cache_key(
+                &entry.font,
+                entry.glyph_id,
+                &entry.cluster_text,
+            ))
         });
     }
 

@@ -44,6 +44,7 @@ use crate::mechanical_port::source::{
 };
 use std::{
     cell::{Cell, RefCell},
+    collections::HashSet,
     rc::{Rc, Weak},
 };
 
@@ -121,12 +122,32 @@ pub(crate) struct ColorGlyphImageCacheEntry {
 }
 impl ColorGlyphImageCacheEntry {
     pub(crate) fn matches(&self, font: &FontRef, glyph_id: u16, cluster: &[u32]) -> bool {
-        std::sync::Arc::ptr_eq(&self.font, font)
-            && self.glyph_id == glyph_id
-            && self.cluster_text == cluster
+        color_glyph_cache_key(&self.font, self.glyph_id, &self.cluster_text)
+            == color_glyph_cache_key(font, glyph_id, cluster)
     }
 }
 pub(crate) type ColorGlyphImageCache = Vec<ColorGlyphImageCacheEntry>;
+
+// Glyph-drawing hosts receive text only as context, so their decoded picture
+// remains the same across clusters. Cluster-drawing hosts retain the whole key.
+pub(crate) fn color_glyph_cache_key<'a>(
+    font: &FontRef,
+    glyph_id: u16,
+    cluster: &'a [u32],
+) -> (usize, u16, &'a [u32]) {
+    let cluster = if font.host_picture_scope()
+        == Some(crate::mechanical_port::source::text_engine::HostPictureScope::Glyph)
+    {
+        &[]
+    } else {
+        cluster
+    };
+    (
+        std::sync::Arc::as_ptr(font) as *const () as usize,
+        glyph_id,
+        cluster,
+    )
+}
 
 fn draw_cached_images(
     renderer: &mut Renderer,
@@ -237,10 +258,11 @@ fn draw_color_glyph_with_factory(
         }
     }
     if only_images {
+        let cluster_text = color_glyph_cache_key(&font, glyph_id, cluster).2.to_vec();
         image_cache.push(ColorGlyphImageCacheEntry {
             font,
             glyph_id,
-            cluster_text: cluster.to_vec(),
+            cluster_text,
             images,
         });
     }
@@ -1858,7 +1880,7 @@ impl Text {
                                 .expect("shaped text retains its font")
                                 .clone(),
                             glyph_id,
-                            cluster_text: run.cluster_text(index).into(),
+                            cluster_text: run.cluster_text_arc(index),
                             transform: path_transform,
                             foreground_color,
                             opacity,
@@ -1968,11 +1990,25 @@ impl Text {
                 y_offset += self.bounds.height() - info.total_height * scale;
             }
         }
-        self.emoji_image_cache.retain(|entry| {
-            self.draw_commands.iter().any(|command| {
-                matches!(command, TextDrawCommand::ColorGlyph { font, glyph_id, cluster_text, .. }
-                if entry.matches(font, *glyph_id, cluster_text))
+        let active_color_keys: HashSet<_> = self
+            .draw_commands
+            .iter()
+            .filter_map(|command| match command {
+                TextDrawCommand::ColorGlyph {
+                    font,
+                    glyph_id,
+                    cluster_text,
+                    ..
+                } => Some(color_glyph_cache_key(font, *glyph_id, cluster_text)),
+                TextDrawCommand::Style(_) => None,
             })
+            .collect();
+        self.emoji_image_cache.retain(|entry| {
+            active_color_keys.contains(&color_glyph_cache_key(
+                &entry.font,
+                entry.glyph_id,
+                &entry.cluster_text,
+            ))
         });
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
@@ -2785,9 +2821,16 @@ mod color_image_cache_tests {
         base: FontBase,
         extractions: AtomicUsize,
         image: Option<ColorGlyphLayer>,
+        scope: Option<crate::mechanical_port::source::text_engine::HostPictureScope>,
     }
     impl LayerCountingFont {
         fn new(image: Option<ColorGlyphLayer>) -> Arc<Self> {
+            Self::with_scope(image, None)
+        }
+        fn with_scope(
+            image: Option<ColorGlyphLayer>,
+            scope: Option<crate::mechanical_port::source::text_engine::HostPictureScope>,
+        ) -> Arc<Self> {
             Arc::new(Self {
                 base: FontBase::new(LineMetrics {
                     ascent: -1.0,
@@ -2797,6 +2840,7 @@ mod color_image_cache_tests {
                 }),
                 extractions: AtomicUsize::new(0),
                 image,
+                scope,
             })
         }
     }
@@ -2843,6 +2887,11 @@ mod color_image_cache_tests {
         fn on_shape_text(&self, _: &[u32], _: &[TextRun], _: i32) -> Vec<Paragraph> {
             unreachable!()
         }
+        fn host_picture_scope(
+            &self,
+        ) -> Option<crate::mechanical_port::source::text_engine::HostPictureScope> {
+            self.scope
+        }
         fn get_color_layers(&self, _: u16, out: &mut Vec<ColorGlyphLayer>, _: ColorInt) -> usize {
             self.extractions.fetch_add(1, Ordering::SeqCst);
             if let Some(image) = &self.image {
@@ -2854,14 +2903,13 @@ mod color_image_cache_tests {
         }
     }
 
-    #[test]
-    fn cached_image_draw_skips_layer_extraction_and_factory_lookup() {
+    fn image_layer() -> ColorGlyphLayer {
         let png = [
             137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
             8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 248, 15, 4,
             0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
         ];
-        let font = LayerCountingFont::new(Some(ColorGlyphLayer {
+        ColorGlyphLayer {
             paint_type: ColorGlyphPaintType::Image,
             image_bytes: Arc::from(png),
             image_width: 1,
@@ -2871,7 +2919,12 @@ mod color_image_cache_tests {
             image_extent_x: 1.0,
             image_extent_y: 1.0,
             ..Default::default()
-        }));
+        }
+    }
+
+    #[test]
+    fn cached_image_draw_skips_layer_extraction_and_factory_lookup() {
+        let font = LayerCountingFont::new(Some(image_layer()));
         let recording = nuxie_render_api::RecordingFactory::new();
         let mut renderer = recording.make_renderer();
         let mut factory = nuxie_render_api::PersistentFactory::new(recording);
@@ -2932,6 +2985,52 @@ mod color_image_cache_tests {
                 .count(),
             3
         );
+    }
+
+    #[test]
+    fn decoded_image_cache_uses_declared_host_picture_scope() {
+        use crate::mechanical_port::source::text_engine::HostPictureScope;
+        for (scope, expected_decodes) in
+            [(HostPictureScope::Glyph, 1), (HostPictureScope::Cluster, 2)]
+        {
+            let font = LayerCountingFont::with_scope(Some(image_layer()), Some(scope));
+            let recording = nuxie_render_api::RecordingFactory::new();
+            let mut renderer = recording.make_renderer();
+            let mut factory = nuxie_render_api::PersistentFactory::new(recording);
+            let handle = crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+            let mut cache = Vec::new();
+            for cluster in [&[65][..], &[65, 0xfe0f][..], &[65][..]] {
+                draw_color_glyph(
+                    &mut renderer,
+                    &handle,
+                    &mut cache,
+                    font.clone(),
+                    1,
+                    cluster,
+                    Mat2D::default(),
+                    0xff000000,
+                    1.0,
+                    Mat2D::default(),
+                );
+            }
+            assert_eq!(font.extractions.load(Ordering::SeqCst), expected_decodes);
+            assert_eq!(cache.len(), expected_decodes);
+            let stream = factory.borrow().stream();
+            assert_eq!(
+                stream
+                    .lines()
+                    .filter(|line| line.starts_with("decodeImage "))
+                    .count(),
+                expected_decodes,
+            );
+            assert_eq!(
+                stream
+                    .lines()
+                    .filter(|line| line.starts_with("drawImage "))
+                    .count(),
+                3,
+            );
+        }
     }
 
     #[test]

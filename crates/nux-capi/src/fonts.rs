@@ -1,6 +1,6 @@
 //! C access to the engine's fonts and process-wide fallback hook.
 use super::*;
-use nuxie::runtime::text::font_hb::{FileProbe, HbFont, HostGlyphPicture};
+use nuxie::runtime::text::font_hb::{FileProbe, HbFont, HostGlyphPicture, HostPictureScope};
 use nuxie::runtime::text::text_engine::{Coord, Font, FontRef, set_fallback_proc};
 
 pub const NUX_FONT_MAX_BYTES: usize = 256 * 1024 * 1024;
@@ -215,12 +215,13 @@ pub type NuxFontPictureSink = unsafe extern "C" fn(*mut c_void, *const NuxFontPi
 /// possibly on any thread. get_path and get_picture may run on any thread,
 /// concurrently; callbacks and context must be thread-safe, must not unwind,
 /// and must not reenter the font API. At least one callback must be supplied.
-/// get_picture is asked only when native colour drawing is unavailable, for
-/// the first glyph in each cluster's shaping (logical) order. Glyph 0 is never
-/// requested. Cluster code points are borrowed for the call. Present and absent
-/// answers are cached by (glyph id, complete cluster text), per font variant;
-/// with_options variants have independent answer caches. When a picture is
-/// supplied, the same cluster's remaining glyphs from this font draw nothing.
+/// get_picture is glyph-scoped: every nonzero glyph without native colour is
+/// requested once while cached, independently per font variant. Glyph 0 is never
+/// requested. Cluster code points are borrowed context only; the first context
+/// seen for a glyph supplies its cached answer. Present and absent answers share
+/// a 4096-entry FIFO cache per variant; evicted glyphs may be requested again.
+/// with_options variants have independent caches. Every cluster component may
+/// draw a picture; return no picture for spaces or hidden glyphs without ink.
 /// Native COLR and readable PNG pictures take precedence.
 /// struct_size must cover the ABI-v4 prefix through release. get_picture is
 /// optional and read only when struct_size covers it; future fields are ignored.
@@ -504,9 +505,10 @@ pub unsafe extern "C" fn nux_font_new_with_outline(
                 .as_any()
                 .downcast_ref::<HbFont>()
                 .expect("decoded HBFont")
-                .with_host_pictures(std::sync::Arc::new(move |glyph, cluster| {
-                    host.picture(glyph, cluster)
-                }));
+                .with_host_pictures(
+                    std::sync::Arc::new(move |glyph, cluster| host.picture(glyph, cluster)),
+                    HostPictureScope::Glyph,
+                );
         }
         unsafe {
             *out_font = publish_font(font);
@@ -971,7 +973,7 @@ mod outline_tests {
         assert!(font.is_color_glyph_with_text(glyph, &cluster));
         assert!(font.is_color_glyph_with_text(glyph, &[0x41]));
         assert!(font.is_color_glyph_with_text(glyph, &cluster));
-        // Glyph-only queries cannot choose an arbitrary cached cluster answer.
+        // Native-only queries stay independent of host answer cache state.
         assert!(!font.is_color_glyph(glyph));
         let mut layers = Vec::new();
         assert_eq!(
@@ -995,17 +997,17 @@ mod outline_tests {
                 scope.spawn(move || assert!(font.is_color_glyph_with_text(second_glyph, &[0x42])));
             }
         });
-        // The same glyph with different cluster text is a separate answer;
-        // concurrent requests for one key still call the host exactly once.
+        // Cluster text is context only: the first one for this glyph wins.
+        // Concurrent requests for one glyph still call the host exactly once.
         assert!(!font.is_color_glyph_with_text(0, &[0x10ffff]));
-        assert_eq!(context.calls.load(Ordering::SeqCst), 3);
+        assert_eq!(context.calls.load(Ordering::SeqCst), 2);
         assert_eq!(
             *context.clusters.lock().unwrap(),
-            [cluster.to_vec(), vec![0x41], vec![0x42]]
+            [cluster.to_vec(), vec![0x42]]
         );
         let variant = font.with_options(&[], &[]);
         assert!(variant.is_color_glyph_with_text(glyph, &cluster));
-        assert_eq!(context.calls.load(Ordering::SeqCst), 4);
+        assert_eq!(context.calls.load(Ordering::SeqCst), 3);
         assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
     }
 
@@ -1104,11 +1106,12 @@ mod outline_tests {
         let original =
             HbFont::decode(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")).unwrap();
         let glyph = glyph(&font, 'A');
-        for _ in 0..3 {
-            assert!(!font.is_color_glyph_with_text(glyph, &[0x41]));
+        for cluster in [[0x41], [0x42], [0x43]] {
+            assert!(!font.is_color_glyph_with_text(glyph, &cluster));
             assert!(!font.is_color_glyph(glyph));
         }
         assert_eq!(context.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(*context.clusters.lock().unwrap(), [vec![0x41]]);
         assert_eq!(
             font.get_path(glyph).points(),
             original.get_path(glyph).points()

@@ -372,9 +372,13 @@ pub trait Font: Any + Send + Sync {
         false
     }
 
-    /// Cluster-aware native/host colour query for the logical cluster leader.
-    /// Use GlyphRun::glyph_render_kind when querying a shaped glyph, so a
-    /// follower cannot request a second picture. Glyph-only queries stay native.
+    fn host_picture_scope(&self) -> Option<HostPictureScope> {
+        None
+    }
+
+    /// Native/host colour query with cluster context. Cluster-scoped sources
+    /// require the logical leader; shaped consumers use glyph_render_kind.
+    /// Glyph-only queries stay native.
     fn is_color_glyph_with_text(&self, glyph: GlyphId, cluster: &[Unichar]) -> bool {
         self.is_color_glyph(glyph) || self.host_picture_layer(glyph, cluster).is_some()
     }
@@ -609,6 +613,13 @@ pub enum GlyphRenderKind {
     Suppressed,
 }
 
+/// Whether a host rasterizes a shaped glyph or the complete cluster text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostPictureScope {
+    Glyph,
+    Cluster,
+}
+
 #[derive(Clone)]
 pub struct GlyphRun {
     pub font: Option<FontRef>,
@@ -692,10 +703,27 @@ impl GlyphRun {
             .map_or(&[], AsRef::as_ref)
     }
 
-    /// A host picture replaces all glyphs in its cluster from this font.
-    /// Other glyphs keep their original shaping, advances and metrics.
+    /// Share shaped text with retained draw commands. Native-only runs share
+    /// one empty allocation instead of allocating an empty Arc per glyph.
+    pub fn cluster_text_arc(&self, glyph_index: usize) -> Arc<[Unichar]> {
+        static EMPTY: std::sync::OnceLock<Arc<[Unichar]>> = std::sync::OnceLock::new();
+        self.cluster_texts
+            .get(glyph_index)
+            .cloned()
+            .unwrap_or_else(|| EMPTY.get_or_init(|| Arc::from([])).clone())
+    }
+
+    /// Cluster pictures replace this font's whole cluster; glyph pictures
+    /// replace only their own glyph. Advances and metrics are unchanged.
     pub fn glyph_render_kind(&self, index: usize) -> GlyphRenderKind {
         let font = self.font.as_ref().expect("shaped run retains its font");
+        if font.host_picture_scope() == Some(HostPictureScope::Glyph) {
+            return if font.is_color_glyph_with_text(self.glyphs[index], self.cluster_text(index)) {
+                GlyphRenderKind::Color
+            } else {
+                GlyphRenderKind::Outline
+            };
+        }
         if let Some(&leader) = self.cluster_leaders.get(index) {
             if font
                 .host_picture_layer(leader, self.cluster_text(index))

@@ -677,7 +677,7 @@ mod host_cluster_tests {
     use crate::vm::ScriptVm;
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_runtime::source::{
-        text::font_hb::{HbFont, HostGlyphPicture},
+        text::font_hb::{HbFont, HostGlyphPicture, HostPictureScope},
         text_engine::TextRun,
     };
     use std::sync::{
@@ -714,24 +714,27 @@ mod host_cluster_tests {
             .as_any()
             .downcast_ref::<HbFont>()
             .unwrap()
-            .with_host_pictures(Arc::new(move |_, cluster| {
-                assert_eq!(cluster, text);
-                count.fetch_add(1, Ordering::SeqCst);
-                Some(HostGlyphPicture {
-                    png: vec![
-                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
-                        0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
-                        120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0,
-                        73, 69, 78, 68, 174, 66, 96, 130,
-                    ],
-                    width: 1,
-                    height: 1,
-                    bearing_x: 0.0,
-                    bearing_y: -1.0,
-                    extent_x: 1.0,
-                    extent_y: 1.0,
-                })
-            }));
+            .with_host_pictures(
+                Arc::new(move |_, cluster| {
+                    assert_eq!(cluster, text);
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Some(HostGlyphPicture {
+                        png: vec![
+                            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+                            1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68,
+                            65, 84, 120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43,
+                            0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+                        ],
+                        width: 1,
+                        height: 1,
+                        bearing_x: 0.0,
+                        bearing_y: -1.0,
+                        extent_x: 1.0,
+                        extent_y: 1.0,
+                    })
+                }),
+                HostPictureScope::Cluster,
+            );
         let vm = ScriptVm::new();
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         vm.install_render_factory(&mut factory).unwrap();

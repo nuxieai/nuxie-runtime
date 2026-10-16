@@ -75,11 +75,18 @@ UNIV-4921 adds `HbFont::with_host_pictures` and the optional, size-gated
 **host-glyph-pictures** addition, not emjc decoding or CoreText shaping parity.
 It takes copied PNG bytes, pixel dimensions and normalized em bearings/extents;
 C `top` is positive above the baseline and maps to negative Rust `bearing_y`.
-Native COLR/readable PNG takes precedence. The first answer (Some or None) is
-cached by (glyph id, complete shaped cluster text), independently for each font
-variant. Only a cluster's first glyph in logical shaping order is requested;
-glyph 0 is never requested. A host picture suppresses the cluster's other glyphs
-from the same font, so a text-drawing host paints each cluster once. Callback context
+Native COLR/readable PNG takes precedence. Rust picture sources declare
+`HostPictureScope::Glyph` or `HostPictureScope::Cluster` when installed. Glyph
+scope requests every nonzero glyph without native colour, keyed by glyph id;
+cluster code points are context only, and the first context seen supplies the
+cached answer. Each cluster component can draw, so glyph-drawing hosts return
+None for spaces or hidden glyphs without ink. Cluster scope requests only the
+first glyph in logical shaping order, keyed by (glyph id, complete cluster
+text); a picture suppresses the same font's remaining glyphs in that cluster.
+Glyph 0 is never requested in either scope. The C callback is always glyph
+scope. Present and absent answers share a 4096-entry FIFO cache independently
+for each font variant; evicted entries may be requested again. Both scopes
+count as colour capability for VS16 fallback. Callback context
 may be called on any thread concurrently, must not reenter or unwind, and
 outlives all retained fonts/variants. The C sink limits PNGs to 4 MiB and each
 encoded/reported side to 1024 pixels, validates matching dimensions and finite

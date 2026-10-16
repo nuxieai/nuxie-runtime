@@ -274,7 +274,8 @@ pub struct StateMachineLayerInstance {
     waiting_for_exit: bool,
     settled: Rc<Cell<bool>>,
     // The settled search read state machine inputs: an input change
-    // unsettles the layer, and it never freezes (see is_frozen).
+    // unsettles the layer, and it freezes only on a finished animation
+    // (see is_frozen).
     settled_on_inputs: Rc<Cell<bool>>,
 }
 
@@ -474,11 +475,7 @@ impl StateMachineLayerInstance {
     }
 
     fn is_frozen(&self, machine: &StateMachineInstance, pose_since: u32) -> bool {
-        // A layer settled on inputs still advances in full every frame, as
-        // upstream advances every layer that reads inputs; only its
-        // transition search is skipped.
         if !self.settled.get()
-            || self.settled_on_inputs.get()
             || self.mix != 1.0
             || self.animation_reset.is_some()
             || self.hold_animation.is_some()
@@ -514,15 +511,18 @@ impl StateMachineLayerInstance {
             }
             Some(AnimationStateBase::TYPE_KEY) => current
                 .first_animation(|animation| {
+                    let speed = state
+                        .with_downcast::<AnimationState, _>(AnimationState::speed)
+                        .expect("AnimationState definition");
+                    // Upstream advances a layer that reads inputs in full
+                    // every frame. Freezing one is exact only where that
+                    // advance would report nothing: its animation must have
+                    // finished, even when it keys nothing.
+                    if self.settled_on_inputs.get() && animation.keep_going_with_multiplier(speed) {
+                        return false;
+                    }
                     animation.with_animation(LinearAnimation::num_keyed_objects) == 0
-                        || self.is_pose_in_place(
-                            machine,
-                            animation,
-                            state
-                                .with_downcast::<AnimationState, _>(AnimationState::speed)
-                                .expect("AnimationState definition"),
-                            pose_since,
-                        )
+                        || self.is_pose_in_place(machine, animation, speed, pose_since)
                 })
                 .expect("AnimationState instance"),
             _ => false,

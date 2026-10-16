@@ -64,8 +64,17 @@ impl EffectPath for EmptyEffectPath {
 }
 
 /// An effect's paths, one per PathProvider. Shared with the parent paint's
-/// cells for effects whose invalidation only rewinds them.
-pub(crate) type EffectPaths = Rc<RefCell<HashMap<u64, Box<dyn EffectPath>>>>;
+/// cells for effects whose invalidation only rewinds them. Provider
+/// identities are process-local, so they take the multiplicative mix.
+pub(crate) type EffectPaths = Rc<
+    RefCell<
+        HashMap<
+            u64,
+            Box<dyn EffectPath>,
+            std::hash::BuildHasherDefault<crate::mechanical_port::source::core::CoreHandleHasher>,
+        >,
+    >,
+>;
 
 #[derive(Default)]
 pub struct StrokeEffectState {

@@ -372,6 +372,17 @@ pub trait Font: Any + Send + Sync {
         false
     }
 
+    /// Additive host picture decision; native fonts retain their ordinary query.
+    fn is_color_glyph_with_text(&self, glyph: GlyphId, _cluster: &[Unichar]) -> bool {
+        self.is_color_glyph(glyph)
+    }
+
+    /// Whether an already-resolved glyph uses the additive host picture.
+    /// Does not ask the host or change ordinary native glyph decisions.
+    fn has_host_picture(&self, _glyph: GlyphId) -> bool {
+        false
+    }
+
     fn get_color_layers(
         &self,
         _glyph: GlyphId,
@@ -574,6 +585,8 @@ pub struct GlyphRun {
     pub letter_spacing: f32,
     pub glyphs: Vec<GlyphId>,
     pub text_indices: Vec<u32>,
+    /// Retained only for host-picture fonts, before fallback/ellipsis slicing.
+    pub cluster_texts: Vec<Vec<Unichar>>,
     pub advances: Vec<f32>,
     pub xpos: Vec<f32>,
     pub offsets: Vec<Vec2D>,
@@ -598,6 +611,7 @@ impl GlyphRun {
             letter_spacing: 0.0,
             glyphs: vec![0; glyph_count],
             text_indices: vec![0; glyph_count],
+            cluster_texts: Vec::new(),
             advances: vec![0.0; glyph_count],
             xpos: vec![0.0; glyph_count + 1],
             offsets: vec![Vec2D::default(); glyph_count],
@@ -622,6 +636,7 @@ impl GlyphRun {
             letter_spacing: 0.0,
             glyphs,
             text_indices,
+            cluster_texts: Vec::new(),
             advances,
             xpos,
             offsets,
@@ -630,6 +645,12 @@ impl GlyphRun {
             level: 0,
             joiners: Vec::new(),
         }
+    }
+
+    pub fn cluster_text(&self, glyph_index: usize) -> &[Unichar] {
+        self.cluster_texts
+            .get(glyph_index)
+            .map_or(&[], Vec::as_slice)
     }
 
     pub fn dir(&self) -> TextDirection {

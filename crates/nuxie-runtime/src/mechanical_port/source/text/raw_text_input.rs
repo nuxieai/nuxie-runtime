@@ -1,3 +1,4 @@
+use super::text::{ColorGlyphImageCache, draw_color_glyph};
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 use std::{cell::RefCell, rc::Rc};
 
@@ -114,6 +115,15 @@ impl Not for Delineator {
     }
 }
 
+// Our additive text-field route retains the exact outline transform. Selection
+// only chooses which drawable owns the glyph; it never recolors the glyph.
+struct InputColorGlyph {
+    font: FontRef,
+    glyph_id: u16,
+    transform: Mat2D,
+    selected: bool,
+}
+
 #[derive(Clone)]
 struct JournalEntry {
     cursor_from: Cursor,
@@ -128,6 +138,8 @@ pub struct RawTextInput {
     text_run: TextRun,
     text_path: ShapePaintPath,
     selected_text_path: ShapePaintPath,
+    color_glyphs: Vec<InputColorGlyph>,
+    emoji_image_cache: ColorGlyphImageCache,
     cursor_path: ShapePaintPath,
     selection_path: TextSelectionPath,
     text: Vec<Unichar>,
@@ -181,6 +193,8 @@ impl RawTextInput {
             },
             text_path: ShapePaintPath::default(),
             selected_text_path: ShapePaintPath::default(),
+            color_glyphs: Vec::new(),
+            emoji_image_cache: Vec::new(),
             cursor_path: ShapePaintPath::default(),
             selection_path: TextSelectionPath::default(),
             text: vec![ZERO_WIDTH_SPACE],
@@ -234,9 +248,62 @@ impl RawTextInput {
         }
         let render_path = self.text_path.render_path(factory);
         renderer.draw_path(render_path, text_paint);
+        self.draw_color_glyphs(factory, renderer, Mat2D::default(), None, 0xff000000, 1.0);
         let cursor_render_path = self.cursor_path.render_path(factory);
         renderer.draw_path(cursor_render_path, cursor_paint);
         if self.overflow == TextOverflow::Clipped && self.clip_render_path.is_some() {
+            renderer.restore();
+        }
+    }
+
+    pub(crate) fn has_color_glyphs(&self, selected: Option<bool>) -> bool {
+        self.color_glyphs
+            .iter()
+            .any(|glyph| selected.is_none_or(|selected| selected == glyph.selected))
+    }
+
+    /// Draw retained color glyphs after the field's outline paints. `selected`
+    /// is None for the editor's combined route and Some for authored drawables.
+    pub(crate) fn draw_color_glyphs(
+        &mut self,
+        factory: &RuntimeFactoryHandle,
+        renderer: &mut Renderer,
+        world: Mat2D,
+        selected: Option<bool>,
+        foreground: u32,
+        opacity: f32,
+    ) {
+        if self.color_glyphs.is_empty() {
+            return;
+        }
+        let clip = self.clip_render_path.as_ref();
+        if let Some(clip) = clip {
+            renderer.save();
+            renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+            renderer.clip_path(clip.borrow().as_ref());
+        }
+        let glyph_world = if clip.is_some() {
+            Mat2D::default()
+        } else {
+            world
+        };
+        for glyph in &self.color_glyphs {
+            if selected.is_some_and(|selected| selected != glyph.selected) {
+                continue;
+            }
+            draw_color_glyph(
+                renderer,
+                factory,
+                &mut self.emoji_image_cache,
+                glyph.font.clone(),
+                glyph.glyph_id,
+                glyph.transform,
+                foreground,
+                opacity,
+                glyph_world,
+            );
+        }
+        if clip.is_some() {
             renderer.restore();
         }
     }
@@ -594,7 +661,9 @@ impl RawTextInput {
         let want_separate = self.flagged(Flags::SeparateSelectionText as u8);
         self.text_path.rewind();
         self.selected_text_path.rewind();
+        self.color_glyphs.clear();
         if !self.shape.has_valid_bounds() {
+            self.emoji_image_cache.clear();
             self.clip_render_path = None;
             return;
         }
@@ -653,16 +722,28 @@ impl RawTextInput {
                     let offset = run.offsets[glyph_index];
                     let glyph_id = run.glyphs[glyph_index];
                     let advance = run.advances[glyph_index];
-                    let mut raw_path = font.get_path(glyph_id);
-                    raw_path.transform_in_place(Mat2D::new(
+                    let transform = Mat2D::new(
                         run.size,
                         0.0,
                         0.0,
                         run.size,
                         x + offset.x,
                         render_y + offset.y,
-                    ));
+                    );
                     x += advance;
+                    let selected =
+                        want_separate && self.cursor.contains(run.text_indices[glyph_index]);
+                    if font.is_color_glyph_with_text(glyph_id, run.cluster_text(glyph_index)) {
+                        self.color_glyphs.push(InputColorGlyph {
+                            font: font.clone(),
+                            glyph_id,
+                            transform,
+                            selected,
+                        });
+                        continue;
+                    }
+                    let mut raw_path = font.get_path(glyph_id);
+                    raw_path.transform_in_place(transform);
                     if want_separate && self.cursor.contains(run.text_indices[glyph_index]) {
                         self.selected_text_path.add_path_clockwise(&raw_path, None);
                     } else {
@@ -676,6 +757,11 @@ impl RawTextInput {
             }
             y += self.paragraph_spacing;
         }
+        self.emoji_image_cache.retain(|(font, glyph, _)| {
+            self.color_glyphs.iter().any(|active| {
+                std::sync::Arc::ptr_eq(font, &active.font) && *glyph == active.glyph_id
+            })
+        });
     }
 
     pub fn cursor(&self) -> Cursor {

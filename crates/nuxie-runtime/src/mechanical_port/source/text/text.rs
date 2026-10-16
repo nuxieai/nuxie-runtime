@@ -113,6 +113,76 @@ pub fn draw_color_glyph_layer(
     renderer.restore();
 }
 
+pub(crate) type ColorGlyphImageCache =
+    Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>;
+
+// Shared by Text, RawText and the additive text-field color-glyph route.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_color_glyph(
+    renderer: &mut Renderer,
+    factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    image_cache: &mut ColorGlyphImageCache,
+    font: FontRef,
+    glyph_id: u16,
+    transform: Mat2D,
+    foreground_color: ColorInt,
+    opacity: f32,
+    world_transform: Mat2D,
+) {
+    let mut layers = Vec::new();
+    if font.get_color_layers(glyph_id, &mut layers, foreground_color) == 0 {
+        return;
+    }
+    renderer.save();
+    renderer.transform(nuxie_render_api::Mat2D(
+        *(world_transform * transform).values(),
+    ));
+    for mut layer in layers {
+        if layer.paint_type
+            == crate::mechanical_port::source::text_engine::ColorGlyphPaintType::Image
+        {
+            let image = if let Some((_, _, image)) =
+                image_cache.iter().find(|(cached_font, cached_glyph, _)| {
+                    std::sync::Arc::ptr_eq(cached_font, &font) && *cached_glyph == glyph_id
+                }) {
+                image.clone()
+            } else {
+                let image = factory
+                    .with_factory_mut(|factory| factory.decode_image(&layer.image_bytes))
+                    .ok()
+                    .map(Rc::<dyn nuxie_render_api::RenderImage>::from);
+                image_cache.push((font.clone(), glyph_id, image.clone()));
+                image
+            };
+            let Some(image) = image else {
+                continue;
+            };
+            renderer.save();
+            renderer.transform(nuxie_render_api::Mat2D(
+                *Mat2D::new(
+                    layer.image_extent_x / layer.image_width as f32,
+                    0.0,
+                    0.0,
+                    layer.image_extent_y / layer.image_height as f32,
+                    layer.image_bearing_x,
+                    layer.image_bearing_y,
+                )
+                .values(),
+            ));
+            renderer.draw_image(
+                Some(image.as_ref()),
+                ImageSampler::LINEAR_CLAMP,
+                BlendMode::SrcOver,
+                opacity,
+            );
+            renderer.restore();
+        } else {
+            draw_color_glyph_layer(renderer, &factory, &mut layer, opacity);
+        }
+    }
+    renderer.restore();
+}
+
 #[derive(Default)]
 pub struct StyledText {
     value: Vec<u32>,
@@ -608,7 +678,7 @@ pub struct Text {
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
     file_features: u8,
-    emoji_image_cache: Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>,
+    emoji_image_cache: ColorGlyphImageCache,
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
     measured_shape: Option<Box<MeasuredShape>>,
@@ -1715,7 +1785,7 @@ impl Text {
                         .font
                         .as_ref()
                         .expect("shaped text retains its font")
-                        .is_color_glyph(glyph_id)
+                        .is_color_glyph_with_text(glyph_id, run.cluster_text(index))
                     {
                         let foreground_color = style
                             .with_downcast::<TextStylePaint, _>(TextStylePaint::foreground_color)
@@ -1929,66 +1999,22 @@ impl Text {
         opacity: f32,
         world_transform: Mat2D,
     ) {
-        let mut layers = Vec::new();
-        if font.get_color_layers(glyph_id, &mut layers, foreground_color) == 0 {
-            return;
-        }
         let factory = self
             .base
             .with_artboard(|artboard| artboard.factory())
             .flatten()
             .expect("Text requires its Artboard renderer factory");
-        renderer.save();
-        renderer.transform(nuxie_render_api::Mat2D(
-            *(world_transform * transform).values(),
-        ));
-        for mut layer in layers {
-            if layer.paint_type
-                == crate::mechanical_port::source::text_engine::ColorGlyphPaintType::Image
-            {
-                let image = if let Some((_, _, image)) =
-                    self.emoji_image_cache
-                        .iter()
-                        .find(|(cached_font, cached_glyph, _)| {
-                            std::sync::Arc::ptr_eq(cached_font, &font) && *cached_glyph == glyph_id
-                        }) {
-                    image.clone()
-                } else {
-                    let image = factory
-                        .with_factory_mut(|factory| factory.decode_image(&layer.image_bytes))
-                        .ok()
-                        .map(Rc::<dyn nuxie_render_api::RenderImage>::from);
-                    self.emoji_image_cache
-                        .push((font.clone(), glyph_id, image.clone()));
-                    image
-                };
-                let Some(image) = image else {
-                    continue;
-                };
-                renderer.save();
-                renderer.transform(nuxie_render_api::Mat2D(
-                    *Mat2D::new(
-                        layer.image_extent_x / layer.image_width as f32,
-                        0.0,
-                        0.0,
-                        layer.image_extent_y / layer.image_height as f32,
-                        layer.image_bearing_x,
-                        layer.image_bearing_y,
-                    )
-                    .values(),
-                ));
-                renderer.draw_image(
-                    Some(image.as_ref()),
-                    ImageSampler::LINEAR_CLAMP,
-                    BlendMode::SrcOver,
-                    opacity,
-                );
-                renderer.restore();
-            } else {
-                draw_color_glyph_layer(renderer, &factory, &mut layer, opacity);
-            }
-        }
-        renderer.restore();
+        draw_color_glyph(
+            renderer,
+            &factory,
+            &mut self.emoji_image_cache,
+            font,
+            glyph_id,
+            transform,
+            foreground_color,
+            opacity,
+            world_transform,
+        );
     }
     pub fn local_bounds(&self) -> Aabb {
         let width = self.bounds.width();

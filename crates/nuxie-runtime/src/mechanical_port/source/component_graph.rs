@@ -622,18 +622,42 @@ impl ComponentGraph {
         let (graph, order) = handle.component_graph()?;
         let kernel = graph.transforms.get(order as usize)?.as_ref()?;
         let (get, set) = input.accessors(kernel)?;
-        let cells = &*kernel.cells;
+        graph.write_plain_input(
+            handle,
+            order,
+            &kernel.cells,
+            (get, set),
+            input == TransformInput::Opacity,
+            property_key as u16,
+            value,
+        );
+        Some(true)
+    }
+
+    /// The setter steps of set_plain_transform_double on member `order`'s
+    /// resolved input cells: the equality test and the cell write, the
+    /// changed callback's dirt, then the property observers.
+    #[inline]
+    fn write_plain_input(
+        &self,
+        handle: &CoreHandle,
+        order: u32,
+        cells: &TransformCells,
+        (get, set): (fn(&TransformCells) -> f32, fn(&TransformCells, f32)),
+        opacity: bool,
+        property_key: u16,
+        value: f32,
+    ) {
         if get(cells) == value {
-            return Some(true);
+            return;
         }
         set(cells, value);
-        if input == TransformInput::Opacity {
-            graph.add_dirt(order, ComponentDirt::RENDER_OPACITY, true);
-        } else if graph.add_dirt(order, ComponentDirt::TRANSFORM, false) {
-            graph.add_dirt(order, ComponentDirt::WORLD_TRANSFORM, true);
+        if opacity {
+            self.add_dirt(order, ComponentDirt::RENDER_OPACITY, true);
+        } else if self.add_dirt(order, ComponentDirt::TRANSFORM, false) {
+            self.add_dirt(order, ComponentDirt::WORLD_TRANSFORM, true);
         }
-        handle.notify_property_changed(property_key as u16);
-        Some(true)
+        handle.notify_property_changed(property_key);
     }
 
     /// The generated getter of a property set_plain_transform_double sets,
@@ -816,6 +840,71 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
         path,
         points_path,
     })
+}
+
+/// Where a plain transform member stores one of its double properties,
+/// resolved once: what set_plain_transform_double and
+/// get_plain_transform_double find for that member and key, held so a
+/// compiled animation track writes the input without looking it up again.
+pub(crate) struct PlainInputSink {
+    graph: Rc<ComponentGraph>,
+    order: u32,
+    cells: Rc<TransformCells>,
+    accessors: (fn(&TransformCells) -> f32, fn(&TransformCells, f32)),
+    opacity: bool,
+    property_key: u16,
+}
+
+impl PlainInputSink {
+    /// The sink set_plain_transform_double would write for `handle` and
+    /// `property_key`; None where that takes the generated setter.
+    pub(crate) fn resolve(handle: &CoreHandle, property_key: u32) -> Option<Self> {
+        let key = i32::try_from(property_key).ok()?;
+        let input = TransformInput::from_key(key)?;
+        if !kernel_candidate(handle) {
+            return None;
+        }
+        let (graph, order) = handle.component_graph()?;
+        let kernel = graph.transforms.get(order as usize)?.as_ref()?;
+        let accessors = input.accessors(kernel)?;
+        let cells = Rc::clone(&kernel.cells);
+        Some(Self {
+            graph,
+            order,
+            cells,
+            accessors,
+            opacity: input == TransformInput::Opacity,
+            property_key: property_key as u16,
+        })
+    }
+
+    /// Whether this sink still is where `handle` stores `property_key`: the
+    /// handle's occupant is still the member of this graph it was resolved
+    /// for (a graph's members, kernels and their inputs never change).
+    #[inline]
+    pub(crate) fn serves(&self, handle: &CoreHandle, property_key: u32) -> bool {
+        u32::from(self.property_key) == property_key && handle.in_component_graph(&self.graph)
+    }
+
+    /// get_plain_transform_double for the resolved member and key.
+    #[inline]
+    pub(crate) fn get(&self) -> f32 {
+        (self.accessors.0)(&self.cells)
+    }
+
+    /// set_plain_transform_double for the resolved member and key.
+    #[inline]
+    pub(crate) fn set(&self, handle: &CoreHandle, value: f32) {
+        self.graph.write_plain_input(
+            handle,
+            self.order,
+            &self.cells,
+            self.accessors,
+            self.opacity,
+            self.property_key,
+            value,
+        );
+    }
 }
 
 /// Whether `handle` occupies its slot as one of plain_transform's concrete

@@ -5,6 +5,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter,
+        compiled_animation::CompiledAnimation,
         linear_animation::{LinearAnimation, LinearAnimationCells, LinearAnimationOwner},
         linear_animation_instance_extras::LAIBindingExtras,
         r#loop::Loop,
@@ -69,6 +70,9 @@ pub struct LinearAnimationInstance {
     // Common instances pay only for a nullable cold-cluster pointer and the
     // borrow flag; copies deliberately start with no allocated cluster.
     binding_extras: RefCell<Option<Box<LAIBindingExtras>>>,
+    // The animation compiled against the targets this instance's applies
+    // resolve; taken while an apply runs, so a nested apply compiles its own.
+    compiled: Cell<Option<Box<CompiledAnimation>>>,
 }
 impl LinearAnimationInstance {
     pub fn new(
@@ -122,6 +126,7 @@ impl LinearAnimationInstance {
             no_keyframe_binds: Cell::new(false),
             loop_value: -1,
             binding_extras: RefCell::new(None),
+            compiled: Cell::new(None),
         }
     }
 
@@ -188,7 +193,16 @@ impl LinearAnimationInstance {
     }
     pub fn apply(&self, mix: f32) {
         if let Some(artboard) = self.scene.artboard_instance_ref().upgrade() {
-            artboard.apply_linear_animation_owner(&self.animation, self.time, mix, Some(self));
+            let mut compiled = self.compiled.take().unwrap_or_default();
+            artboard.apply_linear_animation_compiled(
+                &self.animation,
+                &self.cells,
+                self.time,
+                mix,
+                Some(self),
+                &mut compiled,
+            );
+            self.compiled.set(Some(compiled));
         }
     }
     pub fn did_loop(&self) -> bool {
@@ -653,6 +667,19 @@ impl KeyFrameValueContext for LinearAnimationInstance {
     fn blend_accumulator(&self) -> Option<Rc<RefCell<super::blend_accumulator::BlendAccumulator>>> {
         self.blend_accumulator.upgrade()
     }
+    /// keyframe_value_holder finds no holder (so number_value is None) when
+    /// keyframe binds are off or no holder is recorded, and blend_accumulator
+    /// is None when the accumulator is gone.
+    #[inline]
+    fn plain_numbers(&self) -> bool {
+        self.blend_accumulator.strong_count() == 0
+            && (self.no_keyframe_binds.get()
+                || self
+                    .binding_extras
+                    .borrow()
+                    .as_ref()
+                    .is_none_or(|extras| extras.keyframe_value_holders.is_empty()))
+    }
     fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool> {
         self.keyframe_value_holder(keyframe)?
             .with_downcast::<BindablePropertyBoolean, _>(|holder| holder.base.property_value())
@@ -746,6 +773,7 @@ impl Clone for LinearAnimationInstance {
             no_keyframe_binds: Cell::new(self.no_keyframe_binds.get()),
             loop_value: self.loop_value,
             binding_extras: RefCell::new(None),
+            compiled: Cell::new(None),
         }
     }
 }

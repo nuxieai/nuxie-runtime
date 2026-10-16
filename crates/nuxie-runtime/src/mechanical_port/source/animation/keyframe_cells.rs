@@ -4,6 +4,8 @@
 
 use std::cell::Cell;
 
+use crate::mechanical_port::source::animation::compiled_animation::keyed_data_changed;
+
 pub(crate) struct KeyFrameCells {
     // frame / fps, computed when the keyframe is imported.
     seconds: Cell<f32>,
@@ -11,9 +13,9 @@ pub(crate) struct KeyFrameCells {
     interpolation_type: Cell<u32>,
     // A KeyFrameDouble's value (its storage); None for any other frame.
     double_value: Cell<Option<f32>>,
-    // Whether InterpolatingKeyFrame resolved an interpolator object; without
-    // one, interpolation is linear.
-    has_interpolator: Cell<bool>,
+    // The interpolator object InterpolatingKeyFrame resolved; without one,
+    // interpolation is linear.
+    interpolator: std::cell::RefCell<Option<crate::mechanical_port::source::core::CoreHandle>>,
     // The owning property's flag that its frame times need gathering again,
     // shared once the frame joins that property.
     times_stale: std::cell::OnceCell<std::rc::Rc<Cell<bool>>>,
@@ -25,7 +27,7 @@ impl Default for KeyFrameCells {
             seconds: Cell::new(0.0),
             interpolation_type: Cell::new(0),
             double_value: Cell::new(None),
-            has_interpolator: Cell::new(false),
+            interpolator: std::cell::RefCell::new(None),
             times_stale: std::cell::OnceCell::new(),
         }
     }
@@ -39,6 +41,7 @@ impl KeyFrameCells {
 
     #[inline]
     pub(crate) fn set_seconds(&self, seconds: f32) {
+        keyed_data_changed();
         self.seconds.set(seconds);
         if let Some(stale) = self.times_stale.get() {
             stale.set(true);
@@ -52,6 +55,7 @@ impl KeyFrameCells {
 
     #[inline]
     pub(crate) fn set_interpolation_type(&self, value: u32) {
+        keyed_data_changed();
         self.interpolation_type.set(value);
     }
 
@@ -63,17 +67,23 @@ impl KeyFrameCells {
 
     #[inline]
     pub(crate) fn set_double_value(&self, value: f32) {
+        keyed_data_changed();
         self.double_value.set(Some(value));
     }
 
     #[inline]
     pub(crate) fn has_interpolator(&self) -> bool {
-        self.has_interpolator.get()
+        self.interpolator.borrow().is_some()
     }
 
-    #[inline]
-    pub(crate) fn set_has_interpolator(&self) {
-        self.has_interpolator.set(true);
+    /// The interpolator object, when the keyframe resolved one.
+    pub(crate) fn interpolator(&self) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.interpolator.borrow().clone()
+    }
+
+    pub(crate) fn set_interpolator(&self, interpolator: crate::mechanical_port::source::core::CoreHandle) {
+        keyed_data_changed();
+        *self.interpolator.borrow_mut() = Some(interpolator);
     }
 }
 
@@ -139,6 +149,7 @@ impl KeyedPropertyCells {
 
     #[inline]
     pub(crate) fn set_property_key(&self, value: u32) {
+        keyed_data_changed();
         self.property_key.set(value);
     }
 
@@ -156,6 +167,7 @@ impl KeyedPropertyCells {
 
     /// Replace the keyframes with the owning KeyedProperty's whole list.
     pub(crate) fn set_frames(&self, frames: std::rc::Rc<[KeyFrameEntry]>) {
+        keyed_data_changed();
         // A frame joins one property; its time changes mark this one stale.
         for frame in frames.iter() {
             let _ = frame.cells.times_stale.set(std::rc::Rc::clone(&self.times_stale));
@@ -166,7 +178,7 @@ impl KeyedPropertyCells {
 }
 
 /// KeyedProperty::closestFrameIndex over the frames' times.
-fn closest_time_index(times: &[f32], seconds: f32, offset: i32) -> i32 {
+pub(crate) fn closest_time_index(times: &[f32], seconds: f32, offset: i32) -> i32 {
     let mut start = 0;
     let mut end = times.len() as i32 - 1;
     if seconds > times[end as usize] {
@@ -217,6 +229,7 @@ impl KeyedObjectCells {
 
     #[inline]
     pub(crate) fn set_object_id(&self, value: u32) {
+        keyed_data_changed();
         self.object_id.set(value);
     }
 
@@ -226,6 +239,7 @@ impl KeyedObjectCells {
     }
 
     pub(crate) fn push_property(&self, property: PropertyEntry) {
+        keyed_data_changed();
         let properties: std::rc::Rc<[PropertyEntry]> = self
             .properties
             .borrow()
@@ -237,6 +251,7 @@ impl KeyedObjectCells {
     }
 
     pub(crate) fn remove_property(&self, index: usize) {
+        keyed_data_changed();
         let properties: std::rc::Rc<[PropertyEntry]> = self
             .properties
             .borrow()

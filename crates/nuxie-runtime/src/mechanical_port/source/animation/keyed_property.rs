@@ -6,7 +6,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyframe_cells::{KeyFrameCells, KeyFrameEntry, KeyedPropertyCells},
-        keyframe_double::KeyFrameDouble,
+        keyframe_double::{DoubleTarget, KeyFrameDouble, RegistryDouble},
         keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
         keyframe_interpolator::KeyFrameInterpolator, linear_animation::LinearAnimation,
     },
@@ -254,25 +254,48 @@ impl KeyedProperty {
             }
         };
         let property_key = property.property_key() as i32;
-        let (frame, next) = if index == 0 {
-            (&frames[0], None)
-        } else if index < frame_count as i32 {
-            let from = &frames[index as usize - 1];
-            let to = &frames[index as usize];
-            if seconds == to.cells.seconds() {
-                (to, None)
-            } else if from.cells.interpolation_type() == 0 {
-                (from, None)
-            } else {
-                (from, Some(to))
-            }
-        } else {
-            (&frames[index as usize - 1], None)
-        };
+        Self::apply_frames(
+            &frames,
+            frame_count,
+            index,
+            &RegistryDouble { object, key: property_key },
+            seconds,
+            mix,
+            context,
+            context,
+        );
+    }
+
+    /// The selection and application of apply_cells over `frames`, whose
+    /// search found `index` among `frame_count` frames. The double keyframe
+    /// routes read `double_context`, which is `context` or, where `context`
+    /// is plain, None.
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_frames(
+        frames: &[KeyFrameEntry],
+        frame_count: usize,
+        index: i32,
+        target: &impl DoubleTarget,
+        seconds: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+        double_context: Option<&dyn KeyFrameValueContext>,
+    ) {
+        let object = target.object();
+        let property_key = target.key();
+        let (frame, next) = select_frames(
+            index,
+            frame_count,
+            seconds,
+            |i| frames[i].cells.seconds(),
+            |i| frames[i].cells.interpolation_type() == 0,
+        );
+        let (frame, next) = (&frames[frame], next.map(|next| &frames[next]));
         match (next, frame.cells.double_value()) {
             // A double keyframe applies from its cells.
             (None, Some(stored)) => {
-                KeyFrameDouble::apply_stored(&frame.handle, stored, object, property_key, mix, context);
+                KeyFrameDouble::apply_stored_to(&frame.handle, stored, target, mix, double_context);
             }
             (None, None) => {
                 frame.handle.with(|keyframe| {
@@ -283,7 +306,7 @@ impl KeyedProperty {
             (Some(next), Some(_))
                 if !frame.cells.has_interpolator() && next.cells.double_value().is_some() =>
             {
-                KeyFrameDouble::interpolate_stored(frame, next, object, property_key, seconds, mix, context);
+                KeyFrameDouble::interpolate_stored_to(frame, next, target, seconds, mix, double_context);
             }
             (Some(next), _) => {
                 let next = next.handle.clone();
@@ -420,5 +443,34 @@ impl std::ops::Deref for KeyedProperty {
 impl std::ops::DerefMut for KeyedProperty {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+/// KeyedProperty::apply's frame selection after closestFrameIndex found
+/// `index` among `frame_count` frames: the frame to apply and, when it
+/// interpolates, the frame it interpolates to. `seconds_of` and `holds` read
+/// a frame's time and whether its interpolation type is hold.
+#[inline]
+pub(crate) fn select_frames(
+    index: i32,
+    frame_count: usize,
+    seconds: f32,
+    seconds_of: impl Fn(usize) -> f32,
+    holds: impl Fn(usize) -> bool,
+) -> (usize, Option<usize>) {
+    if index == 0 {
+        (0, None)
+    } else if index < frame_count as i32 {
+        let from = index as usize - 1;
+        let to = index as usize;
+        if seconds == seconds_of(to) {
+            (to, None)
+        } else if holds(from) {
+            (from, None)
+        } else {
+            (from, Some(to))
+        }
+    } else {
+        (index as usize - 1, None)
     }
 }

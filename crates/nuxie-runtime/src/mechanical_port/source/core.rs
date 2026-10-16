@@ -775,6 +775,23 @@ impl CoreHandle {
         Some((result, slot.component_graph_order.get()?))
     }
 
+    /// Whether this handle's occupant is a member of `graph`, read without a
+    /// lease or cloning the binding.
+    #[inline]
+    pub(crate) fn in_component_graph(
+        &self,
+        graph: &Rc<crate::mechanical_port::source::component_graph::ComponentGraph>,
+    ) -> bool {
+        let slot = &self.identity.slot;
+        if slot.generation.get() != slot.identity_generation {
+            return false;
+        }
+        let bound = slot.component_graph.take();
+        let member = bound.as_ref().is_some_and(|bound| Rc::ptr_eq(bound, graph));
+        slot.component_graph.set(bound);
+        member
+    }
+
     pub fn identity_key(&self) -> (usize, usize, u64) {
         (
             self.identity.arena.as_ptr() as usize,

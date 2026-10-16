@@ -20,6 +20,7 @@ pub mod blend_state_direct;
 pub mod blend_state_direct_instance;
 pub mod blend_state_instance;
 pub mod blend_state_transition;
+pub(crate) mod compiled_animation;
 pub mod cubic_ease_interpolator;
 pub mod cubic_interpolator;
 pub mod cubic_interpolator_component;

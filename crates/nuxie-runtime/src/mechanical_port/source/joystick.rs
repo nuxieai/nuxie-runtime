@@ -1,5 +1,8 @@
+use std::cell::Cell;
+
 use crate::mechanical_port::source::{
     animation::{
+        compiled_animation::CompiledAnimation,
         interpolating_keyframe::KeyFrameValueContext,
         keyed_object::KeyedObject,
         linear_animation::{LinearAnimation, LinearAnimationArtboard},
@@ -33,6 +36,10 @@ pub struct Joystick {
     y_animation_instance: Option<LinearAnimationInstance>,
     handle_source: Option<CoreHandle>,
     dependents: Vec<CoreHandle>,
+    // The x and y animations compiled for this joystick's applies; taken
+    // while an apply runs.
+    x_compiled: Cell<Option<Box<CompiledAnimation>>>,
+    y_compiled: Cell<Option<Box<CompiledAnimation>>>,
 }
 
 impl Default for Joystick {
@@ -47,6 +54,8 @@ impl Default for Joystick {
             y_animation_instance: None,
             handle_source: None,
             dependents: Vec::new(),
+            x_compiled: Cell::new(None),
+            y_compiled: Cell::new(None),
         }
     }
 }
@@ -178,17 +187,15 @@ impl Joystick {
             } else {
                 self.base.x()
             };
-            animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
-                let time = (x + 1.0) / 2.0 * animation.duration_seconds();
-                animation.apply(
-                    artboard,
-                    time,
-                    1.0,
-                    self.x_animation_instance
-                        .as_ref()
-                        .map(|instance| instance as &dyn KeyFrameValueContext),
-                );
-            });
+            Self::apply_axis(
+                animation,
+                &self.x_compiled,
+                x,
+                artboard,
+                self.x_animation_instance
+                    .as_ref()
+                    .map(|instance| instance as &dyn KeyFrameValueContext),
+            );
         }
         if let Some(animation) = &self.y_animation {
             let y = if self.is_joystick_flagged(JoystickFlags::INVERT_Y) {
@@ -196,23 +203,49 @@ impl Joystick {
             } else {
                 self.base.y()
             };
-            animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
-                let time = (y + 1.0) / 2.0 * animation.duration_seconds();
-                animation.apply(
-                    artboard,
-                    time,
-                    1.0,
-                    self.y_animation_instance
-                        .as_ref()
-                        .map(|instance| instance as &dyn KeyFrameValueContext),
-                );
-            });
+            Self::apply_axis(
+                animation,
+                &self.y_compiled,
+                y,
+                artboard,
+                self.y_animation_instance
+                    .as_ref()
+                    .map(|instance| instance as &dyn KeyFrameValueContext),
+            );
         }
         for dependent in &self.dependents {
             dependent.with_downcast_mut::<NestedRemapAnimation, _>(|dependent| {
                 dependent.advance(0.0, false);
             });
         }
+    }
+
+    /// LinearAnimation::apply of an axis animation at the axis value's time,
+    /// through the axis's compiled animation.
+    fn apply_axis(
+        animation: &CoreHandle,
+        compiled: &Cell<Option<Box<CompiledAnimation>>>,
+        value: f32,
+        artboard: &mut dyn LinearAnimationArtboard,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) {
+        let mut taken = compiled.take().unwrap_or_default();
+        animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
+            let mut time = (value + 1.0) / 2.0 * animation.duration_seconds();
+            // LinearAnimation::apply's quantization.
+            if animation.base.quantize() {
+                let fps = animation.base.fps() as f32;
+                time = (time * fps).floor() / fps;
+            }
+            taken.apply(
+                || animation.keyed_object_snapshot(),
+                artboard,
+                time,
+                1.0,
+                context,
+            );
+        });
+        compiled.set(Some(taken));
     }
 
     pub fn is_joystick_flagged(&self, flag: JoystickFlags) -> bool {

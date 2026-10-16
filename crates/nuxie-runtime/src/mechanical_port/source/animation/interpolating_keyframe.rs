@@ -13,6 +13,13 @@ pub trait KeyFrameValueContext {
     ) -> Option<std::rc::Rc<std::cell::RefCell<super::blend_accumulator::BlendAccumulator>>> {
         None
     }
+    /// Whether number_value is None for every keyframe and there is no
+    /// blend accumulator, so a double keyframe applies exactly as it would
+    /// without this context. Read without side effects; a context that
+    /// cannot tell answers false.
+    fn plain_numbers(&self) -> bool {
+        false
+    }
     fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool>;
     fn string_value(&self, keyframe: &CoreHandle) -> Option<String>;
     fn color_value(&self, keyframe: &CoreHandle) -> Option<i32>;
@@ -49,8 +56,8 @@ impl InterpolatingKeyFrame {
             if !value.is_type_of(KeyFrameInterpolatorBase::TYPE_KEY) {
                 return StatusCode::MissingObject;
             }
+            self.base.base.cells().set_interpolator(value.clone());
             self.interpolator = Some(value);
-            self.base.base.cells().set_has_interpolator();
         }
         StatusCode::Ok
     }

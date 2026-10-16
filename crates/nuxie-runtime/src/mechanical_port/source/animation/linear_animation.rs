@@ -2,6 +2,7 @@
 
 use crate::mechanical_port::source::{
     animation::{
+        compiled_animation::keyed_data_changed,
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter,
         keyed_object::{KeyedObject, KeyedObjectContext},
@@ -241,6 +242,16 @@ pub trait LinearAnimationArtboard {
         let _ = cells;
         self.apply_keyed_object_borrowed(object, time, mix, context);
     }
+
+    /// The KeyedObjectContext this context's apply_keyed_object_cells and
+    /// apply_keyed_object_borrowed apply keyed objects through (with
+    /// KeyedObject::apply_cells and KeyedObject::apply_occurrence), so a
+    /// compiled animation resolves targets and applies properties exactly as
+    /// they would. None where there is no such single context; a compiled
+    /// animation then applies through the hooks.
+    fn as_keyed_object_context(&mut self) -> Option<&mut dyn KeyedObjectContext> {
+        None
+    }
 }
 
 /// One keyed object of an animation, through its cells when it has them.
@@ -306,6 +317,16 @@ impl LinearAnimationOwner {
         for (object, cells) in objects.iter().zip(cells.iter()) {
             apply_keyed_object_entry(artboard, object, cells, time, mix, context);
         }
+    }
+
+    /// The keyed objects and their cells, as apply snapshots them.
+    pub(crate) fn keyed_object_snapshot(
+        &self,
+    ) -> (
+        crate::mechanical_port::source::lazy_vector::LazyVectorSnapshot<CoreHandle>,
+        crate::mechanical_port::source::lazy_vector::LazyVectorSnapshot<Option<Rc<KeyedObjectCells>>>,
+    ) {
+        self.with(LinearAnimation::keyed_object_snapshot)
     }
 
     pub(crate) fn report_keyed_callbacks(
@@ -397,6 +418,7 @@ impl LinearAnimation {
         v: CoreHandle,
         cells: Option<Rc<KeyedObjectCells>>,
     ) {
+        keyed_data_changed();
         self.keyed_objects.push_back(v);
         self.keyed_object_cells.push_back(cells);
     }
@@ -418,6 +440,7 @@ impl LinearAnimation {
             }
         }
         for i in failed.into_iter().rev() {
+            keyed_data_changed();
             self.keyed_objects.remove(i);
             self.keyed_object_cells.remove(i);
         }
@@ -476,6 +499,15 @@ impl LinearAnimation {
             }
         }
         StatusCode::Ok
+    }
+    /// The keyed objects and their cells, as apply snapshots them.
+    pub(crate) fn keyed_object_snapshot(
+        &self,
+    ) -> (
+        crate::mechanical_port::source::lazy_vector::LazyVectorSnapshot<CoreHandle>,
+        crate::mechanical_port::source::lazy_vector::LazyVectorSnapshot<Option<Rc<KeyedObjectCells>>>,
+    ) {
+        (self.keyed_objects.snapshot(), self.keyed_object_cells.snapshot())
     }
     pub fn apply(
         &mut self,

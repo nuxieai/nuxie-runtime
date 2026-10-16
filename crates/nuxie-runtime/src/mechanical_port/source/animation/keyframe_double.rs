@@ -1,12 +1,13 @@
 use crate::mechanical_port::source::{
     animation::{interpolating_keyframe::KeyFrameValueContext, keyframe_cells::KeyFrameEntry},
+    component_graph::PlainInputSink,
     core::CoreHandle,
     generated::{animation::keyframe_double_base::KeyFrameDoubleBase, core_registry::CoreRegistry},
     math::FloatContract,
 };
 
 #[inline]
-fn interpolated_value(from: f32, to: f32, factor: f32) -> f32 {
+pub(crate) fn interpolated_value(from: f32, to: f32, factor: f32) -> f32 {
     #[cfg(feature = "strict-fp")]
     {
         from + (to - from) * factor
@@ -14,6 +15,72 @@ fn interpolated_value(from: f32, to: f32, factor: f32) -> f32 {
     #[cfg(not(feature = "strict-fp"))]
     {
         (to - from).mul_add(factor, from)
+    }
+}
+
+/// Where a double keyframe's value goes: the target object's double property
+/// `key`, read and written through CoreRegistry or through a resolved sink
+/// that does exactly what CoreRegistry would.
+pub(crate) trait DoubleTarget {
+    fn object(&self) -> &CoreHandle;
+    fn key(&self) -> i32;
+    /// CoreRegistry::get_double_handle(object, key).
+    fn get(&self) -> Option<f32>;
+    /// CoreRegistry::set_double_handle(object, key, value).
+    fn set(&self, value: f32) -> bool;
+}
+
+/// A double property reached through CoreRegistry.
+pub(crate) struct RegistryDouble<'a> {
+    pub(crate) object: &'a CoreHandle,
+    pub(crate) key: i32,
+}
+
+impl DoubleTarget for RegistryDouble<'_> {
+    #[inline]
+    fn object(&self) -> &CoreHandle {
+        self.object
+    }
+    #[inline]
+    fn key(&self) -> i32 {
+        self.key
+    }
+    #[inline]
+    fn get(&self) -> Option<f32> {
+        CoreRegistry::get_double_handle(self.object, self.key)
+    }
+    #[inline]
+    fn set(&self, value: f32) -> bool {
+        CoreRegistry::set_double_handle(self.object, self.key, value)
+    }
+}
+
+/// A plain transform input reached through the sink CoreRegistry's own
+/// lookup resolves to (PlainInputSink::resolve), so its reads and writes are
+/// the registry's.
+pub(crate) struct SinkDouble<'a> {
+    pub(crate) object: &'a CoreHandle,
+    pub(crate) key: i32,
+    pub(crate) sink: &'a PlainInputSink,
+}
+
+impl DoubleTarget for SinkDouble<'_> {
+    #[inline]
+    fn object(&self) -> &CoreHandle {
+        self.object
+    }
+    #[inline]
+    fn key(&self) -> i32 {
+        self.key
+    }
+    #[inline]
+    fn get(&self) -> Option<f32> {
+        Some(self.sink.get())
+    }
+    #[inline]
+    fn set(&self, value: f32) -> bool {
+        self.sink.set(self.object, value);
+        true
     }
 }
 
@@ -32,14 +99,18 @@ impl KeyFrameDouble {
             .unwrap_or_else(|| self.base.value())
     }
     fn apply_value(object: &CoreHandle, key: i32, mix: f32, value: f32) -> bool {
+        Self::apply_value_to(&RegistryDouble { object, key }, mix, value)
+    }
+    #[inline]
+    pub(crate) fn apply_value_to(target: &impl DoubleTarget, mix: f32, value: f32) -> bool {
         if mix == 1.0 {
-            CoreRegistry::set_double_handle(object, key, value)
+            target.set(value)
         } else {
-            let Some(current) = CoreRegistry::get_double_handle(object, key) else {
+            let Some(current) = target.get() else {
                 return false;
             };
             let mixed = current.contracted_mul_add(1.0 - mix, value * mix);
-            CoreRegistry::set_double_handle(object, key, mixed)
+            target.set(mixed)
         }
     }
     pub fn apply(
@@ -72,6 +143,18 @@ impl KeyFrameDouble {
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) -> bool {
+        Self::apply_stored_to(keyframe, stored, &RegistryDouble { object, key }, mix, context)
+    }
+
+    /// apply_stored, writing `target`.
+    #[inline]
+    pub(crate) fn apply_stored_to(
+        keyframe: &CoreHandle,
+        stored: f32,
+        target: &impl DoubleTarget,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) -> bool {
         let effective_value = || {
             context
                 .and_then(|context| context.number_value(keyframe))
@@ -81,10 +164,10 @@ impl KeyFrameDouble {
             let value = effective_value();
             accumulator
                 .borrow_mut()
-                .apply_double(object, key, mix, value);
+                .apply_double(target.object(), target.key(), mix, value);
             return true;
         }
-        Self::apply_value(object, key, mix, effective_value())
+        Self::apply_value_to(target, mix, effective_value())
     }
 
     /// apply_interpolation() from the double keyframe `from` to the double
@@ -97,6 +180,19 @@ impl KeyFrameDouble {
         to: &KeyFrameEntry,
         object: &CoreHandle,
         key: i32,
+        current_time: f32,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+    ) -> bool {
+        Self::interpolate_stored_to(from, to, &RegistryDouble { object, key }, current_time, mix, context)
+    }
+
+    /// interpolate_stored, writing `target`.
+    #[inline]
+    pub(crate) fn interpolate_stored_to(
+        from: &KeyFrameEntry,
+        to: &KeyFrameEntry,
+        target: &impl DoubleTarget,
         current_time: f32,
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
@@ -115,10 +211,10 @@ impl KeyFrameDouble {
         if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
             accumulator
                 .borrow_mut()
-                .apply_double(object, key, mix, value);
+                .apply_double(target.object(), target.key(), mix, value);
             return true;
         }
-        Self::apply_value(object, key, mix, value)
+        Self::apply_value_to(target, mix, value)
     }
     pub fn apply_interpolation(
         &self,

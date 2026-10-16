@@ -613,6 +613,11 @@ impl LinearAnimationArtboard for ArtboardObjectContext {
     ) {
         KeyedObject::apply_cells(cells, self, time, mix, context);
     }
+    fn as_keyed_object_context(
+        &mut self,
+    ) -> Option<&mut dyn crate::mechanical_port::source::animation::keyed_object::KeyedObjectContext> {
+        Some(self)
+    }
 }
 
 // Runtime callbacks receive the live Artboard in pinned C++. Resolve its
@@ -712,6 +717,11 @@ impl LinearAnimationArtboard for RuntimeArtboardObjectContext<'_> {
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
         KeyedObject::apply_cells(cells, self, time, mix, context);
+    }
+    fn as_keyed_object_context(
+        &mut self,
+    ) -> Option<&mut dyn crate::mechanical_port::source::animation::keyed_object::KeyedObjectContext> {
+        Some(self)
     }
 }
 
@@ -7026,6 +7036,39 @@ impl RuntimeArtboardInstanceHandle {
         };
         animation.apply(&mut target, time, mix, context);
     }
+    /// apply_linear_animation_owner through an instance's compiled form of
+    /// `animation`, whose shared timing cells are `cells`.
+    pub(crate) fn apply_linear_animation_compiled(
+        &self,
+        animation: &crate::mechanical_port::source::animation::linear_animation::LinearAnimationOwner,
+        cells: &crate::mechanical_port::source::animation::linear_animation::LinearAnimationCells,
+        mut time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+        compiled: &mut crate::mechanical_port::source::animation::compiled_animation::CompiledAnimation,
+    ) {
+        let root = self.core_handle();
+        let arena = root
+            .retain_arena()
+            .expect("live Artboard animation retains its object arena");
+        let mut target = RuntimeArtboardObjectContext {
+            arena,
+            root,
+            instance: Some(self),
+        };
+        // LinearAnimation::apply's quantization, from the shared cells.
+        if cells.quantize() {
+            let fps = cells.fps() as f32;
+            time = (time * fps).floor() / fps;
+        }
+        compiled.apply(
+            || animation.keyed_object_snapshot(),
+            &mut target,
+            time,
+            mix,
+            context,
+        );
+    }
     pub fn state_machine_instance_handle(
         &self,
         index: usize,
@@ -7876,6 +7919,11 @@ impl LinearAnimationArtboard for Artboard {
     ) {
         KeyedObject::apply_cells(cells, self, time, mix, context);
     }
+    fn as_keyed_object_context(
+        &mut self,
+    ) -> Option<&mut dyn crate::mechanical_port::source::animation::keyed_object::KeyedObjectContext> {
+        Some(self)
+    }
 }
 
 impl LinearAnimationArtboard for ArtboardInstance {
@@ -7907,6 +7955,11 @@ impl LinearAnimationArtboard for ArtboardInstance {
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) {
         KeyedObject::apply_cells(cells, &mut self.base, time, mix, context);
+    }
+    fn as_keyed_object_context(
+        &mut self,
+    ) -> Option<&mut dyn crate::mechanical_port::source::animation::keyed_object::KeyedObjectContext> {
+        Some(&mut self.base)
     }
 }
 
@@ -8088,6 +8141,10 @@ mod artboard_draw_contract_tests;
 #[cfg(test)]
 #[path = "artboard_animation_context_tests.rs"]
 mod artboard_animation_context_tests;
+
+#[cfg(test)]
+#[path = "artboard_compiled_animation_tests.rs"]
+mod artboard_compiled_animation_tests;
 
 #[cfg(test)]
 #[path = "artboard_keyed_object_borrow_tests.rs"]

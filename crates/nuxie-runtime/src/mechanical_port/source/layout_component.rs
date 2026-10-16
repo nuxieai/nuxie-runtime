@@ -219,6 +219,27 @@ pub(crate) enum LayoutComponentFlags {
     StyleDisplayHidden = 1 << 14,
 }
 
+/// A LayoutComponent's flags, shared with the component.
+pub(crate) struct LayoutDrawFlags(Rc<Cell<u16>>);
+
+impl LayoutDrawFlags {
+    /// isCollapsed's style half: the style's display is none.
+    #[inline]
+    pub(crate) fn style_display_hidden(&self) -> bool {
+        self.0.get() & LayoutComponentFlags::StyleDisplayHidden as u16 != 0
+    }
+
+    /// LayoutComponent::draw: restore the clip drawProxy saved.
+    #[inline]
+    pub(crate) fn draw(&self, renderer: &mut Renderer) {
+        let flags = self.0.get();
+        if flags & LayoutComponentFlags::ClipSaved as u16 != 0 {
+            self.0.set(flags & !(LayoutComponentFlags::ClipSaved as u16));
+            renderer.restore();
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct LayoutRenderPaths {
     pub background: RawPath,
@@ -264,7 +285,9 @@ pub struct LayoutComponent {
     solved_padding: LayoutPadding,
     animation: Option<Box<LayoutAnimation>>,
     inherited_direction: LayoutDirection,
-    layout_flags: u16,
+    // Shared with the draw list, which reads StyleDisplayHidden and runs
+    // draw's ClipSaved restore without borrowing this component.
+    layout_flags: Rc<Cell<u16>>,
     render_paths: Option<std::rc::Rc<std::cell::RefCell<LayoutRenderPaths>>>,
     proxy: Option<Rc<RefCell<DrawableProxy>>>,
     width_override: f32,
@@ -305,10 +328,12 @@ impl Default for LayoutComponent {
             solved_padding: LayoutPadding::default(),
             animation: None,
             inherited_direction: LayoutDirection::Inherit,
-            layout_flags: LayoutComponentFlags::ParentIsRow as u16
-                | LayoutComponentFlags::PositionLeftChanged as u16
-                | LayoutComponentFlags::PositionTopChanged as u16
-                | LayoutComponentFlags::ComposeTransform as u16,
+            layout_flags: Rc::new(Cell::new(
+                LayoutComponentFlags::ParentIsRow as u16
+                    | LayoutComponentFlags::PositionLeftChanged as u16
+                    | LayoutComponentFlags::PositionTopChanged as u16
+                    | LayoutComponentFlags::ComposeTransform as u16,
+            )),
             render_paths: None,
             proxy: None,
             width_override: f32::NAN,
@@ -440,14 +465,19 @@ impl LayoutComponent {
         )
     }
     pub(crate) fn has_layout_flag(&self, flag: LayoutComponentFlags) -> bool {
-        self.layout_flags & flag as u16 != 0
+        self.layout_flags.get() & flag as u16 != 0
     }
     pub(crate) fn set_layout_flag(&mut self, flag: LayoutComponentFlags, on: bool) {
-        if on {
-            self.layout_flags |= flag as u16;
+        let flags = self.layout_flags.get();
+        self.layout_flags.set(if on {
+            flags | flag as u16
         } else {
-            self.layout_flags &= !(flag as u16);
-        }
+            flags & !(flag as u16)
+        });
+    }
+    /// This component's flags, for the draw list's range step.
+    pub(crate) fn draw_flags(&self) -> LayoutDrawFlags {
+        LayoutDrawFlags(Rc::clone(&self.layout_flags))
     }
     pub(crate) fn mutable_render_paths(&mut self) -> std::cell::RefMut<'_, LayoutRenderPaths> {
         self.render_paths
@@ -4550,7 +4580,10 @@ impl std::ops::DerefMut for LayoutComponent {
         &mut self.base
     }
 }
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 #[cfg(test)]
 mod packed_layout_tests {
@@ -4703,7 +4736,7 @@ mod packed_layout_tests {
         assert!(layout.local_clockwise_path().is_none());
         assert!(!layout.needs_drawable_proxy());
         assert_eq!(
-            layout.layout_flags,
+            layout.layout_flags.get(),
             (1 << 0) | (1 << 5) | (1 << 6) | (1 << 9)
         );
         layout.mutable_render_paths();

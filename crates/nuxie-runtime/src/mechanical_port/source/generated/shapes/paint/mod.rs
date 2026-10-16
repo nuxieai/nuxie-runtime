@@ -1,3 +1,4 @@
+pub mod angular_gradient_base;
 pub mod color_channels_base;
 pub mod dash_base;
 pub mod dash_path_base;

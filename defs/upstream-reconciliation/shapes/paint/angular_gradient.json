@@ -1,0 +1,8 @@
+{
+  "name": "AngularGradient",
+  "key": {
+    "int": 1089,
+    "string": "angulargradient"
+  },
+  "extends": "shapes/paint/linear_gradient.json"
+}

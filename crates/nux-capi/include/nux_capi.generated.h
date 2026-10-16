@@ -1086,11 +1086,43 @@ typedef struct NuxFontSource {
 typedef void (*NuxFontOutlineSink)(void*, uint8_t, const float*);
 
 /**
+ * A borrowed PNG picture. All storage is copied before the sink returns.
+ * Bearings and extents are in em units; top is the top edge above the baseline,
+ * positive up. Width and height describe the PNG in pixels, at most 1024 each.
+ * PNG data is limited to 4 MiB; dimensions must match its IHDR, and all metrics
+ * must be finite.
+ * struct_size must cover this prefix; appended fields are ignored.
+ */
+typedef struct NuxFontPicture {
+  uint32_t struct_size;
+  const uint8_t *png;
+  size_t png_len;
+  uint32_t width;
+  uint32_t height;
+  float bearing_x;
+  float top;
+  float extent_x;
+  float extent_y;
+} NuxFontPicture;
+
+/**
+ * Emit at most one picture synchronously. Passing NULL or making no sink call
+ * supplies no picture. A second call discards the entire answer. The sink and
+ * its context expire when get_picture returns.
+ */
+typedef void (*NuxFontPictureSink)(void*, const struct NuxFontPicture*);
+
+/**
  * Host callbacks are copied at creation. Context ownership transfers only on
  * success and release runs once after the last retained host font dies,
- * possibly on any thread. get_path may run concurrently; callbacks and context
- * must be thread-safe, must not unwind, and must not reenter the font API.
- * struct_size must cover the ABI-v4 prefix; appended fields are ignored.
+ * possibly on any thread. get_path and get_picture may run on any thread,
+ * concurrently; callbacks and context must be thread-safe, must not unwind,
+ * and must not reenter the font API. At least one callback must be supplied.
+ * get_picture is asked only when native colour drawing is unavailable, once
+ * per glyph; an absent answer is also cached. Cluster code points are borrowed
+ * for the call. Native COLR and readable PNG pictures take precedence.
+ * struct_size must cover the ABI-v4 prefix through release. get_picture is
+ * optional and read only when struct_size covers it; future fields are ignored.
  */
 typedef struct NuxFontOutlineCallbacks {
   uint32_t struct_size;
@@ -1102,6 +1134,7 @@ typedef struct NuxFontOutlineCallbacks {
                    NuxFontOutlineSink,
                    void*);
   void (*release)(void*);
+  void (*get_picture)(void*, uint16_t, const uint32_t*, size_t, NuxFontPictureSink, void*);
 } NuxFontOutlineCallbacks;
 
 /**
@@ -2501,9 +2534,10 @@ NuxStatus nux_font_has_glyph(const struct NuxFont *font, uint32_t character, boo
 NuxStatus nux_font_new(const struct NuxFontSource *source, struct NuxFont **out_font);
 
 /**
- * Decode a host font with empty-outline recovery, mirroring upstream's
- * first CoreTextHBFont attempt. File shaping, metrics and nonempty outlines
- * remain unchanged. This does not install a process fallback hook.
+ * Decode a host font with optional empty-outline recovery and colour pictures.
+ * Outline recovery mirrors upstream's first CoreTextHBFont attempt; pictures
+ * extend it for native formats the runtime cannot decode. File shaping,
+ * metrics and nonempty outlines remain unchanged. No fallback hook is installed.
  */
 NuxStatus nux_font_new_with_outline(const struct NuxFontSource *source,
                                     const struct NuxFontOutlineCallbacks *callbacks,

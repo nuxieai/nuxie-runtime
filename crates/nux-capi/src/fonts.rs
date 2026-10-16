@@ -1,6 +1,6 @@
 //! C access to the engine's fonts and process-wide fallback hook.
 use super::*;
-use nuxie::runtime::text::font_hb::{FileProbe, HbFont};
+use nuxie::runtime::text::font_hb::{FileProbe, HbFont, HostGlyphPicture};
 use nuxie::runtime::text::text_engine::{Coord, Font, FontRef, set_fallback_proc};
 
 pub const NUX_FONT_MAX_BYTES: usize = 256 * 1024 * 1024;
@@ -185,11 +185,41 @@ pub unsafe extern "C" fn nux_font_new(
 /// The sink and its context expire when get_path returns.
 pub type NuxFontOutlineSink = unsafe extern "C" fn(*mut c_void, u8, *const f32);
 
+/// A borrowed PNG picture. All storage is copied before the sink returns.
+/// Bearings and extents are in em units; top is the top edge above the baseline,
+/// positive up. Width and height describe the PNG in pixels, at most 1024 each.
+/// PNG data is limited to 4 MiB; dimensions must match its IHDR, and all metrics
+/// must be finite.
+/// struct_size must cover this prefix; appended fields are ignored.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NuxFontPicture {
+    pub struct_size: u32,
+    pub png: *const u8,
+    pub png_len: usize,
+    pub width: u32,
+    pub height: u32,
+    pub bearing_x: f32,
+    pub top: f32,
+    pub extent_x: f32,
+    pub extent_y: f32,
+}
+
+/// Emit at most one picture synchronously. Passing NULL or making no sink call
+/// supplies no picture. A second call discards the entire answer. The sink and
+/// its context expire when get_picture returns.
+pub type NuxFontPictureSink = unsafe extern "C" fn(*mut c_void, *const NuxFontPicture);
+
 /// Host callbacks are copied at creation. Context ownership transfers only on
 /// success and release runs once after the last retained host font dies,
-/// possibly on any thread. get_path may run concurrently; callbacks and context
-/// must be thread-safe, must not unwind, and must not reenter the font API.
-/// struct_size must cover the ABI-v4 prefix; appended fields are ignored.
+/// possibly on any thread. get_path and get_picture may run on any thread,
+/// concurrently; callbacks and context must be thread-safe, must not unwind,
+/// and must not reenter the font API. At least one callback must be supplied.
+/// get_picture is asked only when native colour drawing is unavailable, once
+/// per glyph; an absent answer is also cached. Cluster code points are borrowed
+/// for the call. Native COLR and readable PNG pictures take precedence.
+/// struct_size must cover the ABI-v4 prefix through release. get_picture is
+/// optional and read only when struct_size covers it; future fields are ignored.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NuxFontOutlineCallbacks {
@@ -206,6 +236,9 @@ pub struct NuxFontOutlineCallbacks {
         ),
     >,
     pub release: Option<unsafe extern "C" fn(*mut c_void)>,
+    pub get_picture: Option<
+        unsafe extern "C" fn(*mut c_void, u16, *const u32, usize, NuxFontPictureSink, *mut c_void),
+    >,
 }
 
 const FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE: usize =
@@ -226,6 +259,9 @@ unsafe fn read_font_outline_callbacks(
             ptr::from_mut(&mut value).cast(),
             FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE,
         );
+    }
+    if struct_size_supports(caller_size, std::mem::size_of::<NuxFontOutlineCallbacks>()) {
+        value.get_picture = unsafe { ptr::addr_of!((*callbacks).get_picture).read() };
     }
     Ok(value)
 }
@@ -296,7 +332,93 @@ unsafe extern "C" fn append_outline(context: *mut c_void, verb: u8, points: *con
     }
 }
 
+const FONT_PICTURE_MAX_PNG_BYTES: usize = 4 * 1024 * 1024;
+const FONT_PICTURE_MAX_SIDE: u32 = 1024;
+const FONT_PICTURE_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxFontPicture, extent_y) + std::mem::size_of::<f32>();
+
+#[derive(Default)]
+struct PictureBuilder {
+    called: bool,
+    picture: Option<HostGlyphPicture>,
+}
+
+unsafe extern "C" fn append_picture(context: *mut c_void, picture: *const NuxFontPicture) {
+    let builder = unsafe { &mut *context.cast::<PictureBuilder>() };
+    if builder.called {
+        builder.picture = None;
+        return;
+    }
+    builder.called = true;
+    if picture.is_null() {
+        return;
+    }
+    let caller_size = unsafe { picture.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, FONT_PICTURE_MIN_SIZE) {
+        return;
+    }
+    // Read exactly the settled prefix, including on platforms where the struct
+    // has trailing padding. The foreign allocation need only cover its prefix.
+    let mut value: NuxFontPicture = unsafe { std::mem::zeroed() };
+    unsafe {
+        ptr::copy_nonoverlapping(
+            picture.cast::<u8>(),
+            ptr::from_mut(&mut value).cast(),
+            FONT_PICTURE_MIN_SIZE,
+        );
+    }
+    if value.png_len == 0
+        || value.png_len > FONT_PICTURE_MAX_PNG_BYTES
+        || value.png.is_null()
+        || value.width == 0
+        || value.height == 0
+        || value.width > FONT_PICTURE_MAX_SIDE
+        || value.height > FONT_PICTURE_MAX_SIDE
+        || [value.bearing_x, value.top, value.extent_x, value.extent_y]
+            .iter()
+            .any(|metric| !metric.is_finite())
+    {
+        return;
+    }
+    let png = unsafe { slice::from_raw_parts(value.png, value.png_len) };
+    // Check the encoded dimensions too, so a small reported size cannot bypass
+    // the bitmap bound. Full PNG decoding remains the renderer's responsibility.
+    if png.len() < 33
+        || &png[..8] != b"\x89PNG\r\n\x1a\n"
+        || png[8..12] != 13u32.to_be_bytes()
+        || &png[12..16] != b"IHDR"
+        || png[16..20] != value.width.to_be_bytes()
+        || png[20..24] != value.height.to_be_bytes()
+    {
+        return;
+    }
+    builder.picture = Some(HostGlyphPicture {
+        png: png.to_vec(),
+        width: value.width,
+        height: value.height,
+        bearing_x: value.bearing_x,
+        bearing_y: -value.top,
+        extent_x: value.extent_x,
+        extent_y: value.extent_y,
+    });
+}
+
 impl HostOutline {
+    fn picture(&self, glyph: u16, cluster: &[u32]) -> Option<HostGlyphPicture> {
+        let mut builder = PictureBuilder::default();
+        unsafe {
+            self.0.get_picture.unwrap()(
+                self.0.user_data,
+                glyph,
+                cluster.as_ptr(),
+                cluster.len(),
+                append_picture,
+                (&mut builder as *mut PictureBuilder).cast(),
+            );
+        }
+        builder.picture
+    }
+
     fn path(&self, glyph: u16, coords: &[Coord]) -> nuxie::runtime::math::raw_path::RawPath {
         let coords: Vec<_> = coords
             .iter()
@@ -329,9 +451,10 @@ impl HostOutline {
     }
 }
 
-/// Decode a host font with empty-outline recovery, mirroring upstream's
-/// first CoreTextHBFont attempt. File shaping, metrics and nonempty outlines
-/// remain unchanged. This does not install a process fallback hook.
+/// Decode a host font with optional empty-outline recovery and colour pictures.
+/// Outline recovery mirrors upstream's first CoreTextHBFont attempt; pictures
+/// extend it for native formats the runtime cannot decode. File shaping,
+/// metrics and nonempty outlines remain unchanged. No fallback hook is installed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_font_new_with_outline(
     source: *const NuxFontSource,
@@ -352,21 +475,35 @@ pub unsafe extern "C" fn nux_font_new_with_outline(
             Ok(callbacks) => callbacks,
             Err(status) => return status,
         };
-        if callbacks.get_path.is_none() {
+        if callbacks.get_path.is_none() && callbacks.get_picture.is_none() {
             return NuxStatus::InvalidArgument;
         }
         let font = match unsafe { decode_face(source) } {
             Ok((font, _)) => font,
             Err(status) => return status,
         };
-        let native = font
-            .as_any()
-            .downcast_ref::<HbFont>()
-            .expect("decoded HBFont");
         let host = std::sync::Arc::new(HostOutline(callbacks));
-        let font = native.with_host_outline(std::sync::Arc::new(move |glyph, coords| {
-            host.path(glyph, coords)
-        }));
+        let mut font = font;
+        if callbacks.get_path.is_some() {
+            let host = host.clone();
+            font = font
+                .as_any()
+                .downcast_ref::<HbFont>()
+                .expect("decoded HBFont")
+                .with_host_outline(std::sync::Arc::new(move |glyph, coords| {
+                    host.path(glyph, coords)
+                }));
+        }
+        if callbacks.get_picture.is_some() {
+            let host = host.clone();
+            font = font
+                .as_any()
+                .downcast_ref::<HbFont>()
+                .expect("decoded HBFont")
+                .with_host_pictures(std::sync::Arc::new(move |glyph, cluster| {
+                    host.picture(glyph, cluster)
+                }));
+        }
         unsafe {
             *out_font = publish_font(font);
         }
@@ -721,6 +858,7 @@ mod outline_tests {
             user_data: context.cast(),
             get_path: Some(outline),
             release: Some(release),
+            get_picture: None,
         };
         let mut font = ptr::null_mut();
         assert_eq!(
@@ -742,6 +880,386 @@ mod outline_tests {
             level: 0,
         };
         font.shape_text(&[character as u32], &[run], 0)[0].runs[0].glyphs[0]
+    }
+
+    const PICTURE_PNG: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+        0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240,
+        31, 0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+
+    fn picture_value(png: &[u8]) -> NuxFontPicture {
+        NuxFontPicture {
+            struct_size: std::mem::size_of::<NuxFontPicture>() as u32,
+            png: png.as_ptr(),
+            png_len: png.len(),
+            width: 1,
+            height: 1,
+            bearing_x: 0.125,
+            top: 0.75,
+            extent_x: 1.0,
+            extent_y: 1.0,
+        }
+    }
+
+    #[derive(Default)]
+    struct PictureContext {
+        calls: AtomicUsize,
+        clusters: std::sync::Mutex<Vec<Vec<u32>>>,
+        absent: bool,
+    }
+
+    unsafe extern "C" fn picture_callback(
+        context: *mut c_void,
+        _: u16,
+        cluster: *const u32,
+        cluster_len: usize,
+        sink: NuxFontPictureSink,
+        destination: *mut c_void,
+    ) {
+        let context = unsafe { &*context.cast::<PictureContext>() };
+        context.calls.fetch_add(1, Ordering::SeqCst);
+        context
+            .clusters
+            .lock()
+            .unwrap()
+            .push(unsafe { slice::from_raw_parts(cluster, cluster_len) }.to_vec());
+        if !context.absent {
+            let mut png = PICTURE_PNG.to_vec();
+            unsafe { sink(destination, &picture_value(&png)) };
+            png.fill(0); // Prove the runtime copied before returning to the host.
+        }
+    }
+
+    fn create_picture_font(context: &mut PictureContext, callback_size: usize) -> *mut NuxFont {
+        let bytes = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
+        let source = NuxFontSource {
+            bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            ..Default::default()
+        };
+        let callbacks = NuxFontOutlineCallbacks {
+            struct_size: callback_size as u32,
+            user_data: ptr::from_mut(context).cast(),
+            get_path: None,
+            release: None,
+            get_picture: Some(picture_callback),
+        };
+        let mut font = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(&source, &callbacks, &mut font) },
+            NuxStatus::Ok
+        );
+        font
+    }
+
+    #[test]
+    fn host_picture_is_copied_cached_and_exposed_as_one_image_layer() {
+        use nuxie::runtime::text::text_engine::ColorGlyphPaintType;
+        let mut context = PictureContext::default();
+        let handle =
+            create_picture_font(&mut context, std::mem::size_of::<NuxFontOutlineCallbacks>());
+        let font = clone_font(handle).unwrap();
+        let glyph = glyph(&font, 'A');
+        let cluster = [0x1f469, 0x200d, 0x1f4bb];
+        assert!(font.is_color_glyph_with_text(glyph, &cluster));
+        assert!(font.is_color_glyph_with_text(glyph, &[0x41]));
+        assert!(font.is_color_glyph(glyph));
+        let mut layers = Vec::new();
+        assert_eq!(font.get_color_layers(glyph, &mut layers, 0xff000000), 1);
+        assert_eq!(layers.len(), 1);
+        let layer = &layers[0];
+        assert_eq!(layer.paint_type, ColorGlyphPaintType::Image);
+        assert_eq!(layer.image_bytes, PICTURE_PNG);
+        assert_eq!((layer.image_width, layer.image_height), (1, 1));
+        assert_eq!(
+            (layer.image_bearing_x, layer.image_bearing_y),
+            (0.125, -0.75)
+        );
+        assert_eq!((layer.image_extent_x, layer.image_extent_y), (1.0, 1.0));
+        let second_glyph = self::glyph(&font, 'B');
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                let font = &font;
+                scope.spawn(move || assert!(font.is_color_glyph_with_text(second_glyph, &[0x42])));
+            }
+        });
+        assert_eq!(context.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            *context.clusters.lock().unwrap(),
+            [cluster.to_vec(), vec![0x42]]
+        );
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+    }
+
+    #[test]
+    fn outline_and_picture_share_context_until_the_last_font_dies() {
+        struct SharedContext {
+            pictures: PictureContext,
+            releases: Arc<AtomicUsize>,
+        }
+        unsafe extern "C" fn shared_picture(
+            context: *mut c_void,
+            glyph: u16,
+            cluster: *const u32,
+            cluster_len: usize,
+            sink: NuxFontPictureSink,
+            destination: *mut c_void,
+        ) {
+            let shared = unsafe { &*context.cast::<SharedContext>() };
+            unsafe {
+                picture_callback(
+                    ptr::from_ref(&shared.pictures).cast_mut().cast(),
+                    glyph,
+                    cluster,
+                    cluster_len,
+                    sink,
+                    destination,
+                );
+            }
+        }
+        unsafe extern "C" fn shared_outline(
+            _: *mut c_void,
+            _: u16,
+            _: *const NuxFontAxisCoord,
+            _: usize,
+            sink: NuxFontOutlineSink,
+            destination: *mut c_void,
+        ) {
+            unsafe {
+                sink(destination, 0, [0.0, 0.0].as_ptr());
+                sink(destination, 1, [1.0, 1.0].as_ptr());
+            }
+        }
+        unsafe extern "C" fn shared_release(context: *mut c_void) {
+            let shared = unsafe { Box::from_raw(context.cast::<SharedContext>()) };
+            shared.releases.fetch_add(1, Ordering::SeqCst);
+        }
+        let releases = Arc::new(AtomicUsize::new(0));
+        let context = Box::into_raw(Box::new(SharedContext {
+            pictures: PictureContext::default(),
+            releases: releases.clone(),
+        }));
+        let bytes = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
+        let source = NuxFontSource {
+            bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            ..Default::default()
+        };
+        let callbacks = NuxFontOutlineCallbacks {
+            struct_size: std::mem::size_of::<NuxFontOutlineCallbacks>() as u32,
+            user_data: context.cast(),
+            get_path: Some(shared_outline),
+            release: Some(shared_release),
+            get_picture: Some(shared_picture),
+        };
+        let mut handle = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(&source, &callbacks, &mut handle) },
+            NuxStatus::Ok
+        );
+        let font = clone_font(handle).unwrap();
+        assert!(!font.get_path(glyph(&font, ' ')).empty());
+        assert!(font.is_color_glyph_with_text(glyph(&font, 'A'), &[0x41]));
+        let variant = font.with_options(&[], &[]);
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        drop(font);
+        assert_eq!(releases.load(Ordering::SeqCst), 0);
+        std::thread::spawn(move || {
+            assert!(variant.is_color_glyph_with_text(glyph(&variant, 'B'), &[0x42]));
+        })
+        .join()
+        .unwrap();
+        assert_eq!(releases.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn absent_host_picture_is_cached_and_preserves_outline() {
+        let mut context = PictureContext {
+            absent: true,
+            ..Default::default()
+        };
+        let handle =
+            create_picture_font(&mut context, std::mem::size_of::<NuxFontOutlineCallbacks>());
+        let font = clone_font(handle).unwrap();
+        let original =
+            HbFont::decode(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")).unwrap();
+        let glyph = glyph(&font, 'A');
+        for _ in 0..3 {
+            assert!(!font.is_color_glyph_with_text(glyph, &[0x41]));
+            assert!(!font.is_color_glyph(glyph));
+        }
+        assert_eq!(context.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            font.get_path(glyph).points(),
+            original.get_path(glyph).points()
+        );
+        assert_eq!(
+            font.get_path(glyph).verbs(),
+            original.get_path(glyph).verbs()
+        );
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+    }
+
+    #[test]
+    fn picture_sink_bounds_and_single_answer_are_enforced_before_copying() {
+        fn collect(value: &NuxFontPicture, twice: bool) -> Option<HostGlyphPicture> {
+            let mut builder = PictureBuilder::default();
+            let context = ptr::from_mut(&mut builder).cast();
+            unsafe { append_picture(context, value) };
+            if twice {
+                unsafe { append_picture(context, value) };
+            }
+            builder.picture
+        }
+        let valid = picture_value(PICTURE_PNG);
+        assert!(collect(&valid, false).is_some());
+        assert!(collect(&valid, true).is_none());
+        for invalid in [
+            NuxFontPicture {
+                struct_size: 4,
+                ..valid
+            },
+            NuxFontPicture {
+                png: ptr::null(),
+                ..valid
+            },
+            NuxFontPicture {
+                png_len: 0,
+                ..valid
+            },
+            NuxFontPicture {
+                png_len: FONT_PICTURE_MAX_PNG_BYTES + 1,
+                ..valid
+            },
+            NuxFontPicture {
+                width: 1025,
+                ..valid
+            },
+            NuxFontPicture {
+                height: 1025,
+                ..valid
+            },
+            NuxFontPicture { width: 0, ..valid },
+            NuxFontPicture { height: 0, ..valid },
+            NuxFontPicture {
+                bearing_x: f32::NAN,
+                ..valid
+            },
+            NuxFontPicture {
+                top: f32::INFINITY,
+                ..valid
+            },
+            NuxFontPicture {
+                extent_x: f32::NEG_INFINITY,
+                ..valid
+            },
+            NuxFontPicture {
+                extent_y: f32::NAN,
+                ..valid
+            },
+        ] {
+            assert!(collect(&invalid, false).is_none());
+        }
+        let mut maximum_png = vec![0; FONT_PICTURE_MAX_PNG_BYTES];
+        maximum_png[..PICTURE_PNG.len()].copy_from_slice(PICTURE_PNG);
+        maximum_png[16..20].copy_from_slice(&1024u32.to_be_bytes());
+        maximum_png[20..24].copy_from_slice(&1024u32.to_be_bytes());
+        let maximum = NuxFontPicture {
+            width: 1024,
+            height: 1024,
+            ..picture_value(&maximum_png)
+        };
+        assert_eq!(
+            collect(&maximum, false).unwrap().png.len(),
+            FONT_PICTURE_MAX_PNG_BYTES
+        );
+        for encoded in [&b"not a PNG"[..], &PICTURE_PNG[..20]] {
+            assert!(collect(&picture_value(encoded), false).is_none());
+        }
+        let mut wrong_dimensions = PICTURE_PNG.to_vec();
+        wrong_dimensions[16..20].copy_from_slice(&1025u32.to_be_bytes());
+        assert!(collect(&picture_value(&wrong_dimensions), false).is_none());
+        assert!(collect(&NuxFontPicture { width: 2, ..valid }, false).is_none());
+        let mut builder = PictureBuilder::default();
+        let destination = ptr::from_mut(&mut builder).cast();
+        unsafe {
+            append_picture(destination, ptr::null());
+            append_picture(destination, &valid);
+        }
+        assert!(builder.picture.is_none());
+    }
+
+    #[test]
+    fn old_callback_prefix_is_not_read_past_release_and_never_calls_picture() {
+        #[repr(C)]
+        struct OldCallbacks {
+            struct_size: u32,
+            user_data: *mut c_void,
+            get_path: Option<
+                unsafe extern "C" fn(
+                    *mut c_void,
+                    u16,
+                    *const NuxFontAxisCoord,
+                    usize,
+                    NuxFontOutlineSink,
+                    *mut c_void,
+                ),
+            >,
+            release: Option<unsafe extern "C" fn(*mut c_void)>,
+        }
+        let bytes = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
+        let source = NuxFontSource {
+            bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            ..Default::default()
+        };
+        let callbacks = OldCallbacks {
+            struct_size: std::mem::size_of::<OldCallbacks>() as u32,
+            user_data: ptr::null_mut(),
+            get_path: Some(outline),
+            release: None,
+        };
+        assert_eq!(
+            std::mem::size_of::<OldCallbacks>(),
+            FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE
+        );
+        let decoded =
+            unsafe { read_font_outline_callbacks(ptr::from_ref(&callbacks).cast()) }.unwrap();
+        assert!(decoded.get_picture.is_none());
+        let mut handle = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_font_new_with_outline(&source, ptr::from_ref(&callbacks).cast(), &mut handle)
+            },
+            NuxStatus::Ok
+        );
+        let font = clone_font(handle).unwrap();
+        assert!(!font.is_color_glyph_with_text(glyph(&font, 'A'), &[0x41]));
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
+        // Even a physically present callback is ignored unless the size covers it.
+        let mut context = PictureContext::default();
+        let callbacks = NuxFontOutlineCallbacks {
+            struct_size: FONT_OUTLINE_CALLBACKS_V4_MIN_SIZE as u32,
+            user_data: ptr::from_mut(&mut context).cast(),
+            get_path: Some(outline),
+            release: None,
+            get_picture: Some(picture_callback),
+        };
+        assert_eq!(
+            unsafe { nux_font_new_with_outline(&source, &callbacks, &mut handle) },
+            NuxStatus::Ok
+        );
+        let font = clone_font(handle).unwrap();
+        assert!(!font.is_color_glyph_with_text(glyph(&font, 'A'), &[0x41]));
+        assert_eq!(context.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(unsafe { nux_font_free(handle) }, NuxStatus::Ok);
     }
 
     #[test]
@@ -813,6 +1331,7 @@ mod outline_tests {
             user_data: ptr::from_mut(&mut observed).cast(),
             get_path: Some(capture),
             release: None,
+            get_picture: None,
         };
         let mut handle = ptr::null_mut();
         assert_eq!(
@@ -863,6 +1382,7 @@ mod outline_tests {
                 user_data: ptr::from_mut(&mut observed).cast(),
                 get_path: Some(empty),
                 release: None,
+                get_picture: None,
             },
             future: [u64::MAX; 2],
         };
@@ -922,6 +1442,7 @@ mod outline_tests {
             user_data: context.cast(),
             get_path: Some(outline),
             release: Some(release),
+            get_picture: None,
         };
         let mut font = ptr::null_mut();
         assert_eq!(

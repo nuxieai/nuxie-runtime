@@ -38,11 +38,46 @@ getPath; both the HarfBuzz outline and CoreText outline are empty. Even if a
 color command were emitted, empty color layers cause drawColorGlyph to return.
 Therefore the source trace predicts no emoji ink upstream in this exact case.
 This is source evidence, not a direct upstream simulator rendering verdict.
-No emjc decoder or new bitmap path was invented. A real fix needs a separately
-scoped Apple rasterization/bitmap boundary and image positioning/scale/color
-qualification, or a compatible upstream decoder.
+UNIV-4921 now adds the bounded host-picture boundary described below. The
+runtime still does not decode emjc; the iOS SDK must rasterize it through the
+platform and supply PNG pictures. Device image positioning/scale/color
+qualification and SDK adoption remain separate work.
 
 Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
+
+### UNIV-4921 additive colour glyph boundaries
+
+- **host-glyph-pictures**: `HbFont::with_host_pictures` and the appended
+  `NuxFontOutlineCallbacks::get_picture` opt a font into platform PNG answers.
+  Native COLR/readable PNG wins. Both present and absent answers are retained
+  once per glyph per font, with the first shaped cluster's complete code points.
+  Host-only cluster metadata is captured from the shaped run's text indices
+  before fallback/ellipsis slices. Pictures compose with empty-outline recovery;
+  option variants retain pictures while preserving upstream's existing policy
+  that plain HB variants do not retain host outline recovery.
+  The C sink copies synchronously, converts positive-up `top` to negative
+  `image_bearing_y`, and rejects repeated answers, non-finite metrics, PNGs
+  over 4 MiB, and encoded/reported dimensions outside 1..1024 or inconsistent
+  with each other. Context/threading rules match the outline callback.
+- **text-input-colour-glyphs**: RawTextInput retains native/host colour glyphs
+  outside both outline paths. Authored text and selected-text drawables and the
+  direct editor/scripting draw route paint them after outlines, within overflow
+  clipping. Selection keeps their colours. Foreground follows upstream Text's
+  first solid Fill (black without one); modifier opacity defaults to one because
+  fields have no glyph modifiers. Direct RawTextInput paint handles are
+  write-only and use the same black default. Metrics, cursor, hit testing and
+  ordinary outline transforms remain upstream behavior.
+- **raw-text-host-pictures**: only host picture layers in RawText use Text's
+  decoded-image cache/path. Native RawText layer traversal remains unchanged,
+  including upstream's lack of an image branch in drawColorGlyphLayer.
+
+The sbix/CBDT extent correction is parity, not an additive host policy:
+`font_hb.rs` follows pinned HarfBuzz rive_13.1.1 strike selection, bitmap-origin
+semantics and integer rounding into Rive's 2048-unit scale. Oracle expectations
+come from that HarfBuzz source; the existing C++ probe has no bitmap-extents
+query. Runtime/device rasterization and host colour-space choices remain SDK
+qualification work.
+
 
 ## Current checkpoint
 

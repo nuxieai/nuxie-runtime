@@ -454,3 +454,287 @@ fn raw_text_draws_colrv1_gradient_layers_with_gradient_shaders() {
         1
     );
 }
+
+// UNIV-4921 additive host picture boundary. A 1x1 raster represents one em;
+// dimensions describe pixels, bearings/extents describe normalized geometry.
+fn host_picture() -> nuxie_runtime::source::text::font_hb::HostGlyphPicture {
+    use nuxie_runtime::source::text::font_hb::HostGlyphPicture;
+    HostGlyphPicture {
+        png: vec![
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+            8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 248, 15, 4,
+            0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+        ],
+        width: 1,
+        height: 1,
+        bearing_x: 0.125,
+        bearing_y: -0.875,
+        extent_x: 1.0,
+        extent_y: 1.0,
+    }
+}
+
+#[test]
+fn host_picture_answers_are_once_per_glyph_across_threads_and_none_keeps_outline() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let plain = font(&regular_bytes());
+    let glyph = shape(&plain, "A")[0].runs[0].glyphs[0];
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let host = plain
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(move |_, cluster| {
+            count.fetch_add(1, Ordering::SeqCst);
+            assert_eq!(cluster, &[u32::from('A')]);
+            Some(host_picture())
+        }));
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            let host = host.clone();
+            scope.spawn(move || assert!(host.is_color_glyph_with_text(glyph, &[65])));
+        }
+    });
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(host.is_color_glyph(glyph));
+    let layers = color_layers(&host, glyph, 0xff000000);
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].paint_type, ColorGlyphPaintType::Image);
+    assert_eq!(layers[0].image_bearing_y, -0.875);
+    let count = calls.clone();
+    let absent = plain
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(move |_, _| {
+            count.fetch_add(1, Ordering::SeqCst);
+            None
+        }));
+    assert!(!absent.is_color_glyph_with_text(glyph, &[65]));
+    assert!(!absent.is_color_glyph_with_text(glyph, &[66]));
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        absent.get_path(glyph).verbs(),
+        plain.get_path(glyph).verbs()
+    );
+    assert_eq!(
+        absent.get_path(glyph).points(),
+        plain.get_path(glyph).points()
+    );
+}
+
+#[test]
+fn native_color_never_asks_host_and_host_sources_compose() {
+    use std::sync::Arc;
+    let native = colrv1_font();
+    let hosted = native
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(|_, _| panic!("native COLR wins")));
+    assert!(hosted.is_color_glyph_with_text(2, &[0x1f600]));
+    assert_eq!(color_layers(&hosted, 2, 0xff000000).len(), 10);
+    let plain = font(&regular_bytes());
+    for picture_first in [false, true] {
+        let hb = plain.as_any().downcast_ref::<HbFont>().unwrap();
+        let first = if picture_first {
+            hb.with_host_pictures(Arc::new(|_, _| Some(host_picture())))
+        } else {
+            hb.with_host_outline(Arc::new(|_, _| Default::default()))
+        };
+        let hb = first.as_any().downcast_ref::<HbFont>().unwrap();
+        let both = if picture_first {
+            hb.with_host_outline(Arc::new(|_, _| Default::default()))
+        } else {
+            hb.with_host_pictures(Arc::new(|_, _| Some(host_picture())))
+        };
+        assert!(both.is_color_glyph_with_text(7, &[65]));
+        assert!(
+            both.with_options(&[], &[])
+                .is_color_glyph_with_text(7, &[65])
+        );
+    }
+}
+
+#[test]
+fn host_cluster_text_retains_ligatures_combining_marks_and_rtl() {
+    use std::sync::Arc;
+    let plain = font(&regular_bytes());
+    let host = plain
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(|_, _| None));
+    for text in ["ffi", "A\u{301}", "אב", "A\nB"] {
+        let paragraphs = shape(&host, text);
+        let points: Vec<u32> = text.chars().map(u32::from).collect();
+        for p in paragraphs {
+            for run in p.runs {
+                for i in 0..run.glyphs.len() {
+                    let start = run.text_indices[i] as usize;
+                    let cluster = run.cluster_text(i);
+                    assert!(!cluster.is_empty());
+                    assert_eq!(cluster, &points[start..start + cluster.len()]);
+                    if cluster.contains(&10) {
+                        // The shaper retains the paragraph separator as its
+                        // own glyph; it must not leak into a neighbour's cluster.
+                        assert_eq!(cluster, &[10]);
+                    }
+                }
+            }
+        }
+    }
+    let ligature = shape(&host, "ffi");
+    assert!(
+        ligature[0]
+            .runs
+            .iter()
+            .any(|r| r.cluster_text(0) == [102, 102, 105])
+    );
+}
+
+#[test]
+fn raw_text_draws_host_images_and_reuses_decoded_image() {
+    use std::sync::Arc;
+    let plain = font(&regular_bytes());
+    let host = plain
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(|_, cluster| {
+            assert_eq!(cluster, &[65]);
+            Some(host_picture())
+        }));
+    let recording = RecordingFactory::new();
+    let mut renderer = recording.make_renderer();
+    let mut factory = PersistentFactory::new(recording);
+    let mut raw = RawText::new(RuntimeFactoryHandle::from_factory(&mut factory).unwrap());
+    raw.append("AA", None, host, 32.0, -1.0, 0.0, 0xff000000);
+    raw.render(&mut renderer, None);
+    raw.render(&mut renderer, None);
+    let stream = factory.borrow().stream();
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|l| l.starts_with("decodeImage "))
+            .count(),
+        1
+    );
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|l| l.starts_with("drawImage "))
+            .count(),
+        4
+    );
+    assert_eq!(raw.debug_command_kinds(), ["color", "color"]);
+}
+
+#[test]
+fn ordinary_text_draws_host_picture_from_retained_shaped_cluster() {
+    use nuxie_runtime::{
+        File,
+        source::{
+            assets::font_asset::FontAsset,
+            generated::{core_registry::CoreRegistry, text::text_value_run_base::TextValueRunBase},
+            text::{
+                text::{Text, TextValueRunHandle},
+                text_style::TextStyle,
+            },
+        },
+    };
+    use std::sync::Arc;
+    let recording = RecordingFactory::new();
+    let mut renderer = recording.make_renderer();
+    let mut factory = PersistentFactory::new(recording);
+    let file = File::import(
+        &asset("new_text.riv"),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let board = file.with_file(File::artboard_default).unwrap();
+    let text = board.with_artboard(|b| b.find_all_handles::<Text>())[0].clone();
+    let plain = font(&regular_bytes());
+    let host = plain
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_pictures(Arc::new(|_, cluster| (cluster == [65]).then(host_picture)));
+    for style in board.with_artboard(|b| b.find_all_handles::<TextStyle>()) {
+        let asset = style.insert_sibling(FontAsset::default()).unwrap();
+        FontAsset::set_font_occurrence(&asset, Some(host.clone()));
+        TextStyle::set_asset_occurrence(&style, Some(asset));
+    }
+    for (i, run) in text
+        .with_downcast::<Text, _>(|t| t.runs().to_vec())
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let TextValueRunHandle::Core(run) = run else {
+            panic!("imported run")
+        };
+        CoreRegistry::set_string_handle(
+            run,
+            i32::from(TextValueRunBase::TEXT_PROPERTY_KEY),
+            if i == 0 { "A".into() } else { String::new() },
+        );
+    }
+    board.update_pass(true);
+    text.with_downcast_mut::<Text, _>(|t| t.draw(&mut renderer))
+        .unwrap();
+    let stream = factory.borrow().stream();
+    assert!(
+        stream.lines().any(|l| l.starts_with("drawImage ")),
+        "{stream}"
+    );
+}
+
+#[test]
+fn host_none_preserves_vs16_fallback_for_primary_and_candidate_fonts() {
+    use std::sync::Arc;
+    let primary = font(&regular_bytes());
+    let with_none = |font: &FontRef| {
+        font.as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .with_host_pictures(Arc::new(|_, _| None))
+    };
+    let signature = |paragraphs: Vec<Paragraph>| {
+        paragraphs
+            .into_iter()
+            .flat_map(|p| p.runs)
+            .map(|r| {
+                (
+                    r.glyphs,
+                    r.text_indices,
+                    r.advances.iter().map(|a| a.to_bits()).collect::<Vec<_>>(),
+                    r.font.unwrap().has_color_glyphs(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let native_color = colrv1_font();
+    let baseline = with_fallback(native_color.clone(), || {
+        signature(shape(&primary, "A\u{fe0f}"))
+    });
+    let hosted = with_fallback(native_color, || {
+        signature(shape(&with_none(&primary), "A\u{fe0f}"))
+    });
+    assert_eq!(baseline, hosted);
+    let plain_candidate = font(&asset("fonts/Inter_18pt-Regular.ttf"));
+    let baseline = with_fallback(plain_candidate.clone(), || {
+        signature(shape(&primary, "A\u{fe0f}"))
+    });
+    let hosted = with_fallback(with_none(&plain_candidate), || {
+        signature(shape(&primary, "A\u{fe0f}"))
+    });
+    assert_eq!(baseline, hosted);
+}

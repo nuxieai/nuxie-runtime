@@ -287,7 +287,7 @@
     },
     {
       "name": "NuxFontOutlineCallbacks",
-      "size": 32,
+      "size": 40,
       "alignment": 8,
       "fields": [
         {
@@ -305,6 +305,53 @@
         {
           "name": "release",
           "offset": 24
+        },
+        {
+          "name": "get_picture",
+          "offset": 32
+        }
+      ]
+    },
+    {
+      "name": "NuxFontPicture",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "png",
+          "offset": 8
+        },
+        {
+          "name": "png_len",
+          "offset": 16
+        },
+        {
+          "name": "width",
+          "offset": 24
+        },
+        {
+          "name": "height",
+          "offset": 28
+        },
+        {
+          "name": "bearing_x",
+          "offset": 32
+        },
+        {
+          "name": "top",
+          "offset": 36
+        },
+        {
+          "name": "extent_x",
+          "offset": 40
+        },
+        {
+          "name": "extent_y",
+          "offset": 44
         }
       ]
     },

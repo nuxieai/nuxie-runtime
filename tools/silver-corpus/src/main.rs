@@ -43,6 +43,7 @@ fn validate(options: Options) -> anyhow::Result<()> {
     let mut byte_exact = 0usize;
     let mut epsilon_exact = 0usize;
     let mut divergent = 0usize;
+    let mut reviewed_layout = 0usize;
     let mut unsupported = 0usize;
     let mut probed = 0usize;
     let mut probe_exact = 0usize;
@@ -107,6 +108,16 @@ fn validate(options: Options) -> anyhow::Result<()> {
                         case.id
                     );
                     divergent += 1;
+                    if manifest
+                        .corpus
+                        .reviewed_layout_divergences
+                        .iter()
+                        .any(|review| review.id == case.id)
+                    {
+                        // Credit only a replay that matched its exact recorded
+                        // first difference above, never a skipped case.
+                        reviewed_layout += 1;
+                    }
                     println!("[divergent] {}: {}", case.id, difference);
                 }
                 Err(difference) => {
@@ -207,12 +218,16 @@ fn validate(options: Options) -> anyhow::Result<()> {
     );
     if options.id.is_none() && options.lane.is_none_or(|lane| lane == Lane::Runtime) {
         anyhow::ensure!(
-            cpp_rust_exact >= manifest.corpus.min_cpp_rust_exact,
-            "accounted cpp-rust-exact={} is below ratchet {}",
-            cpp_rust_exact,
+            cpp_rust_exact + reviewed_layout >= manifest.corpus.min_cpp_rust_exact,
+            "exact plus reviewed CSS coverage={} is below historical ratchet {}",
+            cpp_rust_exact + reviewed_layout,
             manifest.corpus.min_cpp_rust_exact
         );
     }
+    println!(
+        "silver-corpus historical coverage: cpp-rust-exact={cpp_rust_exact} reviewed-css={reviewed_layout} floor={}",
+        manifest.corpus.min_cpp_rust_exact
+    );
     if options.rust_output_dir.is_some() {
         println!("silver-corpus probe: rust-exact={probe_exact} probed={probed}");
     }

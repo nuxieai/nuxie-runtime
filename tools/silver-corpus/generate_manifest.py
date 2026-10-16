@@ -173,6 +173,96 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 }
 
 
+# UNIV-4844: keep the historical EXACT tuple and every old C++ pin intact.
+# These explicit CSS replacements must replay the exact first difference.
+REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got '
+                             '(273, 0)',
+ 'artboard_list_overrides_vertical': 'frame 0, op 73 (addRawPath), field point: expected (500, 0), '
+                                     'got (700, 0)',
+ 'bankcard': 'frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)',
+ 'collapsing_elements': 'frame 0, op 612 (addRawPath), field point: expected (500, -0.0 '
+                        '(0x80000000)), got (499.95004, -0.0 (0x80000000))',
+ 'component_list_child_origin': 'frame 0, op 105 (transform), field ty: expected 29, got 12.5',
+ 'data_viz_demo': 'frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, '
+                  '16.325203), got (268.33334, 16.325203)',
+ 'db_health_tracker': 'frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, '
+                      '0)',
+ 'global_view_models_scripting_test': 'frame 0, op 49 (addRawPath), field point: expected (945, '
+                                      '0), got (980, 0)',
+ 'hittest_ab1_grand_parent': 'frame 0, op 149 (transform), field ty: expected 100, got 0',
+ 'hittest_ab1_parent': 'frame 0, op 129 (addRawPath), field point: expected (572, 0), got '
+                       '(738.65234, 0)',
+ 'number_to_list_nested_children': 'frame 0, op 190 (addRawPath), field point: expected (250, '
+                                   '59.791016), got (250, 61)',
+ 'reset_phase_multi_main': 'frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, '
+                           '0)',
+ 'scroll_threshold-all-scroll': 'frame 0, op 62 (addRawPath), field point: expected (500, 0), got '
+                                '(1500, 0)',
+ 'scroll_threshold-horizontal-scroll': 'frame 0, op 59 (addRawPath), field point: expected (500, '
+                                       '0), got (1700, 0)',
+ 'superbowl': 'frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218',
+ 'text_input': 'frame 0, op 20 (addRawPath), field point: expected (200, 0), got (492.99805, 0)',
+ 'text_layout_7_3': 'frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422',
+ 'text_layout_pre_7_3': 'frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422'}
+
+LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its '
+                             '273-wide host instead of extending beyond it.',
+ 'artboard_list_overrides_vertical': "CSS automatic minimums preserve the vertical list row's "
+                                     "700-wide content contribution rather than Yoga's 500 "
+                                     'allocation.',
+ 'bankcard': "CSS automatic minimums preserve the populated card's content width; its rounded clip "
+             'point moves from 810 to 826.94385, with the original clipping and gradient code '
+             'unchanged.',
+ 'collapsing_elements': 'CSS flex-shrink 1 lets the nested Fixed 500 box fit its 33.33 percent '
+                        'host, 499.95004, instead of keeping the full 500.',
+ 'component_list_child_origin': "CSS flex-shrink 1 lets a Fixed child artboard fit the list row's "
+                                'height; the half-height origin moves from 29 to 12.5 as its box '
+                                'shrinks from 58 to 25.',
+ 'data_viz_demo': "CSS shrinking and content minimums change the chart cells' allocated widths; "
+                  'the first bar gradient endpoint moves from 276.66666 to 268.33334. Gradient '
+                  'interpolation is unchanged.',
+ 'db_health_tracker': 'CSS automatic minimums propagate the nested Artboard Measure width 10000 '
+                      'through its containers: panel width 1008 becomes 10174 and the padded '
+                      'ancestor 1048 becomes 10214.',
+ 'global_view_models_scripting_test': 'CSS automatic minimums keep the view-model-bound card at '
+                                      'its content contribution instead of the old zero-minimum '
+                                      'allocation; its first path point moves from 945 to 980.',
+ 'hittest_ab1_grand_parent': 'CSS min-height:auto keeps the nested 572-high content above the '
+                             '208.60547 column offer; flex-shrink 1 reduces the leading Fixed 100 '
+                             'box to zero and moves the following item from y 100 to zero.',
+ 'hittest_ab1_parent': 'CSS min-width:auto floors parent-clipper at the content contributions '
+                       '238.65234 plus nested width 500, or 738.65234, instead of squeezing it to '
+                       '572.',
+ 'number_to_list_nested_children': 'CSS automatic minimums keep the nested list row at its 61 '
+                                   "content height rather than Yoga's 59.791016 allocation.",
+ 'reset_phase_multi_main': "CSS automatic minimums propagate the nested list child's 186 content "
+                           'width into its background instead of the old 180 allocation.',
+ 'scroll_threshold-all-scroll': 'CSS automatic minimums preserve the 1500 content width rather '
+                                'than the 500 viewport allocation; inside it, Fixed bases 500 and '
+                                '1500 shrink proportionally to 375 and 1125. Scroll dispatch is '
+                                'unchanged.',
+ 'scroll_threshold-horizontal-scroll': 'CSS automatic minimums preserve the 1700 content width '
+                                       'from the 200 and 1500 children rather than the 500 '
+                                       'viewport allocation. Scroll dispatch is unchanged.',
+ 'superbowl': "CSS shrinking and content minimums redistribute the nested Summary row's space and "
+              'its fitted image transform. The first image scale becomes 0.218994141 in the '
+              'ordinary lane and 0.429492176 in the scripted lane instead of 0.674160182; image '
+              'fitting and drawing code are unchanged.',
+ 'text_input': "CSS automatic minimums preserve the unchanged text-input measurer's unbounded "
+               '492.99805 contribution instead of squeezing the box to 200 in Silver or 340 in '
+               'Golden. Text input still needs its own true minimum contract.',
+ 'text_layout_7_3': 'CSS lets the small Hug item shrink from 17.300781 to 4.107422 in the 87-wide '
+                    'clock row while its 49.89258 sibling keeps its content floor; the following '
+                    'origin moves from 35.7041 to 29.107422.',
+ 'text_layout_pre_7_3': 'CSS lets the small Hug item shrink from 17.300781 to 4.107422 in the '
+                        '87-wide clock row while its 49.89258 sibling keeps its content floor; the '
+                        'following origin moves from 35.7041 to 29.107422.'})
+
+
+def reviewed_divergence(silver_id: str) -> str | None:
+    return REVIEWED_LAYOUT_DIVERGENCES.get(silver_id, DIVERGENCES.get(silver_id))
+
+
 def layout_divergence_note(silver_id: str, difference: str) -> str | None:
     reason = LAYOUT_DIVERGENCES.get(silver_id)
     if reason is None:
@@ -3054,7 +3144,7 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         f"Unsupported feature: missing runtime surface {blocker}; the pinned "
                         "C++ action stream requires that unported runtime surface."
                     )
-                elif silver_id in EXACT:
+                elif silver_id in EXACT and silver_id not in REVIEWED_LAYOUT_DIVERGENCES:
                     status = "exact"
                     note = (
                         "Rust renderer stream is operation-exact with the pinned C++ silver "
@@ -3126,7 +3216,7 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "Enrollment alone is not a validation result."
                         )
                 else:
-                    difference = DIVERGENCES.get(silver_id)
+                    difference = reviewed_divergence(silver_id)
                     if difference is None:
                         raise ValueError(
                             f"{silver_id} has executable actions but no Rust result classification"
@@ -3245,14 +3335,14 @@ def dynamic_producers() -> list[Producer]:
 
     layout_scroll = []
     for silver_id, source, artboard, test_name, line in DYNAMIC_LAYOUT_SCROLL:
-        if silver_id in EXACT:
+        if silver_id in EXACT and silver_id not in REVIEWED_LAYOUT_DIVERGENCES:
             status = "exact"
             note = (
                 "Rust renderer stream is operation-exact with the pinned C++ silver "
                 "baseline after replaying the TEST_CASE actions."
             )
         else:
-            difference = DIVERGENCES.get(silver_id)
+            difference = reviewed_divergence(silver_id)
             if difference is None:
                 raise ValueError(f"{silver_id} has no Rust result classification")
             status = "diverges"
@@ -3308,7 +3398,7 @@ def dynamic_producers() -> list[Producer]:
                 f"Unsupported feature: missing runtime surface {blocker}; the pinned "
                 "C++ gridStackSilver action stream requires that unported runtime surface."
             )
-        elif silver_id in EXACT:
+        elif silver_id in EXACT and silver_id not in REVIEWED_LAYOUT_DIVERGENCES:
             status = "exact"
             actions = grid_actions
             note = (
@@ -3316,7 +3406,7 @@ def dynamic_producers() -> list[Producer]:
                 "baseline after replaying the gridStackSilver helper actions."
             )
         else:
-            difference = DIVERGENCES.get(silver_id)
+            difference = reviewed_divergence(silver_id)
             if difference is None:
                 raise ValueError(f"{silver_id} has no Rust result classification")
             status = "diverges"
@@ -3406,7 +3496,7 @@ def text_layout_producers(runtime_dir: Path) -> list[Producer]:
         for match in calls.finditer(chunk):
             asset, silver_id = match.groups()
             layout_note = (
-                layout_divergence_note(silver_id, DIVERGENCES[silver_id])
+                layout_divergence_note(silver_id, reviewed_divergence(silver_id))
                 if silver_id in LAYOUT_DIVERGENCES
                 else None
             )
@@ -3561,6 +3651,14 @@ def render(producers: list[Producer]) -> str:
         + "]",
         "",
     ]
+    # Keep every historical exact ID and the numeric floor. Reviewed CSS
+    # cases satisfy that obligation only through an explicit, exact replay pin.
+    lines.extend(["reviewed_layout_divergences = ["])
+    for silver_id, difference in sorted(REVIEWED_LAYOUT_DIVERGENCES.items()):
+        if silver_id not in EXACT:
+            raise ValueError(f"{silver_id} is not a historical exact obligation")
+        lines.append("  { id = " + quoted(silver_id) + ", first_difference = " + quoted(difference) + " },")
+    lines.extend(["]", ""])
     for producer in producers:
         lines.extend(
             [

@@ -720,7 +720,14 @@ decode queue. Bidi and audio retain their separately tracked status below.
     difference. Matrix probe differences live in
     `tests/support/css_layout_matrix.rs`, with the original C++ values, every
     changed scalar, a CSS reason per case and an exact first difference.
-    A change that moves a pinned difference fails the gate.
+    Silver retains its historical 206 exact-ID obligations and numeric floor.
+    `REVIEWED_LAYOUT_DIVERGENCES` explicitly records the 18 UNIV-4844 CSS
+    replacements, with the original C++ values in each first-difference pin.
+    The validator accepts each replacement only as an executable runtime
+    layout divergence with that exact pin; replay must match it. It reports
+    actual C++ equality separately from reviewed CSS coverage. Unlisted,
+    duplicate, unsupported or moved replacements fail. No baseline or epsilon
+    changes. A change that moves a pinned difference fails the gate.
     Upstream layout/Yoga changes are product decisions, not mechanical
     translations (see `upstream-sync-map.md`, "Scope decisions").
   `TaffyTree::disable_rounding()` keeps unrounded results.

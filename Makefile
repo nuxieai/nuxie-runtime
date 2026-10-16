@@ -447,7 +447,7 @@ silver-corpus-validate: silver-corpus-manifest-check
 	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/silver.log"; \
 	set +e; $(RUST_BUILD) run --quiet -p silver-corpus -- validate --manifest "$(SILVER_CORPUS_MANIFEST)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --lane runtime >"$$log" 2>&1; gate_rc=$$?; set -e; \
 	cat "$$log"; report_rc=0; \
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" silver --manifest "$(SILVER_CORPUS_MANIFEST)" --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --rust-commit "$$(git rev-parse HEAD)" --runner "validator=$(CURDIR)/target/debug/silver-corpus" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/silver.json" || report_rc=$$?; \
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" silver --manifest "$(SILVER_CORPUS_MANIFEST)" --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --rust-commit "$$(git rev-parse HEAD)" --runner "validator=$(CURDIR)/target/debug/silver-corpus__bin" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/silver.json" || report_rc=$$?; \
 	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
 
 silver-corpus:

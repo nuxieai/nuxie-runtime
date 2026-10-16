@@ -75,8 +75,10 @@ struct CompiledObject {
     cells: Rc<KeyedObjectCells>,
     object_id: u32,
     tracks: Vec<Track>,
-    // The target the tracks' sinks were resolved for.
+    // The target the tracks' sinks were resolved for, and its
+    // InterpolatorHost (which only its type decides).
     target: Option<CoreHandle>,
+    interpolator_host: Option<CoreHandle>,
 }
 
 struct Track {
@@ -179,6 +181,7 @@ impl CompiledAnimation {
                         .map(|property| Track::build(&property.cells))
                         .collect(),
                     target: None,
+                    interpolator_host: None,
                 }),
             })
             .collect();
@@ -195,14 +198,21 @@ impl CompiledObject {
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        let Some(object) = artboard.resolve_object(self.object_id) else {
-            return;
+        // The object table rarely changes: check the resolved target in
+        // place, and take a new one only when it moved.
+        let moved = match &self.target {
+            Some(target) => artboard.resolve_object_unless(self.object_id, target),
+            None => Some(artboard.resolve_object(self.object_id)),
         };
-        if self.target.as_ref() != Some(&object) {
+        if let Some(object) = moved {
+            let Some(object) = object else {
+                return;
+            };
             self.resolve_sinks(&object);
         }
+        let object = self.target.as_ref().expect("a resolved target");
         // InterpolatorHost::from, once for every property of this target.
-        let interpolator_host = KeyFrameInterpolator::host_of(&object);
+        let interpolator_host = self.interpolator_host.as_ref();
         for track in &self.tracks {
             if track.callback {
                 continue;
@@ -211,11 +221,11 @@ impl CompiledObject {
             // asked per property in order, may take the whole value. The
             // hook reads only the host's layout animation and the key, so
             // the frames it leaves are the ones compiled.
-            let mix = match &interpolator_host {
+            let mix = match interpolator_host {
                 Some(host) if artboard.overrides_keyed_interpolation(host, track.property_key) => 1.0,
                 _ => mix,
             };
-            track.apply(&object, time, mix, context);
+            track.apply(object, time, mix, context);
         }
     }
 
@@ -225,6 +235,7 @@ impl CompiledObject {
         for track in &mut self.tracks {
             track.sink = PlainInputSink::resolve(target, track.property_key);
         }
+        self.interpolator_host = KeyFrameInterpolator::host_of(target);
         self.target = Some(target.clone());
     }
 }

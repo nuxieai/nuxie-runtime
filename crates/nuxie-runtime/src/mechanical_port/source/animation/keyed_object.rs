@@ -19,6 +19,16 @@ use crate::mechanical_port::source::{
 pub trait KeyedObjectContext: CoreContext {
     fn resolves_object(&self, id: u32) -> bool;
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle>;
+    /// resolve_object(id), reported as None when it is `current`. Contexts
+    /// whose resolution only reads may compare without cloning the handle.
+    fn resolve_object_unless(
+        &mut self,
+        id: u32,
+        current: &CoreHandle,
+    ) -> Option<Option<CoreHandle>> {
+        let object = self.resolve_object(id);
+        (object.as_ref() != Some(current)).then_some(object)
+    }
     fn object_supports_property(&self, id: u32, key: u32) -> bool;
     fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool;
 }

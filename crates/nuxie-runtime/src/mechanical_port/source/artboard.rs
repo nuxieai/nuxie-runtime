@@ -100,8 +100,12 @@ struct ArtboardDirtyState {
     depth: Cell<u32>,
     dirt: Cell<ComponentDirt>,
     did_change: Cell<bool>,
-    change_serial: Cell<u32>,
+    // Advanced by every component dirt notification and hosted artboard
+    // change.
     content_revision: Cell<u64>,
+    // Changes of the artboard's own transform, which its content (and so
+    // its revision) leaves out. The change serial counts both kinds.
+    self_transform_changes: Cell<u32>,
     // Bumped (wrapping) each time the draw order is sorted; state machines
     // read it to re-sort their hit components.
     draw_order_change_counter: Cell<u8>,
@@ -152,8 +156,8 @@ impl Default for RuntimeArtboardDirtyHandle {
             depth: Cell::new(0),
             dirt: Cell::new(ComponentDirt::FILTHY),
             did_change: Cell::new(true),
-            change_serial: Cell::new(0),
             content_revision: Cell::new(1),
+            self_transform_changes: Cell::new(0),
             draw_order_change_counter: Cell::new(0),
             host: RefCell::new(None),
             quiet_host_row: Cell::new(u32::MAX),
@@ -179,18 +183,21 @@ impl RuntimeArtboardDirtyHandle {
         #[cfg(any(test, feature = "testing"))]
         COLLAPSED_RUN_SKIPS.with(|count| count.set(count.get() + 1));
     }
+    /// Every change so far: content revisions (counted from zero) and own
+    /// transform changes.
     pub fn change_serial(&self) -> u32 {
-        self.0.change_serial.get()
+        (self.0.content_revision.get().wrapping_sub(1) as u32)
+            .wrapping_add(self.0.self_transform_changes.get())
     }
 
     pub(crate) fn draw_order_change_counter(&self) -> u8 {
         self.0.draw_order_change_counter.get()
     }
 
-    fn increment_change_serial(&self) {
+    fn increment_self_transform_changes(&self) {
         self.0
-            .change_serial
-            .set(self.0.change_serial.get().wrapping_add(1));
+            .self_transform_changes
+            .set(self.0.self_transform_changes.get().wrapping_add(1));
     }
 
     pub(crate) fn component_dirt(&self) -> ComponentDirt {
@@ -227,7 +234,6 @@ impl RuntimeArtboardDirtyHandle {
         self.0
             .content_revision
             .set(self.0.content_revision.get().wrapping_add(1));
-        self.increment_change_serial();
         self.wake_if_quiet_row();
         self.notify_changed();
     }
@@ -259,7 +265,6 @@ impl RuntimeArtboardDirtyHandle {
         self.0
             .content_revision
             .set(self.0.content_revision.get().wrapping_add(1));
-        self.increment_change_serial();
         self.mark_components_dirty();
         if graph_order < self.0.depth.get() {
             self.0.depth.set(graph_order);
@@ -279,9 +284,6 @@ impl RuntimeArtboardDirtyHandle {
         self.0
             .content_revision
             .set(self.0.content_revision.get().wrapping_add(u64::from(count)));
-        self.0
-            .change_serial
-            .set(self.0.change_serial.get().wrapping_add(count));
         self.mark_components_dirty();
         if lowest_order < self.0.depth.get() {
             self.0.depth.set(lowest_order);
@@ -696,6 +698,23 @@ impl KeyedObjectContext for RuntimeArtboardObjectContext<'_> {
 
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle> {
         self.resolve_handle(id)
+    }
+
+    fn resolve_object_unless(
+        &mut self,
+        id: u32,
+        current: &CoreHandle,
+    ) -> Option<Option<CoreHandle>> {
+        if let Some(instance) = &self.instance
+            && self.root.names_runtime_artboard(Rc::as_ptr(&instance.0))
+        {
+            return instance.with_artboard(|artboard| {
+                (!artboard.base.resolves_handle_to(id, current))
+                    .then(|| artboard.base.resolve_handle(id))
+            });
+        }
+        let object = self.resolve_through_root(id);
+        (object.as_ref() != Some(current)).then_some(object)
     }
 
     fn object_supports_property(&self, id: u32, key: u32) -> bool {
@@ -2546,6 +2565,11 @@ impl Artboard {
         self.objects.get(id as usize)?.clone()
     }
 
+    /// resolve_handle(id) == Some(object), without cloning the handle.
+    fn resolves_handle_to(&self, id: u32, object: &CoreHandle) -> bool {
+        self.objects.get(id as usize).and_then(Option::as_ref) == Some(object)
+    }
+
     pub fn id_of(&self, object: &CoreHandle) -> u32 {
         self.objects
             .iter()
@@ -2562,7 +2586,7 @@ impl Artboard {
     }
 
     pub fn self_transform_changed(&mut self) {
-        self.dirty_state.increment_change_serial();
+        self.dirty_state.increment_self_transform_changes();
         self.wake_if_quiet_row();
         self.host_transform_marked_dirty = false;
         self.mark_host_transform_dirty();
@@ -6793,6 +6817,14 @@ impl KeyedObjectContext for Artboard {
 
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle> {
         self.resolve_handle(id)
+    }
+
+    fn resolve_object_unless(
+        &mut self,
+        id: u32,
+        current: &CoreHandle,
+    ) -> Option<Option<CoreHandle>> {
+        (!self.resolves_handle_to(id, current)).then(|| self.resolve_handle(id))
     }
 
     fn object_supports_property(&self, id: u32, key: u32) -> bool {

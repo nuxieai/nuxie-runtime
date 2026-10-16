@@ -2859,25 +2859,28 @@ impl ListenerViewModel {
     }
 }
 
+/// A state machine instance with the cells it shares with its artboard and
+/// rows, owned together so that a handle is a single reference: retaining
+/// one (once per awake row and nested machine each frame) touches one count.
+/// Only handles own the instance, so the parts live exactly as long.
+struct StateMachineInstanceParts {
+    instance: RefCell<StateMachineInstance>,
+    binds: DataBindContainer,
+    artboard: RuntimeArtboardInstanceWeakHandle,
+    inputs: Rc<RefCell<Sidecar<SMIInputExtras>>>,
+    needs_advance: Rc<Cell<bool>>,
+    settling: Rc<LayerSettling>,
+}
+
 #[derive(Clone)]
-pub struct RuntimeStateMachineInstanceHandle(
-    Rc<RefCell<StateMachineInstance>>,
-    DataBindContainer,
-    RuntimeArtboardInstanceWeakHandle,
-    Rc<RefCell<Sidecar<SMIInputExtras>>>,
-    Rc<Cell<bool>>,
-    Rc<LayerSettling>,
-);
+pub struct RuntimeStateMachineInstanceHandle(Rc<StateMachineInstanceParts>);
 
 #[derive(Clone, Default)]
-pub struct RuntimeStateMachineInstanceWeakHandle(
-    Weak<RefCell<StateMachineInstance>>,
-    crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerWeak,
-    RuntimeArtboardInstanceWeakHandle,
-    Weak<RefCell<Sidecar<SMIInputExtras>>>,
-    Weak<Cell<bool>>,
-    Weak<LayerSettling>,
-);
+pub struct RuntimeStateMachineInstanceWeakHandle {
+    parts: Weak<StateMachineInstanceParts>,
+    // The settling state, which a row may keep after the machine is gone.
+    settling: Weak<LayerSettling>,
+}
 
 impl RuntimeStateMachineInstanceHandle {
     pub fn submit_gamepads_from_buffer(&self, data: &[u8]) -> bool {
@@ -3076,94 +3079,69 @@ impl RuntimeStateMachineInstanceHandle {
     }
 
     pub(crate) fn borrow_instance_mut(&self) -> std::cell::RefMut<'_, StateMachineInstance> {
-        self.0.borrow_mut()
+        self.0.instance.borrow_mut()
     }
 
     fn new(instance: StateMachineInstance) -> Self {
-        let container = instance.data_bind_container.clone();
+        let binds = instance.data_bind_container.clone();
         let artboard = instance.artboard_instance.clone();
-        let input_extras = instance.input_extras.clone();
+        let inputs = instance.input_extras.clone();
         let needs_advance = instance.needs_advance.clone();
         let settling = instance.settling.clone();
-        Self(
-            Rc::new(RefCell::new(instance)),
-            container,
+        Self(Rc::new(StateMachineInstanceParts {
+            instance: RefCell::new(instance),
+            binds,
             artboard,
-            input_extras,
+            inputs,
             needs_advance,
             settling,
-        )
+        }))
     }
 
     pub fn downgrade(&self) -> RuntimeStateMachineInstanceWeakHandle {
-        RuntimeStateMachineInstanceWeakHandle(
-            Rc::downgrade(&self.0),
-            self.1.downgrade(),
-            self.2.clone(),
-            Rc::downgrade(&self.3),
-            Rc::downgrade(&self.4),
-            Rc::downgrade(&self.5),
-        )
+        RuntimeStateMachineInstanceWeakHandle {
+            parts: Rc::downgrade(&self.0),
+            settling: Rc::downgrade(&self.0.settling),
+        }
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> R {
-        f(&self.0.borrow())
+        f(&self.0.instance.borrow())
     }
 
     pub fn with_instance_mut<R>(&self, f: impl FnOnce(&mut StateMachineInstance) -> R) -> R {
-        f(&mut self.0.borrow_mut())
+        f(&mut self.0.instance.borrow_mut())
     }
 }
 
 impl RuntimeStateMachineInstanceWeakHandle {
     pub(crate) fn wake_row(&self) {
-        if let Some(settling) = self.5.upgrade() {
+        if let Some(settling) = self.settling.upgrade() {
             settling.wake_row();
         }
     }
     pub(crate) fn data_bind_dirtied(&self) {
-        if let Some(settling) = self.5.upgrade() {
+        if let Some(settling) = self.settling.upgrade() {
             settling.binds_pending.set(true);
             settling.unsettle();
         }
     }
     pub(crate) fn data_binds_processing_started(&self) {
-        if let Some(settling) = self.5.upgrade() {
+        if let Some(settling) = self.settling.upgrade() {
             settling.binds_pending.set(false);
         }
     }
     pub(crate) fn data_context_changed(&self) {
-        if let Some(settling) = self.5.upgrade() {
+        if let Some(settling) = self.settling.upgrade() {
             settling.unsettle();
         }
     }
     pub fn upgrade(&self) -> Option<RuntimeStateMachineInstanceHandle> {
-        self.0.upgrade().map(|instance| {
-            RuntimeStateMachineInstanceHandle(
-                instance,
-                self.1
-                    .upgrade()
-                    .expect("live machine owns its binding container"),
-                self.2.clone(),
-                self.3
-                    .upgrade()
-                    .expect("live machine owns its input-extras cell"),
-                self.4
-                    .upgrade()
-                    .expect("live machine owns its advance flag"),
-                self.5
-                    .upgrade()
-                    .expect("live machine owns its settling state"),
-            )
-        })
+        self.parts.upgrade().map(RuntimeStateMachineInstanceHandle)
     }
 
     pub(crate) fn data_bind_container(&self) -> Option<DataBindContainer> {
-        if self.0.strong_count() == 0 {
-            None
-        } else {
-            self.1.upgrade()
-        }
+        self.parts.upgrade().map(|parts| parts.binds.clone())
     }
 
     pub(crate) fn relink_data_context(&self) {
@@ -3174,7 +3152,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
         let Some(machine) = self.upgrade() else {
             return;
         };
-        if let Some(artboard) = machine.2.upgrade() {
+        if let Some(artboard) = machine.0.artboard.upgrade() {
             artboard.relink_data_context();
         }
     }
@@ -3184,7 +3162,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
         let Some(machine) = self.upgrade() else {
             return;
         };
-        if let Some(artboard) = machine.2.upgrade() {
+        if let Some(artboard) = machine.0.artboard.upgrade() {
             Artboard::main_view_model_instance_changed_handle(&artboard.core_handle());
         }
     }
@@ -3193,8 +3171,8 @@ impl RuntimeStateMachineInstanceWeakHandle {
         let Some(machine) = self.upgrade() else {
             return;
         };
-        machine.1.drop_instance_value_binds_targeting(target);
-        if let Some(artboard) = machine.2.upgrade() {
+        machine.0.binds.drop_instance_value_binds_targeting(target);
+        if let Some(artboard) = machine.0.artboard.upgrade() {
             if let Some(container) = artboard.core_handle().data_bind_container() {
                 container.drop_instance_value_binds_targeting(target);
             }
@@ -3205,7 +3183,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
         let machine = self.upgrade()?;
         // The retained container exposes the single owning context without
         // reborrowing a machine that may be active in a pointer callback.
-        machine.1.data_bind_context()
+        machine.0.binds.data_bind_context()
     }
 
     pub(crate) fn queue_focus_event(&self, group: RuntimeFocusListenerGroupHandle, is_focus: bool) {
@@ -3216,13 +3194,14 @@ impl RuntimeStateMachineInstanceWeakHandle {
         // machine is borrowed. These are its actual queue and advance flag,
         // so upstream's synchronous enqueue needs no second machine borrow.
         machine
-            .3
+            .0
+            .inputs
             .borrow_mut()
             .ensure_allocated()
             .queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
-        machine.4.set(true);
-        machine.5.wake_row();
+        machine.0.needs_advance.set(true);
+        machine.0.settling.wake_row();
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> Option<R> {
@@ -3237,7 +3216,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.0, &other.0)
+        Weak::ptr_eq(&self.parts, &other.parts)
     }
 }
 

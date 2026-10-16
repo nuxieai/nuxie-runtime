@@ -79,6 +79,7 @@ fn read_cubic(vertex: &mut dyn CubicVertexBehavior, read: VertexRead) -> RenderV
 
 /// read_cubic, or a straight vertex's read, from an authored straight or
 /// cubic vertex's cells.
+#[inline]
 fn read_vertex_cells(owner: &CoreHandle, cells: &VertexCells, read: VertexRead) -> RenderVertex {
     if cells.kind() == VertexKind::Straight {
         return RenderVertex::Straight {
@@ -470,7 +471,20 @@ impl Path {
         Self::read_vertex(vertex, VertexRead::First)
     }
 
+    /// A vertex's render points: an authored straight or cubic vertex's from
+    /// its cells inline, any other through its borrow.
+    #[inline]
     fn read_vertex(vertex: &PathVertexOccurrence, read: VertexRead) -> Option<RenderVertex> {
+        match vertex {
+            PathVertexOccurrence::Authored(vertex, cells) if cells.kind() != VertexKind::Other => {
+                Some(read_vertex_cells(vertex, cells, read))
+            }
+            _ => Self::read_vertex_borrowed(vertex, read),
+        }
+    }
+
+    #[inline(never)]
+    fn read_vertex_borrowed(vertex: &PathVertexOccurrence, read: VertexRead) -> Option<RenderVertex> {
         match vertex {
             PathVertexOccurrence::Authored(vertex, cells) if cells.kind() != VertexKind::Other => {
                 Some(read_vertex_cells(vertex, cells, read))

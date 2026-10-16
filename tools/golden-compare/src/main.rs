@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
@@ -560,6 +561,8 @@ struct CorpusEntry {
     verification: VerificationMode,
     divergence_signature: Option<String>,
     scripted_divergence_signature: Option<String>,
+    rust_stream_sha256: Option<String>,
+    scripted_rust_stream_sha256: Option<String>,
     milestone: Option<String>,
     features: Vec<String>,
 }
@@ -582,6 +585,8 @@ impl CorpusEntry {
             verification: VerificationMode::Exact,
             divergence_signature: None,
             scripted_divergence_signature: None,
+            rust_stream_sha256: None,
+            scripted_rust_stream_sha256: None,
             milestone: None,
             features: Vec::new(),
         }
@@ -665,6 +670,22 @@ impl CorpusEntry {
                 ));
             }
         }
+        if self.layout_divergence().is_some() {
+            if self.status == Status::Diverges {
+                validate_stream_hash(
+                    &self.id,
+                    "rust_stream_sha256",
+                    self.rust_stream_sha256.as_deref(),
+                )?;
+            }
+            if self.effective_status(true) == Status::Diverges {
+                validate_stream_hash(
+                    &self.id,
+                    "scripted_rust_stream_sha256",
+                    self.scripted_rust_stream_sha256.as_deref(),
+                )?;
+            }
+        }
         if self
             .features
             .iter()
@@ -715,8 +736,8 @@ impl CorpusEntry {
 
     /// Layout is a deliberate divergence from upstream Rive (stock Taffy with
     /// CSS semantics replaces Rive's Yoga). An entry whose first difference
-    /// comes from that solver change names the reason here; its pinned
-    /// divergence signature still fails the gate if anything moves it.
+    /// comes from that solver change names the reason here. Each lane pins
+    /// its first difference and the SHA-256 of the entire Rust stream.
     fn layout_divergence(&self) -> Option<&str> {
         self.features
             .iter()
@@ -785,6 +806,21 @@ impl CorpusEntry {
             return self.scripted_divergence_signature.as_deref();
         }
         self.divergence_signature.as_deref()
+    }
+}
+
+fn validate_stream_hash(id: &str, field: &str, value: Option<&str>) -> Result<(), String> {
+    if value.is_some_and(|value| {
+        value.len() == 64
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    }) {
+        Ok(())
+    } else {
+        Err(format!(
+            "entry {id} needs a reviewed full Rust stream SHA-256 in {field}"
+        ))
     }
 }
 
@@ -981,6 +1017,12 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "scripted_divergence_signature" => {
                 entry.scripted_divergence_signature = Some(parse_string(value, line_number)?)
             }
+            "rust_stream_sha256" => {
+                entry.rust_stream_sha256 = Some(parse_string(value, line_number)?)
+            }
+            "scripted_rust_stream_sha256" => {
+                entry.scripted_rust_stream_sha256 = Some(parse_string(value, line_number)?)
+            }
             "milestone" => entry.milestone = Some(parse_string(value, line_number)?),
             "features" => entry.features = parse_string_array(value, line_number)?,
             other => return Err(format!("line {line_number}: unknown key {other}")),
@@ -1027,13 +1069,30 @@ fn parse_string(value: &str, line: usize) -> Result<String, String> {
 
 fn parse_string_array(value: &str, line: usize) -> Result<Vec<String>, String> {
     let inner = array_inner(value, line)?;
-    if inner.trim().is_empty() {
-        return Ok(Vec::new());
+    let mut values = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (offset, ch) in inner.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if quoted && ch == '\\' {
+            escaped = true;
+        } else if ch == '"' {
+            quoted = !quoted;
+        } else if ch == ',' && !quoted {
+            values.push(parse_string(inner[start..offset].trim(), line)?);
+            start = offset + 1;
+        }
     }
-    inner
-        .split(',')
-        .map(|part| parse_string(part.trim(), line))
-        .collect()
+    if quoted || escaped {
+        return Err(format!("line {line}: unterminated array string"));
+    }
+    let last = inner[start..].trim();
+    if !last.is_empty() {
+        values.push(parse_string(last, line)?);
+    }
+    Ok(values)
 }
 
 fn parse_float_array(value: &str, line: usize) -> Result<Vec<f32>, String> {
@@ -1161,14 +1220,30 @@ fn verify_known_divergence(
             entry.id
         ));
     };
-    if actual == recorded {
-        Ok(())
-    } else {
-        Err(format!(
+    if actual != recorded {
+        return Err(format!(
             "{} divergence changed: recorded {recorded}; actual {actual}",
             entry.id
-        ))
+        ));
     }
+    let hash = if scripted {
+        entry.scripted_rust_stream_sha256.as_deref()
+    } else {
+        entry.rust_stream_sha256.as_deref()
+    };
+    if entry.layout_divergence().is_some() {
+        validate_stream_hash(&entry.id, "lane Rust stream SHA-256", hash)?;
+    }
+    if let Some(recorded_hash) = hash {
+        let actual_hash = format!("{:x}", Sha256::digest(rust_stream.as_bytes()));
+        if actual_hash != recorded_hash {
+            return Err(format!(
+                "{} full Rust stream SHA-256 changed: recorded {recorded_hash}; actual {actual_hash}",
+                entry.id
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Verifies the one approved Yoga-to-Taffy semantic-bounds seam without
@@ -1553,6 +1628,8 @@ mod tests {
         assert!(entry.validate(1).is_err());
         entry.status = Status::Diverges;
         entry.divergence_signature = Some("line 3: expected a, got b".to_owned());
+        entry.rust_stream_sha256 = Some("0".repeat(64));
+        entry.scripted_rust_stream_sha256 = Some("0".repeat(64));
         assert_eq!(entry.validate(1), Ok(()));
         assert_eq!(entry.layout_divergence(), Some("CSS flex basis"));
         entry.features = vec!["layout-diverges: ".to_owned()];
@@ -2438,4 +2515,86 @@ fn samples_csv(samples: &[f32]) -> String {
         .map(|sample| sample.to_string())
         .collect::<Vec<_>>()
         .join(",")
+}
+
+#[cfg(test)]
+mod reviewed_layout_tests {
+    use super::*;
+
+    fn reviewed_stream_fixture() -> CorpusEntry {
+        let mut entry = CorpusEntry::new();
+        entry.id = "reviewed-layout".to_owned();
+        entry.path = "fixture.riv".to_owned();
+        entry.status = Status::Diverges;
+        entry.features = vec![
+            "layout-diverges:CSS allocation".to_owned(),
+            "scripted-status:diverges".to_owned(),
+        ];
+        entry.divergence_signature = Some("line 2: rust `value=2` vs c++ `value=1`".to_owned());
+        entry.scripted_divergence_signature = entry.divergence_signature.clone();
+        entry.rust_stream_sha256 =
+            Some("e75738d4745de0f2f9e4625236724a221f05f1077dad2e93afe3d9d45ccdb71f".to_owned());
+        entry.scripted_rust_stream_sha256 =
+            Some("415d07c45d783e93d4a338bf90df6cfbe2b769740f5ec6aacd6a8e2d2ab4f809".to_owned());
+        entry
+    }
+
+    #[test]
+    fn reviewed_layout_requires_both_lane_hashes() {
+        let mut entry = reviewed_stream_fixture();
+        assert!(entry.validate(1).is_ok());
+        entry.rust_stream_sha256 = None;
+        assert!(entry.validate(1).is_err());
+        entry.rust_stream_sha256 = reviewed_stream_fixture().rust_stream_sha256;
+        entry.scripted_rust_stream_sha256 = None;
+        assert!(entry.validate(1).is_err());
+        entry.scripted_rust_stream_sha256 = Some("not-a-hash".to_owned());
+        assert!(entry.validate(1).is_err());
+    }
+
+    #[test]
+    fn reviewed_layout_stream_rejects_change_after_first_difference() {
+        let entry = reviewed_stream_fixture();
+        let cpp = "rive-golden-stream-v1\nvalue=1\nlater=3\n";
+        let approved = "rive-golden-stream-v1\nvalue=2\nlater=3\n";
+        assert!(verify_known_divergence(&entry, approved, cpp, false).is_ok());
+        let changed = approved.replace("later=3", "later=4");
+        assert!(verify_known_divergence(&entry, &changed, cpp, false).is_err());
+    }
+
+    #[test]
+    fn reviewed_scripted_layout_stream_uses_its_own_hash() {
+        let entry = reviewed_stream_fixture();
+        let cpp = "rive-golden-stream-v1\nvalue=1\nlater=5\n";
+        let approved = "rive-golden-stream-v1\nvalue=2\nlater=5\n";
+        assert!(verify_known_divergence(&entry, approved, cpp, true).is_ok());
+        let changed = approved.replace("later=5", "later=6");
+        assert!(verify_known_divergence(&entry, &changed, cpp, true).is_err());
+    }
+
+    #[test]
+    fn quoted_layout_reason_keeps_commas_and_escaped_quotes() {
+        let path =
+            std::env::temp_dir().join(format!("golden-layout-reason-{}.toml", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"[[file]]
+id = "quoted-layout"
+path = "fixture.riv"
+status = "diverges"
+divergence_signature = "line 2: rust `a` vs c++ `b`"
+rust_stream_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+scripted_rust_stream_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+features = ["layout-diverges:Fixed boxes, with \"quoted labels\", shrink."]
+"#,
+        )
+        .unwrap();
+        let result = parse_corpus(&path);
+        std::fs::remove_file(&path).unwrap();
+        let entries = result.unwrap();
+        assert_eq!(
+            entries[0].layout_divergence(),
+            Some(r#"Fixed boxes, with "quoted labels", shrink."#)
+        );
+    }
 }

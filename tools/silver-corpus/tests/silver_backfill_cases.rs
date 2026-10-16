@@ -64,8 +64,9 @@ fn compare_case(id: &str, runtime: &Path) -> anyhow::Result<()> {
     let expected_path = resolve_expected(runtime, case);
     let expected_bytes = std::fs::read(&expected_path)?;
     let expected = parse_sriv(&expected_bytes)?;
-    let actual = parse_sriv(actual.bytes())?;
-    browser_layout::reviewed_result(id, compare_sriv(&expected, &actual))
+    let actual_bytes = actual.bytes().to_vec();
+    let actual = parse_sriv(&actual_bytes)?;
+    browser_layout::reviewed_result(id, compare_sriv(&expected, &actual), &actual_bytes)
         .map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
 }
 

@@ -1,7 +1,7 @@
 use anyhow::Context;
 use silver_corpus::{
     Execution, Lane, Status, compare_files, compare_sriv, parse_sriv, read_manifest,
-    resolve_expected, validate_manifest,
+    resolve_expected, validate_manifest, verify_reviewed_layout_stream,
 };
 use std::env;
 use std::fs;
@@ -108,14 +108,13 @@ fn validate(options: Options) -> anyhow::Result<()> {
                         case.id
                     );
                     divergent += 1;
-                    if manifest
+                    if let Some(review) = manifest
                         .corpus
                         .reviewed_layout_divergences
                         .iter()
-                        .any(|review| review.id == case.id)
+                        .find(|review| review.id == case.id)
                     {
-                        // Credit only a replay that matched its exact recorded
-                        // first difference above, never a skipped case.
+                        verify_reviewed_layout_stream(review, &difference, execution.bytes())?;
                         reviewed_layout += 1;
                     }
                     println!("[divergent] {}: {}", case.id, difference);
@@ -150,6 +149,21 @@ fn validate(options: Options) -> anyhow::Result<()> {
                     println!("[{}] {}: cpp-rust exact", case.status, case.id);
                 }
                 Err(error) if case.status == Status::Diverges => {
+                    if let Some(review) = manifest
+                        .corpus
+                        .reviewed_layout_divergences
+                        .iter()
+                        .find(|review| review.id == case.id)
+                    {
+                        let bytes = fs::read(&actual)?;
+                        let expected = parse_sriv(&fs::read(resolve_expected(
+                            &options.rive_runtime_dir,
+                            case,
+                        ))?)?;
+                        let difference = compare_sriv(&expected, &parse_sriv(&bytes)?)
+                            .expect_err("classified probe divergence");
+                        verify_reviewed_layout_stream(review, &difference, &bytes)?;
+                    }
                     println!("[diverges] {}: classified difference: {error:#}", case.id);
                 }
                 Err(error)

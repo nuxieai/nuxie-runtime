@@ -1,5 +1,5 @@
 {
-  "checksum": "b5931bc971a2511af4b8d971321939cec6acce390d4e925cd9365bee238d7460",
+  "checksum": "117558c63152186c8d84c26c3e1b788c2dde083a132fb31ff05cd53ebb3e829d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3160,6 +3160,10 @@
           {
             "id": "anyhow 1.0.103",
             "target": "anyhow"
+          },
+          {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
           }
         ],
         "edition": "2024"
@@ -8428,6 +8432,10 @@
           {
             "id": "serde 1.0.228",
             "target": "serde"
+          },
+          {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
           },
           {
             "id": "toml 0.9.12+spec-1.1.0",

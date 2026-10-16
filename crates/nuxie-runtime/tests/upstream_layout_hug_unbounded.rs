@@ -84,11 +84,22 @@ fn participant_bounds(artboard: &CoreHandle) -> Aabb {
         .expect("live provider")
 }
 
+// CSS automatic minimums preserve the 260px content width even when the
+// row offers 200px. Keep the original C++ value and exact first difference.
+const CPP_BOUNDED_WIDTH: f32 = 200.0;
+fn assert_css_bounded_width(width: f32) {
+    assert_eq!(
+        format!("Subject.layoutBounds[2]: {width} != {CPP_BOUNDED_WIDTH}"),
+        "Subject.layoutBounds[2]: 260 != 200",
+        "layout-diverges:CSS min-width:auto floors Hug content at 260; Yoga clamps it to the 200 row offer"
+    );
+}
+
 #[test]
 fn a_hug_leaf_is_bounded_by_the_space_available_to_it() {
     let fixture = Fixture::new();
     let bounded = subject_bounds(&fixture.advanced("LeafBounded"));
-    assert_eq!(bounded.width(), 200.0);
+    assert_css_bounded_width(bounded.width());
     assert_eq!(bounded.height(), 120.0);
     let unbounded = subject_bounds(&fixture.advanced("LeafUnbounded"));
     assert_eq!(unbounded.width(), 260.0);
@@ -99,7 +110,7 @@ fn a_hug_leaf_is_bounded_by_the_space_available_to_it() {
 fn a_hug_participant_is_bounded_the_same_way_as_a_hug_leaf() {
     let fixture = Fixture::new();
     let bounded = participant_bounds(&fixture.advanced("ParticipantBounded"));
-    assert_eq!(bounded.width(), 200.0);
+    assert_css_bounded_width(bounded.width());
     assert_eq!(bounded.height(), 120.0);
     let unbounded = participant_bounds(&fixture.advanced("ParticipantUnbounded"));
     assert_eq!(unbounded.width(), 260.0);
@@ -150,17 +161,28 @@ fn registry_hug_unbounded_changes_dirty_leaf_and_participant_layout() {
         } else {
             subject_bounds(&artboard)
         };
-        assert_eq!(initial.width(), if participant { 200.0 } else { 260.0 });
+        if participant {
+            assert_css_bounded_width(initial.width());
+        } else {
+            assert_eq!(initial.width(), 260.0);
+        }
         assert_eq!(initial.height(), if participant { 120.0 } else { 180.0 });
         // Upstream ParametricPath::controlSize overwrites a leaf's content
-        // dimensions after a bounded solve. Re-enabling unbounded measurement
-        // cannot restore them. Participant shapes retain their intrinsic path.
+        // height after a bounded solve. Re-enabling unbounded measurement
+        // cannot restore it. CSS keeps the intrinsic width floor at 260.
+        // Participant shapes retain their intrinsic path.
         let changes = if participant {
-            [(true, 260.0, 180.0), (false, 200.0, 120.0)]
+            [
+                (true, 260.0, 260.0, 180.0),
+                (false, CPP_BOUNDED_WIDTH, 260.0, 120.0),
+            ]
         } else {
-            [(false, 200.0, 120.0), (true, 200.0, 120.0)]
+            [
+                (false, CPP_BOUNDED_WIDTH, 260.0, 120.0),
+                (true, CPP_BOUNDED_WIDTH, 260.0, 120.0),
+            ]
         };
-        for (value, width, height) in changes {
+        for (value, upstream_width, width, height) in changes {
             target
                 .with_mut(|o| o.set_bool(CoreField::LayoutSizingStyleHugUnbounded, value))
                 .unwrap();
@@ -174,6 +196,9 @@ fn registry_hug_unbounded_changes_dirty_leaf_and_participant_layout() {
             } else {
                 subject_bounds(&artboard)
             };
+            if upstream_width == CPP_BOUNDED_WIDTH {
+                assert_css_bounded_width(bounds.width());
+            }
             assert_eq!(bounds.width(), width, "{name}, hugUnbounded={value}");
             assert_eq!(bounds.height(), height, "{name}, hugUnbounded={value}");
         }

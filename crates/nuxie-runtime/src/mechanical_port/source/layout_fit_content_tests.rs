@@ -1016,3 +1016,51 @@ row_hosts!(
         assert_width(&f, 145.4414);
     }
 );
+
+#[test]
+fn css_row_contract_width_owned_paragraph_wraps_for_every_authored_sizing() {
+    for authored in [1, 2] {
+        let f = Fixture::new_host(TITLE, 338.0, true, true);
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_sizing_value_value(authored);
+                text.base.set_width_value(1000.0);
+                text.base.set_height_value(72.0);
+            })
+            .unwrap();
+        f.label
+            .with_downcast_mut::<LayoutParticipant, _>(|p| {
+                p.base
+                    .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+            })
+            .unwrap();
+        LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+        row_icon(&f, 40.0, 40.0, 16.0);
+        assert_width(&f, 282.0);
+        let expected_height = if authored == 1 { 70.30176 } else { 72.0 };
+        assert!(
+            (f.solve().height() - expected_height).abs() < 0.001,
+            "authored sizing {authored}: {:?}",
+            f.solve()
+        );
+    }
+}
+
+row_hosts!(
+    css_row_contract_fitted_leaf_keeps_zero_minimum,
+    css_row_contract_fitted_participant_keeps_zero_minimum,
+    |participant| {
+        use crate::source::text_engine::TextOverflow;
+        let f = Fixture::new_host(TITLE, 160.0, true, participant);
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_overflow_value_value(5);
+                assert_eq!(text.overflow(), TextOverflow::FitFontSize);
+            })
+            .unwrap();
+        row_icon(&f, 40.0, 40.0, 16.0);
+        // Fitted fonts have no intrinsic minimum contract yet. Keep main's
+        // zero minimum, so the label takes the 104px remaining in the row.
+        assert_width(&f, 104.0);
+    }
+);

@@ -5,7 +5,7 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter,
-        linear_animation::{LinearAnimation, LinearAnimationOwner},
+        linear_animation::{LinearAnimation, LinearAnimationCells, LinearAnimationOwner},
         linear_animation_instance_extras::LAIBindingExtras,
         r#loop::Loop,
         nested_animation::NestedEventNotifier,
@@ -52,6 +52,9 @@ thread_local! {
 pub struct LinearAnimationInstance {
     blend_accumulator: std::rc::Weak<RefCell<super::blend_accumulator::BlendAccumulator>>,
     animation: LinearAnimationOwner,
+    // The animation's timing properties and callback presence, read without
+    // borrowing it.
+    cells: Rc<LinearAnimationCells>,
     scene: Scene,
     nested_event_notifier: NestedEventNotifier,
     time: f32,
@@ -97,15 +100,15 @@ impl LinearAnimationInstance {
         artboard: RuntimeArtboardInstanceWeakHandle,
         speed_multiplier: f32,
     ) -> Self {
-        let time = animation.with(|animation| {
-            if speed_multiplier >= 0.0 {
-                animation.start_time()
-            } else {
-                animation.end_time()
-            }
-        });
+        let cells = animation.with(|animation| Rc::clone(animation.base.cells()));
+        let time = if speed_multiplier >= 0.0 {
+            cells.start_time()
+        } else {
+            cells.end_time()
+        };
         Self {
             animation,
+            cells,
             blend_accumulator: std::rc::Weak::new(),
             scene: Scene::from_runtime_artboard_link(artboard),
             nested_event_notifier: NestedEventNotifier::default(),
@@ -174,13 +177,11 @@ impl LinearAnimationInstance {
         }
         self.time = value;
         let difference = self.total_time - self.last_total_time;
-        let start = self.with_animation(|animation| {
-            (if animation.base.enable_work_area() {
-                animation.base.work_start() as f32
-            } else {
-                0.0
-            }) * animation.base.fps() as f32
-        });
+        let start = (if self.cells.enable_work_area() {
+            self.cells.work_start() as f32
+        } else {
+            0.0
+        }) * self.cells.fps() as f32;
         self.total_time = value - start;
         self.last_total_time = self.total_time - difference;
         self.direction = 1.0
@@ -199,9 +200,9 @@ impl LinearAnimationInstance {
     pub fn keep_going_with_multiplier(&self, m: f32) -> bool {
         self.loop_value() != Loop::OneShot.value() as i32
             || (self.directed_speed() * m > 0.0
-                && self.time < self.with_animation(LinearAnimation::end_seconds))
+                && self.time < self.cells.end_seconds())
             || (self.directed_speed() * m < 0.0
-                && self.time > self.with_animation(LinearAnimation::start_seconds))
+                && self.time > self.cells.start_seconds())
     }
     pub fn total_time(&self) -> f32 {
         self.total_time
@@ -213,22 +214,22 @@ impl LinearAnimationInstance {
         self.spilled_time
     }
     pub fn duration_seconds(&self) -> f32 {
-        self.with_animation(LinearAnimation::duration_seconds)
+        self.cells.duration_seconds()
     }
     pub fn global_to_local_seconds(&self, seconds: f32) -> f32 {
-        self.with_animation(|animation| animation.global_to_local_seconds(seconds))
+        self.cells.global_to_local_seconds(seconds)
     }
     pub fn fps(&self) -> u32 {
-        self.with_animation(|animation| animation.base.fps())
+        self.cells.fps()
     }
     pub fn duration(&self) -> u32 {
-        self.with_animation(|animation| animation.base.duration())
+        self.cells.duration()
     }
     pub fn speed(&self) -> f32 {
-        self.with_animation(|animation| animation.base.speed())
+        self.cells.speed()
     }
     pub fn start_time(&self) -> f32 {
-        self.with_animation(LinearAnimation::start_time)
+        self.cells.start_time()
     }
     pub fn name(&self) -> String {
         self.with_animation(|animation| animation.base.base.name().to_owned())
@@ -237,26 +238,24 @@ impl LinearAnimationInstance {
         if self.loop_value != -1 {
             self.loop_value
         } else {
-            self.with_animation(|animation| animation.base.loop_value() as i32)
+            self.cells.loop_value() as i32
         }
     }
     pub fn set_loop_value(&mut self, value: i32) {
         if self.loop_value == value
             || (self.loop_value == -1
-                && self.with_animation(|animation| animation.base.loop_value() as i32) == value)
+                && self.cells.loop_value() as i32 == value)
         {
             return;
         }
         self.loop_value = value
     }
     pub fn reset(&mut self, m: f32) {
-        self.time = self.with_animation(|animation| {
-            if m >= 0.0 {
-                animation.start_time()
-            } else {
-                animation.end_time()
-            }
-        })
+        self.time = if m >= 0.0 {
+            self.cells.start_time()
+        } else {
+            self.cells.end_time()
+        }
     }
     #[inline]
     pub fn keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
@@ -470,6 +469,12 @@ impl LinearAnimationInstance {
         to: f32,
         from_pong: bool,
     ) {
+        // LinearAnimation::reportKeyedCallbacks returns at once for an
+        // animation without callback keys.
+        #[cfg(not(feature = "editor"))]
+        if !self.cells.has_keyed_callbacks() {
+            return;
+        }
         let speed_direction = self.speed_direction;
         match reporter {
             AdvanceReporter::None => {}
@@ -505,20 +510,18 @@ impl LinearAnimationInstance {
         self.report_animation_callbacks(&mut reporter, last_time, self.time, false);
 
         // These reads occur after the first synchronous report in C++.
-        let (fps, start, end) = self.with_animation(|animation| {
-            let fps = animation.base.fps() as f32;
-            let start = if animation.base.enable_work_area() {
-                animation.base.work_start() as f32
-            } else {
-                0.0
-            };
-            let end = if animation.base.enable_work_area() {
-                animation.base.work_end() as f32
-            } else {
-                animation.base.duration() as f32
-            };
-            (fps, start, end)
-        });
+        let timing = &self.cells;
+        let fps = timing.fps() as f32;
+        let start = if timing.enable_work_area() {
+            timing.work_start() as f32
+        } else {
+            0.0
+        };
+        let end = if timing.enable_work_area() {
+            timing.work_end() as f32
+        } else {
+            timing.duration() as f32
+        };
         let mut frames = self.time * fps;
         let range = end - start;
         let mut did_loop = false;
@@ -726,6 +729,7 @@ impl Clone for LinearAnimationInstance {
     fn clone(&self) -> Self {
         Self {
             animation: self.animation.clone(),
+            cells: Rc::clone(&self.cells),
             // Upstream's explicit copy constructor leaves this pointer null.
             blend_accumulator: std::rc::Weak::new(),
             scene: self.scene.clone(),

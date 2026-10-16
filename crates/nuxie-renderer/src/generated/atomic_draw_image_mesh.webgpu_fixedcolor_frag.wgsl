@@ -20,18 +20,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -41,11 +41,11 @@ struct R4Re {
     r2_: array<u32>,
 }
 
-@id(7) override gj: bool = true;
-@id(4) override dj: bool = true;
-@id(0) override Zi: bool = true;
-@id(1) override aj: bool = true;
-@id(2) override bj: bool = true;
+@id(7) override hj: bool = true;
+@id(4) override ej: bool = true;
+@id(0) override aj: bool = true;
+@id(1) override bj: bool = true;
+@id(2) override cj: bool = true;
 
 @group(0) @binding(3)
 var<storage> XC: lg;
@@ -108,7 +108,7 @@ fn main_1() {
     let _e101 = l2_1;
     let _e102 = textureSample(TB, U4_, _e101);
     phi_1548_ = 1f;
-    if aj {
+    if bj {
         let _e103 = V0_1;
         let _e106 = min(_e103.xy, _e103.zw);
         phi_1548_ = clamp(min(_e106.x, _e106.y), 0f, 1f);
@@ -121,8 +121,8 @@ fn main_1() {
     phi_1485_ = _e121;
     if ((_e124.x & 768u) != 0u) {
         let _e128 = abs(_e121);
-        phi_1009_ = dj;
-        if dj {
+        phi_1009_ = ej;
+        if ej {
             phi_1009_ = ((_e124.x & 512u) != 0u);
         }
         let _e132 = phi_1009_;
@@ -136,7 +136,7 @@ fn main_1() {
     let _e142 = phi_1485_;
     let _e143 = clamp(_e142, 0f, 1f);
     phi_1489_ = _e143;
-    if Zi {
+    if aj {
         let _e145 = (_e124.x >> bitcast<u32>(16u));
         phi_1490_ = _e143;
         if (_e145 != 0u) {
@@ -153,8 +153,8 @@ fn main_1() {
         phi_1489_ = _e159;
     }
     let _e161 = phi_1489_;
-    phi_1046_ = aj;
-    if aj {
+    phi_1046_ = bj;
+    if bj {
         phi_1046_ = ((_e124.x & 1024u) != 0u);
     }
     let _e165 = phi_1046_;
@@ -170,7 +170,7 @@ fn main_1() {
     let _e196 = phi_1494_;
     let _e197 = (_e124.x & 15u);
     if (_e197 <= 1u) {
-        let _e282 = (Zi && (_e197 == 0u));
+        let _e282 = (aj && (_e197 == 0u));
         phi_1525_ = 0u;
         if _e282 {
             phi_1525_ = (_e124.y | pack2x16float(vec2<f32>(_e196, 0f)));
@@ -215,7 +215,7 @@ fn main_1() {
         let _e263 = phi_1493_;
         let _e264 = textureSampleLevel(ZC, Q8_, _e263, 0f);
         phi_1523_ = _e264;
-        if !((bj && (((_e124.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
+        if !((cj && (((_e124.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
             let _e268 = (_e264.xyz * _e264.w);
             phi_1523_ = vec4<f32>(_e268.x, _e268.y, _e268.z, (_e264.w * abs(bitcast<f32>(_e124.y))));
         }
@@ -225,8 +225,8 @@ fn main_1() {
     }
     let _e291 = phi_1524_;
     let _e293 = phi_1521_;
-    phi_781_ = Zi;
-    if Zi {
+    phi_781_ = aj;
+    if aj {
         let _e295 = S3_1;
         phi_781_ = (_e295 != 0u);
     }
@@ -254,9 +254,9 @@ fn main_1() {
     let _e318 = ((_e102 * _e316) * _e315);
     let _e322 = (((_e293 * _e196) * (1f - _e318.w)) + _e318);
     let _e323 = _e322.xyz;
-    let _e326 = j.F3_;
-    let _e328 = j.G3_;
-    if (gj && (_e322.w != 0f)) {
+    let _e326 = j.G3_;
+    let _e328 = j.H3_;
+    if (hj && (_e322.w != 0f)) {
         phi_1582_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e65.x) + (0.00583715f * _e65.y))))) * _e326) + _e328)) + _e323);
     } else {
         phi_1582_ = _e323;

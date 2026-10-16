@@ -1,8 +1,8 @@
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -24,18 +24,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -57,16 +57,16 @@ struct VertexOutput {
 
 @id(15) override N7_: bool = false;
 @id(16) override he: bool = false;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 @group(0) @binding(7)
 var UB: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(4)
 var<storage> JB: mg;
 var<private> P0_: vec4<f32>;
@@ -291,7 +291,7 @@ fn main_1() {
             phi_1288_ = _e245;
             phi_1277_ = _e249;
             phi_1264_ = _e245;
-            if (_e260 > 134217728u) {
+            if (_e260 > 201326592u) {
                 let _e265 = f32((_e232.z & 65535u));
                 let _e266 = (_e265 * 0.000015259022f);
                 let _e270 = sqrt(max((1f - (_e266 * _e266)), 0f));
@@ -301,14 +301,14 @@ fn main_1() {
                 }
                 let _e274 = phi_1252_;
                 let _e279 = (mat2x2<f32>(vec2<f32>(_e266, _e274), vec2<f32>(-(_e274), _e266)) * _e245);
-                let _e280 = (_e260 == 201326592u);
+                let _e280 = (_e260 == 268435456u);
                 phi_612_ = _e280;
                 if !(_e280) {
-                    phi_612_ = ((_e260 != 335544320u) && (_e266 < 0.25f));
+                    phi_612_ = ((_e260 != 402653184u) && (_e266 < 0.25f));
                 }
                 let _e286 = phi_612_;
                 let _e288 = ((_e230 & 2097152u) != 0u);
-                if (_e260 == 335544320u) {
+                if (_e260 == 402653184u) {
                     phi_1269_ = (_e245 + _e279);
                 } else {
                     phi_1270_ = _e245;
@@ -370,7 +370,7 @@ fn main_1() {
         let _e346 = XC.r2_[_e152];
         let _e348 = (_e346.x & 15u);
         phi_1345_ = false;
-        if bj {
+        if cj {
             let _e351 = ((_e346.x >> bitcast<u32>(4i)) & 15u);
             Q0_ = f32(_e351);
             phi_1345_ = (_e351 != 0u);
@@ -399,8 +399,8 @@ fn main_1() {
             let _e397 = phi_1343_;
             P0_ = vec4<f32>(_e383.x, _e383.y, _e397, (((_e122 * -0.5f) - 0.25f) - round((bitcast<f32>(_e346.y) * 255f))));
         }
-        phi_837_ = hj;
-        if hj {
+        phi_837_ = ij;
+        if ij {
             phi_837_ = ((_e346.x & 2048u) != 0u);
         }
         let _e407 = phi_837_;

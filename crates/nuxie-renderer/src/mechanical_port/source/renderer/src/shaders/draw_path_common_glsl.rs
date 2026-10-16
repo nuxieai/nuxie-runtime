@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: ce891f526a3297f9498a3e524fce6385cf0f2f25
+ * Upstream source revision: 1c75867de17587c541ad2d7ca88b10577b033bd2
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1c75867de17587c541ad2d7ca88b10577b033bd2";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "bd2a678ccbc7caf4a303a2983101c8f4c6e4de28b21eb920b829deff0103b3a8";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 937;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 40275;
+    "7ab9a4e5d5197beef0a929ab09dd90b82170edf21ccab1183cbd802d5d2cefe8";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 938;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 40347;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -535,7 +535,8 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         // Ensure strokes always emit clockwise triangles.
         outset *= sign(determinant(M));
 
-        // Joins only emanate from the outer side of the stroke.
+        // Joins only emanate from the outer side of the stroke (except full
+        // round joins, which emit both sides like curves).
         if ((contourIDWithFlags & LEFT_JOIN_CONTOUR_FLAG) != 0u)
             outset = min(outset, .0);
         if ((contourIDWithFlags & RIGHT_JOIN_CONTOUR_FLAG) != 0u)

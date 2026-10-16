@@ -23,7 +23,7 @@ d e6=i2.y;if(ED&&e6!=.0){d M4=.0;
 #if defined(DB)&&defined(EC)
 if(EC){W0=unpackHalf2x16(k1(m0));g6=W0.y;}
 #endif
-if(g6!=A1){M4=g6==e6?W0.x:.0;m1(Y0,packHalf2x16(R2(M4,th)));}else{M4=unpackHalf2x16(k1(Y0)).x;g2(Y0);}P3=min(P3,M4);}else
+if(g6!=A1){M4=g6==e6?W0.x:.0;m1(Y0,packHalf2x16(R2(M4,uh)));}else{M4=unpackHalf2x16(k1(Y0)).x;g2(Y0);}P3=min(P3,M4);}else
 #endif
 {g2(Y0);}m1(m0,packHalf2x16(R2(P3,A1)));
 #ifndef U

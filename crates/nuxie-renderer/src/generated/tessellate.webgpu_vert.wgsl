@@ -8,28 +8,28 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
 }
 
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -57,9 +57,9 @@ var<private> WB_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
 @group(3) @binding(9)
@@ -442,7 +442,7 @@ fn main_1() {
         let _e501 = phi_1995_;
         let _e503 = f32(_e121);
         phi_2003_ = _e503;
-        if ((_e123 & 503316480u) == 167772160u) {
+        if ((_e123 & 503316480u) == 234881024u) {
             phi_2003_ = (_e503 - 2f);
         }
         let _e508 = phi_2003_;

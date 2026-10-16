@@ -23,6 +23,6 @@ layout(binding=0,r32ui) uniform highp upixelLocalANGLE w0;layout(location=0) out
 #elif defined(EE)
 layout(binding=0,r32i) uniform highp coherent iimage2D Z9;layout(location=0) out i J4;void main(){J4.x=float(imageLoad(Z9,cf()).x)*(1./ge);}
 #elif defined(EF)
-q3(r3,0,HF);layout(location=0) out i J4;void main(){i T=r1(HF,cf());J4.x=(T.x-T.y)*Db+(T.z-T.w)*255.;}
+q3(v3,0,HF);layout(location=0) out i J4;void main(){i T=r1(HF,cf());J4.x=(T.x-T.y)*Db+(T.z-T.w)*255.;}
 #endif
 #endif

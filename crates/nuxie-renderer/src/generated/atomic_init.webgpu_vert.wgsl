@@ -8,18 +8,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -32,7 +32,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -44,7 +44,7 @@ struct mg {
     r2_: array<vec4<f32>>,
 }
 
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
@@ -58,13 +58,13 @@ var UB: texture_2d<u32>;
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(3)
 var<storage> XC: lg;
 @group(0) @binding(4)
 var<storage> JB: mg;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(3) @binding(9)
 var db: sampler;
 

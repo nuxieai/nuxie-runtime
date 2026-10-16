@@ -46,18 +46,37 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c`
+- LAST_SYNCED_SHA: `1c75867de17587c541ad2d7ca88b10577b033bd2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` (refreshed 2026-10-15 by the daily upstream sync).
+- Current target: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` (refreshed 2026-10-16 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  No upstream commits remain after this checkpoint at the fetched target.
-  All 253 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (275 after `5892bb05`); this
+  Six upstream commits remain after this checkpoint at the fetched target.
+  All 254 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (276 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `1c75867d`, integrated atop downstream `b0ab40448a`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Integration added the missing exact JOIN_TYPE_MASK constant; both
+  reviewers cleared it. Native renderer units pass 942 with 11 existing ignores;
+  only the known UNIV-4801 uniform-range fixture fails. The initial run also
+  exposed obsolete test expectations for encoded join flags and the generated
+  GLSL byte count; exact replacements were rereviewed and the full suite rerun.
+  Both browser backends compile. Shader reproducibility passes all 66 WGSL
+  modules and 56 upstream headers; the reviewed generated inventories include
+  54 retained GLSL files, 24 WebGL payloads and 96 Vulkan headers. Metadata
+  checks pass 39 and generated manifest/build registration is current.
+  Fresh revision-stamped C++ ffi-metal and Rust rust-metal-atomic replays pass
+  all three existing trickycubicstrokes, roundcaps and feather fixture contracts
+  on the same Apple M5 Max. None is byte-exact: the first two have max delta 1
+  and zero pixels beyond delta 2; feather has max delta 4 and two pixels beyond
+  delta 2, within the unchanged 32-pixel budget. Binary, stream, archive and
+  output provenance is retained at /private/tmp/nuxie-oct16-cusp-metal. No
+  Android/vendor hardware or browser pixel validation is claimed. Existing
+  scalar exceptional-angle limitations are not relabeled complete parity.
 - Validation at `e8d647fd`, integrated atop downstream `ea6475e4ba`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean after explicitly excluding ARM32. Stable Rust 1.94.1 does not expose
@@ -1179,6 +1198,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1c75867de17587c541ad2d7ca88b10577b033bd2` | Collapse cusp slivers onto exact shared endpoints and emit n+1 cubics with full-round cusp joins. Retain chop parameters and re-chop at emission; preserve adjacent tangent pairing, polar counts, shared spokes, cap ordering and retained Rust scratch ownership. Translate the new join encoding and full-round shader branch across all supported generated backends. Update existing cusp expectations and label supplemental collapse coverage; no new upstream unit tests occur in the public delta. Private .rive_head contents are not claimed imported. | — |
 | `e8d647fd5acd66574d0a8a9614955ece7e38fd3c` | Translate bitmask, fast min/max, integer-conversion rounding, hardware-only reciprocal-square-root estimates, named four-column matrix loads/transposes and const bit-cast; migrate existing Rust tuple callers and port the complete public test delta. The renderer's tuple-only syntax delta has no corresponding live tuple caller. ARM32 source branches are retained but explicitly unsupported under the pinned stable toolchain; no ARM32 performance or execution claim. Supplemental mask/transpose/const checks are labeled separately from upstream tests. Private .rive_head contents are not claimed imported. | — |
 | `e54bc92a625cee04f88d903822c4503cb44f3714` | Check the exact legacy serialized method sentinel once after successful script self creation, clear only absent down/move/up/exit handlers in order, recopy corrected bits to the occurrence, and retain them for later instances. Reuse live Lua field/function introspection and default unknown backends to present. Typed lookup failures preserve pending status and uncommitted bits. Gate pointer hits on current script lifetime and pointer handlers; retain independent scroll bounds and the broader upstream listener-registration mask. Port both exact legacy-hit fixture cases and add Lua lookup coverage. Private .rive_head contents are not claimed imported. | — |
 | `113d1bcedcc387c92ee000f64a5d7d947b4229dc` | Use cached RiveRenderPath bounds for scale/translation and retain raw-point mapping for rotation/skew. Translate transformed area as abs(determinant) times width times height in source order; update stale triangle-arithmetic expectations from pinned C++ expression evidence. Port the 200-path/seven-matrix exact bounds regression with documented portable PRNG sampling. Historical retained comments are labeled separately from the live owner revision. Private .rive_head contents are not claimed imported. | — |

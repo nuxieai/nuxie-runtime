@@ -62,7 +62,7 @@ k.xyz=N4(k.xyz,a1,W1)*k.w;
 #ifndef NB
 k*=n;
 #endif
-k.xyz=J2(k.xyz,k.w,d0.xy,j.F3,j.G3);
+k.xyz=J2(k.xyz,k.w,d0.xy,j.G3,j.H3);
 #ifdef KC
 if(k.w!=.0){J6(RC,Oa(k,a1));}
 #endif

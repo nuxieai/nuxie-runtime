@@ -7,11 +7,11 @@ y1(CG,f0,B,F,r){L(F,B,XB,f);L(F,B,YB,f);V(S,f);f I;uint c0;c i0;if(ra(XB,YB,r,c0
 #ifdef POST_INVERT_Y
 I.y=-I.y;
 #endif
-}else{I=f(j.i3,j.i3,j.i3,j.i3);}Z(S);z1(I);}
+}else{I=f(j.i3,j.i3,j.i3,j.i3);}a0(S);z1(I);}
 #endif
 #ifdef FRAGMENT
 #ifdef ATLAS_FEATHERED_FILL
-e d c7(f T,bool Vi c4){d n=T8(T n1);if(!Vi) n=-n;return n;}
+e d c7(f T,bool Wi c4){d n=T8(T n1);if(!Wi) n=-n;return n;}
 #endif
 #ifdef ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH
 layout(location=0) inout O w0;

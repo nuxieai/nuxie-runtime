@@ -12,18 +12,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -38,10 +38,10 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override jj: bool = false;
+@id(10) override kj: bool = false;
 
 var<private> o1_1: f32;
-var<private> z3_1: vec2<u32>;
+var<private> A3_1: vec2<u32>;
 var<private> L4_1: vec2<f32>;
 @group(0) @binding(6)
 var<storage, read_write> Y0_: Bf_1;
@@ -78,9 +78,9 @@ fn main_1() {
     var phi_471_: f32;
 
     let _e38 = o1_1;
-    if jj {
-        let _e40 = z3_1[1u];
-        let _e42 = z3_1[0u];
+    if kj {
+        let _e40 = A3_1[1u];
+        let _e42 = A3_1[0u];
         let _e43 = L4_1;
         let _e45 = vec2<u32>(floor(_e43));
         let _e75 = atomicLoad((&Y0_.r2_[(_e42 + (((((_e45.y >> bitcast<u32>(5u)) * (_e40 << bitcast<u32>(5u))) + ((_e45.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e45.x & 28u) << bitcast<u32>(5u)) + ((_e45.y & 28u) << bitcast<u32>(2i)))) + (((_e45.y & 3u) << bitcast<u32>(2i)) + (_e45.x & 3u))))]));
@@ -138,9 +138,9 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(1) @interpolate(flat, either) o1_: f32, @location(7) @interpolate(flat, either) z3_: vec2<u32>, @location(8) L4_: vec2<f32>, @location(0) P0_: vec4<f32>, @location(3) @interpolate(flat, either) G0_: f32, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(5) V0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) U0_: vec3<f32>) -> FragmentOutput {
+fn main(@location(1) @interpolate(flat, either) o1_: f32, @location(7) @interpolate(flat, either) A3_: vec2<u32>, @location(8) L4_: vec2<f32>, @location(0) P0_: vec4<f32>, @location(3) @interpolate(flat, either) G0_: f32, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(5) V0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) U0_: vec3<f32>) -> FragmentOutput {
     o1_1 = o1_;
-    z3_1 = z3_;
+    A3_1 = A3_;
     L4_1 = L4_;
     P0_1 = P0_;
     G0_1 = G0_;

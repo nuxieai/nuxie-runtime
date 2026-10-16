@@ -8,18 +8,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -35,7 +35,7 @@ struct Bf_1 {
 
 var<private> o1_1: f32;
 var<private> L4_1: vec2<f32>;
-var<private> z3_1: vec2<u32>;
+var<private> A3_1: vec2<u32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 @group(0) @binding(6)
@@ -63,8 +63,8 @@ fn main_1() {
     let _e29 = o1_1;
     let _e30 = L4_1;
     let _e32 = vec2<u32>(floor(_e30));
-    let _e34 = z3_1[1u];
-    let _e36 = z3_1[0u];
+    let _e34 = A3_1[1u];
+    let _e36 = A3_1[0u];
     let _e67 = u32(((abs(_e29) * 1024f) + 0.5f));
     let _e69 = j.q2_;
     let _e71 = (_e69 | (262144u - _e67));
@@ -76,10 +76,10 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(1) @interpolate(flat, either) o1_: f32, @location(8) L4_: vec2<f32>, @location(7) @interpolate(flat, either) z3_: vec2<u32>, @location(0) P0_: vec4<f32>, @location(3) @interpolate(flat, either) G0_: f32, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(5) V0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) U0_: vec3<f32>) {
+fn main(@location(1) @interpolate(flat, either) o1_: f32, @location(8) L4_: vec2<f32>, @location(7) @interpolate(flat, either) A3_: vec2<u32>, @location(0) P0_: vec4<f32>, @location(3) @interpolate(flat, either) G0_: f32, @location(4) @interpolate(flat, either) i2_: vec2<f32>, @location(5) V0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) U0_: vec3<f32>) {
     o1_1 = o1_;
     L4_1 = L4_;
-    z3_1 = z3_;
+    A3_1 = A3_;
     P0_1 = P0_;
     G0_1 = G0_;
     i2_1 = i2_;

@@ -1,4 +1,4 @@
-struct gi {
+struct hi {
     r2_: array<vec4<u32>>,
 }
 
@@ -12,18 +12,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -44,7 +44,7 @@ struct mg {
     r2_: array<vec4<f32>>,
 }
 
-struct hi {
+struct ii {
     r2_: array<vec4<u32>>,
 }
 
@@ -55,7 +55,7 @@ struct VertexOutput {
 }
 
 @group(0) @binding(2)
-var<storage> KB: gi;
+var<storage> KB: hi;
 @group(0) @binding(0)
 var<uniform> j: VB;
 var<private> gl_VertexIndex_1: i32;
@@ -73,7 +73,7 @@ var<storage> XC: lg;
 @group(0) @binding(4)
 var<storage> JB: mg;
 @group(0) @binding(5)
-var<storage> DD: hi;
+var<storage> DD: ii;
 @group(3) @binding(9)
 var db: sampler;
 
@@ -82,7 +82,7 @@ fn main_1() {
     let _e27 = (bitcast<u32>(_e24.z) & 65535u);
     let _e32 = KB.r2_[((_e27 * 4u) + 2u)];
     let _e35 = bitcast<vec3<f32>>(_e32.yzw);
-    let _e41 = j.Bi;
+    let _e41 = j.Ci;
     T2_ = (((_e24.xy * _e35.x) + _e35.yz) * _e41);
     G0_ = _e27;
     let _e44 = j.Jg;

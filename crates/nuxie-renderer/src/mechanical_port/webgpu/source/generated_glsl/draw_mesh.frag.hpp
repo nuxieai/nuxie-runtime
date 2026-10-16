@@ -78,7 +78,7 @@ P0 m3);d n=clamp(n2(JD,Sa,T2,.0).x,J0(.0),J0(1.));
 i k=h8(TB,U4,d6,j.Ge);d n=1.;
 #endif
 #ifdef AB
-if(AB){d y5=max(B3(V4(V0)),J0(.0));n=min(y5,n);}
+if(AB){d y5=max(C3(V4(V0)),J0(.0));n=min(y5,n);}
 #endif
 #ifdef Pc
 O2;
@@ -110,7 +110,7 @@ k.xyz=i6(k);
 #endif
 k.xyz=N4(k.xyz,a1,W1)*k.w;}
 #endif
-k*=n;k.xyz=J2(k.xyz,k.w,d0.xy,j.F3,j.G3);
+k*=n;k.xyz=J2(k.xyz,k.w,d0.xy,j.G3,j.H3);
 #ifndef QB
 k=a1*(1.-k.w)+k;
 #endif
@@ -125,7 +125,7 @@ x0(m0,H0(.0));
 P2;
 #endif
 #ifdef U
-k=(k*n);k.xyz=J2(k.xyz,k.w,d0.xy,j.F3,j.G3);N1=k;E3
+k=(k*n);k.xyz=J2(k.xyz,k.w,d0.xy,j.G3,j.H3);N1=k;F3
 #else
 o2;
 #endif

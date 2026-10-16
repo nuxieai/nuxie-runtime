@@ -20,18 +20,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -45,12 +45,12 @@ struct R4Re {
     r2_: array<u32>,
 }
 
-@id(7) override gj: bool = true;
-@id(6) override fj: bool = true;
-@id(4) override dj: bool = true;
-@id(0) override Zi: bool = true;
-@id(1) override aj: bool = true;
-@id(2) override bj: bool = true;
+@id(7) override hj: bool = true;
+@id(6) override gj: bool = true;
+@id(4) override ej: bool = true;
+@id(0) override aj: bool = true;
+@id(1) override bj: bool = true;
+@id(2) override cj: bool = true;
 
 @group(0) @binding(3)
 var<storage> XC: lg;
@@ -115,8 +115,8 @@ fn main_1() {
     phi_3656_ = _e121;
     if ((_e126.x & 768u) != 0u) {
         let _e130 = abs(_e121);
-        phi_1519_ = dj;
-        if dj {
+        phi_1519_ = ej;
+        if ej {
             phi_1519_ = ((_e126.x & 512u) != 0u);
         }
         let _e134 = phi_1519_;
@@ -130,7 +130,7 @@ fn main_1() {
     let _e144 = phi_3656_;
     let _e145 = clamp(_e144, 0f, 1f);
     phi_3660_ = _e145;
-    if Zi {
+    if aj {
         let _e147 = (_e126.x >> bitcast<u32>(16u));
         phi_3661_ = _e145;
         if (_e147 != 0u) {
@@ -147,8 +147,8 @@ fn main_1() {
         phi_3660_ = _e161;
     }
     let _e163 = phi_3660_;
-    phi_1556_ = aj;
-    if aj {
+    phi_1556_ = bj;
+    if bj {
         phi_1556_ = ((_e126.x & 1024u) != 0u);
     }
     let _e167 = phi_1556_;
@@ -164,9 +164,9 @@ fn main_1() {
     let _e198 = phi_3679_;
     let _e199 = (_e126.x & 15u);
     let _e202 = ((_e126.x >> bitcast<u32>(4i)) & 15u);
-    let _e204 = (bj && (_e202 != 0u));
+    let _e204 = (cj && (_e202 != 0u));
     if (_e199 <= 1u) {
-        phi_3674_ = select(unpack4x8unorm(_e126.y), vec4<f32>(0f, 0f, 0f, 0f), vec4((Zi && (_e199 == 0u))));
+        phi_3674_ = select(unpack4x8unorm(_e126.y), vec4<f32>(0f, 0f, 0f, 0f), vec4((aj && (_e199 == 0u))));
     } else {
         let _e206 = (_e123 * 8u);
         let _e209 = JB.r2_[_e206];
@@ -332,7 +332,7 @@ fn main_1() {
                     break;
                 }
                 case 12: {
-                    if fj {
+                    if gj {
                         let _e406 = local_2;
                         let _e407 = clamp(_e406, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                         local_2 = _e407;
@@ -346,7 +346,7 @@ fn main_1() {
                     break;
                 }
                 case 13: {
-                    if fj {
+                    if gj {
                         let _e357 = local_2;
                         let _e358 = clamp(_e357, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                         local_2 = _e358;
@@ -360,7 +360,7 @@ fn main_1() {
                     break;
                 }
                 case 14: {
-                    if fj {
+                    if gj {
                         let _e331 = local_2;
                         let _e332 = clamp(_e331, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                         local_2 = _e332;
@@ -372,7 +372,7 @@ fn main_1() {
                     break;
                 }
                 case 15: {
-                    if fj {
+                    if gj {
                         let _e305 = local_2;
                         let _e306 = clamp(_e305, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                         local_2 = _e306;
@@ -401,9 +401,9 @@ fn main_1() {
     let _e634 = phi_4341_;
     let _e635 = (_e634 * _e198);
     let _e636 = _e635.xyz;
-    let _e639 = j.F3_;
-    let _e641 = j.G3_;
-    if (gj && (_e635.w != 0f)) {
+    let _e639 = j.G3_;
+    let _e641 = j.H3_;
+    if (hj && (_e635.w != 0f)) {
         phi_4342_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e79.x) + (0.00583715f * _e79.y))))) * _e639) + _e641)) + _e636);
     } else {
         phi_4342_ = _e636;

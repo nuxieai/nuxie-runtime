@@ -241,10 +241,12 @@ pub(crate) const CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG: u32 = 1 << 29;
 pub(crate) const RETROFIT_TRI_STRIP_CONTOUR_FLAG: u32 = 1 << 31;
 pub(crate) const NEGATE_PATH_FILL_COVERAGE_FLAG: u32 = 1 << 24;
 pub(crate) const PAINT_FLAG_HAS_CLIP_RECT: u32 = 0x400;
-pub(crate) const MITER_REVERT_JOIN_CONTOUR_FLAG: u32 = 4 << 26;
-pub(crate) const ROUND_JOIN_CONTOUR_FLAG: u32 = 2 << 26;
-pub(crate) const BEVEL_JOIN_CONTOUR_FLAG: u32 = 3 << 26;
-pub(crate) const MITER_CLIP_JOIN_CONTOUR_FLAG: u32 = 5 << 26;
+pub(crate) const JOIN_TYPE_MASK: u32 = 7 << 26;
+pub(crate) const MITER_REVERT_JOIN_CONTOUR_FLAG: u32 = 5 << 26;
+pub(crate) const FULL_ROUND_JOIN_CONTOUR_FLAG: u32 = 2 << 26;
+pub(crate) const ROUND_JOIN_CONTOUR_FLAG: u32 = 3 << 26;
+pub(crate) const BEVEL_JOIN_CONTOUR_FLAG: u32 = 4 << 26;
+pub(crate) const MITER_CLIP_JOIN_CONTOUR_FLAG: u32 = 6 << 26;
 pub(crate) const EMULATED_STROKE_CAP_CONTOUR_FLAG: u32 = 1 << 25;
 
 /// Finalized feather-atlas patch batch shared by platform encoders.

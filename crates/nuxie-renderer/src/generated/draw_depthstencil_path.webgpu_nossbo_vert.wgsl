@@ -17,18 +17,18 @@ struct VB {
     vg: u32,
     wg: u32,
     H8_: vec4<i32>,
-    Bi: vec2<f32>,
+    Ci: vec2<f32>,
     Fe: vec2<f32>,
     q2_: u32,
-    Fi: f32,
+    Gi: f32,
     w6_: u32,
     i3_: f32,
     Ge: f32,
     og: u32,
-    F3_: f32,
     G3_: f32,
+    H3_: f32,
     He: f32,
-    yi: u32,
+    zi: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -44,9 +44,9 @@ struct VertexOutput {
 
 @id(15) override N7_: bool = false;
 @id(16) override he: bool = false;
-@id(1) override aj: bool = true;
-@id(2) override bj: bool = true;
-@id(8) override hj: bool = true;
+@id(1) override bj: bool = true;
+@id(2) override cj: bool = true;
+@id(8) override ij: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -282,7 +282,7 @@ fn main_1() {
             phi_1444_ = _e262;
             phi_1433_ = _e266;
             phi_1420_ = _e262;
-            if (_e277 > 134217728u) {
+            if (_e277 > 201326592u) {
                 let _e282 = f32((_e249.z & 65535u));
                 let _e283 = (_e282 * 0.000015259022f);
                 let _e287 = sqrt(max((1f - (_e283 * _e283)), 0f));
@@ -292,14 +292,14 @@ fn main_1() {
                 }
                 let _e291 = phi_1408_;
                 let _e296 = (mat2x2<f32>(vec2<f32>(_e283, _e291), vec2<f32>(-(_e291), _e283)) * _e262);
-                let _e297 = (_e277 == 201326592u);
+                let _e297 = (_e277 == 268435456u);
                 phi_685_ = _e297;
                 if !(_e297) {
-                    phi_685_ = ((_e277 != 335544320u) && (_e283 < 0.25f));
+                    phi_685_ = ((_e277 != 402653184u) && (_e283 < 0.25f));
                 }
                 let _e303 = phi_685_;
                 let _e305 = ((_e247 & 2097152u) != 0u);
-                if (_e277 == 335544320u) {
+                if (_e277 == 402653184u) {
                     phi_1425_ = (_e262 + _e296);
                 } else {
                     phi_1426_ = _e262;
@@ -354,7 +354,7 @@ fn main_1() {
         phi_1454_ = ((_e174 * _e356) + _e184);
     }
     let _e360 = phi_1454_;
-    if aj {
+    if bj {
         let _e361 = (_e157 * 8u);
         let _e362 = (_e361 + 2u);
         let _e369 = textureLoad(JB, vec2<i32>(bitcast<i32>((_e362 & 255u)), bitcast<i32>((_e362 >> bitcast<u32>(8i)))), 0i);
@@ -381,7 +381,7 @@ fn main_1() {
         let _e420 = textureLoad(XC, vec2<i32>(bitcast<i32>((_e153.z & 255u)), bitcast<i32>((_e157 >> bitcast<u32>(8i)))), 0i);
         let _e422 = (_e420.x & 15u);
         phi_1505_ = false;
-        if bj {
+        if cj {
             let _e425 = ((_e420.x >> bitcast<u32>(4i)) & 15u);
             Q0_ = f32(_e425);
             phi_1505_ = (_e425 != 0u);
@@ -411,8 +411,8 @@ fn main_1() {
             let _e479 = phi_1503_;
             P0_ = vec4<f32>(_e465.x, _e465.y, _e479, (((_e123 * -0.5f) - 0.25f) - round((bitcast<f32>(_e420.y) * 255f))));
         }
-        phi_939_ = hj;
-        if hj {
+        phi_939_ = ij;
+        if ij {
             phi_939_ = ((_e420.x & 2048u) != 0u);
         }
         let _e489 = phi_939_;

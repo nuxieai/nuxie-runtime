@@ -5,9 +5,9 @@ use crate::gpu::TriangleVertex;
 use crate::gpu::{
     AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan,
     BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
-    EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS,
-    MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG,
-    NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CUBIC_PATCH_SEGMENT_SPAN,
+    EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG, FULL_ROUND_JOIN_CONTOUR_FLAG,
+    MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG,
+    MITER_REVERT_JOIN_CONTOUR_FLAG, NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CUBIC_PATCH_SEGMENT_SPAN,
     OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE, PARAMETRIC_PRECISION, POLAR_PRECISION,
     RETROFIT_TRI_STRIP_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH,
 };
@@ -160,12 +160,37 @@ struct StrokeContour {
 
 #[derive(Clone, Copy)]
 struct PreparedStrokeCurve {
-    cubic: [Vec2D; 4],
     tangents: [Vec2D; 2],
     original_start_tangent: Vec2D,
     parametric_segments: u32,
     polar_segments: u32,
     ends_original_curve: bool,
+    ends_at_cusp: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+struct StrokeChops {
+    roots: [f32; 2],
+    count: u8,
+    are_cusps: bool,
+}
+
+impl StrokeChops {
+    fn chop(self, cubic: [Vec2D; 4]) -> SmallVec<[[Vec2D; 4]; 3]> {
+        if self.count == 0 {
+            // Preserve the scalar line fast path: no heap allocation for an
+            // unchanged cubic in either pass.
+            return smallvec::smallvec![cubic];
+        }
+        let roots = &self.roots[..self.count as usize];
+        if self.are_cusps {
+            chop_cubic_at_cusps(cubic, roots)
+        } else {
+            chop_cubic_at_values(cubic, roots)
+        }
+        .into_iter()
+        .collect()
+    }
 }
 
 type PendingStrokeCurve = ([Vec2D; 4], Vec2D, u32, u32, u32, u32);
@@ -176,6 +201,9 @@ pub(crate) struct StrokePreparationScratch {
     // SmallVec storage survive until the frame ends.
     contours: Vec<StrokeContour>,
     prepared: Vec<PreparedStrokeCurve>,
+    // Store chop parameters, not chopped control points. The push pass repeats
+    // the same chop, matching upstream's m_numChops/m_chopVertices queues.
+    chops: Vec<StrokeChops>,
     pending: Vec<PendingStrokeCurve>,
     #[cfg(test)]
     stats: StrokePreparationStats,
@@ -202,6 +230,11 @@ impl StrokePreparationScratch {
         contour_bytes
             .saturating_add(spilled_curve_bytes)
             .saturating_add(
+                self.chops
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<StrokeChops>()),
+            )
+            .saturating_add(
                 self.prepared
                     .capacity()
                     .saturating_mul(std::mem::size_of::<PreparedStrokeCurve>()),
@@ -219,6 +252,7 @@ impl StrokePreparationScratch {
             contour.curves.clear();
         }
         self.prepared.clear();
+        self.chops.clear();
         self.pending.clear();
     }
 }
@@ -642,6 +676,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     let StrokePreparationScratch {
         contours,
         prepared,
+        chops,
         pending,
         stats,
     } = scratch;
@@ -649,9 +684,11 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     let StrokePreparationScratch {
         contours,
         prepared,
+        chops,
         pending,
     } = scratch;
     prepared.clear();
+    chops.clear();
     pending.clear();
     #[cfg(test)]
     let contour_capacity_before = contours.capacity();
@@ -708,7 +745,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         .clamp(6.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32;
     // Match C++ PathDraw::initForMidpointFan's path-wide sizing while retaining
     // the largest allocation in the frame scratch. A stroked cubic can produce
-    // at most five convex/180-degree pieces.
+    // at most three convex/180-degree pieces and two cusp rotations.
     let prepared_capacity = contours
         .iter()
         .map(|contour| {
@@ -729,6 +766,13 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     #[cfg(test)]
     let pending_capacity_before = pending.capacity();
     prepared.reserve(prepared_capacity);
+    chops.reserve(
+        contours
+            .iter()
+            .map(|contour| contour.curves.len())
+            .max()
+            .unwrap_or(0),
+    );
     pending.reserve(pending_capacity);
     #[cfg(test)]
     {
@@ -760,6 +804,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         let contour_start = location as u32;
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
         prepared.clear();
+        chops.clear();
         pending.clear();
         if curves.is_empty() && !is_stroke {
             // There is a contour record but no span carrying this local ID.
@@ -820,6 +865,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         } else {
             for curve in curves {
                 if curve.is_line {
+                    chops.push(StrokeChops::default());
                     prepared.push(prepare_line_curve(curve));
                     continue;
                 }
@@ -827,16 +873,20 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                 // PathDraw only convex/180-degree chops strokes here. Source
                 // feather curves were already chopped by softenedCopy and are
                 // published directly (`isStroke() ? find... : 0`).
-                let chopped = if is_stroke {
+                let curve_chops = if is_stroke {
                     let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
-                    if are_cusps {
-                        chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
-                    } else {
-                        chop_cubic_at_values(curve.cubic, &roots)
-                    }
+                    let mut saved = StrokeChops {
+                        count: roots.len() as u8,
+                        are_cusps,
+                        ..StrokeChops::default()
+                    };
+                    saved.roots[..roots.len()].copy_from_slice(&roots);
+                    saved
                 } else {
-                    vec![curve.cubic]
+                    StrokeChops::default()
                 };
+                chops.push(curve_chops);
+                let chopped = curve_chops.chop(curve.cubic);
                 let chopped_count = chopped.len();
                 for (index, cubic) in chopped.into_iter().enumerate() {
                     let tangents = cubic_tangents(cubic);
@@ -857,27 +907,14 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                         },
                     );
                     prepared.push(PreparedStrokeCurve {
-                        cubic,
                         tangents,
                         original_start_tangent: original_tangents[0],
                         parametric_segments,
                         polar_segments,
                         ends_original_curve: index + 1 == chopped_count,
+                        ends_at_cusp: curve_chops.are_cusps && index + 1 < chopped_count,
                     });
                 }
-            }
-            if !contour.closed {
-                let PreparedStrokeCurve {
-                    cubic, tangents, ..
-                } = prepared[0];
-                pending.push((
-                    [cubic[3], cubic[2], cubic[1], cubic[0]],
-                    tangents[0],
-                    0,
-                    0,
-                    cap_segments,
-                    contour_id | cap_flags,
-                ));
             }
             let original_end_tangent = if let Some(curve) = curves.last() {
                 if curve.is_line {
@@ -889,11 +926,36 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                 Vec2D::new(-1.0, 0.0)
             };
             let mut carried_join_tangent = Vec2D::new(0.0, 1.0);
-            for (index, curve) in prepared.iter().copied().enumerate() {
+            let rechopped = curves
+                .iter()
+                .zip(chops.iter())
+                .flat_map(|(curve, chops)| chops.chop(curve.cubic));
+            for (index, (curve, cubic)) in prepared.iter().copied().zip(rechopped).enumerate() {
+                if index == 0 && !contour.closed {
+                    pending.push((
+                        [cubic[3], cubic[2], cubic[1], cubic[0]],
+                        curve.tangents[0],
+                        0,
+                        0,
+                        cap_segments,
+                        contour_id | cap_flags,
+                    ));
+                }
                 let final_open = !contour.closed && index + 1 == prepared.len();
                 let (join_tangent, join_segments, flags) = if final_open {
                     carried_join_tangent = negate(original_end_tangent);
                     (carried_join_tangent, cap_segments, contour_id | cap_flags)
+                } else if curve.ends_at_cusp {
+                    let next_tangent = prepared[index + 1].tangents[0];
+                    (
+                        next_tangent,
+                        round_join_segment_count(
+                            curve.tangents[1],
+                            next_tangent,
+                            polar_segments_per_radian,
+                        ),
+                        contour_id | FULL_ROUND_JOIN_CONTOUR_FLAG,
+                    )
                 } else if !curve.ends_original_curve {
                     (carried_join_tangent, 1, contour_id | join_flags)
                 } else {
@@ -914,7 +976,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                     (carried_join_tangent, segment_count, contour_id | join_flags)
                 };
                 pending.push((
-                    curve.cubic,
+                    cubic,
                     join_tangent,
                     curve.parametric_segments,
                     curve.polar_segments,
@@ -923,6 +985,9 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                 ));
             }
         }
+        // Every cusp's polar rotation is its join segment count here. The -1
+        // shares both endpoint spokes, just like upstream's cuspJoinCount
+        // subtraction; it does not contribute to the authored stroke joins.
         let vertex_count = pending
             .iter()
             .map(|(_, _, parametric, polar, join, _)| parametric + polar + join - 1)
@@ -1002,12 +1067,12 @@ fn prepare_line_curve(curve: &StrokeCurve) -> PreparedStrokeCurve {
     debug_assert!(curve.is_line);
     let tangent = subtract(curve.cubic[3], curve.cubic[0]);
     PreparedStrokeCurve {
-        cubic: curve.cubic,
         tangents: [tangent, tangent],
         original_start_tangent: tangent,
         parametric_segments: 1,
         polar_segments: 1,
         ends_original_curve: true,
+        ends_at_cusp: false,
     }
 }
 
@@ -1413,11 +1478,7 @@ fn split_cubic_at_two(curve: [Vec2D; 4], t0: f32, t1: f32) -> [[Vec2D; 4]; 3] {
     ]
 }
 
-fn chop_cubic_around_cusps(
-    curve: [Vec2D; 4],
-    cusp_roots: &[f32],
-    matrix_scale: f32,
-) -> Vec<[Vec2D; 4]> {
+fn chop_cubic_at_cusps(curve: [Vec2D; 4], cusp_roots: &[f32]) -> Vec<[Vec2D; 4]> {
     const EPSILON: f32 = 1.0 / 4096.0;
     let mut straddles = Vec::with_capacity(cusp_roots.len() * 2);
     for (index, &root) in cusp_roots.iter().enumerate() {
@@ -1438,22 +1499,11 @@ fn chop_cubic_around_cusps(
         let cusp = eval_cubic(curve, root);
         let offset = index * 2;
         chopped[offset][3] = cusp;
-        chopped[offset + 1][0] = cusp;
-        chopped[offset + 1][3] = cusp;
         chopped[offset + 2][0] = cusp;
-        let neighboring_midpoint = lerp(chopped[offset][2], chopped[offset + 2][1], 0.5);
-        let direction = subtract(cusp, neighboring_midpoint);
-        let length = dot(direction, direction).sqrt();
-        let pivot = if length > 0.0 && matrix_scale > 0.0 {
-            let amount = 1.0 / (length * matrix_scale * POLAR_PRECISION as f32 * 2.0);
-            Vec2D::new(cusp.x + direction.x * amount, cusp.y + direction.y * amount)
-        } else {
-            cusp
-        };
-        chopped[offset + 1][1] = pivot;
-        chopped[offset + 1][2] = pivot;
     }
-    chopped
+    // The odd pieces are only intermediate slivers. Discard them after
+    // snapping the surrounding endpoints to the actual cusp positions.
+    chopped.into_iter().step_by(2).collect()
 }
 
 fn split_cubic(curve: [Vec2D; 4], t: f32) -> ([Vec2D; 4], [Vec2D; 4]) {
@@ -3232,10 +3282,6 @@ mod tests {
         actual: &PreparedStrokeCurve,
         expected: &PreparedStrokeCurve,
     ) {
-        for (actual, expected) in actual.cubic.iter().zip(expected.cubic.iter()) {
-            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
-            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
-        }
         for (actual, expected) in actual.tangents.iter().zip(expected.tangents.iter()) {
             assert_eq!(actual.x.to_bits(), expected.x.to_bits());
             assert_eq!(actual.y.to_bits(), expected.y.to_bits());
@@ -3251,6 +3297,7 @@ mod tests {
         assert_eq!(actual.parametric_segments, expected.parametric_segments);
         assert_eq!(actual.polar_segments, expected.polar_segments);
         assert_eq!(actual.ends_original_curve, expected.ends_original_curve);
+        assert_eq!(actual.ends_at_cusp, expected.ends_at_cusp);
     }
 
     #[test]
@@ -3311,12 +3358,12 @@ mod tests {
         let cubic = chopped.into_iter().next().unwrap();
         let tangent = subtract(cubic[3], cubic[0]);
         let expected = PreparedStrokeCurve {
-            cubic,
             tangents: [tangent, tangent],
             original_start_tangent: original_tangent,
             parametric_segments: 1,
             polar_segments: 1,
             ends_original_curve: true,
+            ends_at_cusp: false,
         };
 
         let actual = prepare_line_curve(&curve);
@@ -4418,8 +4465,9 @@ mod tests {
         assert_eq!(tessellation.path.stroke_radius, 5.0);
         assert_eq!(tessellation.path.feather_radius, 6.0);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert!(geometry_spans(&tessellation)
-            .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 }));
+        assert!(geometry_spans(&tessellation).all(|span| {
+            span.contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK == ROUND_JOIN_CONTOUR_FLAG
+        }));
     }
 
     #[test]
@@ -4458,7 +4506,7 @@ mod tests {
     }
 
     #[test]
-    fn cusp_cubic_stroke_emits_straddled_pivot_curve() {
+    fn cusp_cubic_stroke_emits_full_round_joins_without_pivot_curves() {
         let mut path = RawPath::new();
         path.move_to(0.0, 0.0);
         path.cubic_to(100.0, 0.0, -100.0, 0.0, 0.0, 0.0);
@@ -4470,11 +4518,87 @@ mod tests {
             StrokeCap::Round,
         )
         .unwrap();
-        assert_eq!(tessellation.spans.len(), 9);
+        assert_eq!(tessellation.spans.len(), 7);
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        // One initial cap, then three cubics; the two cusp rotations are joins
+        // attached to the first two cubics, not additional pivot cubics.
+        assert_eq!(geometry.len(), 4);
+        assert_eq!(
+            geometry
+                .iter()
+                .filter(
+                    |span| span.contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK
+                        == FULL_ROUND_JOIN_CONTOUR_FLAG
+                )
+                .count(),
+            2
+        );
         let pivots = geometry_spans(&tessellation)
             .filter(|span| span.points[0] == span.points[3] && span.points[1] == span.points[2])
             .count();
-        assert_eq!(pivots, 2);
+        assert_eq!(pivots, 0);
+    }
+
+    #[test]
+    fn cusp_chops_collapse_slivers_and_preserve_surrounding_control_points() {
+        // Supplemental coverage of draw.cpp::chop_cubic_at_cusps, for both
+        // branches (one and two cusps). The intermediate slivers are not part
+        // of the output; only their neighboring endpoints snap to the cusp.
+        for curve in [
+            [
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(0.0, -10.0),
+                Vec2D::new(0.0, -10.0),
+                Vec2D::new(0.0, 10.0),
+            ],
+            [
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(100.0, 0.0),
+                Vec2D::new(-100.0, 0.0),
+                Vec2D::new(0.0, 0.0),
+            ],
+        ] {
+            let (roots, are_cusps) = find_cubic_convex_180_chops(curve);
+            assert!(are_cusps);
+            assert!(!roots.is_empty());
+            let mut straddles = Vec::new();
+            for (index, &t) in roots.iter().enumerate() {
+                let min_t = if index == 0 {
+                    0.0
+                } else {
+                    (roots[index - 1] + t) * 0.5
+                };
+                let max_t = if index + 1 == roots.len() {
+                    1.0
+                } else {
+                    (roots[index + 1] + t) * 0.5
+                };
+                straddles.extend([(t - 1.0 / 4096.0).max(min_t), (t + 1.0 / 4096.0).min(max_t)]);
+            }
+            let intermediate = chop_cubic_at_values(curve, &straddles);
+            let actual = chop_cubic_at_cusps(curve, &roots);
+            assert_eq!(actual.len(), roots.len() + 1);
+            for (index, piece) in actual.iter().enumerate() {
+                let expected = [
+                    if index == 0 {
+                        curve[0]
+                    } else {
+                        eval_cubic(curve, roots[index - 1])
+                    },
+                    intermediate[2 * index][1],
+                    intermediate[2 * index][2],
+                    if index == roots.len() {
+                        curve[3]
+                    } else {
+                        eval_cubic(curve, roots[index])
+                    },
+                ];
+                for (actual, expected) in piece.iter().zip(expected) {
+                    assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+                    assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+                }
+            }
+        }
     }
 
     #[test]
@@ -4491,10 +4615,15 @@ mod tests {
         )
         .unwrap();
         let tricky_geometry = geometry_spans(&tricky).collect::<Vec<_>>();
-        assert_eq!(tricky_geometry.len(), 4);
-        assert_eq!(tricky_geometry[1].join_tangent, [0.0, 1.0]);
-        assert_eq!(tricky_geometry[2].join_tangent, [0.0, 1.0]);
-        assert_eq!(tricky_geometry[3].join_tangent, [0.66666675, 0.0]);
+        assert_eq!(tricky_geometry.len(), 3);
+        assert_eq!(
+            tricky_geometry[1].contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK,
+            FULL_ROUND_JOIN_CONTOUR_FLAG
+        );
+        let next = tricky_geometry[2].points.map(|p| Vec2D::new(p[0], p[1]));
+        let tangent = cubic_tangents(next)[0];
+        assert_eq!(tricky_geometry[1].join_tangent, [tangent.x, tangent.y]);
+        assert_eq!(tricky_geometry[2].join_tangent, [0.66666675, 0.0]);
 
         let mut turnaround = RawPath::new();
         turnaround.move_to(0.0, 0.0);
@@ -4508,10 +4637,17 @@ mod tests {
         )
         .unwrap();
         let turnaround_geometry = geometry_spans(&turnaround).collect::<Vec<_>>();
-        assert_eq!(turnaround_geometry.len(), 4);
-        assert_eq!(turnaround_geometry[1].join_tangent, [0.0, 1.0]);
-        assert_eq!(turnaround_geometry[2].join_tangent, [0.0, 1.0]);
-        assert_eq!(turnaround_geometry[3].join_tangent, [0.0, -20.0]);
+        assert_eq!(turnaround_geometry.len(), 3);
+        assert_eq!(
+            turnaround_geometry[1].contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK,
+            FULL_ROUND_JOIN_CONTOUR_FLAG
+        );
+        let next = turnaround_geometry[2]
+            .points
+            .map(|p| Vec2D::new(p[0], p[1]));
+        let tangent = cubic_tangents(next)[0];
+        assert_eq!(turnaround_geometry[1].join_tangent, [tangent.x, tangent.y]);
+        assert_eq!(turnaround_geometry[2].join_tangent, [0.0, -20.0]);
     }
 
     #[test]

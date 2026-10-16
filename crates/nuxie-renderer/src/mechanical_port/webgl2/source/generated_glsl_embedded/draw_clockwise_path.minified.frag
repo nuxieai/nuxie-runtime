@@ -51,7 +51,7 @@ W2(Q0),
 #endif
 P0 m3);S1=1.;
 #ifdef AB
-if(AB){d Mc=B3(V4(V0));S1=min(Mc,S1);}
+if(AB){d Mc=C3(V4(V0));S1=min(Mc,S1);}
 #endif
 }O2;
 #if defined(DB)&&defined(EC)
@@ -71,7 +71,7 @@ if(N&&i2.x!=.0){D W0=unpackHalf2x16(k1(m0));d g6=W0.y;d Nc=g6==i2.x?W0.x:J0(.0);
 #endif
 S1=max(S1,.0);d p2=ib(p5,.0,S1);d Q1=ib(Hf,.0,S1);
 #ifdef OB
-d f6;if(OB){f6=lb(d0.xy,j.F3,j.G3);}
+d f6;if(OB){f6=lb(d0.xy,j.G3,j.H3);}
 #endif
 #ifndef U
 i a1=O0(n0);
@@ -106,7 +106,7 @@ Te(o0.x+o0.y+o0.z+o0.w==.0,n0,a1*(1.-o0.w)+o0);
 #endif
 }g2(m0);P2;
 #ifdef U
-N1=o0;E3
+N1=o0;F3
 #else
 o2;
 #endif

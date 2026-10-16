@@ -90,6 +90,11 @@
   look app data up on every script call; lookup results, borrow tracking and
   the API are unchanged.
 - Touched file: `src/app_data.rs`.
+- The interrupt-closure map and the per-VM userdata metatable cache use the
+  same hasher: the interrupt trampoline looks its closure up twice per
+  interrupt, and userdata creation looks up its metatable by VM and `TypeId`.
+  Map contents and lookups are unchanged. Touched files: `src/interrupt.rs`,
+  `src/userdata.rs`.
 
 ## Unprotected reads of metatable-free tables; `Table::get_field`
 

@@ -212,7 +212,12 @@ impl PathCells {
         }
         // pathChanged may enter a renderer and retire this Path; the dirt add
         // below rechecks its liveness.
-        if self.deferred.get() {
+        if self.deferred.get()
+            && !self
+                .dirt
+                .with_graph(|graph, index| graph.add_own_path_dirt(index))
+                .unwrap_or(false)
+        {
             self.add_dirt(owner(), ComponentDirt::PATH);
         }
     }

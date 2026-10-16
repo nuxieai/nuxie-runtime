@@ -439,6 +439,31 @@ impl ComponentGraph {
         self.artboard.on_component_dirty_at(index);
     }
 
+    /// Path::onDirty's own addDirt(Path) on member `index`, from inside that
+    /// onDirty. The nested onDirty it would run (PathCells::on_dirty_with)
+    /// changes nothing: the dirt it sees adds only Path, so it notifies the
+    /// shape only if the outer call already did (the shape's gate stays set
+    /// until the path updates), and its own deferred add finds Path set. What
+    /// remains is Component::addDirt's write and the Artboard notification.
+    /// Returns false, having done nothing, where the member's onDirty is not
+    /// Path::onDirty; the caller then adds the dirt as usual.
+    #[inline]
+    pub(crate) fn add_own_path_dirt(&self, index: u32) -> bool {
+        let node = &self.nodes[index as usize];
+        if !matches!(node.on_dirty, OnDirty::Path(_)) {
+            return false;
+        }
+        #[cfg(feature = "tools")]
+        trace::event(self, 'A', index, ComponentDirt::PATH, false);
+        let dirt = node.dirt.get();
+        if dirt.contains(ComponentDirt::PATH) || !node.alive.get() {
+            return true;
+        }
+        node.dirt.set(dirt | ComponentDirt::PATH);
+        self.notify_artboard(index);
+        true
+    }
+
     /// Component::addDirt for a member reached without a held payload borrow.
     /// The duplicate-bit return is inline; most adds from onDirty handlers
     /// find their bits already set.

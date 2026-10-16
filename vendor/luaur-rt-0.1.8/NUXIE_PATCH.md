@@ -96,6 +96,16 @@
   Map contents and lookups are unchanged. Touched files: `src/interrupt.rs`,
   `src/userdata.rs`.
 
+## Shared borrowed `LuaInner`
+
+- `Lua::from_borrowed`, which every callback and interrupt trampoline calls,
+  reuses the borrowed `LuaInner` it last built on the thread when the state
+  matches instead of allocating one per call. A borrowed inner holds only its
+  state pointer and never closes the state, so handles built from a shared
+  one behave as before. Without `typecheck` only: there each borrowed inner
+  carries its own definition buffer.
+- Touched file: `src/state.rs`.
+
 ## Unprotected reads of metatable-free tables; `Table::get_field`
 
 - `Table::get` reads a table that has no metatable with `lua_rawget`: with no

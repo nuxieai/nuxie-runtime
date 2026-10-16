@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
     artboard::Artboard,
     core::{CoreHandle, PropertySetterCompletion},
     generated::node_base::{NodeBase, NodeBaseCallbacks},
+    layout::layout_participant::LayoutParticipant,
     layout_component::LayoutComponent,
     math::{mat2d::Mat2D, vec2d::Vec2D},
     transform_component::TransformUpdate,
@@ -145,6 +146,7 @@ impl Node {
     }
 
     pub fn mark_layout_node_dirty(&mut self) {
+        LayoutParticipant::invalidate_host_measurements(self.base.children());
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
             let is_layout = current

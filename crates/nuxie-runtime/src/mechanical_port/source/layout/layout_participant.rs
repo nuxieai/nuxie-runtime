@@ -22,6 +22,67 @@ use crate::mechanical_port::source::{
 };
 use taffy::prelude::{Dimension, LengthPercentageAuto, Style};
 
+/// CSS intrinsic-width support at the measurement host boundary. Never change
+/// the upstream measurer to make it answer a different layout protocol.
+pub(crate) fn host_min_content_width(host: &CoreHandle) -> Option<f32> {
+    use crate::mechanical_port::source::{
+        shapes::image::Image,
+        text::text::{StyledText, Text},
+        text_engine::{GlyphLine, TextAlign, TextOverflow, TextSizing, TextWordBreak},
+    };
+    host.with_mut(|object| {
+        if object.as_intrinsically_sizeable_mut().is_none() {
+            return Some(0.0);
+        }
+        if let Some(image) = object.as_any().downcast_ref::<Image>() {
+            // Replaced image content has the same natural min/max width.
+            return Some(
+                image
+                    .measure_layout(
+                        f32::NAN,
+                        LayoutMeasureMode::Undefined,
+                        f32::NAN,
+                        LayoutMeasureMode::Undefined,
+                    )
+                    .x,
+            );
+        }
+        let text = object.as_text_mut()?;
+        if text.effective_sizing() != TextSizing::AutoWidth
+            || text.overflow() == TextOverflow::FitFontSize
+        {
+            // Authored text boxes and fitted fonts do not expose an intrinsic
+            // minimum independent of their current box and font scale.
+            return None;
+        }
+        // Text::measure clamps its return to the offered bound, including zero.
+        // Use the same upstream styled runs, shaper and word iterator instead.
+        // CSS overflow-wrap:break-word excludes emergency cluster breaks from
+        // min-content; word-break:break-all includes them.
+        let mut styled = StyledText::default();
+        if !text.make_styled(&mut styled, true, 1.0) {
+            return Some(0.0);
+        }
+        let font = styled.runs().first()?.font.as_ref()?;
+        let paragraphs = font.shape_text(styled.unichars(), styled.runs(), 0);
+        let word_break = if text.word_break() == TextWordBreak::BreakAll {
+            TextWordBreak::BreakAll
+        } else {
+            TextWordBreak::Normal
+        };
+        let lines = Text::break_lines(&paragraphs, 0.0, TextAlign::Left, text.wrap(), word_break);
+        Some(
+            paragraphs
+                .iter()
+                .zip(&lines)
+                .fold(0.0f32, |minimum, (paragraph, lines)| {
+                    minimum.max(GlyphLine::compute_max_width(lines, &paragraph.runs))
+                }),
+        )
+    })
+    .flatten()
+}
+
 struct ParticipantAnimation {
     animated_layout: Layout,
     a: LayoutAnimationData,
@@ -106,6 +167,20 @@ impl LayoutParticipant {
     }
     pub(crate) fn native_layout_data_mut(&mut self) -> Option<&mut LayoutData> {
         self.layout_data.as_deref_mut()
+    }
+    /// A participant is a child of its measured host, outside Node's ancestor
+    /// walk. Queue its native measurement cache when the host dirties layout.
+    /// This changes only Taffy cache state, without another source dirt callback.
+    pub(crate) fn invalidate_host_measurements(children: &[CoreHandle]) {
+        for child in children {
+            if child.is_type_of(Self::TYPE_KEY) {
+                child.with_downcast_mut::<Self, _>(|participant| {
+                    if let Some(data) = participant.layout_data.as_deref_mut() {
+                        data.mark_dirty();
+                    }
+                });
+            }
+        }
     }
     pub(crate) fn measurement_host_handle(&self) -> Option<CoreHandle> {
         self.owner_handle()

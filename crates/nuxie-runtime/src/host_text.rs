@@ -326,13 +326,36 @@ impl RawTextFont {
     pub fn has_color_glyphs(&self) -> bool {
         self.native.has_color_glyphs()
     }
+    /// Query native colour tables without guessing a host picture's cluster.
+    /// Use `is_color_glyph_with_text` for glyphs from shaped host-picture runs.
     pub fn is_color_glyph(&self, glyph: u32) -> bool {
         self.native.is_color_glyph(glyph as u16)
     }
+    /// Query the logical cluster leader using its complete shaped cluster text.
+    /// Run consumers use GlyphRun::glyph_render_kind to suppress followers.
+    pub fn is_color_glyph_with_text(&self, glyph: u32, cluster: &[u32]) -> bool {
+        self.native.is_color_glyph_with_text(glyph as u16, cluster)
+    }
+    /// Native colour layers; host pictures require `color_layers_with_text`.
     pub fn color_layers(&self, glyph: u32, foreground: u32) -> Vec<RuntimeColorGlyphLayer> {
         let mut layers = Vec::new();
         self.native
             .get_color_layers(glyph as u16, &mut layers, foreground);
+        Self::wrap_color_layers(layers)
+    }
+    /// Retrieve the logical cluster leader's layers using its complete cluster text.
+    pub fn color_layers_with_text(
+        &self,
+        glyph: u32,
+        cluster: &[u32],
+        foreground: u32,
+    ) -> Vec<RuntimeColorGlyphLayer> {
+        let mut layers = Vec::new();
+        self.native
+            .get_color_layers_with_text(glyph as u16, cluster, &mut layers, foreground);
+        Self::wrap_color_layers(layers)
+    }
+    fn wrap_color_layers(layers: Vec<native::ColorGlyphLayer>) -> Vec<RuntimeColorGlyphLayer> {
         layers
             .into_iter()
             .map(|l| {
@@ -627,5 +650,71 @@ impl<'factory> RawText<'factory> {
             .into_iter()
             .map(|b| Aabb::new(b.min_x, b.min_y, b.max_x, b.max_y))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::{text::font_hb::HostGlyphPicture, text_engine::TextRun};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn host_font_queries_use_cluster_text_without_cache_order_dependence() {
+        let base = HbFont::decode(include_bytes!("../../../fixtures/fonts/roboto-input.ttf"))
+            .expect("fixture font");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = calls.clone();
+        let native = base
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .with_host_pictures(Arc::new(move |_, cluster| {
+                counter.fetch_add(1, Ordering::SeqCst);
+                (cluster == [65]).then(|| HostGlyphPicture {
+                    png: vec![
+                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+                        0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
+                        120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0,
+                        73, 69, 78, 68, 174, 66, 96, 130,
+                    ],
+                    width: 1,
+                    height: 1,
+                    bearing_x: 0.0,
+                    bearing_y: -1.0,
+                    extent_x: 1.0,
+                    extent_y: 1.0,
+                })
+            }));
+        let run = TextRun {
+            font: Some(base.clone()),
+            size: 20.0,
+            line_height: -1.0,
+            letter_spacing: 0.0,
+            unichar_count: 1,
+            script: 0,
+            style_id: 0,
+            level: 0,
+        };
+        let glyph = base.shape_text(&[65], &[run], 0)[0].runs[0].glyphs[0] as u32;
+        let font = RawTextFont::from_native(native);
+        assert!(!font.is_color_glyph(glyph));
+        assert!(font.color_layers(glyph, 0xff000000).is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        // A different cluster with the same glyph has an independent answer.
+        assert!(!font.is_color_glyph_with_text(glyph, &[66]));
+        assert!(font.is_color_glyph_with_text(glyph, &[65]));
+        assert_eq!(
+            font.color_layers_with_text(glyph, &[65], 0xff000000).len(),
+            1
+        );
+        assert!(
+            font.color_layers_with_text(glyph, &[66], 0xff000000)
+                .is_empty()
+        );
+        // Priming a host answer never changes the native-only queries.
+        assert!(!font.is_color_glyph(glyph));
+        assert!(font.color_layers(glyph, 0xff000000).is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

@@ -81,6 +81,9 @@ impl TextInputDrawable {
     }
     // Our additive text-field color route. Outline paints keep their existing
     // traversal; foreground lookup matches TextStylePaint::foreground_color.
+    // Like upstream Text's color commands, color glyph opacity is always 1.0.
+    // The file route leaves both outlines and color glyphs unclipped; the direct
+    // RawTextInput route wraps both in its existing overflow clip.
     pub(crate) fn draw_text(
         &mut self,
         renderer: &mut Renderer,

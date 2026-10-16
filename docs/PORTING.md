@@ -76,7 +76,10 @@ UNIV-4921 adds `HbFont::with_host_pictures` and the optional, size-gated
 It takes copied PNG bytes, pixel dimensions and normalized em bearings/extents;
 C `top` is positive above the baseline and maps to negative Rust `bearing_y`.
 Native COLR/readable PNG takes precedence. The first answer (Some or None) is
-cached per glyph, using all code points in the shaped cluster. Callback context
+cached by (glyph id, complete shaped cluster text), independently for each font
+variant. Only a cluster's first glyph in logical shaping order is requested;
+glyph 0 is never requested. A host picture suppresses the cluster's other glyphs
+from the same font, so a text-drawing host paints each cluster once. Callback context
 may be called on any thread concurrently, must not reenter or unwind, and
 outlives all retained fonts/variants. The C sink limits PNGs to 4 MiB and each
 encoded/reported side to 1024 pixels, validates matching dimensions and finite
@@ -85,10 +88,11 @@ picture sources survive options, while the existing outline variant policy
 above remains upstream behavior.
 
 The **text-input-colour-glyphs** addition records colour glyphs separately from
-both field outline paths and draws native/host layers after outline paints
-inside overflow clipping, including selected-text and direct RawTextInput
-routes. Foreground/opacity follow upstream Text: first solid Fill, else black,
-and modifier opacity (one for fields without modifiers). Direct write-only
+both field outline paths and draws native/host layers after outline paints.
+Clipping matches each route's outline text: direct RawTextInput clips both,
+while imported text and selected-text drawable routes apply no extra field
+overflow clip. Foreground follows upstream Text's first solid Fill, else black;
+colour glyph command opacity is always 1.0, like upstream Text. Direct write-only
 RenderPaint callers use black. Selection keeps colour. Cursor/selection geometry,
 line metrics, hit testing and non-colour glyph paths retain upstream behavior.
 The **raw-text-host-pictures** addition uses Text's retained image decoder only

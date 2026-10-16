@@ -14,8 +14,8 @@ use crate::mechanical_port::source::text::fully_shaped_text::FullyShapedText;
 use crate::mechanical_port::source::text::text_selection_path::TextSelectionPath;
 use crate::mechanical_port::source::text::utf::Utf;
 use crate::mechanical_port::source::text_engine::{
-    FontRef, GlyphLine, OrderedLine, TextAlign, TextOrigin, TextOverflow, TextRun, TextSizing,
-    TextWrap, Unichar, VerticalTextAlign, is_white_space,
+    FontRef, GlyphLine, GlyphRenderKind, OrderedLine, TextAlign, TextOrigin, TextOverflow, TextRun,
+    TextSizing, TextWrap, Unichar, VerticalTextAlign, is_white_space,
 };
 
 const ZERO_WIDTH_SPACE: Unichar = 8203;
@@ -120,6 +120,7 @@ impl Not for Delineator {
 struct InputColorGlyph {
     font: FontRef,
     glyph_id: u16,
+    cluster_text: Vec<Unichar>,
     transform: Mat2D,
     selected: bool,
 }
@@ -276,17 +277,6 @@ impl RawTextInput {
         if self.color_glyphs.is_empty() {
             return;
         }
-        let clip = self.clip_render_path.as_ref();
-        if let Some(clip) = clip {
-            renderer.save();
-            renderer.transform(nuxie_render_api::Mat2D(*world.values()));
-            renderer.clip_path(clip.borrow().as_ref());
-        }
-        let glyph_world = if clip.is_some() {
-            Mat2D::default()
-        } else {
-            world
-        };
         for glyph in &self.color_glyphs {
             if selected.is_some_and(|selected| selected != glyph.selected) {
                 continue;
@@ -297,14 +287,12 @@ impl RawTextInput {
                 &mut self.emoji_image_cache,
                 glyph.font.clone(),
                 glyph.glyph_id,
+                &glyph.cluster_text,
                 glyph.transform,
                 foreground,
                 opacity,
-                glyph_world,
+                world,
             );
-        }
-        if clip.is_some() {
-            renderer.restore();
         }
     }
 
@@ -733,14 +721,19 @@ impl RawTextInput {
                     x += advance;
                     let selected =
                         want_separate && self.cursor.contains(run.text_indices[glyph_index]);
-                    if font.is_color_glyph_with_text(glyph_id, run.cluster_text(glyph_index)) {
-                        self.color_glyphs.push(InputColorGlyph {
-                            font: font.clone(),
-                            glyph_id,
-                            transform,
-                            selected,
-                        });
-                        continue;
+                    match run.glyph_render_kind(glyph_index) {
+                        GlyphRenderKind::Color => {
+                            self.color_glyphs.push(InputColorGlyph {
+                                font: font.clone(),
+                                glyph_id,
+                                cluster_text: run.cluster_text(glyph_index).to_vec(),
+                                transform,
+                                selected,
+                            });
+                            continue;
+                        }
+                        GlyphRenderKind::Suppressed => continue,
+                        GlyphRenderKind::Outline => {}
                     }
                     let mut raw_path = font.get_path(glyph_id);
                     raw_path.transform_in_place(transform);
@@ -757,10 +750,10 @@ impl RawTextInput {
             }
             y += self.paragraph_spacing;
         }
-        self.emoji_image_cache.retain(|(font, glyph, _)| {
-            self.color_glyphs.iter().any(|active| {
-                std::sync::Arc::ptr_eq(font, &active.font) && *glyph == active.glyph_id
-            })
+        self.emoji_image_cache.retain(|entry| {
+            self.color_glyphs
+                .iter()
+                .any(|active| entry.matches(&active.font, active.glyph_id, &active.cluster_text))
         });
     }
 

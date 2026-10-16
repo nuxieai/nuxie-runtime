@@ -50,10 +50,12 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 - **host-glyph-pictures**: `HbFont::with_host_pictures` and the appended
   `NuxFontOutlineCallbacks::get_picture` opt a font into platform PNG answers.
   Native COLR/readable PNG wins. Both present and absent answers are retained
-  once per glyph per font, with the first shaped cluster's complete code points.
-  Host-only cluster metadata is captured from the shaped run's text indices
-  before fallback/ellipsis slices. Pictures compose with empty-outline recovery;
-  option variants retain pictures while preserving upstream's existing policy
+  by (glyph id, complete shaped cluster text), independently per font variant.
+  Only the cluster's first glyph in logical shaping order is requested, never
+  glyph 0. A picture suppresses the same font's remaining cluster glyphs.
+  Host-only cluster metadata is captured before fallback/ellipsis slices.
+  Pictures compose with empty-outline recovery; option variants retain the
+  picture source with a fresh answer cache, while preserving upstream's policy
   that plain HB variants do not retain host outline recovery.
   The C sink copies synchronously, converts positive-up `top` to negative
   `image_bearing_y`, and rejects repeated answers, non-finite metrics, PNGs
@@ -61,11 +63,12 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
   with each other. Context/threading rules match the outline callback.
 - **text-input-colour-glyphs**: RawTextInput retains native/host colour glyphs
   outside both outline paths. Authored text and selected-text drawables and the
-  direct editor/scripting draw route paint them after outlines, within overflow
-  clipping. Selection keeps their colours. Foreground follows upstream Text's
-  first solid Fill (black without one); modifier opacity defaults to one because
-  fields have no glyph modifiers. Direct RawTextInput paint handles are
-  write-only and use the same black default. Metrics, cursor, hit testing and
+  direct editor/scripting draw route paint them after outlines. Each route
+  matches its outlines' clipping: direct RawTextInput clips both; imported and
+  selected-text drawables add no field overflow clip. Selection keeps their
+  colours. Foreground follows upstream Text's first solid Fill (black without
+  one); colour glyph command opacity is always 1.0, like upstream Text. Direct
+  RawTextInput paint handles are write-only and use the same black default. Metrics, cursor, hit testing and
   ordinary outline transforms remain upstream behavior.
 - **raw-text-host-pictures**: only host picture layers in RawText use Text's
   decoded-image cache/path. Native RawText layer traversal remains unchanged,

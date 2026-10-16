@@ -18,7 +18,8 @@ use nuxie_runtime::{
             raw_text::RawText,
         },
         text_engine::{
-            GlyphRun, TextDirection, TextOrigin, TextOverflow, TextSizing, TextWordBreak, TextWrap,
+            GlyphRenderKind, GlyphRun, TextDirection, TextOrigin, TextOverflow, TextSizing,
+            TextWordBreak, TextWrap,
         },
     },
 };
@@ -525,12 +526,7 @@ impl UserData for ScriptedGlyph {
         });
         fields.add_field_method_get("direction", |_, g| g.with(|r| direction(r.dir())));
         fields.add_field_method_get("isColor", |_, g| {
-            g.with(|r| {
-                r.font
-                    .as_ref()
-                    .expect("glyph run font")
-                    .is_color_glyph(r.glyphs[g.glyph as usize])
-            })
+            g.with(|r| r.glyph_render_kind(g.glyph as usize) == GlyphRenderKind::Color)
         });
         fields.add_field_method_get("transform", |lua, g| {
             lua.create_userdata(ScriptedMat2D(nuxie_render_api::Mat2D(
@@ -543,6 +539,9 @@ impl UserData for ScriptedGlyph {
         methods.add_method("path", |lua, g, ()| {
             let path = g.with(|r| {
                 let mut path = RawPath::default();
+                if r.glyph_render_kind(g.glyph as usize) == GlyphRenderKind::Suppressed {
+                    return path;
+                }
                 path.add_path(
                     &RawText::glyph_path(
                         r.font.as_ref().expect("glyph run font").as_ref(),
@@ -670,4 +669,100 @@ fn push_glyph(lua: &Lua, glyph: ScriptedGlyph) -> Result<AnyUserData> {
         |u| u.borrow::<ScriptedGlyph>()?.with(|_| ()),
     )?;
     Ok(userdata)
+}
+
+#[cfg(all(test, feature = "compiler"))]
+mod host_cluster_tests {
+    use super::*;
+    use crate::vm::ScriptVm;
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+    use nuxie_runtime::source::{
+        text::font_hb::{HbFont, HostGlyphPicture},
+        text_engine::TextRun,
+    };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[test]
+    fn scripted_host_cluster_reports_color_once_and_suppresses_other_paths() {
+        let base = HbFont::decode(include_bytes!(
+            "../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf"
+        ))
+        .expect("fixture font");
+        // B + acute does not compose; its second glyph has real outline ink.
+        let text = [u32::from('B'), 0x301];
+        let run = TextRun {
+            font: Some(base.clone()),
+            size: 20.0,
+            line_height: -1.0,
+            letter_spacing: 0.0,
+            unichar_count: 2,
+            script: 0,
+            style_id: 0,
+            level: 0,
+        };
+        let shaped = base.shape_text(&text, &[run], 0);
+        let glyphs = &shaped[0].runs[0];
+        assert_eq!(glyphs.glyphs.len(), 2);
+        assert_eq!(glyphs.text_indices, [0, 0]);
+        assert!(!base.get_path(glyphs.glyphs[1]).empty());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let host = base
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .with_host_pictures(Arc::new(move |_, cluster| {
+                assert_eq!(cluster, text);
+                count.fetch_add(1, Ordering::SeqCst);
+                Some(HostGlyphPicture {
+                    png: vec![
+                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+                        0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84,
+                        120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 251, 94, 107, 43, 0, 0, 0, 0,
+                        73, 69, 78, 68, 174, 66, 96, 130,
+                    ],
+                    width: 1,
+                    height: 1,
+                    bearing_x: 0.0,
+                    bearing_y: -1.0,
+                    extent_x: 1.0,
+                    extent_y: 1.0,
+                })
+            }));
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let globals = vm.lua().globals();
+        let readonly = globals.is_readonly();
+        globals.set_readonly(false);
+        globals
+            .set(
+                "hostFont",
+                super::super::lua_font::push_font(vm.lua(), host).unwrap(),
+            )
+            .unwrap();
+        globals.set_readonly(readonly);
+        vm.eval::<()>(
+            r#"
+            local text = Text.new()
+            text:append("B́", {font = hostFont, size = 20})
+            local line = text:line(1)
+            assert(line.glyphCount == 2)
+            local first = line:glyph(1)
+            local second = line:glyph(2)
+            -- Query the ancillary glyph first to exercise call-order independence.
+            assert(not second.isColor)
+            assert(#second:path() == 0)
+            assert(first.isColor)
+            assert(#first:path() > 0)
+            assert(not second.isColor and #second:path() == 0)
+            "#,
+        )
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
 }

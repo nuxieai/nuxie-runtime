@@ -326,7 +326,7 @@ pub struct HostGlyphPicture {
 
 pub type HostGlyphPictures =
     Arc<dyn Fn(GlyphId, &[Unichar]) -> Option<HostGlyphPicture> + Send + Sync>;
-type PictureAnswer = Arc<OnceLock<Option<HostGlyphPicture>>>;
+type PictureAnswer = Arc<OnceLock<Option<Arc<ColorGlyphLayer>>>>;
 
 /// The HBFont owner retains Rive's run/fallback/color semantics. Only its
 /// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
@@ -336,7 +336,7 @@ pub struct HbFont {
     base: FontBase,
     host_outline: Option<HostGlyphOutline>,
     host_pictures: Option<HostGlyphPictures>,
-    host_picture_cache: Mutex<HashMap<GlyphId, PictureAnswer>>,
+    host_picture_cache: Mutex<HashMap<(GlyphId, Vec<Unichar>), PictureAnswer>>,
     bytes: FontBytes,
     face_index: u32,
     // The face's shaping caches and shape plans, shared by every variant
@@ -552,7 +552,13 @@ impl HbFont {
         let face = face.unwrap_or_else(|| {
             let has_color_layers = outline.colr().is_ok();
             let has_color_paint = outline.colr().is_ok_and(|colr| colr.version() >= 1);
-            let has_png = outline.sbix().is_ok() || outline.cbdt().is_ok();
+            let has_png = outline.sbix().is_ok()
+                || (outline
+                    .cbdt()
+                    .is_ok_and(|table| matches!(table.major_version(), 2 | 3))
+                    && outline
+                        .cblc()
+                        .is_ok_and(|table| matches!(table.major_version(), 2 | 3)));
             let palette_colors = if has_color_layers || has_color_paint {
                 outline
                     .color_palettes()
@@ -626,8 +632,9 @@ impl HbFont {
     }
 
     /// Install an additive picture source. Native COLR/readable PNG always wins.
-    /// Answers (including None) are retained per glyph; the first cluster wins.
-    /// Callbacks can run concurrently for distinct glyphs and must not reenter.
+    /// Answers (including None) are retained per (glyph, cluster text), with
+    /// an independent cache for each font variant. Glyph zero is never asked.
+    /// Callbacks can run concurrently for distinct keys and must not reenter.
     pub fn with_host_pictures(&self, pictures: HostGlyphPictures) -> FontRef {
         let mut font = Self::with_face_options(
             self.bytes.clone(),
@@ -648,16 +655,6 @@ impl HbFont {
         let font = self.outline_font();
         let id = OutlineGlyphId::new(glyph as u32);
         font.color_glyphs().get(id).is_some() || native_png_exists(&font, glyph)
-    }
-
-    fn cached_picture(&self, glyph: GlyphId) -> Option<HostGlyphPicture> {
-        let answer = self
-            .host_picture_cache
-            .lock()
-            .unwrap()
-            .get(&glyph)
-            .cloned()?;
-        answer.get().and_then(Clone::clone)
     }
 
     pub fn shape_fallback_run(
@@ -818,36 +815,47 @@ impl Font for HbFont {
         path
     }
     fn has_color_glyphs(&self) -> bool {
-        self.face.has_color_layers || self.face.has_color_paint || self.face.has_png
+        self.face.has_color_layers
+            || self.face.has_color_paint
+            || self.face.has_png
+            || self.host_pictures.is_some()
     }
     fn is_color_glyph(&self, glyph: GlyphId) -> bool {
-        self.native_color_glyph(glyph) || self.has_host_picture(glyph)
+        self.native_color_glyph(glyph)
     }
-    fn is_color_glyph_with_text(&self, glyph: GlyphId, cluster: &[Unichar]) -> bool {
-        if self.native_color_glyph(glyph) {
-            return true;
+    fn host_picture_layer(
+        &self,
+        glyph: GlyphId,
+        cluster: &[Unichar],
+    ) -> Option<Arc<ColorGlyphLayer>> {
+        if glyph == 0 || self.native_color_glyph(glyph) {
+            return None;
         }
-        let Some(source) = &self.host_pictures else {
-            return false;
-        };
+        let source = self.host_pictures.as_ref()?;
         let answer = self
             .host_picture_cache
             .lock()
             .unwrap()
-            .entry(glyph)
+            .entry((glyph, cluster.to_vec()))
             .or_insert_with(|| Arc::new(OnceLock::new()))
             .clone();
-        answer.get_or_init(|| source(glyph, cluster)).is_some()
-    }
-    fn has_host_picture(&self, glyph: GlyphId) -> bool {
-        if self.host_pictures.is_none() {
-            return false;
-        }
-        self.host_picture_cache
-            .lock()
-            .unwrap()
-            .get(&glyph)
-            .is_some_and(|answer| answer.get().is_some_and(Option::is_some))
+        answer
+            .get_or_init(|| {
+                source(glyph, cluster).map(|picture| {
+                    Arc::new(ColorGlyphLayer {
+                        paint_type: ColorGlyphPaintType::Image,
+                        image_bytes: picture.png.into(),
+                        image_width: picture.width,
+                        image_height: picture.height,
+                        image_bearing_x: picture.bearing_x,
+                        image_bearing_y: picture.bearing_y,
+                        image_extent_x: picture.extent_x,
+                        image_extent_y: picture.extent_y,
+                        ..Default::default()
+                    })
+                })
+            })
+            .clone()
     }
     fn get_color_layers(
         &self,
@@ -899,21 +907,6 @@ impl Font for HbFont {
         if layers.is_empty() && self.face.has_png {
             if let Some(layer) = png_color_layer(&font, glyph) {
                 layers.push(layer);
-            }
-        }
-        if layers.is_empty() {
-            if let Some(picture) = self.cached_picture(glyph) {
-                layers.push(ColorGlyphLayer {
-                    paint_type: ColorGlyphPaintType::Image,
-                    image_bytes: picture.png,
-                    image_width: picture.width,
-                    image_height: picture.height,
-                    image_bearing_x: picture.bearing_x,
-                    image_bearing_y: picture.bearing_y,
-                    image_extent_x: picture.extent_x,
-                    image_extent_y: picture.extent_y,
-                    ..Default::default()
-                });
             }
         }
         if layers.is_empty() {
@@ -1031,6 +1024,9 @@ fn sbix_png<'a>(font: &OutlineFont<'a>, glyph: GlyphId, upem: u16) -> Option<Png
 
 fn cbdt_strike(font: &OutlineFont<'_>) -> Option<skrifa::raw::tables::bitmap::BitmapSize> {
     let location = font.cblc().ok()?;
+    if !matches!(location.major_version(), 2 | 3) {
+        return None;
+    }
     let sizes = location.bitmap_sizes();
     let mut strike = sizes.first()?;
     for candidate in &sizes[1..] {
@@ -1082,8 +1078,11 @@ fn native_png_exists(font: &OutlineFont<'_>, glyph: GlyphId) -> bool {
     // short PNG payloads whose extents the paint route cannot read.
     let cbdt = || -> Option<()> {
         let location = font.cblc().ok()?;
+        if !matches!(location.major_version(), 2 | 3) {
+            return None;
+        }
         let table = font.cbdt().ok()?;
-        if table.major_version() == 0 {
+        if !matches!(table.major_version(), 2 | 3) {
             return None;
         }
         let strike = cbdt_strike(font)?;
@@ -1097,8 +1096,11 @@ fn native_png_exists(font: &OutlineFont<'_>, glyph: GlyphId) -> bool {
 
 fn cbdt_png<'a>(font: &OutlineFont<'a>, glyph: GlyphId, upem: u16) -> Option<PngGlyph<'a>> {
     let location = font.cblc().ok()?;
+    if !matches!(location.major_version(), 2 | 3) {
+        return None;
+    }
     let table = font.cbdt().ok()?;
-    if table.major_version() == 0 {
+    if !matches!(table.major_version(), 2 | 3) {
         return None;
     }
     let strike = cbdt_strike(font)?;
@@ -1158,7 +1160,7 @@ fn png_color_layer(font: &OutlineFont<'_>, glyph: GlyphId) -> Option<ColorGlyphL
     let [x, y, width, height] = picture.extents;
     Some(ColorGlyphLayer {
         paint_type: ColorGlyphPaintType::Image,
-        image_bytes: picture.bytes.to_vec(),
+        image_bytes: Arc::from(picture.bytes),
         image_width: picture.width,
         image_height: picture.height,
         image_bearing_x: x as f32 * INVERSE_SCALE,
@@ -1331,15 +1333,22 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
         boundaries.push(text_run.unichar_count as usize);
         boundaries.sort_unstable();
         boundaries.dedup();
-        run.cluster_texts = run
-            .text_indices
-            .iter()
-            .map(|index| {
-                let start = (*index - text_offset) as usize;
-                let end = boundaries[boundaries.binary_search(&start).unwrap() + 1];
-                text[start..end].to_vec()
-            })
-            .collect();
+        let mut cluster_texts: HashMap<u32, Arc<[Unichar]>> = HashMap::new();
+        let mut leaders: HashMap<u32, GlyphId> = HashMap::new();
+        for index in 0..run.glyphs.len() {
+            let text_index = run.text_indices[index];
+            let start = (text_index - text_offset) as usize;
+            let end = boundaries[boundaries.binary_search(&start).unwrap() + 1];
+            let cluster = cluster_texts
+                .entry(text_index)
+                .or_insert_with(|| Arc::from(&text[start..end]))
+                .clone();
+            run.cluster_texts.push(cluster);
+            let is_leader = !leaders.contains_key(&text_index);
+            let leader = *leaders.entry(text_index).or_insert(run.glyphs[index]);
+            run.cluster_leaders.push(leader);
+            run.cluster_leader_flags.push(is_leader);
+        }
     }
     run.xpos[count] = 0.0;
     run
@@ -1634,6 +1643,8 @@ fn extract_subset(original: &GlyphRun, start: usize, end: usize) -> GlyphRun {
     );
     if !original.cluster_texts.is_empty() {
         subset.cluster_texts = original.cluster_texts[start..end].to_vec();
+        subset.cluster_leaders = original.cluster_leaders[start..end].to_vec();
+        subset.cluster_leader_flags = original.cluster_leader_flags[start..end].to_vec();
     }
     subset.font = original.font.clone();
     subset.size = original.size;

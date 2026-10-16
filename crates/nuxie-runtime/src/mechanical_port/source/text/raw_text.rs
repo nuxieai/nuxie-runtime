@@ -39,6 +39,7 @@ enum DrawCommand {
     Color {
         font: FontRef,
         glyph_id: u16,
+        cluster_text: Vec<u32>,
         transform: Mat2D,
         foreground_color: ColorInt,
     },
@@ -582,12 +583,8 @@ impl RawText {
                     );
                     x += run.advances[i];
                     let style = run.style_id as usize;
-                    if run
-                        .font
-                        .as_ref()
-                        .expect("shaped text retains its font")
-                        .is_color_glyph_with_text(run.glyphs[i], run.cluster_text(i))
-                    {
+                    match run.glyph_render_kind(i) {
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Color => {
                         self.draw_commands.push(DrawCommand::Color {
                             font: run
                                 .font
@@ -595,10 +592,12 @@ impl RawText {
                                 .expect("shaped text retains its font")
                                 .clone(),
                             glyph_id: run.glyphs[i],
+                            cluster_text: run.cluster_text(i).to_vec(),
                             transform,
                             foreground_color: self.styles[style].foreground_color,
                         });
-                    } else {
+                        }
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Outline => {
                         let path = run
                             .font
                             .as_ref()
@@ -612,6 +611,8 @@ impl RawText {
                             self.render_styles.push(style);
                             self.draw_commands.push(DrawCommand::Style(style));
                         }
+                        }
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {}
                     }
                 }
                 self.line_glyph_counts.push(line_glyphs);
@@ -669,6 +670,7 @@ impl RawText {
                 DrawCommand::Color {
                     font,
                     glyph_id,
+                    cluster_text,
                     transform,
                     foreground_color,
                 } => {
@@ -676,6 +678,7 @@ impl RawText {
                         renderer,
                         font.clone(),
                         *glyph_id,
+                        cluster_text,
                         transform,
                         *foreground_color,
                     );
@@ -691,16 +694,23 @@ impl RawText {
         renderer: &mut dyn Renderer,
         font: FontRef,
         glyph_id: u16,
+        cluster: &[u32],
         transform: &Mat2D,
         foreground_color: ColorInt,
     ) {
-        if font.has_host_picture(glyph_id) {
+        let cached_image = self
+            .emoji_image_cache
+            .borrow()
+            .iter()
+            .any(|entry| entry.matches(&font, glyph_id, cluster));
+        if cached_image || font.host_picture_layer(glyph_id, cluster).is_some() {
             draw_color_glyph(
                 renderer,
                 &self.factory,
                 &mut self.emoji_image_cache.borrow_mut(),
                 font,
                 glyph_id,
+                cluster,
                 *transform,
                 foreground_color,
                 1.0,

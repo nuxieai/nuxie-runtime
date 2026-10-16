@@ -1366,7 +1366,7 @@ fn with_color_input_fallback<R>(font: FontRef, work: impl FnOnce() -> R) -> R {
 
 // The pre-extension outline result, including clockwise contour normalization.
 // Comparing its vertices by f32 bits catches any change to Latin or mono emoji.
-fn legacy_input_outline(input: &RawTextInput, only_latin: bool) -> Vec<u32> {
+fn legacy_input_outline(input: &RawTextInput, excluded_text_indices: &[u32]) -> Vec<u32> {
     use nuxie_runtime::source::{
         math::mat2d::Mat2D, shapes::paint::shape_paint_path::ShapePaintPath,
     };
@@ -1377,7 +1377,9 @@ fn legacy_input_outline(input: &RawTextInput, only_latin: bool) -> Vec<u32> {
     for (run, index) in &shape.ordered_lines()[0] {
         let index = index as usize;
         let font = run.font.as_ref().unwrap();
-        if !only_latin || !font.is_color_glyph(run.glyphs[index]) {
+        // The fixture's explicit emoji text index is independent of production
+        // color classification. A broken classification must change this result.
+        if !excluded_text_indices.contains(&run.text_indices[index]) {
             let mut glyph = font.get_path(run.glyphs[index]);
             glyph.transform_in_place(Mat2D::new(
                 run.size,
@@ -1414,6 +1416,7 @@ fn draw_input_recording(input: &mut RawTextInput) -> String {
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
     input.update(&retained);
     let mut text = retained.with_factory_mut(|factory| factory.make_render_paint());
+    text.color(0xff123456);
     let mut selection = retained.with_factory_mut(|factory| factory.make_render_paint());
     let mut cursor = retained.with_factory_mut(|factory| factory.make_render_paint());
     input.draw(
@@ -1427,6 +1430,47 @@ fn draw_input_recording(input: &mut RawTextInput) -> String {
     factory.borrow().stream()
 }
 
+fn assert_input_color_layers_follow_outline(stream: &str, has_selection: bool) -> Vec<String> {
+    let draws: Vec<_> = stream
+        .lines()
+        .filter(|line| line.starts_with("drawPath "))
+        .collect();
+    let outline_index = usize::from(has_selection);
+    assert!(draws.len() > outline_index + 2, "{stream}");
+    assert!(
+        draws[outline_index].contains("color=0xff123456,"),
+        "{stream}"
+    );
+    // The selection precedes text, and the caret follows all emoji layers.
+    // Their default paint is distinct from the deliberately colored outline.
+    if has_selection {
+        assert!(!draws[0].contains("color=0xff123456,"), "{stream}");
+    }
+    let colors: Vec<_> = draws[outline_index + 1..draws.len() - 1]
+        .iter()
+        .map(|line| {
+            line.split("color=")
+                .nth(1)
+                .unwrap()
+                .split(',')
+                .next()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert!(
+        colors
+            .iter()
+            .any(|color| { !matches!(color.as_str(), "0x00000000" | "0xff000000" | "0xff123456") }),
+        "emoji layers must retain their native colors: {stream}"
+    );
+    assert!(
+        !draws.last().unwrap().contains("color=0xff123456,"),
+        "{stream}"
+    );
+    colors
+}
+
 #[test]
 fn input_fallback_color_emoji_draws_layers_and_preserves_latin_outline_bits() {
     let emoji = load_font("assets/NotoColorEmojiCOLRv1.subset.ttf");
@@ -1437,17 +1481,10 @@ fn input_fallback_color_emoji_draws_layers_and_preserves_latin_outline_bits() {
         let stream = draw_input_recording(&mut input);
         assert_eq!(
             outline_bits(input.text_path().raw_path()),
-            legacy_input_outline(&input, true)
+            legacy_input_outline(&input, &[1])
         );
         assert!(!input.text_path().empty());
-        assert!(
-            stream
-                .lines()
-                .filter(|line| line.starts_with("drawPath "))
-                .count()
-                > 2,
-            "{stream}"
-        );
+        let normal_colors = assert_input_color_layers_follow_outline(&stream, false);
 
         input.set_separate_selection_text(true);
         input.set_cursor(Cursor::new(
@@ -1461,14 +1498,12 @@ fn input_fallback_color_emoji_draws_layers_and_preserves_latin_outline_bits() {
         );
         assert_eq!(
             outline_bits(input.text_path().raw_path()),
-            legacy_input_outline(&input, true)
+            legacy_input_outline(&input, &[1])
         );
-        assert!(
-            selected_stream
-                .lines()
-                .filter(|line| line.starts_with("drawPath "))
-                .count()
-                > 3
+        assert_eq!(
+            normal_colors,
+            assert_input_color_layers_follow_outline(&selected_stream, true),
+            "selection must not recolor the emoji"
         );
     });
 }
@@ -1499,7 +1534,7 @@ fn input_outline_only_emoji_is_byte_for_byte_legacy_outline() {
     assert!(!input.text_path().empty());
     assert_eq!(
         outline_bits(input.text_path().raw_path()),
-        legacy_input_outline(&input, false)
+        legacy_input_outline(&input, &[])
     );
     assert_eq!(
         stream
@@ -1511,7 +1546,7 @@ fn input_outline_only_emoji_is_byte_for_byte_legacy_outline() {
 }
 
 #[test]
-fn input_host_picture_passes_cluster_and_reuses_image_after_selection_changes() {
+fn input_host_picture_suppresses_cluster_followers_and_reuses_image_after_selection_changes() {
     use nuxie_runtime::source::{math::mat2d::Mat2D, text::font_hb::HostGlyphPicture};
     use std::sync::{
         Arc,
@@ -1525,7 +1560,7 @@ fn input_host_picture_passes_cluster_and_reuses_image_after_selection_changes() 
         .downcast_ref::<HbFont>()
         .unwrap()
         .with_host_pictures(Arc::new(move |_, cluster| {
-            if cluster != [65] {
+            if cluster != [65, 0xfe0f] {
                 return None;
             }
             callback_calls.fetch_add(1, Ordering::Relaxed);
@@ -1551,9 +1586,17 @@ fn input_host_picture_passes_cluster_and_reuses_image_after_selection_changes() 
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
     let mut input = RawTextInput::new();
     input.set_font(Some(host));
-    input.set_text("AA".into());
+    input.set_text("A\u{fe0f}A\u{fe0f}".into());
     input.set_separate_selection_text(true);
     input.update(&retained);
+    assert_eq!(
+        input.shape().ordered_lines()[0]
+            .into_iter()
+            .filter(|(run, index)| run.text_indices[*index as usize] < 4)
+            .count(),
+        4,
+        "each A+VS16 cluster must include its default-ignorable space glyph"
+    );
     assert!(input.text_path().empty());
     let mut text = retained.with_factory_mut(|factory| factory.make_render_paint());
     let mut selection = retained.with_factory_mut(|factory| factory.make_render_paint());
@@ -1562,7 +1605,7 @@ fn input_host_picture_passes_cluster_and_reuses_image_after_selection_changes() 
         if selected {
             input.set_cursor(Cursor::new(
                 CursorPosition::unresolved(0),
-                CursorPosition::unresolved(2),
+                CursorPosition::unresolved(4),
             ));
             input.update(&retained);
             assert!(input.selected_text_path().empty());

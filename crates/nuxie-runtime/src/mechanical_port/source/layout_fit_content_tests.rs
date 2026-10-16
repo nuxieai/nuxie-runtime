@@ -1064,3 +1064,65 @@ row_hosts!(
         assert_width(&f, 104.0);
     }
 );
+
+#[test]
+fn css_scroll_viewport_keeps_its_slot_and_scroll_range() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for (overflow, infer_scroll) in [(1, false), (2, false), (0, true)] {
+        let arena = CoreArena::default();
+        let root = layout(&arena, None, Some(200.0), true);
+        let viewport = layout(&arena, Some(&root), Some(200.0), false);
+        viewport
+            .with_downcast_mut::<LayoutComponent, _>(|v| {
+                v.with_style_mut(|s| {
+                    s.base.set_overflow_value_value(overflow);
+                    s.base
+                        .set_layout_alignment_type_value(LayoutAlignmentType::TopLeft as u8);
+                });
+            })
+            .unwrap();
+        let content = layout(&arena, Some(&viewport), Some(500.0), false);
+        let scroll = arena.insert(ScrollConstraint::default());
+        if infer_scroll {
+            attach(&arena, &content, &scroll);
+        }
+        let icon = layout(&arena, Some(&root), Some(40.0), false);
+        let icon_content = layout(&arena, Some(&icon), Some(40.0), false);
+        for node in [&icon_content, &icon, &content, &viewport, &root] {
+            LayoutComponent::sync_style_occurrence(node);
+            LayoutComponent::sync_layout_children_occurrence(node);
+        }
+        LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&root, false);
+        assert!(
+            (solved(&viewport).width() - 160.0).abs() < 0.001,
+            "overflow {overflow}, inferred {infer_scroll}: {:?}",
+            solved(&viewport)
+        );
+        assert_eq!(solved(&content).width(), 500.0);
+        if !infer_scroll {
+            attach(&arena, &content, &scroll);
+        }
+        scroll
+            .with_downcast::<ScrollConstraint, _>(|s| {
+                assert_eq!(s.viewport_width(), 160.0);
+                assert_eq!(s.content_width(), 500.0);
+                assert_eq!(s.max_offset_x(), -340.0);
+            })
+            .unwrap();
+    }
+}
+
+#[test]
+fn css_draw_clip_keeps_the_word_minimum() {
+    let f = Fixture::new("experience", 160.0, true);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|l| {
+            l.base.set_clip_value(true);
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    row_icon(&f, 40.0, 40.0, 16.0);
+    // Rive's draw clip is CSS overflow:clip, not a scroll container.
+    assert_width(&f, 145.4414);
+}

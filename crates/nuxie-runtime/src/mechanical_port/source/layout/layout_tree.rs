@@ -313,17 +313,18 @@ pub(crate) fn measure_fit_content(
     width: (f32, LayoutMeasureMode),
     height: (f32, LayoutMeasureMode),
     limits: (Option<f32>, Option<f32>),
+    supports_minimum: bool,
     minimum: impl FnOnce() -> Option<f32>,
     mut measure: impl FnMut(f32, LayoutMeasureMode, f32, LayoutMeasureMode) -> Vec2D,
 ) -> Vec2D {
-    if width.1 == LayoutMeasureMode::AtMost && width.0.is_finite() {
+    if supports_minimum && width.1 == LayoutMeasureMode::AtMost && width.0.is_finite() {
+        let maximum = measure(
+            f32::NAN,
+            LayoutMeasureMode::Undefined,
+            f32::NAN,
+            LayoutMeasureMode::Undefined,
+        );
         if let Some(minimum) = minimum().filter(|minimum| minimum.is_finite()) {
-            let maximum = measure(
-                f32::NAN,
-                LayoutMeasureMode::Undefined,
-                f32::NAN,
-                LayoutMeasureMode::Undefined,
-            );
             if maximum.x.is_finite() {
                 let inline = maximum.x.min(minimum.max(width.0));
                 let mut wrapping_width = inline;

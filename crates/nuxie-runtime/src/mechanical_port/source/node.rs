@@ -147,6 +147,11 @@ impl Node {
 
     pub fn mark_layout_node_dirty(&mut self) {
         LayoutParticipant::invalidate_host_measurements(self.base.children());
+        self.mark_layout_ancestors_dirty();
+    }
+
+    /// Visual bounds updates retain participant intrinsic measurements.
+    pub(crate) fn mark_layout_ancestors_dirty(&mut self) {
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
             let is_layout = current

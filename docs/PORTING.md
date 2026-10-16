@@ -619,24 +619,36 @@ decode queue. Bidi and audio retain their separately tracked status below.
     dirties layout is picked up by the next solve. In debug builds,
     `NUXIE_LAYOUT_VERIFY=<file>` re-solves every root from scratch and appends
     each published layout that disagrees: incremental-state bugs, never CSS
-    differences.
+    differences. Host intrinsic dirt also invalidates a child participant's
+    measurement cache: a Text participant now follows text and typography
+    changes, fixing a stale-width bug in the former ancestor-only walk.
+    Paint-only text updates still notify layout ancestors but retain the
+    participant's intrinsic cache. PATH updates retain invalidation because
+    shape modifiers can change typography.
   - *Measurement.* Text, images, scripted layouts and intrinsically sized
     leaves measure through Taffy's leaf measure function. For a definite
-    inline offer without a known width, hosts that supply an intrinsic minimum
+    inline offer without a known width and with an auto or sizing-keyword
+    width, hosts that supply an intrinsic minimum
     answer with CSS fit-content:
     `min(max-content size, max(min-content size, stretch-fit size))`
     ([CSS Box Sizing 3](https://www.w3.org/TR/css-sizing-3/#fit-content-size)).
-    The adapter measures max-content unbounded, chooses that inline size,
-    then measures block size at exactly that width. AutoWidth text with an
-    ordinary overflow supplies its minimum from Rive-shaped runs and normal
-    word boundaries (cluster boundaries for break-all); the zero-bound Rive
-    measurement itself clamps its return to zero. Images use their natural
+    The adapter measures max-content unbounded, derives min-content from
+    that measurement's cached Rive shape, and chooses the inline size. Block
+    size is measured at exactly that width after resolving min/max widths
+    to the content box, including padding, borders and box sizing. This is
+    required even for Taffy's ContentSize basis pass; the intrinsic width
+    returned to Taffy still ignores those limits for flex-basis arithmetic.
+    AutoWidth text with ordinary overflow uses normal word boundaries
+    (cluster boundaries for break-all); the zero-bound Rive measurement
+    itself clamps its return to zero. Images use their natural
     width for both intrinsic sizes. Hosts without a meaningful minimum keep
     their current protocol, including text input, authored text boxes, fitted
     fonts, scripted layouts, shapes, nested artboards, n-slices and joysticks.
-    Exact widths and unbounded hugs keep their existing measurement modes.
-    CSS MinContent requests still measure unbounded, like MaxContent; changing
-    intrinsic grid/flex contributions is a separate follow-up. The upstream
+    A LayoutComponent leaf falls back to the old answer if any measured child
+    cannot supply a minimum. Exact widths and unbounded hugs keep their
+    existing measurement modes. CSS MinContent requests still measure unbounded,
+    like MaxContent; true intrinsic grid/flex contributions are tracked in
+    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893). The upstream
     text measurer is unchanged.
   - *Rive-only Yoga extensions.* Virtualized-grid contributions
     (`YGNodeSetGridVirtualContributions`) are host-side Taffy-only grid items

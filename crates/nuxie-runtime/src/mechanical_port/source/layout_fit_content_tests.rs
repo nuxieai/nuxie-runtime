@@ -199,8 +199,10 @@ fn assert_width(f: &Fixture, expected: f32) {
     );
 }
 const TITLE: &str = "Cross-plane experience is active";
-// Pinned Inter_28pt-Bold at 28px. Independent natural measurements:
-// Unlock premium = 214.29297, experience (the longest word) = 145.4414.
+// Pinned Inter_28pt-Bold at 28px and line-height 36. These literals were
+// measured by calling Text::measure_layout directly with Undefined on both
+// axes, outside the layout adapter: Unlock premium = 214.29297,
+// experience (the longest word) = 145.4414.
 #[test]
 fn css_fit_content_title_uses_the_full_column_offer() {
     let f = Fixture::new(TITLE, 338.0, false);
@@ -369,4 +371,234 @@ fn css_fit_content_column_max_width_controls_wrapped_height() {
             .unwrap()
             >= bounds.top() + bounds.height()
     );
+}
+
+#[test]
+fn css_fit_content_participant_paint_frames_reuse_shaping() {
+    use crate::source::component::ComponentDirt;
+    for participant in [false, true] {
+        let before = HbFont::test_shape_count();
+        let f = Fixture::new_host(TITLE, 338.0, false, participant);
+        assert_width(&f, 338.0);
+        let initial = HbFont::test_shape_count() - before;
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.update_after_transform_super(ComponentDirt::PATH);
+            })
+            .unwrap();
+        f.solve();
+        let settled = HbFont::test_shape_count();
+        for _ in 0..4 {
+            f.text
+                .with_downcast_mut::<Text, _>(|text| {
+                    text.mark_paint_dirty();
+                    text.update_after_transform_super(ComponentDirt::PAINT);
+                })
+                .unwrap();
+            assert_width(&f, 338.0);
+        }
+        let paint = HbFont::test_shape_count() - settled;
+        println!("real shaping: initial={initial}, four paint-only frames={paint}");
+        assert_eq!(paint, 0, "paint-only frames must reuse shaping");
+        assert_eq!(
+            initial, 1,
+            "min-content must reuse the unbounded measure's shape"
+        );
+    }
+}
+
+fn natural_size(f: &Fixture) -> Vec2D {
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.measure_layout(
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+            )
+        })
+        .unwrap()
+}
+
+#[test]
+fn css_fit_content_participant_width_follows_text_changes() {
+    let f = Fixture::new_host("Unlock premium", 338.0, false, true);
+    assert_width(&f, 214.29297);
+    for (content, width) in [
+        (TITLE, 338.0),
+        ("experience", 145.4414),
+        ("Unlock premium", 214.29297),
+    ] {
+        f.run
+            .with_downcast_mut::<TextValueRun, _>(|run| {
+                run.set_bound_text(content.into());
+            })
+            .unwrap();
+        assert_width(&f, width);
+    }
+}
+
+#[test]
+fn css_fit_content_break_all_uses_cluster_minimum() {
+    let control = Fixture::new("x", 338.0, false);
+    let cluster = natural_size(&control).x;
+    let f = Fixture::new("xxx", 1.0, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_word_break_value_value(2); // BreakAll
+        })
+        .unwrap();
+    assert_width(&f, cluster);
+    assert!((f.solve().height() - 106.30176).abs() < 0.001);
+}
+
+#[test]
+fn css_fit_content_no_wrap_keeps_max_content() {
+    let f = Fixture::new(TITLE, 40.0, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_wrap_value_value(1); // NoWrap
+        })
+        .unwrap();
+    let natural = natural_size(&f);
+    assert!(natural.x > 338.0);
+    assert_width(&f, natural.x);
+    assert!((f.solve().height() - 34.301754).abs() < 0.001);
+}
+
+#[test]
+fn css_fit_content_several_paragraphs_use_the_widest_intrinsic_run() {
+    let f = Fixture::new("Unlock premium\nexperience", 0.0, false);
+    assert_width(&f, 145.4414);
+    // Three 36px lines share one initial metric trim: 108 - 1.69824.
+    assert!((f.solve().height() - 106.30176).abs() < 0.001);
+}
+
+#[test]
+fn css_fit_content_letter_spacing_is_included_in_the_minimum() {
+    let f = Fixture::new("experience", 0.0, false);
+    let style = f
+        .run
+        .with_downcast::<TextValueRun, _>(|run| run.style())
+        .flatten()
+        .unwrap();
+    style
+        .with_downcast_mut::<TextStyle, _>(|style| {
+            style.base.set_letter_spacing_value(2.0);
+        })
+        .unwrap();
+    // Ten glyph advances include 2px each: 145.4414 + 10 * 2.
+    assert!((natural_size(&f).x - 165.4414).abs() < 0.001);
+    assert_width(&f, 165.4414);
+}
+
+#[test]
+fn css_fit_content_zero_offer_uses_word_minimum() {
+    assert_width(&Fixture::new(TITLE, 0.0, false), 145.4414);
+}
+
+#[test]
+fn css_fit_content_max_width_subtracts_leaf_padding_before_wrapping() {
+    let f = Fixture::new("experienceexperienceexperience", 200.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|label| {
+            label.with_style_mut(|style| {
+                style.base.set_max_width_value(260.0);
+                style
+                    .base
+                    .set_max_width_units_value_value(YGUnit::Point as u8);
+                style.base.set_padding_left_value(30.0);
+                style.base.set_padding_right_value(30.0);
+                style.base.set_padding_top_value(4.0);
+                style.base.set_padding_bottom_value(6.0);
+                style
+                    .base
+                    .set_padding_left_units_value_value(YGUnit::Point as u8);
+                style
+                    .base
+                    .set_padding_right_units_value_value(YGUnit::Point as u8);
+                style
+                    .base
+                    .set_padding_top_units_value_value(YGUnit::Point as u8);
+                style
+                    .base
+                    .set_padding_bottom_units_value_value(YGUnit::Point as u8);
+            });
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_width(&f, 260.0);
+    // 260 - 60 padding leaves 200 for three lines, plus 10 vertical padding.
+    assert!(
+        (f.solve().height() - 116.30176).abs() < 0.001,
+        "{:?}",
+        f.solve()
+    );
+}
+
+#[test]
+fn css_fit_content_resolves_percentage_max_width() {
+    let f = Fixture::new("experienceexperienceexperience", 200.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|label| {
+            label.with_style_mut(|style| {
+                style.base.set_max_width_value(75.0);
+                style
+                    .base
+                    .set_max_width_units_value_value(YGUnit::Percent as u8);
+            });
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_width(&f, 150.0); // 75% of the 200px parent content box.
+    assert!((f.solve().height() - 106.30176).abs() < 0.001);
+}
+
+#[test]
+fn css_fit_content_min_width_wins_over_max_width() {
+    let f = Fixture::new("experienceexperienceexperience", 200.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|label| {
+            label.with_style_mut(|style| {
+                style.base.set_max_width_value(260.0);
+                style
+                    .base
+                    .set_max_width_units_value_value(YGUnit::Point as u8);
+                style.base.set_min_width_value(500.0);
+                style
+                    .base
+                    .set_min_width_units_value_value(YGUnit::Point as u8);
+            });
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_width(&f, 500.0);
+    assert!((f.solve().height() - 34.301754).abs() < 0.001);
+}
+
+#[test]
+fn css_fit_content_keeps_direct_rive_measure_answers() {
+    let f = Fixture::new(TITLE, 338.0, false);
+    for mode in [LayoutMeasureMode::AtMost, LayoutMeasureMode::Exactly] {
+        let measured = f
+            .text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.measure_layout(338.0, mode, f32::NAN, LayoutMeasureMode::Undefined)
+            })
+            .unwrap();
+        assert!((measured.x - 313.26367).abs() < 0.001);
+        assert!((measured.y - 70.30176).abs() < 0.001);
+    }
+    let zero = f
+        .text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.measure_layout(
+                0.0,
+                LayoutMeasureMode::AtMost,
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+            )
+        })
+        .unwrap();
+    assert_eq!(zero.x, 0.0);
 }

@@ -612,6 +612,10 @@ pub struct Text {
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
     measured_shape: Option<Box<MeasuredShape>>,
+    // Last layout measurement and last update shape, using the same source
+    // inputs. Initially unequal so never-measured text still notifies layout.
+    measured_key: u64,
+    shaped_key: u64,
 }
 
 impl Default for Text {
@@ -649,6 +653,8 @@ impl Default for Text {
             draw_commands: Vec::new(),
             value_run_listeners: Vec::new(),
             measured_shape: None,
+            measured_key: 0,
+            shaped_key: 1,
         }
     }
 }
@@ -1158,7 +1164,9 @@ impl Text {
             }
 
             let mut styled = std::mem::take(&mut self.styled_text);
-            if self.make_styled(&mut styled, true, font_scale) {
+            let has_styled = self.make_styled(&mut styled, true, font_scale);
+            self.shaped_key = self.measure_key(&styled, font_scale);
+            if has_styled {
                 self.shape = match self.take_measured_shape(&styled) {
                     Some(shape) => shape,
                     None => {
@@ -1827,9 +1835,11 @@ impl Text {
         }
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
-        // PAINT dirt includes paragraph spacing and origin changes, which
-        // affect measurement. Match upstream's unconditional layout dirt.
-        self.base.mark_layout_node_dirty();
+        // A solve that already measured this shape needs no second solve.
+        // Modifier reshaping or post-solve sizing/direction changes still do.
+        if self.shaped_key != self.measured_key {
+            self.base.mark_layout_node_dirty();
+        }
         for run in &mut self.all_runs {
             run.with_mut(|run| {
                 if run.is_hit_target() {
@@ -2219,6 +2229,51 @@ impl Text {
         )
     }
 
+    fn measure_key(&self, styled: &StyledText, font_scale: f32) -> u64 {
+        let mut hash = 0x9e3779b97f4a7c15u64;
+        let mut mix = |word: u64| {
+            hash ^= word;
+            hash = hash.wrapping_mul(0xff51afd7ed558ccd);
+            hash ^= hash >> 32;
+        };
+        let bits = |value: f32| u64::from(value.to_bits());
+        let sizing = match self.effective_sizing() {
+            TextSizing::AutoWidth => 0,
+            TextSizing::AutoHeight => 1,
+            TextSizing::Fixed => 2,
+            TextSizing::Unknown(value) => value as u8,
+        };
+        let align = match self.align() {
+            TextAlign::Left => 0,
+            TextAlign::Right => 1,
+            TextAlign::Center => 2,
+            TextAlign::Unknown(value) => value as u8,
+        };
+        mix(bits(font_scale) | (u64::from(sizing) << 32) | (u64::from(align) << 40));
+        for run in styled.runs() {
+            // Arc's data pointer is the identity corresponding to Font*. The
+            // trait-object vtable is not part of the C++ pointer word.
+            mix(run.font.as_ref().map_or(0, |font| {
+                std::sync::Arc::as_ptr(font) as *const () as usize as u64
+            }));
+            mix(bits(run.size) | (bits(run.line_height) << 32));
+            mix(bits(run.letter_spacing) | (u64::from(run.unichar_count) << 32));
+            mix(u64::from(run.script)
+                | (u64::from(run.style_id) << 32)
+                | (u64::from(run.level) << 48));
+        }
+        let unichars = styled.unichars();
+        mix(unichars.len() as u64);
+        let mut pairs = unichars.chunks_exact(2);
+        for pair in &mut pairs {
+            mix(u64::from(pair[0]) | (u64::from(pair[1]) << 32));
+        }
+        if let Some(&last) = pairs.remainder().first() {
+            mix(u64::from(last));
+        }
+        hash
+    }
+
     fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {
         // During the solve, the participant's authored axis types are already
         // available, but control_size has not supplied the resolved slot yet.
@@ -2243,7 +2298,9 @@ impl Text {
             1.0
         };
         let mut styled = std::mem::take(&mut self.styled_text);
-        if !self.make_styled(&mut styled, true, font_scale) {
+        let has_styled = self.make_styled(&mut styled, true, font_scale);
+        self.measured_key = self.measure_key(&styled, font_scale);
+        if !has_styled {
             self.styled_text = styled;
             return Vec2D::default();
         }
@@ -2390,11 +2447,13 @@ impl Text {
             self.mark_shape_dirty();
         } else {
             self.mark_paint_dirty();
+            self.base.mark_layout_node_dirty();
         }
     }
     pub fn origin_value_changed(&mut self) {
         self.mark_paint_dirty();
         CoreCapabilities::world_transform_mark_dirty(self);
+        self.base.mark_layout_node_dirty();
     }
     pub fn origin_x_changed(&mut self) {
         self.mark_paint_dirty();

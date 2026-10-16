@@ -404,9 +404,14 @@ fn css_fit_content_participant_paint_frames_reuse_shaping() {
                 })
                 .unwrap();
             assert_width(&f, 338.0);
-            // PAINT includes size-affecting properties, so each frame must
-            // remeasure. Unchanged glyph inputs must still reuse the shape.
-            assert!(host_measure_count() > measures, "PAINT must remeasure");
+            // Upstream 5551696a: unchanged paint-only frames owe no layout
+            // measurement. Size-affecting paragraph/origin setters now dirty
+            // layout explicitly; unchanged glyph inputs still reuse shaping.
+            assert_eq!(
+                host_measure_count(),
+                measures,
+                "unchanged paint-only frames must not remeasure"
+            );
         }
         let paint = HbFont::test_shape_count() - settled;
         assert_eq!(paint, 0, "paint-only frames must reuse shaping");

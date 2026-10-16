@@ -63,6 +63,11 @@ pub struct TextModifierGroup {
     follow_path_modifiers: Vec<CoreHandle>,
     coverage: Vec<f32>,
     variable_font: Option<FontRef>,
+    variable_font_base: Option<FontRef>,
+    // Unlike std::unordered_map, a fresh Rust HashMap randomizes its iteration
+    // order. Keep the hash seed stable across styling passes so unchanged
+    // modifier insertion order yields unchanged coordinate order.
+    variation_hash_state: std::collections::hash_map::RandomState,
     variation_coords: Vec<FontCoord>,
     next_text_runs: Vec<TextRun>,
 }
@@ -414,7 +419,7 @@ impl TextModifierGroup {
         else {
             return run;
         };
-        let mut variations = HashMap::new();
+        let mut variations = HashMap::with_hasher(self.variation_hash_state.clone());
         let mut size = run.size;
         for modifier in &self.shape_modifiers {
             size = modifier
@@ -425,13 +430,30 @@ impl TextModifierGroup {
         }
         if variations.is_empty() {
             self.variable_font = None;
+            self.variable_font_base = None;
             return run;
         }
-        self.variation_coords.clear();
+        let mut coords = Vec::with_capacity(variations.len());
         for (tag, value) in variations {
-            self.variation_coords.push(FontCoord { axis: tag, value });
+            coords.push(FontCoord { axis: tag, value });
         }
-        self.variable_font = Some(font.make_at_coords(&self.variation_coords));
+        let same = self.variable_font.is_some()
+            && self
+                .variable_font_base
+                .as_ref()
+                .is_some_and(|cached| std::sync::Arc::ptr_eq(cached, &font))
+            && coords.len() == self.variation_coords.len()
+            && coords
+                .iter()
+                .zip(&self.variation_coords)
+                .all(|(coord, cached)| coord.axis == cached.axis && coord.value == cached.value);
+        if !same {
+            self.variation_coords = coords;
+            self.variable_font = Some(font.make_at_coords(&self.variation_coords));
+            self.variable_font_base = style
+                .with_mut(|style| style.as_text_style_mut().and_then(|style| style.font()))
+                .flatten();
+        }
         TextRun {
             font: self.variable_font.clone(),
             ..run

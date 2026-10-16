@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "16332c8ef763b118b3e2b53d73ce29ca3b1218e1"
+upstream_ref = "5551696a826ff546775fffe46ca78824b1f1dc51"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -162,7 +162,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list map rules"
-producer_line = 1089
+producer_line = 1093
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -184,7 +184,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with horizontal distribution"
-producer_line = 678
+producer_line = 682
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -206,7 +206,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with vertical distribution"
-producer_line = 712
+producer_line = 716
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -668,7 +668,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard lists with child artboard origin offset"
-producer_line = 1146
+producer_line = 1150
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -690,7 +690,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint"
-producer_line = 926
+producer_line = 930
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -712,7 +712,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint distance"
-producer_line = 961
+producer_line = 965
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -734,7 +734,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Non Layout List Artboard Position"
-producer_line = 877
+producer_line = 881
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -756,7 +756,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Component List Hit order"
-producer_line = 1012
+producer_line = 1016
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -778,7 +778,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Component List Virtualized Scroll manual"
-producer_line = 644
+producer_line = 648
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -800,7 +800,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Stateful Component"
-producer_line = 1112
+producer_line = 1116
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1394,7 +1394,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Draw index overrides draw order"
-producer_line = 1296
+producer_line = 1300
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1482,7 +1482,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with fit font size correctly resizes its text box"
-producer_line = 1347
+producer_line = 1350
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1504,7 +1504,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Fit font size"
-producer_line = 938
+producer_line = 941
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3248,7 +3248,7 @@ status = "diverges"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text box keeps its content size before 7.3"
-producer_line = 1029
+producer_line = 1032
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS fit-content keeps a hugging text box at its 300 max width; Yoga shrinks it to the widest wrapped line (262.43); first difference: frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)."
 
 [[case]]
@@ -3270,7 +3270,7 @@ status = "diverges"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text box matches layout-controlled size"
-producer_line = 1038
+producer_line = 1041
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS fit-content keeps a hugging text box at its 300 max width; Yoga shrinks it to the widest wrapped line (262.43); first difference: frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)."
 
 [[case]]
@@ -4150,7 +4150,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Number to Lists reset triggers correctly"
-producer_line = 746
+producer_line = 750
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5536,7 +5536,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with background color with active feather"
-producer_line = 1108
+producer_line = 1111
 note = "Exact comparison contract for the one-draw background feather producer at d6107a91: authored VMI 0, advance .032, draw. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5580,7 +5580,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Fit font size with varying sizes"
-producer_line = 1085
+producer_line = 1088
 note = "Exact comparison contract for the literal 94-draw varying-size text producer at 73f94edc. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5646,7 +5646,7 @@ status = "exact"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text at 7.3"
-producer_line = 1054
+producer_line = 1057
 note = "Exact comparison contract for the five-frame checkTextLayoutSilver helper at 4ca3b88a. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5668,7 +5668,7 @@ status = "exact"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text before 7.3"
-producer_line = 1048
+producer_line = 1051
 note = "Exact comparison contract for the five-frame checkTextLayoutSilver helper at 4ca3b88a. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5734,7 +5734,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Vertical Trim"
-producer_line = 968
+producer_line = 971
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6174,7 +6174,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Virtualized list with nested data bound artboards"
-producer_line = 1066
+producer_line = 1070
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6196,7 +6196,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Word joiners are not used to break words"
-producer_line = 884
+producer_line = 887
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6218,5 +6218,5 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Zero width spaces are used to break words"
-producer_line = 719
+producer_line = 722
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."

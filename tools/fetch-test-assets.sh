@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-16332c8ef763b118b3e2b53d73ce29ca3b1218e1}
+ref=${RIVE_RUNTIME_REF:-5551696a826ff546775fffe46ca78824b1f1dc51}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/text_variation_modifier_hug.riv|695efba978e26c14cd18fa89ffb114c677b6e9e7502af351f0e3ea834402af76|5551696a826ff546775fffe46ca78824b1f1dc51|text_variation_modifier_hug.riv"
   "sync/nested_artboard_cycle.riv|56aa525711563773e8b61165070964c24d8016e2b0b8f50e8361911a13a1a86f|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|nested_artboard_cycle.riv"
   "sync/stateful_bindable_host.riv|ac34850110f4a83c150a36ce9a2a80ced976b5a9673b324d7a7bf210254e1e97|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|stateful_bindable_host.riv"
   "sync/viewmodel_deep_chain.riv|7f4841338ea5f706e91bc0f97d49e01676279aff9890a0565ec7d1b5dd16ff62|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|viewmodel_deep_chain.riv"

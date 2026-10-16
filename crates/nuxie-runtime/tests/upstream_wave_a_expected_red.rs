@@ -248,7 +248,9 @@ fn text_of_first_run(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> St
 fn component_list_case_01_direct_port_expected_red() {
     let f = Fixture::new("component_list_1.riv");
     f.advance();
-    assert!(write::<ArtboardComponentList, _>(
+    // Upstream 5551696a: one advance lays the items out completely; retaining
+    // unchanged variable fonts removes the redundant pending style sync.
+    assert!(!write::<ArtboardComponentList, _>(
         &f.list,
         ArtboardComponentList::sync_style_changes
     ));

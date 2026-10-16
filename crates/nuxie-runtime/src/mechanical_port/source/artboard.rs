@@ -228,6 +228,28 @@ impl RuntimeArtboardDirtyHandle {
             self.0.depth.set(graph_order);
         }
     }
+    /// `count` onComponentDirty notifications with no other code between
+    /// them, the lowest graph order among them `lowest_order`. Only the first
+    /// can find a quiet row to wake, and it does so before any of them
+    /// advances the counters, which then advance once per notification.
+    pub(crate) fn on_components_dirty(&self, count: u32, lowest_order: u32) {
+        #[cfg(any(test, feature = "testing"))]
+        DIRT_NOTIFICATIONS.with(|notifications| {
+            notifications.set(notifications.get() + u64::from(count))
+        });
+        self.wake_if_quiet_row();
+        self.0.did_change.set(true);
+        self.0
+            .content_revision
+            .set(self.0.content_revision.get().wrapping_add(u64::from(count)));
+        self.0
+            .change_serial
+            .set(self.0.change_serial.get().wrapping_add(count));
+        self.mark_components_dirty();
+        if lowest_order < self.0.depth.get() {
+            self.0.depth.set(lowest_order);
+        }
+    }
     pub fn mark_components_dirty(&self) {
         self.0
             .dirt

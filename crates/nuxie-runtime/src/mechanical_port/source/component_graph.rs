@@ -97,6 +97,38 @@ struct Node {
 /// (occurrences that are not graph members, such as DrawTargets).
 const OUTSIDE_DEPENDENT: u32 = 1 << 31;
 
+/// Cascade levels walked on the stack before the cascade recurses.
+const CASCADE_DEPTH: usize = 16;
+
+/// Artboard::onComponentDirty notifications from members without onDirty
+/// work, held while no other code runs: nothing can observe the Artboard
+/// between them, so they apply as one batch before the next call out.
+struct PendingNotifications {
+    count: u32,
+    lowest_order: u32,
+}
+
+impl PendingNotifications {
+    const NONE: Self = Self {
+        count: 0,
+        lowest_order: u32::MAX,
+    };
+
+    #[inline]
+    fn add(&mut self, order: u32) {
+        self.count += 1;
+        self.lowest_order = self.lowest_order.min(order);
+    }
+
+    #[inline]
+    fn flush(&mut self, artboard: &RuntimeArtboardDirtyHandle) {
+        if self.count != 0 {
+            artboard.on_components_dirty(self.count, self.lowest_order);
+            *self = Self::NONE;
+        }
+    }
+}
+
 /// A transform input that a plain transform member's generated setter writes
 /// to its TransformCells.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -431,7 +463,7 @@ impl ComponentGraph {
         if node.on_dirty.is_outside() {
             return self.occurrences[i].add_dirt(value, recurse);
         }
-        if !self.mark(i, value) {
+        if !self.mark_out_of_line(i, value) {
             return false;
         }
         if recurse && node.dependents_start != node.dependents_end {
@@ -440,12 +472,17 @@ impl ComponentGraph {
         true
     }
 
+    /// mark, for a member reached outside a cascade.
+    #[inline(never)]
+    fn mark_out_of_line(&self, i: usize, value: ComponentDirt) -> bool {
+        self.mark(i, value)
+    }
+
     /// Component::addDirt's own work for member `i` once its duplicate-bit
     /// check has passed: the liveness check, the dirt write, onDirty and the
     /// Artboard notification. Returns whether it added dirt (so the caller
-    /// continues into its dependents). Kept out of line so the cascade loop
-    /// stays small; only members that gain dirt get here.
-    #[inline(never)]
+    /// continues into its dependents). Only members that gain dirt get here.
+    #[inline(always)]
     fn mark(&self, i: usize, value: ComponentDirt) -> bool {
         let node = &self.nodes[i];
         let live = if node.on_dirty.is_helper() {
@@ -501,14 +538,32 @@ impl ComponentGraph {
         self.cascade(index, value);
     }
 
+    /// Upstream's recursion, depth first: each dependent's whole cascade
+    /// finishes before its next sibling. The walk keeps the remaining
+    /// dependents of each open level on a fixed stack and recurses only past
+    /// CASCADE_DEPTH levels.
     fn cascade(&self, index: u32, value: ComponentDirt) {
         let node = &self.nodes[index as usize];
-        let dependents = &self.dependents[node.dependents_start as usize..node.dependents_end as usize];
-        for &dependent in dependents {
+        let mut levels = [(0u32, 0u32); CASCADE_DEPTH];
+        let mut depth = 0;
+        let (mut next, mut end) = (node.dependents_start, node.dependents_end);
+        let mut pending = PendingNotifications::NONE;
+        loop {
+            if next == end {
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+                (next, end) = levels[depth];
+                continue;
+            }
+            let dependent = self.dependents[next as usize];
+            next += 1;
             // An outside dependent's index has OUTSIDE_DEPENDENT set, so it is
             // never a member index. Members here are never outside:
             // build routes those through `outside`.
             let Some(child) = self.nodes.get(dependent as usize) else {
+                pending.flush(&self.artboard);
                 self.add_dirt_outside(dependent, value);
                 continue;
             };
@@ -517,20 +572,30 @@ impl ComponentGraph {
             if dirt.contains(value) {
                 continue;
             }
-            // A live member with no onDirty work: Component::addDirt's write
-            // and Artboard notification, without a call.
+            // A live member with no onDirty work: Component::addDirt's write,
+            // with its Artboard notification held until other code can run.
             if matches!(child.on_dirty, OnDirty::Noop) && child.alive.get() {
                 child.dirt.set(dirt | value);
-                self.notify_artboard(dependent);
-            } else if !self.mark(dependent as usize, value) {
+                pending.add(dependent);
+            } else {
+                pending.flush(&self.artboard);
+                if !self.mark(dependent as usize, value) {
+                    continue;
+                }
+            }
+            if child.dependents_start == child.dependents_end {
                 continue;
             }
-            // Each dependent's whole cascade finishes before its next sibling,
-            // as upstream's recursion orders it.
-            if child.dependents_start != child.dependents_end {
+            if depth == CASCADE_DEPTH {
+                pending.flush(&self.artboard);
                 self.cascade(dependent, value);
+                continue;
             }
+            levels[depth] = (next, end);
+            depth += 1;
+            (next, end) = (child.dependents_start, child.dependents_end);
         }
+        pending.flush(&self.artboard);
     }
 
     /// Component::addDirt(value, true) on a dependent outside the graph.

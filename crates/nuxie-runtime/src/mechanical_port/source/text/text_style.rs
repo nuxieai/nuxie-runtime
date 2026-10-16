@@ -34,6 +34,7 @@ pub struct TextStyle {
     variation_helper: Option<RuntimeTextVariationHelperHandle>,
     file_asset_referencer: FileAssetReferencer,
     variable_font: Option<FontRef>,
+    variable_font_base: Option<FontRef>,
     coords: Vec<FontCoord>,
     variations: Vec<CoreHandle>,
     style_features: Vec<CoreHandle>,
@@ -48,6 +49,7 @@ impl Default for TextStyle {
             variation_helper: None,
             file_asset_referencer: FileAssetReferencer::default(),
             variable_font: None,
+            variable_font_base: None,
             coords: Vec::new(),
             variations: Vec::new(),
             style_features: Vec::new(),
@@ -172,9 +174,19 @@ impl TextStyle {
             // Not ready yet, or the font was cleared. Drop the variable font
             // cached from the previous base so font() cannot return it.
             self.variable_font = None;
+            self.variable_font_base = None;
             return;
         };
         if !self.variations.is_empty() || !self.style_features.is_empty() {
+            if self.variable_font.is_some()
+                && self
+                    .variable_font_base
+                    .as_ref()
+                    .is_some_and(|cached| std::sync::Arc::ptr_eq(cached, &base_font))
+                && self.same_options()
+            {
+                return;
+            }
             self.coords.clear();
             for axis in &self.variations {
                 axis.with_downcast::<TextStyleAxis, _>(|axis| {
@@ -194,9 +206,39 @@ impl TextStyle {
                 });
             }
             self.variable_font = Some(base_font.with_options(&self.coords, &self.features));
+            self.variable_font_base = Some(base_font);
         } else {
             self.variable_font = None;
+            self.variable_font_base = None;
         }
+    }
+    fn same_options(&self) -> bool {
+        if self.coords.len() != self.variations.len()
+            || self.features.len() != self.style_features.len()
+        {
+            return false;
+        }
+        for (coord, axis) in self.coords.iter().zip(&self.variations) {
+            if !axis
+                .with_downcast::<TextStyleAxis, _>(|axis| {
+                    coord.axis == axis.base.tag() && coord.value == axis.base.axis_value()
+                })
+                .expect("live TextStyleAxis")
+            {
+                return false;
+            }
+        }
+        for (cached, feature) in self.features.iter().zip(&self.style_features) {
+            if !feature
+                .with_downcast::<TextStyleFeature, _>(|feature| {
+                    cached.tag == feature.base.tag() && cached.value == feature.base.feature_value()
+                })
+                .expect("live TextStyleFeature")
+            {
+                return false;
+            }
+        }
+        true
     }
     pub fn build_dependencies(&mut self) {
         if let Some(helper) = &mut self.variation_helper {

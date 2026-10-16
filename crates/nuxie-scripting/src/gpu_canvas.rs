@@ -1080,16 +1080,29 @@ impl RegisteredGpuCanvasShaderAsset {
             // Referenced assets may decode after File::finishImport. Retain
             // their actual owner, and recheck its pure admitted accessor even
             // when a previously decoded artifact is cached.
-            let payload = asset
+            let admitted = asset
                 .with_downcast::<nuxie_runtime::source::assets::shader_asset::ShaderAsset, _>(
-                    |asset| (!asset.rstb().is_empty()).then(|| asset.encoded_payload().to_vec()),
+                    |asset| {
+                        if !asset.rstb().is_empty() {
+                            Ok(asset.encoded_payload().to_vec())
+                        } else if asset.refused() {
+                            Err("its signature did not verify, so the file refuses it")
+                        } else if asset.encoded_payload().is_empty() {
+                            Err("it has no compiled content")
+                        } else {
+                            Err("its compiled content is not a shader table this runtime reads")
+                        }
+                    },
                 )
-                .flatten();
-            let Some(payload) = payload else {
-                *decoded_payload = None;
-                self.decoded = None;
-                self.prepared_module = None;
-                return Err(Error::runtime("ShaderAsset is unavailable"));
+                .unwrap_or(Err("it is not a shader asset"));
+            let payload = match admitted {
+                Ok(payload) => payload,
+                Err(reason) => {
+                    *decoded_payload = None;
+                    self.decoded = None;
+                    self.prepared_module = None;
+                    return Err(Error::runtime(reason));
+                }
             };
             if decoded_payload.as_ref() != Some(&payload)
                 || self
@@ -1141,6 +1154,14 @@ impl RegisteredGpuCanvasShaderAsset {
     }
 }
 
+/// An error's own words, without the VM's "runtime error: " prefix.
+fn reason_of(error: &Error) -> String {
+    match error {
+        Error::RuntimeError(message) => message.clone(),
+        other => other.to_string(),
+    }
+}
+
 pub(crate) type ImportedGpuCanvasShaderAssetOwner = Rc<RefCell<RegisteredGpuCanvasShaderAsset>>;
 
 #[derive(Debug, Clone)]
@@ -1168,22 +1189,24 @@ enum GpuCanvasShaderCatalog {
 }
 
 impl GpuCanvasShaderCatalog {
+    /// The shader `context:shader(name)` returns, or why it returns nil.
     fn shader(
         &self,
         lua: &luaur_rt::Lua,
         name: &str,
         renderer_bindings: Option<&RendererBindings>,
-    ) -> Option<GpuShader> {
+    ) -> std::result::Result<GpuShader, String> {
         match self {
             Self::Direct(shader) => {
                 if shader.entries.is_empty() {
-                    return None;
+                    return Err("this program was given no shader".to_owned());
                 }
                 let mut bound = shader.name.borrow_mut();
-                if bound.get_or_insert_with(|| name.to_owned()) != name {
-                    return None;
+                let bound = bound.get_or_insert_with(|| name.to_owned());
+                if bound != name {
+                    return Err(format!("this program's shader is linked as \"{bound}\""));
                 }
-                Some(GpuShader {
+                Ok(GpuShader {
                     name: name.to_owned(),
                     entries: shader.entries.clone(),
                     module: None,
@@ -1200,16 +1223,34 @@ impl GpuCanvasShaderCatalog {
                         selected = Some((entry.name.clone(), Rc::clone(&entry.owner)));
                     }
                 }
-                let (registered_name, owner) = selected?;
-                let bindings = renderer_bindings?;
-                let selected = SelectedShaderContext::new(bindings)?;
+                let Some((registered_name, owner)) = selected else {
+                    let names = shaders
+                        .borrow()
+                        .iter()
+                        .map(|entry| format!("\"{}\"", entry.name))
+                        .collect::<Vec<_>>();
+                    return Err(if names.is_empty() {
+                        "found no shader; this file has no shaders".to_owned()
+                    } else {
+                        format!(
+                            "found no shader with that name; available: {}",
+                            names.join(", ")
+                        )
+                    });
+                };
+                let no_device = || "this renderer has no GPU device for shaders".to_owned();
+                let bindings = renderer_bindings.ok_or_else(no_device)?;
+                let selected = SelectedShaderContext::new(bindings).ok_or_else(no_device)?;
                 let mut owner = owner.borrow_mut();
                 let shader = owner
                     .resolve(&registered_name, selected.profile)
-                    .ok()?
+                    .map_err(|error| reason_of(&error))?
                     .clone();
                 if shader.entries().is_empty() {
-                    return None;
+                    return Err(format!(
+                        "it has no entry points for this renderer's {:?} backend",
+                        selected.profile
+                    ));
                 }
                 if owner
                     .prepared_module
@@ -1218,12 +1259,15 @@ impl GpuCanvasShaderCatalog {
                 {
                     owner.prepared_module = None;
                 }
-                let asset = owner.native_handle()?;
+                let asset = owner
+                    .native_handle()
+                    .ok_or_else(|| "it has no shader asset".to_owned())?;
                 let prepared_module = owner
                     .prepared_module
                     .as_ref()
                     .map(|prepared| prepared.module.clone());
                 drop(owner);
+                let failed = |error: Error| format!("it did not compile: {}", reason_of(&error));
                 let module: Arc<dyn RenderGpuCanvasShader> = if !selected.factory_matches {
                     crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
                     let anchor: Rc<dyn std::any::Any> = Rc::new(selected.context.clone());
@@ -1234,7 +1278,7 @@ impl GpuCanvasShaderCatalog {
                             &shader,
                             anchor,
                         )
-                        .ok()?,
+                        .map_err(|error| failed(Error::runtime(error)))?,
                     )
                 } else if let Some(prepared_module) = prepared_module {
                     crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
@@ -1244,7 +1288,7 @@ impl GpuCanvasShaderCatalog {
                                 .make_gpu_canvas_shader_occurrence(&prepared_module)
                                 .map_err(|error| Error::runtime(error.to_string()))
                         })
-                        .ok()?
+                        .map_err(failed)?
                 } else {
                     crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
                     bindings
@@ -1253,9 +1297,9 @@ impl GpuCanvasShaderCatalog {
                                 .make_gpu_canvas_shader_artifact(&shader)
                                 .map_err(|error| Error::runtime(error.to_string()))
                         })
-                        .ok()?
+                        .map_err(failed)?
                 };
-                Some(GpuShader {
+                Ok(GpuShader {
                     name: name.to_owned(),
                     entries: shader.entries().to_vec(),
                     module: Some(module),
@@ -1421,14 +1465,23 @@ impl GpuCanvasContextBindings {
     }
 
     pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<MultiValue> {
-        let Some(shader) = self
+        let shader = match self
             .shaders
             .shader(lua, &name, self.renderer_bindings.as_ref())
-        else {
-            return Ok(MultiValue::new());
+        {
+            Ok(shader) => shader,
+            Err(reason) => {
+                crate::vm::lua_image::report_shader_lookup_miss(lua, &name, &reason);
+                return Ok(MultiValue::new());
+            }
         };
         if self.renderer_bindings.is_some() {
             let Some(shader) = ore::shader_userdata(lua, shader)? else {
+                crate::vm::lua_image::report_shader_lookup_miss(
+                    lua,
+                    &name,
+                    "this renderer's GPU device could not use it",
+                );
                 return Ok(MultiValue::new());
             };
             return Ok(MultiValue::from_vec(vec![Value::UserData(shader)]));

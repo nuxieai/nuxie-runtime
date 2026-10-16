@@ -186,9 +186,12 @@ impl FileAssetLoader for AdmittedCodeAssetLoader {
         {
             return true;
         }
-        if let Some(decoded) =
-            asset.with_downcast_mut::<ShaderAsset, _>(|shader| shader.decode(bytes, factory))
-        {
+        if let Some(decoded) = asset.with_downcast_mut::<ShaderAsset, _>(|shader| {
+            // SAFETY: as for scripts above. Upstream verifies a file's
+            // in-band Luau and RSTB as one group, so the authority that
+            // admits this file's scripts admits its shaders.
+            unsafe { shader.decode_with_host_authorization(bytes, factory) }
+        }) {
             if decoded {
                 if let Some(proof) = mint_shader_provenance(
                     self.native_shaders_are_authorized,

@@ -109,6 +109,21 @@ return function(_context)
 end
 "#;
 
+const SHADER_LOOKUP_MISS_SCRIPT: &[u8] = br#"
+return function(context)
+    local missing = context:shader("missing")
+    local again = context:shader("missing")
+    local found = context:shader("scene")
+    if missing ~= nil or again ~= nil or found == nil then
+        error("only the linked shader resolves")
+    end
+    return {
+        draw = function(self, renderer)
+        end,
+    }
+end
+"#;
+
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
     let mut output_size = 0;
@@ -385,6 +400,41 @@ fn contentless_shader_file(script: &[u8]) -> Vec<u8> {
     push_object(&mut bytes, "ScriptAsset", |bytes| {
         push_uint(bytes, "ScriptAsset", "assetId", 1);
         push_string(bytes, "ScriptAsset", "name", "ContentlessShader");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 32.0);
+        push_f32(bytes, "Artboard", "height", 24.0);
+    });
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 1);
+    });
+    bytes
+}
+
+/// `imported_file` with another script beside its shader.
+fn shader_and_script_file(script: &[u8]) -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(script));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ShaderAsset", |bytes| {
+        push_uint(bytes, "ShaderAsset", "assetId", 0);
+        push_string(bytes, "ShaderAsset", "name", "scene");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &shader_payload());
+    });
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 1);
+        push_string(bytes, "ScriptAsset", "name", "Lookups");
     });
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
@@ -810,5 +860,78 @@ fn default_factory_does_not_silently_draw_an_unsupported_gpu_canvas() {
     assert!(
         !stream.contains("drawImage"),
         "unsupported GPU canvas reached the renderer: {stream}"
+    );
+}
+
+/// Imports `bytes` as a host does, with the file's own authority and a script
+/// console, advances its default artboard once, and returns the console lines.
+fn script_console_after_first_advance(
+    bytes: &[u8],
+    factory: &mut dyn Factory,
+) -> Vec<(u8, String)> {
+    let lines = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink_lines = lines.clone();
+    let sink: nuxie::ScriptingLogSink = Arc::new(move |level, line: &[u8]| {
+        sink_lines
+            .lock()
+            .unwrap()
+            .push((level as u8, String::from_utf8_lossy(line).into_owned()));
+    });
+    // SAFETY: the test built these exact bytes.
+    let capability = unsafe {
+        nuxie::ScriptExecutionCapability::for_verified_artifact_unchecked(
+            bytes,
+            Arc::new(nuxie::NoopScriptHostExtension),
+        )
+    }
+    .unwrap();
+    let file = nuxie::import_scripted(
+        bytes,
+        factory,
+        None,
+        FileImportLimits::new(),
+        capability,
+        ScriptExecutionLimits::new(),
+        Some(sink),
+    )
+    .expect("authorized fixture imports");
+    let artboard = file
+        .native_file()
+        .with_file(File::artboard_default)
+        .expect("fixture artboard");
+    file.begin_script_cycle();
+    artboard.advance_default(0.0);
+    file.end_script_cycle();
+    let lines = lines.lock().unwrap().clone();
+    lines
+}
+
+#[test]
+fn a_nil_shader_lookup_is_reported_once_with_its_reason() {
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let lines = script_console_after_first_advance(
+        &shader_and_script_file(SHADER_LOOKUP_MISS_SCRIPT),
+        &mut factory,
+    );
+    assert_eq!(
+        lines,
+        vec![(
+            nuxie::ScriptingLogLevel::Warn as u8,
+            "context:shader(\"missing\") is nil: found no shader with that name; available: \"scene\"".to_owned(),
+        )],
+        "the linked shader resolves and the miss is reported once"
+    );
+
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let lines = script_console_after_first_advance(
+        &contentless_shader_file(REQUESTED_CONTENTLESS_SHADER_SCRIPT),
+        &mut factory,
+    );
+    assert_eq!(
+        lines,
+        vec![(
+            nuxie::ScriptingLogLevel::Warn as u8,
+            "context:shader(\"scene\") is nil: it has no compiled content".to_owned(),
+        )]
     );
 }

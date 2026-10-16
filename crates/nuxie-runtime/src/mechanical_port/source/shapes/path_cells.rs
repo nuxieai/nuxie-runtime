@@ -86,6 +86,12 @@ impl PathCells {
         self.skinned.set(true);
     }
 
+    /// Whether a skin was set on this PointsPath.
+    #[inline]
+    pub(crate) fn is_skinned(&self) -> bool {
+        self.skinned.get()
+    }
+
     /// Path::pathTransform(): identity for a skinned PointsPath, else world.
     #[inline]
     pub(crate) fn path_transform(&self) -> Mat2D {

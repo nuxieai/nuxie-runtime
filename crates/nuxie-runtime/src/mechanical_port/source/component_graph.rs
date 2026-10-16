@@ -769,6 +769,7 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
     let actual: &dyn Any = object;
     let mut after: Option<fn(&CoreHandle, ComponentDirt)> = None;
     let mut path = None;
+    let points_path = actual.is::<crate::mechanical_port::source::shapes::points_path::PointsPath>();
     let (translation, node) = if actual.is::<NodeObject>() {
         (Translation::Own, true)
     } else if actual.is::<RootBone>() {
@@ -819,6 +820,7 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
         node,
         after,
         path,
+        points_path,
     })
 }
 

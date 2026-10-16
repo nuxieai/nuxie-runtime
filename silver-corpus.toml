@@ -12,24 +12,22 @@ min_cpp_rust_exact = 206
 cpp_rust_exact_ids = ["additive_blendmode_test", "advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsed_databinds_test", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_viz_demo", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "db_health_tracker", "deterministic_mode", "drag_event", "draw_index_list", "echo_show_demo", "event_trigger_event", "fill_trim_path", "fit_font_size_hug_test", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focus_traversal_click_to_focus", "focus_traversal_data_bound", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "juice", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_animation_transition_test", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_grid_stack_stack_with_layouts", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "layout_solos", "layout_solos_fit_to_layout_parent", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "solo_nested_artboard_leaf_fits_parent_layout", "solo_nested_artboard_leaf_no_solo", "solo_nested_artboard_leaf_solo", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_layout_7_3", "text_layout_pre_7_3", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
 
 reviewed_layout_divergences = [
-  { id = "animated_clipping-layout", first_difference = "frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got (273, 0)" },
-  { id = "artboard_list_overrides_vertical", first_difference = "frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)" },
-  { id = "bankcard", first_difference = "frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)" },
-  { id = "collapsing_elements", first_difference = "frame 0, op 612 (addRawPath), field point: expected (500, -0.0 (0x80000000)), got (499.95004, -0.0 (0x80000000))" },
-  { id = "component_list_child_origin", first_difference = "frame 0, op 105 (transform), field ty: expected 29, got 12.5" },
-  { id = "data_viz_demo", first_difference = "frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, 16.325203), got (268.33334, 16.325203)" },
-  { id = "db_health_tracker", first_difference = "frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, 0)" },
-  { id = "global_view_models_scripting_test", first_difference = "frame 0, op 49 (addRawPath), field point: expected (945, 0), got (980, 0)" },
-  { id = "hittest_ab1_grand_parent", first_difference = "frame 0, op 149 (transform), field ty: expected 100, got 0" },
-  { id = "hittest_ab1_parent", first_difference = "frame 0, op 129 (addRawPath), field point: expected (572, 0), got (738.65234, 0)" },
-  { id = "number_to_list_nested_children", first_difference = "frame 0, op 190 (addRawPath), field point: expected (250, 59.791016), got (250, 61)" },
-  { id = "reset_phase_multi_main", first_difference = "frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)" },
-  { id = "scroll_threshold-all-scroll", first_difference = "frame 0, op 62 (addRawPath), field point: expected (500, 0), got (1500, 0)" },
-  { id = "scroll_threshold-horizontal-scroll", first_difference = "frame 0, op 59 (addRawPath), field point: expected (500, 0), got (1700, 0)" },
-  { id = "superbowl", first_difference = "frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218" },
-  { id = "text_input", first_difference = "frame 0, op 20 (addRawPath), field point: expected (200, 0), got (492.99805, 0)" },
-  { id = "text_layout_7_3", first_difference = "frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422" },
-  { id = "text_layout_pre_7_3", first_difference = "frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422" },
+  { id = "animated_clipping-layout", first_difference = "frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got (273, 0)", rust_stream_sha256 = "e00881c43f3f84f8d7d9c32ae2a6aad794a7d62e5681b6ce8023962ee1d0cb7d" },
+  { id = "artboard_list_overrides_vertical", first_difference = "frame 0, op 78 (addRawPath), field point: expected (700, 0), got (500, 0)", rust_stream_sha256 = "00170e4f8046ef98432522115d2a524430048669472027dd1bb62302ddd3b85c" },
+  { id = "collapsing_elements", first_difference = "frame 0, op 612 (addRawPath), field point: expected (500, -0.0 (0x80000000)), got (499.95004, -0.0 (0x80000000))", rust_stream_sha256 = "31aff50c0e18b22fde821a2bb136a57e47ef92273f335bdfa62d7778ee917d78" },
+  { id = "component_list_child_origin", first_difference = "frame 0, op 105 (transform), field ty: expected 29, got 12.5", rust_stream_sha256 = "1fd79d63ca4f76bce2fff4e1969c433371cb9df3ec5be2fa9629750449a8dcc6" },
+  { id = "data_viz_demo", first_difference = "frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, 16.325203), got (268.33334, 16.325203)", rust_stream_sha256 = "f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b" },
+  { id = "db_health_tracker", first_difference = "frame 0, op 7788 (transform), field tx: expected 864.3635, got 857.43286", rust_stream_sha256 = "6c998223bc65747a468d9032fdb34d6e42947eba814981304373e1574fc0f1b2" },
+  { id = "draw_index_list", first_difference = "frame 0, op 54 (color): expected color, got makeRenderPaint", rust_stream_sha256 = "a58f57ec5f85f0ef9e283beb2d04df7e383711e8b5b0f75d6b6c75cc52ad92fb" },
+  { id = "global_view_models_scripting_test", first_difference = "frame 0, op 54 (transform), field tx: expected 500, got 482.14285", rust_stream_sha256 = "1ded320dbdca544cc281ee5c950d579bce4d1c69599541943d6f54e9f0cdc364" },
+  { id = "hittest_ab1_grand_parent", first_difference = "frame 0, op 149 (transform), field ty: expected 100, got 31.04248", rust_stream_sha256 = "851e237d5066b780524103ba1db0593725cc4973550ab9e9a98ff6dc07dda2c8" },
+  { id = "hittest_ab1_parent", first_difference = "frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838", rust_stream_sha256 = "a34fe44079a5866f5bb4f9608879c5bc9e92092e2b2978bce2b47c6cd8971107" },
+  { id = "layout_scroll_snap_carousel", first_difference = "frame 0, op 58 (addRawPath), field point: expected (105, -0.0 (0x80000000)), got (94.75, -0.0 (0x80000000))", rust_stream_sha256 = "a3d1eca149df767af713b355ece7a41f67615500c3034dbf654160b65429ac0d" },
+  { id = "reset_phase_multi_main", first_difference = "frame 0, op 69 (addRawPath), field point: expected (62, -0.0 (0x80000000)), got (60, -0.0 (0x80000000))", rust_stream_sha256 = "a8338f8b9f5da3996545abeba2ead24f6f28de655815bae9e0b95e828af11278" },
+  { id = "scroll_threshold-all-scroll", first_difference = "frame 0, op 90 (transform), field tx: expected 500, got 375", rust_stream_sha256 = "b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f" },
+  { id = "superbowl", first_difference = "frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218", rust_stream_sha256 = "5a6903ca508cc59dd3aea3155055c5750fef0406bb4b5431eab89bcb39265815" },
+  { id = "text_layout_7_3", first_difference = "frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422", rust_stream_sha256 = "b8479337b21ca49d674c75d9d21d33898d51c62c95869a7ff7acf621c5705fbb" },
+  { id = "text_layout_pre_7_3", first_difference = "frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422", rust_stream_sha256 = "989f4a77072cb02527a761655a55da1e18d6a7cdbc87385cad034c9465664bad" },
 ]
 
 [[case]]
@@ -140,7 +138,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Animated layout clippings work"
 producer_line = 198
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its 273-wide host instead of extending beyond it.; first difference: frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got (273, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its 273-wide host instead of extending beyond it; first difference: frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got (273, 0)."
 
 [[case]]
 id = "animated_clipping-nodes"
@@ -228,7 +226,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with vertical distribution"
 producer_line = 716
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums sum seven 100-wide child artboards to a 700-wide content floor instead of the old 500 allocation.; first difference: frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The viewport returns to 500 instead of the incorrect 700 minimum. Its seven Fixed 100-point child artboards keep zero minima and share the 500-point row, so their content path changes from 700 to 500; first difference: frame 0, op 78 (addRawPath), field point: expected (700, 0), got (500, 0)."
 
 [[case]]
 id = "artboard_opacity_and_transform_test"
@@ -289,12 +287,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "bank card data binding"
 producer_line = 304
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums keep the lower content row at 740.94385 plus two 63-point padding edges, making the card 866.94385 instead of 850. Its 40-point corner leaves the first clip point at 826.94385 instead of 810.; first difference: frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "bidirectional_binding_source"
@@ -602,7 +600,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Multiple layout collapsing and soloing in hierarchy."
 producer_line = 522
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets the nested Fixed 500 box fit its 33.33 percent host, 499.95004, instead of keeping the full 500.; first difference: frame 0, op 612 (addRawPath), field point: expected (500, -0.0 (0x80000000)), got (499.95004, -0.0 (0x80000000))."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets the nested Fixed 500 box fit its 33.33 percent host, 499.95004, instead of keeping the full 500; first difference: frame 0, op 612 (addRawPath), field point: expected (500, -0.0 (0x80000000)), got (499.95004, -0.0 (0x80000000))."
 
 [[case]]
 id = "color_passthrough_test"
@@ -690,7 +688,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard lists with child artboard origin offset"
 producer_line = 1150
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets a Fixed child artboard fit the list row's height; the half-height origin moves from 29 to 12.5 as its box shrinks from 58 to 25.; first difference: frame 0, op 105 (transform), field ty: expected 29, got 12.5."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets a Fixed child artboard fit the list row's height; the half-height origin moves from 29 to 12.5 as its box shrinks from 58 to 25; first difference: frame 0, op 105 (transform), field ty: expected 29, got 12.5."
 
 [[case]]
 id = "component_list_follow_path"
@@ -1240,7 +1238,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "data viz demo data binding"
 producer_line = 271
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS shrinking and content minimums change the chart cells' allocated widths; the first bar gradient endpoint moves from 276.66666 to 268.33334. Gradient interpolation is unchanged.; first difference: frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, 16.325203), got (268.33334, 16.325203)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The two 50-percent chart cells in the 772-point row have 34-point padding edges and a 20-point gap. Their 352-point bases shrink to (772 - 68 - 20)/2 = 342. The LineBars gradient endpoint is five sixths of the cell width after 20 padding, changing from 276.66666 to 268.33334; first difference: frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, 16.325203), got (268.33334, 16.325203)."
 
 [[case]]
 id = "databind_artboard"
@@ -1350,7 +1348,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "health tracker data binding"
 producer_line = 561
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums propagate the nested Artboard Measure width 10000 through its containers: panel width 1008 becomes 10174 and the padded ancestor 1048 becomes 10214.; first difference: frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The panel returns to its 1008-point offer and no longer floors at the opaque 10000-point artboard contribution. Internal Fixed items still share shrink, moving the first remaining transform x from 864.3635 to 857.43286; first difference: frame 0, op 7788 (transform), field tx: expected 864.3635, got 857.43286."
 
 [[case]]
 id = "deterministic_mode"
@@ -1411,12 +1409,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "pointer-down", x = 30.0, y = 90.0, pointer_id = 0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 90.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 80.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 70.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 60.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 50.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 40.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 30.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 20.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 10.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = 0.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -10.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -20.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -30.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -40.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -50.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -60.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -70.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -80.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -90.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -100.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -110.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -120.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -130.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -140.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -150.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -160.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -170.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -180.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -190.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -200.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -210.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -220.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -230.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -240.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -250.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -260.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -270.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -280.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -290.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -300.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-move", x = 30.0, y = -310.0, seconds = 0.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = 30.0, y = -320.0, pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-down", x = 100.0, y = 45.0, pointer_id = 0 }, { kind = "pointer-up", x = 100.0, y = 45.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 100.0, y = 51.0, pointer_id = 0 }, { kind = "pointer-up", x = 100.0, y = 51.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 100.0, y = 91.0, pointer_id = 0 }, { kind = "pointer-up", x = 100.0, y = 91.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 30.0, y = 90.0, pointer_id = 0 }, { kind = "pointer-move", x = 30.0, y = 10.0, seconds = 0.0, pointer_id = 0 }, { kind = "pointer-up", x = 30.0, y = 10.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 100.0, y = 45.0, pointer_id = 0 }, { kind = "pointer-up", x = 100.0, y = 45.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 100.0, y = 85.0, pointer_id = 0 }, { kind = "pointer-up", x = 100.0, y = 85.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 30.0, y = 90.0, pointer_id = 0 }, { kind = "pointer-move", x = 30.0, y = 10.0, seconds = 0.0, pointer_id = 0 }, { kind = "pointer-up", x = 30.0, y = 10.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 100.0, y = 45.0, pointer_id = 0 }, { kind = "pointer-up", x = 100.0, y = 45.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "exact"
+status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Draw index overrides draw order"
 producer_line = 1300
-note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Ten Fixed 50-point child artboards keep zero automatic minima. With nine negative 10-point gaps, they share the 100-point column at (100 + 90)/10 = 19 each. The visible overlapping carousel items change, so the first stream difference is color versus paint creation. Draw-index dispatch is unchanged and looping scrolling remains available; first difference: frame 0, op 54 (color): expected color, got makeRenderPaint."
 
 [[case]]
 id = "echo_show_demo"
@@ -1966,7 +1964,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Global view models access through scripting"
 producer_line = 175
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the Main artboard width 500 plus the GlobalName list width 480, or 980, instead of squeezing their parent to 945.; first difference: frame 0, op 49 (addRawPath), field point: expected (945, 0), got (980, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The parent returns to width 945. Fixed bases 500 and 480 share that offer by CSS shrink weights: Main becomes 482.14285 and GlobalName 462.85715, instead of keeping 500 and 480; first difference: frame 0, op 54 (transform), field tx: expected 500, got 482.14285."
 
 [[case]]
 id = "global_viewmodels_test-auto_instance"
@@ -2120,7 +2118,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent and grand-parent artboard"
 producer_line = 513
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS min-height:auto keeps the nested 572-high content above the 208.60547 column offer; flex-shrink 1 reduces the leading Fixed 100 box to zero and moves the following item from y 100 to zero.; first difference: frame 0, op 149 (transform), field ty: expected 100, got 0."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The opaque nested artboard keeps zero minimum. Fixed bases 100 and 572 share the 208.60547 column: the first item becomes 31.04248 and the following origin moves from 100 to 31.04248; first difference: frame 0, op 149 (transform), field ty: expected 100, got 31.04248."
 
 [[case]]
 id = "hittest_ab1_parent"
@@ -2142,7 +2140,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent artboard"
 producer_line = 469
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS min-width:auto floors parent-clipper at the content contributions 238.65234 plus nested width 500, or 738.65234, instead of squeezing it to 572.; first difference: frame 0, op 129 (addRawPath), field point: expected (572, 0), got (738.65234, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Parent-clipper returns to width 572. Fixed bases 238.65234 and 500 share that offer with zero minima, becoming 184.80838 and 387.19162. The first nested transform x changes from 238.65234 to 184.80838; first difference: frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838."
 
 [[case]]
 id = "hittest_ab_2_non_virtualized"
@@ -3108,12 +3106,12 @@ view_model = "cpp-test-defined"
 sample_times = [0]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+375", y = "artboard-height/2", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+750", y = "artboard-height/2", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+1125", y = "artboard-height/2", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+1500", y = "artboard-height/2", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2+1500", y = "artboard-height/2", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 300, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "exact"
+status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Carousel snap swipe right settles past index 0"
 producer_line = 264
-note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Four Fixed 105-point child artboards keep zero automatic minima and share the 415-point row after three 12-point gaps: (415 - 36)/4 = 94.75 each. Looping scroll and snap dispatch remain active; the whole swipe and settlement stream is pinned; first difference: frame 0, op 58 (addRawPath), field point: expected (105, -0.0 (0x80000000)), got (94.75, -0.0 (0x80000000))."
 
 [[case]]
 id = "layout_scroll_snap_padding_layouts"
@@ -3793,12 +3791,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "pointer-down", x = 20.0, y = 80.0, pointer_id = 0 }, { kind = "pointer-up", x = 20.0, y = 80.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "pointer-down", x = 460.0, y = 180.0, pointer_id = 0 }, { kind = "pointer-up", x = 460.0, y = 180.0, pointer_id = 0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "data bind list with number to list and lists children"
 producer_line = 99
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums keep the nested list row at its 61 content height rather than Yoga's 59.791016 allocation.; first difference: frame 0, op 190 (addRawPath), field point: expected (250, 59.791016), got (250, 61)."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "path_effect_with_feathers"
@@ -4172,7 +4170,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Number to Lists reset triggers correctly"
 producer_line = 750
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve three 62-wide nested child artboards, or 186, instead of squeezing their background to 180.; first difference: frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The parent returns to width 180. Three Fixed child artboards with 62-point bases keep zero minima and share the row equally at 60, rather than expanding the parent to 186; first difference: frame 0, op 69 (addRawPath), field point: expected (62, -0.0 (0x80000000)), got (60, -0.0 (0x80000000))."
 
 [[case]]
 id = "reset_shared_viewmodel_instance_test"
@@ -5074,7 +5072,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "Multidirectional scroll with threshold"
 producer_line = 295
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the 1500 content width rather than the 500 viewport allocation; inside it, Fixed bases 500 and 1500 shrink proportionally to 375 and 1125. Scroll dispatch is unchanged.; first difference: frame 0, op 62 (addRawPath), field point: expected (500, 0), got (1500, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Overflow mapping keeps the viewport at 500 and the content at 1500. Inside the content row, Fixed bases 500 and 1500 share 1500 by CSS shrink weights, becoming 375 and 1125. Scrolling keeps its 1000-point range; every threshold-drag frame remains compared; first difference: frame 0, op 90 (transform), field tx: expected 500, got 375."
 
 [[case]]
 id = "scroll_threshold-horizontal-scroll"
@@ -5091,12 +5089,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 70.0, y = "artboard-height/2", pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 70.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 62.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 54.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 46.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-up", x = 38.0, y = "artboard-height/2", pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "pointer-down", x = 70.0, y = "artboard-height/2", pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 70.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 62.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 54.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 46.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 38.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 30.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 22.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = 14.0, y = "artboard-height/2", seconds = 0.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-up", x = 6.0, y = "artboard-height/2", pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "Horizontal scroll with threshold"
 producer_line = 230
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the 1700 content width from the 200 and 1500 children rather than the 500 viewport allocation. Scroll dispatch is unchanged.; first difference: frame 0, op 59 (addRawPath), field point: expected (500, 0), got (1700, 0)."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "scroll_threshold-vertical-scroll"
@@ -5514,7 +5512,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "superbowl data binding"
 producer_line = 224
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS shrinking and content minimums redistribute the nested Summary row's space and its fitted image transform. The first image scale becomes 0.218994141 in the ordinary lane and 0.429492176 in the scripted lane instead of 0.674160182; image fitting and drawing code are unchanged.; first difference: frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): In the second Summary, the Fixed Celebration box has a 171.82422-point basis and shrinks to 85.89844. Its fitted square image therefore draws at 85.89844 instead of the height-limited 134.83203; Silver scale changes from 0.6741602 to 0.42949218. Image fitting code is unchanged; first difference: frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218."
 
 [[case]]
 id = "target_event"
@@ -5641,12 +5639,12 @@ view_model = "none"
 sample_times = [0]
 actions = [{ kind = "advance", target = "artboard", seconds = 0.0 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_input_test.cpp"
 provenance_test = "file with text input renders correctly"
 producer_line = 53
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the unchanged text-input measurer's unbounded 492.99805 contribution instead of squeezing the box to 200 in Silver or 340 in Golden. Text input still needs its own true minimum contract.; first difference: frame 0, op 20 (addRawPath), field point: expected (200, 0), got (492.99805, 0)."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "text_layout_7_3"
@@ -5668,7 +5666,7 @@ producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text at 7.3"
 producer_line = 1057
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS lets the small Hug item shrink from 17.300781 to 4.107422 in the 87-wide clock row while its 49.89258 sibling keeps its content floor; the following origin moves from 35.7041 to 29.107422.; first difference: frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The small clock item is a Fixed vector box with authored basis 17.300781, not Hug text. Its drawing-only Solo content has zero minimum. The sibling label has a true longest-word minimum 49.89258, leaving 87 - 16 padding - 17 gap - 49.89258 = 4.107422 for the Fixed box. The C++ following origin 35.7041 becomes 29.107422; first difference: frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422."
 
 [[case]]
 id = "text_layout_pre_7_3"
@@ -5690,7 +5688,7 @@ producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text before 7.3"
 producer_line = 1051
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS lets the small Hug item shrink from 17.300781 to 4.107422 in the 87-wide clock row while its 49.89258 sibling keeps its content floor; the following origin moves from 35.7041 to 29.107422.; first difference: frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The small clock item is a Fixed vector box with authored basis 17.300781, not Hug text. Its drawing-only Solo content has zero minimum. The sibling label has a true longest-word minimum 49.89258, leaving 87 - 16 padding - 17 gap - 49.89258 = 4.107422 for the Fixed box. The C++ following origin 35.7041 becomes 29.107422; first difference: frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422."
 
 [[case]]
 id = "text_listener_simpler"

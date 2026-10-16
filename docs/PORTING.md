@@ -643,11 +643,23 @@ decode queue. Bidi and audio retain their separately tracked status below.
     Hug and Fixed use grow 0, shrink 1 and an automatic basis on either main
     axis, for both LayoutComponent and LayoutParticipant. Fixed dimensions
     supply the basis rather than disabling shrinking. Fill keeps grow and
-    shrink from its fraction, with its existing basis mapping. Flex and grid
+    shrink from its fraction, with its existing basis mapping. Supported flex
     items keep CSS `min-width: auto` and `min-height: auto`; authored minima
-    still win. Taffy resolves the automatic minimum from content and caps it
-    by specified sizes and maxima under CSS rules (Levi, 2026-10-16,
-    [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)).
+    still win. Taffy caps the content minimum by specified sizes and maxima.
+    A flex leaf without a minimum contract keeps main's zero automatic minimum.
+    A mounted artboard is an opaque host boundary. An auto-sized structural
+    container with an unknown descendant contribution also keeps zero on that
+    axis until its full minimum is defined. An explicit length bounds the
+    structural contribution on that axis. The retained tree caches both axis
+    capabilities and refreshes changed ancestor chains, including when text
+    changes fitting mode. Grid and stack items keep their existing CSS auto minima and fallback behavior (Levi,
+    2026-10-16, [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)).
+    Authored overflow maps to Taffy Visible, Hidden or Scroll. A ScrollConstraint
+    is attached to content and its parent is the viewport; its direction makes
+    the corresponding viewport axis scrollable. CSS computes the other visible
+    axis to auto and clip to hidden. Taffy Scroll represents auto's layout
+    behavior, with zero scrollbar width. Rive's draw clip alone maps to Clip,
+    which retains the content minimum. Rive still owns drawing and dispatch.
     Percentages use Taffy's native 0..1 representation. Direction inherits as
     in CSS. A layout root without an authored size fills its host's offer.
     Rive's sizing modes are CSS sizing keywords: a bounded hug is
@@ -686,27 +698,27 @@ decode queue. Bidi and audio retain their separately tracked status below.
     min/max widths to the content box, including padding, borders and box sizing. This is
     required even for Taffy's ContentSize basis pass; the intrinsic width
     returned to Taffy still ignores those limits for flex-basis arithmetic.
-    Authored AutoWidth text, including Fixed/Fill participants whose effective
-    mode is AutoHeight, with ordinary overflow uses normal word boundaries
-    (cluster boundaries for break-all); the zero-bound Rive measurement
-    itself clamps its return to zero. Images use their natural
-    width for both intrinsic sizes. Hosts without a meaningful minimum keep
-    their current protocol, including text input, authored text boxes, fitted
-    fonts, scripted layouts, shapes, nested artboards, n-slices and joysticks.
-    A LayoutComponent leaf falls back to the old answer if any measured child
-    cannot supply a minimum. Exact widths and unbounded hugs keep their
-    existing measurement modes. A CSS MinContent inline request with no known
-    width now returns the true minimum from the same cached shape, including
-    for a Fixed leaf whose automatic minimum Taffy needs. Normal and BreakWord
-    use the longest unbreakable run; BreakAll uses cluster boundaries and
-    NoWrap keeps max-content. The adapter first measures unbounded to populate
-    the shape cache, then measures block size at the minimum inline size,
-    resolving width limits as above. Images use their natural width. Hosts
-    without a minimum contract retain the old unbounded MinContent answer.
-    MaxContent and known-width requests retain their modes. This supplies the
-    supported text/image contributions requested by
-    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893); other leaf kinds
-    still need minimum contracts. The direct upstream text measurer is unchanged.
+    AutoWidth text and every width-owning wrapping text participant, including
+    authored AutoHeight and Fixed text, use the cached shape's word minimum.
+    Normal and BreakWord use the longest unbreakable run; BreakAll uses cluster
+    boundaries and NoWrap AutoWidth text keeps max-content. Fitted fonts and
+    authored nonwrapping boxes lack this contract. A known-width request keeps
+    its existing measurement mode. A MinContent inline request without a known
+    width first populates the cached shape, returns its true minimum and measures
+    height at that width after resolving box limits. The initial measurement
+    preserves the known cross size. Images use the smaller of their natural
+    main size and the known cross size transferred through their natural aspect
+    ratio, on either axis. Without a known cross size they keep natural size.
+    Unsupported flex MinContent axes contribute zero. Text input, fitted fonts,
+    nonwrapping authored boxes, scripted layouts, shapes, nested artboards,
+    n-slices and joysticks keep zero automatic minima until they get contracts;
+    their ordinary Rive measurement protocol stays intact. A measured layout
+    needs a contract from every measured child. Unsupported grid contributions
+    retain their prior fallback. Exact and MaxContent requests keep their modes;
+    max-content is still a flexible basis, not a promise that the box cannot
+    shrink. This supplies the supported text/image part of
+    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893). The bodies of
+    Text::measure and Text::measure_layout are unchanged.
   - *Rive-only Yoga extensions.* Virtualized-grid contributions
     (`YGNodeSetGridVirtualContributions`) are host-side Taffy-only grid items
     that size each unrealized track as its item would. Stock Taffy clamps a
@@ -715,22 +727,23 @@ decode queue. Bidi and audio retain their separately tracked status below.
   - *Gates.* Layout-caused golden, Silver and probe differences are classified
     as layout divergences with a reason per entry; everything else stays
     exact. Golden entries carry `layout-diverges:<reason>` with a pinned
-    `divergence_signature`; Silver ids sit in `LAYOUT_DIVERGENCES`
+    `divergence_signature` and separate full Rust stream SHA-256 pins for the
+    ordinary and scripted lanes; Silver ids sit in `LAYOUT_DIVERGENCES`
     (`tools/silver-corpus/generate_manifest.py`) with a pinned first
     difference. Matrix probe differences live in
     `tests/support/css_layout_matrix.rs`, with the original C++ values, every
     changed scalar, a CSS reason per case and an exact first difference.
     Silver retains its historical 206 exact-ID obligations and numeric floor.
-    `REVIEWED_LAYOUT_DIVERGENCES` explicitly records the 18 UNIV-4844 CSS
-    replacements, with the original C++ values in each first-difference pin.
-    The validator accepts each replacement only as an executable runtime
-    layout divergence with that exact pin; replay must match it. It reports
-    actual C++ equality separately from reviewed CSS coverage. Unlisted,
-    duplicate, unsupported or moved replacements fail. No baseline or epsilon
-    changes. Direct Silver integration assertions use the same closed 18-case
-    review set in `tests/support/browser_layout.rs`, retaining each C++ first
-    value and checking its exact CSS difference. Every unlisted direct
-    assertion stays exact. A moved pin fails the gate.
+    `REVIEWED_LAYOUT_DIVERGENCES` explicitly records reviewed CSS replacements,
+    retaining original C++ first values and a SHA-256 of each full Rust stream.
+    A replacement must remain an executable runtime layout divergence, match
+    its first difference and match every stream byte before it receives floor
+    credit. Actual C++ equality is reported separately. Missing, unlisted,
+    duplicate, unsupported or moved replacements fail. Direct Silver assertions
+    read the same closed ledger and check the same complete stream. The scroll
+    streams include all threshold-drag frames. No baseline or epsilon changes.
+    Quoted Golden reason strings support commas, so prose needs no punctuation
+    workaround. A later change after an unchanged first difference fails too.
     Upstream layout/Yoga changes are product decisions, not mechanical
     translations (see `upstream-sync-map.md`, "Scope decisions").
   `TaffyTree::disable_rounding()` keeps unrounded results.

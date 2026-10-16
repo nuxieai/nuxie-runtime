@@ -151,8 +151,8 @@ SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
 # Layout is a deliberate product divergence from upstream Rive (2026-10-14):
 # Nuxie lays out with stock Taffy and CSS semantics, not Rive's Yoga. Each
 # case whose first difference is caused by that solver change is listed with
-# the reason; its DIVERGENCES row still pins the exact first difference, so a
-# non-layout change that moves it fails validation.
+# the reason. Historical exact replacements pin the full Rust stream too, so
+# changes after the recorded first difference also fail validation.
 LAYOUT_DIVERGENCES: dict[str, str] = {
     "collapse_data_binds-test_1": (
         "a collapsed layout sibling shifts the following item 1.18px less than "
@@ -173,89 +173,118 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 }
 
 
-# UNIV-4844: keep the historical EXACT tuple and every old C++ pin intact.
-# These explicit CSS replacements must replay the exact first difference.
+# UNIV-4844: historical EXACT IDs and the numeric floor stay unchanged.
+# Each reviewed replacement pins the first difference and every Rust stream byte.
+# Previous review artboard_list_overrides_vertical: frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)
+# Previous review bankcard: frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)
+# Previous review db_health_tracker: frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, 0)
+# Previous review global_view_models_scripting_test: frame 0, op 49 (addRawPath), field point: expected (945, 0), got (980, 0)
+# Previous review hittest_ab1_grand_parent: frame 0, op 149 (transform), field ty: expected 100, got 0
+# Previous review hittest_ab1_parent: frame 0, op 129 (addRawPath), field point: expected (572, 0), got (738.65234, 0)
+# Previous review number_to_list_nested_children: frame 0, op 190 (addRawPath), field point: expected (250, 59.791016), got (250, 61)
+# Previous review reset_phase_multi_main: frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)
+# Previous review scroll_threshold-all-scroll: frame 0, op 62 (addRawPath), field point: expected (500, 0), got (1500, 0)
+# Previous review scroll_threshold-horizontal-scroll: frame 0, op 59 (addRawPath), field point: expected (500, 0), got (1700, 0)
+# Previous review text_input: frame 0, op 20 (addRawPath), field point: expected (200, 0), got (492.99805, 0)
 REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got '
                              '(273, 0)',
- 'artboard_list_overrides_vertical': 'frame 0, op 73 (addRawPath), field point: expected (500, 0), '
-                                     'got (700, 0)',
- 'bankcard': 'frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)',
+ 'artboard_list_overrides_vertical': 'frame 0, op 78 (addRawPath), field point: expected (700, 0), '
+                                     'got (500, 0)',
  'collapsing_elements': 'frame 0, op 612 (addRawPath), field point: expected (500, -0.0 '
                         '(0x80000000)), got (499.95004, -0.0 (0x80000000))',
  'component_list_child_origin': 'frame 0, op 105 (transform), field ty: expected 29, got 12.5',
  'data_viz_demo': 'frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, '
                   '16.325203), got (268.33334, 16.325203)',
- 'db_health_tracker': 'frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, '
-                      '0)',
- 'global_view_models_scripting_test': 'frame 0, op 49 (addRawPath), field point: expected (945, '
-                                      '0), got (980, 0)',
- 'hittest_ab1_grand_parent': 'frame 0, op 149 (transform), field ty: expected 100, got 0',
- 'hittest_ab1_parent': 'frame 0, op 129 (addRawPath), field point: expected (572, 0), got '
-                       '(738.65234, 0)',
- 'number_to_list_nested_children': 'frame 0, op 190 (addRawPath), field point: expected (250, '
-                                   '59.791016), got (250, 61)',
- 'reset_phase_multi_main': 'frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, '
-                           '0)',
- 'scroll_threshold-all-scroll': 'frame 0, op 62 (addRawPath), field point: expected (500, 0), got '
-                                '(1500, 0)',
- 'scroll_threshold-horizontal-scroll': 'frame 0, op 59 (addRawPath), field point: expected (500, '
-                                       '0), got (1700, 0)',
+ 'db_health_tracker': 'frame 0, op 7788 (transform), field tx: expected 864.3635, got 857.43286',
+ 'draw_index_list': 'frame 0, op 54 (color): expected color, got makeRenderPaint',
+ 'global_view_models_scripting_test': 'frame 0, op 54 (transform), field tx: expected 500, got '
+                                      '482.14285',
+ 'hittest_ab1_grand_parent': 'frame 0, op 149 (transform), field ty: expected 100, got 31.04248',
+ 'hittest_ab1_parent': 'frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838',
+ 'layout_scroll_snap_carousel': 'frame 0, op 58 (addRawPath), field point: expected (105, -0.0 '
+                                '(0x80000000)), got (94.75, -0.0 (0x80000000))',
+ 'reset_phase_multi_main': 'frame 0, op 69 (addRawPath), field point: expected (62, -0.0 '
+                           '(0x80000000)), got (60, -0.0 (0x80000000))',
+ 'scroll_threshold-all-scroll': 'frame 0, op 90 (transform), field tx: expected 500, got 375',
  'superbowl': 'frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218',
- 'text_input': 'frame 0, op 20 (addRawPath), field point: expected (200, 0), got (492.99805, 0)',
  'text_layout_7_3': 'frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422',
  'text_layout_pre_7_3': 'frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422'}
 
+REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e00881c43f3f84f8d7d9c32ae2a6aad794a7d62e5681b6ce8023962ee1d0cb7d',
+ 'artboard_list_overrides_vertical': '00170e4f8046ef98432522115d2a524430048669472027dd1bb62302ddd3b85c',
+ 'collapsing_elements': '31aff50c0e18b22fde821a2bb136a57e47ef92273f335bdfa62d7778ee917d78',
+ 'component_list_child_origin': '1fd79d63ca4f76bce2fff4e1969c433371cb9df3ec5be2fa9629750449a8dcc6',
+ 'data_viz_demo': 'f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b',
+ 'db_health_tracker': '6c998223bc65747a468d9032fdb34d6e42947eba814981304373e1574fc0f1b2',
+ 'draw_index_list': 'a58f57ec5f85f0ef9e283beb2d04df7e383711e8b5b0f75d6b6c75cc52ad92fb',
+ 'global_view_models_scripting_test': '1ded320dbdca544cc281ee5c950d579bce4d1c69599541943d6f54e9f0cdc364',
+ 'hittest_ab1_grand_parent': '851e237d5066b780524103ba1db0593725cc4973550ab9e9a98ff6dc07dda2c8',
+ 'hittest_ab1_parent': 'a34fe44079a5866f5bb4f9608879c5bc9e92092e2b2978bce2b47c6cd8971107',
+ 'layout_scroll_snap_carousel': 'a3d1eca149df767af713b355ece7a41f67615500c3034dbf654160b65429ac0d',
+ 'reset_phase_multi_main': 'a8338f8b9f5da3996545abeba2ead24f6f28de655815bae9e0b95e828af11278',
+ 'scroll_threshold-all-scroll': 'b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f',
+ 'superbowl': '5a6903ca508cc59dd3aea3155055c5750fef0406bb4b5431eab89bcb39265815',
+ 'text_layout_7_3': 'b8479337b21ca49d674c75d9d21d33898d51c62c95869a7ff7acf621c5705fbb',
+ 'text_layout_pre_7_3': '989f4a77072cb02527a761655a55da1e18d6a7cdbc87385cad034c9465664bad'}
+
 LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its '
                              '273-wide host instead of extending beyond it.',
- 'artboard_list_overrides_vertical': 'CSS automatic minimums sum seven 100-wide child artboards to '
-                                     'a 700-wide content floor instead of the old 500 allocation.',
- 'bankcard': 'CSS automatic minimums keep the lower content row at 740.94385 plus two 63-point '
-             'padding edges, making the card 866.94385 instead of 850. Its 40-point corner leaves '
-             'the first clip point at 826.94385 instead of 810.',
+ 'artboard_list_overrides_vertical': 'The viewport returns to 500 instead of the incorrect 700 '
+                                     'minimum. Its seven Fixed 100-point child artboards keep zero '
+                                     'minima and share the 500-point row, so their content path '
+                                     'changes from 700 to 500.',
  'collapsing_elements': 'CSS flex-shrink 1 lets the nested Fixed 500 box fit its 33.33 percent '
                         'host, 499.95004, instead of keeping the full 500.',
  'component_list_child_origin': "CSS flex-shrink 1 lets a Fixed child artboard fit the list row's "
                                 'height; the half-height origin moves from 29 to 12.5 as its box '
                                 'shrinks from 58 to 25.',
- 'data_viz_demo': "CSS shrinking and content minimums change the chart cells' allocated widths; "
-                  'the first bar gradient endpoint moves from 276.66666 to 268.33334. Gradient '
-                  'interpolation is unchanged.',
- 'db_health_tracker': 'CSS automatic minimums propagate the nested Artboard Measure width 10000 '
-                      'through its containers: panel width 1008 becomes 10174 and the padded '
-                      'ancestor 1048 becomes 10214.',
- 'global_view_models_scripting_test': 'CSS automatic minimums preserve the Main artboard width 500 '
-                                      'plus the GlobalName list width 480, or 980, instead of '
-                                      'squeezing their parent to 945.',
- 'hittest_ab1_grand_parent': 'CSS min-height:auto keeps the nested 572-high content above the '
-                             '208.60547 column offer; flex-shrink 1 reduces the leading Fixed 100 '
-                             'box to zero and moves the following item from y 100 to zero.',
- 'hittest_ab1_parent': 'CSS min-width:auto floors parent-clipper at the content contributions '
-                       '238.65234 plus nested width 500, or 738.65234, instead of squeezing it to '
-                       '572.',
- 'number_to_list_nested_children': 'CSS automatic minimums keep the nested list row at its 61 '
-                                   "content height rather than Yoga's 59.791016 allocation.",
- 'reset_phase_multi_main': 'CSS automatic minimums preserve three 62-wide nested child artboards, '
-                           'or 186, instead of squeezing their background to 180.',
- 'scroll_threshold-all-scroll': 'CSS automatic minimums preserve the 1500 content width rather '
-                                'than the 500 viewport allocation; inside it, Fixed bases 500 and '
-                                '1500 shrink proportionally to 375 and 1125. Scroll dispatch is '
-                                'unchanged.',
- 'scroll_threshold-horizontal-scroll': 'CSS automatic minimums preserve the 1700 content width '
-                                       'from the 200 and 1500 children rather than the 500 '
-                                       'viewport allocation. Scroll dispatch is unchanged.',
- 'superbowl': "CSS shrinking and content minimums redistribute the nested Summary row's space and "
-              'its fitted image transform. The first image scale becomes 0.218994141 in the '
-              'ordinary lane and 0.429492176 in the scripted lane instead of 0.674160182; image '
-              'fitting and drawing code are unchanged.',
- 'text_input': "CSS automatic minimums preserve the unchanged text-input measurer's unbounded "
-               '492.99805 contribution instead of squeezing the box to 200 in Silver or 340 in '
-               'Golden. Text input still needs its own true minimum contract.',
- 'text_layout_7_3': 'CSS lets the small Hug item shrink from 17.300781 to 4.107422 in the 87-wide '
-                    'clock row while its 49.89258 sibling keeps its content floor; the following '
-                    'origin moves from 35.7041 to 29.107422.',
- 'text_layout_pre_7_3': 'CSS lets the small Hug item shrink from 17.300781 to 4.107422 in the '
-                        '87-wide clock row while its 49.89258 sibling keeps its content floor; the '
-                        'following origin moves from 35.7041 to 29.107422.'})
+ 'data_viz_demo': 'The two 50-percent chart cells in the 772-point row have 34-point padding edges '
+                  'and a 20-point gap. Their 352-point bases shrink to (772 - 68 - 20)/2 = 342. '
+                  'The LineBars gradient endpoint is five sixths of the cell width after 20 '
+                  'padding, changing from 276.66666 to 268.33334.',
+ 'db_health_tracker': 'The panel returns to its 1008-point offer and no longer floors at the '
+                      'opaque 10000-point artboard contribution. Internal Fixed items still share '
+                      'shrink, moving the first remaining transform x from 864.3635 to 857.43286.',
+ 'draw_index_list': 'Ten Fixed 50-point child artboards keep zero automatic minima. With nine '
+                    'negative 10-point gaps, they share the 100-point column at (100 + 90)/10 = 19 '
+                    'each. The visible overlapping carousel items change, so the first stream '
+                    'difference is color versus paint creation. Draw-index dispatch is unchanged '
+                    'and looping scrolling remains available.',
+ 'global_view_models_scripting_test': 'The parent returns to width 945. Fixed bases 500 and 480 '
+                                      'share that offer by CSS shrink weights: Main becomes '
+                                      '482.14285 and GlobalName 462.85715, instead of keeping 500 '
+                                      'and 480.',
+ 'hittest_ab1_grand_parent': 'The opaque nested artboard keeps zero minimum. Fixed bases 100 and '
+                             '572 share the 208.60547 column: the first item becomes 31.04248 and '
+                             'the following origin moves from 100 to 31.04248.',
+ 'hittest_ab1_parent': 'Parent-clipper returns to width 572. Fixed bases 238.65234 and 500 share '
+                       'that offer with zero minima, becoming 184.80838 and 387.19162. The first '
+                       'nested transform x changes from 238.65234 to 184.80838.',
+ 'layout_scroll_snap_carousel': 'Four Fixed 105-point child artboards keep zero automatic minima '
+                                'and share the 415-point row after three 12-point gaps: (415 - '
+                                '36)/4 = 94.75 each. Looping scroll and snap dispatch remain '
+                                'active; the whole swipe and settlement stream is pinned.',
+ 'reset_phase_multi_main': 'The parent returns to width 180. Three Fixed child artboards with '
+                           '62-point bases keep zero minima and share the row equally at 60, '
+                           'rather than expanding the parent to 186.',
+ 'scroll_threshold-all-scroll': 'Overflow mapping keeps the viewport at 500 and the content at '
+                                '1500. Inside the content row, Fixed bases 500 and 1500 share 1500 '
+                                'by CSS shrink weights, becoming 375 and 1125. Scrolling keeps its '
+                                '1000-point range; every threshold-drag frame remains compared.',
+ 'superbowl': 'In the second Summary, the Fixed Celebration box has a 171.82422-point basis and '
+              'shrinks to 85.89844. Its fitted square image therefore draws at 85.89844 instead of '
+              'the height-limited 134.83203; Silver scale changes from 0.6741602 to 0.42949218. '
+              'Image fitting code is unchanged.',
+ 'text_layout_7_3': 'The small clock item is a Fixed vector box with authored basis 17.300781, not '
+                    'Hug text. Its drawing-only Solo content has zero minimum. The sibling label '
+                    'has a true longest-word minimum 49.89258, leaving 87 - 16 padding - 17 gap - '
+                    '49.89258 = 4.107422 for the Fixed box. The C++ following origin 35.7041 '
+                    'becomes 29.107422.',
+ 'text_layout_pre_7_3': 'The small clock item is a Fixed vector box with authored basis 17.300781, '
+                        'not Hug text. Its drawing-only Solo content has zero minimum. The sibling '
+                        'label has a true longest-word minimum 49.89258, leaving 87 - 16 padding - '
+                        '17 gap - 49.89258 = 4.107422 for the Fixed box. The C++ following origin '
+                        '35.7041 becomes 29.107422.'})
 
 
 def reviewed_divergence(silver_id: str) -> str | None:
@@ -268,7 +297,7 @@ def layout_divergence_note(silver_id: str, difference: str) -> str | None:
         return None
     return (
         "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): "
-        f"{reason}; first difference: {difference}."
+        f"{reason.rstrip('.')}; first difference: {difference}."
     )
 
 PROVENANCE_UNKNOWN = {
@@ -3624,6 +3653,11 @@ def render_actions(actions: str | tuple[dict[str, object], ...]) -> str:
 
 
 def render(producers: list[Producer]) -> str:
+    if REVIEWED_LAYOUT_DIVERGENCES.keys() != REVIEWED_LAYOUT_STREAM_SHA256.keys():
+        raise ValueError("reviewed layout difference and full stream hash IDs must match")
+    for silver_id, stream_hash in REVIEWED_LAYOUT_STREAM_SHA256.items():
+        if not re.fullmatch(r"[0-9a-f]{64}", stream_hash):
+            raise ValueError(f"{silver_id} needs a full Rust stream SHA-256")
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
@@ -3656,7 +3690,9 @@ def render(producers: list[Producer]) -> str:
     for silver_id, difference in sorted(REVIEWED_LAYOUT_DIVERGENCES.items()):
         if silver_id not in EXACT:
             raise ValueError(f"{silver_id} is not a historical exact obligation")
-        lines.append("  { id = " + quoted(silver_id) + ", first_difference = " + quoted(difference) + " },")
+        stream_hash = REVIEWED_LAYOUT_STREAM_SHA256[silver_id]
+        lines.append("  { id = " + quoted(silver_id) + ", first_difference = " + quoted(difference)
+                     + ", rust_stream_sha256 = " + quoted(stream_hash) + " },")
     lines.extend(["]", ""])
     for producer in producers:
         lines.extend(

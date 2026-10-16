@@ -11,6 +11,7 @@ repository.workspace = true
 strict-fp = ["nuxie-runtime/strict-fp"]
 
 [dependencies]
+sha2 = "0.10"
 anyhow = "1"
 nuxie-render-api = { path = "../../crates/nuxie-render-api" }
 nuxie-runtime = { path = "../../crates/nuxie-runtime", features = ["tools"] }

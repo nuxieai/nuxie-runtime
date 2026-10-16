@@ -1,5 +1,6 @@
 use anyhow::Context;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -52,6 +53,8 @@ pub struct CorpusConfig {
 pub struct ReviewedLayoutDivergence {
     pub id: String,
     pub first_difference: String,
+    #[serde(default)]
+    pub rust_stream_sha256: String,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -421,6 +424,15 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             "reviewed layout id is not a historical exact obligation: {}",
             review.id
         );
+        anyhow::ensure!(
+            review.rust_stream_sha256.len() == 64
+                && review
+                    .rust_stream_sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+            "reviewed layout requires a full lowercase SHA256 stream hash: {}",
+            review.id
+        );
         let case = manifest
             .cases
             .iter()
@@ -461,6 +473,28 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
         config.min_cpp_rust_exact
     );
     Ok(summary)
+}
+
+/// Verify the reviewed replay. The full stream is part of the approval.
+pub fn verify_reviewed_layout_stream(
+    review: &ReviewedLayoutDivergence,
+    difference: &Difference,
+    bytes: &[u8],
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        difference.to_string() == review.first_difference,
+        "{} reviewed first difference changed",
+        review.id
+    );
+    let actual_hash = format!("{:x}", Sha256::digest(bytes));
+    anyhow::ensure!(
+        actual_hash == review.rust_stream_sha256,
+        "{} reviewed full stream changed: expected {}, got {}",
+        review.id,
+        review.rust_stream_sha256,
+        actual_hash
+    );
+    Ok(())
 }
 
 pub fn compare_files(expected: &Path, actual: &Path) -> anyhow::Result<()> {
@@ -633,8 +667,7 @@ reviewed_layout_divergences = [{records}]
         (fixture, manifest)
     }
 
-    const LAYOUT_REVIEW: &str =
-        r#"{ id = "case-000", first_difference = "frame 0, op 0, width 200 != 260" }"#;
+    const LAYOUT_REVIEW: &str = r#"{ id = "case-000", first_difference = "frame 0, op 0, width 200 != 260", rust_stream_sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }"#;
 
     #[test]
     fn reviewed_layout_keeps_historical_exact_coverage() {
@@ -714,5 +747,47 @@ reviewed_layout_divergences = [{records}]
                 .to_string()
                 .contains("must remain an executable runtime divergence")
         );
+    }
+    fn two_frame_transform_stream(first_x: f32, second_x: f32) -> Vec<u8> {
+        let mut bytes = b"SRIV\x01".to_vec();
+        for (frame, x) in [first_x, second_x].into_iter().enumerate() {
+            if frame != 0 {
+                bytes.push(28);
+            }
+            bytes.push(9);
+            for value in [1.0f32, 0.0, 0.0, 1.0, x, 0.0] {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        bytes
+    }
+
+    #[test]
+    fn layout_review_rejects_a_change_after_the_first_difference() {
+        let expected = parse_sriv(&two_frame_transform_stream(0.0, 0.0)).unwrap();
+        let approved = two_frame_transform_stream(10.0, 0.0);
+        let changed = two_frame_transform_stream(10.0, 20.0);
+        let approved_difference =
+            compare_sriv(&expected, &parse_sriv(&approved).unwrap()).unwrap_err();
+        let changed_difference =
+            compare_sriv(&expected, &parse_sriv(&changed).unwrap()).unwrap_err();
+        assert_eq!(approved_difference, changed_difference);
+        let review = ReviewedLayoutDivergence {
+            id: "two-frame-layout".to_owned(),
+            first_difference: "frame 0, op 0 (transform), field tx: expected 0, got 10".to_owned(),
+            rust_stream_sha256: "193cfb855baa26c49cff15ba0dc597c3772430f3768ee35306aafc8781450197"
+                .to_owned(),
+        };
+        assert!(verify_reviewed_layout_stream(&review, &approved_difference, &approved).is_ok());
+        assert!(verify_reviewed_layout_stream(&review, &changed_difference, &changed).is_err());
+    }
+
+    #[test]
+    fn layout_review_requires_a_full_stream_hash() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        manifest.corpus.reviewed_layout_divergences[0]
+            .rust_stream_sha256
+            .clear();
+        assert!(validate_manifest(&manifest, &fixture.root).is_err());
     }
 }

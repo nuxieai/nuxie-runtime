@@ -131,8 +131,9 @@ fn assert_matches(silver_name: &str, actual: &PersistentFactory<SerializingFacto
     let expected_bytes = std::fs::read(&expected_path)
         .unwrap_or_else(|error| panic!("read pinned SRIV {}: {error}", expected_path.display()));
     let expected = parse_sriv(&expected_bytes).expect("parse pinned SRIV");
-    let actual = parse_sriv(&actual.borrow().bytes()).expect("parse Rust SRIV");
-    browser_layout::reviewed_result(silver_name, compare_sriv(&expected, &actual))
+    let actual_bytes = actual.borrow().bytes().to_vec();
+    let actual = parse_sriv(&actual_bytes).expect("parse Rust SRIV");
+    browser_layout::reviewed_result(silver_name, compare_sriv(&expected, &actual), &actual_bytes)
         .unwrap_or_else(|difference| panic!("{silver_name}: {difference}"));
 }
 

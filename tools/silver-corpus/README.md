@@ -25,11 +25,15 @@ independently as their literal C++ action/output replays land; the remainder
 stay `pending-scripted`, and three baselines remain `provenance-unknown`. The
 exact-ID ledger and `min_cpp_rust_exact` ratchet prevent exact cases from being
 silently downgraded. UNIV-4844 retains all 206 historical IDs and the numeric
-floor, with 18 explicit CSS replacements in `reviewed_layout_divergences`.
-Each replacement must remain an executable runtime layout divergence and
-match its exact recorded first operation. Unknown, duplicate, unsupported or
-changed replacements fail. Actual C++ equality is printed separately from
-reviewed CSS coverage; the original SRIV streams and epsilons stay intact.
+floor. A CSS replacement in `reviewed_layout_divergences` must remain an
+executable runtime layout divergence, retain its C++ first-difference value,
+and match the SHA-256 of the full approved Rust stream. The hash covers every
+frame and every operation, so a later change cannot hide behind the first
+mismatch. Direct integration assertions use this same closed ledger. Missing,
+unlisted, duplicate, unsupported, changed or unhashed replacements fail.
+Floor credit is given only after the first difference and full stream match.
+Actual C++ equality is reported separately from reviewed CSS coverage. The
+original SRIV baselines and epsilons stay intact.
 
 Run:
 

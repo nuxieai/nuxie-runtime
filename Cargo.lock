@@ -651,6 +651,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "nuxie-binary",
+ "sha2",
 ]
 
 [[package]]
@@ -1985,6 +1986,7 @@ dependencies = [
  "nuxie-scripting",
  "nuxie-sriv",
  "serde",
+ "sha2",
  "toml",
 ]
 

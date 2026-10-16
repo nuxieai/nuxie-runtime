@@ -38,8 +38,9 @@ fn replay(id: &str, test_name: &str) {
     let expected =
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
-    let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    browser_layout::reviewed_result(id, compare_sriv(&expected, &actual))
+    let actual_bytes = actual.bytes().to_vec();
+    let actual = parse_sriv(&actual_bytes).expect("parse Rust SRIV");
+    browser_layout::reviewed_result(id, compare_sriv(&expected, &actual), &actual_bytes)
         .unwrap_or_else(|difference| panic!("{id}: {difference}"));
 }
 

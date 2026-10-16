@@ -83,8 +83,12 @@ pub(crate) struct PlainTransform {
     // propagation to its paints).
     pub(crate) after: Option<fn(&CoreHandle, ComponentDirt)>,
     // A Path's cells. The kernel runs only the path's transform-only updates
-    // (see `takes`); the path's own update handles the rest.
+    // and a PointsPath's deferred rebuilds (see `takes`); the path's own
+    // update handles the rest.
     pub(crate) path: Option<Rc<crate::mechanical_port::source::shapes::path_cells::PathCells>>,
+    // Whether the path is a PointsPath, whose update adds only its skin's
+    // deformation before Path::update.
+    pub(crate) points_path: bool,
 }
 
 impl PlainTransform {
@@ -93,13 +97,25 @@ impl PlainTransform {
     /// rebuild), or for world-transform dirt under a deformer (the rebuild).
     /// Every other update is TransformComponent::update after resetting the
     /// path's shape notification gate, which the kernel runs.
+    ///
+    /// Path dirt on a PointsPath without a skin adds nothing before
+    /// Path::update, and Path::update only defers its rebuild while the
+    /// hidden shape allows that, which the path's own transform update
+    /// cannot change: the kernel runs those updates too and defers.
     #[inline]
     pub(crate) fn takes(&self, dirt: ComponentDirt) -> bool {
         match &self.path {
             None => true,
             Some(path) => {
-                !dirt.intersects(ComponentDirt::PATH | ComponentDirt::N_SLICER)
-                    && !(dirt.contains(ComponentDirt::WORLD_TRANSFORM) && path.has_deformer())
+                if dirt.intersects(ComponentDirt::N_SLICER) {
+                    return false;
+                }
+                if dirt.contains(ComponentDirt::PATH) {
+                    return self.points_path
+                        && !path.is_skinned()
+                        && path.can_defer_path_update();
+                }
+                !(dirt.contains(ComponentDirt::WORLD_TRANSFORM) && path.has_deformer())
             }
         }
     }
@@ -110,6 +126,12 @@ impl PlainTransform {
             path.reset_shape_notification();
         }
         self.update_transform(dirt);
+        if let Some(path) = &self.path
+            && dirt.contains(ComponentDirt::PATH)
+        {
+            // Path::update's rebuild, deferred (`takes` saw that it defers).
+            path.set_deferred(true);
+        }
         if let Some(after) = self.after {
             after(owner, dirt);
         }

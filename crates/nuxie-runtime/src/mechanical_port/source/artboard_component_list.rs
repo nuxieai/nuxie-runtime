@@ -1317,28 +1317,32 @@ impl ArtboardComponentList {
         let advance_nested = flags.contains(AdvanceFlags::ADVANCE_NESTED);
         let new_frame = flags.contains(AdvanceFlags::NEW_FRAME);
         let advancing_flags = flags & !AdvanceFlags::IS_ROOT;
-        let mut index = owner
-            .with_downcast::<Self, _>(|list| list.next_awake_row(0))
-            .unwrap() as i32;
-        while index
-            < owner
-                .with_downcast::<Self, _>(Self::artboard_count)
-                .expect("live ArtboardComponentList") as i32
-        {
-            if new_frame
-                && owner
-                    .with_downcast_mut::<Self, _>(|list| list.try_quiet_row(index as usize))
-                    .unwrap()
-            {
-                index = owner
-                    .with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1))
-                    .unwrap() as i32;
-                continue;
-            }
+        let mut next = 0;
+        loop {
+            // Step to the next awake row, quieting each row a new frame finds
+            // at rest, and take its machine, under one loan of the list.
+            let Some((index, state_machine)) = owner
+                .with_downcast_mut::<Self, _>(|list| {
+                    let mut index = list.next_awake_row(next);
+                    while index < list.artboard_count() {
+                        if !(new_frame && list.try_quiet_row(index)) {
+                            let state_machine = if advance_nested {
+                                list.state_machine_instance(index as i32)
+                            } else {
+                                None
+                            };
+                            return Some((index, state_machine));
+                        }
+                        index = list.next_awake_row(index + 1);
+                    }
+                    None
+                })
+                .expect("live ArtboardComponentList")
+            else {
+                break;
+            };
+            let index = index as i32;
             if advance_nested {
-                let state_machine = owner
-                    .with_downcast::<Self, _>(|owner| owner.state_machine_instance(index))
-                    .flatten();
                 if let Some(state_machine) = state_machine {
                     if state_machine.with_instance_mut(|state_machine| {
                         if !new_frame {
@@ -1367,9 +1371,7 @@ impl ArtboardComponentList {
                     });
                 }
             }
-            index = owner
-                .with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1))
-                .unwrap() as i32;
+            next = index as usize + 1;
         }
         #[cfg(any(test, feature = "testing"))]
         owner.with_downcast::<Self, _>(|list| {
@@ -2019,21 +2021,21 @@ impl ArtboardComponentList {
         {
             return;
         }
-        let mut index = owner
-            .with_downcast::<Self, _>(|list| list.next_awake_row(0))
-            .unwrap();
-        while index
-            < owner
-                .with_downcast::<Self, _>(Self::artboard_count)
+        let mut next = 0;
+        loop {
+            // The next awake row and its machine, under one loan of the list.
+            let Some((index, machine)) = owner
+                .with_downcast::<Self, _>(|list| {
+                    let index = list.next_awake_row(next);
+                    (index < list.artboard_count())
+                        .then(|| (index, list.state_machine_instance(index as i32)))
+                })
                 .expect("ArtboardComponentList host")
-        {
-            let machine = owner
-                .with_downcast::<Self, _>(|list| list.state_machine_instance(index as i32))
-                .flatten();
+            else {
+                break;
+            };
             if let Some(machine) = machine {
-                let container =
-                    machine.with_instance(|machine| machine.data_bind_container.clone());
-                container.update_data_binds(false);
+                machine.data_bind_container().update_data_binds(false);
             }
             let artboard = owner
                 .with_downcast::<Self, _>(|list| list.artboard_instance(index as i32))
@@ -2041,9 +2043,7 @@ impl ArtboardComponentList {
             if let Some(artboard) = artboard {
                 artboard.update_data_binds(true);
             }
-            index = owner
-                .with_downcast::<Self, _>(|list| list.next_awake_row(index + 1))
-                .unwrap();
+            next = index + 1;
         }
         #[cfg(any(test, feature = "testing"))]
         owner.with_downcast::<Self, _>(|list| {

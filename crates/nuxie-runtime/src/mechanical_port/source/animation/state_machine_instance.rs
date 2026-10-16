@@ -3147,6 +3147,11 @@ impl RuntimeStateMachineInstanceHandle {
         }
     }
 
+    /// The machine's data bind container, without borrowing the machine.
+    pub(crate) fn data_bind_container(&self) -> &DataBindContainer {
+        &self.0.binds
+    }
+
     pub(crate) fn borrow_instance_mut(&self) -> std::cell::RefMut<'_, StateMachineInstance> {
         self.0.instance.borrow_mut()
     }

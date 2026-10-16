@@ -1919,6 +1919,49 @@ mod transformed_area_consumer_tests {
     use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
     use nuxie_render_api::Vec2D;
 
+    /// A drawing script's `Path:quadTo` reaches the renderer through
+    /// `addUntrustedRawPath`. Its fill and coarse area once hit
+    /// RIVE_UNREACHABLE; they now draw the quad's own cubic.
+    #[test]
+    fn a_scripted_quad_fills_as_the_cubic_it_is() {
+        use nuxie_render_api::{PathVerb, RenderPath};
+        let (start, control, end) = (
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(30.0, 0.0),
+            Vec2D::new(30.0, 30.0),
+        );
+        let mut quad = RawPath::new();
+        quad.move_to(start.x, start.y);
+        quad.quad_to(control.x, control.y, end.x, end.y);
+        quad.line_to(0.0, 30.0);
+        quad.close();
+        let mut cubic = RawPath::new();
+        cubic.move_to(start.x, start.y);
+        cubic.cubic(
+            Vec2D::lerp(start, control, 2.0 / 3.0),
+            Vec2D::lerp(end, control, 2.0 / 3.0),
+            end,
+        );
+        cubic.line_to(0.0, 30.0);
+        cubic.close();
+
+        let mut scripted = RiveRenderPath::default();
+        scripted.add_untrusted_raw_path(&quad);
+        assert!(!scripted.m_rawPath.verbs().contains(&PathVerb::Quad));
+        assert_eq!(scripted.m_rawPath.verbs(), cubic.verbs());
+        assert_eq!(scripted.m_rawPath.points(), cubic.points());
+
+        let filled = build_source_fill_tessellation(&scripted.m_rawPath, Mat2D::IDENTITY)
+            .expect("a scripted quad fills");
+        let expected = build_source_fill_tessellation(&cubic, Mat2D::IDENTITY).unwrap();
+        assert_eq!(filled.spans.len(), expected.spans.len());
+        assert_eq!(filled.instance_count, expected.instance_count);
+
+        let mut authored = RiveRenderPath::default();
+        authored.add_raw_path(cubic.as_ref());
+        assert_eq!(scripted.getCoarseArea(), authored.getCoarseArea());
+    }
+
     #[test]
     fn single_pass_draws_push_their_combined_contents() {
         use super::{ClipResetAction, gpu_cpp, make_clip_reset};

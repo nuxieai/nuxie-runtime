@@ -145,7 +145,7 @@ use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
     LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
 use nuxie_render_api::{
-    Aabb, FillRule, Mat2D, RawPath, RawPathRef, RenderPath as ApiRenderPath, Vec2D,
+    Aabb, FillRule, Mat2D, PathVerb, RawPath, RawPathRef, RenderPath as ApiRenderPath, Vec2D,
 };
 use std::any::Any;
 use std::cell::{Cell, RefCell};
@@ -415,9 +415,56 @@ unsafe impl RenderPathContract for RiveRenderPath {
     }
     fn addRawPath(&mut self, path: RawPathRef<'_>) {
         self.assertRawPathMutationsUnlocked();
-        self.m_rawPath.add_path_view(path);
+        if path.verbs().contains(&PathVerb::Quad) {
+            let (verbs, points) = quads_as_cubics(path);
+            self.m_rawPath
+                .add_path_view(RawPathRef::new(&verbs, &points));
+        } else {
+            self.m_rawPath.add_path_view(path);
+        }
         self.m_dirt.set(u32::MAX);
     }
+}
+
+/// Superset of upstream: `RiveRenderPath::addRawPath` keeps a quad, and every
+/// reader of the stored path (draw.cpp's tessellation, computeCoarseArea,
+/// makeSoftenedCopyForFeathering) treats one as RIVE_UNREACHABLE. A script's
+/// `Path:quadTo` reaches here through `addUntrustedRawPath`, so one drawing
+/// script would stop the renderer. Each quad is stored as the cubic it
+/// already is, elevated as upstream `RawPath::addTo` does: the same curve.
+fn quads_as_cubics(path: RawPathRef<'_>) -> (Vec<PathVerb>, Vec<Vec2D>) {
+    let source = path.points();
+    let mut verbs = Vec::with_capacity(path.verbs().len());
+    let mut points = Vec::with_capacity(source.len() + path.verbs().len());
+    let mut index = 0;
+    for &verb in path.verbs() {
+        match verb {
+            PathVerb::Move | PathVerb::Line => {
+                points.push(source[index]);
+                index += 1;
+                verbs.push(verb);
+            }
+            PathVerb::Quad => {
+                // RawPath injects a move before a leading segment, so a quad
+                // always follows a point.
+                let start = points.last().copied().unwrap_or(source[index]);
+                let control = source[index];
+                let end = source[index + 1];
+                points.push(Vec2D::lerp(start, control, 2.0 / 3.0));
+                points.push(Vec2D::lerp(end, control, 2.0 / 3.0));
+                points.push(end);
+                index += 2;
+                verbs.push(PathVerb::Cubic);
+            }
+            PathVerb::Cubic => {
+                points.extend_from_slice(&source[index..index + 3]);
+                index += 3;
+                verbs.push(verb);
+            }
+            PathVerb::Close => verbs.push(verb),
+        }
+    }
+    (verbs, points)
 }
 impl ApiRenderPath for RiveRenderPath {
     fn as_any(&self) -> &dyn Any {

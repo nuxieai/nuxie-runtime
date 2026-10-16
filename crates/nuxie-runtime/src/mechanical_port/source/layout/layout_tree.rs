@@ -322,12 +322,7 @@ pub(crate) fn measure_fit_content(
     if supports_minimum
         && (min_content || (width.1 == LayoutMeasureMode::AtMost && width.0.is_finite()))
     {
-        let maximum = measure(
-            f32::NAN,
-            LayoutMeasureMode::Undefined,
-            f32::NAN,
-            LayoutMeasureMode::Undefined,
-        );
+        let maximum = measure(f32::NAN, LayoutMeasureMode::Undefined, height.0, height.1);
         if let Some(minimum) = minimum().filter(|minimum| minimum.is_finite()) {
             if maximum.x.is_finite() {
                 let inline = if min_content {

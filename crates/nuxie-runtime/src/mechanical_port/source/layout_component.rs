@@ -3096,27 +3096,36 @@ impl LayoutComponent {
         use crate::mechanical_port::source::layout::{
             layout_measure_mode::unbound_measure_mode,
             layout_participant::{
-                LayoutParticipant, host_min_content_width, host_supports_min_content_width,
+                LayoutParticipant, host_min_content_height, host_min_content_width,
+                host_supports_min_content_width,
             },
             layout_tree::{measure_axis, measure_fit_content},
         };
-        fn measure_host(
-            host: &CoreHandle,
-            width: f32,
-            width_mode: LayoutMeasureMode,
-            height: f32,
-            height_mode: LayoutMeasureMode,
-        ) -> Vec2D {
+        let measure_host = |host: &CoreHandle,
+                            width: f32,
+                            width_mode: LayoutMeasureMode,
+                            height: f32,
+                            height_mode: LayoutMeasureMode|
+         -> Vec2D {
             #[cfg(test)]
             layout_fit_content_tests::note_host_measure();
-            host.with_mut(|object| {
-                object
-                    .as_intrinsically_sizeable_mut()
-                    .map(|sizeable| sizeable.measure_layout(width, width_mode, height, height_mode))
-            })
-            .flatten()
-            .unwrap_or_default()
-        }
+            let mut measured = host
+                .with_mut(|object| {
+                    object.as_intrinsically_sizeable_mut().map(|sizeable| {
+                        sizeable.measure_layout(width, width_mode, height, height_mode)
+                    })
+                })
+                .flatten()
+                .unwrap_or_default();
+            if known.height.is_none()
+                && available.height == taffy::prelude::AvailableSpace::MinContent
+            {
+                if let Some(minimum) = host_min_content_height(host, known.width) {
+                    measured.y = minimum;
+                }
+            }
+            measured
+        };
         // An unbounded axis carries no number.
         let offer = |value: f32, mode: LayoutMeasureMode| {
             if mode == LayoutMeasureMode::Undefined {
@@ -3180,7 +3189,7 @@ impl LayoutComponent {
                             width_limits,
                             min_content,
                             (intrinsic_width || min_content) && supports,
-                            || host_min_content_width(&host),
+                            || host_min_content_width(&host, known.height),
                             |width, width_mode, height, height_mode| {
                                 measure_host(&host, width, width_mode, height, height_mode)
                             },
@@ -3220,7 +3229,8 @@ impl LayoutComponent {
                                 .iter()
                                 .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
                                 .try_fold(0.0f32, |minimum, child| {
-                                    host_min_content_width(child).map(|next| minimum.max(next))
+                                    host_min_content_width(child, known.height)
+                                        .map(|next| minimum.max(next))
                                 })
                         },
                         |width, width_mode, height, height_mode| {

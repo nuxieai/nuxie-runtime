@@ -1126,3 +1126,98 @@ fn css_draw_clip_keeps_the_word_minimum() {
     // Rive's draw clip is CSS overflow:clip, not a scroll container.
     assert_width(&f, 145.4414);
 }
+
+fn image_transfer_fixture(participant: bool, row: bool) -> (CoreArena, CoreHandle, CoreHandle) {
+    use crate::source::shapes::image::Image;
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(200.0), row);
+    root.with_downcast_mut::<LayoutComponent, _>(|r| {
+        r.base.set_height_value(120.0);
+        r.with_style_mut(|s| {
+            s.base
+                .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+            s.base.set_height_units_value_value(YGUnit::Point as u8);
+        });
+    })
+    .unwrap();
+    let mut image = Image::default();
+    image.set_runtime_size(442.0, 412.0);
+    let image = arena.insert(image);
+    let subject = if participant {
+        attach(&arena, &root, &image);
+        let mut p = LayoutParticipant::default();
+        p.base
+            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+        p.base
+            .set_layout_height_scale_type_value(LayoutScaleType::Fill as u8);
+        let p = arena.insert(p);
+        attach(&arena, &image, &p);
+        let mut context = ParentContext {
+            arena: &arena,
+            parent: image.clone(),
+        };
+        assert_eq!(
+            LayoutParticipant::on_added_clean_occurrence(&p, &mut context),
+            StatusCode::Ok
+        );
+        p
+    } else {
+        let subject = layout(&arena, Some(&root), None, false);
+        attach(&arena, &subject, &image);
+        subject
+            .with_downcast_mut::<LayoutComponent, _>(|l| {
+                l.with_style_mut(|s| {
+                    s.base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    s.base
+                        .set_layout_height_scale_type_value(LayoutScaleType::Fill as u8);
+                });
+            })
+            .unwrap();
+        LayoutComponent::sync_style_occurrence(&subject);
+        LayoutComponent::sync_layout_children_occurrence(&subject);
+        subject
+    };
+    let sibling = layout(&arena, Some(&root), Some(60.0), false);
+    let content = layout(&arena, Some(&sibling), Some(60.0), false);
+    if !row {
+        for node in [&sibling, &content] {
+            node.with_downcast_mut::<LayoutComponent, _>(|l| {
+                l.base.set_height_value(40.0);
+                l.with_style_mut(|s| {
+                    s.base
+                        .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                    s.base.set_height_units_value_value(YGUnit::Point as u8);
+                });
+            })
+            .unwrap();
+        }
+    }
+    for node in [&content, &sibling, &root] {
+        LayoutComponent::sync_style_occurrence(node);
+        LayoutComponent::sync_layout_children_occurrence(node);
+    }
+    (arena, root, subject)
+}
+row_hosts!(
+    css_image_transfers_the_known_cross_size,
+    css_image_participant_transfers_the_known_cross_size,
+    |participant| {
+        for row in [true, false] {
+            let (_arena, root, image) = image_transfer_fixture(participant, row);
+            LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+            let bounds = solved(&image);
+            if row {
+                // min(442, 120 * 442 / 412) = 128.73787. The 140px
+                // remaining after the 60px sibling is above that minimum.
+                assert!((bounds.width() - 140.0).abs() < 0.001, "{bounds:?}");
+                assert_eq!(bounds.height(), 120.0);
+            } else {
+                // min(412, 200 * 412 / 442) = 186.42534. This exceeds
+                // the 80px remaining in the column and must overflow.
+                assert!((bounds.height() - 186.42534).abs() < 0.001, "{bounds:?}");
+                assert_eq!(bounds.width(), 200.0);
+            }
+        }
+    }
+);

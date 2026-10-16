@@ -201,7 +201,7 @@ impl LayoutParticipant {
         self.owner_handle()?.with_mut(f)
     }
 
-    fn owning_layout_handle(&self) -> Option<CoreHandle> {
+    pub(crate) fn owning_layout_handle(&self) -> Option<CoreHandle> {
         // Source owningLayout walks every Component ancestor independently of
         // transformComponent's stricter host type check.
         Self::owning_layout_from(self.base.parent_handle())

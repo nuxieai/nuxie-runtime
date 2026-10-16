@@ -602,3 +602,47 @@ fn css_fit_content_keeps_direct_rive_measure_answers() {
         .unwrap();
     assert_eq!(zero.x, 0.0);
 }
+
+// These properties publish PAINT dirt upstream, but both affect measured height.
+#[test]
+fn css_fit_content_participant_paragraph_spacing_publishes_height() {
+    use crate::source::component::ComponentDirt;
+    let f = Fixture::new_host("experience\nexperience", 338.0, false, true);
+    let before = f.solve();
+    assert!((before.height() - 70.30176).abs() < 0.001, "{before:?}");
+    f.text.with_downcast_mut::<Text, _>(|text| {
+        text.update_after_transform_super(ComponentDirt::PATH);
+    }).unwrap();
+    f.solve();
+    f.text.with_downcast_mut::<Text, _>(|text| {
+        assert!(text.base.set_paragraph_spacing_value(20.0));
+        text.paragraph_spacing_changed();
+        text.update_after_transform_super(ComponentDirt::PAINT);
+    }).unwrap();
+    let after = f.solve();
+    // One inter-paragraph gap adds 20px to two 36px lines, minus the
+    // same 1.69824px font metric trim as the initial measure.
+    assert!((after.height() - 90.30176).abs() < 0.001, "{after:?}");
+}
+
+#[test]
+fn css_fit_content_participant_baseline_origin_publishes_height() {
+    use crate::source::component::ComponentDirt;
+    let f = Fixture::new_host("experience\nexperience", 338.0, false, true);
+    assert!((f.solve().height() - 70.30176).abs() < 0.001);
+    f.text.with_downcast_mut::<Text, _>(|text| {
+        text.update_after_transform_super(ComponentDirt::PATH);
+    }).unwrap();
+    f.solve();
+    f.text.with_downcast_mut::<Text, _>(|text| {
+        assert!(text.base.set_origin_value_value(1));
+        text.origin_value_changed();
+        text.update_after_transform_super(ComponentDirt::PAINT);
+    }).unwrap();
+    // Direct Rive measurement supplies the unchanged Baseline metrics;
+    // the regression concerns publishing them through the retained participant.
+    let expected = natural_size(&f).y;
+    assert!(expected < 70.30176, "Baseline moves the first baseline to zero");
+    let after = f.solve();
+    assert!((after.height() - expected).abs() < 0.001, "{after:?} != {expected}");
+}

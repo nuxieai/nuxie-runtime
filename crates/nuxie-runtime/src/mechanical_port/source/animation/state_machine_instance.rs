@@ -277,6 +277,10 @@ pub struct StateMachineLayerInstance {
     // unsettles the layer, and it freezes only on a finished animation
     // (see is_frozen).
     settled_on_inputs: Rc<Cell<bool>>,
+    // Whether the any state's and the current state's searches read inputs,
+    // for the state definitions last asked.
+    any_reads_inputs: Option<(CoreHandle, bool)>,
+    current_reads_inputs: Option<(CoreHandle, bool)>,
 }
 
 #[derive(Clone)]
@@ -340,6 +344,8 @@ impl Default for StateMachineLayerInstance {
             waiting_for_exit: false,
             settled: Rc::new(Cell::new(false)),
             settled_on_inputs: Rc::new(Cell::new(false)),
+            any_reads_inputs: None,
+            current_reads_inputs: None,
             hold_animation: None,
             hold_time: 0.0,
         }
@@ -817,30 +823,52 @@ impl StateMachineLayerInstance {
             && Self::is_settle_safe(self.any_state_instance.as_ref())
             && Self::is_settle_safe(self.current_state.as_ref())
         {
-            self.settled_on_inputs.set(
-                Self::reads_inputs(self.any_state_instance.as_ref())
-                    || Self::reads_inputs(self.current_state.as_ref()),
+            let any = Self::cached_reads_inputs(
+                &mut self.any_reads_inputs,
+                self.any_state_instance.as_ref(),
             );
+            let current = any
+                || Self::cached_reads_inputs(
+                    &mut self.current_reads_inputs,
+                    self.current_state.as_ref(),
+                );
+            self.settled_on_inputs.set(current);
             self.settled.set(true);
             machine.settling.any_settled.set(true);
         }
         false
     }
 
+    /// reads_inputs for `state`, from `cache` while it holds the same
+    /// state definition.
+    fn cached_reads_inputs(
+        cache: &mut Option<(CoreHandle, bool)>,
+        state: Option<&RuntimeStateInstanceHandle>,
+    ) -> bool {
+        let Some(state) = state else {
+            return false;
+        };
+        let definition = state.definition_ref();
+        if let Some((cached, reads)) = cache.as_ref()
+            && cached == definition
+        {
+            return *reads;
+        }
+        let reads = Self::reads_inputs(definition);
+        *cache = Some((definition.clone(), reads));
+        reads
+    }
+
     /// Whether a transition search from `state` reads state machine inputs:
     /// an enabled transition has an input condition (StateMachine's
     /// classify_state skips disabled ones too).
-    fn reads_inputs(state: Option<&RuntimeStateInstanceHandle>) -> bool {
+    fn reads_inputs(state: &CoreHandle) -> bool {
         use crate::mechanical_port::source::generated::animation::{
             transition_bool_condition_base::TransitionBoolConditionBase,
             transition_number_condition_base::TransitionNumberConditionBase,
             transition_trigger_condition_base::TransitionTriggerConditionBase,
         };
-        let Some(state) = state else {
-            return false;
-        };
         let transitions = state
-            .definition()
             .with(|state| {
                 (0..state.layer_state_transition_count().unwrap_or(0))
                     .filter_map(|i| state.layer_state_transition(i))

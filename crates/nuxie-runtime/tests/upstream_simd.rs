@@ -1,8 +1,15 @@
-//! All 23 pinned SIMD cases exercise the translated production SIMD owner.
+//! Pinned SIMD cases exercise the translated production SIMD owner.
 //! Scalar reference expressions remain only as independent expected results.
 
 use nuxie_runtime::source::math::simd::{self, GVec};
 use nuxie_runtime::source::math::simd_gvec_polyfill::compare;
+
+// Supplemental compile-time coverage for e8d647fd's constexpr bit_cast.
+const _: () = {
+    // SAFETY: f32/u32 have equal size and every source bit pattern is a valid u32.
+    let bits = unsafe { nuxie_runtime::source::math::math_types::bit_cast::<u32, f32>(-0.0) };
+    assert!(bits == 0x8000_0000);
+};
 
 fn all<const N: usize>(values: [bool; N]) -> bool {
     simd::all(GVec::from_array(
@@ -372,6 +379,33 @@ fn ternary_operator() {
 
 #[test]
 fn min_max() {
+    let a = GVec::from_array([1.0f32, f32::NAN, 2.0, f32::NAN]);
+    let b = GVec::from_array([f32::NAN, 1.0, 1.0, f32::NAN]);
+    let fast_min = simd::min_fast(a, b);
+    let fast_max = simd::max_fast(a, b);
+    for i in 0..4 {
+        // std::min/max preserve the first argument for unordered comparisons.
+        let std_min = if b[i] < a[i] { b[i] } else { a[i] };
+        let std_max = if a[i] < b[i] { b[i] } else { a[i] };
+        assert_eq!(fast_min[i].to_bits(), std_min.to_bits());
+        assert_eq!(fast_max[i].to_bits(), std_max.to_bits());
+    }
+    assert_eq!(
+        simd::min_fast(
+            GVec::from_array([1.0f32, 2.0, 3.0, 4.0]),
+            GVec::from_array([4.0, 3.0, 2.0, 0.0])
+        )
+        .data,
+        [1.0, 2.0, 2.0, 0.0]
+    );
+    assert_eq!(
+        simd::max_fast(
+            GVec::from_array([1.0f32, 2.0, 3.0, 4.0]),
+            GVec::from_array([4.0, 3.0, 2.0, 0.0])
+        )
+        .data,
+        [4.0, 3.0, 3.0, 4.0]
+    );
     assert_eq!(
         simd::max(GVec::splat(-1i32), GVec::from_array([-2, 0])).data,
         [-1, 0]
@@ -601,6 +635,73 @@ fn ceil() {
     );
     assert!(simd::ceil(GVec::from_array([f32::NAN]))[0].is_nan());
     assert!(simd::ceil(GVec::from_array([(-f32::NAN)]))[0].is_nan());
+}
+
+#[test]
+fn floor_by_int_conversion_ceil_by_int_conversion() {
+    let mut values = vec![
+        0.0f32,
+        -0.0,
+        0.5,
+        -0.5,
+        1.0,
+        -1.0,
+        1.5,
+        -1.5,
+        2.5,
+        -2.5,
+        0.99999994,
+        -0.99999994,
+        1e-30,
+        -1e-30,
+        f32::from_bits(1),
+        -f32::from_bits(1),
+        8388607.5,
+        -8388607.5,
+        8388608.0,
+        -8388608.0,
+        8388609.0,
+        -8388609.0,
+        3e9,
+        -3e9,
+        f32::MAX,
+        -f32::MAX,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+    ];
+    assert_eq!(values.len(), 28);
+    // Keep the existing portable PRNG adaptation instead of platform-global
+    // libc rand(); upstream's 10,000 samples, scales and assertions are exact.
+    let mut random = UpstreamRand::seeded();
+    for i in 0..10000 {
+        let scale = if i < 5000 { 100.0 } else { 1e7 };
+        values.push((random.next() - 0.5) * scale);
+    }
+    for x in values {
+        let x4 = GVec::<f32, 4>::splat(x);
+        assert_eq!(
+            simd::floor_by_int_conversion(x4)[0].to_bits(),
+            x.floor().to_bits(),
+            "floor({x:?})"
+        );
+        assert_eq!(
+            simd::ceil_by_int_conversion(x4)[0].to_bits(),
+            x.ceil().to_bits(),
+            "ceil({x:?})"
+        );
+    }
+    assert!(
+        simd::floor_by_int_conversion(GVec::from_array([f32::NAN, -f32::NAN]))
+            .data
+            .into_iter()
+            .all(f32::is_nan)
+    );
+    assert!(
+        simd::ceil_by_int_conversion(GVec::from_array([f32::NAN, -f32::NAN]))
+            .data
+            .into_iter()
+            .all(f32::is_nan)
+    );
 }
 
 #[test]
@@ -892,10 +993,58 @@ fn load4x4f() {
     let matrix = [
         0.0, 4.0, 8.0, 12.0, 1.0, 5.0, 9.0, 13.0, 2.0, 6.0, 10.0, 14.0, 3.0, 7.0, 11.0, 15.0,
     ];
-    let (a, b, c, d) = simd::load4x4f(&matrix);
-    let rows = [a.data, b.data, c.data, d.data];
+    let loaded = simd::load4x4f(&matrix);
+    let rows = loaded.cols.map(|column| column.data);
     assert_eq!(rows[0], [0.0, 1.0, 2.0, 3.0]);
     assert_eq!(rows[1], [4.0, 5.0, 6.0, 7.0]);
     assert_eq!(rows[2], [8.0, 9.0, 10.0, 11.0]);
     assert_eq!(rows[3], [12.0, 13.0, 14.0, 15.0]);
+}
+
+#[cfg(any(
+    all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse"
+    ),
+    all(
+        any(target_arch = "arm", target_arch = "aarch64"),
+        target_feature = "neon"
+    )
+))]
+#[test]
+fn inverse_sqrt_fast() {
+    let mut x = 1e-20f32;
+    while x < 1e20 {
+        let xs = GVec::from_array([x, x * 1.1, x * 1.2, x * 1.3]);
+        let estimate = simd::inverse_sqrt_fast(xs);
+        for i in 0..4 {
+            let exact = 1.0 / xs[i].sqrt();
+            assert!((estimate[i] - exact).abs() <= exact * (1.5 / 4096.0));
+        }
+        x *= 1.37;
+    }
+}
+
+// Supplemental coverage: the public upstream test delta does not itself add
+// bitmask or register-transpose cases.
+#[test]
+fn bitmask_lane_order() {
+    for bits in 0u32..16 {
+        let lanes = std::array::from_fn(|i| if bits & (1 << i) != 0 { -1i32 } else { 0 });
+        assert_eq!(simd::bitmask(GVec::from_array(lanes)), bits);
+    }
+}
+
+#[test]
+fn transpose4x4f_registers() {
+    let matrix = simd::transpose4x4f(
+        GVec::from_array([0.0, 4.0, 8.0, 12.0]),
+        GVec::from_array([1.0, 5.0, 9.0, 13.0]),
+        GVec::from_array([2.0, 6.0, 10.0, 14.0]),
+        GVec::from_array([3.0, 7.0, 11.0, 15.0]),
+    );
+    assert_eq!(matrix.cols[0].data, [0.0, 1.0, 2.0, 3.0]);
+    assert_eq!(matrix.cols[1].data, [4.0, 5.0, 6.0, 7.0]);
+    assert_eq!(matrix.cols[2].data, [8.0, 9.0, 10.0, 11.0]);
+    assert_eq!(matrix.cols[3].data, [12.0, 13.0, 14.0, 15.0]);
 }

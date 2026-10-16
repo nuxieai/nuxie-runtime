@@ -1,6 +1,16 @@
 pub use super::simd_gvec_polyfill::GVec;
 use core::ops::{Add, BitAnd, BitOr, Div, Mul, Sub};
 
+// Rust 1.94.1 does not expose ARM32 neon/fp-armv8 target_feature cfgs,
+// even when those codegen features are enabled. No ARM32 target is shipped
+// by this workspace. Keep its source branches below, but do not silently
+// select pre-ARMv8 math or omit a hardware helper on an ARMv8 build. A future
+// ARM32 platform needs explicit, validated feature wiring before enabling it.
+#[cfg(target_arch = "arm")]
+compile_error!(
+    "ARM32 SIMD requires target-feature wiring unavailable in the pinned Rust toolchain"
+);
+
 pub type Float2 = GVec<f32, 2>;
 pub type Float4 = GVec<f32, 4>;
 pub type Int2 = GVec<i32, 2>;
@@ -33,6 +43,24 @@ truthy!(
 );
 pub fn any<T: Copy + Truthy, const N: usize>(x: GVec<T, N>) -> bool {
     x.data.into_iter().any(Truthy::truthy)
+}
+/// Pack boolean masks. Like upstream, partial masks differ on SSE: it
+/// extracts sign bits while NEON and the generic path extract lane bits.
+pub fn bitmask(x: Int4) -> u32 {
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse"
+    ))]
+    {
+        return (0..4).fold(0, |mask, i| mask | (((x[i] as u32) >> 31) << i));
+    }
+    #[cfg(not(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse"
+    )))]
+    {
+        ((x[0] & 1) | (x[1] & 2) | (x[2] & 4) | (x[3] & 8)) as u32
+    }
 }
 pub fn all<T: Copy + Truthy + NotBits, const N: usize>(x: GVec<T, N>) -> bool {
     !any(GVec {
@@ -76,6 +104,15 @@ pub trait SimdMinMax: Copy + PartialOrd {
 }
 impl SimdMinMax for f32 {
     fn simd_min(self, other: Self) -> Self {
+        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        {
+            return if other < self || self.is_nan() {
+                other
+            } else {
+                self
+            };
+        }
+        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -89,6 +126,15 @@ impl SimdMinMax for f32 {
         }
     }
     fn simd_max(self, other: Self) -> Self {
+        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        {
+            return if self < other || self.is_nan() {
+                other
+            } else {
+                self
+            };
+        }
+        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -104,6 +150,15 @@ impl SimdMinMax for f32 {
 }
 impl SimdMinMax for f64 {
     fn simd_min(self, other: Self) -> Self {
+        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        {
+            return if other < self || self.is_nan() {
+                other
+            } else {
+                self
+            };
+        }
+        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -118,6 +173,15 @@ impl SimdMinMax for f64 {
     }
 
     fn simd_max(self, other: Self) -> Self {
+        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        {
+            return if self < other || self.is_nan() {
+                other
+            } else {
+                self
+            };
+        }
+        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -151,6 +215,16 @@ pub fn clamp<T: SimdMinMax, const N: usize>(
     high: GVec<T, N>,
 ) -> GVec<T, N> {
     min(max(low, x), high)
+}
+pub fn min_fast<T: Copy + PartialOrd, const N: usize>(a: GVec<T, N>, b: GVec<T, N>) -> GVec<T, N> {
+    GVec {
+        data: core::array::from_fn(|i| if b[i] < a[i] { b[i] } else { a[i] }),
+    }
+}
+pub fn max_fast<T: Copy + PartialOrd, const N: usize>(a: GVec<T, N>, b: GVec<T, N>) -> GVec<T, N> {
+    GVec {
+        data: core::array::from_fn(|i| if a[i] < b[i] { b[i] } else { a[i] }),
+    }
 }
 pub trait SimdAbs: Copy {
     fn simd_abs(self) -> Self;
@@ -191,11 +265,21 @@ pub fn reduce_or<T: Copy + BitOr<Output = T>, const N: usize>(x: GVec<T, N>) -> 
     x.data[1..].iter().copied().fold(x[0], |a, b| a | b)
 }
 pub fn floor<const N: usize>(x: GVec<f32, N>) -> GVec<f32, N> {
+    #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+    {
+        return floor_by_int_conversion(x);
+    }
+    #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
     GVec {
         data: x.data.map(f32::floor),
     }
 }
 pub fn ceil<const N: usize>(x: GVec<f32, N>) -> GVec<f32, N> {
+    #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+    {
+        return ceil_by_int_conversion(x);
+    }
+    #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
     GVec {
         data: x.data.map(f32::ceil),
     }
@@ -204,6 +288,87 @@ pub fn copy_sign<const N: usize>(x: GVec<f32, N>, y: GVec<f32, N>) -> GVec<f32, 
     GVec {
         data: core::array::from_fn(|i| x[i].copysign(y[i])),
     }
+}
+pub fn floor_by_int_conversion<const N: usize>(x: GVec<f32, N>) -> GVec<f32, N> {
+    GVec {
+        data: x.data.map(|x| {
+            let small = x.abs() < 8388608.0;
+            let mut t = (if small { x } else { 0.0 }) as i32 as f32;
+            if t > x {
+                t -= 1.0;
+            }
+            if small { t.copysign(x) } else { x }
+        }),
+    }
+}
+pub fn ceil_by_int_conversion<const N: usize>(x: GVec<f32, N>) -> GVec<f32, N> {
+    GVec {
+        data: x.data.map(|x| {
+            let small = x.abs() < 8388608.0;
+            let mut t = (if small { x } else { 0.0 }) as i32 as f32;
+            if t < x {
+                t += 1.0;
+            }
+            if small { t.copysign(x) } else { x }
+        }),
+    }
+}
+
+// Deliberately unavailable without the hardware estimate, as in upstream.
+#[cfg(all(
+    any(target_arch = "x86", target_arch = "x86_64"),
+    target_feature = "sse"
+))]
+pub fn inverse_sqrt_fast(x: Float4) -> Float4 {
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::{_mm_loadu_ps, _mm_rsqrt_ps, _mm_storeu_ps};
+    #[cfg(target_arch = "x86_64")]
+    use core::arch::x86_64::{_mm_loadu_ps, _mm_rsqrt_ps, _mm_storeu_ps};
+    let mut result = [0.0; 4];
+    // SAFETY: SSE is enabled and both arrays contain four accessible lanes.
+    unsafe {
+        _mm_storeu_ps(
+            result.as_mut_ptr(),
+            _mm_rsqrt_ps(_mm_loadu_ps(x.data.as_ptr())),
+        );
+    }
+    GVec::from_array(result)
+}
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+pub fn inverse_sqrt_fast(x: Float4) -> Float4 {
+    use core::arch::aarch64::{vld1q_f32, vmulq_f32, vrsqrteq_f32, vrsqrtsq_f32, vst1q_f32};
+    let mut result = [0.0; 4];
+    // SAFETY: NEON is enabled; load/store address complete four-lane arrays.
+    unsafe {
+        let xv = vld1q_f32(x.data.as_ptr());
+        let y = vrsqrteq_f32(xv);
+        let y = vmulq_f32(y, vrsqrtsq_f32(xv, vmulq_f32(y, y)));
+        vst1q_f32(result.as_mut_ptr(), y);
+    }
+    GVec::from_array(result)
+}
+#[cfg(all(target_arch = "arm", target_feature = "neon"))]
+pub fn inverse_sqrt_fast(x: Float4) -> Float4 {
+    let mut result = [0.0; 4];
+    // ARM32 stdarch NEON intrinsics are not stable. These are exactly the
+    // upstream estimate and one Newton step, not a scalar 1/sqrt substitute.
+    // SAFETY: NEON is enabled; pointers refer to complete four-lane arrays;
+    // all vector registers modified by this sequence are declared clobbered.
+    unsafe {
+        core::arch::asm!(
+            "vld1.32 {{q0}}, [{input}]",
+            "vrsqrte.f32 q1, q0",
+            "vmul.f32 q2, q1, q1",
+            "vrsqrts.f32 q0, q0, q2",
+            "vmul.f32 q1, q1, q0",
+            "vst1.32 {{q1}}, [{output}]",
+            input = in(reg) x.data.as_ptr(),
+            output = in(reg) result.as_mut_ptr(),
+            out("q0") _, out("q1") _, out("q2") _,
+            options(nostack),
+        );
+    }
+    GVec::from_array(result)
 }
 pub fn sqrt<const N: usize>(x: GVec<f32, N>) -> GVec<f32, N> {
     GVec {
@@ -277,13 +442,33 @@ pub unsafe fn store<T: Copy, const N: usize>(pointer: *mut T, vector: GVec<T, N>
         }
     }
 }
-pub fn load4x4f(matrix: &[f32; 16]) -> (Float4, Float4, Float4, Float4) {
-    (
-        GVec::from_array([matrix[0], matrix[4], matrix[8], matrix[12]]),
-        GVec::from_array([matrix[1], matrix[5], matrix[9], matrix[13]]),
-        GVec::from_array([matrix[2], matrix[6], matrix[10], matrix[14]]),
-        GVec::from_array([matrix[3], matrix[7], matrix[11], matrix[15]]),
-    )
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GVec4x4<T> {
+    pub cols: [GVec<T, 4>; 4],
+}
+impl<T> GVec4x4<T> {
+    pub fn get<const I: usize>(&self) -> &GVec<T, 4> {
+        &self.cols[I]
+    }
+    pub fn get_mut<const I: usize>(&mut self) -> &mut GVec<T, 4> {
+        &mut self.cols[I]
+    }
+}
+pub fn load4x4f(matrix: &[f32; 16]) -> GVec4x4<f32> {
+    GVec4x4 {
+        cols: [
+            GVec::from_array([matrix[0], matrix[4], matrix[8], matrix[12]]),
+            GVec::from_array([matrix[1], matrix[5], matrix[9], matrix[13]]),
+            GVec::from_array([matrix[2], matrix[6], matrix[10], matrix[14]]),
+            GVec::from_array([matrix[3], matrix[7], matrix[11], matrix[15]]),
+        ],
+    }
+}
+pub fn transpose4x4f(row0: Float4, row1: Float4, row2: Float4, row3: Float4) -> GVec4x4<f32> {
+    GVec4x4 {
+        cols: core::array::from_fn(|i| GVec::from_array([row0[i], row1[i], row2[i], row3[i]])),
+    }
 }
 pub fn join<T: Copy + Default, const A: usize, const B: usize, const OUT: usize>(
     a: GVec<T, A>,

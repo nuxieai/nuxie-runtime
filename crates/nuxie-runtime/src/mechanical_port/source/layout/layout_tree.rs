@@ -246,9 +246,9 @@ pub fn virtual_item_styles(rows: &[f32], columns: &[f32]) -> Vec<Style> {
 
 /// Map a Taffy measurement request onto Rive's intrinsic measure protocol.
 /// A known axis is measured exactly at its content-box size (Taffy's Definite
-/// available space already excludes padding and border). CSS min- and
-/// max-content both ask for the content's own size: Rive's measurers clamp
-/// to any bound they are given, so they report intrinsic size only unbounded.
+/// available space already excludes padding and border). Both intrinsic modes
+/// start unbounded because Rive clamps bounded answers. `measure_fit_content`
+/// replaces MinContent with a true minimum when the host supplies one.
 pub fn measure_axis(known: Option<f32>, available: AvailableSpace) -> (f32, LayoutMeasureMode) {
     let bounded = |value: f32| {
         if value.is_nan() {
@@ -305,19 +305,23 @@ pub(crate) fn content_width_limits(
 }
 
 /// Answer a bounded intrinsic inline-size offer using CSS fit-content:
-/// min(max-content, max(min-content, stretch-fit)). Taffy passes content-box
+/// min(max-content, max(min-content, stretch-fit)), or answer MinContent
+/// with the host's true intrinsic minimum. Taffy passes content-box
 /// offers here; width limits are resolved from the same style and box sizing.
 /// A host without a meaningful minimum keeps its existing measurement protocol.
-/// Exact and unbounded axes, including hugUnbounded, do not take this path.
+/// Exact widths and MaxContent keep their existing measurement modes.
 pub(crate) fn measure_fit_content(
     width: (f32, LayoutMeasureMode),
     height: (f32, LayoutMeasureMode),
     limits: (Option<f32>, Option<f32>),
+    min_content: bool,
     supports_minimum: bool,
     minimum: impl FnOnce() -> Option<f32>,
     mut measure: impl FnMut(f32, LayoutMeasureMode, f32, LayoutMeasureMode) -> Vec2D,
 ) -> Vec2D {
-    if supports_minimum && width.1 == LayoutMeasureMode::AtMost && width.0.is_finite() {
+    if supports_minimum
+        && (min_content || (width.1 == LayoutMeasureMode::AtMost && width.0.is_finite()))
+    {
         let maximum = measure(
             f32::NAN,
             LayoutMeasureMode::Undefined,
@@ -326,7 +330,11 @@ pub(crate) fn measure_fit_content(
         );
         if let Some(minimum) = minimum().filter(|minimum| minimum.is_finite()) {
             if maximum.x.is_finite() {
-                let inline = maximum.x.min(minimum.max(width.0));
+                let inline = if min_content {
+                    minimum
+                } else {
+                    maximum.x.min(minimum.max(width.0))
+                };
                 let mut wrapping_width = inline;
                 if let Some(maximum) = limits.1 {
                     wrapping_width = wrapping_width.min(maximum);

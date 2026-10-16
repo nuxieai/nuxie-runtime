@@ -637,10 +637,17 @@ decode queue. Bidi and audio retain their separately tracked status below.
   Taffy, or add solver-side workarounds, to recover Yoga's numbers.
   - *Authored model → CSS.* `layout/layout_style_applier.rs` maps Rive's
     authored values onto `taffy::Style` explicitly. `rive_default_style()`
-    states every Yoga default that differs from CSS (column direction,
-    `flex-shrink: 0`, `align-content: flex-start`, every node positioned so
-    absolute children stay with their parent); flex items get no automatic
-    minimum size (`apply_flex_item_minimums`), grid items keep CSS `auto`.
+    states the retained authored defaults that differ from CSS (column
+    direction, `align-content: flex-start`, every node positioned so absolute
+    children stay with their parent). Flex shrinking follows the browser:
+    Hug and Fixed use grow 0, shrink 1 and an automatic basis on either main
+    axis, for both LayoutComponent and LayoutParticipant. Fixed dimensions
+    supply the basis rather than disabling shrinking. Fill keeps grow and
+    shrink from its fraction, with its existing basis mapping. Flex and grid
+    items keep CSS `min-width: auto` and `min-height: auto`; authored minima
+    still win. Taffy resolves the automatic minimum from content and caps it
+    by specified sizes and maxima under CSS rules (Levi, 2026-10-16,
+    [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)).
     Percentages use Taffy's native 0..1 representation. Direction inherits as
     in CSS. A layout root without an authored size fills its host's offer.
     Rive's sizing modes are CSS sizing keywords: a bounded hug is
@@ -679,7 +686,8 @@ decode queue. Bidi and audio retain their separately tracked status below.
     min/max widths to the content box, including padding, borders and box sizing. This is
     required even for Taffy's ContentSize basis pass; the intrinsic width
     returned to Taffy still ignores those limits for flex-basis arithmetic.
-    AutoWidth text with ordinary overflow uses normal word boundaries
+    Authored AutoWidth text, including Fixed/Fill participants whose effective
+    mode is AutoHeight, with ordinary overflow uses normal word boundaries
     (cluster boundaries for break-all); the zero-bound Rive measurement
     itself clamps its return to zero. Images use their natural
     width for both intrinsic sizes. Hosts without a meaningful minimum keep
@@ -687,10 +695,18 @@ decode queue. Bidi and audio retain their separately tracked status below.
     fonts, scripted layouts, shapes, nested artboards, n-slices and joysticks.
     A LayoutComponent leaf falls back to the old answer if any measured child
     cannot supply a minimum. Exact widths and unbounded hugs keep their
-    existing measurement modes. CSS MinContent requests still measure unbounded,
-    like MaxContent; true intrinsic grid/flex contributions are tracked in
-    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893). The upstream
-    text measurer is unchanged.
+    existing measurement modes. A CSS MinContent inline request with no known
+    width now returns the true minimum from the same cached shape, including
+    for a Fixed leaf whose automatic minimum Taffy needs. Normal and BreakWord
+    use the longest unbreakable run; BreakAll uses cluster boundaries and
+    NoWrap keeps max-content. The adapter first measures unbounded to populate
+    the shape cache, then measures block size at the minimum inline size,
+    resolving width limits as above. Images use their natural width. Hosts
+    without a minimum contract retain the old unbounded MinContent answer.
+    MaxContent and known-width requests retain their modes. This supplies the
+    supported text/image contributions requested by
+    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893); other leaf kinds
+    still need minimum contracts. The direct upstream text measurer is unchanged.
   - *Rive-only Yoga extensions.* Virtualized-grid contributions
     (`YGNodeSetGridVirtualContributions`) are host-side Taffy-only grid items
     that size each unrealized track as its item would. Stock Taffy clamps a

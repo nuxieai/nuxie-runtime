@@ -3536,33 +3536,35 @@ impl LayoutComponent {
         elapsed: f32,
         flags: AdvanceFlags,
     ) -> bool {
-        if flags.0 & AdvanceFlags::NEW_FRAME.0 == 0
-            || owner
-                .with(|object| object.as_layout_component().unwrap().is_collapsed())
-                .unwrap_or(true)
-        {
+        if flags.0 & AdvanceFlags::NEW_FRAME.0 == 0 {
             return false;
         }
-        Self::apply_interpolation_occurrence(
-            owner,
-            elapsed,
-            flags.0 & (AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0) != 0,
-        )
+        let animate = flags.0 & (AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0) != 0;
+        // isCollapsed, then applyInterpolation's opening test, under one loan:
+        // nothing runs between them. Only an interpolating layout goes on.
+        let interpolating = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                !layout.is_collapsed() && Self::interpolation_pending(layout, animate)
+            })
+            .unwrap_or(false);
+        interpolating && Self::apply_interpolation_occurrence(owner, elapsed, animate)
+    }
+
+    /// applyInterpolation's opening test: an animating layout whose current
+    /// animation has not reached its layout.
+    fn interpolation_pending(layout: &mut Self, animate: bool) -> bool {
+        let target = layout.layout;
+        let Some(data) = layout.current_animation_data().copied() else {
+            return false;
+        };
+        animate && layout.animates() && layout.style.is_some() && data.to != target
     }
 
     pub fn apply_interpolation_occurrence(owner: &CoreHandle, elapsed: f32, animate: bool) -> bool {
-        let Some(()) = owner
-            .with_mut(|object| {
-                let layout = object.as_layout_component_mut().unwrap();
-                let target = layout.layout;
-                let data = *layout.current_animation_data()?;
-                if !animate || !layout.animates() || layout.style.is_none() || data.to == target {
-                    return None;
-                }
-                Some(())
-            })
-            .flatten()
-        else {
+        let Some(true) = owner.with_mut(|object| {
+            Self::interpolation_pending(object.as_layout_component_mut().unwrap(), animate)
+        }) else {
             return false;
         };
         let (smoothing, data_a) = owner

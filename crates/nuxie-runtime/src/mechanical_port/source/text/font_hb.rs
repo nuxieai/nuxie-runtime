@@ -613,9 +613,18 @@ impl HbFont {
                 has_color_layers,
                 has_color_paint,
                 has_png,
-                native_color_glyphs: std::iter::repeat_with(|| AtomicU8::new(0))
-                    .take(usize::from(u16::MAX) + 1)
-                    .collect(),
+                // Only colour-capable faces classify glyphs, so other faces
+                // keep an empty table instead of one byte per possible glyph.
+                native_color_glyphs: if has_color_layers || has_color_paint || has_png {
+                    let glyphs = outline.maxp().map_or(usize::from(u16::MAX) + 1, |maxp| {
+                        usize::from(maxp.num_glyphs())
+                    });
+                    std::iter::repeat_with(|| AtomicU8::new(0))
+                        .take(glyphs)
+                        .collect()
+                } else {
+                    Box::default()
+                },
                 palette_colors,
                 // Pinned Rive HarfBuzz is compiled with HB_NO_LEGACY. HarfRust
                 // has no equivalent build switch, so suppress only its legacy
@@ -703,16 +712,19 @@ impl HbFont {
         if !(self.face.has_color_layers || self.face.has_color_paint || self.face.has_png) {
             return false;
         }
-        let cached = &self.face.native_color_glyphs[usize::from(glyph)];
-        match cached.load(Ordering::Relaxed) {
-            1 => return false,
-            2 => return true,
+        // A glyph id past maxp's count is classified without being cached.
+        let cached = self.face.native_color_glyphs.get(usize::from(glyph));
+        match cached.map(|cached| cached.load(Ordering::Relaxed)) {
+            Some(1) => return false,
+            Some(2) => return true,
             _ => {}
         }
         let font = self.outline_font();
         let id = OutlineGlyphId::new(glyph as u32);
         let color = font.color_glyphs().get(id).is_some() || native_png_exists(&font, glyph);
-        cached.store(if color { 2 } else { 1 }, Ordering::Relaxed);
+        if let Some(cached) = cached {
+            cached.store(if color { 2 } else { 1 }, Ordering::Relaxed);
+        }
         color
     }
 
@@ -1055,10 +1067,16 @@ fn sbix_picture<'a>(
     font: &OutlineFont<'a>,
     glyph: GlyphId,
 ) -> Option<(skrifa::raw::tables::sbix::GlyphData<'a>, u16)> {
-    let table = font.sbix().ok()?;
-    if table.version() == 0 {
+    // HarfBuzz reads pictures only from an sbix that passed its sanitizer,
+    // the same check that decides PNG capability.
+    let num_glyphs = font.maxp().map_or(0, |maxp| u32::from(maxp.num_glyphs()));
+    if !font
+        .table_data(skrifa::Tag::new(b"sbix"))
+        .is_some_and(|table| sbix_has_data(table.as_bytes(), num_glyphs))
+    {
         return None;
     }
+    let table = font.sbix().ok()?;
     // Rive leaves x/y_ppem unset. HarfBuzz chooses the first largest strike
     // before looking up the glyph, never a smaller strike containing it.
     let strikes = table.strikes();

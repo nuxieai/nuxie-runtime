@@ -10,7 +10,7 @@ helper cases are explicit generator data. `interpolator.sriv`,
 `multitouch_debug.sriv`, and the upstream-disabled `stateful_list_props.sriv`
 remain explicit `provenance-unknown` entries.
 
-The runner validates all 259 streams structurally. For the 211 runtime cases,
+The runner validates all 282 streams structurally. For the 231 runtime cases,
 the generator translates the replayable portion of each pinned C++ test body
 into a shared action stream. Validation imports the recorded `.riv`, selects
 the requested artboard/state machine/animation, applies those actions to the
@@ -24,7 +24,12 @@ that cannot yet be represented or require an unported subsystem are
 independently as their literal C++ action/output replays land; the remainder
 stay `pending-scripted`, and three baselines remain `provenance-unknown`. The
 exact-ID ledger and `min_cpp_rust_exact` ratchet prevent exact cases from being
-silently downgraded.
+silently downgraded. UNIV-4844 retains all 206 historical IDs and the numeric
+floor, with 18 explicit CSS replacements in `reviewed_layout_divergences`.
+Each replacement must remain an executable runtime layout divergence and
+match its exact recorded first operation. Unknown, duplicate, unsupported or
+changed replacements fail. Actual C++ equality is printed separately from
+reviewed CSS coverage; the original SRIV streams and epsilons stay intact.
 
 Run:
 

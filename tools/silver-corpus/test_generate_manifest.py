@@ -561,6 +561,17 @@ TEST_CASE("renders selected board", "[silver]")
             all(item["x"] == "artboard-width/2" for item in pointer_actions)
         )
 
+    def test_css_reviews_preserve_historical_exact_obligations(self):
+        reviews = generate_manifest.REVIEWED_LAYOUT_DIVERGENCES
+        self.assertEqual(len(generate_manifest.EXACT), 206)
+        self.assertEqual(len(reviews), 18)
+        self.assertTrue(set(reviews).issubset(generate_manifest.EXACT))
+        for silver_id, difference in reviews.items():
+            with self.subTest(silver_id=silver_id):
+                note = generate_manifest.layout_divergence_note(silver_id, difference)
+                self.assertIn("CSS", note)
+                self.assertTrue(note.endswith(f"first difference: {difference}."))
+
     def test_render_pins_lane_and_provenance_ratchets(self):
         producer = generate_manifest.Producer(
             id="placeholder",

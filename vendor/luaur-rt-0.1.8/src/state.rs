@@ -70,6 +70,39 @@ impl LuaInner {
     }
 }
 
+#[cfg(not(feature = "typecheck"))]
+thread_local! {
+    /// The borrowed `LuaInner` last built on this thread. A borrowed inner
+    /// holds only its state pointer and never closes it, so any two for one
+    /// state are interchangeable: trampolines entered again from the same
+    /// state share one instead of allocating one per call.
+    static LAST_BORROWED: std::cell::RefCell<Option<XRc<LuaInner>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// A borrowed (non-closing) `LuaInner` for `state`.
+#[cfg(not(feature = "typecheck"))]
+fn borrowed_inner(state: *mut lua_State) -> XRc<LuaInner> {
+    LAST_BORROWED.with(|last| {
+        let mut last = last.borrow_mut();
+        match last.as_ref() {
+            Some(inner) if inner.state == state => XRc::clone(inner),
+            _ => {
+                let inner = XRc::new(LuaInner::new(state, false));
+                *last = Some(XRc::clone(&inner));
+                inner
+            }
+        }
+    })
+}
+
+/// A borrowed `LuaInner` for `state`; each carries its own type definitions
+/// under `typecheck`, so none is shared.
+#[cfg(feature = "typecheck")]
+fn borrowed_inner(state: *mut lua_State) -> XRc<LuaInner> {
+    XRc::new(LuaInner::new(state, false))
+}
+
 impl Drop for LuaInner {
     fn drop(&mut self) {
         if self.owned && !self.state.is_null() {
@@ -237,7 +270,7 @@ impl Lua {
     /// and all handles cloned from it.
     pub(crate) unsafe fn from_borrowed(state: *mut lua_State) -> Lua {
         Lua {
-            inner: XRc::new(LuaInner::new(state, false)),
+            inner: borrowed_inner(state),
             _not_sync: NOT_SYNC,
         }
     }

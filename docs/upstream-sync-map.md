@@ -46,18 +46,27 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f2aa739e3ec4922c22ea34e4b6bce1653ea21106`
+- LAST_SYNCED_SHA: `5e3de3857d6ae9e019f94da507f6385b96fbf3c3`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` (refreshed 2026-10-16 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 257 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (279 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 258 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (280 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `5e3de385`, integrated atop downstream `b08d8e6eb0`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Renderer units pass 946 with 11 existing ignores and only known
+  UNIV-4801 failing. Both complete upstream delayed-image tests pass using
+  actual null-context renderer paints/images and the byte-identical PNG.
+  Both wasm32-unknown-unknown browser backends compile; metadata checks pass
+  39 and the Silver manifest/build registration are current. Private web mesh
+  fixes, web sink override and browser tests are absent from the public delta;
+  no browser pixel result or private host implementation is claimed imported.
 - Validation at `f2aa739e`, integrated atop downstream `2f12e1d6cd`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Renderer units pass 944 with 11 existing ignores and only known
@@ -1238,6 +1247,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `5e3de3857d6ae9e019f94da507f6385b96fbf3c3` | Prepare decoded paint images through the frame-sink hook; track pending paints and retry before resource replay creates version aliases. Preserve ordered removal, generation-safe destruction, canvas exclusion and stored sampler/matrix. Port both complete lazy-image regressions. Existing direct Rust decoded-image owners retain default preparation. Private web mesh-buffer changes, web sink override, browser tests and .rive_head contents are absent from the public delta and not claimed imported. | — |
 | `f2aa739e3ec4922c22ea34e4b6bce1653ea21106` | Forward host canvas command buffers and frame serials without local submission, preserving own-buffer fallback and no-active-canvas ordering. Add an explicit unsafe Rust submission/lifetime contract and port both upstream spy tests. Flush GL before state scrubbing. Acquire wrapped Vulkan targets through Rive's access tracker with exact load preservation and remove all pending sampled transitions for that texture identity. Concrete Rust hosts retain default resources; private Android override and .rive_head contents are absent from the public delta and not claimed imported. | — |
 | `183df53fbdfa36441b90a06130cd1d68a87c3ce4` | Cache per-verb counts through every mutation and ownership path in both RawPath owners; carry counts through borrowed views, remove mutable verb access, and use cached counts for renderer reservations with the existing combined-record representation and implicit closes. Port the complete mutation-count test and expanded long-zigzag GM fixtures with fresh provenance-bound C++ captures. Correct the initial cap's preexisting tangent translation error exposed by the new fixture. Skia accessor edits have no live Rust backend and are inapplicable; private .rive_head contents are not claimed imported. | — |
 | `e7124f18b96e11fde64a14c48138c8b4c80d2acc` | Translate the cubic convex-under-180-degree and nondegenerate-line early-out in both runtime and renderer owners. Preserve separate SIMD products/reduction, ordered C++ min/max NaN and tie behavior, exact EPSILON, sequential zero-edge substitutions and untouched output slots on early return. The existing solver remains unchanged. No new upstream tests occur in the public delta; private .rive_head contents are not claimed imported. | — |

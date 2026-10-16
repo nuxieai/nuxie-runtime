@@ -66,6 +66,7 @@ pub trait DeferredFrameSink {
     }
     /// Prepare a foreign image for sampling on this replay device. Returning
     /// None drops its dependent make when a lazy upload is not ready.
+    /// Also prepares decoded paint images; None leaves the paint unimaged.
     fn prep_foreign_image(&mut self, image: Rc<dyn RenderImage>) -> Option<Rc<dyn RenderImage>> {
         Some(image)
     }
@@ -236,6 +237,7 @@ impl DeferredReplayer {
         let open_content = RefCell::new((INVALID_RENDER_HANDLE, None::<RendererOwner>));
         let mut hooks = ReplayHooks {
             filter: ReplayFilter::Resources,
+            prep_image: Some(Box::new(|image| sink.borrow_mut().prep_foreign_image(image))),
             canvas_image: Some(Box::new(|id| {
                 // Paint mutations retain the image in the resources pass,
                 // before content replay can otherwise allocate its backing.
@@ -254,6 +256,7 @@ impl DeferredReplayer {
                 open.1.clone()
             })),
         };
+        retry_pending_paint_images(&mut self.table, &mut hooks);
         replay_render_commands(
             &mut factory,
             None,

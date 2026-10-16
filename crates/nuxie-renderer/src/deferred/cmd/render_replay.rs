@@ -1,5 +1,5 @@
 //! renderer/cmd/render_replay.hpp at e949498e.
-pub use super::deferred_cmd::replay_render_commands;
+pub use super::deferred_cmd::{replay_render_commands, retry_pending_paint_images};
 use super::render_commands::ResourceKind;
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -9,6 +9,8 @@ pub type PaintOwner = Rc<RefCell<Box<dyn RenderPaint>>>;
 pub type BufferOwner = Rc<RefCell<Box<dyn RenderBuffer>>>;
 pub type RendererOwner = Rc<RefCell<Box<dyn Renderer>>>;
 pub type CanvasImageResolver<'a> = Box<dyn FnMut(u32) -> Option<Rc<dyn RenderImage>> + 'a>;
+pub type ImagePreparer<'a> =
+    Box<dyn FnMut(Rc<dyn RenderImage>) -> Option<Rc<dyn RenderImage>> + 'a>;
 #[derive(Default)]
 pub struct ReplayStats {
     pub dropped_draws: u32,
@@ -26,6 +28,8 @@ pub struct ReplayHooks<'a> {
     pub filter: ReplayFilter,
     pub canvas_image: Option<CanvasImageResolver<'a>>,
     pub begin_canvas_content: Option<Box<dyn FnMut(u32, u32) -> Option<RendererOwner> + 'a>>,
+    /// Ready decoded images for paints; None from the callback means not ready.
+    pub prep_image: Option<ImagePreparer<'a>>,
     pub stats: Option<&'a mut ReplayStats>,
 }
 
@@ -157,12 +161,28 @@ pub struct ResourceTable {
     pub paint_shadows: Vec<PaintShadow>,
     pub path_fill_rules: Vec<u8>,
     pub buffer_shadows: Vec<BufferShadow>,
+    pub pending_paint_images: Vec<u32>,
 }
 impl ResourceTable {
+    pub fn mark_paint_image_pending(&mut self, paint: u32, pending: bool) {
+        let index = self.pending_paint_images.iter().position(|&id| id == paint);
+        match (pending, index) {
+            (true, None) => self.pending_paint_images.push(paint),
+            (false, Some(index)) => {
+                self.pending_paint_images.remove(index);
+            }
+            _ => {}
+        }
+    }
     pub fn destroy(&mut self, kind: ResourceKind, id: u32, generation: u32) {
         match kind {
             ResourceKind::Path => self.paths.destroy(id, generation),
-            ResourceKind::Paint => self.paints.destroy(id, generation),
+            ResourceKind::Paint => {
+                self.paints.destroy(id, generation);
+                if self.paints.get(id).is_none() {
+                    self.mark_paint_image_pending(id, false);
+                }
+            }
             ResourceKind::Shader => self.shaders.destroy(id, generation),
             ResourceKind::Image => self.images.destroy(id, generation),
             ResourceKind::Buffer => self.buffers.destroy(id, generation),

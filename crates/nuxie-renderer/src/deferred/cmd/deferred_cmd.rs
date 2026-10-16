@@ -507,7 +507,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                             .as_deref_mut()
                             .expect("resource creation requires a factory")
                             .make_render_paint();
-                        if let Some(shadow) = table.paint_shadows.get(c.id as usize) {
+                        if let Some(shadow) = table.paint_shadows.get(c.id as usize).cloned() {
                             fresh.style(style(shadow.style));
                             fresh.color(shadow.color);
                             fresh.thickness(shadow.thickness);
@@ -522,13 +522,21 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                                 fresh.shader(table.shaders.get(shadow.shader).as_deref());
                             }
                             if shadow.image != INVALID_RENDER_HANDLE {
-                                let image = if shadow.image & CANVAS_HANDLE_FLAG != 0 {
+                                let mut image = if shadow.image & CANVAS_HANDLE_FLAG != 0 {
                                     hooks.canvas_image.as_mut().and_then(|resolve| {
                                         resolve(shadow.image & CANVAS_HANDLE_MASK)
                                     })
                                 } else {
                                     table.images.get(shadow.image)
                                 };
+                                if shadow.image & CANVAS_HANDLE_FLAG == 0 {
+                                    if let (Some(resident), Some(prep)) =
+                                        (image.as_ref(), hooks.prep_image.as_mut())
+                                    {
+                                        image = prep(resident.clone());
+                                        table.mark_paint_image_pending(c.id, image.is_none());
+                                    }
+                                }
                                 fresh.modulated_image(
                                     image.as_deref(),
                                     shadow.image_sampler,
@@ -694,7 +702,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
             RenderCmd::PaintModulatedImage => {
                 let c: PaintModulatedImagePod = reader.read();
                 if let Some(paint) = table.paints.get(c.paint) {
-                    let image = if c.image == INVALID_RENDER_HANDLE {
+                    let mut image = if c.image == INVALID_RENDER_HANDLE {
                         None
                     } else if c.image & CANVAS_HANDLE_FLAG != 0 {
                         hooks
@@ -704,6 +712,16 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                     } else {
                         table.images.get(c.image)
                     };
+                    let mut pending_image = false;
+                    if c.image & CANVAS_HANDLE_FLAG == 0 {
+                        if let (Some(resident), Some(prep)) =
+                            (image.as_ref(), hooks.prep_image.as_mut())
+                        {
+                            image = prep(resident.clone());
+                            pending_image = image.is_none();
+                        }
+                    }
+                    table.mark_paint_image_pending(c.paint, pending_image);
                     let image_sampler = sampler(c.wrap_x, c.wrap_y, c.filter);
                     let image_matrix = Mat2D([c.xx, c.xy, c.yx, c.yy, c.tx, c.ty]);
                     paint.borrow_mut().modulated_image(
@@ -937,5 +955,48 @@ pub(crate) fn replay_render_commands_with_optional_factory(
             commands.len()
         );
         debug_assert!(false, "replay payload overrun");
+    }
+}
+
+/// Retry once before a replay's resource pass can move live paints into aliases.
+pub fn retry_pending_paint_images(table: &mut ResourceTable, hooks: &mut ReplayHooks<'_>) {
+    if table.pending_paint_images.is_empty() {
+        return;
+    }
+    let Some(prep) = hooks.prep_image.as_mut() else {
+        return;
+    };
+    let mut index = 0;
+    while index < table.pending_paint_images.len() {
+        let id = table.pending_paint_images[index];
+        let paint = table.paints.get(id);
+        let shadow = table.paint_shadows.get(id as usize);
+        let image = if paint.is_some() {
+            shadow
+                .filter(|shadow| {
+                    shadow.image != INVALID_RENDER_HANDLE && shadow.image & CANVAS_HANDLE_FLAG == 0
+                })
+                .and_then(|shadow| table.images.get(shadow.image))
+        } else {
+            None
+        };
+        let Some(image) = image else {
+            table.pending_paint_images.remove(index);
+            continue;
+        };
+        let Some(ready) = prep(image) else {
+            index += 1;
+            continue;
+        };
+        let shadow = shadow.expect("resident image has a paint shadow");
+        paint
+            .expect("resident image has a live paint")
+            .borrow_mut()
+            .modulated_image(
+                Some(ready.as_ref()),
+                shadow.image_sampler,
+                shadow.image_matrix,
+            );
+        table.pending_paint_images.remove(index);
     }
 }

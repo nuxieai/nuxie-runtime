@@ -1,5 +1,7 @@
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
+    advancing_component::QuietState,
+    artboard_component_list::ArtboardComponentList,
     animation::{
         listener_invocation::ListenerInvocation, nested_state_machine::NestedStateMachine,
         state_machine_instance::RuntimeStateMachineInstanceHandle,
@@ -97,7 +99,20 @@ pub struct NestedArtboard {
     // Dropped after the mounted instance and all of its dependent state.
     mounted_bindable:
         Option<crate::mechanical_port::source::bindable_artboard::RuntimeBindableArtboardHandle>,
+    // Row 0 is set while the mounted instance and its machines are at rest
+    // (see quiet_state); the instance's wakes clear it. Reset whenever the
+    // instance or the nested animations change.
+    quiet: crate::source::artboard_component_list::QuietRowHostState,
+    // quiet_state answered Never for the current instance and animations.
+    never_quiet: bool,
+    // New frames left before quiet_state is asked again after a Busy answer,
+    // and the current wait, doubled per Busy answer up to QUIET_BACKOFF_MAX.
+    // Asking later only keeps the host awake longer, which is always exact.
+    quiet_retry_in: u8,
+    quiet_backoff: u8,
 }
+
+const QUIET_BACKOFF_MAX: u8 = 32;
 
 impl Default for NestedArtboard {
     fn default() -> Self {
@@ -121,6 +136,10 @@ impl Default for NestedArtboard {
             host_flags: NestedArtboardHostFlags::NONE,
             inactive_change_sequence: Default::default(),
             mounted_bindable: None,
+            quiet: crate::source::artboard_component_list::QuietRowHostState::single(None),
+            never_quiet: false,
+            quiet_retry_in: 0,
+            quiet_backoff: 0,
         }
     }
 }
@@ -382,9 +401,11 @@ impl NestedArtboard {
         self.instance = None;
         self.reset_mesh_raster();
         self.instance = Some(instance.clone());
+        self.reset_quiet();
         let inactive_change_sequence = self.inactive_change_sequence.clone();
+        let quiet = self.quiet.clone();
         let layout_parent = instance.with_artboard_mut(|instance| {
-            instance.set_host_state(host, parent, Some(inactive_change_sequence))
+            instance.set_host_state(host, parent, Some(inactive_change_sequence), Some(quiet))
         });
         if let Some(parent) = layout_parent {
             // The source synchronously enumerates this layout provider after
@@ -437,6 +458,7 @@ impl NestedArtboard {
                 let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
                 nested.reset_mesh_raster();
                 nested.instance = Some(instance.clone());
+                nested.reset_quiet();
                 nested.parent_artboard_handle()
             })
             .expect("live NestedArtboard");
@@ -562,6 +584,7 @@ impl NestedArtboard {
             });
         }
         self.nested_animations.clear();
+        self.reset_quiet();
     }
 
     fn retire_bound_nested_state_machine(&mut self) {
@@ -652,6 +675,7 @@ impl NestedArtboard {
             }
             self.artboard_referencer.set_referenced_artboard(None);
             self.instance = None;
+            self.reset_quiet();
             self.mounted_bindable = None;
             self.reset_mesh_raster();
             self.set_active_view_model_instance(None, false);
@@ -1060,6 +1084,110 @@ impl NestedArtboard {
 
     pub fn add_nested_animation_handle(&mut self, nested_animation: CoreHandle) {
         self.nested_animations.push(nested_animation);
+        self.reset_quiet();
+    }
+
+    pub(crate) fn quiet_host_state(&self) -> crate::source::artboard_component_list::QuietRowHostState {
+        self.quiet.clone()
+    }
+
+    /// The instance or the nested animations changed: awake, and asked anew.
+    fn reset_quiet(&mut self) {
+        self.quiet
+            .reset_single(self.instance.as_ref().map(RuntimeArtboardInstanceHandle::core_handle));
+        self.never_quiet = false;
+        self.quiet_retry_in = 0;
+        self.quiet_backoff = 0;
+    }
+
+    /// Whether advancing would leave everything as it is, as
+    /// ArtboardComponentList::row_quiet_state asks of a row: every nested
+    /// animation is a state machine driving the mounted instance and at rest,
+    /// and the instance is at rest.
+    fn quiet_state(&self) -> QuietState {
+        let Some(instance) = self.instance.as_ref() else {
+            return QuietState::Never;
+        };
+        let machine = |animation: &CoreHandle| {
+            animation
+                .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+                .flatten()
+        };
+        for animation in &self.nested_animations {
+            let Some(machine) = machine(animation) else {
+                return QuietState::Never;
+            };
+            if !machine.with_instance(|machine| machine.drives(instance)) {
+                return QuietState::Busy;
+            }
+        }
+        let mut state = instance.with_artboard(|artboard| artboard.row_quiet_state());
+        for animation in &self.nested_animations {
+            if state == QuietState::Never {
+                break;
+            }
+            let quiet = machine(animation)
+                .map_or(QuietState::Never, |machine| machine.with_instance(|machine| machine.row_quiet_state()));
+            if quiet != QuietState::Quiet {
+                state = quiet;
+            }
+        }
+        state
+    }
+
+    /// At a new frame, whether this host is at rest and so skips its
+    /// advance, its settle passes and its data bind updates until a wake.
+    fn try_quiet(&mut self) -> bool {
+        #[cfg(any(test, feature = "testing"))]
+        if !ArtboardComponentList::quiet_rows_enabled() {
+            return false;
+        }
+        if self.never_quiet {
+            return false;
+        }
+        if self.quiet_retry_in != 0 {
+            self.quiet_retry_in -= 1;
+            return false;
+        }
+        let Some(instance) = self.instance.clone() else {
+            return false;
+        };
+        // A host whose instance does not route wakes here yet waits like a
+        // busy one.
+        let state = if instance.with_artboard(|artboard| artboard.wakes_quiet_rows(&self.quiet)) {
+            self.quiet_state()
+        } else {
+            QuietState::Busy
+        };
+        match state {
+            QuietState::Never => {
+                self.never_quiet = true;
+                false
+            }
+            QuietState::Busy => {
+                self.quiet_backoff = (self.quiet_backoff.max(1) * 2).min(QUIET_BACKOFF_MAX);
+                self.quiet_retry_in = self.quiet_backoff - 1;
+                false
+            }
+            QuietState::Quiet => {
+                self.quiet_backoff = 0;
+                self.quiet.set_single_quiet();
+                instance.with_artboard(|artboard| artboard.set_quiet_host_row(0));
+                true
+            }
+        }
+    }
+
+    /// Whether this host is quiet, and its instance still routes wakes here.
+    fn is_quiet(&self) -> bool {
+        #[cfg(any(test, feature = "testing"))]
+        if !ArtboardComponentList::quiet_rows_enabled() {
+            return false;
+        }
+        self.quiet.is_single_quiet()
+            && self.instance.as_ref().is_some_and(|instance| {
+                instance.with_artboard(|artboard| artboard.wakes_quiet_rows(&self.quiet))
+            })
     }
 
     pub fn on_added_clean_occurrence(
@@ -1469,18 +1597,75 @@ impl NestedArtboard {
     }
 
     pub(crate) fn update_data_binds_occurrence(owner: &CoreHandle) {
-        let instance = owner
+        let Some((instance, quiet)) = owner
             .with(|owner| {
                 let nested = owner.as_nested_artboard().expect("NestedArtboard host");
                 nested
                     .instance
                     .clone()
                     .filter(|_| !nested.base.is_paused() && !nested.is_collapsed())
+                    .map(|instance| (instance, nested.is_quiet()))
             })
-            .flatten();
-        if let Some(instance) = instance {
-            instance.update_data_binds(true);
+            .flatten()
+        else {
+            return;
+        };
+        if quiet {
+            #[cfg(any(test, feature = "testing"))]
+            Self::verify_quiet(owner, || {
+                instance.update_data_binds(true);
+                false
+            });
+            return;
         }
+        instance.update_data_binds(true);
+    }
+
+    /// A quiet host's skipped `pass`, run anyway in testing builds: it must
+    /// find the host still at rest and do no work.
+    #[cfg(any(test, feature = "testing"))]
+    fn verify_quiet(owner: &CoreHandle, pass: impl FnOnce() -> bool) {
+        if !ArtboardComponentList::verify_quiet_rows_enabled() {
+            return;
+        }
+        ArtboardComponentList::count_quiet_row_skip();
+        let (state, instance, machines) = owner
+            .with(|owner| {
+                let nested = owner.as_nested_artboard().expect("NestedArtboard owner");
+                let machines = nested
+                    .nested_animations
+                    .iter()
+                    .filter_map(|animation| {
+                        animation
+                            .with_downcast::<NestedStateMachine, _>(
+                                NestedStateMachine::state_machine_instance,
+                            )
+                            .flatten()
+                    })
+                    .collect::<Vec<_>>();
+                (nested.quiet_state(), nested.instance.clone(), machines)
+            })
+            .expect("live NestedArtboard owner");
+        assert_eq!(
+            state,
+            QuietState::Quiet,
+            "Quiet nested artboard stopped being quiet but nothing woke it"
+        );
+        let instance = instance.expect("a quiet nested artboard has an instance");
+        let dirt = Artboard::dirt_notifications();
+        let updates = crate::source::data_bind::data_bind_container::DataBindContainer::data_bind_updates();
+        let did_work = pass();
+        assert!(
+            !did_work
+                && dirt == Artboard::dirt_notifications()
+                && updates == crate::source::data_bind::data_bind_container::DataBindContainer::data_bind_updates()
+                && !instance.with_artboard(|artboard| artboard.has_component_dirt())
+                && instance.with_artboard(|artboard| artboard.quiet_host_row()) == 0
+                && !machines.iter().any(|machine| machine.with_instance(|machine| {
+                    machine.needs_advance() || machine.state_changed_count() != 0
+                })),
+            "Quiet nested artboard did work while quiet"
+        );
     }
 
     pub fn bind_view_model_instance(
@@ -1572,13 +1757,33 @@ impl NestedArtboard {
         let Some((local_elapsed_seconds, quantize)) = advance else {
             return false;
         };
-        let mut keep_going = false;
-        let advance_nested =
-            flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == AdvanceFlags::ADVANCE_NESTED.0;
         let new_frame = flags.0 & AdvanceFlags::NEW_FRAME.0 == AdvanceFlags::NEW_FRAME.0;
         if local_elapsed_seconds == 0.0 && quantize >= 0.0 && new_frame {
             return true;
         }
+        // A quiet host skips its advance until a wake, as a quiet list row does.
+        let quiet = owner
+            .with_mut(|owner| {
+                let nested = owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard owner");
+                nested.is_quiet() || (new_frame && nested.try_quiet())
+            })
+            .expect("live NestedArtboard owner");
+        if quiet {
+            #[cfg(any(test, feature = "testing"))]
+            Self::verify_quiet(owner, || Self::advance_awake(owner, local_elapsed_seconds, flags));
+            return false;
+        }
+        Self::advance_awake(owner, local_elapsed_seconds, flags)
+    }
+
+    /// The nested animations' and the instance's advance.
+    fn advance_awake(owner: &CoreHandle, local_elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
+        let mut keep_going = false;
+        let advance_nested =
+            flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == AdvanceFlags::ADVANCE_NESTED.0;
+        let new_frame = flags.0 & AdvanceFlags::NEW_FRAME.0 == AdvanceFlags::NEW_FRAME.0;
         if advance_nested {
             let animation_count = owner
                 .with(|owner| {

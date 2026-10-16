@@ -2587,6 +2587,21 @@ impl Artboard {
         self.dirty_state.has_component_dirt()
     }
 
+    /// Whether this artboard's wakes reach `rows` (its current host's
+    /// quiet-row state).
+    pub(crate) fn wakes_quiet_rows(
+        &self,
+        rows: &crate::source::artboard_component_list::QuietRowHostState,
+    ) -> bool {
+        self.dirty_state
+            .0
+            .host
+            .borrow()
+            .as_ref()
+            .and_then(|host| host.quiet_rows.as_ref())
+            .is_some_and(|host_rows| host_rows.ptr_eq(rows))
+    }
+
     pub const NO_QUIET_ROW: u32 = u32::MAX;
     pub fn quiet_host_row(&self) -> u32 {
         self.dirty_state.0.quiet_host_row.get()
@@ -2724,7 +2739,7 @@ impl Artboard {
         parent_artboard: Option<CoreHandle>,
         inactive_change_sequence: Option<crate::mechanical_port::source::artboard_host::InactiveChangeMark>,
     ) {
-        let parent = self.set_host_state(host, parent_artboard, inactive_change_sequence);
+        let parent = self.set_host_state(host, parent_artboard, inactive_change_sequence, None);
         if let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
             Self::sync_layout_after_host_attachment(&this, parent);
         }
@@ -2746,29 +2761,44 @@ impl Artboard {
             .flatten()
             .expect("ArtboardHost mount")
         });
+        // A nested artboard host's quiet-row state; a list's is read below.
+        let quiet_rows = host.as_ref().and_then(|host| {
+            host.with(|object| {
+                object
+                    .as_nested_artboard()
+                    .map(crate::source::nested_artboard::NestedArtboard::quiet_host_state)
+            })
+            .flatten()
+        });
         let parent = this
             .with_mut(|object| {
                 object.as_artboard_mut().expect("Artboard").set_host_state(
                     host,
                     parent_artboard,
                     inactive_change_sequence,
+                    quiet_rows,
                 )
             })
             .expect("live Artboard");
         Self::sync_layout_after_host_attachment(this, parent);
     }
 
+    /// `quiet_rows` is the quiet-row state of a host that calls while
+    /// mutably borrowed (a NestedArtboard); a list host's is read here.
     pub(crate) fn set_host_state(
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
         inactive_change_sequence: Option<crate::mechanical_port::source::artboard_host::InactiveChangeMark>,
+        quiet_rows: Option<crate::source::artboard_component_list::QuietRowHostState>,
     ) -> Option<CoreHandle> {
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             inactive_change_sequence: inactive_change_sequence
                 .expect("ArtboardHost sequence state"),
-            quiet_rows: if host.is_type_of(ArtboardComponentList::TYPE_KEY) {
+            quiet_rows: if quiet_rows.is_some() {
+                quiet_rows
+            } else if host.is_type_of(ArtboardComponentList::TYPE_KEY) {
                 Some(
                     host.with_downcast::<ArtboardComponentList, _>(
                         ArtboardComponentList::quiet_row_host_state,

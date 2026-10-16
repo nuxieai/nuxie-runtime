@@ -30,6 +30,32 @@ pub(crate) struct QuietRowHostState {
     artboards: Rc<RefCell<Vec<Option<CoreHandle>>>>,
 }
 impl QuietRowHostState {
+    /// A host with one row, row 0 (a nested artboard), hosting `artboard`.
+    pub(crate) fn single(artboard: Option<CoreHandle>) -> Self {
+        Self {
+            bits: Rc::new(RefCell::new(vec![0])),
+            artboards: Rc::new(RefCell::new(vec![artboard])),
+        }
+    }
+
+    /// Row 0 now hosts `artboard`, awake.
+    pub(crate) fn reset_single(&self, artboard: Option<CoreHandle>) {
+        self.bits.borrow_mut()[0] = 0;
+        self.artboards.borrow_mut()[0] = artboard;
+    }
+
+    pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.bits, &other.bits)
+    }
+
+    pub(crate) fn is_single_quiet(&self) -> bool {
+        self.bits.borrow()[0] & 1 != 0
+    }
+
+    pub(crate) fn set_single_quiet(&self) {
+        self.bits.borrow_mut()[0] |= 1;
+    }
+
     pub(crate) fn hosted_row_woke(&self, artboard: &CoreHandle, row: u32) {
         if self
             .artboards
@@ -1224,6 +1250,18 @@ impl ArtboardComponentList {
     #[cfg(any(test, feature = "testing"))]
     pub fn quiet_row_skips() -> u64 {
         QUIET_ROW_SKIPS.with(std::cell::Cell::get)
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn quiet_rows_enabled() -> bool {
+        QUIET_ROWS_ENABLED.with(std::cell::Cell::get)
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn verify_quiet_rows_enabled() -> bool {
+        VERIFY_QUIET_ROWS.get()
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn count_quiet_row_skip() {
+        QUIET_ROW_SKIPS.with(|count| count.set(count.get() + 1));
     }
     #[cfg(any(test, feature = "testing"))]
     pub fn set_quiet_rows_enabled(enabled: bool) {

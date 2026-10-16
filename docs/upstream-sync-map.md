@@ -46,18 +46,30 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `5e3de3857d6ae9e019f94da507f6385b96fbf3c3`
+- LAST_SYNCED_SHA: `269ebcab3016e68340bb1427b720712213066eaf`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` (refreshed 2026-10-16 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 258 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (280 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 259 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (281 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `269ebcab`, integrated atop downstream `0d460f0328`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All four translated loader test groups pass, including 10 instance
+  failure combinations and five device failures in headless/presenting modes.
+  Full renderer units pass 950 with 11 existing ignores and only known
+  UNIV-4801 failing. Android Vulkan C API libraries compile; metadata checks
+  pass 39 and the manifest/build registration are current. The fake loader
+  exercises real production helpers but intentionally fails device creation
+  after capturing extensions: no physical Vulkan startup is claimed. No
+  OpenGL fallback was added; unchanged bootstrap/version negotiation is not
+  newly certified by this delta. Browser-only compilation was not repeated
+  for this native-only change.
 - Validation at `5e3de385`, integrated atop downstream `b08d8e6eb0`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Renderer units pass 946 with 11 existing ignores and only known
@@ -1247,6 +1259,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `269ebcab3016e68340bb1427b720712213066eaf` | Use exact two-call SUCCESS-only instance extension/layer enumeration and stop before using failed counts; treat INCOMPLETE as failure. Device enumeration failures log and continue with an empty list, retaining headless creation and rejecting required missing swapchains. Preserve existing offscreen startup and optional Android presentation. Port all public loader cases through production helpers with scoped thread-local fake dispatch and initialized Rust counts. Stack poisoning/environment mutation are unnecessary at this Rust boundary. No new fallback or private .rive_head contents imported. | — |
 | `5e3de3857d6ae9e019f94da507f6385b96fbf3c3` | Prepare decoded paint images through the frame-sink hook; track pending paints and retry before resource replay creates version aliases. Preserve ordered removal, generation-safe destruction, canvas exclusion and stored sampler/matrix. Port both complete lazy-image regressions. Existing direct Rust decoded-image owners retain default preparation. Private web mesh-buffer changes, web sink override, browser tests and .rive_head contents are absent from the public delta and not claimed imported. | — |
 | `f2aa739e3ec4922c22ea34e4b6bce1653ea21106` | Forward host canvas command buffers and frame serials without local submission, preserving own-buffer fallback and no-active-canvas ordering. Add an explicit unsafe Rust submission/lifetime contract and port both upstream spy tests. Flush GL before state scrubbing. Acquire wrapped Vulkan targets through Rive's access tracker with exact load preservation and remove all pending sampled transitions for that texture identity. Concrete Rust hosts retain default resources; private Android override and .rive_head contents are absent from the public delta and not claimed imported. | — |
 | `183df53fbdfa36441b90a06130cd1d68a87c3ce4` | Cache per-verb counts through every mutation and ownership path in both RawPath owners; carry counts through borrowed views, remove mutable verb access, and use cached counts for renderer reservations with the existing combined-record representation and implicit closes. Port the complete mutation-count test and expanded long-zigzag GM fixtures with fresh provenance-bound C++ captures. Correct the initial cap's preexisting tangent translation error exposed by the new fixture. Skia accessor edits have no live Rust backend and are inapplicable; private .rive_head contents are not claimed imported. | — |

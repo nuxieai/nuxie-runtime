@@ -4732,6 +4732,13 @@ pub trait DataConverterCapability {
     fn may_advance(&self) -> bool {
         false
     }
+    /// The rest states of the advancing converters at and under this one, or
+    /// None where one of them keeps none (see ConverterRest).
+    fn rest_states(
+        &self,
+    ) -> Option<Vec<std::rc::Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>>> {
+        None
+    }
     fn convert(
         &mut self,
         input: &dyn crate::mechanical_port::source::data_bind::data_values::data_value::DataValue,

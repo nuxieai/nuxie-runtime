@@ -26,6 +26,8 @@ pub(crate) struct GroupItemCells {
     // Whether the converter may advance, cached as DataBind caches its own:
     // unknown until first asked, forgotten when the converter changes.
     may_advance: Cell<Option<bool>>,
+    // The group's notifier for changes to the converters under it.
+    structure: RefCell<Option<Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>>>,
 }
 
 impl GroupItemCells {
@@ -36,6 +38,17 @@ impl GroupItemCells {
     fn set_converter(&self, value: Option<CoreHandle>) {
         *self.converter.borrow_mut() = value;
         self.may_advance.set(None);
+        let structure = self.structure.borrow().clone();
+        if let Some(structure) = structure {
+            structure.restructured();
+        }
+    }
+
+    pub(crate) fn set_structure(
+        &self,
+        structure: Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>,
+    ) {
+        *self.structure.borrow_mut() = Some(structure);
     }
 
     /// The converter, unless it may not advance. A converter that may not

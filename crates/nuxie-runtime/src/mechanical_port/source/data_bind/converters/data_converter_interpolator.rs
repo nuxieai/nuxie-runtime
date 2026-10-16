@@ -99,8 +99,11 @@ impl InterpolatorAdvancer {
         self.animation_a.elapsed_seconds = 0.0;
         self.animation_b.elapsed_seconds = 0.0
     }
-    fn update_values(&mut self, input: &dyn DataValue) {
-        if !input.compare(self.current().to.as_deref()) {
+    /// Whether it changed anything: an input equal to the current target
+    /// leaves every value as it is.
+    fn update_values(&mut self, input: &dyn DataValue) -> bool {
+        let changes = !input.compare(self.current().to.as_deref());
+        if changes {
             if self.current().elapsed_seconds != 0.0 {
                 if self.is_smoothing {
                     let mut old = core::mem::take(&mut self.animation_a);
@@ -123,6 +126,7 @@ impl InterpolatorAdvancer {
             input.copy_value(current.to.as_deref_mut());
             current.elapsed_seconds = 0.0
         }
+        changes
     }
     fn copy_current_value(&self, output: &mut dyn DataValue) {
         self.current_value
@@ -145,6 +149,10 @@ pub struct DataConverterInterpolator {
     output: Option<Box<dyn DataValue>>,
     advance_count: u8,
     advancer: InterpolatorAdvancer,
+    // Set by an advance that found the current value at its target (past the
+    // first two advances, initialized), so the next advance changes nothing;
+    // cleared by everything that changes the advancer or the count.
+    rest: Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>,
 }
 
 impl Default for DataConverterInterpolator {
@@ -156,6 +164,7 @@ impl Default for DataConverterInterpolator {
             output: None,
             advance_count: 0,
             advancer: InterpolatorAdvancer::default(),
+            rest: Rc::default(),
         }
     }
 }
@@ -275,6 +284,7 @@ impl DataConverterInterpolator {
             .as_ref()
             .unwrap()
             .compare(self.advancer.current_value.as_deref());
+        self.rest.set_at_rest(current_to_matches && self.advance_count == 2);
         if current_to_matches || elapsed == 0.0 {
             return false;
         }
@@ -355,6 +365,7 @@ impl DataConverterInterpolator {
     }
     pub fn convert<'a>(&'a mut self, input: &'a dyn DataValue) -> &'a dyn DataValue {
         if self.base.duration() == 0.0 && self.advancer.initialized {
+            self.rest.set_at_rest(false);
             self.advancer.reset_to_start(input);
             return input;
         }
@@ -362,6 +373,7 @@ impl DataConverterInterpolator {
             let Some(output) = new_like(input) else {
                 return input;
             };
+            self.rest.set_at_rest(false);
             self.output = Some(output);
             self.advancer.initialize(input);
         }
@@ -369,9 +381,10 @@ impl DataConverterInterpolator {
             && self.output.is_some()
         {
             if self.advance_count < 2 {
+                self.rest.set_at_rest(false);
                 self.advancer.reset_values(input)
-            } else {
-                self.advancer.update_values(input)
+            } else if self.advancer.update_values(input) {
+                self.rest.set_at_rest(false);
             }
             self.advancer
                 .copy_current_value(self.output.as_deref_mut().unwrap());
@@ -383,16 +396,19 @@ impl DataConverterInterpolator {
         self.convert(input)
     }
     pub fn reset(&mut self) {
+        self.rest.set_at_rest(false);
         self.advance_count = 0;
         self.advancer.reset()
     }
     pub fn copy(&mut self, other: &Self) {
+        self.rest.set_at_rest(false);
         self.interpolator = other.interpolator.clone();
         let mut base = std::mem::take(&mut self.base);
         base.copy(&other.base, self);
         self.base = base;
     }
     pub fn duration_changed(&mut self) {
+        self.rest.set_at_rest(false);
         self.base.base.mark_converter_dirty()
     }
 }
@@ -467,6 +483,11 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     }
     fn may_advance(&self) -> bool {
         true
+    }
+    fn rest_states(
+        &self,
+    ) -> Option<Vec<Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>>> {
+        Some(vec![Rc::clone(&self.rest)])
     }
 }
 

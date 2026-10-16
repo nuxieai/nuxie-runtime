@@ -126,6 +126,74 @@ pub trait BindContainer {
     fn relink_data_context(&mut self) {}
 }
 
+/// Whether a converter that may advance is at rest: its next advance would
+/// change nothing and answer false. Shared with the binds whose advance
+/// reaches it, which it wakes whenever that changes; while every advancing
+/// converter under a bind rests, the bind's advance gate is closed.
+#[derive(Default)]
+pub(crate) struct ConverterRest {
+    at_rest: Cell<bool>,
+    listeners: std::cell::RefCell<Vec<std::rc::Weak<DataBindAdvanceCells>>>,
+}
+
+impl ConverterRest {
+    /// A group's notifier for changes to the converters under it, which is
+    /// always at rest itself.
+    pub(crate) fn structure() -> Self {
+        Self {
+            at_rest: Cell::new(true),
+            listeners: Default::default(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_at_rest(&self) -> bool {
+        self.at_rest.get()
+    }
+
+    /// The converter's next advance would (or no longer would) change
+    /// nothing.
+    #[inline]
+    pub(crate) fn set_at_rest(&self, at_rest: bool) {
+        if self.at_rest.replace(at_rest) != at_rest {
+            self.notify(false);
+        }
+    }
+
+    /// The converters under this one changed: the binds listening gather
+    /// their rest states anew.
+    pub(crate) fn restructured(&self) {
+        self.notify(true);
+    }
+
+    #[cold]
+    fn notify(&self, restructured: bool) {
+        let listeners: Vec<_> = self
+            .listeners
+            .borrow()
+            .iter()
+            .filter_map(std::rc::Weak::upgrade)
+            .collect();
+        for cells in listeners {
+            cells.rest_changed(restructured);
+        }
+    }
+
+    fn listen(&self, cells: &std::rc::Rc<DataBindAdvanceCells>) {
+        let mut listeners = self.listeners.borrow_mut();
+        listeners.retain(|listener| listener.strong_count() > 0);
+        if !listeners
+            .iter()
+            .any(|listener| std::ptr::eq(listener.as_ptr(), std::rc::Rc::as_ptr(cells)))
+        {
+            listeners.push(std::rc::Rc::downgrade(cells));
+        }
+    }
+}
+
+/// The rest states of the advancing converters under a bind's converter.
+type ConverterRests = std::rc::Rc<[std::rc::Rc<ConverterRest>]>;
+
 /// The state a bind's advance tests before reaching its converter, shared
 /// with its container so a frame's advance passes over binds that cannot
 /// advance without borrowing them.
@@ -142,6 +210,11 @@ pub(crate) struct DataBindAdvanceCells {
     // The gate epoch of the container listing this bind, bumped whenever an
     // input above changes.
     container_gate: std::cell::RefCell<Option<std::rc::Rc<Cell<u64>>>>,
+    // The rest states of the advancing converters under the converter, as
+    // gathered at its first advance: None until then (and again once the
+    // converter or the converters under it change); Some(None) where one of
+    // them keeps no rest state. While every one rests, the gate is closed.
+    converter_rests: std::cell::RefCell<Option<Option<ConverterRests>>>,
 }
 
 impl DataBindAdvanceCells {
@@ -175,16 +248,62 @@ impl DataBindAdvanceCells {
     }
 
     fn set_converter_may_advance(&self, value: Option<bool>) {
+        if value.is_none() {
+            *self.converter_rests.borrow_mut() = None;
+        }
         if self.converter_may_advance.replace(value) != value {
             self.gate_changed();
         }
     }
 
+    fn rests_unknown(&self) -> bool {
+        self.converter_rests.borrow().is_none()
+    }
+
+    /// Record the rest states `rests` (None: one of the advancing converters
+    /// keeps none) and listen to them.
+    fn gather_rests(self: &std::rc::Rc<Self>, rests: Option<Vec<std::rc::Rc<ConverterRest>>>) {
+        let rests = rests.filter(|rests| !rests.is_empty()).map(|rests| {
+            for rest in &rests {
+                rest.listen(self);
+            }
+            ConverterRests::from(rests)
+        });
+        *self.converter_rests.borrow_mut() = Some(rests);
+        // The converters may already rest.
+        self.gate_changed();
+    }
+
+    /// A rest state this bind listens to changed.
+    fn rest_changed(&self, restructured: bool) {
+        if restructured {
+            *self.converter_rests.borrow_mut() = None;
+        }
+        self.gate_changed();
+    }
+
+    /// Every advancing converter under the converter rests.
+    #[inline]
+    pub(crate) fn converters_rest(&self) -> bool {
+        self.converter_rests
+            .borrow()
+            .as_ref()
+            .and_then(Option::as_ref)
+            .is_some_and(|rests| rests.iter().all(|rest| rest.is_at_rest()))
+    }
+
     /// DataBind::advance_handle's gate before it reaches the converter: a
-    /// bound source, not collapsed, and a converter not known never to
-    /// advance. A bind failing it answers false and changes nothing.
+    /// bound source, not collapsed, a converter not known never to advance,
+    /// and not every advancing converter under it at rest. A bind failing it
+    /// answers false and changes nothing.
     #[inline]
     pub(crate) fn may_advance(&self) -> bool {
+        self.may_reach_converter() && !self.converters_rest()
+    }
+
+    /// The gate's part that DataBind::advance_handle tests itself.
+    #[inline]
+    pub(crate) fn may_reach_converter(&self) -> bool {
         self.bound.get()
             && !self.collapsed.get()
             && self.has_converter.get()
@@ -573,6 +692,22 @@ impl DataBind {
             if !may_advance {
                 return false;
             }
+        }
+        if let Some(cells) = owner
+            .with(|owner| {
+                let cells = &owner.as_data_bind().unwrap().advance_cells;
+                cells.rests_unknown().then(|| Rc::clone(cells))
+            })
+            .flatten()
+        {
+            let rests = converter
+                .with(|converter| {
+                    converter
+                        .as_data_converter_capability()
+                        .and_then(|converter| converter.rest_states())
+                })
+                .flatten();
+            cells.gather_rests(rests);
         }
         Some(converter).is_some_and(|converter| {
             converter

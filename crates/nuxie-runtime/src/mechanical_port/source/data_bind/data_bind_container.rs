@@ -417,6 +417,40 @@ impl DataBindContainer {
     }
 
     pub fn advance_data_binds(&self, elapsed: f32) -> bool {
+        let updated = self.advance_open_data_binds(elapsed);
+        #[cfg(any(test, feature = "testing"))]
+        self.verify_resting_data_binds(elapsed);
+        updated
+    }
+
+    /// A bind passed over because its converters rest must, advanced anyway,
+    /// answer false and change nothing.
+    #[cfg(any(test, feature = "testing"))]
+    fn verify_resting_data_binds(&self, elapsed: f32) {
+        let count = self.0.borrow().data_binds.len();
+        for index in 0..count {
+            let bind = {
+                let state = self.0.borrow();
+                let Some(cells) = state.advance_cells.get(index) else {
+                    break;
+                };
+                if !(cells.may_reach_converter() && cells.converters_rest()) {
+                    continue;
+                }
+                state.data_binds[index].clone()
+            };
+            let updates = Self::data_bind_updates();
+            let dirt = crate::mechanical_port::source::artboard::Artboard::dirt_notifications();
+            assert!(
+                !DataBind::advance_handle(&bind, elapsed)
+                    && updates == Self::data_bind_updates()
+                    && dirt == crate::mechanical_port::source::artboard::Artboard::dirt_notifications(),
+                "A data bind whose converters rest did work when advanced"
+            );
+        }
+    }
+
+    fn advance_open_data_binds(&self, elapsed: f32) -> bool {
         // While no gate input or bind list changes, a bind whose gate was
         // closed when the candidates were gathered would still be skipped:
         // visit only the candidates (none: every gate is closed). Once

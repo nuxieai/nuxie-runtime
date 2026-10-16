@@ -35,12 +35,27 @@ pub trait GroupConverter {
     fn advance(&mut self, elapsed: f32) -> bool;
 }
 
-#[derive(Default)]
 pub struct DataConverterGroup {
     pub base: DataConverterGroupBase,
     items: Vec<CoreHandle>,
     // Each item's converter cells, in item order.
     item_cells: Vec<std::rc::Rc<GroupItemCells>>,
+    // Tells the binds gathering this group's rest states when its items or
+    // their converters change.
+    structure: std::rc::Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>,
+}
+
+impl Default for DataConverterGroup {
+    fn default() -> Self {
+        Self {
+            base: DataConverterGroupBase::default(),
+            items: Vec::new(),
+            item_cells: Vec::new(),
+            structure: std::rc::Rc::new(
+                crate::mechanical_port::source::data_bind::data_bind::ConverterRest::structure(),
+            ),
+        }
+    }
 }
 
 impl Drop for DataConverterGroup {
@@ -64,8 +79,10 @@ impl DataConverterGroup {
 
     /// add_item for an item that is borrowed now, given its cells.
     pub(crate) fn add_item_with_cells(&mut self, item: CoreHandle, cells: std::rc::Rc<GroupItemCells>) {
+        cells.set_structure(std::rc::Rc::clone(&self.structure));
         self.items.push(item);
         self.item_cells.push(cells);
+        self.structure.restructured();
     }
 
     pub fn convert(
@@ -317,6 +334,27 @@ fn convert_chain(
 }
 
 impl DataConverterCapability for DataConverterGroup {
+    fn rest_states(
+        &self,
+    ) -> Option<Vec<std::rc::Rc<crate::mechanical_port::source::data_bind::data_bind::ConverterRest>>> {
+        // The items advance() reaches, and the notifier for their changes.
+        let mut rests = vec![std::rc::Rc::clone(&self.structure)];
+        for cells in &self.item_cells {
+            if let Some(converter) = cells.advancing_converter() {
+                rests.extend(
+                    converter
+                        .with(|converter| {
+                            converter
+                                .as_data_converter_capability()
+                                .and_then(|converter| converter.rest_states())
+                        })
+                        .flatten()?,
+                );
+            }
+        }
+        Some(rests)
+    }
+
     fn convert(
         &mut self,
         input: &dyn DataValue,

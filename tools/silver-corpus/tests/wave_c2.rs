@@ -1,5 +1,8 @@
 //! Exact pinned Silver action streams for Wave C2 layout cases.
 
+#[path = "support/browser_layout.rs"]
+mod browser_layout;
+
 use silver_corpus::{Execution, compare_sriv, parse_sriv, read_manifest, resolve_expected};
 use std::path::{Path, PathBuf};
 
@@ -20,7 +23,8 @@ fn runtime_root() -> PathBuf {
 }
 
 fn replay(id: &str) {
-    replay_result(id).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    browser_layout::reviewed_result(id, replay_result(id))
+        .unwrap_or_else(|difference| panic!("{id}: {difference}"));
 }
 
 fn replay_result(id: &str) -> Result<(), silver_corpus::Difference> {

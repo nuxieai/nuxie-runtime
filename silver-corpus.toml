@@ -228,7 +228,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with vertical distribution"
 producer_line = 716
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the vertical list row's 700-wide content contribution rather than Yoga's 500 allocation.; first difference: frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums sum seven 100-wide child artboards to a 700-wide content floor instead of the old 500 allocation.; first difference: frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)."
 
 [[case]]
 id = "artboard_opacity_and_transform_test"
@@ -294,7 +294,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "bank card data binding"
 producer_line = 304
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the populated card's content width; its rounded clip point moves from 810 to 826.94385, with the original clipping and gradient code unchanged.; first difference: frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums keep the lower content row at 740.94385 plus two 63-point padding edges, making the card 866.94385 instead of 850. Its 40-point corner leaves the first clip point at 826.94385 instead of 810.; first difference: frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)."
 
 [[case]]
 id = "bidirectional_binding_source"
@@ -1966,7 +1966,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Global view models access through scripting"
 producer_line = 175
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums keep the view-model-bound card at its content contribution instead of the old zero-minimum allocation; its first path point moves from 945 to 980.; first difference: frame 0, op 49 (addRawPath), field point: expected (945, 0), got (980, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve the Main artboard width 500 plus the GlobalName list width 480, or 980, instead of squeezing their parent to 945.; first difference: frame 0, op 49 (addRawPath), field point: expected (945, 0), got (980, 0)."
 
 [[case]]
 id = "global_viewmodels_test-auto_instance"
@@ -4172,7 +4172,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Number to Lists reset triggers correctly"
 producer_line = 750
-note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums propagate the nested list child's 186 content width into its background instead of the old 180 allocation.; first difference: frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minimums preserve three 62-wide nested child artboards, or 186, instead of squeezing their background to 180.; first difference: frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)."
 
 [[case]]
 id = "reset_shared_viewmodel_instance_test"

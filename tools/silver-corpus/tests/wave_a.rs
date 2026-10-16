@@ -1,3 +1,6 @@
+#[path = "support/browser_layout.rs"]
+mod browser_layout;
+
 use nuxie_render_api::{PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle;
 use nuxie_runtime::source::viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime;
@@ -40,7 +43,8 @@ fn compare_case(id: &str) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("missing silver case {id}"))?;
     let actual = parse_sriv(Execution::run(case, &runtime)?.bytes())?;
     let expected = parse_sriv(&std::fs::read(resolve_expected(&runtime, case))?)?;
-    compare_sriv(&expected, &actual).map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
+    browser_layout::reviewed_result(id, compare_sriv(&expected, &actual))
+        .map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
 }
 
 struct NativeSilver {
@@ -132,7 +136,8 @@ impl NativeSilver {
         )
         .expect("parse pinned SRIV");
         let actual = parse_sriv(&self.factory.borrow().bytes()).expect("parse native SRIV");
-        compare_sriv(&expected, &actual).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+        browser_layout::reviewed_result(id, compare_sriv(&expected, &actual))
+            .unwrap_or_else(|difference| panic!("{id}: {difference}"));
     }
 }
 

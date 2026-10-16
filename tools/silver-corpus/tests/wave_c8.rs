@@ -1,5 +1,8 @@
 //! Exact pinned Silver replays for executable Wave C8 rendering cases.
 
+#[path = "support/browser_layout.rs"]
+mod browser_layout;
+
 use nuxie_runtime::source::math::random::RandomProvider;
 use silver_corpus::{
     Difference, Execution, Status, compare_sriv, parse_sriv, read_manifest, resolve_expected,
@@ -36,7 +39,8 @@ fn replay(id: &str) {
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     let (_, result) = replay_locked(id);
-    result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    browser_layout::reviewed_result(id, result)
+        .unwrap_or_else(|difference| panic!("{id}: {difference}"));
 }
 
 fn replay_exact_locked(id: &str) {

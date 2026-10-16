@@ -727,7 +727,10 @@ decode queue. Bidi and audio retain their separately tracked status below.
     layout divergence with that exact pin; replay must match it. It reports
     actual C++ equality separately from reviewed CSS coverage. Unlisted,
     duplicate, unsupported or moved replacements fail. No baseline or epsilon
-    changes. A change that moves a pinned difference fails the gate.
+    changes. Direct Silver integration assertions use the same closed 18-case
+    review set in `tests/support/browser_layout.rs`, retaining each C++ first
+    value and checking its exact CSS difference. Every unlisted direct
+    assertion stays exact. A moved pin fails the gate.
     Upstream layout/Yoga changes are product decisions, not mechanical
     translations (see `upstream-sync-map.md`, "Scope decisions").
   `TaffyTree::disable_rounding()` keeps unrounded results.

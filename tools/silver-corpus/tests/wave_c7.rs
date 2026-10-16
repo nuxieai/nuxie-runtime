@@ -1,5 +1,8 @@
 //! Exact pinned Silver replay for the callable Wave C7 TextInput render case.
 
+#[path = "support/browser_layout.rs"]
+mod browser_layout;
+
 use silver_corpus::{Execution, compare_sriv, parse_sriv, read_manifest, resolve_expected};
 use std::path::{Path, PathBuf};
 
@@ -40,7 +43,7 @@ fn replay_text_input_silver() {
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
     let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    compare_sriv(&expected, &actual)
+    browser_layout::reviewed_result("text_input", compare_sriv(&expected, &actual))
         .unwrap_or_else(|difference| panic!("text_input: {difference}"));
 }
 

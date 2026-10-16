@@ -111,3 +111,104 @@ fn scroll_threshold_viewports_keep_their_content_and_scroll_range() {
             .unwrap();
     }
 }
+
+fn assert_fixed_artboard_scroll_content(
+    file_name: &str,
+    board_name: &str,
+    expected: (f32, f32),
+    item: (f32, f32),
+) {
+    use nuxie_runtime::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    let mut factory = PersistentFactory::new(NullFactory);
+    let file = File::import(
+        &std::fs::read(fixture_path(file_name)).unwrap(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let board = file.with_file(|f| f.artboard_named(board_name)).unwrap();
+    let model_id = board.with_artboard(|a| a.view_model_id());
+    let model = file
+        .with_file_mut(|f| f.create_view_model_instance_at(model_id as usize, 0))
+        .unwrap();
+    board.bind_view_model_instance(Some(model.clone()));
+    let machine = board.state_machine_at(0).unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.1);
+    let scroll = board
+        .with_artboard(|a| {
+            a.objects()
+                .iter()
+                .flatten()
+                .find(|handle| {
+                    handle
+                        .with(|object| object.as_any().is::<ScrollConstraint>())
+                        .unwrap_or(false)
+                })
+                .cloned()
+        })
+        .unwrap();
+    let content = scroll
+        .with(|object| object.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let bounds = content
+        .with(|object| {
+            let layout = object.as_layout_component().unwrap();
+            (layout.layout_width(), layout.layout_height())
+        })
+        .unwrap();
+    assert_eq!(
+        bounds, expected,
+        "{file_name}: CSS allocation of the Hug content"
+    );
+    let children = content
+        .with(|object| object.as_container_component().unwrap().children().to_vec())
+        .unwrap();
+    let list = children.iter().find_map(|handle| handle.with(|object| {
+        object.as_any().downcast_ref::<nuxie_runtime::source::artboard_component_list::ArtboardComponentList>()
+            .map(|list| (0..list.artboard_count()).filter_map(|i|list.artboard_instance(i as i32)).collect::<Vec<_>>())
+    }).flatten()).unwrap();
+    assert!(!list.is_empty());
+    for board in list {
+        let size = board.with_artboard(|board| (board.layout_width(), board.layout_height()));
+        assert_eq!(
+            size, item,
+            "{file_name}: Fixed items share shrink by their equal bases"
+        );
+    }
+    scroll
+        .with_downcast::<ScrollConstraint, _>(|scroll| {
+            assert!(
+                scroll.max_offset_x() < 0.0 || scroll.max_offset_y() < 0.0,
+                "{file_name}: scrolling must retain range"
+            );
+        })
+        .unwrap();
+}
+
+#[test]
+fn fixed_artboard_items_share_the_draw_index_list_shrink_and_still_loop() {
+    // Ten equal 50-point bases share 100 + 9*10 available after negative gaps.
+    // Hosted artboards have zero automatic minima, so each gets 19.
+    assert_fixed_artboard_scroll_content(
+        "draw_index_list.riv",
+        "Main",
+        (200.0, 100.0),
+        (200.0, 19.0),
+    );
+}
+
+#[test]
+fn fixed_artboard_items_share_the_carousel_shrink_and_still_loop() {
+    // Four equal 105-point bases share 415 - 3*12 = 379 after gaps.
+    // The item allocation is 379/4 = 94.75 and the carousel still loops.
+    assert_fixed_artboard_scroll_content(
+        "layout/layout_scroll_snap.riv",
+        "main",
+        (415.0, 94.0),
+        (94.75, 94.0),
+    );
+}

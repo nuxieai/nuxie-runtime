@@ -84,14 +84,15 @@ fn participant_bounds(artboard: &CoreHandle) -> Aabb {
         .expect("live provider")
 }
 
-// CSS automatic minimums preserve the 260px content width even when the
-// row offers 200px. Keep the original C++ value and exact first difference.
+// Unsupported shape measurement keeps main's zero automatic minimum. CSS
+// shrink factors share negative space by basis. Preserve the C++ width and
+// exact new first difference for every reviewed result.
 const CPP_BOUNDED_WIDTH: f32 = 200.0;
-fn assert_css_bounded_width(width: f32) {
+fn assert_css_width(width: f32, cpp: f32, reviewed: &str) {
     assert_eq!(
-        format!("Subject.layoutBounds[2]: {width} != {CPP_BOUNDED_WIDTH}"),
-        "Subject.layoutBounds[2]: 260 != 200",
-        "layout-diverges:CSS min-width:auto floors Hug content at 260; Yoga clamps it to the 200 row offer"
+        format!("Subject.layoutBounds[2]: {width} != {cpp}"),
+        reviewed,
+        "layout-diverges:CSS weighted shrink with zero shape minimum; Rive controlSize updates a measured leaf basis between solves"
     );
 }
 
@@ -99,10 +100,18 @@ fn assert_css_bounded_width(width: f32) {
 fn a_hug_leaf_is_bounded_by_the_space_available_to_it() {
     let fixture = Fixture::new();
     let bounded = subject_bounds(&fixture.advanced("LeafBounded"));
-    assert_css_bounded_width(bounded.width());
+    assert_css_width(
+        bounded.width(),
+        CPP_BOUNDED_WIDTH,
+        "Subject.layoutBounds[2]: 143.88489 != 200",
+    );
     assert_eq!(bounded.height(), 120.0);
     let unbounded = subject_bounds(&fixture.advanced("LeafUnbounded"));
-    assert_eq!(unbounded.width(), 260.0);
+    assert_css_width(
+        unbounded.width(),
+        260.0,
+        "Subject.layoutBounds[2]: 146.06741 != 260",
+    );
     assert_eq!(unbounded.height(), 180.0);
 }
 
@@ -110,10 +119,18 @@ fn a_hug_leaf_is_bounded_by_the_space_available_to_it() {
 fn a_hug_participant_is_bounded_the_same_way_as_a_hug_leaf() {
     let fixture = Fixture::new();
     let bounded = participant_bounds(&fixture.advanced("ParticipantBounded"));
-    assert_css_bounded_width(bounded.width());
+    assert_css_width(
+        bounded.width(),
+        CPP_BOUNDED_WIDTH,
+        "Subject.layoutBounds[2]: 153.84616 != 200",
+    );
     assert_eq!(bounded.height(), 120.0);
     let unbounded = participant_bounds(&fixture.advanced("ParticipantUnbounded"));
-    assert_eq!(unbounded.width(), 260.0);
+    assert_css_width(
+        unbounded.width(),
+        260.0,
+        "Subject.layoutBounds[2]: 162.5 != 260",
+    );
     assert_eq!(unbounded.height(), 180.0);
 }
 
@@ -121,7 +138,11 @@ fn a_hug_participant_is_bounded_the_same_way_as_a_hug_leaf() {
 fn max_sizing_still_bounds_an_unbounded_hug() {
     let fixture = Fixture::new();
     let bounds = subject_bounds(&fixture.advanced("UnboundedMaxed"));
-    assert_eq!(bounds.width(), 180.0);
+    assert_css_width(
+        bounds.width(),
+        180.0,
+        "Subject.layoutBounds[2]: 146.06741 != 180",
+    );
     assert_eq!(bounds.height(), 150.0);
 }
 
@@ -129,7 +150,11 @@ fn max_sizing_still_bounds_an_unbounded_hug() {
 fn a_fixed_axis_survives_hug_unbounded() {
     let fixture = Fixture::new();
     let bounds = subject_bounds(&fixture.advanced("UnboundedFixedHeight"));
-    assert_eq!(bounds.width(), 260.0);
+    assert_css_width(
+        bounds.width(),
+        260.0,
+        "Subject.layoutBounds[2]: 146.06741 != 260",
+    );
     assert_eq!(bounds.height(), 40.0);
 }
 
@@ -162,24 +187,32 @@ fn registry_hug_unbounded_changes_dirty_leaf_and_participant_layout() {
             subject_bounds(&artboard)
         };
         if participant {
-            assert_css_bounded_width(initial.width());
+            assert_css_width(
+                initial.width(),
+                CPP_BOUNDED_WIDTH,
+                "Subject.layoutBounds[2]: 153.84616 != 200",
+            );
         } else {
-            assert_eq!(initial.width(), 260.0);
+            assert_css_width(
+                initial.width(),
+                260.0,
+                "Subject.layoutBounds[2]: 146.06741 != 260",
+            );
         }
         assert_eq!(initial.height(), if participant { 120.0 } else { 180.0 });
         // Upstream ParametricPath::controlSize overwrites a leaf's content
         // height after a bounded solve. Re-enabling unbounded measurement
-        // cannot restore it. CSS keeps the intrinsic width floor at 260.
+        // cannot restore it. The next CSS shrink uses the current path basis.
         // Participant shapes retain their intrinsic path.
         let changes = if participant {
             [
-                (true, 260.0, 260.0, 180.0),
-                (false, CPP_BOUNDED_WIDTH, 260.0, 120.0),
+                (true, 260.0, 162.5, 180.0),
+                (false, CPP_BOUNDED_WIDTH, 153.84616, 120.0),
             ]
         } else {
             [
-                (false, CPP_BOUNDED_WIDTH, 260.0, 120.0),
-                (true, CPP_BOUNDED_WIDTH, 260.0, 120.0),
+                (false, CPP_BOUNDED_WIDTH, 141.76663, 120.0),
+                (true, CPP_BOUNDED_WIDTH, 140.52534, 120.0),
             ]
         };
         for (value, upstream_width, width, height) in changes {
@@ -196,9 +229,13 @@ fn registry_hug_unbounded_changes_dirty_leaf_and_participant_layout() {
             } else {
                 subject_bounds(&artboard)
             };
-            if upstream_width == CPP_BOUNDED_WIDTH {
-                assert_css_bounded_width(bounds.width());
-            }
+            let signature = match (participant, value) {
+                (true, true) => "Subject.layoutBounds[2]: 162.5 != 260",
+                (true, false) => "Subject.layoutBounds[2]: 153.84616 != 200",
+                (false, false) => "Subject.layoutBounds[2]: 141.76663 != 200",
+                (false, true) => "Subject.layoutBounds[2]: 140.52534 != 200",
+            };
+            assert_css_width(bounds.width(), upstream_width, signature);
             assert_eq!(bounds.width(), width, "{name}, hugUnbounded={value}");
             assert_eq!(bounds.height(), height, "{name}, hugUnbounded={value}");
         }

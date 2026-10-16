@@ -534,6 +534,26 @@ pub fn fallback_proc_enabled() -> bool {
     G_FALLBACK_PROC_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+thread_local! {
+    static FALLBACK_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Counts a call into the fallback callback, so a caller can tell whether a
+/// shaping depended on what the callback returned.
+pub(crate) fn note_fallback_call() {
+    FALLBACK_CALLS.with(|calls| calls.set(calls.get().wrapping_add(1)));
+}
+
+pub(crate) fn fallback_calls() -> u64 {
+    FALLBACK_CALLS.with(std::cell::Cell::get)
+}
+
+/// What shaping reads of the fallback configuration without calling it:
+/// whether a callback is set, and whether fallback is enabled.
+pub(crate) fn fallback_state() -> (bool, bool) {
+    (fallback_proc().is_some(), fallback_proc_enabled())
+}
+
 #[derive(Clone)]
 pub struct TextRun {
     pub font: Option<FontRef>,

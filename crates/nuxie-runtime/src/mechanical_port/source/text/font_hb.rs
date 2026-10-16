@@ -21,7 +21,7 @@ use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 use crate::mechanical_port::source::text_engine::{
     Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, FontRef, GlyphId,
     GlyphRun, GradientStop, LineMetrics, Paragraph, TextRun, Unichar, fallback_proc,
-    fallback_proc_enabled,
+    fallback_proc_enabled, note_fallback_call,
 };
 
 const STANDARD_SCALE: i32 = 2048;
@@ -604,7 +604,10 @@ impl HbFont {
         if let Some(index) = glyph_run.glyphs.iter().position(|glyph| *glyph == 0) {
             let missing = text[glyph_run.text_indices[index] as usize];
             let fallback =
-                fallback_proc().and_then(|callback| callback(missing, fallback_index, self));
+                fallback_proc().and_then(|callback| {
+                    note_fallback_call();
+                    callback(missing, fallback_index, self)
+                });
             if let Some(fallback_font) = fallback {
                 let fallback_hb = fallback_font
                     .as_any()
@@ -1222,8 +1225,10 @@ impl HbFont {
                         if glyph_run.glyphs[glyph_index] != 0 {
                             let text_position = glyph_run.text_indices[glyph_index] as usize;
                             if text_position + 1 < text.len() && text[text_position + 1] == 0xfe0f {
-                                let emoji_font = fallback_proc()
-                                    .and_then(|callback| callback(text[text_position], 0, self));
+                                let emoji_font = fallback_proc().and_then(|callback| {
+                                    note_fallback_call();
+                                    callback(text[text_position], 0, self)
+                                });
                                 if emoji_font
                                     .as_ref()
                                     .is_some_and(|font| font.has_color_glyphs())
@@ -1244,7 +1249,10 @@ impl HbFont {
                 } else {
                     let index = missing_index.unwrap();
                     let missing = text[glyph_run.text_indices[index] as usize];
-                    let fallback = fallback_proc().and_then(|callback| callback(missing, 0, self));
+                    let fallback = fallback_proc().and_then(|callback| {
+                        note_fallback_call();
+                        callback(missing, 0, self)
+                    });
                     if let Some(fallback) = fallback {
                         perform_fallback(fallback, &mut glyph_runs, text, &glyph_run, text_run, 1);
                     } else if !glyph_run.glyphs.is_empty() {

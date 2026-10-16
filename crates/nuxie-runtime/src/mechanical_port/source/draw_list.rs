@@ -2,8 +2,9 @@
 //! the drawables' links. The links change only where the Artboard sorts or
 //! splices its draw order, which bumps the version here; the list is rebuilt
 //! from the links on the next draw. Each entry keeps the cells of a plain
-//! Shape so its draw needs no borrow of the shape, and a Text's drawable cells
-//! so its range step needs only the borrow its draw takes.
+//! Shape so its draw needs no borrow of the shape, a Text's drawable cells
+//! so its range step needs only the borrow its draw takes, and a
+//! LayoutComponent's flags so its step needs no borrow either.
 
 use std::{
     cell::{Cell, RefCell},
@@ -12,7 +13,11 @@ use std::{
 
 use crate::mechanical_port::source::{
     drawable::{Drawable, DrawableCells, RuntimeDrawableOccurrence, RuntimeDrawableWeakOccurrence},
-    generated::{shapes::shape_base::ShapeBase, text::text_base::TextBase},
+    generated::{
+        layout_component_base::LayoutComponentBase, shapes::shape_base::ShapeBase,
+        text::text_base::TextBase,
+    },
+    layout_component::LayoutDrawFlags,
     shapes::shape_cells::ShapeCells,
 };
 
@@ -84,8 +89,8 @@ pub(crate) struct DrawList {
 
 pub(crate) struct DrawEntry {
     occurrence: RuntimeDrawableWeakOccurrence,
-    /// A Shape's or Text's cells, for the step that reads them instead of
-    /// borrowing the drawable.
+    /// A Shape's, Text's or LayoutComponent's cells, for the step that reads
+    /// them instead of borrowing the drawable.
     pub(crate) listed: Option<ListedDraw>,
 }
 
@@ -94,6 +99,8 @@ pub(crate) enum ListedDraw {
     Shape(ShapeDraw),
     /// A Text's range step reads its drawable cells; its draw borrows it.
     Text(TextDraw),
+    /// A LayoutComponent's range step and draw read its cells.
+    Layout(LayoutDraw),
 }
 
 pub(crate) struct ShapeDraw {
@@ -106,6 +113,13 @@ pub(crate) struct ShapeDraw {
 pub(crate) struct TextDraw {
     pub(crate) drawable: DrawableCells,
     // The text's Component dirt in its artboard's graph, when it is a member.
+    pub(crate) dirt: Option<crate::mechanical_port::source::component_graph::DirtBinding>,
+}
+
+pub(crate) struct LayoutDraw {
+    pub(crate) drawable: DrawableCells,
+    pub(crate) flags: LayoutDrawFlags,
+    // The component's Component dirt in its artboard's graph, when it is a member.
     pub(crate) dirt: Option<crate::mechanical_port::source::component_graph::DirtBinding>,
 }
 
@@ -156,6 +170,21 @@ impl DrawEntry {
                     .with(|object| {
                         object.as_text().map(|text| ListedDraw::Text(TextDraw {
                             drawable: text.base.draw_cells(),
+                            dirt: handle
+                                .component_graph()
+                                .map(|(graph, order)| graph.dirt_binding(order)),
+                        }))
+                    })
+                    .flatten()
+            }
+            RuntimeDrawableOccurrence::Authored(handle)
+                if handle.occupied_core_type() == Some(LayoutComponentBase::TYPE_KEY) =>
+            {
+                handle
+                    .with(|object| {
+                        object.as_layout_component().map(|layout| ListedDraw::Layout(LayoutDraw {
+                            drawable: layout.base.base.draw_cells(),
+                            flags: layout.draw_flags(),
                             dirt: handle
                                 .component_graph()
                                 .map(|(graph, order)| graph.dirt_binding(order)),

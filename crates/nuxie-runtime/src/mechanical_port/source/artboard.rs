@@ -4012,7 +4012,7 @@ impl Artboard {
         while let Some(entry) = list.entries.get(index) {
             // A listed Shape draws from its cells against the entry's handle; a
             // listed Text takes its range step from its cells and one borrow
-            // to draw.
+            // to draw; a listed LayoutComponent needs no borrow.
             if state.pending_clip_operations.is_empty()
                 && let (Some(listed), Some(handle)) = (entry.listed.as_ref(), entry.authored())
                 && match listed {
@@ -4021,6 +4021,9 @@ impl Artboard {
                     }
                     crate::mechanical_port::source::draw_list::ListedDraw::Text(text) => {
                         Self::draw_listed_text(root, renderer, handle, text, &mut state)
+                    }
+                    crate::mechanical_port::source::draw_list::ListedDraw::Layout(layout) => {
+                        Self::draw_listed_layout(root, renderer, handle, layout, &mut state)
                     }
                 }
             {
@@ -4051,7 +4054,8 @@ impl Artboard {
 
     /// The range step for a listed Shape, from its cells: the prelude, the
     /// visitor check and Shape::draw. Returns false, having done nothing, when
-    /// the step must borrow the shape.
+    /// the step must borrow the shape. The listed loop's per-entry body.
+    #[inline(always)]
     fn draw_listed_shape(
         root: &CoreHandle,
         renderer: &mut Renderer,
@@ -4064,9 +4068,10 @@ impl Artboard {
             return false;
         }
         // A settled member's graph binding is the one recorded with the list.
-        let Some(dirt) = shape.dirt.as_ref().map(|dirt| dirt.get()) else {
+        let Some(dirt) = shape.dirt.as_ref() else {
             return false;
         };
+        let dirt = dirt.get();
         // A generated Drawable's prelude: Shape is neither a clip start nor a
         // clip end, and no clip operation is pending. Shape::willDraw is
         // !isHidden() && renderOpacity() != 0.
@@ -4111,9 +4116,10 @@ impl Artboard {
             return false;
         }
         // A settled member's graph binding is the one recorded with the list.
-        let Some(dirt) = text.dirt.as_ref().map(|dirt| dirt.get()) else {
+        let Some(dirt) = text.dirt.as_ref() else {
             return false;
         };
+        let dirt = dirt.get();
         let hidden = text.drawable.is_flagged_hidden()
             || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
         if hidden || state.empty_clips > 0 {
@@ -4127,6 +4133,42 @@ impl Artboard {
         // The text's own draw ran: read the visitor afresh, as after any
         // borrowed step.
         state.has_visitor = None;
+        true
+    }
+
+    /// The range step for a listed LayoutComponent, from its cells: the
+    /// generated prelude (an authored LayoutComponent is no clip start or end,
+    /// and Drawable::willDraw is !isHidden(), which LayoutComponent widens by
+    /// isCollapsed()), the visitor check, then LayoutComponent::draw. Returns
+    /// false, having done nothing, when the step must borrow the component.
+    #[inline(never)]
+    fn draw_listed_layout(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        handle: &CoreHandle,
+        layout: &crate::mechanical_port::source::draw_list::LayoutDraw,
+        state: &mut DrawRangeState,
+    ) -> bool {
+        // A loan of the component would succeed and its release would run nothing.
+        if !handle.is_occupied_settled() {
+            return false;
+        }
+        // A settled member's graph binding is the one recorded with the list.
+        let Some(dirt) = layout.dirt.as_ref() else {
+            return false;
+        };
+        let dirt = dirt.get();
+        let hidden = layout.drawable.is_flagged_hidden()
+            || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED)
+            || layout.flags.style_display_hidden();
+        if hidden || state.empty_clips > 0 {
+            return true;
+        }
+        // An authored drawable has no layer mask operation.
+        if state.has_visitor(root) && layout.drawable.has_custom_properties() {
+            return false;
+        }
+        layout.flags.draw(renderer);
         true
     }
 

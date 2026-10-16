@@ -58,6 +58,17 @@ mod deferred_canvas_mode_test;
 mod deferred_flush_parity_test;
 mod deferred_measure_test;
 mod deferred_mesh_instanced_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod deferred_paint_image_prep_test;
 mod deferred_path_geometry_test;
 #[cfg(feature = "with-rive-path-query")]
 mod deferred_path_query_test;

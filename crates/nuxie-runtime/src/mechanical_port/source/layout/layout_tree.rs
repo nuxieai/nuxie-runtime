@@ -272,14 +272,47 @@ pub fn measure_axis(known: Option<f32>, available: AvailableSpace) -> (f32, Layo
     }
 }
 
+/// Resolve width limits even during ContentSize, where Taffy defers these
+/// clamps. Height must already reflect the final content-box width.
+pub(crate) fn content_width_limits(
+    style: &Style,
+    parent: taffy::geometry::Size<Option<f32>>,
+) -> (Option<f32>, Option<f32>) {
+    use taffy::util::{MaybeMath, MaybeResolve, ResolveOrZero};
+    let calc = |_: *const (), _: f32| 0.0;
+    let padding_border = style.padding.resolve_or_zero(parent.width, calc)
+        + style.border.resolve_or_zero(parent.width, calc);
+    let inset = if style.box_sizing == taffy::BoxSizing::BorderBox {
+        padding_border.horizontal_axis_sum()
+    } else {
+        0.0
+    } + if style.overflow.y == taffy::Overflow::Scroll {
+        style.scrollbar_width
+    } else {
+        0.0
+    };
+    let content = |value: Option<f32>| value.map(|value| (value - inset).max(0.0));
+    (
+        content(
+            style
+                .min_size
+                .maybe_resolve(parent, calc)
+                .maybe_apply_aspect_ratio(style.aspect_ratio)
+                .width,
+        ),
+        content(style.max_size.width.maybe_resolve(parent.width, calc)),
+    )
+}
+
 /// Answer a bounded intrinsic inline-size offer using CSS fit-content:
 /// min(max-content, max(min-content, stretch-fit)). Taffy passes content-box
-/// offers here, so its solver still owns padding, borders and size limits.
+/// offers here; width limits are resolved from the same style and box sizing.
 /// A host without a meaningful minimum keeps its existing measurement protocol.
 /// Exact and unbounded axes, including hugUnbounded, do not take this path.
 pub(crate) fn measure_fit_content(
     width: (f32, LayoutMeasureMode),
     height: (f32, LayoutMeasureMode),
+    limits: (Option<f32>, Option<f32>),
     minimum: impl FnOnce() -> Option<f32>,
     mut measure: impl FnMut(f32, LayoutMeasureMode, f32, LayoutMeasureMode) -> Vec2D,
 ) -> Vec2D {
@@ -293,7 +326,22 @@ pub(crate) fn measure_fit_content(
             );
             if maximum.x.is_finite() {
                 let inline = maximum.x.min(minimum.max(width.0));
-                let mut measured = measure(inline, LayoutMeasureMode::Exactly, height.0, height.1);
+                let mut wrapping_width = inline;
+                if let Some(maximum) = limits.1 {
+                    wrapping_width = wrapping_width.min(maximum);
+                }
+                if let Some(minimum) = limits.0 {
+                    wrapping_width = wrapping_width.max(minimum);
+                }
+                let mut measured = measure(
+                    wrapping_width,
+                    LayoutMeasureMode::Exactly,
+                    height.0,
+                    height.1,
+                );
+                // Preserve the intrinsic flex basis: ContentSize intentionally
+                // ignores min/max on its main axis. Taffy clamps the box later;
+                // its block size must already use that final wrapping width.
                 // Upstream text returns the widest wrapped line even for an
                 // exact offer. The CSS box keeps the chosen inline size.
                 measured.x = inline;

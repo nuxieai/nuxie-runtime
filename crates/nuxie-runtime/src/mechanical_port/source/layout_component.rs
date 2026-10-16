@@ -3131,6 +3131,24 @@ impl LayoutComponent {
             known.width.is_none() && available.width == taffy::prelude::AvailableSpace::MinContent;
         let (width, width_mode) = measure_axis(known.width, available.width);
         let (height, height_mode) = measure_axis(known.height, available.height);
+        // An unimplemented minimum is zero, as before automatic minima were
+        // enabled. An unbounded Rive answer is max-content, not a substitute
+        // minimum. Keep this query-time decision live when host modes change.
+        let minimum_contract = |mut measured: Vec2D, supports: bool| {
+            if !supports {
+                if known.width.is_none()
+                    && available.width == taffy::prelude::AvailableSpace::MinContent
+                {
+                    measured.x = 0.0;
+                }
+                if known.height.is_none()
+                    && available.height == taffy::prelude::AvailableSpace::MinContent
+                {
+                    measured.y = 0.0;
+                }
+            }
+            measured
+        };
         let measured = match kind {
             LayoutNodeKind::Participant => {
                 let Some((host, width_mode, height_mode)) = owner
@@ -3154,16 +3172,20 @@ impl LayoutComponent {
                     return taffy::prelude::Size::ZERO;
                 };
                 host.map(|host| {
-                    measure_fit_content(
-                        (offer(width, width_mode), width_mode),
-                        (offer(height, height_mode), height_mode),
-                        width_limits,
-                        min_content,
-                        (intrinsic_width || min_content) && host_supports_min_content_width(&host),
-                        || host_min_content_width(&host),
-                        |width, width_mode, height, height_mode| {
-                            measure_host(&host, width, width_mode, height, height_mode)
-                        },
+                    let supports = host_supports_min_content_width(&host);
+                    minimum_contract(
+                        measure_fit_content(
+                            (offer(width, width_mode), width_mode),
+                            (offer(height, height_mode), height_mode),
+                            width_limits,
+                            min_content,
+                            (intrinsic_width || min_content) && supports,
+                            || host_min_content_width(&host),
+                            |width, width_mode, height, height_mode| {
+                                measure_host(&host, width, width_mode, height, height_mode)
+                            },
+                        ),
+                        supports,
                     )
                 })
                 .unwrap_or_default()
@@ -3182,36 +3204,40 @@ impl LayoutComponent {
                 };
                 let width = offer(width, width_mode);
                 let height = offer(height, height_mode);
-                measure_fit_content(
-                    (width, width_mode),
-                    (height, height_mode),
-                    width_limits,
-                    min_content,
-                    (intrinsic_width || min_content)
-                        && children
-                            .iter()
-                            .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
-                            .all(host_supports_min_content_width),
-                    || {
-                        children
-                            .iter()
-                            .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
-                            .try_fold(0.0f32, |minimum, child| {
-                                host_min_content_width(child).map(|next| minimum.max(next))
-                            })
-                    },
-                    |width, width_mode, height, height_mode| {
-                        let mut measured = Vec2D::default();
-                        for child in &children {
-                            if child.is_type_of(LayoutComponentBase::TYPE_KEY) {
-                                continue;
+                let supports = children
+                    .iter()
+                    .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
+                    .all(host_supports_min_content_width);
+                minimum_contract(
+                    measure_fit_content(
+                        (width, width_mode),
+                        (height, height_mode),
+                        width_limits,
+                        min_content,
+                        (intrinsic_width || min_content) && supports,
+                        || {
+                            children
+                                .iter()
+                                .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
+                                .try_fold(0.0f32, |minimum, child| {
+                                    host_min_content_width(child).map(|next| minimum.max(next))
+                                })
+                        },
+                        |width, width_mode, height, height_mode| {
+                            let mut measured = Vec2D::default();
+                            for child in &children {
+                                if child.is_type_of(LayoutComponentBase::TYPE_KEY) {
+                                    continue;
+                                }
+                                let next =
+                                    measure_host(child, width, width_mode, height, height_mode);
+                                measured.x = measured.x.max(next.x);
+                                measured.y = measured.y.max(next.y);
                             }
-                            let next = measure_host(child, width, width_mode, height, height_mode);
-                            measured.x = measured.x.max(next.x);
-                            measured.y = measured.y.max(next.y);
-                        }
-                        measured
-                    },
+                            measured
+                        },
+                    ),
+                    supports,
                 )
             }
         };

@@ -25,17 +25,19 @@ use taffy::prelude::{Dimension, Style};
 pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
     use crate::mechanical_port::source::{
         shapes::image::Image,
-        text_engine::{TextOverflow, TextSizing},
+        text_engine::{TextOverflow, TextSizing, TextWrap},
     };
     host.with_mut(|object| {
         object.as_intrinsically_sizeable_mut().is_none()
             || object.as_any().is::<Image>()
             || object.as_text_mut().is_some_and(|text| {
-                // A Fixed or Fill participant owns the width and reports an
-                // effective AutoHeight mode. Its authored AutoWidth text still
-                // supplies the same intrinsic word minimum.
+                // A width-owning participant wraps at its allocated slot,
+                // regardless of the authored Text sizing. Authored boxes that
+                // do not wrap and fitted fonts still lack a minimum contract.
                 (text.effective_sizing() == TextSizing::AutoWidth
-                    || (text.layout_owns_width() && text.sizing() == TextSizing::AutoWidth))
+                    || (text.layout_owns_width()
+                        && (text.sizing() == TextSizing::AutoWidth
+                            || text.wrap() != TextWrap::NoWrap)))
                     && text.overflow() != TextOverflow::FitFontSize
             })
     })

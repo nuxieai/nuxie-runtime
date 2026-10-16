@@ -338,3 +338,35 @@ fn css_fit_content_does_not_change_wrapping_in_a_fixed_inline_slot() {
     // The fixed slot still uses upstream emergency word wrapping at 40px.
     assert!((f.solve().height() - 502.30176).abs() < 0.001);
 }
+
+#[test]
+fn css_fit_content_column_max_width_controls_wrapped_height() {
+    // Three 145.4414px words joined without a break make one 436.3242px run.
+    // At max-width 260, BreakWord draws two 36px lines. Rive's unchanged
+    // baseline metrics trim 1.69824px, giving 2 * 36 - 1.69824 = 70.30176.
+    let f = Fixture::new("experienceexperienceexperience", 200.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|label| {
+            label.with_style_mut(|style| {
+                style.base.set_max_width_value(260.0);
+                style
+                    .base
+                    .set_max_width_units_value_value(YGUnit::Point as u8);
+            });
+        })
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    let sibling = layout(&f.arena, Some(&f.root), Some(20.0), false);
+    LayoutComponent::sync_style_occurrence(&sibling);
+    LayoutComponent::sync_layout_children_occurrence(&f.root);
+    let bounds = f.solve();
+    println!("max-width column: {bounds:?}");
+    assert!((bounds.width() - 260.0).abs() < 0.001, "{bounds:?}");
+    assert!((bounds.height() - 70.30176).abs() < 0.001, "{bounds:?}");
+    assert!(
+        sibling
+            .with_downcast::<LayoutComponent, _>(|s| s.layout_data.solved_layout.top())
+            .unwrap()
+            >= bounds.top() + bounds.height()
+    );
+}

@@ -634,9 +634,11 @@ decode queue. Bidi and audio retain their separately tracked status below.
     `min(max-content size, max(min-content size, stretch-fit size))`
     ([CSS Box Sizing 3](https://www.w3.org/TR/css-sizing-3/#fit-content-size)).
     The adapter measures max-content unbounded, derives min-content from
-    that measurement's cached Rive shape, and chooses the inline size. Block
-    size is measured at exactly that width after resolving min/max widths
-    to the content box, including padding, borders and box sizing. This is
+    that measurement's cached Rive shape, and chooses the inline size. When
+    fallback-font shaping prevents Rive from retaining that cache, the minimum
+    query shapes a temporary copy instead; only that uncached path pays for
+    another shape. Block size is measured at exactly that width after resolving
+    min/max widths to the content box, including padding, borders and box sizing. This is
     required even for Taffy's ContentSize basis pass; the intrinsic width
     returned to Taffy still ignores those limits for flex-basis arithmetic.
     AutoWidth text with ordinary overflow uses normal word boundaries

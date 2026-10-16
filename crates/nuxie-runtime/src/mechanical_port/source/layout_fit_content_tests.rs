@@ -687,12 +687,14 @@ fn css_fit_content_fallback_font_keeps_the_full_offer() {
         }
     }
     let root = std::path::PathBuf::from(std::env::var_os("RIVE_RUNTIME_DIR").unwrap());
-    let primary = HbFont::decode(&std::fs::read(root.join(
-        "tests/unit_tests/assets/fonts/Inter_28pt-Bold.ttf",
-    )).unwrap()).unwrap();
-    let fallback = HbFont::decode(&std::fs::read(root.join(
-        "tests/unit_tests/assets/TwemojiMozilla.subset.ttf",
-    )).unwrap()).unwrap();
+    let primary = HbFont::decode(
+        &std::fs::read(root.join("tests/unit_tests/assets/fonts/Inter_28pt-Bold.ttf")).unwrap(),
+    )
+    .unwrap();
+    let fallback = HbFont::decode(
+        &std::fs::read(root.join("tests/unit_tests/assets/TwemojiMozilla.subset.ttf")).unwrap(),
+    )
+    .unwrap();
     // U+3297 is a color glyph in the pinned emoji subset, absent from Inter.
     assert!(!primary.has_glyph(0x3297));
     assert!(fallback.has_glyph(0x3297));
@@ -700,10 +702,18 @@ fn css_fit_content_fallback_font_keeps_the_full_offer() {
     let _restore = Restore;
     with_host_fallback_proc(pick, || {
         for participant in [false, true] {
-            let f = Fixture::new_host("Cross-plane ㊗ experience is active", 338.0, false, participant);
+            let f = Fixture::new_host(
+                "Cross-plane ㊗ experience is active",
+                338.0,
+                false,
+                participant,
+            );
             let before = fallback_calls();
             assert!(natural_size(&f).x > 338.0);
-            assert!(fallback_calls() > before, "the title must exercise fallback shaping");
+            assert!(
+                fallback_calls() > before,
+                "the title must exercise fallback shaping"
+            );
             // The widest word is experience, 145.4414px, and max-content
             // exceeds 338px. CSS min(max-content, max(min-content, 338)) = 338.
             assert_width(&f, 338.0);

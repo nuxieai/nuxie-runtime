@@ -2173,13 +2173,35 @@ impl Text {
         None
     }
 
-    /// Layout adapter query after an unbounded measure. Read its cached shape;
-    /// never shape again or change the direct Rive measurement protocol.
-    pub(crate) fn layout_min_content_width(&self) -> Option<f32> {
+    /// Layout adapter query after an unbounded measure. Reuse its cached shape
+    /// when present. If measurement could not retain a shape, notably after a
+    /// fallback-font callback, shape a temporary copy for this minimum query.
+    /// The direct Rive measurement protocol and its cache policy stay unchanged.
+    pub(crate) fn layout_min_content_width(&mut self) -> Option<f32> {
         if self.styled_text.empty() {
             return Some(0.0);
         }
-        let shape = &self.measured_shape.as_ref()?.shape;
+        let temporary = if self.measured_shape.is_none() {
+            let mut styled = StyledText::default();
+            if !self.make_styled(&mut styled, true, 1.0) {
+                return Some(0.0);
+            }
+            let runs = styled.runs();
+            Some(
+                runs[0]
+                    .font
+                    .as_ref()
+                    .expect("shaped text retains its font")
+                    .shape_text(styled.unichars(), runs, 0),
+            )
+        } else {
+            None
+        };
+        let shape = self
+            .measured_shape
+            .as_ref()
+            .map(|measured| &measured.shape)
+            .or(temporary.as_ref())?;
         // CSS break-word emergency breaks do not reduce min-content.
         let word_break = if self.word_break() == TextWordBreak::BreakAll {
             TextWordBreak::BreakAll

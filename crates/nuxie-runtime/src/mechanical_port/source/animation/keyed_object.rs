@@ -19,6 +19,11 @@ use crate::mechanical_port::source::{
 pub trait KeyedObjectContext: CoreContext {
     fn resolves_object(&self, id: u32) -> bool;
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle>;
+    /// An identity and epoch of the context's object table, while every id
+    /// keeps resolving to the same object; None where that isn't tracked.
+    fn objects_stamp(&self) -> Option<(u64, u64)> {
+        None
+    }
     /// resolve_object(id), reported as None when it is `current`. Contexts
     /// whose resolution only reads may compare without cloning the handle.
     fn resolve_object_unless(

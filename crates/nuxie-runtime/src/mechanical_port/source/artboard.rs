@@ -18,6 +18,12 @@ thread_local! { static DIRT_NOTIFICATIONS: Cell<u64> = const { Cell::new(0) }; }
 #[cfg(any(test, feature = "testing"))]
 thread_local! { static COLLAPSED_RUN_SKIPS: Cell<u64> = const { Cell::new(0) }; }
 
+/// A fresh object table identity.
+fn next_objects_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 #[cfg(any(test, feature = "testing"))]
 thread_local! {
     static RETAINED_DRAW_REPLAYS: Cell<u64> = const { Cell::new(0) };
@@ -106,6 +112,10 @@ struct ArtboardDirtyState {
     // Changes of the artboard's own transform, which its content (and so
     // its revision) leaves out. The change serial counts both kinds.
     self_transform_changes: Cell<u32>,
+    // This artboard's object table: an identity no other artboard shares and
+    // an epoch advanced by every change to the table.
+    objects_id: u64,
+    objects_epoch: Cell<u64>,
     // Bumped (wrapping) each time the draw order is sorted; state machines
     // read it to re-sort their hit components.
     draw_order_change_counter: Cell<u8>,
@@ -158,6 +168,8 @@ impl Default for RuntimeArtboardDirtyHandle {
             did_change: Cell::new(true),
             content_revision: Cell::new(1),
             self_transform_changes: Cell::new(0),
+            objects_id: next_objects_id(),
+            objects_epoch: Cell::new(0),
             draw_order_change_counter: Cell::new(0),
             host: RefCell::new(None),
             quiet_host_row: Cell::new(u32::MAX),
@@ -192,6 +204,16 @@ impl RuntimeArtboardDirtyHandle {
 
     pub(crate) fn draw_order_change_counter(&self) -> u8 {
         self.0.draw_order_change_counter.get()
+    }
+
+    /// The object table's identity and epoch: while both stand, every id
+    /// resolves to what it resolved to before.
+    pub(crate) fn objects_stamp(&self) -> (u64, u64) {
+        (self.0.objects_id, self.0.objects_epoch.get())
+    }
+
+    fn objects_changed(&self) {
+        self.0.objects_epoch.set(self.0.objects_epoch.get().wrapping_add(1));
     }
 
     fn increment_self_transform_changes(&self) {
@@ -700,6 +722,13 @@ impl KeyedObjectContext for RuntimeArtboardObjectContext<'_> {
         self.resolve_handle(id)
     }
 
+    fn objects_stamp(&self) -> Option<(u64, u64)> {
+        let instance = self.instance?;
+        self.root
+            .names_runtime_artboard(Rc::as_ptr(&instance.0))
+            .then(|| instance.with_artboard(|artboard| artboard.base.dirty_state.objects_stamp()))
+    }
+
     fn resolve_object_unless(
         &mut self,
         id: u32,
@@ -1200,16 +1229,22 @@ impl Artboard {
     // object-list append: callers still perform the explicit source lifecycle.
     #[cfg(any(feature = "tools", feature = "testing"))]
     pub fn add_object(&mut self, object: Option<CoreHandle>) {
-        self.objects.push(object);
+        self.objects_mut().push(object);
     }
 
     #[cfg(not(any(feature = "tools", feature = "testing")))]
     pub(crate) fn add_object(&mut self, object: Option<CoreHandle>) {
-        self.objects.push(object);
+        self.objects_mut().push(object);
     }
 
     pub(crate) fn release_import_slot(&mut self, index: usize) {
-        self.objects[index] = None;
+        self.objects_mut()[index] = None;
+    }
+
+    /// The object table, to change: its epoch advances.
+    fn objects_mut(&mut self) -> &mut Vec<Option<CoreHandle>> {
+        self.dirty_state.objects_changed();
+        &mut self.objects
     }
 
     pub(crate) fn add_animation(&mut self, object: CoreHandle) {
@@ -1249,7 +1284,7 @@ impl Artboard {
                         continue;
                     }
                     self.invalid_objects.push(self.objects[i].clone());
-                    self.objects[i] = None;
+                    self.objects_mut()[i] = None;
                 }
             } else {
                 break;
@@ -6620,7 +6655,7 @@ impl Artboard {
                 Some(object) => Some(object.clone_occurrence_into(&arena)?),
                 None => None,
             };
-            instance.with_artboard_mut(|instance| instance.base.objects.push(clone.clone()));
+            instance.with_artboard_mut(|instance| instance.base.objects_mut().push(clone.clone()));
             Self::clone_object_data_binds(&data_binds, object.as_ref(), clone, &arena, &container)?;
         }
         // All cloned binds must exist before installing the context, otherwise
@@ -6817,6 +6852,10 @@ impl KeyedObjectContext for Artboard {
 
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle> {
         self.resolve_handle(id)
+    }
+
+    fn objects_stamp(&self) -> Option<(u64, u64)> {
+        Some(self.dirty_state.objects_stamp())
     }
 
     fn resolve_object_unless(
@@ -7016,7 +7055,7 @@ impl Drop for Artboard {
                 crate::mechanical_port::source::animation::source_disposal::dispose_state_machine_source(machine);
             }
         }
-        self.objects.clear();
+        self.objects_mut().clear();
         self.invalid_objects.clear();
         self.animations.clear();
         self.state_machines.clear();
@@ -7150,9 +7189,9 @@ impl RuntimeArtboardInstanceHandle {
                 root.clone(),
             );
             if instance.base.objects.is_empty() {
-                instance.base.objects.push(Some(root.clone()));
+                instance.base.objects_mut().push(Some(root.clone()));
             } else {
-                instance.base.objects[0] = Some(root.clone());
+                instance.base.objects_mut()[0] = Some(root.clone());
             }
             instance.base.data_bind_container.set_owner(root);
         }

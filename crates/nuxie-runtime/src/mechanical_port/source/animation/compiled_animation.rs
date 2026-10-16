@@ -62,6 +62,8 @@ pub(crate) struct CompiledAnimation {
     // The epoch `objects` was built at; None before the first build.
     epoch: Option<u64>,
     objects: Vec<CompiledEntry>,
+    // The object table stamp the objects' targets were last resolved at.
+    resolved_at: Option<(u64, u64)>,
 }
 
 enum CompiledEntry {
@@ -132,14 +134,20 @@ impl CompiledAnimation {
         }
         match artboard.as_keyed_object_context() {
             Some(objects) => {
+                // While the object table stands, resolved targets stand too.
+                let stamp = objects.objects_stamp();
+                let current = stamp.is_some() && stamp == self.resolved_at;
                 for entry in &mut self.objects {
                     match entry {
                         CompiledEntry::Borrowed(object) => {
                             KeyedObject::apply_occurrence(object, objects, time, mix, context)
                         }
-                        CompiledEntry::Object(object) => object.apply(objects, time, mix, context),
+                        CompiledEntry::Object(object) => {
+                            object.apply(objects, time, mix, context, current)
+                        }
                     }
                 }
+                self.resolved_at = stamp;
             }
             None => {
                 for entry in &self.objects {
@@ -197,10 +205,12 @@ impl CompiledObject {
         time: f32,
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
+        table_stands: bool,
     ) {
         // The object table rarely changes: check the resolved target in
         // place, and take a new one only when it moved.
         let moved = match &self.target {
+            Some(_) if table_stands => None,
             Some(target) => artboard.resolve_object_unless(self.object_id, target),
             None => Some(artboard.resolve_object(self.object_id)),
         };

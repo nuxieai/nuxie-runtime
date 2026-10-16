@@ -1671,6 +1671,8 @@ impl ArtboardComponentList {
 
 impl ArtboardComponentList {
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        // Hosted artboards keep their own retained draws.
+        crate::mechanical_port::source::draw_replay::unreplayable();
         fn read<R>(
             owner: &CoreHandle,
             callback: impl FnOnce(&mut ArtboardComponentList) -> R,

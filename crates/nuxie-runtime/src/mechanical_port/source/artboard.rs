@@ -18,6 +18,12 @@ thread_local! { static DIRT_NOTIFICATIONS: Cell<u64> = const { Cell::new(0) }; }
 #[cfg(any(test, feature = "testing"))]
 thread_local! { static COLLAPSED_RUN_SKIPS: Cell<u64> = const { Cell::new(0) }; }
 
+#[cfg(any(test, feature = "testing"))]
+thread_local! {
+    static RETAINED_DRAW_REPLAYS: Cell<u64> = const { Cell::new(0) };
+    static RETAINED_DRAWS_ENABLED: Cell<bool> = const { Cell::new(true) };
+}
+
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::{AdvancingComponent, AdvancingComponentHandle, QuietState},
@@ -101,6 +107,28 @@ struct ArtboardDirtyState {
     draw_order_change_counter: Cell<u8>,
     host: RefCell<Option<ArtboardHostAttachment>>,
     quiet_host_row: Cell<u32>,
+    // The last draw's content key and, once the content stood for a draw,
+    // the calls recorded for it (draw_replay).
+    retained: RefCell<RetainedDraw>,
+}
+
+/// An artboard's content revision, its graph's write epoch and its child
+/// opacity at a draw: while all three stand, its draw makes the same calls.
+/// The epoch covers writes no component reports to the artboard (a paint's
+/// visibility is read only when it draws).
+type DrawKey = (u64, u64, u32);
+
+/// What the last draws of a leaf artboard's content left.
+#[derive(Default)]
+enum RetainedDraw {
+    #[default]
+    None,
+    /// Drawn once at this key.
+    Seen(DrawKey),
+    /// The calls of a draw at this key.
+    Recorded(DrawKey, Box<[crate::mechanical_port::source::draw_replay::DrawCmd]>),
+    /// A draw at this key made a call a recording can't keep.
+    Unreplayable(DrawKey),
 }
 
 /// One mount relation, shared with the dirty state rather than duplicated in
@@ -129,6 +157,7 @@ impl Default for RuntimeArtboardDirtyHandle {
             draw_order_change_counter: Cell::new(0),
             host: RefCell::new(None),
             quiet_host_row: Cell::new(u32::MAX),
+            retained: RefCell::new(RetainedDraw::None),
         }))
     }
 }
@@ -2623,6 +2652,21 @@ impl Artboard {
     pub fn collapsed_run_skips() -> u64 {
         COLLAPSED_RUN_SKIPS.with(Cell::get)
     }
+    /// Draws that replayed a retained recording on this thread.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn retained_draw_replays() -> u64 {
+        RETAINED_DRAW_REPLAYS.with(Cell::get)
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn set_retained_draws_enabled(enabled: bool) {
+        RETAINED_DRAWS_ENABLED.with(|value| value.set(enabled));
+    }
+    fn retained_draws_enabled() -> bool {
+        #[cfg(any(test, feature = "testing"))]
+        return RETAINED_DRAWS_ENABLED.with(Cell::get);
+        #[cfg(not(any(test, feature = "testing")))]
+        true
+    }
     pub fn collapse_changed(&self) {
         self.dirty_state.collapse_changed();
     }
@@ -3647,7 +3691,11 @@ impl Artboard {
         // already the top-level render target, and a host can skip drawing
         // entirely via did_change(). Only nested/instanced draws (which reach
         // draw_internal directly) participate in cache-as-bitmap.
-        Self::draw_content_handle(root, renderer);
+        if Self::retained_draws_enabled() {
+            Self::draw_content_retained_handle(root, renderer);
+        } else {
+            Self::draw_content_handle(root, renderer);
+        }
     }
 
     pub fn draw_internal_handle(root: &CoreHandle, renderer: &mut Renderer) {
@@ -3771,7 +3819,100 @@ impl Artboard {
         if visitor.is_none() && has_cache && Self::draw_cached_as_bitmap_handle(root, renderer) {
             return;
         }
+        if visitor.is_none() && !has_cache && Self::retained_draws_enabled() {
+            return Self::draw_content_retained_handle(root, renderer);
+        }
         Self::draw_content_with_visitor_handle(root, renderer, visitor);
+    }
+
+    /// The draw key of a leaf artboard (one hosting no other artboard, whose
+    /// draws therefore depend on its own content alone), with its dirty state.
+    fn retained_draw_key(
+        root: &CoreHandle,
+        receiver: Option<&RuntimeArtboardInstanceHandle>,
+    ) -> Option<(DrawKey, RuntimeArtboardDirtyHandle)> {
+        Self::with_root(root, receiver, |artboard| {
+            artboard.artboard_hosts.is_empty().then(|| {
+                (
+                    (
+                        artboard.dirty_state.0.content_revision.get(),
+                        root.arena_write_epoch(),
+                        artboard.child_opacity().to_bits(),
+                    ),
+                    artboard.dirty_state.clone(),
+                )
+            })
+        })
+        .flatten()
+    }
+
+    /// draw_content without a visitor: a leaf artboard whose content stands
+    /// since its last draw replays the calls that draw recorded
+    /// (draw_replay). The first draw at a key draws in full; the next records
+    /// while it draws; later ones replay, until a component notifies a change
+    /// or the child opacity moves.
+    fn draw_content_retained_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        use crate::mechanical_port::source::draw_replay;
+        let receiver = root.runtime_artboard_instance();
+        let Some((key, dirty)) = Self::retained_draw_key(root, receiver.as_ref()) else {
+            return Self::draw_content_with_visitor_handle(root, renderer, None);
+        };
+        let state = std::mem::take(&mut *dirty.0.retained.borrow_mut());
+        let next = match state {
+            RetainedDraw::Recorded(at, cmds) if at == key => {
+                #[cfg(any(test, feature = "testing"))]
+                {
+                    Self::verify_retained_draw(root, &cmds);
+                    RETAINED_DRAW_REPLAYS.with(|count| count.set(count.get() + 1));
+                }
+                // draw_content's own effect besides its calls.
+                dirty.0.did_change.set(false);
+                draw_replay::replay(&cmds, renderer);
+                RetainedDraw::Recorded(at, cmds)
+            }
+            RetainedDraw::Seen(at) if at == key => {
+                let mut recorder = draw_replay::RecordingRenderer::new(renderer);
+                Self::draw_content_with_visitor_handle(root, &mut recorder, None);
+                let cmds = recorder.finish();
+                let stands = Self::retained_draw_key(root, receiver.as_ref())
+                    .is_some_and(|(after, _)| after == key);
+                match (stands, cmds) {
+                    (true, Some(cmds)) => RetainedDraw::Recorded(key, cmds.into_boxed_slice()),
+                    (true, None) => RetainedDraw::Unreplayable(key),
+                    (false, _) => RetainedDraw::None,
+                }
+            }
+            RetainedDraw::Unreplayable(at) if at == key => {
+                Self::draw_content_with_visitor_handle(root, renderer, None);
+                RetainedDraw::Unreplayable(at)
+            }
+            _ => {
+                Self::draw_content_with_visitor_handle(root, renderer, None);
+                let stands = Self::retained_draw_key(root, receiver.as_ref())
+                    .is_some_and(|(after, _)| after == key);
+                if stands {
+                    RetainedDraw::Seen(key)
+                } else {
+                    RetainedDraw::None
+                }
+            }
+        };
+        *dirty.0.retained.borrow_mut() = next;
+    }
+
+    /// A replay's calls must be the calls the artboard's draw makes now.
+    #[cfg(any(test, feature = "testing"))]
+    fn verify_retained_draw(
+        root: &CoreHandle,
+        cmds: &[crate::mechanical_port::source::draw_replay::DrawCmd],
+    ) {
+        let mut null = nuxie_render_api::NullRenderer::new();
+        let mut recorder = crate::mechanical_port::source::draw_replay::RecordingRenderer::new(&mut null);
+        Self::draw_content_with_visitor_handle(root, &mut recorder, None);
+        assert!(
+            recorder.finish().as_deref() == Some(cmds),
+            "a retained draw no longer matches the artboard's draw"
+        );
     }
 
     /// The actual vector-drawing body of draw_internal. Split out so the
@@ -3872,7 +4013,7 @@ impl Artboard {
             })
             .flatten();
         if let Some((paths, factory)) = clipping {
-            renderer.clip_path(paths.borrow_mut().local.render_path(&factory));
+            renderer.clip_path(&*paths.borrow_mut().local.render_path(&factory));
         }
         let mut paint_index = 0;
         loop {

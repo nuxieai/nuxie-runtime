@@ -226,20 +226,19 @@ impl PaintCells {
             renderer.translate(feather.offset_x(), feather.offset_y());
         }
         let mut draw_path = |path: &mut ShapePaintPath| {
-            let render_path = path.render_path_with_deferred_factory(factory);
+            let mut render_path = path.render_path_with_deferred_factory(factory);
             if self.is_fill.get() {
                 if let Some(fill_rule) = fill_rule {
                     match fill_rule {
-                        0 => render_path.fill_rule(nuxie_render_api::FillRule::NonZero),
-                        1 => render_path.fill_rule(nuxie_render_api::FillRule::EvenOdd),
-                        2 => render_path.fill_rule(nuxie_render_api::FillRule::Clockwise),
+                        0 => crate::mechanical_port::source::draw_replay::set_fill_rule(&mut *render_path, nuxie_render_api::FillRule::NonZero),
+                        1 => crate::mechanical_port::source::draw_replay::set_fill_rule(&mut *render_path, nuxie_render_api::FillRule::EvenOdd),
+                        2 => crate::mechanical_port::source::draw_replay::set_fill_rule(&mut *render_path, nuxie_render_api::FillRule::Clockwise),
                         _ => {}
                     }
                 }
             }
-            let render_path = path.existing_render_path();
             if let Some(paint) = self.render_paint() {
-                renderer.draw_path(render_path, paint.borrow().as_ref());
+                renderer.draw_path(&*render_path, paint.borrow().as_ref());
             }
         };
         if let Some(effect) = path_effect {
@@ -414,8 +413,11 @@ impl PaintCells {
         };
         let render_paint = self.render_paint().expect("initialized paint");
         let mut render_paint = render_paint.borrow_mut();
-        render_paint.blend_mode(mode);
-        render_paint.additiveness(super::blend_mode::additiveness_for(mode, amount));
+        crate::mechanical_port::source::draw_replay::set_blend(
+            &mut **render_paint,
+            mode,
+            super::blend_mode::additiveness_for(mode, amount),
+        );
     }
 
     /// ShapePaintMutator::isVisible from the flags the mutator shared, while a
@@ -435,6 +437,7 @@ impl PaintCells {
 
     /// Install the render paint; a paint is initialized at most once.
     pub(crate) fn set_render_paint(&self, paint: RuntimeRenderPaintHandle) {
+        crate::mechanical_port::source::draw_replay::register_paint(&paint);
         assert!(
             self.render_paint.set(paint).is_ok(),
             "a ShapePaint initializes its render paint once"

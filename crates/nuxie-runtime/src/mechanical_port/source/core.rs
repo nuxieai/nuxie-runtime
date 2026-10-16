@@ -269,6 +269,8 @@ struct CoreAccessFields {
 struct CoreArenaSlot {
     // The arena owns payload lifetime; handles retain only allocation storage.
     retirement: Rc<CoreRetirementDomain>,
+    // The arena's write epoch, shared by all its slots.
+    write_epoch: Rc<Cell<u64>>,
     property_observers: RefCell<Weak<PropertyObservers>>,
     source_global_id: Cell<Option<u32>>,
     type_predicate: Cell<Option<fn(CoreTypeKey) -> bool>>,
@@ -300,9 +302,14 @@ impl std::ops::Deref for CoreArenaSlot {
 }
 
 impl CoreArenaSlot {
-    fn vacant(generation: u64, retirement: Rc<CoreRetirementDomain>) -> Self {
+    fn vacant(
+        generation: u64,
+        retirement: Rc<CoreRetirementDomain>,
+        write_epoch: Rc<Cell<u64>>,
+    ) -> Self {
         Self {
             retirement,
+            write_epoch,
             property_observers: RefCell::new(Weak::new()),
             source_global_id: Cell::new(None),
             type_predicate: Cell::new(None),
@@ -473,6 +480,9 @@ impl Drop for CoreBorrowRelease<'_> {
 struct CoreArenaInner {
     slots: Vec<CoreSlotOwner>,
     free: Vec<usize>,
+    // Advanced by every property change notified on one of its objects, so a
+    // cache of what the graph draws can tell that nothing in it was written.
+    write_epoch: Rc<Cell<u64>>,
 }
 
 /// Single-threaded owner for one imported Rive object graph.
@@ -528,6 +538,7 @@ impl CoreArena {
             index,
             0,
             Rc::new(CoreRetirementDomain::default()),
+            Rc::clone(&inner.write_epoch),
         );
         let slot = &identity.slot;
         slot.core_type
@@ -558,8 +569,13 @@ impl CoreArena {
                 let previous = &inner.slots[index];
                 let generation = previous.generation.get();
                 let retirement = Rc::clone(&previous.retirement);
-                let identity =
-                    CoreHandleIdentity::new(self.inner.clone(), index, generation, retirement);
+                let identity = CoreHandleIdentity::new(
+                    self.inner.clone(),
+                    index,
+                    generation,
+                    retirement,
+                    Rc::clone(&inner.write_epoch),
+                );
                 let previous_owner =
                     std::mem::replace(&mut inner.slots[index], CoreSlotOwner(Rc::clone(&identity)));
                 (CoreHandle { identity }, Some(previous_owner))
@@ -570,6 +586,7 @@ impl CoreArena {
                     index,
                     0,
                     Rc::new(CoreRetirementDomain::default()),
+                    Rc::clone(&inner.write_epoch),
                 );
                 inner.slots.push(CoreSlotOwner(Rc::clone(&identity)));
                 (CoreHandle { identity }, None)
@@ -717,11 +734,12 @@ impl CoreHandleIdentity {
         index: usize,
         generation: u64,
         retirement: Rc<CoreRetirementDomain>,
+        write_epoch: Rc<Cell<u64>>,
     ) -> Rc<Self> {
         let identity = Rc::new(Self {
             arena,
             index,
-            slot: CoreArenaSlot::vacant(generation, retirement),
+            slot: CoreArenaSlot::vacant(generation, retirement, write_epoch),
         });
         *identity.slot.retirement.current.borrow_mut() = Rc::downgrade(&identity);
         identity
@@ -730,9 +748,19 @@ impl CoreHandleIdentity {
 
 impl CoreHandle {
     pub(crate) fn notify_property_changed(&self, property_key: u16) {
+        self.note_write();
         if let Some(observers) = self.property_observers() {
             observers.notify(property_key);
         }
+    }
+    fn note_write(&self) {
+        let epoch = &self.identity.slot.write_epoch;
+        epoch.set(epoch.get().wrapping_add(1));
+    }
+    /// The write epoch of this object's arena: it moves whenever a property
+    /// change is notified on any object of the arena.
+    pub(crate) fn arena_write_epoch(&self) -> u64 {
+        self.identity.slot.write_epoch.get()
     }
     pub(crate) fn property_observers(&self) -> Option<Rc<PropertyObservers>> {
         self.slot()?.property_observers.borrow().upgrade()
@@ -1242,6 +1270,10 @@ impl PropertySetterCompletion {
     }
     pub(crate) fn record(&mut self, core: &Core, property_key: u16) {
         debug_assert!(self.notification.is_none());
+        // The write itself is done; only its observers wait for the caller.
+        if let Some(handle) = &core.handle {
+            handle.note_write();
+        }
         self.notification = core
             .observers
             .as_ref()
@@ -1455,6 +1487,9 @@ impl Core {
     }
 
     pub fn notify_property_changed(&mut self, property_key: u16) {
+        if let Some(handle) = &self.handle {
+            handle.note_write();
+        }
         if let Some(observers) = &self.observers {
             observers.notify(property_key);
         }

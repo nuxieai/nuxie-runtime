@@ -341,14 +341,14 @@ impl Shape {
             let transform = transform * self.base.world_transform();
             self.with_path_mut(ShapePaintPathKind::Local, |source| {
                 path.add_render_path(
-                    source.render_path(&factory),
+                    &*source.render_path(&factory),
                     nuxie_render_api::Mat2D(*transform.values()),
                 );
             });
         } else {
             self.with_path_mut(ShapePaintPathKind::World, |source| {
                 path.add_render_path(
-                    source.render_path(&factory),
+                    &*source.render_path(&factory),
                     nuxie_render_api::Mat2D(*transform.values()),
                 );
             });

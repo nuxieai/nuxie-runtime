@@ -230,12 +230,12 @@ impl RawTextInput {
         }
         if self.cursor.has_selection() {
             let render_path = self.selection_path.path.render_path(factory);
-            renderer.draw_path(render_path, selection_paint);
+            renderer.draw_path(&*render_path, selection_paint);
         }
         let render_path = self.text_path.render_path(factory);
-        renderer.draw_path(render_path, text_paint);
+        renderer.draw_path(&*render_path, text_paint);
         let cursor_render_path = self.cursor_path.render_path(factory);
-        renderer.draw_path(cursor_render_path, cursor_paint);
+        renderer.draw_path(&*cursor_render_path, cursor_paint);
         if self.overflow == TextOverflow::Clipped && self.clip_render_path.is_some() {
             renderer.restore();
         }

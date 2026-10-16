@@ -128,6 +128,8 @@ impl Default for Image {
 
 impl Image {
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        // Image assets arrive outside the artboard's content.
+        crate::mechanical_port::source::draw_replay::unreplayable();
         let Some((
             image,
             mesh,

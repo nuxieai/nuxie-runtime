@@ -900,6 +900,8 @@ impl NestedArtboard {
     }
 
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        // A hosted artboard keeps its own retained draw.
+        crate::mechanical_port::source::draw_replay::unreplayable();
         let mesh_host = owner
             .with_downcast::<NestedArtboard, _>(|n| {
                 let visitor = n

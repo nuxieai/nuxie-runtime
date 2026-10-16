@@ -373,9 +373,7 @@ impl DataBind {
             }
         });
         if changed == Some(true) {
-            if let Some(observers) = owner.property_observers() {
-                observers.notify(property_key);
-            }
+            owner.notify_property_changed(property_key);
         }
         changed.is_some()
     }

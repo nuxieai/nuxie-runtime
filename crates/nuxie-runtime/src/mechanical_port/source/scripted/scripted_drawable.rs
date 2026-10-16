@@ -129,6 +129,8 @@ impl ScriptedDrawable {
     }
 
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        // A script draws from its own state, which no recording can key.
+        crate::mechanical_port::source::draw_replay::unreplayable();
         let Some((instance, opacity, save, transform, artboard)) = owner
             .with(|owner| {
                 let drawable = owner.as_scripted_drawable()?;

@@ -1755,7 +1755,7 @@ impl LayoutComponent {
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("a drawable LayoutComponent has its imported factory");
-            renderer.clip_path(self.mutable_render_paths().world.render_path(&factory));
+            renderer.clip_path(&*self.mutable_render_paths().world.render_path(&factory));
         }
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
         let world = self.shape_world_transform();

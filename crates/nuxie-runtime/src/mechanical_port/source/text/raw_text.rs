@@ -644,7 +644,7 @@ impl RawText {
                 .as_mut()
                 .expect("the clipped branch retains a clip path")
                 .render_path(&self.factory);
-            renderer.clip_path(clip);
+            renderer.clip_path(&*clip);
         }
         for command in &self.draw_commands {
             match command {
@@ -656,7 +656,7 @@ impl RawText {
                     {
                         let paint = paint.borrow();
                         renderer.draw_path(
-                            self.styles[*index].path.render_path(&self.factory),
+                            &*self.styles[*index].path.render_path(&self.factory),
                             paint.as_ref(),
                         );
                     }

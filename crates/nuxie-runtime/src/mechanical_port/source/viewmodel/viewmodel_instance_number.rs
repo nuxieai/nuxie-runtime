@@ -53,9 +53,7 @@ impl ViewModelInstanceNumber {
             }
         });
         super::viewmodel_instance_value::ViewModelInstanceValue::on_value_changed_handle(owner);
-        if let Some(observers) = owner.property_observers() {
-            observers.notify(ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY);
-        }
+        owner.notify_property_changed(ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY);
         true
     }
 

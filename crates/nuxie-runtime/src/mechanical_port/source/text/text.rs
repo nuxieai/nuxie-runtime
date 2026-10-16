@@ -1859,7 +1859,7 @@ impl Text {
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("Text requires its Artboard renderer factory");
-            renderer.clip_path(self.clip_path.render_path(&factory));
+            renderer.clip_path(&*self.clip_path.render_path(&factory));
         }
         let world_transform = self.shape_world_transform();
         let blend_mode = self.base.blend_mode().into();
@@ -1876,6 +1876,8 @@ impl Text {
             }
         }
         if let Some(controller) = self.selection_controller.upgrade() {
+            // A selection follows pointer input, not the artboard's content.
+            crate::mechanical_port::source::draw_replay::unreplayable();
             controller.borrow_mut().draw(self, renderer);
         }
         for index in 0..self.draw_commands.len() {

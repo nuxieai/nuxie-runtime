@@ -155,6 +155,8 @@ impl Video {
         &self.image
     }
     pub(crate) fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        // Frames arrive from the decoder, not from the artboard's content.
+        crate::mechanical_port::source::draw_replay::unreplayable();
         let drawn_by_script = owner
             .with_downcast_mut::<Self, _>(|video| {
                 if video.showing_poster {

@@ -557,9 +557,7 @@ impl ScriptedTransition {
     fn set_active_id(owner: &CoreHandle, value: u32) {
         if Self::write(owner, |this| this.base.set_active_component_id_value(value)) {
             Self::active_component_id_changed_occurrence(owner);
-            if let Some(observers) = owner.property_observers() {
-                observers.notify(ScriptedTransitionBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
-            }
+            owner.notify_property_changed(ScriptedTransitionBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
         }
     }
     pub fn update_by_index_occurrence(owner: &CoreHandle, index: usize) {
@@ -774,6 +772,8 @@ impl ScriptedTransition {
         keep_going
     }
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        // A script draws from its own state, which no recording can key.
+        crate::mechanical_port::source::draw_replay::unreplayable();
         let draw =
             Self::read(owner, |this| {
                 if this.transitioning && this.base.base.scripted.draws() {

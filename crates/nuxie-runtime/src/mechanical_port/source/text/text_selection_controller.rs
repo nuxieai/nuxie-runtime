@@ -923,7 +923,7 @@ impl SelectionState {
         renderer.transform(nuxie_render_api::Mat2D(
             *text.shape_world_transform().values(),
         ));
-        renderer.draw_path(p.path.path.render_path(&factory), paint.as_ref());
+        renderer.draw_path(&*p.path.path.render_path(&factory), paint.as_ref());
         renderer.restore();
     }
 }

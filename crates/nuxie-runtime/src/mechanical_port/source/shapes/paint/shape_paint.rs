@@ -354,8 +354,11 @@ impl ShapePaint {
         };
         let render_paint = self.cells.render_paint().expect("initialized paint");
         let mut render_paint = render_paint.borrow_mut();
-        render_paint.blend_mode(mode);
-        render_paint.additiveness(super::blend_mode::additiveness_for(mode, amount));
+        crate::mechanical_port::source::draw_replay::set_blend(
+            &mut **render_paint,
+            mode,
+            super::blend_mode::additiveness_for(mode, amount),
+        );
     }
     pub fn additive_amount_changed(&mut self) {
         let Some(render_paint) = self.cells.render_paint() else {
@@ -477,7 +480,7 @@ impl ShapePaint {
         &self,
         path: &'a mut ShapePaintPath,
         active_factory: Option<&RuntimeFactoryHandle>,
-    ) -> &'a mut dyn nuxie_render_api::RenderPath {
+    ) -> std::cell::RefMut<'a, dyn nuxie_render_api::RenderPath> {
         if let Some(factory) = active_factory {
             return path.render_path(factory);
         }
@@ -580,10 +583,10 @@ impl ShapePaint {
                 // renderer callbacks, at the source's resource creation point.
                 if let Some(effect) = path_effect.as_ref() {
                     renderer.clip_path(
-                        self.render_path_for_draw(&mut effect.borrow_mut(), active_factory),
+                        &*self.render_path_for_draw(&mut effect.borrow_mut(), active_factory),
                     );
                 } else {
-                    renderer.clip_path(self.render_path_for_draw(shape_paint_path, active_factory));
+                    renderer.clip_path(&*self.render_path_for_draw(shape_paint_path, active_factory));
                 }
             }
             if !cells.space_is_world() && !cells.is_inner() && cells.has_offset() {
@@ -596,17 +599,18 @@ impl ShapePaint {
         }
 
         let mut draw_path = |path: &mut ShapePaintPath, original: Option<&ShapePaintPath>| {
-            let render_path = self.render_path_for_draw(path, active_factory);
+            let mut render_path = self.render_path_for_draw(path, active_factory);
             if !use_path_fill_rule && self.is_fill {
                 if let Some(fill_rule) = fill_rule {
                     match fill_rule {
-                        0 => render_path.fill_rule(nuxie_render_api::FillRule::NonZero),
-                        1 => render_path.fill_rule(nuxie_render_api::FillRule::EvenOdd),
-                        2 => render_path.fill_rule(nuxie_render_api::FillRule::Clockwise),
+                        0 => crate::mechanical_port::source::draw_replay::set_fill_rule(&mut *render_path, nuxie_render_api::FillRule::NonZero),
+                        1 => crate::mechanical_port::source::draw_replay::set_fill_rule(&mut *render_path, nuxie_render_api::FillRule::EvenOdd),
+                        2 => crate::mechanical_port::source::draw_replay::set_fill_rule(&mut *render_path, nuxie_render_api::FillRule::Clockwise),
                         _ => {}
                     }
                 }
             }
+            drop(render_path);
             let mut target =
                 crate::source::shapes::paint::artboard_paint_source::ModulatedDrawTarget::default();
             if override_paint.is_none() {
@@ -620,13 +624,13 @@ impl ShapePaint {
                 rerouted.transform(nuxie_render_api::Mat2D(*target.transform.values()));
                 rerouted.modulate_opacity(target.opacity);
                 if let Some(paint) = self.cells.render_paint() {
-                    rerouted.draw_path(render_path, paint.borrow().as_ref());
+                    rerouted.draw_path(&*render_path, paint.borrow().as_ref());
                 }
                 rerouted.restore();
             } else if let Some(paint) = override_paint.as_deref() {
-                renderer.draw_path(render_path, paint);
+                renderer.draw_path(&*render_path, paint);
             } else if let Some(paint) = self.cells.render_paint() {
-                renderer.draw_path(render_path, paint.borrow().as_ref());
+                renderer.draw_path(&*render_path, paint.borrow().as_ref());
             }
         };
         if let Some(inner) = inner_path {
@@ -714,6 +718,7 @@ impl ShapePaint {
             })
             .flatten();
         if let Some(child) = child {
+            crate::mechanical_port::source::draw_replay::unreplayable();
             let applied = self
                 .with_render_paint_mut(|paint| {
                     PaintImage::apply_to_occurrence(

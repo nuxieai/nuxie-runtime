@@ -49,6 +49,7 @@ pub mod draw_target;
 pub mod draw_target_placement;
 pub mod drawable;
 pub(crate) mod draw_list;
+pub(crate) mod draw_replay;
 pub mod drawable_flag;
 pub(crate) mod engine_clock;
 /// Sets the monotonic clock for the whole engine, including text input and scrolling.

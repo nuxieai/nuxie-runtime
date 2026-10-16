@@ -2,10 +2,13 @@ use crate::mechanical_port::source::{
     factory::RuntimeFactoryHandle,
     math::{aabb::Aabb, mat2d::Mat2D, path_types::PathDirection, raw_path::RawPath},
 };
+use crate::mechanical_port::source::draw_replay::{self, RenderPathHandle};
 use nuxie_render_api::{FillRule, RenderPath};
+use std::cell::RefMut;
 pub struct ShapePaintPath {
     render_path_dirty: bool,
-    render_path: Option<Box<dyn RenderPath>>,
+    // Shared with the draw recordings that reference it (draw_replay).
+    render_path: Option<RenderPathHandle>,
     raw_path: RawPath,
     is_local: bool,
     fill_rule: FillRule,
@@ -111,13 +114,19 @@ impl ShapePaintPath {
     pub fn has_render_path(&self) -> bool {
         self.render_path.is_some() && !self.render_path_dirty
     }
-    pub fn render_path(&mut self, factory: &RuntimeFactoryHandle) -> &mut dyn RenderPath {
+    pub fn render_path(&mut self, factory: &RuntimeFactoryHandle) -> RefMut<'_, dyn RenderPath> {
         if self.render_path.is_none() {
-            self.render_path =
-                Some(factory.with_factory_mut(|factory| factory.make_empty_render_path()));
-            let path = self.render_path.as_mut().unwrap();
-            path.add_raw_path(self.raw_path.as_render_path_ref());
-            path.fill_rule(self.fill_rule);
+            // Published before its first upload, so a failed upload leaves
+            // the resource for the retry.
+            let path: RenderPathHandle = std::rc::Rc::new(std::cell::RefCell::new(
+                factory.with_factory_mut(|factory| factory.make_empty_render_path()),
+            ));
+            draw_replay::register_path(&path);
+            self.render_path = Some(std::rc::Rc::clone(&path));
+            let mut created = path.borrow_mut();
+            created.add_raw_path(self.raw_path.as_render_path_ref());
+            created.fill_rule(self.fill_rule);
+            drop(created);
             self.render_path_dirty = false;
         }
         self.update_existing_render_path()
@@ -129,7 +138,7 @@ impl ShapePaintPath {
     pub(crate) fn render_path_with_deferred_factory(
         &mut self,
         factory: impl FnOnce() -> RuntimeFactoryHandle,
-    ) -> &mut dyn RenderPath {
+    ) -> RefMut<'_, dyn RenderPath> {
         if self.render_path.is_none() {
             let factory = factory();
             return self.render_path(&factory);
@@ -137,22 +146,26 @@ impl ShapePaintPath {
         self.update_existing_render_path()
     }
 
-    fn update_existing_render_path(&mut self) -> &mut dyn RenderPath {
+    fn update_existing_render_path(&mut self) -> RefMut<'_, dyn RenderPath> {
+        let mut path = self.render_path.as_ref().unwrap().borrow_mut();
         if self.render_path_dirty {
-            let path = self.render_path.as_mut().unwrap();
             path.rewind();
             path.add_raw_path(self.raw_path.as_render_path_ref());
             self.render_path_dirty = false;
         }
-        self.render_path.as_deref_mut().unwrap()
+        RefMut::map(path, |path| &mut **path)
     }
 
     /// Reborrow the resource selected by render_path without repeating its
     /// factory lookup or dirty-path callbacks.
-    pub(crate) fn existing_render_path(&mut self) -> &mut dyn RenderPath {
-        self.render_path
-            .as_deref_mut()
-            .expect("resolved RenderPath")
+    pub(crate) fn existing_render_path(&mut self) -> RefMut<'_, dyn RenderPath> {
+        RefMut::map(
+            self.render_path
+                .as_ref()
+                .expect("resolved RenderPath")
+                .borrow_mut(),
+            |path| &mut **path,
+        )
     }
 }
 
@@ -208,10 +221,10 @@ mod deferred_factory_tests {
     fn existing_clean_and_dirty_paths_preserve_identity_and_callback_order_without_factory() {
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut path = ShapePaintPath::new(true);
-        path.render_path = Some(Box::new(TracePath(
+        path.render_path = Some(Rc::new(RefCell::new(Box::new(TracePath(
             calls.clone(),
             Rc::new(Cell::new(false)),
-        )));
+        )))));
         path.render_path_dirty = false;
         let clean =
             path.render_path_with_deferred_factory(|| panic!("clean resource needs no factory"));
@@ -220,6 +233,7 @@ mod deferred_factory_tests {
             &calls
         ));
         assert!(calls.borrow().is_empty());
+        drop(clean);
         path.rewind();
         let dirty =
             path.render_path_with_deferred_factory(|| panic!("dirty resource needs no factory"));
@@ -228,6 +242,7 @@ mod deferred_factory_tests {
             &calls
         ));
         assert_eq!(&*calls.borrow(), &["rewind", "add_raw_path"]);
+        drop(dirty);
         assert!(path.has_render_path());
         path.render_path_with_deferred_factory(|| panic!("updated resource needs no factory"));
         assert_eq!(&*calls.borrow(), &["rewind", "add_raw_path"]);

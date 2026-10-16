@@ -52,7 +52,7 @@ impl ClippingShapeOperation for ClippingShapeStart {
                         .with_artboard(|artboard| artboard.factory())
                         .flatten();
                     if let Some(factory) = factory {
-                        renderer.clip_path(shape.path.render_path(&factory));
+                        renderer.clip_path(&*shape.path.render_path(&factory));
                     }
                 }
             });

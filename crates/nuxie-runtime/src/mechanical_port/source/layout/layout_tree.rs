@@ -61,6 +61,10 @@ pub(crate) struct LayoutNodeContext {
     /// Measured through the owner's intrinsic size (text, images, scripted
     /// layouts, intrinsically sized layouts without layout children).
     pub(crate) measured: bool,
+    /// Whether this subtree supplies usable width and height minima. Hosted
+    /// artboards are opaque until their host protocol defines them.
+    pub(crate) minimum_supported: [bool; 2],
+    pub(crate) zero_auto_minimums: [bool; 2],
     /// Taffy-only grid items standing in for a virtualized grid's
     /// unrealized items; appended after the realized children.
     pub(crate) virtual_items: Vec<NodeId>,
@@ -85,6 +89,8 @@ impl LayoutTree {
                     owner: root_owner,
                     kind,
                     measured: false,
+                    minimum_supported: [true; 2],
+                    zero_auto_minimums: [false; 2],
                     virtual_items: Vec::new(),
                 },
             )
@@ -121,6 +127,8 @@ impl LayoutTree {
                     owner,
                     kind,
                     measured: false,
+                    minimum_supported: [true; 2],
+                    zero_auto_minimums: [false; 2],
                     virtual_items: Vec::new(),
                 },
             )

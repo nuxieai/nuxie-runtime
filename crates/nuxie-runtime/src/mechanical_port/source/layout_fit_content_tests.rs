@@ -1221,3 +1221,22 @@ row_hosts!(
         }
     }
 );
+
+row_hosts!(
+    css_row_contract_cache_tracks_font_fitting,
+    css_row_contract_participant_cache_tracks_font_fitting,
+    |participant| {
+        let f = Fixture::new_host(TITLE, 160.0, true, participant);
+        row_icon(&f, 40.0, 40.0, 16.0);
+        assert_width(&f, 145.4414);
+        for (overflow, width) in [(5, 104.0), (0, 145.4414)] {
+            f.text
+                .with_downcast_mut::<Text, _>(|text| {
+                    text.base.set_overflow_value_value(overflow);
+                    text.overflow_value_changed();
+                })
+                .unwrap();
+            assert_width(&f, width);
+        }
+    }
+);

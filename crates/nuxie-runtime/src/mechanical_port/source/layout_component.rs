@@ -2248,7 +2248,8 @@ impl LayoutComponent {
             }
         }
     }
-    /// The CSS style this node lays out with.
+    /// CSS style from the authored appliers. The owning tree resolves the
+    /// compatibility minimum for unsupported intrinsic subtrees at solve time.
     pub fn layout_style(&self) -> &Style {
         self.layout_data.style()
     }
@@ -2563,6 +2564,7 @@ impl LayoutComponent {
         if !same(tree.root_available.0, size.x) || !same(tree.root_available.1, size.y) {
             Self::sync_layout_root_style(&mut tree, owner, (size.x, size.y), &mut touched);
         }
+        Self::sync_minimum_contracts(&mut tree, &mut touched);
         let root = tree.root;
         let space = |value: f32| {
             if value.is_nan() {
@@ -2633,7 +2635,7 @@ impl LayoutComponent {
             root_style, virtual_item_styles,
         };
         use taffy::prelude::{NodeId, Size, TaffyTree};
-        type Context = (CoreHandle, LayoutNodeKind, bool);
+        type Context = (CoreHandle, LayoutNodeKind, bool, [bool; 2]);
         static REPORT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
         let Some(report) =
             REPORT.get_or_init(|| std::env::var_os("NUXIE_LAYOUT_VERIFY").map(Into::into))
@@ -2644,8 +2646,10 @@ impl LayoutComponent {
             taffy: &mut TaffyTree<Context>,
             owner: &CoreHandle,
             nodes: &mut Vec<(CoreHandle, NodeId)>,
+            parent_is_flex: bool,
+            is_root: bool,
         ) -> Option<NodeId> {
-            let (style, kind, measured, children, virtual_tracks) = owner.with(|object| {
+            let (mut style, kind, measured, children, virtual_tracks) = owner.with(|object| {
                 if let Some(layout) = object.as_layout_component() {
                     Some((
                         layout.layout_data.style().clone(),
@@ -2674,14 +2678,36 @@ impl LayoutComponent {
             let mut ids = Vec::new();
             for child in &children {
                 if let Some(child) = layout_node_owner_for(child) {
-                    ids.extend(build(taffy, &child, nodes));
+                    ids.extend(build(
+                        taffy,
+                        &child,
+                        nodes,
+                        style.display == taffy::Display::Flex,
+                        false,
+                    ));
                 }
             }
             for style in virtual_item_styles(&virtual_tracks.0, &virtual_tracks.1) {
                 ids.push(taffy.new_leaf(style).ok()?);
             }
+            let mut children_supported = [true; 2];
+            for id in &ids {
+                if let Some(context) = taffy.get_node_context(*id) {
+                    for axis in 0..2 {
+                        children_supported[axis] &= context.3[axis];
+                    }
+                }
+            }
+            let supported = LayoutComponent::own_minimum_contract(owner, kind, measured, is_root)
+                .unwrap_or_else(|| {
+                    LayoutComponent::container_minimum_contract(&style, children_supported)
+                });
+            LayoutComponent::apply_minimum_contract(
+                &mut style,
+                supported.map(|known| !known && parent_is_flex),
+            );
             let id = taffy
-                .new_leaf_with_context(style, (owner.clone(), kind, measured))
+                .new_leaf_with_context(style, (owner.clone(), kind, measured, supported))
                 .ok()?;
             taffy.set_children(id, &ids).ok()?;
             nodes.push((owner.clone(), id));
@@ -2690,7 +2716,7 @@ impl LayoutComponent {
         let mut taffy = TaffyTree::<Context>::new();
         taffy.disable_rounding();
         let mut nodes = Vec::new();
-        let Some(root) = build(&mut taffy, owner, &mut nodes) else {
+        let Some(root) = build(&mut taffy, owner, &mut nodes, false, true) else {
             return;
         };
         let style = taffy.style(root).expect("fresh root").clone();
@@ -3030,6 +3056,167 @@ impl LayoutComponent {
                 Self::sync_layout_virtual_items(tree, id, &rows, &columns, touched);
             }
         }
+    }
+
+    /// A measured host or mounted artboard defines the boundary of an
+    /// intrinsic minimum contract. Structural auto sizes derive it from their
+    /// children; unknown contributions keep main's zero automatic minimum.
+    fn own_minimum_contract(
+        owner: &CoreHandle,
+        kind: LayoutNodeKind,
+        measured: bool,
+        is_root: bool,
+    ) -> Option<[bool; 2]> {
+        use crate::source::layout::layout_participant::{
+            LayoutParticipant, host_supports_min_content_width,
+        };
+        if !is_root
+            && owner
+                .with(|object| object.as_artboard().is_some())
+                .unwrap_or(false)
+        {
+            return Some([false; 2]);
+        }
+        let hosts: Option<Vec<CoreHandle>> = owner
+            .with(|object| {
+                if !measured {
+                    return None;
+                }
+                Some(match kind {
+                    LayoutNodeKind::Participant => object
+                        .as_any()
+                        .downcast_ref::<LayoutParticipant>()
+                        .and_then(LayoutParticipant::measurement_host_handle)
+                        .into_iter()
+                        .collect(),
+                    LayoutNodeKind::Layout => object
+                        .as_container_component()
+                        .unwrap()
+                        .children()
+                        .iter()
+                        .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
+                        .cloned()
+                        .collect(),
+                })
+            })
+            .flatten();
+        hosts.map(|hosts| [hosts.iter().all(host_supports_min_content_width); 2])
+    }
+
+    fn container_minimum_contract(style: &Style, children: [bool; 2]) -> [bool; 2] {
+        use taffy::style::CompactLength;
+        // A structural box with an explicit length supplies its own bounded
+        // contribution on that axis, regardless of its children's contracts.
+        [
+            children[0] || style.size.width.tag() == CompactLength::LENGTH_TAG,
+            children[1] || style.size.height.tag() == CompactLength::LENGTH_TAG,
+        ]
+    }
+
+    fn apply_minimum_contract(style: &mut Style, zero: [bool; 2]) {
+        if zero[0] && style.min_size.width.is_auto() {
+            style.min_size.width = taffy::prelude::LengthPercentageAuto::length(0.0);
+        }
+        if zero[1] && style.min_size.height.is_auto() {
+            style.min_size.height = taffy::prelude::LengthPercentageAuto::length(0.0);
+        }
+    }
+
+    /// Revisit only changed nodes and their ancestors. Cached contract bits
+    /// keep untouched subtrees out of the walk, just like the retained solve.
+    fn sync_minimum_contracts(tree: &mut LayoutTree, touched: &mut Vec<taffy::prelude::NodeId>) {
+        use taffy::TraversePartialTree;
+        let mut affected = std::collections::HashSet::new();
+        for &id in touched.iter() {
+            let mut next = Some(id);
+            while let Some(id) = next {
+                if !affected.insert(id) {
+                    break;
+                }
+                next = tree.taffy.parent(id);
+            }
+        }
+        if affected.is_empty() {
+            return;
+        }
+        fn update(
+            tree: &mut LayoutTree,
+            id: taffy::prelude::NodeId,
+            affected: &std::collections::HashSet<taffy::prelude::NodeId>,
+            touched: &mut Vec<taffy::prelude::NodeId>,
+        ) -> [bool; 2] {
+            use crate::source::layout::layout_participant::LayoutParticipant;
+            use crate::source::layout::layout_tree::root_style;
+            let Some(context) = tree.taffy.get_node_context(id) else {
+                return [true; 2];
+            };
+            let (owner, kind, measured, old_supported, old_zero) = (
+                context.owner.clone(),
+                context.kind,
+                context.measured,
+                context.minimum_supported,
+                context.zero_auto_minimums,
+            );
+            let changed = affected.contains(&id);
+            let authored_style = || {
+                owner
+                    .with(|object| {
+                        if let Some(layout) = object.as_layout_component() {
+                            layout.layout_data.style().clone()
+                        } else {
+                            object
+                                .as_any()
+                                .downcast_ref::<LayoutParticipant>()
+                                .unwrap()
+                                .native_layout_data()
+                                .unwrap()
+                                .style()
+                                .clone()
+                        }
+                    })
+                    .unwrap()
+            };
+            let supported = if changed {
+                let children = tree.taffy.child_ids(id).collect::<Vec<_>>();
+                let mut children_supported = [true; 2];
+                for child in children {
+                    let child_supported = update(tree, child, affected, touched);
+                    for axis in 0..2 {
+                        children_supported[axis] &= child_supported[axis];
+                    }
+                }
+                LayoutComponent::own_minimum_contract(&owner, kind, measured, id == tree.root)
+                    .unwrap_or_else(|| {
+                        LayoutComponent::container_minimum_contract(
+                            &authored_style(),
+                            children_supported,
+                        )
+                    })
+            } else {
+                old_supported
+            };
+            let parent_is_flex = tree.taffy.parent(id).is_some_and(|parent| {
+                tree.taffy
+                    .style(parent)
+                    .is_ok_and(|style| style.display == taffy::Display::Flex)
+            });
+            let zero = supported.map(|known| !known && parent_is_flex);
+            if changed || zero != old_zero {
+                let mut style = authored_style();
+                if id == tree.root {
+                    style = root_style(&style, tree.root_available);
+                }
+                LayoutComponent::apply_minimum_contract(&mut style, zero);
+                let context = tree.taffy.get_node_context_mut(id).unwrap();
+                context.minimum_supported = supported;
+                context.zero_auto_minimums = zero;
+                if tree.sync_style(id, &style) {
+                    touched.push(id);
+                }
+            }
+            supported
+        }
+        update(tree, tree.root, &affected, touched);
     }
 
     /// Replace a grid's virtual items, keeping its realized children.

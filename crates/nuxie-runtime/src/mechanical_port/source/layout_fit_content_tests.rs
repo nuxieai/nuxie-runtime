@@ -227,6 +227,33 @@ fn css_fit_content_narrow_offer_floors_at_the_longest_word() {
     assert_width(&Fixture::new("experience", 338.0, false), 145.4414);
     assert_width(&Fixture::new(TITLE, 40.0, false), 145.4414);
 }
+/// A CSS box (a LayoutCssStyle record, so the style's Hug is ignored)
+/// measures its text: `width: auto` in a centred column is fit-content, so
+/// a short title keeps its natural width and a long one takes the offer and
+/// wraps (docs/CSS_LAYOUT.md, 5).
+#[test]
+fn css_mode_box_sizes_to_its_text() {
+    for (content, expected) in [("Unlock premium", 214.29297), (TITLE, 338.0)] {
+        let f = Fixture::new(content, 338.0, false);
+        f.label
+            .with_downcast_mut::<LayoutComponent, _>(|o| {
+                o.with_style_mut(|s| s.base.set_intrinsically_sized_value_value(false))
+            })
+            .unwrap();
+        let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&f.arena, &f.label, &record);
+        f.label
+            .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+            .unwrap();
+        LayoutComponent::sync_style_occurrence(&f.label);
+        assert!(
+            f.label
+                .with_downcast::<LayoutComponent, _>(LayoutComponent::is_css_mode)
+                .unwrap()
+        );
+        assert_width(&f, expected);
+    }
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

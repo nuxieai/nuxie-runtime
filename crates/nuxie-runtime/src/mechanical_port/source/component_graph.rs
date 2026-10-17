@@ -497,11 +497,17 @@ impl ComponentGraph {
         if node.on_dirty.is_outside() {
             return self.occurrences[i].add_dirt(value, recurse);
         }
-        if !self.mark(i, value) {
+        if !self.mark_unnotified(i, value) {
             return false;
         }
         if recurse && node.dependents_start != node.dependents_end {
-            self.cascade(index, value);
+            // Its notification joins the cascade's held ones: the cascade
+            // makes them before any onDirty that could read them runs.
+            let mut pending = PendingNotifications::NONE;
+            pending.add(index);
+            self.cascade_holding(index, value, pending);
+        } else {
+            self.notify_artboard(index);
         }
         true
     }
@@ -580,11 +586,15 @@ impl ComponentGraph {
     /// dependents of each open level on a fixed stack and recurses only past
     /// CASCADE_DEPTH levels.
     fn cascade(&self, index: u32, value: ComponentDirt) {
+        self.cascade_holding(index, value, PendingNotifications::NONE);
+    }
+
+    /// cascade with notifications already held (made with the cascade's own).
+    fn cascade_holding(&self, index: u32, value: ComponentDirt, mut pending: PendingNotifications) {
         let node = &self.nodes[index as usize];
         let mut levels = [(0u32, 0u32); CASCADE_DEPTH];
         let mut depth = 0;
         let (mut next, mut end) = (node.dependents_start, node.dependents_end);
-        let mut pending = PendingNotifications::NONE;
         loop {
             if next == end {
                 if depth == 0 {
@@ -746,12 +756,17 @@ impl ComponentGraph {
                 // over it on one read. The depth only matters to a member's
                 // update and its callbacks, so it is set where those can run.
                 let node = &self.nodes[i];
-                if node.dirt.get() == ComponentDirt::NONE && !node.on_dirty.is_outside() {
+                // Read once: the depth write below goes to the Artboard's
+                // state, never a node's, but would make both reads repeat.
+                let dirt = node.dirt.get();
+                let outside = node.on_dirty.is_outside();
+                if dirt == ComponentDirt::NONE && !outside {
                     i += 1;
                     continue;
                 }
                 dirty.set_depth(i as u32);
-                if self.member_dirt(i).contains(ComponentDirt::COLLAPSED) {
+                let member_dirt = if outside { self.outside_member_dirt(i) } else { dirt };
+                if member_dirt.contains(ComponentDirt::COLLAPSED) {
                     // Collapsed members aren't updated and sit in long runs (a
                     // Solo's inactive options): skip the whole run. A collapse
                     // change during this pass makes the skips stale, so step
@@ -765,7 +780,7 @@ impl ComponentGraph {
                     }
                     continue;
                 }
-                if !self.update_entry(i) {
+                if !self.update_entry(i, outside, dirt) {
                     i += 1;
                     continue;
                 }
@@ -778,13 +793,14 @@ impl ComponentGraph {
         }
     }
 
-    fn update_entry(&self, i: usize) -> bool {
-        let node = &self.nodes[i];
-        if node.on_dirty.is_outside() {
+    /// Member `i`'s update, given what the walk read of it: whether its dirt
+    /// lives outside the graph and, otherwise, its dirt.
+    fn update_entry(&self, i: usize, outside: bool, dirt: ComponentDirt) -> bool {
+        if outside {
             return self.occurrences[i].update_if_dirty();
         }
+        let node = &self.nodes[i];
         if node.on_dirty.is_helper() {
-            let dirt = node.dirt.get();
             if !needs_update(dirt) {
                 return false;
             }
@@ -793,7 +809,6 @@ impl ComponentGraph {
             return true;
         }
         assert!(node.alive.get(), "live component in dependency graph");
-        let dirt = node.dirt.get();
         if !needs_update(dirt) {
             return false;
         }

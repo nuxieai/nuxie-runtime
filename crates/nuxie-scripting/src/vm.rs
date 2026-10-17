@@ -1154,14 +1154,26 @@ fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGp
             Ok(false) => {}
             Err(error) => logging().log_error(&error),
         };
-        report(
-            crate::gpu_canvas::close_orphan_render_pass(bindings, scope.open_render_pass_token),
-            "GPU render pass left open at script return. Call :finish() on render passes before returning.",
-        );
-        report(
-            lua_canvas::close_orphan_canvas_frames(bindings, scope.open_canvas_frame_token),
-            "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
-        );
+        // Most calls leave nothing open: report only what was closed or
+        // failed, and sweep canvas frames only when one is open.
+        let closed =
+            crate::gpu_canvas::close_orphan_render_pass(bindings, scope.open_render_pass_token);
+        if !matches!(closed, Ok(false)) {
+            report(
+                closed,
+                "GPU render pass left open at script return. Call :finish() on render passes before returning.",
+            );
+        }
+        if bindings.has_open_canvas_frames() {
+            let closed =
+                lua_canvas::close_orphan_canvas_frames(bindings, scope.open_canvas_frame_token);
+            if !matches!(closed, Ok(false)) {
+                report(
+                    closed,
+                    "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
+                );
+            }
+        }
     }
 }
 

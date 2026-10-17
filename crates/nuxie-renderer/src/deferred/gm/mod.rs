@@ -6,6 +6,7 @@ mod additive_blend;
 mod bitmap_cache_pixel;
 mod canvas_paint_image;
 mod clipstrokes;
+mod css_box_paint;
 mod emptypath;
 mod feather_modes;
 mod gradients;

@@ -1059,6 +1059,58 @@ impl ProtectedScriptCall for luaur_rt::FieldFunction<'_> {
     }
 }
 
+/// A script method's arguments: the script's table, then `args` converted
+/// in order. Up to two arguments (the common per-frame calls) are pushed
+/// without building a [`MultiValue`].
+enum ScriptCallArgs {
+    Zero(Table),
+    One(Table, Value),
+    Two(Table, Value, Value),
+    Many(MultiValue),
+}
+
+impl ScriptCallArgs {
+    fn new(lua: &Lua, table: &Table, args: &[ScriptValue]) -> Self {
+        match args {
+            [] => Self::Zero(table.clone()),
+            [arg] => Self::One(table.clone(), script_value_to_lua(lua, arg)),
+            [first, second] => Self::Two(
+                table.clone(),
+                script_value_to_lua(lua, first),
+                script_value_to_lua(lua, second),
+            ),
+            _ => {
+                let mut values = MultiValue::with_capacity(args.len() + 1);
+                values.push_back(Value::Table(table.clone()));
+                for arg in args {
+                    values.push_back(script_value_to_lua(lua, arg));
+                }
+                Self::Many(values)
+            }
+        }
+    }
+}
+
+impl IntoLuaMulti for ScriptCallArgs {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
+        match self {
+            Self::Zero(table) => table.into_lua_multi(lua),
+            Self::One(table, arg) => (table, arg).into_lua_multi(lua),
+            Self::Two(table, first, second) => (table, first, second).into_lua_multi(lua),
+            Self::Many(values) => Ok(values),
+        }
+    }
+
+    fn push_call_args(self, lua: &Lua) -> Result<core::ffi::c_int> {
+        match self {
+            Self::Zero(table) => table.push_call_args(lua),
+            Self::One(table, arg) => (table, arg).push_call_args(lua),
+            Self::Two(table, first, second) => (table, first, second).push_call_args(lua),
+            Self::Many(values) => values.push_call_args(lua),
+        }
+    }
+}
+
 fn protected_script_call<R>(lua: &Lua, call: impl FnOnce() -> Result<R>) -> Result<R> {
     #[cfg(feature = "tools")]
     let _write_source = luau_write_scope(lua);
@@ -1401,11 +1453,7 @@ impl LuaScriptInstance {
             return Ok(false);
         };
         let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(table.clone()));
-        for arg in args {
-            call_args.push_back(script_value_to_lua(&lua, arg));
-        }
+        let call_args = ScriptCallArgs::new(&lua, &table, args);
         let called = table
             .with_field_function(ScriptMethod::Advance.as_str(), |function| {
                 let _property_owner = self.enter_property_owner(&lua);
@@ -3342,11 +3390,7 @@ impl ScriptInstance for LuaScriptInstance {
         let lua = table.lua();
         let called = table
             .with_field_function(method.as_str(), |function| {
-                let mut call_args = MultiValue::with_capacity(args.len() + 1);
-                call_args.push_back(Value::Table(table.clone()));
-                for arg in args {
-                    call_args.push_back(script_value_to_lua(&lua, arg));
-                }
+                let call_args = ScriptCallArgs::new(&lua, &table, args);
                 let _property_owner = self.enter_property_owner(&lua);
                 function.protected_call::<Value>(call_args)
             })

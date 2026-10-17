@@ -199,14 +199,28 @@ impl ScriptedPropertyListenerOwner {
 }
 
 /// Per-VM retained scripted-property watchers and listener ownership.
+///
+/// Every clone shares one [`FrameContextState`]: script calls clone the
+/// handle out of app data, so a clone is a single reference count.
 #[derive(Clone, Default)]
-pub(crate) struct ScriptViewModelFrameContext {
+pub(crate) struct ScriptViewModelFrameContext(Rc<FrameContextState>);
+
+#[derive(Default)]
+pub(crate) struct FrameContextState {
     trigger_watches: Rc<RefCell<Vec<Rc<ScriptedTriggerWatch>>>>,
     blob_watches: Rc<RefCell<Vec<Rc<ScriptedBlobWatch>>>>,
     property_watches: Rc<RefCell<Vec<Rc<ScriptedPropertyWatch>>>>,
     current_owner: Rc<RefCell<Option<ScriptedPropertyListenerOwner>>>,
     orphans: Rc<RefCell<Vec<Weak<ScriptedPropertyState>>>>,
     orphan_owner_tag: Rc<Cell<u32>>,
+}
+
+impl std::ops::Deref for ScriptViewModelFrameContext {
+    type Target = FrameContextState;
+
+    fn deref(&self) -> &FrameContextState {
+        &self.0
+    }
 }
 
 #[derive(Default)]

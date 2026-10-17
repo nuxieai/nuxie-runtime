@@ -260,31 +260,44 @@ unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
                 }
                 Ok(n)
             }
-            Ok(Err(err)) => {
-                // 5b. The closure returned Err -> raise it as a Lua error.
-                //     A translated C callback can explicitly retain
-                //     `luaL_error`'s caller attribution; this path also uses
-                //     the raw message rather than nesting Error's display
-                //     prefix inside the Lua runtime error.
-                if let Error::LuaLRuntimeError(message) = &err {
-                    return raise_lua_l_runtime_error(state, message);
-                }
-                //     Structured errors (scope destruction) travel as a userdata
-                //     error object so the caller can pattern-match on them; all
-                //     others keep the flat string path.
-                if is_structured(&err) {
-                    raise_structured_error(state, err)
-                } else {
-                    raise_lua_error(state, &err.to_string())
-                }
-            }
-            Err(panic_payload) => {
-                // 5c. The closure panicked -> turn it into a catchable Lua error.
-                let msg = panic_message(&panic_payload);
-                raise_lua_error(state, &format!("rust panic: {msg}"))
-            }
+            Ok(Err(err)) => raise_callback_error(state, err),
+            Err(panic_payload) => raise_callback_panic(state, panic_payload),
         }
     }
+}
+
+/// 5b. The closure returned Err -> raise it as a Lua error. Out of line, so
+/// the trampoline's success path does not carry this frame.
+#[cold]
+#[inline(never)]
+unsafe fn raise_callback_error(state: *mut lua_State, err: Error) -> LuaResult<c_int> {
+    unsafe {
+        // A translated C callback can explicitly retain `luaL_error`'s caller
+        // attribution; this path also uses the raw message rather than
+        // nesting Error's display prefix inside the Lua runtime error.
+        if let Error::LuaLRuntimeError(message) = &err {
+            return raise_lua_l_runtime_error(state, message);
+        }
+        // Structured errors (scope destruction) travel as a userdata error
+        // object so the caller can pattern-match on them; all others keep the
+        // flat string path.
+        if is_structured(&err) {
+            raise_structured_error(state, err)
+        } else {
+            raise_lua_error(state, &err.to_string())
+        }
+    }
+}
+
+/// 5c. The closure panicked -> turn it into a catchable Lua error.
+#[cold]
+#[inline(never)]
+unsafe fn raise_callback_panic(
+    state: *mut lua_State,
+    panic_payload: Box<dyn std::any::Any + Send>,
+) -> LuaResult<c_int> {
+    let msg = panic_message(&panic_payload);
+    unsafe { raise_lua_error(state, &format!("rust panic: {msg}")) }
 }
 
 /// The actual `lua_CFunction` pointer (an `Option<unsafe fn(...)>`).

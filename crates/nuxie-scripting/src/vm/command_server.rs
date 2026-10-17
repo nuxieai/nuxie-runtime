@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use luaur_rt::{Error, Result};
-use nuxie_render_api::{Factory as RenderFactory, PersistentFactoryContext};
+use nuxie_render_api::{Factory as RenderFactory, OreContextHandle, PersistentFactoryContext};
 
 #[derive(Clone, Default)]
 pub(crate) struct PersistentRenderContext {
@@ -78,6 +78,14 @@ impl PersistentRenderContext {
             ));
         };
         f(&mut context)
+    }
+
+    /// The installed factory's ORE context, if any: what
+    /// `try_with_factory(|factory| factory.ore())` returns, without cloning
+    /// the context or going through the factory callback. A factory's `ore()`
+    /// never reinstalls the context, so the borrow held across it is shared.
+    pub(crate) fn ore(&self) -> Option<OreContextHandle> {
+        self.context.borrow().as_ref()?.ore_context()
     }
 
     /// Run `f` on the installed factory; None, without building

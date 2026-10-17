@@ -5188,25 +5188,21 @@ impl LayoutComponent {
             } else {
                 self.base.fractional_height()
             };
-            match main_scale {
-                LayoutScaleType::Fill => {
-                    style.flex_grow = grow(fraction);
-                    style.flex_shrink = grow(fraction);
-                    // Rive sizes an automatic basis to its content, bounded
-                    // by the space the container offers: `fit-content`.
-                    let basis = rive_dimension(flex_basis, flex_basis_units);
-                    style.flex_basis = if basis.is_auto() {
-                        Dimension::fit_content()
-                    } else {
-                        basis
-                    };
-                }
-                _ => {
-                    style.flex_grow = 0.0;
-                    style.flex_shrink = 1.0;
-                    style.flex_basis = Dimension::auto();
-                }
-            }
+            // Fill is CSS `flex: <fraction> 1 0%`: siblings share the line by
+            // their fractions, whatever their content (docs/CSS_LAYOUT.md,
+            // 2.2). Fixed and Hug keep an automatic basis. An authored
+            // flexBasis in points or percent replaces either basis.
+            let basis = rive_dimension(flex_basis, flex_basis_units);
+            let fill = main_scale == LayoutScaleType::Fill;
+            style.flex_grow = if fill { grow(fraction) } else { 0.0 };
+            style.flex_shrink = 1.0;
+            style.flex_basis = if !basis.is_auto() {
+                basis
+            } else if fill {
+                Dimension::percent(0.0)
+            } else {
+                Dimension::auto()
+            };
             let cross_scale = if context.parent_is_row {
                 height_scale
             } else {

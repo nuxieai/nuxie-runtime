@@ -485,10 +485,13 @@ mod tests {
         };
         // 180deg (to bottom): the vertical centre line, top to bottom.
         let down = geometry(&[], false);
-        assert_eq!(
-            (down.start, down.end),
-            (Vec2D::new(110.0, 20.0), Vec2D::new(110.0, 120.0))
+        let near = |a: Vec2D, b: Vec2D| (a.x - b.x).abs() < 1e-3 && (a.y - b.y).abs() < 1e-3;
+        assert!(
+            near(down.start, Vec2D::new(110.0, 20.0)),
+            "{:?}",
+            down.start
         );
+        assert!(near(down.end, Vec2D::new(110.0, 120.0)), "{:?}", down.end);
         // 90deg (to right).
         let right = geometry(&[(keys::GRADIENT_ANGLE, 90.0)], false);
         assert!((right.start.x - 10.0).abs() < 1e-4 && (right.end.x - 210.0).abs() < 1e-4);

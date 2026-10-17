@@ -3240,7 +3240,8 @@ impl LayoutComponent {
     /// minimum is clamped by a definite maximum, while an explicit minimum
     /// would override it, so the synthesized minimum takes the smaller of the
     /// two; a percentage maximum resolves only during the solve, so there
-    /// Taffy keeps its own automatic minimum, which it clamps.
+    /// Taffy keeps its own automatic minimum, which it clamps. A scroll
+    /// container's automatic minimum is zero, so its axes get none.
     fn apply_definite_artboard_minimum(owner: &CoreHandle, is_root: bool, style: &mut Style) {
         use taffy::style::CompactLength;
         if is_root
@@ -3265,11 +3266,13 @@ impl LayoutComponent {
             }
         };
         if style.min_size.width.is_auto()
+            && !style.overflow.x.is_scroll_container()
             && let Some(width) = minimum(style.size.width, style.max_size.width)
         {
             style.min_size.width = taffy::prelude::LengthPercentageAuto::length(width);
         }
         if style.min_size.height.is_auto()
+            && !style.overflow.y.is_scroll_container()
             && let Some(height) = minimum(style.size.height, style.max_size.height)
         {
             style.min_size.height = taffy::prelude::LengthPercentageAuto::length(height);

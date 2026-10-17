@@ -427,6 +427,7 @@ fn changing_the_line_rebuilds_the_text() {
             .clone();
         // Through the registry, as hosts and bindings write properties.
         let key = i32::from(nuxie_runtime::text_decoration::LINE_PROPERTY_KEY);
+        assert_eq!(CoreRegistry::property_field_id(key), 0, "a uint field");
         assert_eq!(
             CoreRegistry::get_uint_handle(&decoration, key),
             Some(UNDERLINE)

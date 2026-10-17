@@ -10668,6 +10668,10 @@ impl CoreRegistry {
         if let Some(field) = crate::video::properties::field_id(property_key) {
             return field;
         }
+        // Nuxie TextStyleDecoration.line is a uint.
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
+            return 0;
+        }
         match property_key {
             486 => 1,
             485 => 1,

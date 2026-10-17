@@ -24,6 +24,7 @@ use crate::mechanical_port::source::{
 
 pub struct Joystick {
     pub base: JoystickBase,
+    layout_natural_size: crate::source::intrinsically_sizeable::LayoutNaturalSize,
     world_transform: Mat2D,
     inverse_world_transform: Mat2D,
     x_animation: Option<CoreHandle>,
@@ -39,6 +40,7 @@ impl Default for Joystick {
     fn default() -> Self {
         Self {
             base: JoystickBase::default(),
+            layout_natural_size: Default::default(),
             world_transform: Mat2D::default(),
             inverse_world_transform: Mat2D::default(),
             x_animation: None,
@@ -52,6 +54,20 @@ impl Default for Joystick {
 }
 
 impl Joystick {
+    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
+        self.layout_natural_size
+            .get(Vec2D::new(self.base.width(), self.base.height()))
+    }
+    pub(crate) fn clone_definition(&self) -> Self {
+        let mut twin = Self::default();
+        let mut base = std::mem::take(&mut twin.base);
+        base.copy(&self.base, &mut twin);
+        twin.base = base;
+        twin.layout_natural_size
+            .copy_from(&self.layout_natural_size);
+        twin
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let status = self.base.base.on_added_dirty(context);
         if status != StatusCode::Ok {
@@ -304,6 +320,9 @@ impl Joystick {
 }
 
 impl IntrinsicallySizeable for Joystick {
+    fn natural_size_for_layout(&self) -> Option<Vec2D> {
+        Some(Joystick::natural_size_for_layout(self))
+    }
     fn measure_layout(
         &mut self,
         width: f32,
@@ -334,8 +353,11 @@ impl IntrinsicallySizeable for Joystick {
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
+        self.layout_natural_size
+            .begin_control(Vec2D::new(self.base.width(), self.base.height()));
         self.set_width(size.x);
         self.set_height(size.y);
+        self.layout_natural_size.end_control();
         self.set_pos_x(size.x * self.base.origin_x());
         self.set_pos_y(size.y * self.base.origin_y());
     }
@@ -366,9 +388,11 @@ impl JoystickBaseCallbacks for Joystick {
         self.add_component_dirt();
     }
     fn width_changed(&mut self) {
+        self.layout_natural_size.width_changed(self.base.width());
         self.add_component_dirt();
     }
     fn height_changed(&mut self) {
+        self.layout_natural_size.height_changed(self.base.height());
         self.add_component_dirt();
     }
 }

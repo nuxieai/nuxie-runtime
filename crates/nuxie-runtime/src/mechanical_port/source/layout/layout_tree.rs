@@ -312,6 +312,37 @@ pub(crate) fn content_width_limits(
     )
 }
 
+/// Content-box block-size limits for a replaced item's ratio transfer.
+pub(crate) fn content_height_limits(
+    style: &Style,
+    parent: taffy::geometry::Size<Option<f32>>,
+) -> (Option<f32>, Option<f32>) {
+    use taffy::util::{MaybeMath, MaybeResolve, ResolveOrZero};
+    let calc = |_: *const (), _: f32| 0.0;
+    let padding_border = style.padding.resolve_or_zero(parent.width, calc)
+        + style.border.resolve_or_zero(parent.width, calc);
+    let inset = if style.box_sizing == taffy::BoxSizing::BorderBox {
+        padding_border.vertical_axis_sum()
+    } else {
+        0.0
+    } + if style.overflow.x == taffy::Overflow::Scroll {
+        style.scrollbar_width
+    } else {
+        0.0
+    };
+    let content = |value: Option<f32>| value.map(|value| (value - inset).max(0.0));
+    (
+        content(
+            style
+                .min_size
+                .maybe_resolve(parent, calc)
+                .maybe_apply_aspect_ratio(style.aspect_ratio)
+                .height,
+        ),
+        content(style.max_size.height.maybe_resolve(parent.height, calc)),
+    )
+}
+
 /// Answer a bounded intrinsic inline-size offer using CSS fit-content:
 /// min(max-content, max(min-content, stretch-fit)), or answer MinContent
 /// with the host's true intrinsic minimum. Taffy passes content-box

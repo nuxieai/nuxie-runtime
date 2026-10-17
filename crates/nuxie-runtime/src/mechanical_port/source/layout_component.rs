@@ -2253,10 +2253,67 @@ impl LayoutComponent {
     pub fn layout_style(&self) -> &Style {
         self.layout_data.style()
     }
+    /// A hugging leaf is measured, as upstream. A non-artboard leaf that holds
+    /// non-reflowing content (a shape, image, drawing group, n-slice or
+    /// joystick, or a nested artboard on an axis the box does not Fill) is
+    /// measured too, but only for its automatic minimum, so the box keeps
+    /// that content's natural size. Text in a box that does not hug keeps
+    /// upstream's unmeasured answer. An artboard keeps upstream's rule: its
+    /// leaf check resolves Solo children through the artboard itself, which
+    /// its callers have borrowed.
     pub fn is_intrinsic_leaf(&self) -> bool {
+        let hugs = self.hugs();
+        (hugs
+            || (!self.is_artboard()
+                && (0..2).any(|axis| !self.natural_content_hosts(axis).is_empty())))
+            && self.is_leaf()
+    }
+    fn hugs(&self) -> bool {
         self.with_style(|style| style.intrinsically_sized())
             .unwrap_or(false)
-            && self.is_leaf()
+    }
+    /// The children whose natural size, from authored geometry, answers a
+    /// non-hugging leaf's min-content query on `axis` (0 width, 1 height).
+    /// A nested artboard is an opaque host: in a box that Fills that axis it
+    /// has neither a definite nor a hugging size, so it contributes nothing.
+    fn natural_content_hosts(&self, axis: usize) -> Vec<CoreHandle> {
+        let fills = self
+            .with_style(|style| {
+                if axis == 0 {
+                    style.width_scale_type()
+                } else {
+                    style.height_scale_type()
+                }
+            })
+            .is_some_and(|scale| scale == LayoutScaleType::Fill);
+        self.children()
+            .iter()
+            .filter(|child| {
+                !child.is_type_of(LayoutComponentBase::TYPE_KEY)
+                    && !(fills
+                        && child
+                            .with(|object| object.as_nested_artboard().is_some())
+                            .unwrap_or(false))
+                    && crate::source::intrinsically_sizeable::natural_size_for_layout_host(child)
+                        .is_some()
+            })
+            .cloned()
+            .collect()
+    }
+    /// The hosts a measured Layout leaf asks on each axis: every non-layout
+    /// child when it hugs, as upstream, and otherwise its natural content.
+    fn measured_hosts(&self) -> [Vec<CoreHandle>; 2] {
+        if self.hugs() {
+            let hosts = self
+                .children()
+                .iter()
+                .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
+                .cloned()
+                .collect::<Vec<_>>();
+            [hosts.clone(), hosts]
+        } else {
+            [self.natural_content_hosts(0), self.natural_content_hosts(1)]
+        }
     }
     pub fn set_solved_layout(&mut self, layout: Layout, padding: LayoutPadding) {
         self.layout_data.solved_layout = layout;
@@ -2593,6 +2650,11 @@ impl LayoutComponent {
                             style,
                             inputs.parent_size,
                         );
+                    let height_limits =
+                        crate::mechanical_port::source::layout::layout_tree::content_height_limits(
+                            style,
+                            inputs.parent_size,
+                        );
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
@@ -2605,6 +2667,7 @@ impl LayoutComponent {
                                 available,
                                 intrinsic_width,
                                 width_limits,
+                                height_limits,
                             ),
                             None => taffy::prelude::Size::ZERO,
                         },
@@ -2690,18 +2753,9 @@ impl LayoutComponent {
             for style in virtual_item_styles(&virtual_tracks.0, &virtual_tracks.1) {
                 ids.push(taffy.new_leaf(style).ok()?);
             }
-            let mut children_supported = [true; 2];
-            for id in &ids {
-                if let Some(context) = taffy.get_node_context(*id) {
-                    for axis in 0..2 {
-                        children_supported[axis] &= context.3[axis];
-                    }
-                }
-            }
             let supported = LayoutComponent::own_minimum_contract(owner, kind, measured, is_root)
-                .unwrap_or_else(|| {
-                    LayoutComponent::container_minimum_contract(&style, children_supported)
-                });
+                .unwrap_or([true; 2]);
+            LayoutComponent::apply_definite_artboard_minimum(owner, is_root, &mut style);
             LayoutComponent::apply_minimum_contract(
                 &mut style,
                 supported.map(|known| !known && parent_is_flex),
@@ -2750,6 +2804,11 @@ impl LayoutComponent {
                             style,
                             inputs.parent_size,
                         );
+                    let height_limits =
+                        crate::mechanical_port::source::layout::layout_tree::content_height_limits(
+                            style,
+                            inputs.parent_size,
+                        );
                     taffy::compute_leaf_layout(
                         inputs,
                         style,
@@ -2762,6 +2821,7 @@ impl LayoutComponent {
                                 space,
                                 intrinsic_width,
                                 width_limits,
+                                height_limits,
                             ),
                             None => Size::ZERO,
                         },
@@ -3058,9 +3118,10 @@ impl LayoutComponent {
         }
     }
 
-    /// A measured host or mounted artboard defines the boundary of an
-    /// intrinsic minimum contract. Structural auto sizes derive it from their
-    /// children; unknown contributions keep main's zero automatic minimum.
+    /// Minimum contracts belong to measured leaves. Containers, including a
+    /// mounted artboard's root, keep CSS auto minima, so every known child and
+    /// definite size still contributes; only a leaf whose host has no answer
+    /// keeps a zero automatic minimum.
     fn own_minimum_contract(
         owner: &CoreHandle,
         kind: LayoutNodeKind,
@@ -3075,7 +3136,7 @@ impl LayoutComponent {
                 .with(|object| object.as_artboard().is_some())
                 .unwrap_or(false)
         {
-            return Some([false; 2]);
+            return Some([true; 2]);
         }
         let hosts: Option<Vec<CoreHandle>> = owner
             .with(|object| {
@@ -3089,28 +3150,43 @@ impl LayoutComponent {
                         .and_then(LayoutParticipant::measurement_host_handle)
                         .into_iter()
                         .collect(),
-                    LayoutNodeKind::Layout => object
-                        .as_container_component()
-                        .unwrap()
-                        .children()
-                        .iter()
-                        .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
-                        .cloned()
-                        .collect(),
+                    LayoutNodeKind::Layout => {
+                        let [width, height] = object
+                            .as_layout_component()
+                            .expect("layout measurement owner")
+                            .measured_hosts();
+                        let extra = height
+                            .into_iter()
+                            .filter(|host| !width.contains(host))
+                            .collect::<Vec<_>>();
+                        width.into_iter().chain(extra).collect()
+                    }
                 })
             })
             .flatten();
         hosts.map(|hosts| [hosts.iter().all(host_supports_min_content_width); 2])
     }
 
-    fn container_minimum_contract(style: &Style, children: [bool; 2]) -> [bool; 2] {
+    /// A mounted artboard is an opaque host. On an axis where it has a
+    /// definite size, that size is its specified size suggestion, so a flex
+    /// container never squeezes it below its authored size.
+    fn apply_definite_artboard_minimum(owner: &CoreHandle, is_root: bool, style: &mut Style) {
         use taffy::style::CompactLength;
-        // A structural box with an explicit length supplies its own bounded
-        // contribution on that axis, regardless of its children's contracts.
-        [
-            children[0] || style.size.width.tag() == CompactLength::LENGTH_TAG,
-            children[1] || style.size.height.tag() == CompactLength::LENGTH_TAG,
-        ]
+        if is_root
+            || !owner
+                .with(|object| object.as_artboard().is_some())
+                .unwrap_or(false)
+        {
+            return;
+        }
+        if style.min_size.width.is_auto() && style.size.width.tag() == CompactLength::LENGTH_TAG {
+            style.min_size.width =
+                taffy::prelude::LengthPercentageAuto::length(style.size.width.value());
+        }
+        if style.min_size.height.is_auto() && style.size.height.tag() == CompactLength::LENGTH_TAG {
+            style.min_size.height =
+                taffy::prelude::LengthPercentageAuto::length(style.size.height.value());
+        }
     }
 
     fn apply_minimum_contract(style: &mut Style, zero: [bool; 2]) {
@@ -3144,11 +3220,11 @@ impl LayoutComponent {
             id: taffy::prelude::NodeId,
             affected: &std::collections::HashSet<taffy::prelude::NodeId>,
             touched: &mut Vec<taffy::prelude::NodeId>,
-        ) -> [bool; 2] {
+        ) {
             use crate::source::layout::layout_participant::LayoutParticipant;
             use crate::source::layout::layout_tree::root_style;
             let Some(context) = tree.taffy.get_node_context(id) else {
-                return [true; 2];
+                return;
             };
             let (owner, kind, measured, old_supported, old_zero) = (
                 context.owner.clone(),
@@ -3177,21 +3253,11 @@ impl LayoutComponent {
                     .unwrap()
             };
             let supported = if changed {
-                let children = tree.taffy.child_ids(id).collect::<Vec<_>>();
-                let mut children_supported = [true; 2];
-                for child in children {
-                    let child_supported = update(tree, child, affected, touched);
-                    for axis in 0..2 {
-                        children_supported[axis] &= child_supported[axis];
-                    }
+                for child in tree.taffy.child_ids(id).collect::<Vec<_>>() {
+                    update(tree, child, affected, touched);
                 }
                 LayoutComponent::own_minimum_contract(&owner, kind, measured, id == tree.root)
-                    .unwrap_or_else(|| {
-                        LayoutComponent::container_minimum_contract(
-                            &authored_style(),
-                            children_supported,
-                        )
-                    })
+                    .unwrap_or([true; 2])
             } else {
                 old_supported
             };
@@ -3206,6 +3272,11 @@ impl LayoutComponent {
                 if id == tree.root {
                     style = root_style(&style, tree.root_available);
                 }
+                LayoutComponent::apply_definite_artboard_minimum(
+                    &owner,
+                    id == tree.root,
+                    &mut style,
+                );
                 LayoutComponent::apply_minimum_contract(&mut style, zero);
                 let context = tree.taffy.get_node_context_mut(id).unwrap();
                 context.minimum_supported = supported;
@@ -3214,7 +3285,6 @@ impl LayoutComponent {
                     touched.push(id);
                 }
             }
-            supported
         }
         update(tree, tree.root, &affected, touched);
     }
@@ -3279,6 +3349,7 @@ impl LayoutComponent {
         available: taffy::prelude::Size<taffy::prelude::AvailableSpace>,
         intrinsic_width: bool,
         width_limits: (Option<f32>, Option<f32>),
+        height_limits: (Option<f32>, Option<f32>),
     ) -> taffy::prelude::Size<f32> {
         use crate::mechanical_port::source::layout::{
             layout_measure_mode::unbound_measure_mode,
@@ -3296,18 +3367,40 @@ impl LayoutComponent {
          -> Vec2D {
             #[cfg(test)]
             layout_fit_content_tests::note_host_measure();
-            let mut measured = host
-                .with_mut(|object| {
+            // Image already measures exact offers as exact sizes. Preserve that
+            // protocol; controlled geometry and drawing groups use authored bounds.
+            let natural = if host
+                .is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+            {
+                None
+            } else {
+                crate::source::intrinsically_sizeable::natural_size_for_layout_host(host)
+            };
+            let mut measured = if let Some(natural) = natural {
+                let axis = |natural: f32, offer: f32, mode| {
+                    if mode == LayoutMeasureMode::Undefined {
+                        natural
+                    } else {
+                        natural.min(offer)
+                    }
+                };
+                Vec2D::new(
+                    axis(natural.x, width, width_mode),
+                    axis(natural.y, height, height_mode),
+                )
+            } else {
+                host.with_mut(|object| {
                     object.as_intrinsically_sizeable_mut().map(|sizeable| {
                         sizeable.measure_layout(width, width_mode, height, height_mode)
                     })
                 })
                 .flatten()
-                .unwrap_or_default();
+                .unwrap_or_default()
+            };
             if known.height.is_none()
                 && available.height == taffy::prelude::AvailableSpace::MinContent
             {
-                if let Some(minimum) = host_min_content_height(host, known.width) {
+                if let Some(minimum) = host_min_content_height(host, known.width, width_limits) {
                     measured.y = minimum;
                 }
             }
@@ -3339,16 +3432,31 @@ impl LayoutComponent {
                 }
             })
             .flatten();
-        let parent_is_grid = layout_parent
-            .and_then(|parent| {
-                parent.with(|object| {
-                    object
-                        .as_layout_component()
-                        .and_then(|layout| layout.with_style(LayoutComponentStyle::is_grid))
+        let mut ancestor = layout_parent;
+        let parent_is_grid = loop {
+            let Some(parent) = ancestor else {
+                break false;
+            };
+            let Some((is_grid, next)) = parent
+                .with(|object| {
+                    object.as_layout_component().map(|layout| {
+                        (
+                            layout
+                                .with_style(LayoutComponentStyle::is_grid)
+                                .unwrap_or(false),
+                            layout.layout_parent_handle(),
+                        )
+                    })
                 })
-            })
-            .flatten()
-            .unwrap_or(false);
+                .flatten()
+            else {
+                break false;
+            };
+            if is_grid {
+                break true;
+            }
+            ancestor = next;
+        };
         // An unimplemented minimum is zero, as before automatic minima were
         // enabled. An unbounded Rive answer is max-content, not a substitute
         // minimum. Keep this query-time decision live when host modes change.
@@ -3399,7 +3507,7 @@ impl LayoutComponent {
                             width_limits,
                             min_content,
                             (intrinsic_width || min_content) && supports,
-                            || host_min_content_width(&host, known.height),
+                            || host_min_content_width(&host, known.height, height_limits),
                             |width, width_mode, height, height_mode| {
                                 measure_host(&host, width, width_mode, height, height_mode)
                             },
@@ -3410,55 +3518,76 @@ impl LayoutComponent {
                 .unwrap_or_default()
             }
             LayoutNodeKind::Layout => {
-                let Some((children, (width_mode, height_mode))) = owner.with(|object| {
+                let Some((hosts, (width_mode, height_mode), hugs)) = owner.with(|object| {
                     let layout = object
                         .as_layout_component()
                         .expect("layout measurement owner");
                     (
-                        object.as_container_component().unwrap().children().to_vec(),
+                        layout.measured_hosts(),
                         layout.content_measure_modes(width_mode, height_mode),
+                        layout.hugs(),
                     )
                 }) else {
                     return taffy::prelude::Size::ZERO;
                 };
+                // A leaf that does not hug is measured only for its automatic
+                // minimum. Every other request keeps upstream's unmeasured
+                // answer, so its basis and Rive's measure calls are unchanged.
+                let min_content_axes = [
+                    min_content,
+                    known.height.is_none()
+                        && available.height == taffy::prelude::AvailableSpace::MinContent,
+                ];
+                if !hugs && min_content_axes == [false; 2] {
+                    return taffy::prelude::Size::ZERO;
+                }
                 let width = offer(width, width_mode);
                 let height = offer(height, height_mode);
-                let supports = children
-                    .iter()
-                    .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
-                    .all(host_supports_min_content_width);
-                minimum_contract(
-                    measure_fit_content(
-                        (width, width_mode),
-                        (height, height_mode),
-                        width_limits,
-                        min_content,
-                        (intrinsic_width || min_content) && supports,
-                        || {
-                            children
-                                .iter()
-                                .filter(|child| !child.is_type_of(LayoutComponentBase::TYPE_KEY))
-                                .try_fold(0.0f32, |minimum, child| {
-                                    host_min_content_width(child, known.height)
+                let measure_children = |children: &[CoreHandle]| {
+                    let supports = children.iter().all(host_supports_min_content_width);
+                    minimum_contract(
+                        measure_fit_content(
+                            (width, width_mode),
+                            (height, height_mode),
+                            width_limits,
+                            min_content,
+                            (intrinsic_width || min_content) && supports,
+                            || {
+                                children.iter().try_fold(0.0f32, |minimum, child| {
+                                    host_min_content_width(child, known.height, height_limits)
                                         .map(|next| minimum.max(next))
                                 })
-                        },
-                        |width, width_mode, height, height_mode| {
-                            let mut measured = Vec2D::default();
-                            for child in &children {
-                                if child.is_type_of(LayoutComponentBase::TYPE_KEY) {
-                                    continue;
+                            },
+                            |width, width_mode, height, height_mode| {
+                                let mut measured = Vec2D::default();
+                                for child in children {
+                                    let next =
+                                        measure_host(child, width, width_mode, height, height_mode);
+                                    measured.x = measured.x.max(next.x);
+                                    measured.y = measured.y.max(next.y);
                                 }
-                                let next =
-                                    measure_host(child, width, width_mode, height, height_mode);
-                                measured.x = measured.x.max(next.x);
-                                measured.y = measured.y.max(next.y);
-                            }
-                            measured
+                                measured
+                            },
+                        ),
+                        supports,
+                    )
+                };
+                if hugs {
+                    measure_children(&hosts[0])
+                } else {
+                    Vec2D::new(
+                        if min_content_axes[0] && !hosts[0].is_empty() {
+                            measure_children(&hosts[0]).x
+                        } else {
+                            0.0
                         },
-                    ),
-                    supports,
-                )
+                        if min_content_axes[1] && !hosts[1].is_empty() {
+                            measure_children(&hosts[1]).y
+                        } else {
+                            0.0
+                        },
+                    )
+                }
             }
         };
         taffy::prelude::Size {

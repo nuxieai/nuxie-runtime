@@ -27644,10 +27644,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::layout::n_sliced_node_base::NSlicedNodeBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -48399,10 +48396,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::joystick_base::JoystickBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,

@@ -110,6 +110,7 @@ mod scope;
 #[cfg(feature = "serde")]
 mod serde;
 mod stack_guard;
+mod stack_slot;
 pub mod state;
 mod string;
 mod sync;
@@ -150,7 +151,7 @@ pub use table::{FieldFunction, FieldValue, StackArg, Table, TablePairs, TableSeq
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 #[doc(hidden)]
-pub use traits::ReturnValues;
+pub use traits::{PushedCount, ReturnValues};
 
 /// Process-global `FFlag::LuauDirectFieldGet` control used by pinned Rive.
 ///

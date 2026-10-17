@@ -505,6 +505,13 @@ pub(crate) unsafe fn call_pushed<R: FromLuaMulti>(
         // Push the function, then the arguments.
         push_function(state).map_err(|error| crate::error::Error::from_vm(error))?;
         let nargs = args.push_call_args(lua)?;
+        // The count must name exactly the values pushed above the function:
+        // lua_pcall finds the function `nargs` slots below the top.
+        if nargs != lua_gettop(state) - base - 1 {
+            return Err(crate::error::Error::RuntimeError(
+                "luaur-rt: call arguments miscounted".to_string(),
+            ));
+        }
         // LUA_MULTRET == -1: keep every result.
         let status =
             lua_pcall(state, nargs, -1, 0).map_err(|error| crate::error::Error::from_vm(error))?;

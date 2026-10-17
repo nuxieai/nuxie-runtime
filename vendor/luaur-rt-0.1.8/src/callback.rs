@@ -239,7 +239,11 @@ unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
                 //     catchable error if the results cannot fit (mirroring mlua).
                 let n = results.len() as c_int;
                 if let ReturnValues::Pushed(_) = results {
-                    // Already on the stack top, in room the callback made.
+                    // Already on the stack top, in room the callback made,
+                    // above its arguments.
+                    if n < 0 || n > lua_gettop(state) - nargs {
+                        return raise_lua_error(state, "luaur-rt: callback results miscounted");
+                    }
                     return Ok(n);
                 }
                 if lua_checkstack(state, n.max(1)) == 0 {

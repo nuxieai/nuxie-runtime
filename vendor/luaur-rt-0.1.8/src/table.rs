@@ -2,6 +2,7 @@
 
 use crate::error::Result;
 use crate::multi::MultiValue;
+use crate::stack_slot::FrameSlot;
 use crate::state::{Lua, LuaRef};
 use crate::sync::{NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
@@ -9,7 +10,8 @@ use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::value::Value;
 
 /// A value read from a table field by [`Table::with_field`], held in its
-/// stack slot (not the registry) for the callback's duration.
+/// stack slot (not the registry) for the callback's duration. It is usable
+/// only in the call frame that read it.
 pub struct FieldValue<'a> {
     function: FieldFunction<'a>,
 }
@@ -17,24 +19,27 @@ pub struct FieldValue<'a> {
 impl<'a> FieldValue<'a> {
     /// The value as a function, when it is one (`LUA_TFUNCTION` only, not
     /// merely callable).
-    pub fn as_function(&self) -> Option<&FieldFunction<'a>> {
+    pub fn as_function(&self) -> Result<Option<&FieldFunction<'a>>> {
         let function = &self.function;
-        let is_function =
-            unsafe { lua_type(function.lua.state(), function.slot) } == ttype::FUNCTION;
-        is_function.then_some(function)
+        let slot = function.slot.index()?;
+        let is_function = unsafe { lua_type(function.lua.state(), slot) } == ttype::FUNCTION;
+        Ok(is_function.then_some(function))
     }
 
     /// The value itself, as [`Table::get_field`] returns it.
     pub fn to_value(&self) -> Result<Value> {
-        self.function.lua.value_from_stack(self.function.slot)
+        self.function
+            .lua
+            .value_from_stack(self.function.slot.index()?)
     }
 }
 
 /// A function read from a table field by [`Table::with_field`], held in its
-/// stack slot (not the registry) for the callback's duration.
+/// stack slot (not the registry) for the callback's duration. It is usable
+/// only in the call frame that read it.
 pub struct FieldFunction<'a> {
     lua: &'a Lua,
-    slot: c_int,
+    slot: FrameSlot,
 }
 
 impl FieldFunction<'_> {
@@ -46,20 +51,21 @@ impl FieldFunction<'_> {
     /// Call the function with `args`, exactly as
     /// [`Function::call`](crate::Function::call) calls a function handle.
     pub fn call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
-        let slot = self.slot;
+        let slot = self.slot.index()?;
         unsafe { crate::function::call_pushed(self.lua, |state| lua_pushvalue(state, slot), args) }
     }
 }
 
 /// A value held in a stack slot (see [`Lua::with_stack_userdata`]), passed
-/// as a call argument without a registry handle.
+/// as a call argument without a registry handle. It is usable only in the
+/// call frame that holds the slot.
 pub struct StackArg<'a> {
     lua: &'a Lua,
-    slot: c_int,
+    slot: FrameSlot,
 }
 
 impl<'a> StackArg<'a> {
-    pub(crate) fn new(lua: &'a Lua, slot: c_int) -> Self {
+    pub(crate) fn new(lua: &'a Lua, slot: FrameSlot) -> Self {
         Self { lua, slot }
     }
 }
@@ -67,7 +73,7 @@ impl<'a> StackArg<'a> {
 impl IntoLuaMulti for StackArg<'_> {
     fn into_lua_multi(self, _lua: &Lua) -> Result<MultiValue> {
         let mut values = MultiValue::with_capacity(1);
-        values.push_back(self.lua.value_from_stack(self.slot)?);
+        values.push_back(self.lua.value_from_stack(self.slot.index()?)?);
         Ok(values)
     }
 
@@ -77,13 +83,14 @@ impl IntoLuaMulti for StackArg<'_> {
             // Another thread's stack: pass the value through a handle.
             return self.into_lua_multi(lua)?.push_call_args(lua);
         }
+        let slot = self.slot.index()?;
         unsafe {
             if lua_checkstack(state, 2) == 0 {
                 return Err(crate::error::Error::RuntimeError(
                     "stack overflow: too many arguments to function call".to_string(),
                 ));
             }
-            lua_pushvalue(state, self.slot).map_err(|error| crate::error::Error::from_vm(error))?;
+            lua_pushvalue(state, slot).map_err(|error| crate::error::Error::from_vm(error))?;
         }
         Ok(1)
     }
@@ -231,7 +238,7 @@ impl Table {
             let value = FieldValue {
                 function: FieldFunction {
                     lua: &lua,
-                    slot: lua_gettop(state),
+                    slot: FrameSlot::current(state, lua_gettop(state)),
                 },
             };
             Ok(with(&value))
@@ -245,7 +252,9 @@ impl Table {
         field: &str,
         call: impl FnOnce(&FieldFunction<'_>) -> T,
     ) -> Result<Option<T>> {
-        self.with_field(field, |value| value.as_function().map(call))
+        self.with_field(field, |value| {
+            value.as_function().map(|function| function.map(call))
+        })?
     }
 
     /// Look up a table field and call it with a fixed zero-result contract.

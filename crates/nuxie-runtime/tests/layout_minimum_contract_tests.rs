@@ -194,6 +194,102 @@ fn mounted_artboard_minimum_respects_an_authored_maximum() {
 }
 
 #[test]
+fn scrollable_mounted_artboards_keep_a_zero_automatic_minimum() {
+    use nuxie_runtime::source::generated::{
+        core_registry::CoreRegistry,
+        layout::{
+            layout_component_style_base::LayoutComponentStyleBase,
+            layout_sizing_style_base::LayoutSizingStyleBase,
+        },
+    };
+    // The heights of the list items in component_list_child_origin.riv
+    // after `author` edits the style of each item mounted at the first frame.
+    let heights = |author: &dyn Fn(&nuxie_runtime::CoreHandle)| {
+        let mut factory = PersistentFactory::new(NullFactory);
+        let file = File::import(
+            &std::fs::read(fixture_path("component_list_child_origin.riv")).unwrap(),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let board = file.with_file(|f| f.artboard_named("Artboard")).unwrap();
+        let model_id = board.with_artboard(|a| a.view_model_id());
+        let model = file
+            .with_file_mut(|f| f.create_view_model_instance_at(model_id as usize, 0))
+            .unwrap();
+        board.bind_view_model_instance(Some(model.clone()));
+        let machine = board.state_machine_at(0).unwrap();
+        machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+        machine.advance_and_apply(0.1);
+        let items = board.with_artboard(|a| {
+            a.objects()
+                .iter()
+                .flatten()
+                .filter_map(|handle| {
+                    handle
+                        .with(|object| {
+                            object
+                                .as_any()
+                                .downcast_ref::<nuxie_runtime::source::artboard_component_list::ArtboardComponentList>()
+                                .map(|list| {
+                                    (0..list.artboard_count())
+                                        .filter_map(|i| list.artboard_instance(i as i32))
+                                        .collect::<Vec<_>>()
+                                })
+                        })
+                        .flatten()
+                })
+                .flatten()
+                .collect::<Vec<_>>()
+        });
+        for item in &items {
+            author(
+                &item
+                    .with_artboard(|item| item.style_handle())
+                    .expect("item style"),
+            );
+        }
+        for _ in 0..3 {
+            machine.advance_and_apply(0.1);
+        }
+        items
+            .iter()
+            .map(|item| item.with_artboard(|item| item.layout_height()))
+            .collect::<Vec<_>>()
+    };
+    // CSS gives a scroll container a zero automatic minimum, so an item
+    // with hidden overflow shrinks as one with an explicit zero minimum
+    // does, instead of keeping its definite 58 points.
+    let hidden = heights(&|style| {
+        assert!(CoreRegistry::set_uint_handle(
+            style,
+            LayoutComponentStyleBase::OVERFLOW_VALUE_PROPERTY_KEY.into(),
+            1,
+        ));
+    });
+    let zero_minimum = heights(&|style| {
+        assert!(CoreRegistry::set_uint_handle(
+            style,
+            LayoutSizingStyleBase::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY.into(),
+            1,
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            style,
+            LayoutSizingStyleBase::MIN_HEIGHT_PROPERTY_KEY.into(),
+            0.0,
+        ));
+    });
+    // Items the list keeps out of view hold their first layout.
+    assert!(
+        zero_minimum.iter().any(|height| *height < 58.0),
+        "{zero_minimum:?}"
+    );
+    assert_eq!(hidden, zero_minimum);
+}
+
+#[test]
 fn a_definite_10000_point_artboard_contributes_to_the_panel_minimum() {
     let mut factory = PersistentFactory::new(NullFactory);
     let vm = nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle::new(Box::new(

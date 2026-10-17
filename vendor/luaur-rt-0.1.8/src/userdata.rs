@@ -162,6 +162,14 @@ pub trait UserDataMethods<T> {
         M: Fn(&Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
+
+    /// Register a method callable as `obj:name(...)` that reads its arguments
+    /// in place through [`CallArgs`]; receives `&T`. A userdata argument is
+    /// borrowed from its stack slot instead of becoming a handle.
+    fn add_method_with_args<M, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, &CallArgs<'_>) -> Result<R> + MaybeSend + 'static,
+        R: IntoLuaMulti;
 }
 
 /// Registrar passed to [`UserData::add_fields`].
@@ -678,6 +686,29 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
             callback,
         });
     }
+
+    fn add_method_with_args<M, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, &CallArgs<'_>) -> Result<R> + MaybeSend + 'static,
+        R: IntoLuaMulti,
+    {
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let args = CallArgs::new(lua, 2, (nargs - 1).max(0));
+            let borrowed = cell
+                .cell
+                .try_borrow()
+                .map_err(|_| Error::UserDataBorrowError)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
+            let r = method(lua, data, &args)?;
+            r.into_return_values(lua)
+        });
+        self.methods.push(Registered {
+            name: name.into(),
+            is_meta: false,
+            callback,
+        });
+    }
 }
 
 impl<T: 'static> UserDataFields<T> for Collector<T> {
@@ -1064,6 +1095,31 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
         self.methods.push(Registered {
             name: name.into(),
             is_meta: true,
+            callback,
+        });
+    }
+
+    fn add_method_with_args<M, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, &CallArgs<'_>) -> Result<R> + MaybeSend + 'static,
+        R: IntoLuaMulti,
+    {
+        let marker = self.marker;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let this = stack_arg(lua, 1, nargs, 0)?;
+            let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
+            let args = CallArgs::new(lua, 2, (nargs - 1).max(0));
+            let borrowed = cell
+                .cell
+                .try_borrow()
+                .map_err(|_| Error::UserDataBorrowError)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
+            let r = method(lua, data, &args)?;
+            r.into_return_values(lua)
+        });
+        self.methods.push(Registered {
+            name: name.into(),
+            is_meta: false,
             callback,
         });
     }
@@ -1531,22 +1587,135 @@ pub struct StackUserData<'a, T> {
     _marker: PhantomData<T>,
 }
 
+/// Borrow the userdata in stack slot `slot` as [`AnyUserData::borrow`] does.
+///
+/// # Safety
+/// The slot must hold a userdata rooted for `'a`.
+unsafe fn borrow_at<'a, U: 'static>(lua: &Lua, slot: c_int) -> Result<UserDataRef<'a, U>> {
+    let cell = unsafe { cell_at::<U>(lua.state(), slot)? };
+    let guard = cell
+        .cell
+        .try_borrow()
+        .map_err(|_| Error::UserDataBorrowError)?;
+    if guard.is_none() {
+        return Err(Error::UserDataDestructed);
+    }
+    Ok(UserDataRef {
+        guard,
+        _marker: PhantomData,
+    })
+}
+
+/// Mutably borrow the userdata in stack slot `slot` as
+/// [`AnyUserData::borrow_mut`] does.
+///
+/// # Safety
+/// The slot must hold a userdata rooted for `'a`.
+unsafe fn borrow_mut_at<'a, U: 'static>(lua: &Lua, slot: c_int) -> Result<UserDataRefMut<'a, U>> {
+    let cell = unsafe { cell_at::<U>(lua.state(), slot)? };
+    let guard = cell
+        .cell
+        .try_borrow_mut()
+        .map_err(|_| Error::UserDataBorrowMutError)?;
+    if guard.is_none() {
+        return Err(Error::UserDataDestructed);
+    }
+    Ok(UserDataRefMut {
+        guard,
+        _marker: PhantomData,
+    })
+}
+
+/// The arguments of a method registered with
+/// [`UserDataMethods::add_method_with_args`] (after `self`), read in place
+/// from the callback's stack for the call's duration.
+pub struct CallArgs<'a> {
+    lua: &'a Lua,
+    start: c_int,
+    count: c_int,
+}
+
+impl<'a> CallArgs<'a> {
+    fn new(lua: &'a Lua, start: c_int, count: c_int) -> Self {
+        Self { lua, start, count }
+    }
+
+    /// The number of arguments.
+    pub fn len(&self) -> usize {
+        self.count as usize
+    }
+
+    /// Whether there are no arguments.
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    /// Argument `i` (0-based; nil past the end) converted as `V::from_lua`
+    /// converts it.
+    pub fn get<V: FromLua>(&self, i: usize) -> Result<V> {
+        V::from_lua(
+            stack_arg(self.lua, self.start, self.count, i as c_int)?,
+            self.lua,
+        )
+    }
+
+    /// Argument `i` as a userdata, failing as an [`AnyUserData`] argument
+    /// does when it is not one.
+    pub fn userdata(&self, i: usize) -> Result<ArgUserData<'_>> {
+        let i = i as c_int;
+        let slot = self.start + i;
+        if i < self.count && unsafe { lua_type(self.lua.state(), slot) } == ttype::USERDATA {
+            return Ok(ArgUserData {
+                lua: self.lua,
+                slot,
+            });
+        }
+        let value = stack_arg(self.lua, self.start, self.count, i)?;
+        match AnyUserData::from_lua(value, self.lua) {
+            Err(error) => Err(error),
+            // Only a full userdata converts, and those are read in place above.
+            Ok(_) => Err(Error::UserDataTypeMismatch),
+        }
+    }
+}
+
+/// A userdata argument held in its stack slot (see [`CallArgs::userdata`]).
+pub struct ArgUserData<'a> {
+    lua: &'a Lua,
+    slot: c_int,
+}
+
+impl ArgUserData<'_> {
+    /// Immutably borrow the value as `U`, as [`AnyUserData::borrow`] does.
+    pub fn borrow<U: 'static>(&self) -> Result<UserDataRef<'_, U>> {
+        // The argument slot roots the userdata for the call.
+        unsafe { borrow_at::<U>(self.lua, self.slot) }
+    }
+
+    /// Mutably borrow the value as `U`, as [`AnyUserData::borrow_mut`] does.
+    pub fn borrow_mut<U: 'static>(&self) -> Result<UserDataRefMut<'_, U>> {
+        unsafe { borrow_mut_at::<U>(self.lua, self.slot) }
+    }
+
+    /// Whether the value is a live `U`, as [`AnyUserData::is`] answers.
+    pub fn is<U: 'static>(&self) -> bool {
+        match unsafe { cell_at::<U>(self.lua.state(), self.slot) } {
+            Ok(cell) => cell.cell.borrow().is_some(),
+            Err(_) => false,
+        }
+    }
+
+    /// A handle to the value.
+    pub fn to_any(&self) -> Result<AnyUserData> {
+        AnyUserData::from_lua(self.lua.value_from_stack(self.slot)?, self.lua)
+    }
+}
+
 impl<T: 'static> StackUserData<'_, T> {
     /// Immutably borrow the value, as [`AnyUserData::borrow`] does.
     pub fn borrow(&self) -> Result<UserDataRef<'_, T>> {
         // The slot roots the userdata for the borrow's lifetime.
-        let cell = unsafe { cell_at::<T>(self.lua.state(), self.slot)? };
-        let guard = cell
-            .cell
-            .try_borrow()
-            .map_err(|_| Error::UserDataBorrowError)?;
-        if guard.is_none() {
-            return Err(Error::UserDataDestructed);
-        }
-        Ok(UserDataRef {
-            guard,
-            _marker: PhantomData,
-        })
+        unsafe { borrow_at::<T>(self.lua, self.slot) }
     }
 
     /// The userdata as a call argument, pushed from its slot.

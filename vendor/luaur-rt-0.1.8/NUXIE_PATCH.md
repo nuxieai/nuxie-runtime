@@ -199,3 +199,17 @@
 - Touched files: `src/userdata.rs`, `src/table.rs`, `src/traits.rs`,
   `src/callback.rs`, `src/lib.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+
+## Userdata arguments borrowed in place
+
+- `UserDataMethods::add_method_with_args` registers a method that reads its
+  arguments through a call-scoped `CallArgs`: `get` converts an argument as
+  `FromLua` does, and `userdata(i)` yields an `ArgUserData` held in its stack
+  slot, failing exactly as an `AnyUserData` argument does when the value is
+  not a userdata; `borrow`/`borrow_mut`/`is` behave as `AnyUserData`'s. A
+  userdata argument therefore needs no registry reference or `Rc` handle.
+  Lifetimes keep both inside the call. Arguments are read when the method
+  body asks, after `self` is borrowed; hosts use it where that order cannot
+  change which error is reported.
+- Touched files: `src/userdata.rs`, `src/lib.rs`; parity coverage against
+  handle arguments in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.

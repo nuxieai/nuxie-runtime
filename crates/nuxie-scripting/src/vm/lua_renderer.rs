@@ -411,14 +411,18 @@ impl UserData for ScriptedRenderer {
             })
         });
         methods.add_method("restore", |_, this, ()| this.restore());
-        methods.add_method("transform", |_, this, matrix: AnyUserData| {
+        // The renderer is never borrowed mutably, so reading arguments after
+        // borrowing `this` reports the same errors in the same order.
+        methods.add_method_with_args("transform", |_, this, args| {
+            let matrix = args.userdata(0)?;
             let matrix = matrix.borrow::<ScriptedMat2D>()?;
             this.with_renderer_mut(|renderer| {
                 renderer.transform(matrix.0);
                 Ok(())
             })
         });
-        methods.add_method("clipPath", |_, this, path: AnyUserData| {
+        methods.add_method_with_args("clipPath", |_, this, args| {
+            let path = args.userdata(0)?;
             let mut path = path.borrow_mut::<ScriptedPath>()?;
             this.bindings.with_factory(|factory| {
                 let render_path = path.render_path(factory);
@@ -428,20 +432,18 @@ impl UserData for ScriptedRenderer {
                 })
             })
         });
-        methods.add_method(
-            "drawPath",
-            |_, this, (path, paint): (AnyUserData, AnyUserData)| {
-                let mut path = path.borrow_mut::<ScriptedPath>()?;
-                let paint = paint.borrow::<ScriptedPaint>()?;
-                this.bindings.with_factory(|factory| {
-                    let render_path = path.render_path(factory);
-                    this.with_renderer_mut(|renderer| {
-                        renderer.draw_path(render_path, paint.render_paint.borrow().as_ref());
-                        Ok(())
-                    })
+        methods.add_method_with_args("drawPath", |_, this, args| {
+            let (path, paint) = (args.userdata(0)?, args.userdata(1)?);
+            let mut path = path.borrow_mut::<ScriptedPath>()?;
+            let paint = paint.borrow::<ScriptedPaint>()?;
+            this.bindings.with_factory(|factory| {
+                let render_path = path.render_path(factory);
+                this.with_renderer_mut(|renderer| {
+                    renderer.draw_path(render_path, paint.render_paint.borrow().as_ref());
+                    Ok(())
                 })
-            },
-        );
+            })
+        });
         methods.add_method(
             "drawImage",
             |_,

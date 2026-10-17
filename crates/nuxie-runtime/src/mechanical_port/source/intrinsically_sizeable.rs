@@ -86,7 +86,21 @@ pub(crate) fn authored_text_box_width(text: &crate::source::text::text::Text) ->
 pub(crate) fn natural_size_for_layout_host(
     host: &crate::source::core::CoreHandle,
 ) -> Option<Vec2D> {
-    natural_bounds_for_layout_host(host, None).map(|bounds| {
+    natural_bounds_for_layout_host(host, None, false).map(|bounds| {
+        bounds.map_or(Vec2D::default(), |bounds| {
+            Vec2D::new(bounds.width(), bounds.height())
+        })
+    })
+}
+
+/// The natural size a direct child of a translated (Rive) box gives that
+/// box's automatic minimum. A shape layout resizes (a parametric shape the
+/// box reaches directly or through Solos) is the box's paint: it adds no
+/// geometry (docs/CSS_LAYOUT.md, 5).
+pub(crate) fn natural_content_size_for_layout_host(
+    host: &crate::source::core::CoreHandle,
+) -> Option<Vec2D> {
+    natural_bounds_for_layout_host(host, None, true).map(|bounds| {
         bounds.map_or(Vec2D::default(), |bounds| {
             Vec2D::new(bounds.width(), bounds.height())
         })
@@ -96,9 +110,12 @@ pub(crate) fn natural_size_for_layout_host(
 /// `transform` maps the host's local space into the measured box's space;
 /// None is the measured host itself. Shapes bound their actual geometry, so a
 /// rotated curve keeps its precise extent rather than a rotated box.
+/// `resized_reach`: the host is one layout's size propagation reaches (a box's
+/// direct child, or below Solos only), so a parametric shape here is paint.
 fn natural_bounds_for_layout_host(
     host: &crate::source::core::CoreHandle,
     transform: Option<crate::source::math::mat2d::Mat2D>,
+    mut resized_reach: bool,
 ) -> Option<Option<crate::source::math::aabb::Aabb>> {
     use crate::source::{
         math::{aabb::Aabb, mat2d::Mat2D},
@@ -120,6 +137,9 @@ fn natural_bounds_for_layout_host(
             return Content::Children(Vec::new());
         }
         if let Some(shape) = object.as_any().downcast_ref::<Shape>() {
+            if resized_reach && shape.is_resized_by_layout() {
+                return Content::Placed(None);
+            }
             return Content::Placed(shape.natural_bounds_for_layout(transform));
         }
         // A host's rectangle sits about its origin, as it draws, so a group
@@ -152,6 +172,10 @@ fn natural_bounds_for_layout_host(
         if let Some(solo) = object.as_any().downcast_ref::<Solo>() {
             return Content::Children(solo.active_component().into_iter().collect());
         }
+        // Size propagation stops at a plain group's content.
+        if object.core_type() == crate::source::generated::node_base::NodeBase::TYPE_KEY {
+            resized_reach = false;
+        }
         Content::Children(
             object
                 .as_container_component()
@@ -178,7 +202,9 @@ fn natural_bounds_for_layout_host(
                         .as_transform_component()
                         .map_or_else(Mat2D::identity, |transform| transform.transform())
                 })?;
-                if let Some(bounds) = natural_bounds_for_layout_host(&child, Some(outer * local))? {
+                if let Some(bounds) =
+                    natural_bounds_for_layout_host(&child, Some(outer * local), resized_reach)?
+                {
                     if let Some(result) = &mut result {
                         result.expand(bounds);
                     } else {

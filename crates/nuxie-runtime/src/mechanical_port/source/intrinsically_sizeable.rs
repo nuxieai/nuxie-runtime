@@ -66,15 +66,19 @@ pub(crate) fn authored_text_box_width(text: &crate::source::text::text::Text) ->
 pub(crate) fn natural_size_for_layout_host(
     host: &crate::source::core::CoreHandle,
 ) -> Option<Vec2D> {
-    natural_bounds_for_layout_host(host).map(|bounds| {
+    natural_bounds_for_layout_host(host, None).map(|bounds| {
         bounds.map_or(Vec2D::default(), |bounds| {
             Vec2D::new(bounds.width(), bounds.height())
         })
     })
 }
 
+/// `transform` maps the host's local space into the measured box's space;
+/// None is the measured host itself. Shapes bound their actual geometry, so a
+/// rotated curve keeps its precise extent rather than a rotated box.
 fn natural_bounds_for_layout_host(
     host: &crate::source::core::CoreHandle,
+    transform: Option<crate::source::math::mat2d::Mat2D>,
 ) -> Option<Option<crate::source::math::aabb::Aabb>> {
     use crate::source::{
         math::{aabb::Aabb, mat2d::Mat2D},
@@ -82,7 +86,8 @@ fn natural_bounds_for_layout_host(
         solo::Solo,
     };
     enum Content {
-        Bounds(Aabb),
+        Placed(Aabb),
+        Rect(Aabb),
         Children(Vec<crate::source::core::CoreHandle>),
         Unknown,
     }
@@ -94,16 +99,16 @@ fn natural_bounds_for_layout_host(
             return Content::Children(Vec::new());
         }
         if let Some(shape) = object.as_any().downcast_ref::<Shape>() {
-            return Content::Bounds(shape.natural_bounds_for_layout());
+            return Content::Placed(shape.natural_bounds_for_layout(transform));
         }
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Content::Bounds(Aabb::from_ltwh(0.0, 0.0, image.width(), image.height()));
+            return Content::Rect(Aabb::from_ltwh(0.0, 0.0, image.width(), image.height()));
         }
         if let Some(size) = object
             .as_intrinsically_sizeable_mut()
             .and_then(|host| host.natural_size_for_layout())
         {
-            return Content::Bounds(Aabb::from_ltwh(0.0, 0.0, size.x, size.y));
+            return Content::Rect(Aabb::from_ltwh(0.0, 0.0, size.x, size.y));
         }
         // Ordinary drawing nodes inherit TransformComponent's zero measurer.
         // Concrete measured hosts need their own contract instead of a walk.
@@ -127,18 +132,24 @@ fn natural_bounds_for_layout_host(
         )
     })?;
     match content {
-        Content::Bounds(bounds) => Some(Some(bounds)),
+        Content::Placed(bounds) => Some(Some(bounds)),
+        // A transformed rectangle's bounds are its mapped corners exactly.
+        Content::Rect(bounds) => {
+            Some(Some(transform.map_or(bounds, |transform| {
+                transform.map_bounding_box(bounds)
+            })))
+        }
         Content::Unknown => None,
         Content::Children(children) => {
+            let outer = transform.unwrap_or_else(Mat2D::identity);
             let mut result: Option<Aabb> = None;
             for child in children {
-                if let Some(bounds) = natural_bounds_for_layout_host(&child)? {
-                    let transform = child.with(|object| {
-                        object
-                            .as_transform_component()
-                            .map_or_else(Mat2D::identity, |transform| transform.transform())
-                    })?;
-                    let bounds = transform.map_bounding_box(bounds);
+                let local = child.with(|object| {
+                    object
+                        .as_transform_component()
+                        .map_or_else(Mat2D::identity, |transform| transform.transform())
+                })?;
+                if let Some(bounds) = natural_bounds_for_layout_host(&child, Some(outer * local))? {
                     if let Some(result) = &mut result {
                         result.expand(bounds);
                     } else {

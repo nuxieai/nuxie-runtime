@@ -1526,3 +1526,126 @@ fn css_fill_text_leaves_keep_their_zero_basis() {
         }
     }
 }
+
+// UNIV-4844 review: natural sizes of drawing content follow authored geometry.
+#[derive(Clone, Copy, PartialEq)]
+enum ShapeHost {
+    HugBox,
+    GroupedHugBox,
+    Participant,
+}
+struct ShapeFixture {
+    _arena: CoreArena,
+    root: CoreHandle,
+    subject: CoreHandle,
+    path: CoreHandle,
+}
+fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture {
+    use crate::source::generated::core_registry::CoreField;
+    use crate::source::math::mat2d::Mat2D;
+    use crate::source::shapes::{ellipse::Ellipse, rectangle::Rectangle, shape::Shape};
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(300.0), true);
+    let shape = arena.insert(Shape::default());
+    let path = if ellipse {
+        arena.insert(Ellipse::default())
+    } else {
+        arena.insert(Rectangle::default())
+    };
+    path.with_mut(|o| {
+        o.set_double(CoreField::ParametricPathWidth, 80.0);
+        o.set_double(CoreField::ParametricPathHeight, 80.0);
+    })
+    .unwrap();
+    attach(&arena, &shape, &path);
+    shape
+        .with_downcast_mut::<Shape, _>(|s| s.add_path(path.clone()))
+        .unwrap();
+    // Stand in for the update pass that composes the authored rotation.
+    path.with_mut(|o| {
+        o.as_transform_component_mut()
+            .unwrap()
+            .with_transform_mut(|t| *t = Mat2D::from_rotation(rotation))
+    })
+    .unwrap();
+    let subject = match host {
+        ShapeHost::Participant => {
+            attach(&arena, &root, &shape);
+            let mut p = LayoutParticipant::default();
+            p.base
+                .set_layout_width_scale_type_value(LayoutScaleType::Hug as u8);
+            p.base
+                .set_layout_height_scale_type_value(LayoutScaleType::Hug as u8);
+            p.base.set_width_units_value_value(YGUnit::Auto as u8);
+            p.base.set_height_units_value_value(YGUnit::Auto as u8);
+            let p = arena.insert(p);
+            attach(&arena, &shape, &p);
+            let mut context = ParentContext {
+                arena: &arena,
+                parent: shape.clone(),
+            };
+            assert_eq!(
+                LayoutParticipant::on_added_clean_occurrence(&p, &mut context),
+                StatusCode::Ok
+            );
+            p
+        }
+        ShapeHost::HugBox | ShapeHost::GroupedHugBox => {
+            let subject = layout(&arena, Some(&root), None, false);
+            if host == ShapeHost::GroupedHugBox {
+                let group = arena.insert(crate::source::node::Node::default());
+                attach(&arena, &subject, &group);
+                attach(&arena, &group, &shape);
+            } else {
+                attach(&arena, &subject, &shape);
+            }
+            LayoutComponent::sync_style_occurrence(&subject);
+            LayoutComponent::sync_layout_children_occurrence(&subject);
+            subject
+        }
+    };
+    LayoutComponent::sync_style_occurrence(&root);
+    LayoutComponent::sync_layout_children_occurrence(&root);
+    ShapeFixture {
+        _arena: arena,
+        root,
+        subject,
+        path,
+    }
+}
+impl ShapeFixture {
+    /// Solve, then publish bounds so layout controls the path's size.
+    fn width(&self) -> f32 {
+        LayoutComponent::calculate_layout_occurrence(&self.root, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&self.root, false);
+        solved(&self.subject).width()
+    }
+}
+
+#[test]
+fn css_rotated_curve_natural_size_follows_its_geometry() {
+    let quarter = std::f32::consts::FRAC_PI_4;
+    let mut widths = Vec::new();
+    for host in [
+        ShapeHost::HugBox,
+        ShapeHost::GroupedHugBox,
+        ShapeHost::Participant,
+    ] {
+        widths.push(shape_fixture(true, host, quarter).width());
+    }
+    // An 80-point circle rotated 45 degrees still spans 80 points, not the
+    // 113 of its rotated bounding box. Rive draws the circle as four cubics,
+    // which stray up to about 0.03 percent from the true circle.
+    for width in &widths {
+        assert!((width - 80.0).abs() < 0.05, "{widths:?}");
+    }
+    // A rotated square measures as upstream does: a hug box asks the path's
+    // authored width, a participant its precise transformed geometry.
+    let square = [ShapeHost::HugBox, ShapeHost::Participant]
+        .map(|host| shape_fixture(false, host, quarter).width());
+    assert!((square[0] - 80.0).abs() < 0.001, "{square:?}");
+    assert!(
+        (square[1] - 80.0 * std::f32::consts::SQRT_2).abs() < 0.001,
+        "{square:?}"
+    );
+}

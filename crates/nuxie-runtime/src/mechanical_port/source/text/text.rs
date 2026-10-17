@@ -609,45 +609,6 @@ enum TextDrawCommand {
     },
 }
 
-/// Nuxie addition: a line-through paints over its glyphs, so a style with
-/// one draws after the colour glyphs that follow its first glyph. Styles
-/// without a line-through keep the upstream order.
-fn lift_line_through_styles(commands: &mut Vec<TextDrawCommand>) {
-    let Some(last_color) = commands
-        .iter()
-        .rposition(|command| matches!(command, TextDrawCommand::ColorGlyph { .. }))
-    else {
-        return;
-    };
-    let lifts = |command: &TextDrawCommand| {
-        matches!(
-            command,
-            TextDrawCommand::Style(style)
-                if crate::text_decoration::style_line(style)
-                    & crate::text_decoration::LINE_THROUGH
-                    != 0
-        )
-    };
-    if !commands[..last_color].iter().any(lifts) {
-        return;
-    }
-    let mut kept = Vec::with_capacity(commands.len());
-    let mut lifted = Vec::new();
-    for (index, command) in std::mem::take(commands).into_iter().enumerate() {
-        if index < last_color && lifts(&command) {
-            lifted.push(command);
-        } else {
-            let last = index == last_color;
-            kept.push(command);
-            if last {
-                // In their own order, right after the last colour glyph.
-                kept.append(&mut lifted);
-            }
-        }
-    }
-    *commands = kept;
-}
-
 /// Nuxie addition: adds decoration lines to a style's glyph path, registering
 /// the style for drawing when it has no glyph path yet.
 fn add_decoration(
@@ -2058,7 +2019,6 @@ impl Text {
             }
             current_y += self.fit_paragraph_spacing();
         }
-        lift_line_through_styles(&mut self.draw_commands);
 
         let mut scale = 1.0f32;
         let mut x_offset = -self.bounds.width() * self.base.origin_x();

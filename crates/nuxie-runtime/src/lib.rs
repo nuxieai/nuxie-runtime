@@ -5,6 +5,7 @@
 //! a [`Renderer`]. The complete upstream-shaped API is available in [`source`].
 
 #[doc(hidden)]
+pub mod css_layout;
 pub mod mechanical_port;
 /// Shared test-only scene builders, for this package's tests and the
 /// renderer's. The non-default `test-support` feature keeps them out of
@@ -28,7 +29,8 @@ pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObjec
         60000 => Some(Box::new(video::VideoAsset::default())),
         60001 => Some(Box::new(video::Video::default())),
         60002 => Some(Box::new(text_decoration::TextStyleDecoration::default())),
-        _ => source::generated::core_registry::CoreRegistry::make_core_box(type_key),
+        _ => css_layout::make_core(type_key)
+            .or_else(|| source::generated::core_registry::CoreRegistry::make_core_box(type_key)),
     }
 }
 

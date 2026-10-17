@@ -934,6 +934,11 @@ impl LayoutComponent {
             return;
         };
         for child in children {
+            // A CSS record has no collapsed state of its own, and it is the
+            // caller when its display changes.
+            if child.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE) {
+                continue;
+            }
             if let Some(style) = active_style
                 .as_deref_mut()
                 .filter(|style| style.handle().as_ref() == Some(&child))
@@ -1027,6 +1032,13 @@ impl LayoutComponent {
             applier.with(|applier| {
                 if let Some(applier) = applier.as_layout_style_applier() {
                     applier.apply_placement_style(&mut style, &context);
+                }
+            });
+        }
+        for applier in &appliers {
+            applier.with(|applier| {
+                if let Some(applier) = applier.as_layout_style_applier() {
+                    applier.apply_css_style(&mut style, &context);
                 }
             });
         }
@@ -2005,6 +2017,11 @@ impl LayoutComponent {
             .unwrap_or(LayoutScaleType::Fixed)
     }
     pub fn main_axis_is_row(&self) -> bool {
+        if let Some(row) =
+            self.with_css(|css| css.choice(crate::css_layout::keys::FLEX_DIRECTION) <= 1)
+        {
+            return row;
+        }
         self.with_style(|style| {
             matches!(
                 style.flex_direction(),
@@ -2095,8 +2112,70 @@ impl LayoutComponent {
         })
     }
     pub fn is_grid_container(&self) -> bool {
+        if let Some(grid) = self.with_css(|css| css.choice(crate::css_layout::keys::DISPLAY) == 2) {
+            return grid;
+        }
         self.with_style(|style| style.is_grid() && !style.is_stack())
             .unwrap_or(false)
+    }
+    /// This box's `LayoutCssStyle`: present exactly when the box is in CSS
+    /// mode (docs/CSS_LAYOUT.md, 2.1).
+    pub fn css_record(&self) -> Option<CoreHandle> {
+        self.layout_data
+            .appliers
+            .as_deref()?
+            .iter()
+            .find(|applier| applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE))
+            .cloned()
+    }
+    pub fn is_css_mode(&self) -> bool {
+        self.css_record().is_some()
+    }
+    pub fn with_css<R>(&self, f: impl FnOnce(crate::css_layout::CssValues<'_>) -> R) -> Option<R> {
+        crate::css_layout::record::with_values(&self.css_record()?, f)
+    }
+    /// What a CSS box tells its children's sync context: whether it is a
+    /// grid (never a Rive stack) and its justify-items as Rive numbers it.
+    pub(crate) fn css_child_context(&self) -> Option<(bool, bool, u8)> {
+        self.with_css(|css| {
+            (
+                css.choice(crate::css_layout::keys::DISPLAY) == 2,
+                false,
+                crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
+                    as u8,
+            )
+        })
+    }
+    /// The record's display changed, or the record was attached: in CSS mode
+    /// `display: none` hides the box as the style's display none does. The
+    /// record passes its value, since it is borrowed while it calls.
+    pub(crate) fn css_display_changed_occurrence(owner: &CoreHandle, hidden: bool) {
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("layout component");
+                let changed = layout.style_display_hidden() != hidden;
+                layout.set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, hidden);
+                changed
+            })
+            .unwrap_or(false);
+        if !changed {
+            return;
+        }
+        let collapsed = owner
+            .with(|object| {
+                object
+                    .as_component()
+                    .expect("layout component")
+                    .is_collapsed()
+                    || hidden
+            })
+            .expect("live layout owner");
+        Self::propagate_resolved_collapse_occurrence(owner, collapsed, None, None);
+        Self::mark_layout_node_dirty_occurrence(owner, false);
+    }
+    /// A record value that only the box's paint reads changed.
+    pub(crate) fn css_paint_changed_occurrence(owner: &CoreHandle) {
+        owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
     }
     pub fn grid_lines(&self, rows: bool, out: &mut Vec<f32>) -> f32 {
         out.clear();
@@ -2170,6 +2249,16 @@ impl LayoutComponent {
                 })
                 .flatten()
         });
+        let css_parent = parent
+            .as_ref()
+            .and_then(|parent| {
+                parent.with(|parent| {
+                    parent
+                        .as_layout_component()
+                        .and_then(LayoutComponent::css_child_context)
+                })
+            })
+            .flatten();
         let (parent_is_grid, parent_is_stack, container_justify_items) = active_parent_style
             .map(|snapshot| {
                 (
@@ -2178,6 +2267,7 @@ impl LayoutComponent {
                     snapshot.justify_items as u8,
                 )
             })
+            .or(css_parent)
             .or_else(|| {
                 parent_style.as_ref().and_then(|style| {
                     style.with_downcast::<LayoutComponentStyle, _>(|style| {
@@ -2213,6 +2303,7 @@ impl LayoutComponent {
             },
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
+            css_role: crate::css_layout::record::role(self.is_artboard(), false),
         })
     }
     pub fn sync_style(&mut self) {
@@ -2228,13 +2319,14 @@ impl LayoutComponent {
             .as_deref()
             .cloned()
             .unwrap_or_default();
-        for pass in 0..4 {
+        for pass in 0..5 {
             for applier in &appliers {
                 let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
                     0 => applier.apply_base_style(&mut taffy_style, &context),
                     1 => applier.apply_container_style(&mut taffy_style, &context),
                     2 => applier.apply_item_style(&mut taffy_style, &context),
-                    _ => applier.apply_placement_style(&mut taffy_style, &context),
+                    3 => applier.apply_placement_style(&mut taffy_style, &context),
+                    _ => applier.apply_css_style(&mut taffy_style, &context),
                 };
                 if this.as_ref() == Some(applier) {
                     apply(self);
@@ -3846,11 +3938,19 @@ impl LayoutComponent {
     }
     fn refresh_style_display_hidden(&mut self) {
         let hidden = self
-            .with_style(|style| style.display() == YGDisplay::None)
+            .with_css(|css| css.display_none())
+            .or_else(|| self.with_style(|style| style.display() == YGDisplay::None))
             .unwrap_or(false);
         self.set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, hidden);
     }
     pub fn actual_direction(&self) -> LayoutDirection {
+        if self.is_css_mode() {
+            return match self.with_css(|css| css.direction()).flatten() {
+                Some(true) => LayoutDirection::Ltr,
+                Some(false) => LayoutDirection::Rtl,
+                None => self.inherited_direction,
+            };
+        }
         self.with_style(|style| match style.direction() {
             YGDirection::Ltr => LayoutDirection::Ltr,
             YGDirection::Rtl => LayoutDirection::Rtl,
@@ -4764,6 +4864,16 @@ impl LayoutComponent {
         owner: &CoreHandle,
         active_style: &mut LayoutComponentStyle,
     ) {
+        let css = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .is_some_and(LayoutComponent::is_css_mode)
+            })
+            .unwrap_or(false);
+        if css {
+            return;
+        }
         if let Some(display_hidden) = Self::with_callback_style(owner, active_style, |style| {
             style.display() == YGDisplay::None
         }) {

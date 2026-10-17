@@ -343,6 +343,18 @@ impl LayoutParticipant {
                 participant.add_layout_style_applier(placement)
             });
         }
+        // So does the host's CSS record (docs/CSS_LAYOUT.md, 2.1).
+        if let Some(record) = host
+            .with(|host| {
+                host.as_container_component()
+                    .and_then(|host| crate::css_layout::record::find_in(host.children()))
+            })
+            .flatten()
+        {
+            owner.with_downcast_mut::<Self, _>(|participant| {
+                participant.add_layout_style_applier(record)
+            });
+        }
         Self::sync_style_changes_occurrence(owner, None);
         if let Some(layout) = owner
             .with_downcast::<Self, _>(Self::owning_layout_handle)
@@ -448,6 +460,15 @@ impl LayoutParticipant {
             .flatten()
         {
             self.add_layout_style_applier(placement);
+        }
+        if let Some(record) = host
+            .with(|host| {
+                host.as_container_component()
+                    .and_then(|host| crate::css_layout::record::find_in(host.children()))
+            })
+            .flatten()
+        {
+            self.add_layout_style_applier(record);
         }
         self.sync_style_changes();
         if let Some(layout) = self.owning_layout_handle() {
@@ -646,6 +667,15 @@ impl LayoutParticipant {
             .and_then(|layout| {
                 layout.with(|layout| {
                     let layout = layout.as_layout_component()?;
+                    if let Some((grid, stack, justify)) = layout.css_child_context() {
+                        return Some((
+                            layout.main_axis_is_row(),
+                            grid,
+                            stack,
+                            justify,
+                            layout.actual_direction() != LayoutDirection::Rtl,
+                        ));
+                    }
                     let style = layout.style_handle();
                     Some((
                         layout.main_axis_is_row(),
@@ -691,6 +721,7 @@ impl LayoutParticipant {
             parent_is_row,
             is_ltr: direction_ltr,
             has_layout_parent: layout.is_some(),
+            css_role: crate::css_layout::CssRole::Participant,
         };
         let Some(data) = self.layout_data.as_deref_mut() else {
             return false;
@@ -698,13 +729,14 @@ impl LayoutParticipant {
         let mut style = data.take_style();
         let appliers = data.appliers.as_deref().cloned().unwrap_or_default();
         let this = self.base.handle();
-        for pass in 0..4 {
+        for pass in 0..5 {
             for applier in &appliers {
                 let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
                     0 => applier.apply_base_style(&mut style, &context),
                     1 => applier.apply_container_style(&mut style, &context),
                     2 => applier.apply_item_style(&mut style, &context),
-                    _ => applier.apply_placement_style(&mut style, &context),
+                    3 => applier.apply_placement_style(&mut style, &context),
+                    _ => applier.apply_css_style(&mut style, &context),
                 };
                 if this.as_ref() == Some(applier) {
                     apply(self);

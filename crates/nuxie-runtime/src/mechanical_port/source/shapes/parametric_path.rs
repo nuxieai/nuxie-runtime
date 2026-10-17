@@ -29,6 +29,11 @@ pub struct ParametricPath {
     pub base: ParametricPathBase,
 }
 impl ParametricPath {
+    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
+        self.base
+            .layout_natural
+            .get(Vec2D::new(self.base.width(), self.base.height()))
+    }
     pub fn measure_layout(
         &self,
         width: f32,
@@ -58,8 +63,11 @@ impl ParametricPath {
         _height: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
+        let current = Vec2D::new(self.base.width(), self.base.height());
+        self.base.layout_natural.begin_control(current);
         self.set_width(size.x);
         self.set_height(size.y);
+        self.base.layout_natural.end_control();
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty(false);
     }

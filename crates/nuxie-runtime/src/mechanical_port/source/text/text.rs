@@ -2567,6 +2567,10 @@ impl Text {
     pub fn overflow_value_changed(&mut self) {
         if self.effective_sizing() != TextSizing::AutoWidth || self.overflow_as_fixed() {
             self.mark_shape_dirty();
+        } else {
+            // AutoWidth glyph shaping is unchanged, but font fitting changes
+            // the layout adapter's intrinsic minimum contract.
+            self.base.mark_layout_node_dirty();
         }
     }
     pub fn width_changed(&mut self) {

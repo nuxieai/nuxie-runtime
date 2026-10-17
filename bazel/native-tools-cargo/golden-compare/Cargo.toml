@@ -13,5 +13,6 @@ build = false
 path = "lib.rs"
 
 [dependencies]
+"sha2" = { "version" = "0.10" }
 "anyhow" = { "version" = "1" }
 "nuxie-binary" = { "path" = "../nuxie-binary" }

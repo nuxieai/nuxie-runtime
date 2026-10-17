@@ -726,6 +726,157 @@ impl Shape {
         bounds
     }
 
+    /// UNIV-4844: a shape's natural size from authored geometry, never from
+    /// a size layout wrote back. Measured directly without participating, a
+    /// parametric path answers as upstream's measure does, with its authored
+    /// width and height. Other paths, participants and shapes inside drawing
+    /// groups answer with the precise bounds of their geometry at the
+    /// authored size, mapped by `transform` into the measured box's space.
+    /// None when no path has geometry, so a group does not union a point.
+    pub(crate) fn natural_bounds_for_layout(&self, transform: Option<Mat2D>) -> Option<Aabb> {
+        let measured_directly = transform.is_none() && !self.is_participating_in_layout();
+        let participant = transform.is_none() && !measured_directly;
+        let outer = transform.unwrap_or_else(Mat2D::identity);
+        let shape = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+        let mut size = Vec2D::default();
+        let mut result: Option<Aabb> = None;
+        let mut pending = RawPath::default();
+        for path in self.paths().iter() {
+            path.with(|object| {
+                let Some(path) = object.as_path() else {
+                    return;
+                };
+                if path.base.is_collapsed() {
+                    return;
+                }
+                // A participant keeps upstream's path transform, as
+                // compute_intrinsic_bounds does; otherwise the path draws
+                // through any nodes between it and this shape.
+                let matrix = outer
+                    * if participant {
+                        path.base.transform()
+                    } else {
+                        Self::path_to_shape_transform(path, shape.as_ref())
+                    };
+                if object.as_parametric_path().is_some() {
+                    let natural = object.as_parametric_path().unwrap().natural_size_for_layout();
+                    if measured_directly {
+                        size = Vec2D::new(size.x.max(natural.x), size.y.max(natural.y));
+                        return;
+                    }
+                    if !Self::build_natural_parametric_path(object, natural, self, &mut pending) {
+                        return;
+                    }
+                } else if path.needs_path_build() || path.raw_path().verbs().is_empty() {
+                    pending.rewind();
+                    path.build_path_from_shape(
+                        &mut pending,
+                        Path::is_path_closed_for(object),
+                        object.as_points_path().is_some_and(|points| crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(points).is_some()),
+                        self,
+                    );
+                } else {
+                    pending.rewind();
+                    pending.add_path(&path.raw_path(), None);
+                }
+                let bounds = pending.precise_bounds_with_transform(matrix);
+                if !(bounds.width() >= 0.0 && bounds.height() >= 0.0) {
+                    return;
+                }
+                if measured_directly {
+                    size = Vec2D::new(size.x.max(bounds.width()), size.y.max(bounds.height()));
+                } else if let Some(result) = &mut result {
+                    result.expand(bounds);
+                } else {
+                    result = Some(bounds);
+                }
+            });
+        }
+        if measured_directly {
+            Some(Aabb::from_ltwh(0.0, 0.0, size.x, size.y))
+        } else {
+            result
+        }
+    }
+
+    /// A path's transform into this shape's space, composed through the nodes
+    /// between them; a path may sit below a node inside its shape.
+    fn path_to_shape_transform(path: &Path, shape: Option<&CoreHandle>) -> Mat2D {
+        let mut matrix = path.base.transform();
+        let Some(shape) = shape else {
+            return matrix;
+        };
+        let mut parent = path.base.parent_handle();
+        while let Some(current) = parent {
+            if &current == shape {
+                break;
+            }
+            let Some((local, next)) = current.with(|object| {
+                (
+                    object
+                        .as_transform_component()
+                        .map_or_else(Mat2D::identity, |component| component.transform()),
+                    object.component_parent_handle(),
+                )
+            }) else {
+                break;
+            };
+            matrix = local * matrix;
+            parent = next;
+        }
+        matrix
+    }
+
+    /// The geometry Rive builds for a parametric path at its authored size,
+    /// from a detached copy, so neither the live path nor its build state is
+    /// involved. Returns false for a parametric type it does not know.
+    fn build_natural_parametric_path(
+        object: &dyn crate::mechanical_port::source::core::CoreObject,
+        natural: Vec2D,
+        shape: &Shape,
+        raw: &mut RawPath,
+    ) -> bool {
+        use crate::mechanical_port::source::shapes::{
+            ellipse::Ellipse, polygon::Polygon, rectangle::Rectangle, star::Star,
+            triangle::Triangle,
+        };
+        let Some(mut copy) = object.clone_boxed() else {
+            return false;
+        };
+        let Some(parametric) = copy.as_parametric_path_mut() else {
+            return false;
+        };
+        parametric.base.set_width_value(natural.x);
+        parametric.base.set_height_value(natural.y);
+        let any = copy.as_any_mut();
+        if let Some(path) = any.downcast_mut::<Ellipse>() {
+            path.update_before_path_super(ComponentDirt::PATH);
+        } else if let Some(path) = any.downcast_mut::<Rectangle>() {
+            path.update_before_path_super(ComponentDirt::PATH);
+        } else if let Some(path) = any.downcast_mut::<Triangle>() {
+            path.update_before_path_super(ComponentDirt::PATH);
+        } else if let Some(path) = any.downcast_mut::<Star>() {
+            path.update_before_path_super(ComponentDirt::PATH);
+        } else if let Some(path) = any.downcast_mut::<Polygon>() {
+            path.update_before_path_super(ComponentDirt::PATH);
+        } else {
+            return false;
+        }
+        let Some(path) = copy.as_path() else {
+            return false;
+        };
+        raw.rewind();
+        path.build_path_from_shape(raw, Path::is_path_closed_for(&*copy), false, shape);
+        true
+    }
+
+    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
+        self.natural_bounds_for_layout(None)
+            .map_or(Vec2D::default(), |bounds| {
+                Vec2D::new(bounds.width(), bounds.height())
+            })
+    }
+
     pub(crate) fn invalidate_intrinsic_bounds(&mut self) {
         if let Some(participant) = self.layout_participant() {
             participant.with_downcast_mut::<LayoutParticipant, _>(

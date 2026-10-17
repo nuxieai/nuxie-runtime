@@ -637,10 +637,49 @@ decode queue. Bidi and audio retain their separately tracked status below.
   Taffy, or add solver-side workarounds, to recover Yoga's numbers.
   - *Authored model → CSS.* `layout/layout_style_applier.rs` maps Rive's
     authored values onto `taffy::Style` explicitly. `rive_default_style()`
-    states every Yoga default that differs from CSS (column direction,
-    `flex-shrink: 0`, `align-content: flex-start`, every node positioned so
-    absolute children stay with their parent); flex items get no automatic
-    minimum size (`apply_flex_item_minimums`), grid items keep CSS `auto`.
+    states the retained authored defaults that differ from CSS (column
+    direction, `align-content: flex-start`, every node positioned so absolute
+    children stay with their parent). Flex shrinking follows the browser.
+    Levi decided (2026-10-16,
+    [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)) that Hug and
+    Fixed shrink with flex-shrink 1, that Fill is unchanged, and that items
+    use the browser's automatic minimum: "aim to be more like a browser moving
+    forward". Hug and Fixed therefore use grow 0, shrink 1 and an automatic
+    basis on either main axis, for both LayoutComponent and LayoutParticipant;
+    Fixed dimensions supply the basis rather than disabling shrinking. Fill
+    keeps grow and shrink from its fraction, with its existing basis mapping.
+    Flex items keep CSS `min-width: auto` and `min-height: auto`; authored
+    minima still win, and Taffy caps the content minimum by specified sizes
+    and maxima. This change implements that rule for Rive's leaves as
+    follows. A non-reflowing leaf (a shape or drawing group, an image, an
+    n-slice or a joystick) answers min-content with its natural size from
+    authored geometry, never with a size layout wrote back through
+    controlSize, and measures from that size, so repeated solves agree and
+    widening restores the natural size, as for an SVG or image in a browser.
+    A nested artboard uses its artboard's authored size. A LayoutComponent
+    leaf that does not hug but holds such content answers min-content queries
+    from it, so a Fixed or Fill box keeps that content's natural size as its
+    automatic minimum; every other request, and any text it holds, keeps
+    upstream's unmeasured answer, so Fill bases are unchanged. Containers,
+    including a mounted artboard's root, keep CSS auto
+    minima, so a definite child size contributes its basis. Text whose
+    overflow is Hidden, Clipped, Ellipsis, Fit or FitFontSize gets a zero
+    automatic minimum, as CSS gives a box with hidden overflow. Only a leaf
+    with a host that has no answer (text input, scripted layouts, a nested
+    artboard without an instance), or a measured LayoutComponent leaf with any
+    such child, keeps a zero automatic minimum. The retained tree
+    caches each leaf's answer and refreshes it when its host changes,
+    including when text changes fitting mode. Grid and stack items keep their
+    existing CSS auto minima, and grid track contributions keep their prior
+    fallback at any depth below the grid.
+    Authored overflow maps to Taffy Visible, Hidden or Scroll. A ScrollConstraint
+    is attached to content and its parent is the viewport; its direction makes
+    the corresponding viewport axis scrollable. CSS computes the other visible
+    axis to auto and clip to hidden. Taffy Scroll represents auto's layout
+    behavior, with zero scrollbar width. Rive's draw clip alone maps to Clip,
+    which retains the content minimum. A ScrollConstraint added at runtime or
+    a changed scroll direction marks the viewport's style dirty, so its
+    overflow follows. Rive still owns drawing and dispatch.
     Percentages use Taffy's native 0..1 representation. Direction inherits as
     in CSS. A layout root without an authored size fills its host's offer.
     Rive's sizing modes are CSS sizing keywords: a bounded hug is
@@ -679,18 +718,28 @@ decode queue. Bidi and audio retain their separately tracked status below.
     min/max widths to the content box, including padding, borders and box sizing. This is
     required even for Taffy's ContentSize basis pass; the intrinsic width
     returned to Taffy still ignores those limits for flex-basis arithmetic.
-    AutoWidth text with ordinary overflow uses normal word boundaries
-    (cluster boundaries for break-all); the zero-bound Rive measurement
-    itself clamps its return to zero. Images use their natural
-    width for both intrinsic sizes. Hosts without a meaningful minimum keep
-    their current protocol, including text input, authored text boxes, fitted
-    fonts, scripted layouts, shapes, nested artboards, n-slices and joysticks.
-    A LayoutComponent leaf falls back to the old answer if any measured child
-    cannot supply a minimum. Exact widths and unbounded hugs keep their
-    existing measurement modes. CSS MinContent requests still measure unbounded,
-    like MaxContent; true intrinsic grid/flex contributions are tracked in
-    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893). The upstream
-    text measurer is unchanged.
+    AutoWidth text and every width-owning text participant, including
+    authored AutoHeight and Fixed text, use the cached shape's word minimum.
+    Normal and BreakWord use the longest unbreakable run; BreakAll uses cluster
+    boundaries and NoWrap text keeps its whole line. A visible authored
+    AutoHeight or Fixed text box whose width no participant owns answers with
+    its authored width, like a CSS box with a specified width; its height is
+    still Rive's measurement at that width. A known-width request keeps
+    its existing measurement mode. A MinContent inline request without a known
+    width first populates the cached shape, returns its true minimum and measures
+    height at that width after resolving box limits. The initial measurement
+    preserves the known cross size. Images use the smaller of their natural
+    main size and the known cross size transferred through their natural aspect
+    ratio, on either axis. Before the cross size is known, the natural size is
+    still clamped through the aspect ratio by the opposite axis's minimum and
+    maximum. Non-reflowing leaves and drawing groups answer with the natural
+    size described above. Flex MinContent axes of hosts without an answer
+    contribute zero; below a grid, at any depth, they keep their prior
+    fallback. Exact and MaxContent requests keep their modes; max-content is
+    still a flexible basis, not a promise that the box cannot shrink. This
+    supplies the text, image and natural-size part of
+    [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893). The bodies of
+    Text::measure and Text::measure_layout are unchanged.
   - *Rive-only Yoga extensions.* Virtualized-grid contributions
     (`YGNodeSetGridVirtualContributions`) are host-side Taffy-only grid items
     that size each unrealized track as its item would. Stock Taffy clamps a
@@ -699,12 +748,23 @@ decode queue. Bidi and audio retain their separately tracked status below.
   - *Gates.* Layout-caused golden, Silver and probe differences are classified
     as layout divergences with a reason per entry; everything else stays
     exact. Golden entries carry `layout-diverges:<reason>` with a pinned
-    `divergence_signature`; Silver ids sit in `LAYOUT_DIVERGENCES`
+    `divergence_signature` and separate full Rust stream SHA-256 pins for the
+    ordinary and scripted lanes; Silver ids sit in `LAYOUT_DIVERGENCES`
     (`tools/silver-corpus/generate_manifest.py`) with a pinned first
     difference. Matrix probe differences live in
     `tests/support/css_layout_matrix.rs`, with the original C++ values, every
     changed scalar, a CSS reason per case and an exact first difference.
-    A change that moves a pinned difference fails the gate.
+    Silver retains its historical 206 exact-ID obligations and numeric floor.
+    `REVIEWED_LAYOUT_DIVERGENCES` explicitly records reviewed CSS replacements,
+    retaining original C++ first values and a SHA-256 of each full Rust stream.
+    A replacement must remain an executable runtime layout divergence, match
+    its first difference and match every stream byte before it receives floor
+    credit. Actual C++ equality is reported separately. Missing, unlisted,
+    duplicate, unsupported or moved replacements fail. Direct Silver assertions
+    read the same closed ledger and check the same complete stream. The scroll
+    streams include all threshold-drag frames. No baseline or epsilon changes.
+    Quoted Golden reason strings support commas, so prose needs no punctuation
+    workaround. A later change after an unchanged first difference fails too.
     Upstream layout/Yoga changes are product decisions, not mechanical
     translations (see `upstream-sync-map.md`, "Scope decisions").
   `TaffyTree::disable_rounding()` keeps unrounded results.

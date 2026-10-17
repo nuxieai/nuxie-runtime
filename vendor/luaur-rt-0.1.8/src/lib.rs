@@ -149,6 +149,8 @@ pub use sync::{MaybeSend, MaybeSync};
 pub use table::{Table, TablePairs, TableSequence};
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+#[doc(hidden)]
+pub use traits::{stack_arg, ReturnValues};
 
 /// Process-global `FFlag::LuauDirectFieldGet` control used by pinned Rive.
 ///

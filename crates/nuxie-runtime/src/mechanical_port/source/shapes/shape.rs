@@ -983,6 +983,12 @@ impl Shape {
             });
         }
     }
+    /// Whether a layout box that reaches this shape resizes it: it has a
+    /// parametric path and is not a participant (prepare_control_size).
+    pub(crate) fn is_resized_by_layout(&self) -> bool {
+        !self.is_participating_in_layout()
+            && self.paths().iter().any(|path| path.is_type_of(crate::mechanical_port::source::generated::shapes::parametric_path_base::ParametricPathBase::TYPE_KEY))
+    }
     fn prepare_control_size(&mut self, size: Vec2D) -> Option<CoreHandle> {
         if self.is_participating_in_layout() {
             self.update_layout_scale(size);

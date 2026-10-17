@@ -2401,7 +2401,16 @@ impl LayoutComponent {
         let Some(measured) = measured else {
             return;
         };
-        let natural = crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
+        let Some(natural) = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .map(|layout| layout.natural_of(host))
+            })
+            .flatten()
+        else {
+            return;
+        };
         // Within a few ULPs, as upstream compares a participant's bounds.
         let moved =
             |a: f32, b: f32| (a - b).abs() > 16.0 * f32::EPSILON * a.abs().max(b.abs()).max(1.0);
@@ -2425,9 +2434,14 @@ impl LayoutComponent {
     pub(crate) fn measures_drawing_content(&self) -> bool {
         self.layout_children.is_empty() && (self.hugs() || !self.is_artboard())
     }
+    /// Whether this box measures all its content, as a hugging Rive box
+    /// does. A CSS box always does: an auto size is its content's size
+    /// (docs/CSS_LAYOUT.md, 5).
     fn hugs(&self) -> bool {
-        self.with_style(|style| style.intrinsically_sized())
-            .unwrap_or(false)
+        self.is_css_mode()
+            || self
+                .with_style(|style| style.intrinsically_sized())
+                .unwrap_or(false)
     }
     /// The children whose natural size, from authored geometry, answers a
     /// non-hugging leaf's min-content query on `axis` (0 width, 1 height).
@@ -2451,11 +2465,13 @@ impl LayoutComponent {
                         && child
                             .with(|object| object.as_nested_artboard().is_some())
                             .unwrap_or(false))
+                    && !child
+                        .with_downcast::<crate::source::shapes::shape::Shape, _>(
+                            crate::source::shapes::shape::Shape::is_resized_by_layout,
+                        )
+                        .unwrap_or(false)
                     && {
-                        let natural =
-                            crate::source::intrinsically_sizeable::natural_size_for_layout_host(
-                                child,
-                            );
+                        let natural = self.natural_of(child);
                         // What the update pass compares against (UNIV-4844).
                         self.note_measured_natural(child, natural);
                         natural.is_some()
@@ -2463,6 +2479,17 @@ impl LayoutComponent {
             })
             .cloned()
             .collect()
+    }
+    /// The natural size of `host`, a child of this box. A box that hugs
+    /// (and every CSS box) measures all its content; a translated box that
+    /// does not hug leaves out the shapes it resizes, its paint
+    /// (docs/CSS_LAYOUT.md, 5).
+    pub(crate) fn natural_of(&self, host: &CoreHandle) -> Option<Vec2D> {
+        if self.hugs() {
+            crate::source::intrinsically_sizeable::natural_size_for_layout_host(host)
+        } else {
+            crate::source::intrinsically_sizeable::natural_content_size_for_layout_host(host)
+        }
     }
     /// The hosts a measured Layout leaf asks on each axis: every non-layout
     /// child when it hugs, as upstream, and otherwise its natural content.
@@ -2614,6 +2641,7 @@ impl LayoutComponent {
             self.is_hidden(),
             Vec2D::new(self.layout.width(), self.layout.height()),
             style,
+            self.is_css_mode(),
         );
     }
     // Plain groups contain free content; Solo children still receive the
@@ -2626,11 +2654,15 @@ impl LayoutComponent {
             == crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY
     }
 
+    /// `css`: the box is in CSS mode, where shapes and images are content
+    /// that keeps its natural size, so only text follows the box
+    /// (docs/CSS_LAYOUT.md, 5).
     fn propagate_size_to_children(
         children: Vec<CoreHandle>,
         hidden: bool,
         size: Vec2D,
         style: Option<(LayoutScaleType, LayoutScaleType, LayoutDirection)>,
+        css: bool,
     ) {
         if hidden {
             return;
@@ -2641,6 +2673,11 @@ impl LayoutComponent {
                     child.as_layout_component().is_some()
                         || Self::stops_content_sizing(child)
                         || child.layout_provider_handle().is_some()
+                        || (css && {
+                            use crate::mechanical_port::source::core::CoreObject;
+                            CoreObject::is_type_of(child, crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
+                                || CoreObject::is_type_of(child, crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+                        })
                 })
                 .unwrap_or(true);
             if skip {
@@ -2672,7 +2709,7 @@ impl LayoutComponent {
                     })
                     .flatten()
                 {
-                    Self::propagate_size_to_children(children, false, size, style);
+                    Self::propagate_size_to_children(children, false, size, style, css);
                 }
             }
         }
@@ -2685,7 +2722,7 @@ impl LayoutComponent {
             Artboard::propagate_size_handle(owner);
             return;
         }
-        let Some((children, hidden, size, style)) = owner.with(|object| {
+        let Some((children, hidden, size, style, css)) = owner.with(|object| {
             let layout = object.as_layout_component().unwrap();
             (
                 object.as_container_component().unwrap().children().to_vec(),
@@ -2698,11 +2735,12 @@ impl LayoutComponent {
                         layout.actual_direction(),
                     )
                 }),
+                layout.is_css_mode(),
             )
         }) else {
             return;
         };
-        Self::propagate_size_to_children(children, hidden, size, style);
+        Self::propagate_size_to_children(children, hidden, size, style, css);
     }
     pub fn layout_solve_available_size(
         &self,
@@ -3595,6 +3633,13 @@ impl LayoutComponent {
             },
             layout_tree::{measure_axis, measure_fit_content},
         };
+        let css_owner = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .is_some_and(LayoutComponent::is_css_mode)
+            })
+            .unwrap_or(false);
         let measure_host = |host: &CoreHandle,
                             width: f32,
                             width_mode: LayoutMeasureMode,
@@ -3605,20 +3650,28 @@ impl LayoutComponent {
             layout_fit_content_tests::note_host_measure();
             // Image already measures exact offers as exact sizes. Preserve that
             // protocol; controlled geometry and drawing groups use authored bounds.
+            // In a CSS box an image is content and keeps its natural size.
             let natural = if host
                 .is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+                && !css_owner
             {
                 None
             } else {
-                let natural =
-                    crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
                 // What the update pass compares against (UNIV-4844).
-                owner.with(|object| {
-                    if let Some(layout) = object.as_layout_component() {
-                        layout.note_measured_natural(host, natural);
-                    }
-                });
-                natural
+                owner
+                    .with(|object| match object.as_layout_component() {
+                        Some(layout) => {
+                            let natural = layout.natural_of(host);
+                            layout.note_measured_natural(host, natural);
+                            natural
+                        }
+                        None => {
+                            crate::source::intrinsically_sizeable::natural_size_for_layout_host(
+                                host,
+                            )
+                        }
+                    })
+                    .flatten()
             };
             let mut measured = if let Some(natural) = natural {
                 let axis = |natural: f32, offer: f32, mode| {

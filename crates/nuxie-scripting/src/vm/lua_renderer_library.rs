@@ -8,12 +8,26 @@ use std::{cell::RefCell, rc::Rc};
 use super::command_server::PersistentRenderContext;
 use super::view_model::ScriptViewModelFrameContext;
 
+/// A VM's renderer bindings. Every clone shares one [`RendererBindingsState`]:
+/// script calls clone the handle out of app data, so a clone is a single
+/// reference count.
 #[derive(Clone, Default)]
-pub(crate) struct RendererBindings {
+pub(crate) struct RendererBindings(Rc<RendererBindingsState>);
+
+#[derive(Default)]
+pub(crate) struct RendererBindingsState {
     render_context: PersistentRenderContext,
     routing: Rc<RefCell<ScriptingRouting>>,
     open_canvas_frames: Rc<RefCell<OpenCanvasFrames>>,
     pub(super) view_model_frame_context: ScriptViewModelFrameContext,
+}
+
+impl std::ops::Deref for RendererBindings {
+    type Target = RendererBindingsState;
+
+    fn deref(&self) -> &RendererBindingsState {
+        &self.0
+    }
 }
 
 #[derive(Default)]
@@ -42,12 +56,12 @@ impl Default for OpenCanvasFrames {
 
 impl RendererBindings {
     pub(crate) fn new(view_model_frame_context: ScriptViewModelFrameContext) -> Self {
-        Self {
+        Self(Rc::new(RendererBindingsState {
             render_context: PersistentRenderContext::default(),
             routing: Rc::default(),
             open_canvas_frames: Rc::default(),
             view_model_frame_context,
-        }
+        }))
     }
 
     pub(crate) fn bootstrap_render_context(&self, factory: &mut dyn RenderFactory) -> Result<()> {

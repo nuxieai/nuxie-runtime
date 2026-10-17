@@ -195,6 +195,9 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 # Previous review (d8217e4476) artboard_list_overrides_vertical: frame 0, op 78 (addRawPath), field point: expected (700, 0), got (500, 0)
 # Previous review (d8217e4476) component_list_child_origin: frame 0, op 105 (transform), field ty: expected 29, got 12.5
 # Previous review (d8217e4476) db_health_tracker: frame 0, op 7788 (transform), field tx: expected 864.3635, got 857.43286
+# Previous stream (bca2243599) db_health_tracker: 95122ffa7516a8c686466e3ec58f964b6736e3c3e92640380b71a4d05f95a29d. The
+# update pass now measures a panel's grouped content at its laid-out transforms rather than
+# the identity matrices of the first layout, so one y scale matches C++ (0.16, was 0.170283).
 # Previous review (d8217e4476) global_view_models_scripting_test: frame 0, op 54 (transform), field tx: expected 500, got 482.14285
 # Previous review (d8217e4476) hittest_ab1_grand_parent: frame 0, op 149 (transform), field ty: expected 100, got 31.04248
 # Previous review (d8217e4476) hittest_ab1_parent: frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838
@@ -226,7 +229,7 @@ REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e0
  'bankcard': '86f2d3515f0d1b4c094e35e9f88c1468ee2a92c54b544acda15e79845abe43fe',
  'component_list_child_origin': '78c29b5c807a5731a1aff7e929895efe4c7cf099664ff9e3f15aeb5f5aff1c03',
  'data_viz_demo': 'f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b',
- 'db_health_tracker': '95122ffa7516a8c686466e3ec58f964b6736e3c3e92640380b71a4d05f95a29d',
+ 'db_health_tracker': 'f7c6d803e6b9873b07ab7dd4ab8f0acd31b01d5516b4500d07192925687fbb68',
  'global_view_models_scripting_test': '301407ac55b4ab537717af38f61d635780c075a3030d760f0d44e0c408311c44',
  'hittest_ab1_grand_parent': 'aab2993936f2b1df51a30cc49504bd92f23fef02cd0010badf6e32fe5dc95cfb',
  'hittest_ab1_parent': '3a03f5dbf20a07e0244612a4827eec609abf1af5993a91a7dbe608f0c68ad61f',

@@ -129,7 +129,7 @@ impl RendererBindings {
     }
 
     pub(crate) fn for_lua(lua: &Lua) -> Option<Self> {
-        lua.app_data_clone::<Self>()
+        lua.app_data_ref::<Self>().map(|bindings| bindings.clone())
     }
 
     pub(crate) fn with_factory<R>(

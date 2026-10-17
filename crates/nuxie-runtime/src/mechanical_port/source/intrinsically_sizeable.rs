@@ -121,14 +121,22 @@ fn natural_bounds_for_layout_host(
         if let Some(shape) = object.as_any().downcast_ref::<Shape>() {
             return Content::Placed(shape.natural_bounds_for_layout(transform));
         }
+        // A host's rectangle sits about its origin, as it draws, so a group
+        // places it where it is.
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Content::Rect(Aabb::from_ltwh(0.0, 0.0, image.width(), image.height()));
+            let (width, height) = (image.width(), image.height());
+            return Content::Rect(Aabb::from_ltwh(
+                -width * image.base.origin_x(),
+                -height * image.base.origin_y(),
+                width,
+                height,
+            ));
         }
-        if let Some(size) = object
+        if let Some(bounds) = object
             .as_intrinsically_sizeable_mut()
-            .and_then(|host| host.natural_size_for_layout())
+            .and_then(|host| host.natural_bounds_for_layout())
         {
-            return Content::Rect(Aabb::from_ltwh(0.0, 0.0, size.x, size.y));
+            return Content::Rect(bounds);
         }
         // Ordinary drawing nodes inherit TransformComponent's zero measurer.
         // Concrete measured hosts need their own contract instead of a walk.
@@ -186,6 +194,11 @@ pub trait IntrinsicallySizeable {
     /// CSS min-content of a non-reflowing host, independent of its solved size.
     fn natural_size_for_layout(&self) -> Option<Vec2D> {
         None
+    }
+    /// That natural size placed in the host's local space, as it draws.
+    fn natural_bounds_for_layout(&self) -> Option<crate::source::math::aabb::Aabb> {
+        self.natural_size_for_layout()
+            .map(|size| crate::source::math::aabb::Aabb::from_ltwh(0.0, 0.0, size.x, size.y))
     }
     fn measure_layout(
         &mut self,
@@ -287,6 +300,9 @@ intrinsic_owner!(crate::mechanical_port::source::text::text_input::TextInput);
 impl IntrinsicallySizeable for crate::source::nested_artboard::NestedArtboard {
     fn natural_size_for_layout(&self) -> Option<Vec2D> {
         Self::natural_size_for_layout(self)
+    }
+    fn natural_bounds_for_layout(&self) -> Option<crate::source::math::aabb::Aabb> {
+        Self::natural_bounds_for_layout(self)
     }
     fn measure_layout(
         &mut self,

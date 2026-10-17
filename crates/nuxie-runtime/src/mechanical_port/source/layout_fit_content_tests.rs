@@ -1661,3 +1661,36 @@ fn css_grouped_geometry_change_invalidates_the_measured_box() {
     let widths = [f.width(), f.width()];
     assert_eq!(widths, [160.0; 2]);
 }
+
+#[test]
+fn css_authored_write_equal_to_a_controlled_size_is_kept() {
+    use crate::source::generated::core_registry::CoreField;
+    let f = shape_fixture(false, ShapeHost::HugBox, 0.0);
+    let cap = |maximum: Option<f32>| {
+        f.subject
+            .with_downcast_mut::<LayoutComponent, _>(|l| {
+                l.with_style_mut(|s| {
+                    s.base.set_max_width_value(maximum.unwrap_or(0.0));
+                    s.base
+                        .set_max_width_units_value_value(if maximum.is_some() {
+                            YGUnit::Point
+                        } else {
+                            YGUnit::Auto
+                        } as u8);
+                });
+            })
+            .unwrap();
+        LayoutComponent::sync_style_occurrence(&f.subject);
+    };
+    let mut widths = vec![f.width()];
+    cap(Some(40.0));
+    widths.push(f.width());
+    // Layout wrote 40 into the path; an authored write of the same 40 must
+    // still become the natural size once the cap is gone.
+    f.path
+        .with_mut(|o| o.set_double(CoreField::ParametricPathWidth, 40.0))
+        .unwrap();
+    cap(None);
+    widths.push(f.width());
+    assert_eq!(widths, [80.0, 40.0, 40.0]);
+}

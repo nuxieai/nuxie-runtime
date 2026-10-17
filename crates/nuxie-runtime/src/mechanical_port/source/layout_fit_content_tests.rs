@@ -1728,6 +1728,36 @@ fn css_grouped_hosts_keep_their_origins() {
 }
 
 #[test]
+fn css_grouped_joysticks_keep_their_positions() {
+    use crate::source::generated::core_registry::CoreField;
+    // A joystick has no transform: it draws at its position. Two 100-point
+    // joysticks at x 0 and 100 make a 200-point group.
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(1000.0), true);
+    let subject = layout(&arena, Some(&root), None, false);
+    let group = arena.insert(crate::source::node::Node::default());
+    attach(&arena, &subject, &group);
+    for x in [0.0, 100.0] {
+        let host = arena.insert(crate::source::joystick::Joystick::default());
+        host.with_mut(|o| {
+            o.set_double(CoreField::JoystickWidth, 100.0);
+            o.set_double(CoreField::JoystickHeight, 30.0);
+            o.set_double(CoreField::JoystickOriginX, 0.0);
+            o.set_double(CoreField::JoystickPosX, x);
+        })
+        .unwrap();
+        attach(&arena, &group, &host);
+    }
+    for node in [&subject, &root] {
+        LayoutComponent::sync_style_occurrence(node);
+        LayoutComponent::sync_layout_children_occurrence(node);
+    }
+    LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+    LayoutComponent::update_layout_bounds_occurrence(&root, false);
+    assert_eq!(solved(&subject).width(), 200.0);
+}
+
+#[test]
 fn css_empty_shape_adds_no_bounds_to_a_group() {
     use crate::source::generated::core_registry::CoreField;
     use crate::source::math::mat2d::Mat2D;

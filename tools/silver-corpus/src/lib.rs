@@ -1,4 +1,6 @@
+use anyhow::Context;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -40,6 +42,19 @@ pub struct CorpusConfig {
     pub min_cpp_rust_exact: usize,
     #[serde(default)]
     pub cpp_rust_exact_ids: Vec<String>,
+    /// Explicit CSS replacements for historical exact obligations. The
+    /// original IDs and numeric floor stay intact; equality is reported apart.
+    #[serde(default)]
+    pub reviewed_layout_divergences: Vec<ReviewedLayoutDivergence>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewedLayoutDivergence {
+    pub id: String,
+    pub first_difference: String,
+    #[serde(default)]
+    pub rust_stream_sha256: String,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -144,6 +159,7 @@ pub struct CorpusSummary {
     pub scripted: usize,
     pub cpp_baseline_exact: usize,
     pub cpp_rust_exact: usize,
+    pub reviewed_layout_divergences: usize,
     pub statuses: BTreeMap<Status, usize>,
     pub operations: usize,
     pub bytes: u64,
@@ -396,19 +412,89 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
-    let downgraded = ratchet_ids.difference(&exact_ids).collect::<Vec<_>>();
+    let mut reviewed_ids = BTreeSet::new();
+    for review in &config.reviewed_layout_divergences {
+        anyhow::ensure!(
+            reviewed_ids.insert(review.id.as_str()),
+            "duplicate reviewed layout id: {}",
+            review.id
+        );
+        anyhow::ensure!(
+            ratchet_ids.contains(review.id.as_str()),
+            "reviewed layout id is not a historical exact obligation: {}",
+            review.id
+        );
+        anyhow::ensure!(
+            review.rust_stream_sha256.len() == 64
+                && review
+                    .rust_stream_sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+            "reviewed layout requires a full lowercase SHA256 stream hash: {}",
+            review.id
+        );
+        let case = manifest
+            .cases
+            .iter()
+            .find(|case| case.id == review.id)
+            .with_context(|| format!("reviewed layout case is missing: {}", review.id))?;
+        anyhow::ensure!(
+            case.lane == Lane::Runtime && case.status == Status::Diverges,
+            "reviewed layout case must remain an executable runtime divergence: {}",
+            review.id
+        );
+        anyhow::ensure!(
+            !review.first_difference.is_empty()
+                && case.note.starts_with(
+                    "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): "
+                )
+                && case
+                    .note
+                    .ends_with(&format!("first difference: {}.", review.first_difference)),
+            "reviewed layout first difference or reason changed: {}",
+            review.id
+        );
+    }
+    let accounted_ids = exact_ids
+        .union(&reviewed_ids)
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let downgraded = ratchet_ids.difference(&accounted_ids).collect::<Vec<_>>();
     anyhow::ensure!(
         downgraded.is_empty(),
         "exact entries were downgraded without a ledger change: {downgraded:?}"
     );
     summary.cpp_rust_exact = exact_ids.len();
+    summary.reviewed_layout_divergences = reviewed_ids.len();
     anyhow::ensure!(
-        summary.cpp_rust_exact >= config.min_cpp_rust_exact,
-        "cpp-rust-exact={} is below ratchet {}",
-        summary.cpp_rust_exact,
+        accounted_ids.len() >= config.min_cpp_rust_exact,
+        "exact plus reviewed CSS coverage={} is below historical ratchet {}",
+        accounted_ids.len(),
         config.min_cpp_rust_exact
     );
     Ok(summary)
+}
+
+/// Verify the reviewed replay. The full stream is part of the approval.
+pub fn verify_reviewed_layout_stream(
+    review: &ReviewedLayoutDivergence,
+    difference: &Difference,
+    bytes: &[u8],
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        difference.to_string() == review.first_difference,
+        "{} reviewed first difference changed",
+        review.id
+    );
+    let actual_hash = format!("{:x}", Sha256::digest(bytes));
+    anyhow::ensure!(
+        actual_hash == review.rust_stream_sha256,
+        "{} reviewed full stream changed: expected {}, got {}",
+        review.id,
+        review.rust_stream_sha256,
+        actual_hash
+    );
+    Ok(())
 }
 
 pub fn compare_files(expected: &Path, actual: &Path) -> anyhow::Result<()> {
@@ -515,6 +601,7 @@ mod tests {
                     max_provenance_unknown: MAX_PROVENANCE_UNKNOWN,
                     min_cpp_rust_exact: 0,
                     cpp_rust_exact_ids: Vec::new(),
+                    reviewed_layout_divergences: Vec::new(),
                 },
                 cases,
             };
@@ -558,5 +645,149 @@ mod tests {
                 .to_string()
                 .contains("runtime entry must be classified after execution")
         );
+    }
+    fn layout_review_fixture(records: &str) -> (TestCorpus, Manifest) {
+        let (fixture, mut manifest) = TestCorpus::new();
+        let config = format!(
+            r#"version = 1
+upstream_ref = "{UPSTREAM_REF}"
+expected_entries = {EXPECTED_ENTRIES}
+expected_runtime = {EXPECTED_RUNTIME}
+expected_scripted = {EXPECTED_SCRIPTED}
+max_provenance_unknown = {MAX_PROVENANCE_UNKNOWN}
+min_cpp_rust_exact = 1
+cpp_rust_exact_ids = ["case-000"]
+reviewed_layout_divergences = [{records}]
+"#
+        );
+        manifest.corpus = toml::from_str(&config).unwrap();
+        manifest.cases[0].status = Status::Diverges;
+        manifest.cases[0].actions = Actions::Executable(vec![Action::Draw]);
+        manifest.cases[0].note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS content minimum; first difference: frame 0, op 0, width 200 != 260.".to_owned();
+        (fixture, manifest)
+    }
+
+    const LAYOUT_REVIEW: &str = r#"{ id = "case-000", first_difference = "frame 0, op 0, width 200 != 260", rust_stream_sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }"#;
+
+    #[test]
+    fn reviewed_layout_keeps_historical_exact_coverage() {
+        let (fixture, manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        assert_eq!(manifest.corpus.min_cpp_rust_exact, 1);
+        assert_eq!(manifest.corpus.cpp_rust_exact_ids, ["case-000"]);
+        let summary = validate_manifest(&manifest, &fixture.root).unwrap();
+        // Approved CSS output is reported separately from C++ equality.
+        assert_eq!(summary.cpp_rust_exact, 0);
+    }
+
+    #[test]
+    fn layout_review_cannot_hide_an_unlisted_exact_downgrade() {
+        let (fixture, mut manifest) = layout_review_fixture("");
+        // An unrelated exact entry meets the numeric floor, but cannot
+        // replace the historical case-000 obligation.
+        manifest.cases[1].status = Status::Exact;
+        manifest.cases[1].actions = Actions::Executable(vec![Action::Draw]);
+        let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
+        assert!(error.to_string().contains("exact entries were downgraded"));
+    }
+
+    #[test]
+    fn layout_review_requires_its_exact_first_difference() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        manifest.cases[0].note = manifest.cases[0].note.replace("260", "261");
+        assert!(validate_manifest(&manifest, &fixture.root).is_err());
+    }
+
+    #[test]
+    fn layout_review_cannot_count_a_case_twice() {
+        let (fixture, manifest) =
+            layout_review_fixture(&format!("{LAYOUT_REVIEW}, {LAYOUT_REVIEW}"));
+        assert!(validate_manifest(&manifest, &fixture.root).is_err());
+    }
+
+    #[test]
+    fn layout_review_cannot_credit_an_unrelated_case() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        manifest.corpus.cpp_rust_exact_ids = vec!["case-001".to_owned()];
+        manifest.cases[1].status = Status::Exact;
+        manifest.cases[1].actions = Actions::Executable(vec![Action::Draw]);
+        assert!(validate_manifest(&manifest, &fixture.root).is_err());
+    }
+
+    #[test]
+    fn layout_review_cannot_credit_a_missing_case() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        // Preserve the entry count, lane count and complete baseline coverage.
+        // The reviewed ID alone disappears, rather than an unrelated validator
+        // rejecting a shortened corpus before the missing-review guard runs.
+        let case = &mut manifest.cases[0];
+        let old_path = fixture.root.join(&case.expected);
+        case.id = "renamed-000".to_owned();
+        case.expected = "tests/unit_tests/silvers/renamed-000.sriv".to_owned();
+        fs::rename(old_path, fixture.root.join(&case.expected)).unwrap();
+        let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("reviewed layout case is missing: case-000")
+        );
+    }
+
+    #[test]
+    fn layout_review_cannot_credit_an_unsupported_case() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        manifest.cases[0].status = Status::UnsupportedFeature;
+        // Keep a valid CSS review note and a valid unsupported-feature note.
+        // Only the executable runtime divergence guard must reject this case.
+        manifest.cases[0].note = manifest.cases[0]
+            .note
+            .replace("CSS content minimum", "Unsupported feature: fixture");
+        let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must remain an executable runtime divergence")
+        );
+    }
+    fn two_frame_transform_stream(first_x: f32, second_x: f32) -> Vec<u8> {
+        let mut bytes = b"SRIV\x01".to_vec();
+        for (frame, x) in [first_x, second_x].into_iter().enumerate() {
+            if frame != 0 {
+                bytes.push(28);
+            }
+            bytes.push(9);
+            for value in [1.0f32, 0.0, 0.0, 1.0, x, 0.0] {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        bytes
+    }
+
+    #[test]
+    fn layout_review_rejects_a_change_after_the_first_difference() {
+        let expected = parse_sriv(&two_frame_transform_stream(0.0, 0.0)).unwrap();
+        let approved = two_frame_transform_stream(10.0, 0.0);
+        let changed = two_frame_transform_stream(10.0, 20.0);
+        let approved_difference =
+            compare_sriv(&expected, &parse_sriv(&approved).unwrap()).unwrap_err();
+        let changed_difference =
+            compare_sriv(&expected, &parse_sriv(&changed).unwrap()).unwrap_err();
+        assert_eq!(approved_difference, changed_difference);
+        let review = ReviewedLayoutDivergence {
+            id: "two-frame-layout".to_owned(),
+            first_difference: "frame 0, op 0 (transform), field tx: expected 0, got 10".to_owned(),
+            rust_stream_sha256: "193cfb855baa26c49cff15ba0dc597c3772430f3768ee35306aafc8781450197"
+                .to_owned(),
+        };
+        assert!(verify_reviewed_layout_stream(&review, &approved_difference, &approved).is_ok());
+        assert!(verify_reviewed_layout_stream(&review, &changed_difference, &changed).is_err());
+    }
+
+    #[test]
+    fn layout_review_requires_a_full_stream_hash() {
+        let (fixture, mut manifest) = layout_review_fixture(LAYOUT_REVIEW);
+        manifest.corpus.reviewed_layout_divergences[0]
+            .rust_stream_sha256
+            .clear();
+        assert!(validate_manifest(&manifest, &fixture.root).is_err());
     }
 }

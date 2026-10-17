@@ -746,6 +746,14 @@ impl Artboard {
         nuxie_render_api::artboard_draw_frame_id()
     }
 
+    /// `changed`, outside the dependency order, recomputed what a layout box
+    /// may measure; the next update pass checks it (UNIV-4844).
+    pub(crate) fn queue_measured_content(&self, changed: CoreHandle) {
+        if let Some(graph) = &self.component_graph {
+            graph.queue_measured_content(changed);
+        }
+    }
+
     #[cfg(test)]
     pub fn layout_pass_count() -> u64 {
         LAYOUT_PASS_COUNT.with(Cell::get)

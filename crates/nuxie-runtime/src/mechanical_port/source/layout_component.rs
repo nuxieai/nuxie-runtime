@@ -5423,3 +5423,7 @@ mod layout_fit_content_tests;
 #[cfg(test)]
 #[path = "layout_measured_content_tests.rs"]
 mod layout_measured_content_tests;
+
+#[cfg(test)]
+#[path = "layout_css_mode_tests.rs"]
+mod layout_css_mode_tests;

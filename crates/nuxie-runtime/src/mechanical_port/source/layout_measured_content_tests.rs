@@ -39,7 +39,7 @@ const FRAME: f32 = 1.0 / 60.0;
 
 /// tests/support/riv_bytes.rs, for this crate's own unit tests.
 #[derive(Default)]
-struct Riv {
+pub(super) struct Riv {
     objects: Vec<u8>,
     toc: BTreeMap<u16, u32>,
 }
@@ -51,39 +51,39 @@ fn varuint(out: &mut Vec<u8>, mut value: u64) {
     out.push(value as u8);
 }
 impl Riv {
-    fn object(&mut self, key: u16) -> &mut Self {
+    pub(super) fn object(&mut self, key: u16) -> &mut Self {
         varuint(&mut self.objects, key.into());
         self
     }
-    fn end(&mut self) {
+    pub(super) fn end(&mut self) {
         varuint(&mut self.objects, 0);
     }
-    fn uint(&mut self, key: u16, value: u64) -> &mut Self {
+    pub(super) fn uint(&mut self, key: u16, value: u64) -> &mut Self {
         self.toc.insert(key, 0);
         varuint(&mut self.objects, key.into());
         varuint(&mut self.objects, value);
         self
     }
-    fn bool(&mut self, key: u16, value: bool) -> &mut Self {
+    pub(super) fn bool(&mut self, key: u16, value: bool) -> &mut Self {
         self.toc.insert(key, 0);
         varuint(&mut self.objects, key.into());
         self.objects.push(u8::from(value));
         self
     }
-    fn string(&mut self, key: u16, value: &str) -> &mut Self {
+    pub(super) fn string(&mut self, key: u16, value: &str) -> &mut Self {
         self.toc.insert(key, 1);
         varuint(&mut self.objects, key.into());
         varuint(&mut self.objects, value.len() as u64);
         self.objects.extend_from_slice(value.as_bytes());
         self
     }
-    fn float(&mut self, key: u16, value: f32) -> &mut Self {
+    pub(super) fn float(&mut self, key: u16, value: f32) -> &mut Self {
         self.toc.insert(key, 2);
         varuint(&mut self.objects, key.into());
         self.objects.extend_from_slice(&value.to_le_bytes());
         self
     }
-    fn bytes(&self) -> Vec<u8> {
+    pub(super) fn bytes(&self) -> Vec<u8> {
         let mut out = b"RIVE".to_vec();
         varuint(&mut out, File::MAJOR_VERSION as u64);
         varuint(&mut out, File::MINOR_VERSION as u64);

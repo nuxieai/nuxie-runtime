@@ -178,3 +178,24 @@
   per safepoint instead of a closure call.
 - Touched files: `src/interrupt.rs`, `src/lib.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`.
+
+## Userdata held on the stack
+
+- A callback that returns a new userdata (`T: UserData` by value) creates it
+  where the trampoline would push the returned value (`ReturnValues::Pushed`):
+  the same userdata, metatable and destructor as `create_userdata`, without
+  the registry reference and `Rc` the handle needed only to be pushed and
+  dropped. Without stack room it falls back to the handle, so the trampoline
+  reports the overflow as before. Returning an `AnyUserData` handle is
+  unchanged.
+- `Lua::with_stack_userdata` holds a new userdata in a stack slot for a
+  closure: `StackUserData::arg` passes it as a call argument (`StackArg`,
+  pushed from the slot; through a handle onto another thread's stack) and
+  `borrow` reads it as `AnyUserData::borrow` does. It is collected like any
+  unreferenced userdata afterwards unless Lua kept it, as the dropped handle
+  was before.
+- `create_userdata` and both paths share `push_userdata`; destructed-value
+  errors in the userdata collector are built only on that path.
+- Touched files: `src/userdata.rs`, `src/table.rs`, `src/traits.rs`,
+  `src/callback.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.

@@ -639,27 +639,47 @@ decode queue. Bidi and audio retain their separately tracked status below.
     authored values onto `taffy::Style` explicitly. `rive_default_style()`
     states the retained authored defaults that differ from CSS (column
     direction, `align-content: flex-start`, every node positioned so absolute
-    children stay with their parent). Flex shrinking follows the browser:
-    Hug and Fixed use grow 0, shrink 1 and an automatic basis on either main
-    axis, for both LayoutComponent and LayoutParticipant. Fixed dimensions
-    supply the basis rather than disabling shrinking. Fill keeps grow and
-    shrink from its fraction, with its existing basis mapping. Supported flex
-    items keep CSS `min-width: auto` and `min-height: auto`; authored minima
-    still win. Taffy caps the content minimum by specified sizes and maxima.
-    A flex leaf without a minimum contract keeps main's zero automatic minimum.
-    A mounted artboard is an opaque host boundary. An auto-sized structural
-    container with an unknown descendant contribution also keeps zero on that
-    axis until its full minimum is defined. An explicit length bounds the
-    structural contribution on that axis. The retained tree caches both axis
-    capabilities and refreshes changed ancestor chains, including when text
-    changes fitting mode. Grid and stack items keep their existing CSS auto minima and fallback behavior (Levi,
-    2026-10-16, [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)).
+    children stay with their parent). Flex shrinking follows the browser.
+    Levi decided (2026-10-16,
+    [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)) that Hug and
+    Fixed shrink with flex-shrink 1, that Fill is unchanged, and that items
+    use the browser's automatic minimum: "aim to be more like a browser moving
+    forward". Hug and Fixed therefore use grow 0, shrink 1 and an automatic
+    basis on either main axis, for both LayoutComponent and LayoutParticipant;
+    Fixed dimensions supply the basis rather than disabling shrinking. Fill
+    keeps grow and shrink from its fraction, with its existing basis mapping.
+    Flex items keep CSS `min-width: auto` and `min-height: auto`; authored
+    minima still win, and Taffy caps the content minimum by specified sizes
+    and maxima. This change implements that rule for Rive's leaves as
+    follows. A non-reflowing leaf (a shape or drawing group, an image, an
+    n-slice or a joystick) answers min-content with its natural size from
+    authored geometry, never with a size layout wrote back through
+    controlSize, and measures from that size, so repeated solves agree and
+    widening restores the natural size, as for an SVG or image in a browser.
+    A nested artboard uses its artboard's authored size. A LayoutComponent
+    leaf that does not hug but holds such content answers min-content queries
+    from it, so a Fixed or Fill box keeps that content's natural size as its
+    automatic minimum; every other request, and any text it holds, keeps
+    upstream's unmeasured answer, so Fill bases are unchanged. Containers,
+    including a mounted artboard's root, keep CSS auto
+    minima, so a definite child size contributes its basis. Text whose
+    overflow is Hidden, Clipped, Ellipsis, Fit or FitFontSize gets a zero
+    automatic minimum, as CSS gives a box with hidden overflow. Only a leaf
+    with a host that has no answer (text input, scripted layouts, a nested
+    artboard without an instance), or a measured LayoutComponent leaf with any
+    such child, keeps a zero automatic minimum. The retained tree
+    caches each leaf's answer and refreshes it when its host changes,
+    including when text changes fitting mode. Grid and stack items keep their
+    existing CSS auto minima, and grid track contributions keep their prior
+    fallback at any depth below the grid.
     Authored overflow maps to Taffy Visible, Hidden or Scroll. A ScrollConstraint
     is attached to content and its parent is the viewport; its direction makes
     the corresponding viewport axis scrollable. CSS computes the other visible
     axis to auto and clip to hidden. Taffy Scroll represents auto's layout
     behavior, with zero scrollbar width. Rive's draw clip alone maps to Clip,
-    which retains the content minimum. Rive still owns drawing and dispatch.
+    which retains the content minimum. A ScrollConstraint added at runtime or
+    a changed scroll direction marks the viewport's style dirty, so its
+    overflow follows. Rive still owns drawing and dispatch.
     Percentages use Taffy's native 0..1 representation. Direction inherits as
     in CSS. A layout root without an authored size fills its host's offer.
     Rive's sizing modes are CSS sizing keywords: a bounded hug is
@@ -698,25 +718,26 @@ decode queue. Bidi and audio retain their separately tracked status below.
     min/max widths to the content box, including padding, borders and box sizing. This is
     required even for Taffy's ContentSize basis pass; the intrinsic width
     returned to Taffy still ignores those limits for flex-basis arithmetic.
-    AutoWidth text and every width-owning wrapping text participant, including
+    AutoWidth text and every width-owning text participant, including
     authored AutoHeight and Fixed text, use the cached shape's word minimum.
     Normal and BreakWord use the longest unbreakable run; BreakAll uses cluster
-    boundaries and NoWrap AutoWidth text keeps max-content. Fitted fonts and
-    authored nonwrapping boxes lack this contract. A known-width request keeps
+    boundaries and NoWrap text keeps its whole line. A visible authored
+    AutoHeight or Fixed text box whose width no participant owns answers with
+    its authored width, like a CSS box with a specified width; its height is
+    still Rive's measurement at that width. A known-width request keeps
     its existing measurement mode. A MinContent inline request without a known
     width first populates the cached shape, returns its true minimum and measures
     height at that width after resolving box limits. The initial measurement
     preserves the known cross size. Images use the smaller of their natural
     main size and the known cross size transferred through their natural aspect
-    ratio, on either axis. Without a known cross size they keep natural size.
-    Unsupported flex MinContent axes contribute zero. Text input, fitted fonts,
-    nonwrapping authored boxes, scripted layouts, shapes, nested artboards,
-    n-slices and joysticks keep zero automatic minima until they get contracts;
-    their ordinary Rive measurement protocol stays intact. A measured layout
-    needs a contract from every measured child. Unsupported grid contributions
-    retain their prior fallback. Exact and MaxContent requests keep their modes;
-    max-content is still a flexible basis, not a promise that the box cannot
-    shrink. This supplies the supported text/image part of
+    ratio, on either axis. Before the cross size is known, the natural size is
+    still clamped through the aspect ratio by the opposite axis's minimum and
+    maximum. Non-reflowing leaves and drawing groups answer with the natural
+    size described above. Flex MinContent axes of hosts without an answer
+    contribute zero; below a grid, at any depth, they keep their prior
+    fallback. Exact and MaxContent requests keep their modes; max-content is
+    still a flexible basis, not a promise that the box cannot shrink. This
+    supplies the text, image and natural-size part of
     [UNIV-4893](https://universe.basis.dev/issue/UNIV-4893). The bodies of
     Text::measure and Text::measure_layout are unchanged.
   - *Rive-only Yoga extensions.* Virtualized-grid contributions

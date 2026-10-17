@@ -735,7 +735,9 @@ impl Shape {
     /// None when no path has geometry, so a group does not union a point.
     pub(crate) fn natural_bounds_for_layout(&self, transform: Option<Mat2D>) -> Option<Aabb> {
         let measured_directly = transform.is_none() && !self.is_participating_in_layout();
+        let participant = transform.is_none() && !measured_directly;
         let outer = transform.unwrap_or_else(Mat2D::identity);
+        let shape = crate::mechanical_port::source::core::CoreObject::core(self).handle();
         let mut size = Vec2D::default();
         let mut result: Option<Aabb> = None;
         let mut pending = RawPath::default();
@@ -747,7 +749,15 @@ impl Shape {
                 if path.base.is_collapsed() {
                     return;
                 }
-                let matrix = outer * path.base.transform();
+                // A participant keeps upstream's path transform, as
+                // compute_intrinsic_bounds does; otherwise the path draws
+                // through any nodes between it and this shape.
+                let matrix = outer
+                    * if participant {
+                        path.base.transform()
+                    } else {
+                        Self::path_to_shape_transform(path, shape.as_ref())
+                    };
                 if object.as_parametric_path().is_some() {
                     let natural = object.as_parametric_path().unwrap().natural_size_for_layout();
                     if measured_directly {
@@ -787,6 +797,34 @@ impl Shape {
         } else {
             result
         }
+    }
+
+    /// A path's transform into this shape's space, composed through the nodes
+    /// between them; a path may sit below a node inside its shape.
+    fn path_to_shape_transform(path: &Path, shape: Option<&CoreHandle>) -> Mat2D {
+        let mut matrix = path.base.transform();
+        let Some(shape) = shape else {
+            return matrix;
+        };
+        let mut parent = path.base.parent_handle();
+        while let Some(current) = parent {
+            if &current == shape {
+                break;
+            }
+            let Some((local, next)) = current.with(|object| {
+                (
+                    object
+                        .as_transform_component()
+                        .map_or_else(Mat2D::identity, |component| component.transform()),
+                    object.component_parent_handle(),
+                )
+            }) else {
+                break;
+            };
+            matrix = local * matrix;
+            parent = next;
+        }
+        matrix
     }
 
     /// The geometry Rive builds for a parametric path at its authored size,

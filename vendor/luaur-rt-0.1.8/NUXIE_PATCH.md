@@ -263,3 +263,17 @@
   panics from `#[cold]` functions: creating a userdata and returning from a
   callback no longer carry those frames. Behavior is unchanged.
 - Touched files: `src/userdata.rs`, `src/callback.rs`.
+
+## Stack-held arguments across threads
+
+- A `StackArg` passed to a function of another thread of the same VM (a
+  coroutine's callback calling a main-state function) is copied onto the
+  callee's stack with `lua_xpush`; it previously went through a handle that
+  pushed onto the holder's stack, so the call's argument count check failed.
+  Passed to another VM, it fails with "luaur-rt: a stack-held value was
+  passed to another Lua VM".
+- The interrupt harness tests capture `Rc` counters, so the `send` feature
+  (which requires `Send` interrupt callbacks) does not build them.
+- Touched file: `src/table.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`
+  (`stack_arguments_cross_coroutines_but_not_vms`).

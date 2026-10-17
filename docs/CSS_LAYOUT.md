@@ -58,7 +58,9 @@ What `calc()` may contain:
 - Refused: `min()`, `max()`, `clamp()`, a product or quotient of two lengths, and viewport units (`vw`, `vh`, `vmin`, `vmax`).
 - Font-relative units (`em`, `rem`, `ch`, `ex`) are resolved to points by the compiler before encoding, or refused when it cannot know the font size.
 
-Taffy resolves a `calc()` value through its tree's `resolve_calc_value`. Taffy's own `TaffyTree` answers 0 there, so the runtime drives Taffy through its own tree view for calc values (section 3).
+**Mixed values are deferred.** Step 1 resolves a length-percentage only when at least one of its two parts is 0, so it is a plain length or a plain percentage. A value with both parts non-zero (a mixed `calc()`) is refused at load as unsupported, like the record's other refused forms: the import fails. The compiler refuses a mixed `calc()` with a clear error. The encoding above stays, so the format does not change when mixed values arrive.
+
+Mixed values come in a separate runtime change after steps 1 and 2 land. Taffy resolves a `calc()` value through its tree's `resolve_calc_value`, and Taffy's own `TaffyTree` answers 0 there, so that change drives Taffy through the runtime's own tree view (section 3).
 
 ### 1.3 `LayoutCssStyle` properties
 
@@ -164,7 +166,8 @@ The compiler reports these as unsupported instead of writing them:
   - `repeat(auto-fill)`, `repeat(auto-fit)`;
   - tracks sized `min-content`, `max-content` or `fit-content()`.
 - `overflow` values beyond the five above; `scrollbar-gutter`; `overflow-clip-margin`.
-- The `calc()` forms in 1.2.
+- The `calc()` forms in 1.2, and in step 1 any length-percentage with both parts non-zero (refused at load).
+- Enum values outside the ranges in 1.3 (refused at load).
 
 ## 2. CSS mode or translated mode
 
@@ -223,18 +226,17 @@ Switched on, beside today's `std`, `taffy_tree`, `flexbox`, `grid` and `detailed
 | Feature | Why |
 |---|---|
 | `block_layout` | `display: block` and `flow-root`, the browser default for a `div`, with margin collapsing |
-| `calc` | `calc()` lengths. The runtime resolves each one as `length + percent / 100 * basis` in its tree's `resolve_calc_value` |
 | `content_size` | a node's scrollable overflow rectangle, `scroll_width` and `scroll_height`, for scroll ranges |
 
-Left off: `float_layout` (floats are refused), `flexbox_balance` and `parse` (the compiler encodes values; the runtime never parses CSS).
+Left off: `float_layout` (floats are refused), `flexbox_balance` and `parse` (the compiler encodes values; the runtime never parses CSS), and, in step 1, `calc`.
 
-`TaffyTree::resolve_calc_value` always returns 0. The runtime therefore implements Taffy's layout traits over its own tree for the solve:
+`calc` waits for mixed length-percentages (1.2). `TaffyTree::resolve_calc_value` always returns 0, so that later change implements Taffy's layout traits over the runtime's own tree for the solve:
 
 - keeping the node storage and styles it has today;
 - keeping a cache and the unrounded layouts in each node's context;
 - calling Taffy's compute functions for each display mode.
 
-This is runtime work in step 1, with no effect on the file format.
+It changes no part of the file format.
 
 **Block flow.** A CSS box with `display: block` lays its layout children out in Taffy's block flow, and its leaf content is measured as section 5 says. Translated boxes never use block flow.
 

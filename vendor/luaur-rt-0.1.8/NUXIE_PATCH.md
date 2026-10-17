@@ -117,3 +117,24 @@
   up script methods by name on every call.
 - Touched file: `src/table.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/table_get_field.rs`.
+
+## Callback arguments and results on the stack
+
+- The callback trampoline no longer collects every argument into a
+  `MultiValue` (a heap deque holding a registry reference per table,
+  function or userdata argument). A `BoxedCallback` receives the argument
+  count and converts from the stack: a userdata method reads `self` from
+  argument slot 1 in place (the slot roots it for the call), and the
+  arguments through the hidden `FromLuaMulti::from_stack_args`, which converts
+  exactly the values `from_lua_multi` would, in order. Zero or one result is
+  handed back as `ReturnValues` without a deque and pushed where the deque was.
+  This is mlua's `from_stack` fast path; conversions, errors, error messages
+  and results are unchanged.
+- Scoped userdata/functions and the historical `MultiValue` callback shape keep
+  collecting their arguments (`multi_value_callback`).
+- Tuples build one pre-sized `MultiValue` (hidden `push_into_multi`) instead of
+  one per element.
+- Touched files: `src/traits.rs`, `src/conversion.rs`, `src/callback.rs`,
+  `src/scope.rs`, `src/state.rs`, `src/userdata.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/callback_stack_args.rs`.
+

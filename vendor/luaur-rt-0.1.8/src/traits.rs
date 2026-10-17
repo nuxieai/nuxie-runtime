@@ -8,10 +8,17 @@
 //! the value-level methods. The public method *names and shapes*
 //! (`into_lua(self, &Lua)`, `from_lua(value, &Lua)`,
 //! `into_lua_multi`, `from_lua_multi`) match mlua exactly.
+//!
+//! The hidden `from_stack_args` / `into_return_values` / `push_into_multi`
+//! methods let the callback trampoline and argument lists skip the
+//! intermediate [`MultiValue`] (a heap-allocated deque) for fixed-arity
+//! conversions. Each one converts exactly the values the value-level method
+//! would, in the same order, so the two paths cannot be told apart.
 
 use crate::error::Result;
 use crate::multi::MultiValue;
 use crate::state::Lua;
+use crate::sys::c_int;
 use crate::value::Value;
 
 /// Convert a Rust value into a single Lua [`Value`].
@@ -37,12 +44,53 @@ pub trait FromLua: Sized {
     }
 }
 
+/// The values a callback returns, before they are pushed for the VM.
+///
+/// Zero and one value need no [`MultiValue`]; the callback trampoline pushes
+/// them after the callback's own locals (argument handles, borrows) are gone,
+/// exactly where it used to push the [`MultiValue`].
+#[doc(hidden)]
+pub enum ReturnValues {
+    /// No values.
+    None,
+    /// Exactly one value.
+    One(Value),
+    /// Any number of values.
+    Many(MultiValue),
+}
+
+impl ReturnValues {
+    /// The number of values.
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            ReturnValues::None => 0,
+            ReturnValues::One(_) => 1,
+            ReturnValues::Many(values) => values.len(),
+        }
+    }
+}
+
 /// Convert a Rust value into a sequence of Lua values (multiple returns / args).
 ///
 /// Mirrors `mlua::IntoLuaMulti`.
 pub trait IntoLuaMulti: Sized {
     /// Perform the conversion.
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue>;
+
+    /// The same conversion as [`IntoLuaMulti::into_lua_multi`], for a
+    /// callback's return values.
+    #[doc(hidden)]
+    fn into_return_values(self, lua: &Lua) -> Result<ReturnValues> {
+        Ok(ReturnValues::Many(self.into_lua_multi(lua)?))
+    }
+
+    /// The same conversion as [`IntoLuaMulti::into_lua_multi`], appended to
+    /// `out` (tuples build one list instead of one per element).
+    #[doc(hidden)]
+    fn push_into_multi(self, lua: &Lua, out: &mut MultiValue) -> Result<()> {
+        out.extend(self.into_lua_multi(lua)?);
+        Ok(())
+    }
 }
 
 /// Convert a sequence of Lua values into a Rust value.
@@ -51,6 +99,19 @@ pub trait IntoLuaMulti: Sized {
 pub trait FromLuaMulti: Sized {
     /// Perform the conversion.
     fn from_lua_multi(values: MultiValue, lua: &Lua) -> Result<Self>;
+
+    /// Convert the `count` callback arguments at stack indices
+    /// `start..start + count` (the values [`FromLuaMulti::from_lua_multi`]
+    /// would receive) of the running callback. The default collects them into
+    /// a [`MultiValue`].
+    #[doc(hidden)]
+    fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
+        let mut values = MultiValue::with_capacity(count.max(0) as usize);
+        for i in 0..count {
+            values.push_back(lua.value_from_stack(start + i)?);
+        }
+        Self::from_lua_multi(values, lua)
+    }
 }
 
 // Any single-value type is trivially a multi-value of length one.
@@ -59,6 +120,15 @@ impl<T: IntoLua> IntoLuaMulti for T {
         let mut m = MultiValue::with_capacity(1);
         m.push_back(self.into_lua(lua)?);
         Ok(m)
+    }
+
+    fn into_return_values(self, lua: &Lua) -> Result<ReturnValues> {
+        Ok(ReturnValues::One(self.into_lua(lua)?))
+    }
+
+    fn push_into_multi(self, lua: &Lua, out: &mut MultiValue) -> Result<()> {
+        out.push_back(self.into_lua(lua)?);
+        Ok(())
     }
 }
 
@@ -69,5 +139,21 @@ impl<T: FromLua> FromLuaMulti for T {
     fn from_lua_multi(mut values: MultiValue, lua: &Lua) -> Result<Self> {
         let v = values.pop_front().unwrap_or(Value::Nil);
         T::from_lua(v, lua)
+    }
+
+    fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
+        T::from_lua(stack_arg(lua, start, count, 0)?, lua)
+    }
+}
+
+/// The `i`th (0-based) of the `count` arguments at `start`, or nil past the
+/// end, as [`FromLuaMulti::from_lua_multi`]'s `pop_front` would see it.
+#[doc(hidden)]
+#[inline]
+pub fn stack_arg(lua: &Lua, start: c_int, count: c_int, i: c_int) -> Result<Value> {
+    if i < count {
+        lua.value_from_stack(start + i)
+    } else {
+        Ok(Value::Nil)
     }
 }

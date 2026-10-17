@@ -17,7 +17,8 @@
 //!   yieldable point; ignored otherwise, exactly like upstream Luau).
 //! * `Err(e)`                 — raises `e` as a Lua error via `lua_error`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use crate::app_data::WordMap;
 
@@ -37,10 +38,19 @@ pub enum VmState {
 
 type InterruptFn = Box<dyn Fn(&Lua) -> Result<VmState> + 'static>;
 
+/// One VM's installed interrupt closure. `running` marks a call in progress:
+/// an interrupt reached while the closure runs (re-entrantly, from Lua it
+/// executes) is skipped, as when the closure was taken out of the map for the
+/// call. A closure installed meanwhile is a new entry that runs at once.
+struct InterruptEntry {
+    callback: InterruptFn,
+    running: Cell<bool>,
+}
+
 thread_local! {
     /// Per-VM interrupt closure, keyed by the `global_State` pointer (stable for
     /// the lifetime of the VM and shared by all of its threads).
-    static INTERRUPTS: RefCell<WordMap<*mut core::ffi::c_void, InterruptFn>> =
+    static INTERRUPTS: RefCell<WordMap<*mut core::ffi::c_void, Rc<InterruptEntry>>> =
         RefCell::new(WordMap::default());
 }
 
@@ -62,8 +72,12 @@ impl Lua {
         let state = self.state();
         unsafe {
             let key = vm_key(state);
+            let entry = Rc::new(InterruptEntry {
+                callback: Box::new(callback),
+                running: Cell::new(false),
+            });
             INTERRUPTS.with(|m| {
-                m.borrow_mut().insert(key, Box::new(callback));
+                m.borrow_mut().insert(key, entry);
             });
             let cb = lua_callbacks(state);
             (*cb).interrupt = Some(interrupt_trampoline);
@@ -110,20 +124,18 @@ unsafe fn interrupt_trampoline(
         return Ok(());
     }
     let key = unsafe { vm_key(state) };
-    // Take the closure out of the map for the duration of the call so a
-    // re-entrant `set_interrupt` from inside the callback can't alias the
-    // borrow. Put it back afterwards (unless the callback replaced it).
-    let cb = INTERRUPTS.with(|m| m.borrow_mut().remove(&key));
-    let Some(cb) = cb else { return Ok(()) };
+    // Hold the entry (not the map borrow) for the duration of the call, so a
+    // re-entrant `set_interrupt`/`remove_interrupt` from inside the callback
+    // can replace the map's entry freely.
+    let entry = INTERRUPTS.with(|m| m.borrow().get(&key).cloned());
+    let Some(entry) = entry else { return Ok(()) };
+    if entry.running.replace(true) {
+        return Ok(());
+    }
 
     let lua = unsafe { Lua::from_borrowed(state) };
-    let result = cb(&lua);
-
-    // Restore the closure if the callback didn't install a new one.
-    INTERRUPTS.with(|m| {
-        let mut map = m.borrow_mut();
-        map.entry(key).or_insert(cb);
-    });
+    let result = (entry.callback)(&lua);
+    entry.running.set(false);
 
     match result {
         Ok(VmState::Continue) => {}

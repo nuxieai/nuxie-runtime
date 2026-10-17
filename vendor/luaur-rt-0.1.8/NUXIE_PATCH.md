@@ -138,3 +138,13 @@
   `src/scope.rs`, `src/state.rs`, `src/userdata.rs`, `src/lib.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/callback_stack_args.rs`.
 
+## Interrupt closure held, not re-inserted
+
+- The interrupt trampoline used to remove its closure from the per-VM map and
+  re-insert it around every call (two hash-map mutations per safepoint). The
+  map now holds an `Rc` entry with a `running` flag: the trampoline clones the
+  entry, skips a safepoint reached while the closure runs (as the removed
+  closure was skipped), and a closure installed meanwhile replaces the map's
+  entry and runs at once, as before.
+- Touched file: `src/interrupt.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`.

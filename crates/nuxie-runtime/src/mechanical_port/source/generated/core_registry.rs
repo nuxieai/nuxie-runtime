@@ -10350,6 +10350,16 @@ impl CoreRegistry {
     }
 
     pub fn set_uint_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
+        // Nuxie TextStyleDecoration.line: rebuilds the owning Text.
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
+            && handle
+                .with_downcast_mut::<crate::text_decoration::TextStyleDecoration, _>(|decoration| {
+                    decoration.set_line(value)
+                })
+                .is_some()
+        {
+            return true;
+        }
         if matches!(property_key, 586 | 587 | 660)
             && handle.is_type_of(
                 crate::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY,
@@ -10615,6 +10625,14 @@ impl CoreRegistry {
     }
 
     pub fn get_uint_handle(handle: &CoreHandle, property_key: i32) -> Option<u32> {
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
+            && let Some(line) = handle
+                .with_downcast::<crate::text_decoration::TextStyleDecoration, _>(|decoration| {
+                    decoration.line()
+                })
+        {
+            return Some(line);
+        }
         handle.with_mut(|object| Self::get_uint(object, property_key))
     }
 

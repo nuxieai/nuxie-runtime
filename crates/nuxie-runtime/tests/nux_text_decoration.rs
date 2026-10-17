@@ -8,6 +8,7 @@ use nuxie_binary::{
 use nuxie_render_api::{NullRenderer, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
+    generated::core_registry::CoreRegistry,
     math::{path_types::PathVerb, vec2d::Vec2D},
     text::{text::Text, text_style_paint::TextStylePaint},
 };
@@ -424,9 +425,14 @@ fn changing_the_line_rebuilds_the_text() {
             .with_downcast::<Artboard, _>(|b| b.find_all_handles::<TextStyleDecoration>())
             .unwrap()[0]
             .clone();
-        decoration
-            .with_downcast_mut::<TextStyleDecoration, _>(|d| d.set_line(0))
-            .unwrap();
+        // Through the registry, as hosts and bindings write properties.
+        let key = i32::from(nuxie_runtime::text_decoration::LINE_PROPERTY_KEY);
+        assert_eq!(
+            CoreRegistry::get_uint_handle(&decoration, key),
+            Some(UNDERLINE)
+        );
+        assert!(CoreRegistry::set_uint_handle(&decoration, key, 0));
+        assert_eq!(CoreRegistry::get_uint_handle(&decoration, key), Some(0));
     });
     assert!(rects(&cleared.decorated).is_empty());
 }

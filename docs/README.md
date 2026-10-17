@@ -25,6 +25,8 @@ history, not maintained as another implementation authority.
 
 - [Runtime boundary](pure-runtime-boundary.md)
 - [Player scheduling](player-scheduling-contract.md)
+- [CSS layout](CSS_LAYOUT.md): the keys, modes, paint and measurement rules the
+  compiler writes and the runtime lays out (proposal under review).
 - [Project-data seam](project-data-runtime-seam.md)
 - [Browser renderer packaging](browser-renderer-wasm-packaging.md): explicitly
   selected WebGPU and WebGL2 products, both `wasm32-unknown-unknown`.

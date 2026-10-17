@@ -657,7 +657,21 @@ impl Shape {
     }
 
     pub fn compute_intrinsic_bounds(&self) -> Aabb {
-        let participant = self.layout_participant();
+        self.compute_intrinsic_bounds_for_layout(false)
+    }
+
+    pub(crate) fn natural_bounds_for_layout(&self) -> Aabb {
+        self.compute_intrinsic_bounds_for_layout(true)
+    }
+
+    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
+        let bounds = self.natural_bounds_for_layout();
+        Vec2D::new(bounds.width(), bounds.height())
+    }
+
+    fn compute_intrinsic_bounds_for_layout(&self, natural: bool) -> Aabb {
+        // Solved bounds cache controlled geometry, never authored geometry.
+        let participant = (!natural).then(|| self.layout_participant()).flatten();
         if let Some(bounds) = participant.as_ref().and_then(|participant| {
             participant
                 .with_downcast::<LayoutParticipant, _>(|participant| {
@@ -681,7 +695,17 @@ impl Shape {
                 if path.base.is_collapsed() {
                     return;
                 }
-                let bounds = if !path.needs_path_build() {
+                let bounds = if natural && object.as_parametric_path().is_some() {
+                    let parametric = object.as_parametric_path().unwrap();
+                    let size = parametric.natural_size_for_layout();
+                    used_pending = true;
+                    path.base.transform().map_bounding_box(Aabb::from_ltwh(
+                        -parametric.base.origin_x() * size.x,
+                        -parametric.base.origin_y() * size.y,
+                        size.x,
+                        size.y,
+                    ))
+                } else if !path.needs_path_build() {
                     path.raw_path()
                         .precise_bounds_with_transform(path.base.transform())
                 } else {

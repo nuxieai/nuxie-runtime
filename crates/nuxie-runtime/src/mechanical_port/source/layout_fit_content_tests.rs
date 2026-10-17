@@ -1240,3 +1240,289 @@ row_hosts!(
         }
     }
 );
+
+row_hosts!(
+    css_row_truncating_text_has_zero_automatic_minimum,
+    css_row_truncating_participant_has_zero_automatic_minimum,
+    |participant| {
+        let mut widths = Vec::new();
+        for overflow in 1..=5 {
+            let f = Fixture::new_host(TITLE, 160.0, true, participant);
+            f.text
+                .with_downcast_mut::<Text, _>(|text| {
+                    text.base.set_overflow_value_value(overflow);
+                    if overflow == 3 {
+                        text.base.set_wrap_value_value(1);
+                    }
+                })
+                .unwrap();
+            f.label
+                .with_mut(|object| {
+                    if let Some(layout) = object.as_layout_component_mut() {
+                        layout.with_style_mut(|style| {
+                            style
+                                .base
+                                .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                        });
+                    } else {
+                        object
+                            .as_any_mut()
+                            .downcast_mut::<LayoutParticipant>()
+                            .unwrap()
+                            .base
+                            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    }
+                })
+                .unwrap();
+            if participant {
+                LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+            } else {
+                LayoutComponent::sync_style_occurrence(&f.label);
+            }
+            row_icon(&f, 40.0, 40.0, 16.0);
+            widths.push(f.solve().width());
+        }
+        // Hidden, Clipped, Ellipsis, Fit and FitFontSize all have the CSS
+        // hidden-overflow zero minimum. The icon and gap leave 104 points.
+        assert_eq!(widths, vec![104.0; 5]);
+    }
+);
+
+row_hosts!(
+    css_grid_keeps_unknown_leaf_contributions_through_flex,
+    css_grid_keeps_unknown_participant_contributions_through_flex,
+    |participant| {
+        let f = Fixture::new_host("experience", 160.0, true, participant);
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_overflow_value_value(5);
+            })
+            .unwrap();
+        let grid = layout(&f.arena, None, Some(100.0), false);
+        grid.with_downcast_mut::<LayoutComponent, _>(|layout| {
+            layout.with_style_mut(|style| {
+                style.base.set_layout_type_value_value(1);
+            });
+        })
+        .unwrap();
+        attach(&f.arena, &grid, &f.root);
+        f.root
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.base.set_width_value(0.0);
+                layout.with_style_mut(|style| {
+                    style
+                        .base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    style.base.set_width_units_value_value(YGUnit::Auto as u8);
+                });
+            })
+            .unwrap();
+        f.label
+            .with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    layout.with_style_mut(|style| {
+                        style
+                            .base
+                            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    });
+                } else {
+                    object
+                        .as_any_mut()
+                        .downcast_mut::<LayoutParticipant>()
+                        .unwrap()
+                        .base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                }
+            })
+            .unwrap();
+        if participant {
+            LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+        } else {
+            LayoutComponent::sync_style_occurrence(&f.label);
+        }
+        for node in [&f.root, &grid] {
+            LayoutComponent::sync_style_occurrence(node);
+            LayoutComponent::sync_layout_children_occurrence(node);
+        }
+        LayoutComponent::calculate_layout_occurrence(&grid, f32::NAN, f32::NAN);
+        // The unknown fitted-text fallback stays max-content for grid track
+        // contributions, even below a flex box. Include its 64-point padding.
+        assert!(
+            (solved(&f.root).width() - 209.4414).abs() < 0.001,
+            "flex {:?}, text {:?}",
+            solved(&f.root),
+            solved(&f.label)
+        );
+        assert!((solved(&f.label).width() - 145.4414).abs() < 0.001);
+    }
+);
+
+row_hosts!(
+    css_image_minimum_uses_cross_limits_before_the_cross_size_is_known,
+    css_image_participant_minimum_uses_cross_limits_before_the_cross_size_is_known,
+    |participant| {
+        use crate::source::generated::core_registry::CoreField as Field;
+        let mut widths = Vec::new();
+        for (minimum, maximum) in [(None, Some(120.0)), (Some(600.0), None)] {
+            let (_arena, root, image) = image_transfer_fixture(participant, true);
+            root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                root.base.set_height_value(0.0);
+                root.with_style_mut(|style| {
+                    style
+                        .base
+                        .set_layout_height_scale_type_value(LayoutScaleType::Hug as u8);
+                    style.base.set_height_units_value_value(YGUnit::Auto as u8);
+                });
+            })
+            .unwrap();
+            let applier = if participant {
+                image.clone()
+            } else {
+                image
+                    .with(|object| object.as_layout_component().unwrap().style_handle())
+                    .flatten()
+                    .unwrap()
+            };
+            applier
+                .with_mut(|object| {
+                    object.set_uint(
+                        Field::LayoutSizingStyleMinHeightUnitsValue,
+                        if minimum.is_some() {
+                            YGUnit::Point
+                        } else {
+                            YGUnit::Auto
+                        } as u32,
+                    );
+                    object.set_double(Field::LayoutSizingStyleMinHeight, minimum.unwrap_or(0.0));
+                    object.set_uint(
+                        Field::LayoutSizingStyleMaxHeightUnitsValue,
+                        if maximum.is_some() {
+                            YGUnit::Point
+                        } else {
+                            YGUnit::Auto
+                        } as u32,
+                    );
+                    object.set_double(Field::LayoutSizingStyleMaxHeight, maximum.unwrap_or(0.0));
+                })
+                .unwrap();
+            if participant {
+                LayoutParticipant::sync_style_changes_occurrence(&image, None);
+            } else {
+                LayoutComponent::sync_style_occurrence(&image);
+            }
+            LayoutComponent::sync_style_occurrence(&root);
+            LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+            widths.push(solved(&image).width());
+        }
+        // max-height:120 transfers a 128.73787 minimum, below the 140 slot.
+        // min-height:600 transfers 643.68933, which must overflow the row.
+        for (actual, expected) in widths.iter().zip([140.0, 643.68933]) {
+            assert!((actual - expected).abs() < 0.001, "{widths:?}");
+        }
+    }
+);
+
+row_hosts!(
+    css_visible_authored_text_boxes_keep_their_width_minimum,
+    css_visible_authored_text_participants_keep_their_width_minimum,
+    |participant| {
+        let mut widths = Vec::new();
+        for authored in [1, 2] {
+            for fill in [false, true] {
+                let f = Fixture::new_host(TITLE, 60.0, true, participant);
+                f.text
+                    .with_downcast_mut::<Text, _>(|text| {
+                        text.base.set_sizing_value_value(authored);
+                        text.base.set_wrap_value_value(1);
+                        text.base.set_width_value(80.0);
+                        text.base.set_height_value(72.0);
+                    })
+                    .unwrap();
+                if fill {
+                    f.label
+                        .with_mut(|object| {
+                            if let Some(layout) = object.as_layout_component_mut() {
+                                layout.with_style_mut(|style| {
+                                    style.base.set_layout_width_scale_type_value(
+                                        LayoutScaleType::Fill as u8,
+                                    );
+                                });
+                            } else {
+                                object
+                                    .as_any_mut()
+                                    .downcast_mut::<LayoutParticipant>()
+                                    .unwrap()
+                                    .base
+                                    .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                            }
+                        })
+                        .unwrap();
+                    if participant {
+                        LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+                    } else {
+                        LayoutComponent::sync_style_occurrence(&f.label);
+                    }
+                }
+                row_icon(&f, 20.0, 20.0, 0.0);
+                widths.push(f.solve().width());
+            }
+        }
+        // An unowned authored text box stays 80 wide. When a Fill participant
+        // owns its width, NoWrap instead floors at the whole line, 427.35547.
+        let expected = if participant {
+            vec![80.0, 427.35547, 80.0, 427.35547]
+        } else {
+            vec![80.0; 4]
+        };
+        assert_eq!(widths, expected);
+    }
+);
+
+// UNIV-4844: a leaf that does not hug is measured only for its automatic
+// minimum. Fill keeps upstream's zero content basis, so equal Fill fractions
+// still split the row equally whatever text each leaf holds.
+#[test]
+fn css_fill_text_leaves_keep_their_zero_basis() {
+    let mut widths = Vec::new();
+    for overflow in [0, 5] {
+        let f = Fixture::new("x", 300.0, true);
+        let mut leaves = vec![f.label.clone()];
+        for content in ["x x x", "Cross plane"] {
+            let label = add_label(&f, content, false);
+            leaves.push(label);
+        }
+        for leaf in &leaves {
+            leaf.with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.with_style_mut(|style| {
+                    style
+                        .base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+                    style.base.set_intrinsically_sized_value_value(false);
+                });
+                for child in layout.base.children().to_vec() {
+                    child.with_downcast_mut::<Text, _>(|text| {
+                        text.base.set_overflow_value_value(overflow);
+                    });
+                }
+            })
+            .unwrap();
+            LayoutComponent::sync_style_occurrence(leaf);
+        }
+        LayoutComponent::sync_style_occurrence(&f.root);
+        LayoutComponent::sync_layout_children_occurrence(&f.root);
+        f.solve();
+        widths.push(
+            leaves
+                .iter()
+                .map(|leaf| solved(leaf).width())
+                .collect::<Vec<_>>(),
+        );
+    }
+    // 364 - 64 padding = 300 shared by three Fill leaves. Each automatic
+    // minimum (one word, or zero for fitted text) is below 100.
+    for row in &widths {
+        for width in row {
+            assert!((width - 100.0).abs() < 0.001, "{widths:?}");
+        }
+    }
+}

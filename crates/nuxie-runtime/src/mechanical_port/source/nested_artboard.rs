@@ -1347,6 +1347,13 @@ impl NestedArtboard {
         true
     }
 
+    pub(crate) fn natural_size_for_layout(&self) -> Option<Vec2D> {
+        self.instance.as_ref().map(|instance| {
+            instance
+                .with_artboard(|board| Vec2D::new(board.original_width(), board.original_height()))
+        })
+    }
+
     pub fn measure_layout(
         &self,
         width: f32,

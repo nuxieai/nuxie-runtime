@@ -29,6 +29,7 @@ impl std::ops::DerefMut for NSlicedNode {
 
 pub struct NSlicedNode {
     pub base: NSlicedNodeBase,
+    layout_natural_size: crate::source::intrinsically_sizeable::LayoutNaturalSize,
     details: NSlicerDetailsState,
     pub map_world_point: Box<dyn Fn(&mut Vec2D)>,
 }
@@ -48,10 +49,25 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl NSlicedNode {
+    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
+        self.layout_natural_size
+            .get(Vec2D::new(self.base.width(), self.base.height()))
+    }
+    pub(crate) fn clone_definition(&self) -> Self {
+        let mut twin = Self::default();
+        let mut base = std::mem::take(&mut twin.base);
+        base.copy(&self.base, &mut twin);
+        twin.base = base;
+        twin.layout_natural_size
+            .copy_from(&self.layout_natural_size);
+        twin
+    }
+
     pub const TYPE_KEY: u16 = NSlicedNodeBase::TYPE_KEY;
     pub fn new(base: NSlicedNodeBase) -> Self {
         Self {
             base,
+            layout_natural_size: Default::default(),
             details: NSlicerDetailsState::default(),
             map_world_point: Box::new(|_point| {}),
         }
@@ -74,6 +90,7 @@ impl NSlicedNode {
         }
     }
     pub fn width_changed(&mut self) {
+        self.layout_natural_size.width_changed(self.base.width());
         self.mark_path_dirty_recursive(true);
     }
     pub fn set_width(&mut self, value: f32) {
@@ -95,6 +112,7 @@ impl NSlicedNode {
         }
     }
     pub fn height_changed(&mut self) {
+        self.layout_natural_size.height_changed(self.base.height());
         self.mark_path_dirty_recursive(true);
     }
     pub fn local_bounds(&self) -> Aabb {
@@ -210,8 +228,11 @@ impl NSlicedNode {
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
+        self.layout_natural_size
+            .begin_control(Vec2D::new(self.base.width(), self.base.height()));
         self.set_width(size.x);
         self.set_height(size.y);
+        self.layout_natural_size.end_control();
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty_recursive(false);
     }

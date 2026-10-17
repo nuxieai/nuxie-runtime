@@ -246,6 +246,9 @@ pub(crate) struct LayoutRenderPaths {
     pub background: RawPath,
     pub local: ShapePaintPath,
     pub world: ShapePaintPath,
+    /// CSS mode: the clip `overflow` implies, in world space, which is not
+    /// the background (docs/CSS_LAYOUT.md, 4.2). Unused in translated mode.
+    pub clip: ShapePaintPath,
 }
 
 struct VirtualGrid {
@@ -300,6 +303,11 @@ pub struct LayoutComponent {
     virtual_grid: Option<Box<VirtualGrid>>,
     /// The natural size this box last measured for each host (UNIV-4844).
     measured_natural: RefCell<Vec<(CoreHandle, Option<Vec2D>)>>,
+    /// The solved border widths (top, right, bottom, left) and Taffy's
+    /// scroll range (scroll width and height), which CSS mode paints and
+    /// scrolls with (docs/CSS_LAYOUT.md, sections 3 and 4).
+    solved_border: [f32; 4],
+    scroll_range: Vec2D,
     grid_column_lines: Vec<f32>,
     grid_row_lines: Vec<f32>,
     grid_column_gap: f32,
@@ -347,6 +355,8 @@ impl Default for LayoutComponent {
             forced_height: f32::NAN,
             virtual_grid: None,
             measured_natural: RefCell::new(Vec::new()),
+            solved_border: [0.0; 4],
+            scroll_range: Vec2D::default(),
             grid_column_lines: Vec::new(),
             grid_row_lines: Vec::new(),
             grid_column_gap: 0.0,
@@ -495,8 +505,19 @@ impl LayoutComponent {
     ) -> Option<std::rc::Rc<std::cell::RefCell<LayoutRenderPaths>>> {
         self.render_paths.clone()
     }
+    /// Whether this box clips its children: Rive's clip at its outer edge in
+    /// translated mode, and in CSS mode an `overflow` other than visible.
+    pub fn clips(&self) -> bool {
+        match self.with_css(|css| css.overflow()) {
+            Some(overflow) => {
+                overflow.x != taffy::style::Overflow::Visible
+                    || overflow.y != taffy::style::Overflow::Visible
+            }
+            None => self.base.clip(),
+        }
+    }
     pub fn needs_drawable_proxy(&self) -> bool {
-        self.base.clip()
+        self.clips()
             || !self.paints.shape_paints().is_empty()
             || self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy)
     }
@@ -1521,7 +1542,7 @@ impl LayoutComponent {
         if !self.base.world_transform().invert(&mut inverse) {
             return false;
         }
-        if !(skip_on_unclipped && !self.base.clip()) {
+        if !(skip_on_unclipped && !self.clips()) {
             let mut local = inverse * *position;
             if let Some(origin) = root_origin {
                 local += origin;
@@ -1752,14 +1773,21 @@ impl LayoutComponent {
         StatusCode::Ok
     }
     pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
-        let save_for_clip = self.base.clip();
+        let save_for_clip = self.clips();
         if save_for_clip {
             renderer.save();
             let factory = self
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("a drawable LayoutComponent has its imported factory");
-            renderer.clip_path(self.mutable_render_paths().world.render_path(&factory));
+            let css = self.is_css_mode();
+            let mut paths = self.mutable_render_paths();
+            let clip = if css {
+                &mut paths.clip
+            } else {
+                &mut paths.world
+            };
+            renderer.clip_path(clip.render_path(&factory));
         }
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
         let world = self.shape_world_transform();
@@ -1846,9 +1874,13 @@ impl LayoutComponent {
         {
             if self.is_hidden()
                 || (self.paints.shape_paints().is_empty()
-                    && !self.base.clip()
+                    && !self.clips()
                     && !self.has_layout_flag(LayoutComponentFlags::HasForegroundDrawable))
             {
+                return;
+            }
+            if self.is_css_mode() {
+                self.update_css_render_path();
                 return;
             }
             let mut radii = [0.0; 4];
@@ -1903,6 +1935,84 @@ impl LayoutComponent {
                         &paint, None,
                     );
                 }
+            }
+        }
+    }
+    /// CSS mode's box paths (docs/CSS_LAYOUT.md, 4): the border box with CSS
+    /// radii (points from the style, percentages from the record, scaled
+    /// together when they overlap) and, when `overflow` clips, the padding
+    /// box with its inner radii. Radii are physical: no RTL swap.
+    fn update_css_render_path(&mut self) {
+        use crate::css_layout::{keys, paint};
+        let points = self
+            .with_style(|style| {
+                if style.base.link_corner_radius() {
+                    [style.base.corner_radius_tl(); 4]
+                } else {
+                    [
+                        style.base.corner_radius_tl(),
+                        style.base.corner_radius_tr(),
+                        style.base.corner_radius_br(),
+                        style.base.corner_radius_bl(),
+                    ]
+                }
+            })
+            .unwrap_or([0.0; 4]);
+        let Some((percents, overflow)) = self.with_css(|css| {
+            (
+                std::array::from_fn(|corner| {
+                    css.number(keys::RADIUS_TOP_LEFT_PERCENT + corner as u16)
+                }),
+                css.overflow(),
+            )
+        }) else {
+            return;
+        };
+        let (width, height) = (self.layout.width(), self.layout.height());
+        let bounds = Aabb::new(0.0, 0.0, width, height);
+        let radii = paint::border_radii(width, height, points, percents);
+        let border = self.solved_border;
+        let padding = paint::padding_box(bounds, border);
+        let inner = paint::inner_radii(radii, border);
+        let world = self.base.base.base.base.world_transform();
+        let mut paths_owner = self.mutable_render_paths();
+        let paths = &mut *paths_owner;
+        paths.background.rewind();
+        paint::add_rounded_rect(&mut paths.background, bounds, radii);
+        paths.background.prune_empty_segments();
+        if paths.local.raw_path() != &paths.background {
+            paths.local.rewind();
+            paths.local.add_path(&paths.background, None);
+        }
+        paths
+            .world
+            .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
+        paths.world.add_path(&paths.background, Some(&world));
+        let mut clip = RawPath::default();
+        let visible = taffy::style::Overflow::Visible;
+        paint::add_overflow_clip(
+            &mut clip,
+            padding,
+            inner,
+            (overflow.x != visible, overflow.y != visible),
+        );
+        paths
+            .clip
+            .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
+        paths.clip.add_path(&clip, Some(&world));
+        drop(paths_owner);
+        for paint in self.paints.shape_paints().iter().cloned() {
+            let should_draw = paint
+                .with_mut(|paint| {
+                    paint
+                        .as_shape_paint_behavior_mut()
+                        .is_some_and(|paint| paint.should_draw())
+                })
+                .unwrap_or(false);
+            if should_draw {
+                crate::mechanical_port::source::shapes::paint::effects_container::invalidate_effects_handle(
+                    &paint, None,
+                );
             }
         }
     }
@@ -3929,6 +4039,13 @@ impl LayoutComponent {
                 output.padding.right,
                 output.padding.bottom,
             );
+            let border = [
+                output.border.top,
+                output.border.right,
+                output.border.bottom,
+                output.border.left,
+            ];
+            let scroll_range = Vec2D::new(output.scroll_width(), output.scroll_height());
             let grid = (context.kind == LayoutNodeKind::Layout).then(|| {
                 let style = tree.taffy.style(id).expect("solved layout node");
                 match tree.taffy.detailed_layout_info(id) {
@@ -3965,8 +4082,12 @@ impl LayoutComponent {
                                 layout.grid_row_gap,
                             ) = grid;
                         }
-                        let padding_changed = layout.solved_padding != padding;
+                        let padding_changed = layout.solved_padding != padding
+                            || layout.solved_border != border
+                            || layout.scroll_range != scroll_range;
                         layout.solved_padding = padding;
+                        layout.solved_border = border;
+                        layout.scroll_range = scroll_range;
                         let changed = padding_changed || layout.layout_data.solved_layout != next;
                         layout.layout_data.has_new_layout |= touched || changed;
                         layout.layout_data.solved_layout = next;
@@ -3988,6 +4109,15 @@ impl LayoutComponent {
     }
     pub fn style_display_hidden(&self) -> bool {
         self.has_layout_flag(LayoutComponentFlags::StyleDisplayHidden)
+    }
+    /// Taffy's maximum scroll offsets for this box: its scrollable overflow
+    /// less its padding box, as `scrollWidth - clientWidth` in a browser.
+    pub fn scroll_range(&self) -> Vec2D {
+        self.scroll_range
+    }
+    /// The solved border widths: top, right, bottom, left.
+    pub fn solved_border(&self) -> [f32; 4] {
+        self.solved_border
     }
     fn refresh_style_display_hidden(&mut self) {
         let hidden = self
@@ -4013,7 +4143,7 @@ impl LayoutComponent {
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
         self.base.base.base.base.base.on_dirty(value);
-        if value.contains(ComponentDirt::WORLD_TRANSFORM) && self.base.clip() {
+        if value.contains(ComponentDirt::WORLD_TRANSFORM) && self.clips() {
             CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
         }
     }

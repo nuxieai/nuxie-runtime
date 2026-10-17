@@ -346,9 +346,21 @@ impl ScrollConstraint {
     pub fn min_offset_y(&self) -> f32 {
         if self.loops_y() { f32::INFINITY } else { 0.0 }
     }
+    /// A CSS viewport's range is Taffy's scrollable overflow less its
+    /// padding box (docs/CSS_LAYOUT.md, section 3). Virtualized lists keep
+    /// their own extents.
+    fn css_scroll_range(&self) -> Option<crate::source::math::vec2d::Vec2D> {
+        if self.base.virtualize() {
+            return None;
+        }
+        self.with_viewport(|viewport| viewport.is_css_mode().then(|| viewport.scroll_range()))
+            .flatten()
+    }
     pub fn max_offset_x(&self) -> f32 {
         if self.loops_x() {
             f32::NEG_INFINITY
+        } else if let Some(range) = self.css_scroll_range() {
+            -range.x
         } else {
             0.0_f32.min(
                 self.viewport_width()
@@ -362,6 +374,8 @@ impl ScrollConstraint {
     pub fn max_offset_y(&self) -> f32 {
         if self.loops_y() {
             f32::NEG_INFINITY
+        } else if let Some(range) = self.css_scroll_range() {
+            -range.y
         } else {
             0.0_f32.min(
                 self.viewport_height()

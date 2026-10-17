@@ -116,6 +116,84 @@ fn definite_list_artboards_keep_their_height_in_a_fill_column() {
 }
 
 #[test]
+fn mounted_artboard_minimum_respects_an_authored_maximum() {
+    use nuxie_runtime::source::generated::{
+        core_registry::CoreRegistry, layout::layout_sizing_style_base::LayoutSizingStyleBase,
+    };
+    let mut factory = PersistentFactory::new(NullFactory);
+    let file = File::import(
+        &std::fs::read(fixture_path("component_list_child_origin.riv")).unwrap(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let board = file.with_file(|f| f.artboard_named("Artboard")).unwrap();
+    let model_id = board.with_artboard(|a| a.view_model_id());
+    let model = file
+        .with_file_mut(|f| f.create_view_model_instance_at(model_id as usize, 0))
+        .unwrap();
+    board.bind_view_model_instance(Some(model.clone()));
+    let machine = board.state_machine_at(0).unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.1);
+    let items = || {
+        board
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .filter_map(|handle| {
+                        handle
+                            .with(|object| {
+                                object
+                                    .as_any()
+                                    .downcast_ref::<nuxie_runtime::source::artboard_component_list::ArtboardComponentList>()
+                                    .map(|list| {
+                                        (0..list.artboard_count())
+                                            .filter_map(|i| list.artboard_instance(i as i32))
+                                            .collect::<Vec<_>>()
+                                    })
+                            })
+                            .flatten()
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>()
+            })
+    };
+    // Each 58-point item's definite height is its automatic minimum, but a
+    // CSS automatic minimum is clamped by a definite maximum: max-height 20
+    // makes every item 20 points tall. A shorter item lets the list create
+    // more, which keep their authored style, so check the styled ones.
+    let styled = items();
+    for item in &styled {
+        let style = item
+            .with_artboard(|item| item.style_handle())
+            .expect("item style");
+        assert!(CoreRegistry::set_uint_handle(
+            &style,
+            LayoutSizingStyleBase::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY.into(),
+            1,
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &style,
+            LayoutSizingStyleBase::MAX_HEIGHT_PROPERTY_KEY.into(),
+            20.0,
+        ));
+    }
+    for _ in 0..3 {
+        machine.advance_and_apply(0.1);
+    }
+    let heights = styled
+        .iter()
+        .map(|item| item.with_artboard(|item| item.layout_height()))
+        .collect::<Vec<_>>();
+    assert!(heights.len() >= 6, "{heights:?}");
+    assert!(heights.iter().all(|height| *height == 20.0), "{heights:?}");
+}
+
+#[test]
 fn a_definite_10000_point_artboard_contributes_to_the_panel_minimum() {
     let mut factory = PersistentFactory::new(NullFactory);
     let vm = nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle::new(Box::new(

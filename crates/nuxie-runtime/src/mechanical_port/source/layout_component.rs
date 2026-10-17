@@ -3236,7 +3236,11 @@ impl LayoutComponent {
 
     /// A mounted artboard is an opaque host. On an axis where it has a
     /// definite size, that size is its specified size suggestion, so a flex
-    /// container never squeezes it below its authored size.
+    /// container never squeezes it below its authored size. A CSS automatic
+    /// minimum is clamped by a definite maximum, while an explicit minimum
+    /// would override it, so the synthesized minimum takes the smaller of the
+    /// two; a percentage maximum resolves only during the solve, so there
+    /// Taffy keeps its own automatic minimum, which it clamps.
     fn apply_definite_artboard_minimum(owner: &CoreHandle, is_root: bool, style: &mut Style) {
         use taffy::style::CompactLength;
         if is_root
@@ -3246,13 +3250,29 @@ impl LayoutComponent {
         {
             return;
         }
-        if style.min_size.width.is_auto() && style.size.width.tag() == CompactLength::LENGTH_TAG {
-            style.min_size.width =
-                taffy::prelude::LengthPercentageAuto::length(style.size.width.value());
+        let minimum = |size: taffy::prelude::Dimension,
+                       maximum: taffy::prelude::LengthPercentageAuto| {
+            if size.tag() != CompactLength::LENGTH_TAG {
+                return None;
+            }
+            let maximum = maximum.into_raw();
+            if maximum.is_auto() {
+                Some(size.value())
+            } else if maximum.tag() == CompactLength::LENGTH_TAG {
+                Some(size.value().min(maximum.value()))
+            } else {
+                None
+            }
+        };
+        if style.min_size.width.is_auto()
+            && let Some(width) = minimum(style.size.width, style.max_size.width)
+        {
+            style.min_size.width = taffy::prelude::LengthPercentageAuto::length(width);
         }
-        if style.min_size.height.is_auto() && style.size.height.tag() == CompactLength::LENGTH_TAG {
-            style.min_size.height =
-                taffy::prelude::LengthPercentageAuto::length(style.size.height.value());
+        if style.min_size.height.is_auto()
+            && let Some(height) = minimum(style.size.height, style.max_size.height)
+        {
+            style.min_size.height = taffy::prelude::LengthPercentageAuto::length(height);
         }
     }
 

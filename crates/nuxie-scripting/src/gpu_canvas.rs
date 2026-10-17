@@ -2450,6 +2450,9 @@ pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {
 pub(crate) struct ScriptCallGpuScope {
     pub(crate) open_canvas_frame_token: u64,
     pub(crate) open_render_pass_token: u64,
+    /// The VM's renderer bindings when the call began; its exit closes
+    /// against the same ones.
+    pub(crate) bindings: Option<RendererBindings>,
 }
 
 pub(crate) fn enter_script_call_gpu_scope(lua: &luaur_rt::Lua) -> ScriptCallGpuScope {
@@ -2461,6 +2464,7 @@ pub(crate) fn enter_script_call_gpu_scope(lua: &luaur_rt::Lua) -> ScriptCallGpuS
         open_render_pass_token: bindings
             .ore_context()
             .map_or(0, |context| context.borrow().nextRenderPassToken()),
+        bindings: Some(bindings),
     }
 }
 

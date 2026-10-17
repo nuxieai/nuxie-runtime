@@ -146,11 +146,11 @@ pub use scope::Scope;
 pub use state::{Lua, WeakLua};
 pub use string::LuaString;
 pub use sync::{MaybeSend, MaybeSync};
-pub use table::{Table, TablePairs, TableSequence};
+pub use table::{FieldFunction, FieldValue, Table, TablePairs, TableSequence};
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 #[doc(hidden)]
-pub use traits::{stack_arg, ReturnValues};
+pub use traits::ReturnValues;
 
 /// Process-global `FFlag::LuauDirectFieldGet` control used by pinned Rive.
 ///

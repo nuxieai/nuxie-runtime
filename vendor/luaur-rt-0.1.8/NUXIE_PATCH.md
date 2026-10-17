@@ -148,3 +148,20 @@
   entry and runs at once, as before.
 - Touched file: `src/interrupt.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`.
+
+## Field functions called in place; call results from the stack
+
+- `Table::with_field` reads `self[field]` exactly as `Table::get_field` does
+  (raw without a metatable, protected `lua_gettable` with one) and hands the
+  callback a `FieldValue` held in its stack slot; `with_field_function` runs
+  the callback only for a function (`LUA_TFUNCTION`). Hosts that call a
+  script method by name on every frame no longer mint a registry-owned
+  `Function` per call; `FieldValue::to_value` gives the value when it is not a
+  function. `FieldFunction::call` is `Function::call` for the held function.
+- `Function::call` pushes its arguments directly (hidden
+  `IntoLuaMulti::push_call_args`, the same conversions as `into_lua_multi`)
+  and converts its results with `from_stack_args`, so unused results take no
+  registry references. The stack-overflow checks and errors are unchanged.
+- Touched files: `src/table.rs`, `src/function.rs`, `src/traits.rs`,
+  `src/conversion.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/table_field_calls.rs`.

@@ -91,6 +91,29 @@ pub trait IntoLuaMulti: Sized {
         out.extend(self.into_lua_multi(lua)?);
         Ok(())
     }
+
+    /// The same conversion as [`IntoLuaMulti::into_lua_multi`], with each
+    /// value pushed onto the stack as a call argument; returns the count.
+    #[doc(hidden)]
+    fn push_call_args(self, lua: &Lua) -> Result<c_int> {
+        let values = self.into_lua_multi(lua)?;
+        for value in values.iter() {
+            push_call_arg(lua, value)?;
+        }
+        Ok(values.len() as c_int)
+    }
+}
+
+/// Push one call argument, failing as [`Function::call`](crate::Function)
+/// does when the stack cannot hold its arguments.
+pub(crate) fn push_call_arg(lua: &Lua, value: &Value) -> Result<()> {
+    // Room for this value plus the call machinery's slack slot.
+    if unsafe { crate::sys::lua_checkstack(lua.state(), 2) } == 0 {
+        return Err(crate::error::Error::RuntimeError(
+            "stack overflow: too many arguments to function call".to_string(),
+        ));
+    }
+    lua.push_value(value)
 }
 
 /// Convert a sequence of Lua values into a Rust value.
@@ -130,6 +153,11 @@ impl<T: IntoLua> IntoLuaMulti for T {
         out.push_back(self.into_lua(lua)?);
         Ok(())
     }
+
+    fn push_call_args(self, lua: &Lua) -> Result<c_int> {
+        push_call_arg(lua, &self.into_lua(lua)?)?;
+        Ok(1)
+    }
 }
 
 // And any single-value type can be parsed from the first of a multi-value
@@ -148,9 +176,8 @@ impl<T: FromLua> FromLuaMulti for T {
 
 /// The `i`th (0-based) of the `count` arguments at `start`, or nil past the
 /// end, as [`FromLuaMulti::from_lua_multi`]'s `pop_front` would see it.
-#[doc(hidden)]
 #[inline]
-pub fn stack_arg(lua: &Lua, start: c_int, count: c_int, i: c_int) -> Result<Value> {
+pub(crate) fn stack_arg(lua: &Lua, start: c_int, count: c_int, i: c_int) -> Result<Value> {
     if i < count {
         lua.value_from_stack(start + i)
     } else {

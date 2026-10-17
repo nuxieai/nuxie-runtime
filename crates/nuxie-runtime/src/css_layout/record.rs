@@ -121,8 +121,12 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                         let hidden = self.values().display_none();
                         LayoutComponent::css_display_changed_occurrence(&parent, hidden);
                     }
+                    // What only the box's paint and clip read.
                     if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4)
                         .contains(&key)
+                        || (keys::BORDER_TOP..keys::BORDER_TOP + 4).contains(&key)
+                        || key == keys::OVERFLOW_X
+                        || key == keys::OVERFLOW_Y
                     {
                         LayoutComponent::css_paint_changed_occurrence(&parent);
                     }

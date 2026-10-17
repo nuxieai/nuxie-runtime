@@ -23,7 +23,7 @@ use crate::source::{
     math::aabb::Aabb,
     status_code::StatusCode,
     text::text_style_paint::TextStylePaint,
-    text_engine::{DecorationMetric, Font},
+    text_engine::{DecorationMetric, DecorationMetrics, Font},
 };
 use std::any::Any;
 
@@ -57,8 +57,24 @@ impl TextStyleDecoration {
         self.line
     }
 
+    /// Changes the lines and has the owning Text rebuild its paths.
     pub fn set_line(&mut self, line: u32) {
+        if self.line == line {
+            return;
+        }
         self.line = line;
+        let text = self.component.parent_handle().and_then(|style| {
+            style
+                .with(|style| style.as_component().and_then(|style| style.parent_handle()))
+                .flatten()
+        });
+        if let Some(text) = text {
+            text.with_mut(|text| {
+                if let Some(text) = text.as_text_mut() {
+                    text.mark_paint_dirty();
+                }
+            });
+        }
     }
 
     fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
@@ -251,6 +267,33 @@ pub(crate) fn style_line(style: &CoreHandle) -> u32 {
         .unwrap_or(0)
 }
 
+/// The decoration rectangles between `start_x` and `end_x` on a line whose
+/// baseline is at `baseline` (the text's local space, y down).
+pub(crate) fn line_rects(
+    line: u32,
+    metrics: DecorationMetrics,
+    size: f32,
+    start_x: f32,
+    end_x: f32,
+    baseline: f32,
+) -> Vec<Aabb> {
+    let mut rects = Vec::with_capacity(2);
+    let mut add = |metric: DecorationMetric| {
+        let top = baseline - metric.offset * size;
+        let bottom = top + metric.thickness * size;
+        if end_x > start_x && bottom > top {
+            rects.push(Aabb::new(start_x, top, end_x, bottom));
+        }
+    };
+    if line & UNDERLINE != 0 {
+        add(resolved(metrics.underline, FALLBACK_UNDERLINE_OFFSET));
+    }
+    if line & LINE_THROUGH != 0 {
+        add(resolved(metrics.strikeout, FALLBACK_STRIKEOUT_OFFSET));
+    }
+    rects
+}
+
 /// One decorated stretch of a drawn line: consecutive glyphs of one style.
 pub(crate) struct DecorationSpan {
     pub style: CoreHandle,
@@ -259,28 +302,20 @@ pub(crate) struct DecorationSpan {
     end_x: f32,
     baseline: f32,
     size: f32,
-    underline: Option<DecorationMetric>,
-    strikeout: Option<DecorationMetric>,
+    metrics: DecorationMetrics,
 }
 
 impl DecorationSpan {
     /// The rectangles this span draws, in the text's local space (y down).
     pub fn rects(&self) -> Vec<Aabb> {
-        let mut rects = Vec::with_capacity(2);
-        let mut add = |metric: DecorationMetric| {
-            let top = self.baseline - metric.offset * self.size;
-            let bottom = top + metric.thickness * self.size;
-            if self.end_x > self.start_x && bottom > top {
-                rects.push(Aabb::new(self.start_x, top, self.end_x, bottom));
-            }
-        };
-        if self.line & UNDERLINE != 0 {
-            add(resolved(self.underline, FALLBACK_UNDERLINE_OFFSET));
-        }
-        if self.line & LINE_THROUGH != 0 {
-            add(resolved(self.strikeout, FALLBACK_STRIKEOUT_OFFSET));
-        }
-        rects
+        line_rects(
+            self.line,
+            self.metrics,
+            self.size,
+            self.start_x,
+            self.end_x,
+            self.baseline,
+        )
     }
 }
 
@@ -328,25 +363,24 @@ impl DecorationSpans {
         if line == 0 {
             return self.current.take();
         }
-        let end = if inked { x + advance } else { x };
         if let Some(span) = &mut self.current
             && span.style == *style
             && span.line == line
         {
             span.start_x = span.start_x.min(x);
-            span.end_x = span.end_x.max(end);
+            if inked {
+                span.end_x = span.end_x.max(x + advance);
+            }
             return None;
         }
-        let metrics = font.decoration_metrics();
         self.current.replace(DecorationSpan {
             style: style.clone(),
             line,
             start_x: x,
-            end_x: end,
+            end_x: if inked { x + advance } else { x },
             baseline,
             size,
-            underline: metrics.underline,
-            strikeout: metrics.strikeout,
+            metrics: font.decoration_metrics(),
         })
     }
 

@@ -1,7 +1,6 @@
 import os
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
 
 import generate_manifest
@@ -561,44 +560,6 @@ TEST_CASE("renders selected board", "[silver]")
         self.assertTrue(
             all(item["x"] == "artboard-width/2" for item in pointer_actions)
         )
-
-    def test_css_reviews_preserve_historical_exact_obligations(self):
-        reviews = generate_manifest.REVIEWED_LAYOUT_DIVERGENCES
-        self.assertEqual(len(generate_manifest.EXACT), 206)
-        # Six reviews returned to exact C++ and two were added (UNIV-4844).
-        self.assertEqual(len(reviews), 12)
-        self.assertTrue(set(reviews).issubset(generate_manifest.EXACT))
-        for silver_id, difference in reviews.items():
-            with self.subTest(silver_id=silver_id):
-                note = generate_manifest.layout_divergence_note(silver_id, difference)
-                self.assertIn("CSS", note)
-                self.assertTrue(note.endswith(f"first difference: {difference}."))
-
-    def test_css_reviews_require_one_full_stream_hash_per_id(self):
-        hashes = generate_manifest.REVIEWED_LAYOUT_STREAM_SHA256
-        self.assertEqual(set(hashes), set(generate_manifest.REVIEWED_LAYOUT_DIVERGENCES))
-        for value in hashes.values():
-            self.assertRegex(value, r"^[0-9a-f]{64}$")
-        with mock.patch.dict(hashes, {}, clear=True):
-            with self.assertRaisesRegex(ValueError, "hash IDs must match"):
-                generate_manifest.render([])
-        key = next(iter(hashes))
-        with mock.patch.dict(hashes, {key: "not a stream hash"}):
-            with self.assertRaisesRegex(ValueError, "needs a full Rust stream"):
-                generate_manifest.render([])
-
-    def test_scroll_threshold_reviews_keep_both_drag_sequences_and_every_frame(self):
-        for case, draws, frames, moves in [
-            ("scroll_threshold-all-scroll", 13, 11, 8),
-            ("scroll_threshold-horizontal-scroll", 17, 15, 12),
-        ]:
-            with self.subTest(case=case):
-                actions = generate_manifest.p1q_pointer_actions(case)
-                self.assertEqual(sum(a["kind"] == "draw" for a in actions), draws)
-                self.assertEqual(sum(a["kind"] == "frame" for a in actions), frames)
-                self.assertEqual(sum(a["kind"] == "pointer-move" for a in actions), moves)
-                self.assertEqual(sum(a["kind"] == "pointer-down" for a in actions), 2)
-                self.assertEqual(sum(a["kind"] == "pointer-up" for a in actions), 2)
 
     def test_render_pins_lane_and_provenance_ratchets(self):
         producer = generate_manifest.Producer(

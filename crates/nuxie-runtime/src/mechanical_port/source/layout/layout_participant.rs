@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::layout::layout_style_applier::{
-    YGAlign, YGDisplay, YGJustify, YGUnit, rive_align_self, rive_dimension, rive_hug_dimension,
+    YGAlign, YGDisplay, YGJustify, YGUnit, apply_flex_item_minimums, rive_align_self,
+    rive_dimension, rive_hug_dimension,
 };
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
@@ -19,7 +20,7 @@ use crate::mechanical_port::source::{
     layout_component::{Layout, LayoutAnimationData, LayoutComponent},
     math::{aabb::Aabb, vec2d::Vec2D},
 };
-use taffy::prelude::{Dimension, Style};
+use taffy::prelude::{Dimension, LengthPercentageAuto, Style};
 
 /// Check capability without invoking a measurer, especially scripted hosts.
 pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
@@ -30,109 +31,34 @@ pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
     host.with_mut(|object| {
         object.as_intrinsically_sizeable_mut().is_none()
             || object.as_any().is::<Image>()
-            || object
-                .as_intrinsically_sizeable_mut()
-                .and_then(|host| host.natural_size_for_layout())
-                .is_some()
-            || (object.as_transform_component().is_some()
-                && object.as_layout_component().is_none()
-                && object.as_text_mut().is_none()
-                && object.as_text_input_mut().is_none()
-                && object.as_scripted_layout().is_none()
-                && object.as_nested_artboard().is_none())
             || object.as_text_mut().is_some_and(|text| {
-                // Owned widths use content minima, including a whole NoWrap
-                // line. Unowned authored boxes supply their declared width.
-                (text.effective_sizing() == TextSizing::AutoWidth
-                    || text.layout_owns_width()
-                    || crate::source::intrinsically_sizeable::authored_text_box_width(text)
-                        .is_some())
-                    && !matches!(
-                        text.overflow(),
-                        TextOverflow::Hidden
-                            | TextOverflow::Clipped
-                            | TextOverflow::Ellipsis
-                            | TextOverflow::Fit
-                            | TextOverflow::FitFontSize
-                    )
+                text.effective_sizing() == TextSizing::AutoWidth
+                    && text.overflow() != TextOverflow::FitFontSize
             })
     })
     .unwrap_or(false)
 }
 
 /// Called after the unbounded measure populated Text's measured-shape cache.
-pub(crate) fn host_min_content_width(
-    host: &CoreHandle,
-    known_height: Option<f32>,
-    cross_limits: (Option<f32>, Option<f32>),
-) -> Option<f32> {
+pub(crate) fn host_min_content_width(host: &CoreHandle) -> Option<f32> {
     use crate::mechanical_port::source::shapes::image::Image;
-    let natural = crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
     host.with_mut(|object| {
-        if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Some(transferred_image_minimum(
-                image.width(),
-                image.height(),
-                known_height,
-                cross_limits,
-            ));
-        }
-        if let Some(size) = natural {
-            return Some(size.x);
-        }
         if object.as_intrinsically_sizeable_mut().is_none() {
             return Some(0.0);
         }
-        let text = object.as_text_mut()?;
-        crate::source::intrinsically_sizeable::authored_text_box_width(text)
-            .or_else(|| text.layout_min_content_width())
-    })
-    .flatten()
-}
-
-/// CSS replaced items clamp their content suggestion through cross-axis
-/// limits, then take the smaller content and transferred suggestions.
-fn transferred_image_minimum(
-    main: f32,
-    cross: f32,
-    known_cross: Option<f32>,
-    limits: (Option<f32>, Option<f32>),
-) -> f32 {
-    if cross <= 0.0 {
-        return main;
-    }
-    let clamp = |value: f32| {
-        let value = limits.1.map_or(value, |maximum| value.min(maximum));
-        limits.0.map_or(value, |minimum| value.max(minimum))
-    };
-    let clamped_cross = clamp(cross);
-    let content = if clamped_cross == cross {
-        main
-    } else {
-        clamped_cross * main / cross
-    };
-    known_cross
-        .filter(|value| value.is_finite() && *value >= 0.0)
-        .map_or(content, |value| content.min(clamp(value) * main / cross))
-}
-
-pub(crate) fn host_min_content_height(
-    host: &CoreHandle,
-    known_width: Option<f32>,
-    cross_limits: (Option<f32>, Option<f32>),
-) -> Option<f32> {
-    use crate::source::shapes::image::Image;
-    let natural = crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
-    host.with_mut(|object| {
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Some(transferred_image_minimum(
-                image.height(),
-                image.width(),
-                known_width,
-                cross_limits,
-            ));
+            return Some(
+                image
+                    .measure_layout(
+                        f32::NAN,
+                        LayoutMeasureMode::Undefined,
+                        f32::NAN,
+                        LayoutMeasureMode::Undefined,
+                    )
+                    .x,
+            );
         }
-        natural.map(|size| size.y)
+        object.as_text_mut()?.layout_min_content_width()
     })
     .flatten()
 }
@@ -255,7 +181,7 @@ impl LayoutParticipant {
         self.owner_handle()?.with_mut(f)
     }
 
-    pub(crate) fn owning_layout_handle(&self) -> Option<CoreHandle> {
+    fn owning_layout_handle(&self) -> Option<CoreHandle> {
         // Source owningLayout walks every Component ancestor independently of
         // transformComponent's stricter host type check.
         Self::owning_layout_from(self.base.parent_handle())
@@ -408,7 +334,7 @@ impl LayoutParticipant {
                 0.0
             };
             style.flex_grow = grow;
-            style.flex_shrink = if main_fill { grow } else { 1.0 };
+            style.flex_shrink = grow;
             style.flex_basis = if main_fill {
                 Dimension::length(0.0)
             } else {
@@ -424,6 +350,12 @@ impl LayoutParticipant {
             } else {
                 YGAlign::Auto
             });
+        }
+        if width_fill && YGUnit::from(self.base.min_width_units_value()) == YGUnit::Undefined {
+            style.min_size.width = LengthPercentageAuto::length(0.0);
+        }
+        if height_fill && YGUnit::from(self.base.min_height_units_value()) == YGUnit::Undefined {
+            style.min_size.height = LengthPercentageAuto::length(0.0);
         }
     }
 
@@ -717,6 +649,7 @@ impl LayoutParticipant {
                 }
             }
         }
+        apply_flex_item_minimums(&mut style, context.parent_is_grid);
         self.layout_data.as_deref_mut().unwrap().set_style(style);
         true
     }

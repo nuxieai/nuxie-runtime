@@ -84,80 +84,26 @@ fn participant_bounds(artboard: &CoreHandle) -> Aabb {
         .expect("live provider")
 }
 
-// UNIV-4844: a shape is non-reflowing content. Its natural size from
-// authored geometry is its CSS min-content, so a bounded Hug (fit-content)
-// cannot go below 260 even though the row offers 200. Rive's leaf measure
-// clamps the shape to the offer instead. Each reviewed width keeps its C++
-// value; every other field is the exact C++ value.
-const CPP_BOUNDED: (f32, f32) = (200.0, 120.0);
-const NATURAL_MINIMUM: &str = "layout-diverges:the shape's natural 260 width is its CSS min-content, so fit-content keeps 260 where Rive's leaf measure clamps to the 200 offer";
-
-fn assert_reviewed(observed: &[(&str, f32, f32)], reviewed: &[&str]) {
-    let differences = observed
-        .iter()
-        .filter(|(_, css, cpp)| css != cpp)
-        .map(|(field, css, cpp)| format!("{field}: {css} != {cpp}"))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        differences, reviewed,
-        "{NATURAL_MINIMUM}; observed {observed:?}"
-    );
-}
-
 #[test]
 fn a_hug_leaf_is_bounded_by_the_space_available_to_it() {
     let fixture = Fixture::new();
     let bounded = subject_bounds(&fixture.advanced("LeafBounded"));
+    assert_eq!(bounded.width(), 200.0);
+    assert_eq!(bounded.height(), 120.0);
     let unbounded = subject_bounds(&fixture.advanced("LeafUnbounded"));
-    assert_reviewed(
-        &[
-            (
-                "LeafBounded.layoutBounds[2]",
-                bounded.width(),
-                CPP_BOUNDED.0,
-            ),
-            (
-                "LeafBounded.layoutBounds[3]",
-                bounded.height(),
-                CPP_BOUNDED.1,
-            ),
-            ("LeafUnbounded.layoutBounds[2]", unbounded.width(), 260.0),
-            ("LeafUnbounded.layoutBounds[3]", unbounded.height(), 180.0),
-        ],
-        &["LeafBounded.layoutBounds[2]: 260 != 200"],
-    );
+    assert_eq!(unbounded.width(), 260.0);
+    assert_eq!(unbounded.height(), 180.0);
 }
 
 #[test]
 fn a_hug_participant_is_bounded_the_same_way_as_a_hug_leaf() {
     let fixture = Fixture::new();
     let bounded = participant_bounds(&fixture.advanced("ParticipantBounded"));
+    assert_eq!(bounded.width(), 200.0);
+    assert_eq!(bounded.height(), 120.0);
     let unbounded = participant_bounds(&fixture.advanced("ParticipantUnbounded"));
-    assert_reviewed(
-        &[
-            (
-                "ParticipantBounded.layoutBounds[2]",
-                bounded.width(),
-                CPP_BOUNDED.0,
-            ),
-            (
-                "ParticipantBounded.layoutBounds[3]",
-                bounded.height(),
-                CPP_BOUNDED.1,
-            ),
-            (
-                "ParticipantUnbounded.layoutBounds[2]",
-                unbounded.width(),
-                260.0,
-            ),
-            (
-                "ParticipantUnbounded.layoutBounds[3]",
-                unbounded.height(),
-                180.0,
-            ),
-        ],
-        &["ParticipantBounded.layoutBounds[2]: 260 != 200"],
-    );
+    assert_eq!(unbounded.width(), 260.0);
+    assert_eq!(unbounded.height(), 180.0);
 }
 
 #[test]
@@ -199,30 +145,16 @@ fn registry_hug_unbounded_changes_dirty_leaf_and_participant_layout() {
                 .flatten()
                 .unwrap()
         };
-        let bounds = |artboard: &CoreHandle| {
-            if participant {
-                participant_bounds(artboard)
-            } else {
-                subject_bounds(artboard)
-            }
+        let initial = if participant {
+            participant_bounds(&artboard)
+        } else {
+            subject_bounds(&artboard)
         };
-        let initial = bounds(&artboard);
-        let mut observed = vec![
-            (
-                format!("{name}.initial[2]"),
-                initial.width(),
-                if participant { 200.0 } else { 260.0 },
-            ),
-            (
-                format!("{name}.initial[3]"),
-                initial.height(),
-                if participant { 120.0 } else { 180.0 },
-            ),
-        ];
-        // C++ values: upstream ParametricPath::controlSize overwrites a leaf's
-        // path after a bounded solve, so re-enabling unbounded measurement
-        // cannot restore 260x180 there. The CSS minimum reads authored
-        // geometry, never the written-back size, so Rust restores it.
+        assert_eq!(initial.width(), if participant { 200.0 } else { 260.0 });
+        assert_eq!(initial.height(), if participant { 120.0 } else { 180.0 });
+        // Upstream ParametricPath::controlSize overwrites a leaf's content
+        // dimensions after a bounded solve. Re-enabling unbounded measurement
+        // cannot restore them. Participant shapes retain their intrinsic path.
         let changes = if participant {
             [(true, 260.0, 180.0), (false, 200.0, 120.0)]
         } else {
@@ -237,34 +169,13 @@ fn registry_hug_unbounded_changes_dirty_leaf_and_participant_layout() {
                 0.0,
                 AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME,
             );
-            let solved = bounds(&artboard);
-            observed.push((
-                format!("{name}.hugUnbounded={value}[2]"),
-                solved.width(),
-                width,
-            ));
-            observed.push((
-                format!("{name}.hugUnbounded={value}[3]"),
-                solved.height(),
-                height,
-            ));
+            let bounds = if participant {
+                participant_bounds(&artboard)
+            } else {
+                subject_bounds(&artboard)
+            };
+            assert_eq!(bounds.width(), width, "{name}, hugUnbounded={value}");
+            assert_eq!(bounds.height(), height, "{name}, hugUnbounded={value}");
         }
-        let observed = observed
-            .iter()
-            .map(|(field, css, cpp)| (field.as_str(), *css, *cpp))
-            .collect::<Vec<_>>();
-        let reviewed: &[&str] = if participant {
-            &[
-                "ParticipantBounded.initial[2]: 260 != 200",
-                "ParticipantBounded.hugUnbounded=false[2]: 260 != 200",
-            ]
-        } else {
-            &[
-                "LeafUnbounded.hugUnbounded=false[2]: 260 != 200",
-                "LeafUnbounded.hugUnbounded=true[2]: 260 != 200",
-                "LeafUnbounded.hugUnbounded=true[3]: 180 != 120",
-            ]
-        };
-        assert_reviewed(&observed, reviewed);
     }
 }

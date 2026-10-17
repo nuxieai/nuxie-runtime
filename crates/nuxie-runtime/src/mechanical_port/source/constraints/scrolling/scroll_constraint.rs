@@ -1273,25 +1273,7 @@ impl ScrollConstraint {
         }
         self.set_offset_x(self.authored_scroll_offset_x());
         self.set_offset_y(self.authored_scroll_offset_y());
-        if result == StatusCode::Ok {
-            self.mark_viewport_layout_style_dirty();
-        }
         result
-    }
-
-    pub fn direction_value_changed(&mut self) {
-        self.mark_viewport_layout_style_dirty();
-    }
-
-    fn mark_viewport_layout_style_dirty(&self) {
-        if let Some(viewport) = self.viewport_handle().filter(|viewport| {
-            viewport
-                .with(|object| object.as_layout_component().is_some())
-                .unwrap_or(false)
-        }) {
-            LayoutComponent::mark_layout_style_dirty_occurrence(&viewport);
-            LayoutComponent::mark_layout_node_dirty_occurrence(&viewport, false);
-        }
     }
 
     pub fn virtualize_buffer_changed(&mut self) {

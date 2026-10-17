@@ -52,12 +52,6 @@ impl Default for Joystick {
 }
 
 impl Joystick {
-    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
-        self.base
-            .layout_natural
-            .get(Vec2D::new(self.base.width(), self.base.height()))
-    }
-
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let status = self.base.base.on_added_dirty(context);
         if status != StatusCode::Ok {
@@ -260,23 +254,6 @@ impl Joystick {
         }
     }
 
-    /// A joystick's authored size, origin and position place its natural
-    /// bounds (UNIV-4844). Joysticks are applied from the artboard's own list
-    /// rather than updated in the dependency order, so the update pass would
-    /// not see the change: hand it to that pass's measured-content check.
-    /// Layout's own size write-back is excluded; its position write-back
-    /// leaves the natural size alone, which the check confirms.
-    fn measured_geometry_changed(&mut self) {
-        if self.base.layout_natural.controlling() {
-            return;
-        }
-        if let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
-            self.base
-                .base
-                .with_artboard_mut(|artboard| artboard.queue_measured_content(this));
-        }
-    }
-
     fn add_component_dirt(&mut self) {
         self.base
             .base
@@ -327,20 +304,6 @@ impl Joystick {
 }
 
 impl IntrinsicallySizeable for Joystick {
-    fn natural_size_for_layout(&self) -> Option<Vec2D> {
-        Some(Joystick::natural_size_for_layout(self))
-    }
-    /// A joystick has no transform: its pad sits at its position, about its
-    /// origin, as Joystick::update places and bounds it.
-    fn natural_bounds_for_layout(&self) -> Option<Aabb> {
-        let size = Joystick::natural_size_for_layout(self);
-        Some(Aabb::from_ltwh(
-            self.base.pos_x() - size.x * self.base.origin_x(),
-            self.base.pos_y() - size.y * self.base.origin_y(),
-            size.x,
-            size.y,
-        ))
-    }
     fn measure_layout(
         &mut self,
         width: f32,
@@ -371,11 +334,8 @@ impl IntrinsicallySizeable for Joystick {
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        let current = Vec2D::new(self.base.width(), self.base.height());
-        self.base.layout_natural.begin_control(current);
         self.set_width(size.x);
         self.set_height(size.y);
-        self.base.layout_natural.end_control();
         self.set_pos_x(size.x * self.base.origin_x());
         self.set_pos_y(size.y * self.base.origin_y());
     }
@@ -401,27 +361,15 @@ impl JoystickBaseCallbacks for Joystick {
     }
     fn pos_x_changed(&mut self) {
         self.add_component_dirt();
-        self.measured_geometry_changed();
     }
     fn pos_y_changed(&mut self) {
         self.add_component_dirt();
-        self.measured_geometry_changed();
-    }
-    fn origin_x_changed(&mut self) {
-        self.add_component_dirt();
-        self.measured_geometry_changed();
-    }
-    fn origin_y_changed(&mut self) {
-        self.add_component_dirt();
-        self.measured_geometry_changed();
     }
     fn width_changed(&mut self) {
         self.add_component_dirt();
-        self.measured_geometry_changed();
     }
     fn height_changed(&mut self) {
         self.add_component_dirt();
-        self.measured_geometry_changed();
     }
 }
 

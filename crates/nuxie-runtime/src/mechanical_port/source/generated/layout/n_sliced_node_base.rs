@@ -16,9 +16,6 @@ pub struct NSlicedNodeBase {
     initial_height: f32,
     width: f32,
     height: f32,
-    /// UNIV-4844: authored width and height across layout control.
-    pub(crate) layout_natural:
-        crate::mechanical_port::source::intrinsically_sizeable::LayoutNaturalSize,
 }
 
 impl Default for NSlicedNodeBase {
@@ -29,7 +26,6 @@ impl Default for NSlicedNodeBase {
             initial_height: 0.0,
             width: 0.0,
             height: 0.0,
-            layout_natural: Default::default(),
         }
     }
 }
@@ -107,11 +103,7 @@ impl NSlicedNodeBase {
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
-        // Recorded before the equality check: an authored write equal to a
-        // layout-written size is still authored, and changes the natural
-        // size, so it reports a change for the callbacks to lay out again.
-        let natural_changed = self.layout_natural.assign_width(value, self.width);
-        if self.width == value && !natural_changed {
+        if self.width == value {
             return false;
         }
         self.width = value;
@@ -129,11 +121,7 @@ impl NSlicedNodeBase {
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
-        // Recorded before the equality check: an authored write equal to a
-        // layout-written size is still authored, and changes the natural
-        // size, so it reports a change for the callbacks to lay out again.
-        let natural_changed = self.layout_natural.assign_height(value, self.height);
-        if self.height == value && !natural_changed {
+        if self.height == value {
             return false;
         }
         self.height = value;
@@ -149,7 +137,6 @@ impl NSlicedNodeBase {
         self.initial_height = object.initial_height;
         self.width = object.width;
         self.height = object.height;
-        self.layout_natural = object.layout_natural.copied();
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(

@@ -23,9 +23,9 @@ use crate::mechanical_port::source::math::{mat2d::Mat2D, raw_path::RawPath, vec2
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 pub use crate::mechanical_port::source::text_engine::HostPictureScope;
 use crate::mechanical_port::source::text_engine::{
-    Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, FontRef, GlyphId,
-    GlyphRun, GradientStop, LineMetrics, Paragraph, TextRun, Unichar, fallback_proc,
-    fallback_proc_enabled, note_fallback_call,
+    Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, DecorationMetric, DecorationMetrics,
+    Feature, Font, FontBase, FontRef, GlyphId, GlyphRun, GradientStop, LineMetrics, Paragraph,
+    TextRun, Unichar, fallback_proc, fallback_proc_enabled, note_fallback_call,
 };
 
 // Test-only observation of real shaping, scoped to each test thread.
@@ -650,7 +650,10 @@ impl HbFont {
         let line_metrics = make_line_metrics(&outline, LocationRef::from(&location));
         let features = shaping_features(&feature_values, face.suppress_legacy_kern);
         Self {
-            base: FontBase::new(line_metrics),
+            base: FontBase::new(line_metrics).with_decoration_metrics(make_decoration_metrics(
+                &outline,
+                LocationRef::from(&location),
+            )),
             host_outline: None,
             host_pictures: None,
             host_picture_scope: HostPictureScope::Glyph,
@@ -1314,6 +1317,20 @@ fn make_line_metrics(font: &OutlineFont<'_>, location: LocationRef<'_>) -> LineM
         descent: -metrics.descent.round() * INVERSE_SCALE,
         cap_height: top('H'),
         x_height: top('x'),
+    }
+}
+
+/// Nuxie addition: the font's suggested underline and strikeout, per unit
+/// font size, for text decoration. Upstream shaping never reads these.
+fn make_decoration_metrics(font: &OutlineFont<'_>, location: LocationRef<'_>) -> DecorationMetrics {
+    let metrics = font.metrics(Size::new(STANDARD_SCALE as f32), location);
+    let per_unit = |decoration: skrifa::metrics::Decoration| DecorationMetric {
+        offset: decoration.offset * INVERSE_SCALE,
+        thickness: decoration.thickness * INVERSE_SCALE,
+    };
+    DecorationMetrics {
+        underline: metrics.underline.map(per_unit),
+        strikeout: metrics.strikeout.map(per_unit),
     }
 }
 

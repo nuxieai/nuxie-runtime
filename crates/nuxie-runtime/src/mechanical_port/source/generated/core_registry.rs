@@ -9176,6 +9176,21 @@ impl CoreRegistry {
         value: u32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        // Nuxie TextStyleDecoration.line: rebuilds the owning Text and tells
+        // the property's observers, as the generated setters do.
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
+            && let Some(decoration) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::text_decoration::TextStyleDecoration>()
+        {
+            if decoration.set_line(value) {
+                completion.record(
+                    crate::mechanical_port::source::core::CoreObject::core(decoration),
+                    crate::text_decoration::LINE_PROPERTY_KEY,
+                );
+            }
+            return;
+        }
         let field = match property_key {
             459 => CoreField::LayerMaskSourceId,
             460 => CoreField::LayerMaskMaskFlags,
@@ -9852,6 +9867,13 @@ impl CoreRegistry {
         object.get_uint(field)
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
+            && let Some(decoration) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::text_decoration::TextStyleDecoration>()
+        {
+            return decoration.line();
+        }
         let field = match property_key {
             459 => CoreField::LayerMaskSourceId,
             460 => CoreField::LayerMaskMaskFlags,
@@ -10649,6 +10671,10 @@ impl CoreRegistry {
     pub fn property_field_id(property_key: i32) -> i32 {
         if let Some(field) = crate::video::properties::field_id(property_key) {
             return field;
+        }
+        // Nuxie TextStyleDecoration.line is a uint.
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
+            return 0;
         }
         match property_key {
             486 => 1,

@@ -609,6 +609,31 @@ enum TextDrawCommand {
     },
 }
 
+/// Nuxie addition: adds decoration lines to a style's glyph path, registering
+/// the style for drawing when it has no glyph path yet.
+fn add_decoration(
+    render_styles: &mut Vec<CoreHandle>,
+    draw_commands: &mut Vec<TextDrawCommand>,
+    render_opacity: f32,
+    style: &CoreHandle,
+    path: &RawPath,
+    opacity: f32,
+) {
+    if path.empty() {
+        return;
+    }
+    let first_path = style
+        .with_downcast_mut::<TextStylePaint, _>(|paint| paint.add_path(path, opacity))
+        .unwrap_or(false);
+    if first_path {
+        render_styles.push(style.clone());
+        style.with_downcast_mut::<TextStylePaint, _>(|paint| {
+            paint.paints.propagate_opacity(render_opacity);
+        });
+        draw_commands.push(TextDrawCommand::Style(style.clone()));
+    }
+}
+
 fn compute_vertical_trim(
     lines: &[Vec<GlyphLine>],
     shape: &[Paragraph],
@@ -1824,6 +1849,8 @@ impl Text {
                 let ordered_line = self.ordered_lines.last().unwrap();
                 let mut current_x = line.start_x;
                 minimum_x = minimum_x.min(current_x);
+                // Nuxie addition: decorated runs on this line (none upstream).
+                let mut decorations = crate::text_decoration::LineDecorations::default();
                 for (run, glyph_index) in ordered_line {
                     let index = glyph_index as usize;
                     let offset = run.offsets[index];
@@ -1836,6 +1863,7 @@ impl Text {
                     components.set_scale_y(run.size);
                     components.set_x(-center_x);
                     let mut path_transform = Mat2D::compose(&components);
+                    let glyph_layout_transform = path_transform;
                     let mut opacity = 1.0f32;
                     if has_modifiers {
                         let text_index = run.text_indices[index];
@@ -1858,6 +1886,10 @@ impl Text {
                             });
                         }
                     }
+                    // Nuxie addition: what the modifiers did to this glyph,
+                    // for its decoration to follow.
+                    let modifier_transform = has_modifiers
+                        .then(|| path_transform * glyph_layout_transform.invert_or_identity());
                     path_transform = Mat2D::from_translate(
                         current_position.x + center_x + offset.x,
                         current_position.y + offset.y,
@@ -1868,6 +1900,7 @@ impl Text {
                         .with(TextValueRun::style)
                         .flatten()
                         .expect("TextValueRun style");
+                    let mut inked = false;
                     match run.glyph_render_kind(index) {
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Color => {
                         let foreground_color = style
@@ -1885,6 +1918,7 @@ impl Text {
                             foreground_color,
                             opacity,
                         });
+                        inked = true;
                         }
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Outline => {
                         let path = run
@@ -1893,6 +1927,7 @@ impl Text {
                             .expect("shaped text retains its font")
                             .get_path(glyph_id)
                             .transform(path_transform);
+                        inked = !path.empty();
                         let first_path = style
                             .with_downcast_mut::<TextStylePaint, _>(|style| {
                                 style.add_path(&path, opacity)
@@ -1907,7 +1942,38 @@ impl Text {
                                 .push(TextDrawCommand::Style(style.clone()));
                         }
                         }
-                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {}
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {
+                            // Drawn by its cluster's colour picture.
+                            inked = true;
+                        }
+                    }
+                    // Nuxie addition: the run style's underline/line-through.
+                    let decoration_line = crate::text_decoration::style_line(&style);
+                    let font = run.font.as_deref().expect("shaped text retains its font");
+                    if let Some(modifier_transform) = modifier_transform {
+                        decorations.modified_glyph(
+                            &style,
+                            decoration_line,
+                            current_x,
+                            advance,
+                            inked,
+                            Mat2D::from_translate(current_x + center_x, render_y)
+                                * modifier_transform,
+                            opacity,
+                            run.size,
+                            font,
+                        );
+                    } else {
+                        decorations.glyph(
+                            &style,
+                            decoration_line,
+                            current_x,
+                            advance,
+                            inked,
+                            render_y,
+                            run.size,
+                            font,
+                        );
                     }
                     let background = style
                         .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
@@ -1931,6 +1997,16 @@ impl Text {
                         }
                     }
                     current_x += advance;
+                }
+                for decoration in decorations.finish() {
+                    add_decoration(
+                        &mut self.render_styles,
+                        &mut self.draw_commands,
+                        self.base.render_opacity(),
+                        &decoration.style,
+                        &decoration.path,
+                        decoration.opacity,
+                    );
                 }
                 if line_index == info.ellipsis_line {
                     break 'paragraphs;

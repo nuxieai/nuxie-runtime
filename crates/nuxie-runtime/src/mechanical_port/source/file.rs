@@ -193,7 +193,7 @@ fn read_runtime_object(
 ) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
     let core_object_key = reader.read_var_uint_as::<i32>();
     // Nuxie-owned types share the Rive record grammar and ordinary arena lifecycle.
-    let mut object = crate::video::make_core(core_object_key);
+    let mut object = crate::make_core(core_object_key);
     loop {
         let property_key = reader.read_var_uint_as::<u16>();
         if property_key == 0 {

@@ -1783,3 +1783,27 @@ fn css_equal_authored_write_still_resizes_the_box() {
         assert!((width - 48.780487).abs() < 0.0001, "{widths:?}");
     }
 }
+
+#[test]
+fn css_joystick_resize_refreshes_the_box_minimum() {
+    use crate::source::generated::core_registry::CoreField;
+    let mut joystick = None;
+    let f = shared_row(Some(200.0), false, |arena, subject| {
+        let host = arena.insert(crate::source::joystick::Joystick::default());
+        host.with_mut(|o| {
+            o.set_double(CoreField::JoystickWidth, 80.0);
+            o.set_double(CoreField::JoystickHeight, 30.0);
+        })
+        .unwrap();
+        attach(arena, subject, &host);
+        joystick = Some(host);
+    });
+    let joystick = joystick.unwrap();
+    // The Fixed 200 box shrinks to its joystick's natural minimum.
+    let mut widths = vec![f.width()];
+    joystick
+        .with_mut(|o| o.set_double(CoreField::JoystickWidth, 160.0))
+        .unwrap();
+    widths.push(f.width());
+    assert_eq!(widths, [80.0, 160.0]);
+}

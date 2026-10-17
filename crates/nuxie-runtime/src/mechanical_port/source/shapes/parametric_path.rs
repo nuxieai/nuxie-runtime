@@ -91,40 +91,12 @@ impl ParametricPath {
     /// Upstream stops at an intervening Node. A leaf LayoutComponent also
     /// measures drawing groups for their natural size (UNIV-4844), so a path
     /// below a group still invalidates the nearest such leaf.
-    fn send_layout_dirty(shape: Option<CoreHandle>, mut parent: Option<CoreHandle>) {
-        let mut through_group = false;
-        while let Some(current) = parent {
-            if current.is_type_of(
-                    crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
-                ) {
-                    let measures_group = || {
-                        current
-                            .with(|object| {
-                                object
-                                    .as_layout_component()
-                                    .is_some_and(|layout| !layout.has_layout_children())
-                            })
-                            .unwrap_or(false)
-                    };
-                    if !through_group || measures_group() {
-                        crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
-                    }
-                    break;
-                }
-            let is_node = current.is_type_of(
-                crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY,
-            );
-            if is_node
-                && !(current
-                    .is_type_of(crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
-                    && shape.as_ref() == Some(&current))
-            {
-                through_group = true;
-            }
-            parent = current
-                .with(|current| current.component_parent_handle())
-                .flatten();
-        }
+    fn send_layout_dirty(shape: Option<CoreHandle>, parent: Option<CoreHandle>) {
+        crate::source::intrinsically_sizeable::mark_measuring_layout_dirty(
+            parent,
+            shape.as_ref(),
+            true,
+        );
     }
     pub fn try_property_bounds(&self, result: &mut Aabb) -> bool {
         *result = Aabb::from_ltwh(

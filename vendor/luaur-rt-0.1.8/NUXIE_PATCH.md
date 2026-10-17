@@ -255,3 +255,11 @@
 - Touched files: `src/app_data.rs`, `src/interrupt.rs`, `src/userdata.rs`;
   coverage in `tools/luaur-rt-test-harness/tests/app_data_clone.rs` and
   `tests/interrupt_reentry.rs` (`each_vm_reaches_its_current_interrupt`).
+
+## Cold paths out of line
+
+- Building a userdata type's metatable (once per VM and type) is a separate
+  `#[cold]` function, and the callback trampoline raises callback errors and
+  panics from `#[cold]` functions: creating a userdata and returning from a
+  callback no longer carry those frames. Behavior is unchanged.
+- Touched files: `src/userdata.rs`, `src/callback.rs`.

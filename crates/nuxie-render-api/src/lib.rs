@@ -2976,6 +2976,9 @@ impl std::error::Error for RenderCanvasError {}
 
 trait PersistentFactoryAccess {
     fn with_factory(&self, callback: &mut dyn FnMut(&mut dyn Factory));
+    /// The factory's `ore()`, borrowed as `with_factory` borrows it. Script
+    /// calls probe it on entry and exit, so it skips the callback round trip.
+    fn ore(&self) -> Option<OreContextHandle>;
 }
 
 struct PersistentFactoryCell<F> {
@@ -2985,6 +2988,10 @@ struct PersistentFactoryCell<F> {
 impl<F: Factory + 'static> PersistentFactoryAccess for PersistentFactoryCell<F> {
     fn with_factory(&self, callback: &mut dyn FnMut(&mut dyn Factory)) {
         callback(&mut *self.factory.borrow_mut());
+    }
+
+    fn ore(&self) -> Option<OreContextHandle> {
+        self.factory.borrow_mut().ore()
     }
 }
 
@@ -3036,6 +3043,11 @@ pub struct PersistentFactoryContext {
 impl PersistentFactoryContext {
     pub fn identity(&self) -> *const () {
         self.identity
+    }
+
+    /// The factory's ORE context: `with_factory(|factory| factory.ore())`.
+    pub fn ore_context(&self) -> Option<OreContextHandle> {
+        self.access.ore()
     }
 
     pub fn with_factory<R>(&self, callback: impl FnOnce(&mut dyn Factory) -> R) -> R {
@@ -3315,7 +3327,7 @@ impl Factory for PersistentFactoryContext {
         self.with_factory(|factory| factory.is_render_context())
     }
     fn ore(&mut self) -> Option<OreContextHandle> {
-        self.with_factory(|factory| factory.ore())
+        self.ore_context()
     }
     fn render_context(&mut self) -> Option<PersistentFactoryContext> {
         if self.is_render_context() {

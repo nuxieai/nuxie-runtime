@@ -1441,10 +1441,20 @@ fn userdata_metatable<T: UserData + MaybeSend + MaybeSync + 'static>(lua: &Lua) 
     if let Some(reference) = cached_metatable(state, type_id) {
         return Ok(reference);
     }
+    register_userdata_metatable::<T>(lua)
+}
 
-    // Register the Rust surface once per VM/type, matching Luau's native
-    // `lua_register_rive<T>` model. Constructing another T should allocate
-    // only its userdata payload, not rebuild tables and callback closures.
+/// Build and retain `T`'s metatable for `lua`'s VM: once per VM and type,
+/// matching Luau's native `lua_register_rive<T>` model. Constructing another
+/// T allocates only its userdata payload, not tables and callback closures.
+/// Out of line, so creating a userdata does not carry this frame.
+#[cold]
+#[inline(never)]
+fn register_userdata_metatable<T: UserData + MaybeSend + MaybeSync + 'static>(
+    lua: &Lua,
+) -> Result<c_int> {
+    let state = lua.state();
+    let type_id = TypeId::of::<T>();
     let mut collector = Collector::<T>::new();
     T::add_fields(&mut collector);
     T::add_methods(&mut collector);

@@ -49,11 +49,13 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::mem;
 
-use crate::callback::{create_callback_function, BoxedCallback};
+use crate::callback::{collect_args, create_callback_function, BoxedCallback};
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::multi::MultiValue;
 use crate::state::Lua;
+use crate::sys::c_int;
+use crate::traits::ReturnValues;
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::userdata::{create_scoped_userdata, AnyUserData, UserData};
 
@@ -137,19 +139,19 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
         // The destructor list is drained before 'scope ends.
         let cleanup: Box<dyn FnOnce()> = unsafe { mem::transmute(cleanup) };
         self.destructors.list.borrow_mut().push(cleanup);
-        let boxed: Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue> + 'scope> =
-            Box::new(move |lua, args| {
+        let boxed: Box<dyn Fn(&Lua, c_int) -> Result<ReturnValues> + 'scope> =
+            Box::new(move |lua, nargs| {
+                let args = collect_args(lua, nargs)?;
                 let callback = slot.borrow();
                 match callback.as_ref() {
-                    Some(callback) => callback(lua, args),
+                    Some(callback) => Ok(ReturnValues::Many(callback(lua, args)?)),
                     None => Err(Error::CallbackDestructed),
                 }
             });
         let boxed: BoxedCallback = unsafe {
-            mem::transmute::<
-                Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue> + 'scope>,
-                BoxedCallback,
-            >(boxed)
+            mem::transmute::<Box<dyn Fn(&Lua, c_int) -> Result<ReturnValues> + 'scope>, BoxedCallback>(
+                boxed,
+            )
         };
 
         create_callback_function(&self.lua, boxed)

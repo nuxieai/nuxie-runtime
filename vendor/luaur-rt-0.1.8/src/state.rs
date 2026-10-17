@@ -445,10 +445,10 @@ impl Lua {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let boxed: BoxedCallback = Box::new(move |lua, args| {
-            let a = A::from_lua_multi(args, lua)?;
+        let boxed: BoxedCallback = Box::new(move |lua, nargs| {
+            let a = A::from_stack_args(lua, 1, nargs)?;
             let r = func(lua, a)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         create_callback_function(self, boxed)
     }

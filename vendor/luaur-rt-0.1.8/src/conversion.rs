@@ -6,8 +6,9 @@ use crate::function::Function;
 use crate::multi::{MultiValue, Variadic};
 use crate::state::Lua;
 use crate::string::LuaString;
+use crate::sys::c_int;
 use crate::table::Table;
-use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::traits::{stack_arg, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues};
 use crate::value::{Integer, Number, Value};
 
 // ---------------------------------------------------------------------------
@@ -40,10 +41,22 @@ impl IntoLuaMulti for () {
     fn into_lua_multi(self, _lua: &Lua) -> Result<MultiValue> {
         Ok(MultiValue::new())
     }
+
+    fn into_return_values(self, _lua: &Lua) -> Result<ReturnValues> {
+        Ok(ReturnValues::None)
+    }
+
+    fn push_into_multi(self, _lua: &Lua, _out: &mut MultiValue) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl FromLuaMulti for () {
     fn from_lua_multi(_values: MultiValue, _lua: &Lua) -> Result<Self> {
+        Ok(())
+    }
+
+    fn from_stack_args(_lua: &Lua, _start: c_int, _count: c_int) -> Result<Self> {
         Ok(())
     }
 }
@@ -943,14 +956,23 @@ macro_rules! impl_tuple_into {
         #[allow(non_snake_case)]
         impl<$first: IntoLuaMulti, $($rest: IntoLuaMulti,)*> IntoLuaMulti for ($first, $($rest,)*) {
             fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
-                let ($first, $($rest,)*) = self;
-                let mut m = MultiValue::new();
-                for v in $first.into_lua_multi(lua)? { m.push_back(v); }
-                $( for v in $rest.into_lua_multi(lua)? { m.push_back(v); } )*
+                // One list sized for one value per element (a trailing
+                // multi-value element may still grow it).
+                let mut m = MultiValue::with_capacity(impl_tuple_into!(@count $first $($rest)*));
+                self.push_into_multi(lua, &mut m)?;
                 Ok(m)
+            }
+
+            fn push_into_multi(self, lua: &Lua, out: &mut MultiValue) -> Result<()> {
+                let ($first, $($rest,)*) = self;
+                $first.push_into_multi(lua, out)?;
+                $( $rest.push_into_multi(lua, out)?; )*
+                Ok(())
             }
         }
     };
+    (@count) => { 0usize };
+    (@count $head:ident $($tail:ident)*) => { 1usize + impl_tuple_into!(@count $($tail)*) };
 }
 
 impl_tuple_into!(A B C D E F G H I J K L);
@@ -971,6 +993,10 @@ macro_rules! impl_tuple_from {
             fn from_lua_multi(values: MultiValue, lua: &Lua) -> Result<Self> {
                 Ok(($last::from_lua_multi(values, lua)?,))
             }
+
+            fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
+                Ok(($last::from_stack_args(lua, start, count)?,))
+            }
         }
     };
     ($last:ident; $head0:ident $($head:ident)*) => {
@@ -984,6 +1010,17 @@ macro_rules! impl_tuple_from {
                 let $head0 = $head0::from_lua(values.pop_front().unwrap_or(Value::Nil), lua)?;
                 $( let $head = $head::from_lua(values.pop_front().unwrap_or(Value::Nil), lua)?; )*
                 let $last = $last::from_lua_multi(values, lua)?;
+                Ok(($head0, $($head,)* $last,))
+            }
+
+            fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
+                // The same per-element conversions as `from_lua_multi`, in
+                // order; the last element takes whatever arguments remain.
+                let mut i: c_int = 0;
+                let $head0 = $head0::from_lua(stack_arg(lua, start, count, i)?, lua)?;
+                i += 1;
+                $( let $head = $head::from_lua(stack_arg(lua, start, count, i)?, lua)?; i += 1; )*
+                let $last = $last::from_stack_args(lua, start + i.min(count), (count - i).max(0))?;
                 Ok(($head0, $($head,)* $last,))
             }
         }

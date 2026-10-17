@@ -26,13 +26,13 @@ use std::any::TypeId;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
-use crate::callback::{create_callback_function, BoxedCallback};
+use crate::callback::{create_callback_function, multi_value_callback, BoxedCallback};
 use crate::error::{Error, Result};
 use crate::state::{Lua, LuaRef};
 use crate::sync::{MaybeSend, MaybeSync, NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
 use crate::table::Table;
-use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::traits::{stack_arg, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::value::Value;
 
 type UserDataMetatableCache = crate::app_data::WordMap<TypeId, c_int>;
@@ -272,17 +272,10 @@ impl AnyUserData {
         let state = self.reference.state();
         unsafe {
             self.reference.push();
-            let ptr = lua_touserdata(state, -1);
+            // The registry reference keeps the userdata alive after the pop.
+            let cell = cell_at::<T>(state, -1);
             lua_pop(state, 1).expect("shrinking the stack cannot fail");
-            if ptr.is_null() {
-                return Err(Error::UserDataTypeMismatch);
-            }
-            // The wrapper stores the TypeId first; check it before downcasting.
-            let header = &*(ptr as *const UserDataHeader);
-            if header.type_id != TypeId::of::<T>() {
-                return Err(Error::UserDataTypeMismatch);
-            }
-            Ok(&*(ptr as *const UserDataCell<T>))
+            cell
         }
     }
 
@@ -493,27 +486,39 @@ struct UserDataCell<T> {
     cell: RefCell<Option<T>>,
 }
 
-/// Recover `&UserDataCell<T>` from a `self` userdata [`Value`] (Lua argument 1).
-fn recover_cell<'a, T: 'static>(lua: &Lua, value: &Value) -> Result<&'a UserDataCell<T>> {
-    match value {
-        Value::UserData(ud) => {
-            let state = lua.state();
-            unsafe {
-                ud.reference.push();
-                let ptr = lua_touserdata(state, -1);
-                lua_pop(state, 1).expect("shrinking the stack cannot fail");
-                if ptr.is_null() {
-                    return Err(Error::UserDataTypeMismatch);
-                }
-                let header = &*(ptr as *const UserDataHeader);
-                if header.type_id != TypeId::of::<T>() {
-                    return Err(Error::UserDataTypeMismatch);
-                }
-                Ok(&*(ptr as *const UserDataCell<T>))
-            }
+/// Recover `&UserDataCell<T>` from the userdata at stack index `idx`. The
+/// wrapper stores the `TypeId` first; it is checked before downcasting.
+///
+/// # Safety
+/// `idx` must be a valid stack index of `state`, holding a value that stays
+/// rooted (by its stack slot or a registry reference) for `'a`.
+unsafe fn cell_at<'a, T: 'static>(
+    state: *mut lua_State,
+    idx: c_int,
+) -> Result<&'a UserDataCell<T>> {
+    unsafe {
+        let ptr = lua_touserdata(state, idx);
+        if ptr.is_null() {
+            return Err(Error::UserDataTypeMismatch);
         }
-        _ => Err(Error::UserDataTypeMismatch),
+        let header = &*(ptr as *const UserDataHeader);
+        if header.type_id != TypeId::of::<T>() {
+            return Err(Error::UserDataTypeMismatch);
+        }
+        Ok(&*(ptr as *const UserDataCell<T>))
     }
+}
+
+/// Recover `&UserDataCell<T>` from a callback's `self`, its stack argument 1,
+/// as [`AnyUserData::cell`] would from that argument collected as a handle
+/// (any other value is a type mismatch). The argument slot roots the userdata
+/// for the whole callback: callbacks only push and pop above their arguments.
+fn self_cell<'a, T: 'static>(lua: &Lua, nargs: c_int) -> Result<&'a UserDataCell<T>> {
+    let state = lua.state();
+    if nargs < 1 || unsafe { lua_type(state, 1) } != ttype::USERDATA {
+        return Err(Error::UserDataTypeMismatch);
+    }
+    unsafe { cell_at::<T>(state, 1) }
 }
 
 // ---------------------------------------------------------------------------
@@ -562,17 +567,16 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
-            let a = A::from_lua_multi(args, lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
             let borrowed = cell
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
             let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.methods.push(Registered {
             name: name.into(),
@@ -587,17 +591,16 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
-            let a = A::from_lua_multi(args, lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
             let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.methods.push(Registered {
             name: name.into(),
@@ -612,10 +615,10 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, args| {
-            let a = A::from_lua_multi(args, lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let a = A::from_stack_args(lua, 1, nargs)?;
             let r = function(lua, a)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.methods.push(Registered {
             name: name.into(),
@@ -630,17 +633,16 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
-            let a = A::from_lua_multi(args, lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
             let borrowed = cell
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
             let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.methods.push(Registered {
             name: name.into(),
@@ -655,17 +657,16 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
-            let a = A::from_lua_multi(args, lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
             let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.methods.push(Registered {
             name: name.into(),
@@ -680,9 +681,9 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
     where
         V: IntoLua + Clone + MaybeSend + 'static,
     {
-        let callback: BoxedCallback = Box::new(move |lua, _args| {
+        let callback: BoxedCallback = Box::new(move |lua, _nargs| {
             let v = value.clone().into_lua(lua)?;
-            v.into_lua_multi(lua)
+            v.into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: name.into(),
@@ -697,16 +698,15 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
         R: IntoLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
             let borrowed = cell
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
             let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
             let r = method(lua, data)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: name.into(),
@@ -721,16 +721,15 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
         R: IntoLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
             let borrowed = cell
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
             let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
             let r = method(lua, data)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: String::new(),
@@ -745,17 +744,16 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         M: Fn(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
-            let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let val = A::from_lua(stack_arg(lua, 1, nargs, 1)?, lua)?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
             let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
             method(lua, data, val)?;
-            ().into_lua_multi(lua)
+            ().into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: name.into(),
@@ -770,17 +768,16 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         M: Fn(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let cell = recover_cell::<T>(lua, &this)?;
-            let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let cell = self_cell::<T>(lua, nargs)?;
+            let val = A::from_lua(stack_arg(lua, 1, nargs, 1)?, lua)?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
             let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
             method(lua, data, val)?;
-            ().into_lua_multi(lua)
+            ().into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: String::new(),
@@ -795,11 +792,10 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         F: Fn(&Lua, AnyUserData) -> Result<R> + MaybeSend + 'static,
         R: IntoLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let ud = AnyUserData::from_lua(this, lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let ud = AnyUserData::from_lua(stack_arg(lua, 1, nargs, 0)?, lua)?;
             let r = function(lua, ud)?;
-            r.into_lua_multi(lua)
+            r.into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: name.into(),
@@ -814,12 +810,11 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         F: Fn(&Lua, AnyUserData, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
-            let this = args.pop_front().unwrap_or(Value::Nil);
-            let ud = AnyUserData::from_lua(this, lua)?;
-            let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
+        let callback: BoxedCallback = Box::new(move |lua, nargs| {
+            let ud = AnyUserData::from_lua(stack_arg(lua, 1, nargs, 0)?, lua)?;
+            let val = A::from_lua(stack_arg(lua, 1, nargs, 1)?, lua)?;
             function(lua, ud, val)?;
-            ().into_lua_multi(lua)
+            ().into_return_values(lua)
         });
         self.fields.push(FieldEntry {
             name: name.into(),
@@ -954,7 +949,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
         R: IntoLuaMulti,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let a = A::from_lua_multi(args, lua)?;
@@ -980,7 +975,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
         R: IntoLuaMulti,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let a = A::from_lua_multi(args, lua)?;
@@ -1005,7 +1000,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, args| {
             let a = A::from_lua_multi(args, lua)?;
             let r = function(lua, a)?;
             r.into_lua_multi(lua)
@@ -1024,7 +1019,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
         R: IntoLuaMulti,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let a = A::from_lua_multi(args, lua)?;
@@ -1050,7 +1045,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
         R: IntoLuaMulti,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let a = A::from_lua_multi(args, lua)?;
@@ -1075,7 +1070,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
     where
         V: IntoLua + Clone + MaybeSend + 'static,
     {
-        let callback: BoxedCallback = Box::new(move |lua, _args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, _args| {
             let v = value.clone().into_lua(lua)?;
             v.into_lua_multi(lua)
         });
@@ -1093,7 +1088,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         R: IntoLua,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let borrowed = cell
@@ -1118,7 +1113,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         R: IntoLua,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let borrowed = cell
@@ -1143,7 +1138,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         A: FromLua,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
@@ -1169,7 +1164,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         A: FromLua,
     {
         let marker = self.marker;
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
@@ -1194,7 +1189,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         F: Fn(&Lua, AnyUserData) -> Result<R> + MaybeSend + 'static,
         R: IntoLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let ud = AnyUserData::from_lua(this, lua)?;
             let r = function(lua, ud)?;
@@ -1213,7 +1208,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         F: Fn(&Lua, AnyUserData, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = multi_value_callback(move |lua, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let ud = AnyUserData::from_lua(this, lua)?;
             let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;

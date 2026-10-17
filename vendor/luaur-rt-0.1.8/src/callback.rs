@@ -31,6 +31,7 @@ use crate::function::Function;
 use crate::multi::MultiValue;
 use crate::state::Lua;
 use crate::sys::*;
+use crate::traits::ReturnValues;
 use luaur_vm::records::lua_exception::LuaResult;
 
 // ---------------------------------------------------------------------------
@@ -150,16 +151,48 @@ pub(crate) unsafe fn recover_wrapped_error(state: *mut lua_State, idx: c_int) ->
 
 /// The type-erased boxed callback stored in the trampoline's upvalue userdata.
 ///
+/// It receives the argument count (the arguments are stack slots
+/// `1..=nargs`) and converts what it needs straight from the stack
+/// ([`FromLuaMulti::from_stack_args`](crate::traits::FromLuaMulti)); the
+/// trampoline pushes the [`ReturnValues`] it hands back.
+///
 /// Under the `send` feature the boxed closure is additionally `Send` (so a
 /// callback may capture `Send` data moved in from another thread and the whole
 /// VM can be moved across threads). Without the feature the `+ Send` bound is
 /// absent and this is byte-identical to before. See [`crate::sync::MaybeSend`].
 #[cfg(feature = "send")]
-pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue> + Send>;
+pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, c_int) -> Result<ReturnValues> + Send>;
 
 /// See the `send`-gated variant above.
 #[cfg(not(feature = "send"))]
-pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue>>;
+pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, c_int) -> Result<ReturnValues>>;
+
+/// Adapt a callback over the whole argument list as a [`MultiValue`] (the
+/// historical callback shape) to a [`BoxedCallback`].
+#[cfg(feature = "send")]
+pub(crate) fn multi_value_callback(
+    callback: impl Fn(&Lua, MultiValue) -> Result<MultiValue> + Send + 'static,
+) -> BoxedCallback {
+    Box::new(move |lua, nargs| {
+        Ok(ReturnValues::Many(callback(
+            lua,
+            collect_args(lua, nargs)?,
+        )?))
+    })
+}
+
+/// See the `send`-gated variant above.
+#[cfg(not(feature = "send"))]
+pub(crate) fn multi_value_callback(
+    callback: impl Fn(&Lua, MultiValue) -> Result<MultiValue> + 'static,
+) -> BoxedCallback {
+    Box::new(move |lua, nargs| {
+        Ok(ReturnValues::Many(callback(
+            lua,
+            collect_args(lua, nargs)?,
+        )?))
+    })
+}
 
 /// The destructor installed on the callback userdata: reconstruct the `Box`
 /// inside the userdata storage and drop it (calling `Drop` on captures).
@@ -188,18 +221,14 @@ unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
         // 2. Build a borrowed Lua handle for the calling thread (must NOT close it).
         let lua = Lua::from_borrowed(state);
 
-        // 3. Pull the arguments off the stack into a MultiValue. They occupy
-        //    stack indices 1..=nargs.
+        // 3. The arguments occupy stack indices 1..=nargs; the callback
+        //    converts them from there.
         let nargs = lua_gettop(state);
-        let args = match collect_args(&lua, nargs) {
-            Ok(a) => a,
-            Err(e) => return raise_lua_error(state, &e.to_string()),
-        };
 
         // 4. Run the user closure inside catch_unwind so a user `panic!` never
         //    becomes a nested panic when we then call lua_error.
-        let outcome: std::thread::Result<Result<MultiValue>> =
-            catch_unwind(AssertUnwindSafe(|| callback(&lua, args)));
+        let outcome: std::thread::Result<Result<ReturnValues>> =
+            catch_unwind(AssertUnwindSafe(|| callback(&lua, nargs)));
 
         match outcome {
             Ok(Ok(results)) => {
@@ -212,10 +241,13 @@ unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
                 if lua_checkstack(state, n.max(1)) == 0 {
                     return raise_lua_error(state, "too many results to return to Lua");
                 }
-                for v in results.iter() {
-                    if let Err(e) = lua.push_value(v) {
-                        return raise_lua_error(state, &e.to_string());
-                    }
+                let pushed = match &results {
+                    ReturnValues::None => Ok(()),
+                    ReturnValues::One(v) => lua.push_value(v),
+                    ReturnValues::Many(values) => values.iter().try_for_each(|v| lua.push_value(v)),
+                };
+                if let Err(e) = pushed {
+                    return raise_lua_error(state, &e.to_string());
                 }
                 Ok(n)
             }
@@ -252,7 +284,7 @@ fn trampoline_ptr() -> lua_CFunction {
 }
 
 /// Collect stack arguments `1..=nargs` into a [`MultiValue`].
-unsafe fn collect_args(lua: &Lua, nargs: c_int) -> Result<MultiValue> {
+pub(crate) fn collect_args(lua: &Lua, nargs: c_int) -> Result<MultiValue> {
     let mut m = MultiValue::with_capacity(nargs.max(0) as usize);
     for i in 1..=nargs {
         m.push_back(lua.value_from_stack(i)?);

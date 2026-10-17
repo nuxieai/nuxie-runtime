@@ -609,9 +609,8 @@ enum TextDrawCommand {
     },
 }
 
-/// Nuxie addition: adds a decorated span's lines to its style's glyph path,
-/// registering the style for drawing when it has no glyph path yet.
-fn add_decoration(
+/// Nuxie addition: adds a decorated span's lines to its style's glyph path.
+fn add_decoration_span(
     render_styles: &mut Vec<CoreHandle>,
     draw_commands: &mut Vec<TextDrawCommand>,
     render_opacity: f32,
@@ -621,19 +620,38 @@ fn add_decoration(
     for rect in span.rects() {
         path.add_rect(rect, PathDirection::Clockwise);
     }
+    add_decoration(
+        render_styles,
+        draw_commands,
+        render_opacity,
+        &span.style,
+        &path,
+        1.0,
+    );
+}
+
+/// Nuxie addition: adds decoration lines to a style's glyph path, registering
+/// the style for drawing when it has no glyph path yet.
+fn add_decoration(
+    render_styles: &mut Vec<CoreHandle>,
+    draw_commands: &mut Vec<TextDrawCommand>,
+    render_opacity: f32,
+    style: &CoreHandle,
+    path: &RawPath,
+    opacity: f32,
+) {
     if path.empty() {
         return;
     }
-    let first_path = span
-        .style
-        .with_downcast_mut::<TextStylePaint, _>(|style| style.add_path(&path, 1.0))
+    let first_path = style
+        .with_downcast_mut::<TextStylePaint, _>(|paint| paint.add_path(path, opacity))
         .unwrap_or(false);
     if first_path {
-        render_styles.push(span.style.clone());
-        span.style.with_downcast_mut::<TextStylePaint, _>(|style| {
-            style.paints.propagate_opacity(render_opacity);
+        render_styles.push(style.clone());
+        style.with_downcast_mut::<TextStylePaint, _>(|paint| {
+            paint.paints.propagate_opacity(render_opacity);
         });
-        draw_commands.push(TextDrawCommand::Style(span.style.clone()));
+        draw_commands.push(TextDrawCommand::Style(style.clone()));
     }
 }
 
@@ -1866,6 +1884,7 @@ impl Text {
                     components.set_scale_y(run.size);
                     components.set_x(-center_x);
                     let mut path_transform = Mat2D::compose(&components);
+                    let glyph_layout_transform = path_transform;
                     let mut opacity = 1.0f32;
                     if has_modifiers {
                         let text_index = run.text_indices[index];
@@ -1888,6 +1907,10 @@ impl Text {
                             });
                         }
                     }
+                    // Nuxie addition: what the modifiers did to this glyph,
+                    // for its decoration to follow.
+                    let modifier_transform = has_modifiers
+                        .then(|| path_transform * glyph_layout_transform.invert_or_identity());
                     path_transform = Mat2D::from_translate(
                         current_position.x + center_x + offset.x,
                         current_position.y + offset.y,
@@ -1898,28 +1921,7 @@ impl Text {
                         .with(TextValueRun::style)
                         .flatten()
                         .expect("TextValueRun style");
-                    let decoration_line = crate::text_decoration::style_line(&style);
-                    if let Some(span) = decorations.glyph(
-                        &style,
-                        decoration_line,
-                        current_x,
-                        advance,
-                        self.styled_text
-                            .unichars()
-                            .get(run.text_indices[index] as usize)
-                            .and_then(|&unichar| char::from_u32(unichar))
-                            .is_none_or(|character| !character.is_whitespace()),
-                        render_y,
-                        run.size,
-                        run.font.as_deref().expect("shaped text retains its font"),
-                    ) {
-                        add_decoration(
-                            &mut self.render_styles,
-                            &mut self.draw_commands,
-                            self.base.render_opacity(),
-                            &span,
-                        );
-                    }
+                    let mut inked = false;
                     match run.glyph_render_kind(index) {
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Color => {
                         let foreground_color = style
@@ -1937,6 +1939,7 @@ impl Text {
                             foreground_color,
                             opacity,
                         });
+                        inked = true;
                         }
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Outline => {
                         let path = run
@@ -1945,6 +1948,7 @@ impl Text {
                             .expect("shaped text retains its font")
                             .get_path(glyph_id)
                             .transform(path_transform);
+                        inked = !path.empty();
                         let first_path = style
                             .with_downcast_mut::<TextStylePaint, _>(|style| {
                                 style.add_path(&path, opacity)
@@ -1960,6 +1964,62 @@ impl Text {
                         }
                         }
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {}
+                    }
+                    // Nuxie addition: the run style's underline/line-through.
+                    let decoration_line = crate::text_decoration::style_line(&style);
+                    let font = run.font.as_deref().expect("shaped text retains its font");
+                    if let Some(modifier_transform) = modifier_transform {
+                        // Modified glyphs move, turn and fade one by one: each
+                        // carries its own piece of line, spaces included.
+                        if decoration_line != 0 {
+                            let to_text = Mat2D::from_translate(current_x + center_x, render_y)
+                                * modifier_transform;
+                            let mut path = RawPath::default();
+                            for rect in crate::text_decoration::line_rects(
+                                decoration_line,
+                                font.decoration_metrics(),
+                                run.size,
+                                -center_x,
+                                advance - center_x,
+                                0.0,
+                            ) {
+                                let corners = [
+                                    Vec2D::new(rect.left(), rect.top()),
+                                    Vec2D::new(rect.right(), rect.top()),
+                                    Vec2D::new(rect.right(), rect.bottom()),
+                                    Vec2D::new(rect.left(), rect.bottom()),
+                                ];
+                                path.move_to_point(to_text * corners[0]);
+                                for corner in &corners[1..] {
+                                    path.line_to_point(to_text * *corner);
+                                }
+                                path.close();
+                            }
+                            add_decoration(
+                                &mut self.render_styles,
+                                &mut self.draw_commands,
+                                self.base.render_opacity(),
+                                &style,
+                                &path,
+                                opacity,
+                            );
+                        }
+                    } else if let Some(span) = decorations.glyph(
+                        &style,
+                        decoration_line,
+                        current_x,
+                        advance,
+                        inked,
+                        render_y,
+                        run.size,
+                        font,
+                    ) {
+                        add_decoration_span(
+                            &mut self.render_styles,
+                            &mut self.draw_commands,
+                            self.base.render_opacity(),
+                            &span,
+                        );
                     }
                     let background = style
                         .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
@@ -1985,7 +2045,7 @@ impl Text {
                     current_x += advance;
                 }
                 if let Some(span) = decorations.finish() {
-                    add_decoration(
+                    add_decoration_span(
                         &mut self.render_styles,
                         &mut self.draw_commands,
                         self.base.render_opacity(),

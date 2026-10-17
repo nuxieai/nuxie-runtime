@@ -180,8 +180,8 @@ pub use app_data::{AppDataRef, AppDataRefMut};
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use async_support::AsyncThread;
 pub use userdata::{
-    AnyUserData, StackUserData, UserData, UserDataFields, UserDataMethods, UserDataRef,
-    UserDataRefMut,
+    AnyUserData, ArgUserData, CallArgs, StackUserData, UserData, UserDataFields, UserDataMethods,
+    UserDataRef, UserDataRefMut,
 };
 pub use value::{Integer, Number, Value};
 pub use vector::Vector;

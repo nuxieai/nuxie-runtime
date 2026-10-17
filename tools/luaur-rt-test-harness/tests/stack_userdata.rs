@@ -1,4 +1,6 @@
-use luaur_rt::{AnyUserData, Function, Lua, Result, Table, UserData, UserDataMethods, Value};
+use luaur_rt::{
+    AnyUserData, Function, IntoLuaMulti, Lua, Result, Table, UserData, UserDataMethods, Value,
+};
 
 // A userdata a callback returns is created on the stack, and one a host
 // holds for a call (Lua::with_stack_userdata) lives in a stack slot: neither
@@ -104,5 +106,68 @@ fn stack_arguments_cross_into_other_calls_as_values() -> Result<()> {
         panic!("expected userdata");
     };
     assert_eq!((ud.borrow::<Counter>()?.0, echoed.1), (4, 3));
+    Ok(())
+}
+
+// Methods registered with add_method_with_args borrow userdata arguments in
+// place and must fail exactly as AnyUserData arguments do.
+struct Sink(i64);
+
+impl UserData for Sink {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("take", |_, this, (a, b): (AnyUserData, AnyUserData)| {
+            let mut a = a.borrow_mut::<Counter>()?;
+            let b = b.borrow::<Counter>()?;
+            a.0 += b.0 + this.0;
+            Ok(a.0)
+        });
+        methods.add_method_with_args("takeInPlace", |_, this, args| {
+            let (a, b) = (args.userdata(0)?, args.userdata(1)?);
+            let mut a = a.borrow_mut::<Counter>()?;
+            let b = b.borrow::<Counter>()?;
+            a.0 += b.0 + this.0;
+            Ok(a.0)
+        });
+        methods.add_method_with_args("count", |_, _, args| Ok(args.len()));
+    }
+}
+
+#[test]
+fn in_place_userdata_arguments_match_handle_arguments() -> Result<()> {
+    let lua = Lua::new();
+    lua.globals().set("sink", Sink(100))?;
+    lua.globals().set(
+        "make",
+        lua.create_function(|_, start: i64| Ok(Counter(start)))?,
+    )?;
+    // One call site for both methods, so their messages must be identical.
+    let call: Function = lua
+        .load("return function(method, ...) return sink[method](sink, ...) end")
+        .eval()?;
+    let outcome = |method: &str, case: usize| -> Result<std::result::Result<i64, String>> {
+        // Fresh arguments for each call: the success case mutates them.
+        let a: AnyUserData = lua.load("return make(1)").eval()?;
+        let b: AnyUserData = lua.load("return make(2)").eval()?;
+        let args = match case {
+            0 => (a.clone(), b).into_lua_multi(&lua)?,
+            1 => (5, b).into_lua_multi(&lua)?,
+            2 => (a.clone(),).into_lua_multi(&lua)?,
+            3 => (a.clone(), lua.create_table()).into_lua_multi(&lua)?,
+            4 => (a.clone(), lua.globals().get::<Value>("sink")?).into_lua_multi(&lua)?,
+            5 => (a.clone(), a.clone()).into_lua_multi(&lua)?,
+            _ => ().into_lua_multi(&lua)?,
+        };
+        Ok(call
+            .call::<i64>((method, args))
+            .map_err(|error| error.to_string()))
+    };
+    for case in 0..7 {
+        let handle = outcome("take", case)?;
+        let in_place = outcome("takeInPlace", case)?;
+        assert_eq!(handle, in_place, "case {case}");
+        assert_eq!(handle.is_ok(), case == 0, "case {case}: {handle:?}");
+    }
+    assert_eq!(lua.load("return sink:count(1, nil, 3)").eval::<i64>()?, 3);
+    assert_eq!(lua.load("return sink:count()").eval::<i64>()?, 0);
     Ok(())
 }

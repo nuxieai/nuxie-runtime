@@ -99,6 +99,9 @@ struct B {
     children: Vec<B>,
     /// Drawing content: rectangles, each a Shape with one Rectangle path.
     content: Vec<Rect>,
+    /// A ScrollConstraint on this box (its content box), with its direction
+    /// (0 horizontal, 1 vertical); its parent is the viewport.
+    scroll: Option<u64>,
 }
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
@@ -150,6 +153,7 @@ enum Entry<'a> {
     Group(u64),
     Shape(&'a Rect, u64),
     Path(&'a Rect, u64),
+    Scroll(u64, u64),
 }
 
 fn write(riv: &mut Riv, props: &[P]) {
@@ -169,6 +173,9 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         entries.push(Entry::Box(node, parent));
         if let Some(props) = &node.css {
             entries.push(Entry::Record(props, index));
+        }
+        if let Some(direction) = node.scroll {
+            entries.push(Entry::Scroll(index, direction));
         }
         for rect in &node.content {
             let mut parent = index;
@@ -218,6 +225,13 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent);
                 write(&mut riv, props);
                 riv.end();
+            }
+            Entry::Scroll(parent, direction) => {
+                use crate::source::generated::constraints::draggable_constraint_base::DraggableConstraintBase;
+                riv.object(crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, *direction)
+                    .end();
             }
             Entry::Group(parent) => {
                 riv.object(NodeBase::TYPE_KEY)
@@ -327,6 +341,43 @@ impl Scene {
                     .flatten()
             })
             .unwrap_or_else(|| panic!("{path}"))
+    }
+    /// The scroll constraint's offset range: (max x, max y), both <= 0.
+    fn max_offsets(&self) -> (f32, f32) {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        let scroll = self
+            .artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+            .into_iter()
+            .next()
+            .expect("a scroll constraint");
+        scroll
+            .with_downcast::<ScrollConstraint, _>(|scroll| {
+                (scroll.max_offset_x(), scroll.max_offset_y())
+            })
+            .unwrap()
+    }
+    /// A box's background and clip paths, in its own and world space.
+    fn paths(
+        &self,
+        name: &str,
+    ) -> (
+        Vec<crate::source::math::vec2d::Vec2D>,
+        Option<crate::source::math::aabb::Aabb>,
+        bool,
+    ) {
+        self.named(name)
+            .with_downcast::<LayoutComponent, _>(|layout| {
+                let paths = layout.render_paths_handle().expect("render paths");
+                let paths = paths.borrow();
+                let clips = layout.clips();
+                (
+                    paths.background.points().to_vec(),
+                    clips.then(|| paths.clip.raw_path().bounds()),
+                    clips,
+                )
+            })
+            .unwrap()
     }
     fn record(&self, name: &str) -> CoreHandle {
         let owner = self.named(name);
@@ -797,4 +848,98 @@ fn translated_paint_shape_adds_no_minimum() {
     let f = row(true);
     assert_eq!(f.bounds("Painted")[2], 80.0);
     assert_eq!(f.bounds("Sibling")[2], 20.0);
+}
+
+/// CSS mode clips by `overflow`, at the padding box, and not by Rive's clip
+/// (on by default, but CSS mode ignores it). The background has CSS radii.
+#[test]
+fn css_overflow_clips_at_the_padding_box() {
+    const OVERFLOW_X: u16 = 60025;
+    const OVERFLOW_Y: u16 = 60026;
+    const RADIUS_TL_PERCENT: u16 = 60101;
+    let border = [
+        F(BORDER_TOP, 4.0),
+        F(BORDER_RIGHT, 4.0),
+        F(BORDER_BOTTOM, 4.0),
+        F(BORDER_LEFT, 4.0),
+    ];
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [[U(DISPLAY, 1)].as_slice(), &width(400.0), &height(300.0)].concat(),
+            vec![
+                css(
+                    "Clipped",
+                    [
+                        [U(BOX_SIZING, 1), U(OVERFLOW_Y, 2)].as_slice(),
+                        &width(100.0),
+                        &height(60.0),
+                        &border,
+                    ]
+                    .concat(),
+                    vec![],
+                ),
+                css(
+                    "Pill",
+                    [
+                        [
+                            U(OVERFLOW_X, 1),
+                            U(OVERFLOW_Y, 1),
+                            F(RADIUS_TL_PERCENT, 50.0),
+                        ]
+                        .as_slice(),
+                        &width(200.0),
+                        &height(100.0),
+                    ]
+                    .concat(),
+                    vec![],
+                ),
+                css("Visible", [width(10.0), height(10.0)].concat(), vec![]),
+            ],
+        ),
+    );
+    // overflow-y hidden makes overflow-x auto: both axes clip, inside the
+    // 4-point border.
+    let (_, clip, clips) = f.paths("Clipped");
+    assert!(clips);
+    let clip = clip.unwrap();
+    assert_eq!(
+        [clip.left(), clip.top(), clip.right(), clip.bottom()],
+        [4.0, 4.0, 96.0, 56.0]
+    );
+    // 50% of 200 by 100 at the top left: a 100 by 50 ellipse, so the path
+    // starts 100 along the top edge.
+    let (background, _, clips) = f.paths("Pill");
+    assert!(clips);
+    assert_eq!(
+        background[0],
+        crate::source::math::vec2d::Vec2D::new(100.0, 0.0)
+    );
+    let visible = f
+        .named("Visible")
+        .with_downcast::<LayoutComponent, _>(LayoutComponent::clips)
+        .unwrap();
+    assert!(!visible, "Rive's default clip is ignored in CSS mode");
+}
+
+/// A CSS viewport's scroll range is its scrollable overflow less its padding
+/// box: a 120-point block list in an 80-point view stops at 40.
+#[test]
+fn css_scroll_range_comes_from_scrollable_overflow() {
+    const OVERFLOW_Y: u16 = 60026;
+    let item = |name| css(name, height(60.0), vec![]);
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [[U(OVERFLOW_Y, 3)].as_slice(), &width(200.0), &height(80.0)].concat(),
+            vec![B {
+                scroll: Some(1),
+                ..css("List", [], vec![item("One"), item("Two")])
+            }],
+        ),
+    );
+    assert_eq!(f.bounds("List"), [0.0, 0.0, 200.0, 120.0]);
+    assert_eq!(f.max_offsets().1, -40.0);
 }

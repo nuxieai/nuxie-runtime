@@ -2776,9 +2776,11 @@ impl LayoutComponent {
             taffy: &mut TaffyTree<Context>,
             owner: &CoreHandle,
             nodes: &mut Vec<(CoreHandle, NodeId)>,
-            parent_is_flex: bool,
+            parent: Option<&Style>,
             is_root: bool,
         ) -> Option<NodeId> {
+            let parent_is_flex =
+                parent.is_some_and(|parent| parent.display == taffy::Display::Flex);
             let (mut style, kind, measured, children, virtual_tracks) = owner.with(|object| {
                 if let Some(layout) = object.as_layout_component() {
                     Some((
@@ -2808,13 +2810,7 @@ impl LayoutComponent {
             let mut ids = Vec::new();
             for child in &children {
                 if let Some(child) = layout_node_owner_for(child) {
-                    ids.extend(build(
-                        taffy,
-                        &child,
-                        nodes,
-                        style.display == taffy::Display::Flex,
-                        false,
-                    ));
+                    ids.extend(build(taffy, &child, nodes, Some(&style), false));
                 }
             }
             for style in virtual_item_styles(&virtual_tracks.0, &virtual_tracks.1) {
@@ -2822,7 +2818,7 @@ impl LayoutComponent {
             }
             let supported = LayoutComponent::own_minimum_contract(owner, kind, measured, is_root)
                 .unwrap_or([true; 2]);
-            LayoutComponent::apply_definite_artboard_minimum(owner, is_root, &mut style);
+            LayoutComponent::apply_definite_artboard_minimum(owner, is_root, parent, &mut style);
             LayoutComponent::apply_minimum_contract(
                 &mut style,
                 supported.map(|known| !known && parent_is_flex),
@@ -2837,7 +2833,7 @@ impl LayoutComponent {
         let mut taffy = TaffyTree::<Context>::new();
         taffy.disable_rounding();
         let mut nodes = Vec::new();
-        let Some(root) = build(&mut taffy, owner, &mut nodes, false, true) else {
+        let Some(root) = build(&mut taffy, owner, &mut nodes, None, true) else {
             return;
         };
         let style = taffy.style(root).expect("fresh root").clone();
@@ -3239,10 +3235,16 @@ impl LayoutComponent {
     /// container never squeezes it below its authored size. A CSS automatic
     /// minimum is clamped by a definite maximum, while an explicit minimum
     /// would override it, so the synthesized minimum takes the smaller of the
-    /// two; a percentage maximum resolves only during the solve, so there
-    /// Taffy keeps its own automatic minimum, which it clamps. A scroll
-    /// container's automatic minimum is zero, so its axes get none.
-    fn apply_definite_artboard_minimum(owner: &CoreHandle, is_root: bool, style: &mut Style) {
+    /// two. A percentage maximum is resolved against `parent`'s content box
+    /// when the parent's size on that axis is a definite length; otherwise
+    /// it is treated as not limiting, so the artboard keeps its size. A
+    /// scroll container's automatic minimum is zero, so its axes get none.
+    fn apply_definite_artboard_minimum(
+        owner: &CoreHandle,
+        is_root: bool,
+        parent: Option<&Style>,
+        style: &mut Style,
+    ) {
         use taffy::style::CompactLength;
         if is_root
             || !owner
@@ -3251,8 +3253,46 @@ impl LayoutComponent {
         {
             return;
         }
+        let parent_content = |horizontal: bool| -> Option<f32> {
+            let parent = parent?;
+            let size = if horizontal {
+                parent.size.width
+            } else {
+                parent.size.height
+            };
+            if size.tag() != CompactLength::LENGTH_TAG {
+                return None;
+            }
+            if parent.box_sizing == taffy::BoxSizing::ContentBox {
+                return Some(size.value());
+            }
+            let edges = if horizontal {
+                [
+                    parent.padding.left.into_raw(),
+                    parent.padding.right.into_raw(),
+                    parent.border.left.into_raw(),
+                    parent.border.right.into_raw(),
+                ]
+            } else {
+                [
+                    parent.padding.top.into_raw(),
+                    parent.padding.bottom.into_raw(),
+                    parent.border.top.into_raw(),
+                    parent.border.bottom.into_raw(),
+                ]
+            };
+            let mut inner = size.value();
+            for edge in edges {
+                if edge.tag() != CompactLength::LENGTH_TAG {
+                    return None;
+                }
+                inner -= edge.value();
+            }
+            Some(inner.max(0.0))
+        };
         let minimum = |size: taffy::prelude::Dimension,
-                       maximum: taffy::prelude::LengthPercentageAuto| {
+                       maximum: taffy::prelude::LengthPercentageAuto,
+                       horizontal: bool| {
             if size.tag() != CompactLength::LENGTH_TAG {
                 return None;
             }
@@ -3261,19 +3301,23 @@ impl LayoutComponent {
                 Some(size.value())
             } else if maximum.tag() == CompactLength::LENGTH_TAG {
                 Some(size.value().min(maximum.value()))
+            } else if maximum.tag() == CompactLength::PERCENT_TAG {
+                Some(parent_content(horizontal).map_or(size.value(), |inner| {
+                    size.value().min(inner * maximum.value())
+                }))
             } else {
                 None
             }
         };
         if style.min_size.width.is_auto()
             && !style.overflow.x.is_scroll_container()
-            && let Some(width) = minimum(style.size.width, style.max_size.width)
+            && let Some(width) = minimum(style.size.width, style.max_size.width, true)
         {
             style.min_size.width = taffy::prelude::LengthPercentageAuto::length(width);
         }
         if style.min_size.height.is_auto()
             && !style.overflow.y.is_scroll_container()
-            && let Some(height) = minimum(style.size.height, style.max_size.height)
+            && let Some(height) = minimum(style.size.height, style.max_size.height, false)
         {
             style.min_size.height = taffy::prelude::LengthPercentageAuto::length(height);
         }
@@ -3362,9 +3406,14 @@ impl LayoutComponent {
                 if id == tree.root {
                     style = root_style(&style, tree.root_available);
                 }
+                let parent_style = tree
+                    .taffy
+                    .parent(id)
+                    .and_then(|parent| tree.taffy.style(parent).ok().cloned());
                 LayoutComponent::apply_definite_artboard_minimum(
                     &owner,
                     id == tree.root,
+                    parent_style.as_ref(),
                     &mut style,
                 );
                 LayoutComponent::apply_minimum_contract(&mut style, zero);

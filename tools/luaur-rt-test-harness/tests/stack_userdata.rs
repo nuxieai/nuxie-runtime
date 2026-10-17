@@ -238,3 +238,34 @@ fn stack_values_refuse_use_from_another_frame() -> Result<()> {
     assert!(called.contains("outside the call frame"), "{called}");
     Ok(())
 }
+
+// A stack-held argument passed from a coroutine's callback to a function of
+// the main state is copied onto the callee's stack; one passed to another VM
+// is refused.
+#[test]
+fn stack_arguments_cross_coroutines_but_not_vms() -> Result<()> {
+    let lua = Lua::new();
+    let identity: Function = lua.load("return function(counter) return counter:get() end").eval()?;
+    let other = Lua::new();
+    let foreign: Function = other.load("return function(...) return select('#', ...) end").eval()?;
+    lua.globals().set(
+        "inCoroutine",
+        lua.create_function(move |lua, ()| {
+            lua.with_stack_userdata(Counter(7), |counter| -> Result<_> {
+                let value = identity.call::<i64>(counter.arg())?;
+                let refused = foreign
+                    .call::<i64>(counter.arg())
+                    .map_err(|error| error.to_string())
+                    .err();
+                Ok((value, refused))
+            })?
+        })?,
+    )?;
+    let (value, refused): (i64, Option<String>) = lua
+        .load("return coroutine.wrap(function() return inCoroutine() end)()")
+        .eval()?;
+    assert_eq!(value, 7);
+    let refused = refused.expect("another VM refuses the value");
+    assert!(refused.contains("passed to another Lua VM"), "{refused}");
+    Ok(())
+}

@@ -49,6 +49,10 @@ impl IntoLuaMulti for () {
     fn push_into_multi(self, _lua: &Lua, _out: &mut MultiValue) -> Result<()> {
         Ok(())
     }
+
+    fn push_call_args(self, _lua: &Lua) -> Result<c_int> {
+        Ok(0)
+    }
 }
 
 impl FromLuaMulti for () {
@@ -968,6 +972,14 @@ macro_rules! impl_tuple_into {
                 $first.push_into_multi(lua, out)?;
                 $( $rest.push_into_multi(lua, out)?; )*
                 Ok(())
+            }
+
+            #[allow(unused_mut)]
+            fn push_call_args(self, lua: &Lua) -> Result<c_int> {
+                let ($first, $($rest,)*) = self;
+                let mut count = $first.push_call_args(lua)?;
+                $( count += $rest.push_call_args(lua)?; )*
+                Ok(count)
             }
         }
     };

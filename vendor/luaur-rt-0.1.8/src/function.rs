@@ -41,54 +41,15 @@ impl Function {
     /// than unwinding.
     pub fn call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
         let lua = self.lua();
-        let state = lua.state();
-        let args: MultiValue = args.into_lua_multi(&lua)?;
-
         unsafe {
-            let _stack = crate::stack_guard::StackGuard::new(state);
-            let base = lua_gettop(state);
-            let nargs = args.len() as c_int;
-            // Guard against pushing more values than the Lua stack can hold:
-            // an unprotected overflow would abort the VM. We need room for the
-            // function + all arguments (+1 slack for the call machinery).
-            if lua_checkstack(state, nargs.saturating_add(2)) == 0 {
-                return Err(crate::error::Error::RuntimeError(
-                    "stack overflow: too many arguments to function call".to_string(),
-                ));
-            }
-            // Push the function, then the arguments.
-            self.reference.push();
-            for v in args.iter() {
-                lua.push_value(v)?;
-            }
-            // LUA_MULTRET == -1: keep every result.
-            let status = lua_pcall(state, nargs, -1, 0)
-                .map_err(|error| crate::error::Error::from_vm(error))?;
-            if status != 0 {
-                return Err(lua.pop_error(status));
-            }
-            // The result-collection loop below reads each reference-typed result
-            // via `value_from_stack`, which DUPLICATES it onto the stack
-            // (`lua_pushvalue`) before popping it into a registry ref. After a
-            // LUA_MULTRET call the results can fill the C frame's stack exactly to
-            // `ci->top` (LUA_MINSTACK), so that duplicating push would overrun the
-            // frame — the `api_incr_top` assert in `lua_pushvalue`. Reserve a slot
-            // of headroom for it. (Found by the `run` fuzzer:
-            // `local t={a=1}; return <~20 values including t>`.)
-            if lua_checkstack(state, 2) == 0 {
-                return Err(crate::error::Error::RuntimeError(
-                    "stack overflow: too many return values".to_string(),
-                ));
-            }
-            // Collect every value pushed above `base` as the results.
-            let top = lua_gettop(state);
-            let nresults = top - base;
-            let mut results = MultiValue::with_capacity(nresults.max(0) as usize);
-            for i in 0..nresults {
-                let idx = base + 1 + i;
-                results.push_back(lua.value_from_stack(idx)?);
-            }
-            R::from_lua_multi(results, &lua)
+            call_pushed(
+                &lua,
+                |_| {
+                    self.reference.push();
+                    Ok(())
+                },
+                args,
+            )
         }
     }
 
@@ -515,5 +476,56 @@ where
                 .map_err(crate::error::ExternalError::into_lua_err)
         })?;
         Ok(crate::value::Value::Function(f))
+    }
+}
+
+/// Call the function `push_function` pushes with `args` (protected, every
+/// result kept), the body of [`Function::call`].
+///
+/// # Safety
+/// `push_function` must push exactly one value, the function, onto `lua`'s
+/// stack.
+pub(crate) unsafe fn call_pushed<R: FromLuaMulti>(
+    lua: &Lua,
+    push_function: impl FnOnce(*mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<()>,
+    args: impl IntoLuaMulti,
+) -> Result<R> {
+    let state = lua.state();
+    unsafe {
+        let _stack = crate::stack_guard::StackGuard::new(state);
+        let base = lua_gettop(state);
+        // Guard against pushing more values than the Lua stack can hold:
+        // an unprotected overflow would abort the VM. Each push reserves
+        // its own slot plus one of slack for the call machinery.
+        if lua_checkstack(state, 2) == 0 {
+            return Err(crate::error::Error::RuntimeError(
+                "stack overflow: too many arguments to function call".to_string(),
+            ));
+        }
+        // Push the function, then the arguments.
+        push_function(state).map_err(|error| crate::error::Error::from_vm(error))?;
+        let nargs = args.push_call_args(lua)?;
+        // LUA_MULTRET == -1: keep every result.
+        let status =
+            lua_pcall(state, nargs, -1, 0).map_err(|error| crate::error::Error::from_vm(error))?;
+        if status != 0 {
+            return Err(lua.pop_error(status));
+        }
+        // The result conversion below reads each reference-typed result
+        // via `value_from_stack`, which DUPLICATES it onto the stack
+        // (`lua_pushvalue`) before popping it into a registry ref. After a
+        // LUA_MULTRET call the results can fill the C frame's stack exactly to
+        // `ci->top` (LUA_MINSTACK), so that duplicating push would overrun the
+        // frame — the `api_incr_top` assert in `lua_pushvalue`. Reserve a slot
+        // of headroom for it. (Found by the `run` fuzzer:
+        // `local t={a=1}; return <~20 values including t>`.)
+        if lua_checkstack(state, 2) == 0 {
+            return Err(crate::error::Error::RuntimeError(
+                "stack overflow: too many return values".to_string(),
+            ));
+        }
+        // Every value pushed above `base` is a result.
+        let nresults = lua_gettop(state) - base;
+        R::from_stack_args(lua, base + 1, nresults)
     }
 }

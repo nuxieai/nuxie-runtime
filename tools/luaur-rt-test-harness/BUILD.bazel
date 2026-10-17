@@ -158,6 +158,21 @@ rust_test(
 )
 
 rust_test(
+    name = "luaur-rt-test-harness__test_table_field_calls",
+    crate_name = "table_field_calls",
+    crate_root = "tests/table_field_calls.rs",
+    srcs = _test_sources,
+    compile_data = _compile_data,
+    data = _compile_data + [],
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default"],
+    deps = [":luaur-rt-test-harness__test"] + ["//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/luaur-rt-test-harness"),
+    rustc_env = dict(dict({"CARGO_PKG_NAME": "luaur-rt-test-harness"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
+)
+
+rust_test(
     name = "luaur-rt-test-harness__test_table_get_field",
     crate_name = "table_get_field",
     crate_root = "tests/table_get_field.rs",

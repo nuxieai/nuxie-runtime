@@ -142,3 +142,58 @@ fn a_countdown_also_bounds_free_safepoints() -> Result<()> {
     assert_eq!(used.get(), 6);
     Ok(())
 }
+
+// The trampoline remembers the last VM's entry. Interleaved VMs on one thread,
+// and interrupts replaced or removed between runs, must each reach exactly
+// their own current closure.
+#[test]
+fn each_vm_reaches_its_current_interrupt() -> Result<()> {
+    let counter = |calls: &Rc<Cell<usize>>| {
+        let calls = Rc::clone(calls);
+        move |_: &Lua| {
+            calls.set(calls.get() + 1);
+            Ok(VmState::Continue)
+        }
+    };
+    let (a, b) = (Lua::new(), Lua::new());
+    let (a_first, a_second, b_calls) = (
+        Rc::new(Cell::new(0)),
+        Rc::new(Cell::new(0)),
+        Rc::new(Cell::new(0)),
+    );
+    a.set_interrupt(counter(&a_first));
+    b.set_interrupt(counter(&b_calls));
+    let run = |lua: &Lua| lua.load("for i = 1, 20 do end").exec();
+    for _ in 0..3 {
+        let (a_before, b_before) = (a_first.get(), b_calls.get());
+        run(&a)?;
+        assert!(a_first.get() > a_before);
+        assert_eq!(b_calls.get(), b_before);
+        run(&b)?;
+        assert!(b_calls.get() > b_before);
+    }
+    // A replaced closure takes over at once; the old one is never reached.
+    a.set_interrupt(counter(&a_second));
+    let a_old = a_first.get();
+    run(&a)?;
+    assert_eq!(a_first.get(), a_old);
+    assert!(a_second.get() > 0);
+    // A removed closure is gone for its VM only.
+    a.remove_interrupt();
+    let (a_now, b_now) = (a_second.get(), b_calls.get());
+    run(&a)?;
+    run(&b)?;
+    assert_eq!(a_second.get(), a_now);
+    assert!(b_calls.get() > b_now);
+    // A closed VM's closure is released.
+    let probe = Rc::new(());
+    let held = Rc::clone(&probe);
+    b.set_interrupt(move |_| {
+        let _ = &held;
+        Ok(VmState::Continue)
+    });
+    run(&b)?;
+    drop(b);
+    assert_eq!(Rc::strong_count(&probe), 1);
+    Ok(())
+}

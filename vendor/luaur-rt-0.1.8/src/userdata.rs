@@ -36,7 +36,9 @@ use crate::table::Table;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues, StackRange};
 use crate::value::Value;
 
-type UserDataMetatableCache = crate::app_data::WordMap<TypeId, c_int>;
+/// Retained metatable references, keyed by VM (global-state pointer) and
+/// type together: one probe per userdata created.
+type UserDataMetatableCache = crate::app_data::WordMap<(usize, TypeId), c_int>;
 
 #[inline]
 unsafe fn vm_key(state: *mut lua_State) -> usize {
@@ -46,13 +48,12 @@ unsafe fn vm_key(state: *mut lua_State) -> usize {
 #[cfg(feature = "send")]
 mod metatable_store {
     use super::UserDataMetatableCache;
-    use crate::app_data::WordMap;
     use std::sync::{LazyLock, Mutex};
 
-    static STORE: LazyLock<Mutex<WordMap<usize, UserDataMetatableCache>>> =
-        LazyLock::new(|| Mutex::new(WordMap::default()));
+    static STORE: LazyLock<Mutex<UserDataMetatableCache>> =
+        LazyLock::new(|| Mutex::new(UserDataMetatableCache::default()));
 
-    pub(super) fn with<R>(f: impl FnOnce(&mut WordMap<usize, UserDataMetatableCache>) -> R) -> R {
+    pub(super) fn with<R>(f: impl FnOnce(&mut UserDataMetatableCache) -> R) -> R {
         let mut guard = STORE.lock().unwrap_or_else(|error| error.into_inner());
         f(&mut guard)
     }
@@ -61,26 +62,21 @@ mod metatable_store {
 #[cfg(not(feature = "send"))]
 mod metatable_store {
     use super::UserDataMetatableCache;
-    use crate::app_data::WordMap;
     use std::cell::RefCell;
 
     thread_local! {
-        static STORE: RefCell<WordMap<usize, UserDataMetatableCache>> =
-            RefCell::new(WordMap::default());
+        static STORE: RefCell<UserDataMetatableCache> =
+            RefCell::new(UserDataMetatableCache::default());
     }
 
-    pub(super) fn with<R>(f: impl FnOnce(&mut WordMap<usize, UserDataMetatableCache>) -> R) -> R {
+    pub(super) fn with<R>(f: impl FnOnce(&mut UserDataMetatableCache) -> R) -> R {
         STORE.with(|store| f(&mut store.borrow_mut()))
     }
 }
 
 fn cached_metatable(state: *mut lua_State, type_id: TypeId) -> Option<c_int> {
     let key = unsafe { vm_key(state) };
-    metatable_store::with(|store| {
-        store
-            .get(&key)
-            .and_then(|cache| cache.get(&type_id).copied())
-    })
+    metatable_store::with(|store| store.get(&(key, type_id)).copied())
 }
 
 fn retain_metatable(
@@ -94,7 +90,7 @@ fn retain_metatable(
     unsafe { lua_pop(state, 1).expect("shrinking the stack cannot fail") };
     let key = unsafe { vm_key(state) };
     metatable_store::with(|store| {
-        store.entry(key).or_default().insert(type_id, reference);
+        store.insert((key, type_id), reference);
     });
     Ok(reference)
 }
@@ -104,11 +100,17 @@ fn retain_metatable(
 /// state; borrowed callback handles deliberately leave the shared cache alone.
 pub(crate) fn clear_metatable_cache(state: *mut lua_State) {
     let key = unsafe { vm_key(state) };
-    let references = metatable_store::with(|store| store.remove(&key));
-    if let Some(references) = references {
-        for reference in references.into_values() {
-            unsafe { lua_unref(state, reference) };
-        }
+    let mut references = Vec::new();
+    metatable_store::with(|store| {
+        store.retain(|&(vm, _), reference| {
+            if vm == key {
+                references.push(*reference);
+            }
+            vm != key
+        })
+    });
+    for reference in references {
+        unsafe { lua_unref(state, reference) };
     }
 }
 

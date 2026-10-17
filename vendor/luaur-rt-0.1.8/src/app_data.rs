@@ -184,7 +184,10 @@ impl Lua {
     pub fn try_set_app_data<T: 'static>(&self, data: T) -> Result<Option<T>> {
         let key = unsafe { vm_key(self.state()) };
         APP_DATA.with(|m| {
-            let mut outer = m.borrow_mut();
+            // A clone in progress (app_data_clone) holds the map borrowed.
+            let Ok(mut outer) = m.try_borrow_mut() else {
+                return Err(Error::runtime("cannot mutably borrow app data container"));
+            };
             let store = outer.entry(key).or_default();
             // Any outstanding borrow blocks mutation of the container (mlua).
             if store.borrow.get() != 0 {
@@ -245,6 +248,32 @@ impl Lua {
         }))
     }
 
+    /// A clone of the application-data value of type `T`, if present: the
+    /// value [`Lua::app_data_ref`] would borrow, cloned, without the guard.
+    /// `T::clone` runs while the store is borrowed, as it would under the
+    /// guard, so it cannot set or remove app data.
+    ///
+    /// Not part of mlua's surface.
+    ///
+    /// # Panics
+    /// Panics if the value is currently mutably borrowed.
+    pub fn app_data_clone<T: Clone + 'static>(&self) -> Option<T> {
+        let key = unsafe { vm_key(self.state()) };
+        APP_DATA.with(|m| {
+            let outer = m.borrow();
+            let entry = outer.get(&key)?.entries.get(&TypeId::of::<T>())?;
+            let Ok(value) = entry.try_borrow() else {
+                panic!("already mutably borrowed");
+            };
+            Some(
+                value
+                    .downcast_ref::<T>()
+                    .expect("app data type mismatch")
+                    .clone(),
+            )
+        })
+    }
+
     /// Borrow the application-data value of type `T` mutably, if present.
     /// Mirrors `mlua::Lua::app_data_mut`.
     ///
@@ -295,7 +324,9 @@ impl Lua {
     pub fn remove_app_data<T: 'static>(&self) -> Option<T> {
         let key = unsafe { vm_key(self.state()) };
         APP_DATA.with(|m| {
-            let mut outer = m.borrow_mut();
+            let Ok(mut outer) = m.try_borrow_mut() else {
+                panic!("cannot mutably borrow app data container");
+            };
             let store = outer.get_mut(&key)?;
             if store.borrow.get() != 0 {
                 panic!("cannot mutably borrow app data container");

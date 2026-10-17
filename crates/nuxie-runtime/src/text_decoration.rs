@@ -350,21 +350,24 @@ pub(crate) struct DecorationPath {
 }
 
 /// Collects one drawn line's decorations while its glyphs are laid out, and
-/// builds them when the line ends. A line reaches the end of the line's last
-/// inked glyph: spaces inside the line are decorated, its trailing spaces are
-/// not, with or without modifiers.
+/// builds them when the line ends. Lines reach no further than the line's
+/// ink: spaces inside the line are decorated, its leading and trailing spaces
+/// are not, with or without modifiers.
 #[derive(Default)]
 pub(crate) struct LineDecorations {
     spans: Vec<Span>,
     pieces: Vec<Piece>,
-    ink_end: Option<f32>,
+    /// The left and right edges of the line's ink.
+    ink: Option<(f32, f32)>,
 }
 
 impl LineDecorations {
     fn ink(&mut self, x: f32, advance: f32, inked: bool) {
         if inked {
             let end = x + advance;
-            self.ink_end = Some(self.ink_end.map_or(end, |ink_end| ink_end.max(end)));
+            self.ink = Some(self.ink.map_or((x, end), |(start, ink_end)| {
+                (start.min(x), ink_end.max(end))
+            }));
         }
     }
 
@@ -444,9 +447,10 @@ impl LineDecorations {
         }
     }
 
-    /// The line's decoration paths, trimmed at its last inked glyph.
+    /// The line's decoration paths, trimmed to its ink at both edges: a
+    /// line's trailing spaces sit at its left in right-to-left text.
     pub fn finish(self) -> Vec<DecorationPath> {
-        let Some(ink_end) = self.ink_end else {
+        let Some((ink_start, ink_end)) = self.ink else {
             return Vec::new();
         };
         let mut paths = Vec::new();
@@ -456,7 +460,7 @@ impl LineDecorations {
                 span.line,
                 span.metrics,
                 span.size,
-                span.start_x,
+                span.start_x.max(ink_start),
                 span.end_x.min(ink_end),
                 span.baseline,
             ) {
@@ -470,13 +474,14 @@ impl LineDecorations {
         }
         for piece in self.pieces {
             let centre = piece.advance / 2.0;
+            let start = piece.x.max(ink_start) - piece.x;
             let end = (piece.x + piece.advance).min(ink_end) - piece.x;
             let mut path = RawPath::default();
             for rect in line_rects(
                 piece.line,
                 piece.metrics,
                 piece.size,
-                -centre,
+                start - centre,
                 end - centre,
                 0.0,
             ) {

@@ -235,3 +235,23 @@
   frame and the stack top on every read, instead of a raw start and count a
   caller could aim anywhere. `CallArgs` reads through one, comparing indices
   as `usize` before narrowing them: any index past the arguments is nil.
+
+## Cheaper per-call lookups
+
+- `Lua::app_data_clone::<T: Clone>()` returns the value `app_data_ref`
+  would borrow, cloned, without building the guard (no entry or
+  borrow-counter `Rc` clones). `T::clone` runs while the store is borrowed,
+  so it cannot set or remove app data: `try_set_app_data` then fails with the
+  error an outstanding guard gives, and `set_app_data` / `remove_app_data`
+  panic with the guard's message. A mutably borrowed value panics as
+  `app_data_ref` does. Not part of mlua's surface.
+- The interrupt trampoline checks the entry it used last before the per-VM
+  map (a thread usually runs one VM); setting or removing an interrupt, and
+  closing a VM, forget it. Running the closure is out of line, so a safepoint
+  the budget settles returns without the call's frame.
+- The userdata metatable cache is one map keyed by VM and `TypeId` together
+  instead of a map of per-VM maps: one probe per userdata created. Closing a
+  VM releases its references as before.
+- Touched files: `src/app_data.rs`, `src/interrupt.rs`, `src/userdata.rs`;
+  coverage in `tools/luaur-rt-test-harness/tests/app_data_clone.rs` and
+  `tests/interrupt_reentry.rs` (`each_vm_reaches_its_current_interrupt`).

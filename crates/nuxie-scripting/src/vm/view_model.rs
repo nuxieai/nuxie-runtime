@@ -373,10 +373,7 @@ impl ScriptViewModelFrameContext {
         }
     }
     pub(crate) fn for_lua(lua: &Lua) -> Self {
-        if let Some(context) = lua
-            .app_data_ref::<ScriptViewModelFrameContext>()
-            .map(|context| context.clone())
-        {
+        if let Some(context) = lua.app_data_clone::<ScriptViewModelFrameContext>() {
             return context;
         }
         let context = Self::default();

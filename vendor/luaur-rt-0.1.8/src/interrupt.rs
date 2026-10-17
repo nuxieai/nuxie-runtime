@@ -97,11 +97,45 @@ struct InterruptEntry {
     running: Cell<bool>,
 }
 
+/// This thread's interrupt closures, keyed by the `global_State` pointer
+/// (stable for the lifetime of the VM and shared by all of its threads).
+#[derive(Default)]
+struct Interrupts {
+    map: WordMap<*mut core::ffi::c_void, Rc<InterruptEntry>>,
+    /// The entry the last safepoint found, checked before the map: a thread
+    /// usually runs one VM. Always the map's current entry for its key.
+    last: Option<(*mut core::ffi::c_void, Rc<InterruptEntry>)>,
+}
+
+impl Interrupts {
+    fn insert(&mut self, key: *mut core::ffi::c_void, entry: Rc<InterruptEntry>) {
+        self.forget(key);
+        self.map.insert(key, entry);
+    }
+
+    fn remove(&mut self, key: *mut core::ffi::c_void) {
+        self.forget(key);
+        self.map.remove(&key);
+    }
+
+    fn forget(&mut self, key: *mut core::ffi::c_void) {
+        if self.last.as_ref().is_some_and(|(last, _)| *last == key) {
+            self.last = None;
+        }
+    }
+
+    /// The entry for `key`, remembered for the next safepoint.
+    fn get(&mut self, key: *mut core::ffi::c_void) -> Option<&Rc<InterruptEntry>> {
+        if !self.last.as_ref().is_some_and(|(last, _)| *last == key) {
+            let entry = Rc::clone(self.map.get(&key)?);
+            self.last = Some((key, entry));
+        }
+        self.last.as_ref().map(|(_, entry)| entry)
+    }
+}
+
 thread_local! {
-    /// Per-VM interrupt closure, keyed by the `global_State` pointer (stable for
-    /// the lifetime of the VM and shared by all of its threads).
-    static INTERRUPTS: RefCell<WordMap<*mut core::ffi::c_void, Rc<InterruptEntry>>> =
-        RefCell::new(WordMap::default());
+    static INTERRUPTS: RefCell<Interrupts> = RefCell::new(Interrupts::default());
 }
 
 /// The `global_State` pointer for `state` — the per-VM key shared by all
@@ -142,9 +176,7 @@ impl Lua {
                 budget,
                 running: Cell::new(false),
             });
-            INTERRUPTS.with(|m| {
-                m.borrow_mut().insert(key, entry);
-            });
+            INTERRUPTS.with(|m| m.borrow_mut().insert(key, entry));
             let cb = lua_callbacks(state);
             (*cb).interrupt = Some(interrupt_trampoline);
         }
@@ -156,9 +188,7 @@ impl Lua {
         let state = self.state();
         unsafe {
             let key = vm_key(state);
-            INTERRUPTS.with(|m| {
-                m.borrow_mut().remove(&key);
-            });
+            INTERRUPTS.with(|m| m.borrow_mut().remove(key));
             let cb = lua_callbacks(state);
             (*cb).interrupt = None;
         }
@@ -171,9 +201,7 @@ impl Lua {
 /// the VM and this never runs — but the common case captures non-Lua state.)
 pub(crate) fn clear_interrupt(state: *mut lua_State) {
     let key = unsafe { vm_key(state) };
-    INTERRUPTS.with(|m| {
-        m.borrow_mut().remove(&key);
-    });
+    INTERRUPTS.with(|m| m.borrow_mut().remove(key));
 }
 
 /// The fixed C trampoline installed as `lua_callbacks().interrupt`.
@@ -196,14 +224,26 @@ unsafe fn interrupt_trampoline(
     // `set_interrupt`/`remove_interrupt` from inside the callback can replace
     // the map's entry freely.
     let entry = INTERRUPTS.with(|m| {
-        let map = m.borrow();
-        let entry = map.get(&key)?;
+        let mut interrupts = m.borrow_mut();
+        let entry = interrupts.get(key)?;
         if entry.running.get() || entry.budget.as_ref().is_some_and(InterruptBudget::spend) {
             return None;
         }
         Some(Rc::clone(entry))
     });
-    let Some(entry) = entry else { return Ok(()) };
+    match entry {
+        Some(entry) => unsafe { run_interrupt(state, entry) },
+        None => Ok(()),
+    }
+}
+
+/// Run `entry`'s closure for one safepoint. Kept out of line: most
+/// safepoints return before it.
+#[inline(never)]
+unsafe fn run_interrupt(
+    state: *mut lua_State,
+    entry: Rc<InterruptEntry>,
+) -> luaur_vm::records::lua_exception::LuaResult<()> {
     entry.running.set(true);
 
     let lua = unsafe { Lua::from_borrowed(state) };
@@ -253,5 +293,5 @@ unsafe fn raise_error(
 
 #[cfg(test)]
 pub(crate) fn interrupts_len() -> usize {
-    INTERRUPTS.with(|m| m.borrow().len())
+    INTERRUPTS.with(|m| m.borrow().map.len())
 }

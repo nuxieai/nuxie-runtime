@@ -33,7 +33,7 @@ use crate::state::{Lua, LuaRef};
 use crate::sync::{MaybeSend, MaybeSync, NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
 use crate::table::Table;
-use crate::traits::{stack_arg, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues, StackRange};
 use crate::value::Value;
 
 type UserDataMetatableCache = crate::app_data::WordMap<TypeId, c_int>;
@@ -582,7 +582,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
             let cell = self_cell::<T>(lua, nargs)?;
-            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
+            let a = A::from_stack_args(StackRange::new(lua, 2, nargs - 1))?;
             let borrowed = cell
                 .cell
                 .try_borrow()
@@ -606,7 +606,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
             let cell = self_cell::<T>(lua, nargs)?;
-            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
+            let a = A::from_stack_args(StackRange::new(lua, 2, nargs - 1))?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
@@ -629,7 +629,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         R: IntoLuaMulti,
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
-            let a = A::from_stack_args(lua, 1, nargs)?;
+            let a = A::from_stack_args(StackRange::new(lua, 1, nargs))?;
             let r = function(lua, a)?;
             r.into_return_values(lua)
         });
@@ -648,7 +648,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
             let cell = self_cell::<T>(lua, nargs)?;
-            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
+            let a = A::from_stack_args(StackRange::new(lua, 2, nargs - 1))?;
             let borrowed = cell
                 .cell
                 .try_borrow()
@@ -672,7 +672,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
             let cell = self_cell::<T>(lua, nargs)?;
-            let a = A::from_stack_args(lua, 2, (nargs - 1).max(0))?;
+            let a = A::from_stack_args(StackRange::new(lua, 2, nargs - 1))?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
@@ -782,7 +782,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
             let cell = self_cell::<T>(lua, nargs)?;
-            let val = A::from_lua(stack_arg(lua, 1, nargs, 1)?, lua)?;
+            let val = A::from_lua(StackRange::new(lua, 1, nargs).value(1)?, lua)?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
@@ -806,7 +806,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
             let cell = self_cell::<T>(lua, nargs)?;
-            let val = A::from_lua(stack_arg(lua, 1, nargs, 1)?, lua)?;
+            let val = A::from_lua(StackRange::new(lua, 1, nargs).value(1)?, lua)?;
             let mut borrowed = cell
                 .cell
                 .try_borrow_mut()
@@ -829,7 +829,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         R: IntoLua,
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
-            let ud = AnyUserData::from_lua(stack_arg(lua, 1, nargs, 0)?, lua)?;
+            let ud = AnyUserData::from_lua(StackRange::new(lua, 1, nargs).value(0)?, lua)?;
             let r = function(lua, ud)?;
             r.into_return_values(lua)
         });
@@ -847,8 +847,8 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         A: FromLua,
     {
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
-            let ud = AnyUserData::from_lua(stack_arg(lua, 1, nargs, 0)?, lua)?;
-            let val = A::from_lua(stack_arg(lua, 1, nargs, 1)?, lua)?;
+            let ud = AnyUserData::from_lua(StackRange::new(lua, 1, nargs).value(0)?, lua)?;
+            let val = A::from_lua(StackRange::new(lua, 1, nargs).value(1)?, lua)?;
             function(lua, ud, val)?;
             ().into_return_values(lua)
         });
@@ -1107,7 +1107,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
     {
         let marker = self.marker;
         let callback: BoxedCallback = Box::new(move |lua, nargs| {
-            let this = stack_arg(lua, 1, nargs, 0)?;
+            let this = StackRange::new(lua, 1, nargs).value(0)?;
             let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
             let args = CallArgs::new(lua, 2, (nargs - 1).max(0));
             let borrowed = cell
@@ -1632,52 +1632,46 @@ unsafe fn borrow_mut_at<'a, U: 'static>(lua: &Lua, slot: c_int) -> Result<UserDa
 /// from the callback's stack for the call's duration.
 pub struct CallArgs<'a> {
     lua: &'a Lua,
-    /// The first argument's slot; usable only in the callback's own frame.
-    start: FrameSlot,
-    count: c_int,
+    args: StackRange<'a>,
 }
 
 impl<'a> CallArgs<'a> {
     fn new(lua: &'a Lua, start: c_int, count: c_int) -> Self {
         Self {
             lua,
-            start: FrameSlot::current(lua.state(), start),
-            count,
+            args: StackRange::new(lua, start, count),
         }
     }
 
     /// The number of arguments.
     pub fn len(&self) -> usize {
-        self.count as usize
+        self.args.len()
     }
 
     /// Whether there are no arguments.
     pub fn is_empty(&self) -> bool {
-        self.count == 0
+        self.args.len() == 0
     }
 
     /// Argument `i` (0-based; nil past the end) converted as `V::from_lua`
     /// converts it.
     pub fn get<V: FromLua>(&self, i: usize) -> Result<V> {
-        V::from_lua(
-            stack_arg(self.lua, self.start.index()?, self.count, i as c_int)?,
-            self.lua,
-        )
+        V::from_lua(self.args.value(i)?, self.lua)
     }
 
     /// Argument `i` as a userdata, failing as an [`AnyUserData`] argument
     /// does when it is not one.
     pub fn userdata(&self, i: usize) -> Result<ArgUserData<'_>> {
-        let start = self.start.index()?;
-        let i = i as c_int;
-        if i < self.count && unsafe { lua_type(self.lua.state(), start + i) } == ttype::USERDATA {
-            return Ok(ArgUserData {
-                lua: self.lua,
-                slot: self.start.above(i),
-            });
+        if i < self.args.len() {
+            let slot = self.args.slot(i)?;
+            if unsafe { lua_type(self.lua.state(), slot) } == ttype::USERDATA {
+                return Ok(ArgUserData {
+                    lua: self.lua,
+                    slot: self.args.frame_slot(i),
+                });
+            }
         }
-        let value = stack_arg(self.lua, start, self.count, i)?;
-        match AnyUserData::from_lua(value, self.lua) {
+        match AnyUserData::from_lua(self.args.value(i)?, self.lua) {
             Err(error) => Err(error),
             // Only a full userdata converts, and those are read in place above.
             Ok(_) => Err(Error::UserDataTypeMismatch),

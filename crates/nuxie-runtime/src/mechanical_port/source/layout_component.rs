@@ -4238,6 +4238,39 @@ impl LayoutComponent {
         }
     }
 
+    /// Taffy places an absolute box against its containing block, its
+    /// nearest positioned ancestor, which in CSS mode can be above its
+    /// parent: a static box is not one. Owners keep parent-relative bounds,
+    /// so this is the parent's offset from that containing block (zero when
+    /// the parent is it, as for every translated box).
+    fn hoisted_offset(tree: &LayoutTree, id: taffy::prelude::NodeId) -> Vec2D {
+        use taffy::TraversePartialTree;
+        let mut offset = Vec2D::default();
+        let positioned = |node| {
+            tree.taffy
+                .style(node)
+                .is_ok_and(|style| style.position != taffy::style::Position::Static)
+        };
+        if !tree
+            .taffy
+            .style(id)
+            .is_ok_and(|style| style.position == taffy::style::Position::Absolute)
+        {
+            return offset;
+        }
+        let mut ancestor = tree.taffy.parent(id);
+        while let Some(node) = ancestor {
+            let parent = tree.taffy.parent(node);
+            if parent.is_none() || positioned(node) {
+                break;
+            }
+            if let Ok(layout) = tree.taffy.layout(node) {
+                offset = Vec2D::new(offset.x + layout.location.x, offset.y + layout.location.y);
+            }
+            ancestor = parent;
+        }
+        offset
+    }
     /// Publish solved layouts to their owners. Descends only into nodes whose
     /// result changed or whose subtree held a touched node: Taffy leaves an
     /// untouched subtree's results in place when its parent's result holds.
@@ -4262,9 +4295,10 @@ impl LayoutComponent {
                 continue;
             };
             let output = tree.taffy.layout(id).expect("solved layout node");
+            let hoisted = Self::hoisted_offset(tree, id);
             let next = Layout::new(
-                output.location.x,
-                output.location.y,
+                output.location.x - hoisted.x,
+                output.location.y - hoisted.y,
                 output.size.width,
                 output.size.height,
             );

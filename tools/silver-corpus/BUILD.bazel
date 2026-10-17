@@ -28,7 +28,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-runtime:nuxie-runtime", "//crates/nuxie-scripting:nuxie-scripting", "//crates/nuxie-sriv:nuxie-sriv"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-runtime:nuxie-runtime", "//crates/nuxie-scripting:nuxie-scripting", "//crates/nuxie-sriv:nuxie-sriv"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -42,7 +42,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-runtime:nuxie-runtime", "//crates/nuxie-scripting:nuxie-scripting", "//crates/nuxie-sriv:nuxie-sriv"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-runtime:nuxie-runtime", "//crates/nuxie-scripting:nuxie-scripting", "//crates/nuxie-sriv:nuxie-sriv"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -56,7 +56,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -70,7 +70,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__test"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__test"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -94,7 +94,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -109,7 +109,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -124,7 +124,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -139,7 +139,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -154,7 +154,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -169,7 +169,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -184,7 +184,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -199,7 +199,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -214,7 +214,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -229,7 +229,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -244,7 +244,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -259,7 +259,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -274,7 +274,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -289,7 +289,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -304,7 +304,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -319,7 +319,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -334,7 +334,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -349,7 +349,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -364,7 +364,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -379,7 +379,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -394,7 +394,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = [":silver-corpus__test"] + ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + [["CARGO_BIN_EXE_silver-corpus", "$(rootpath :silver-corpus__test__bin)"]]),
 )
@@ -408,7 +408,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-runtime:nuxie-runtime__host", "//crates/nuxie-scripting:nuxie-scripting__host", "//crates/nuxie-sriv:nuxie-sriv__host"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-runtime:nuxie-runtime__host", "//crates/nuxie-scripting:nuxie-scripting__host", "//crates/nuxie-sriv:nuxie-sriv__host"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -422,7 +422,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-runtime:nuxie-runtime__host", "//crates/nuxie-scripting:nuxie-scripting__host", "//crates/nuxie-sriv:nuxie-sriv__host"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__host"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-runtime:nuxie-runtime__host", "//crates/nuxie-scripting:nuxie-scripting__host", "//crates/nuxie-sriv:nuxie-sriv__host"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__host"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -436,7 +436,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-runtime:nuxie-runtime__editor", "//crates/nuxie-scripting:nuxie-scripting__editor", "//crates/nuxie-sriv:nuxie-sriv__editor"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-runtime:nuxie-runtime__editor", "//crates/nuxie-scripting:nuxie-scripting__editor", "//crates/nuxie-sriv:nuxie-sriv__editor"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -450,7 +450,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-runtime:nuxie-runtime__editor", "//crates/nuxie-scripting:nuxie-scripting__editor", "//crates/nuxie-sriv:nuxie-sriv__editor"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__editor"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-runtime:nuxie-runtime__editor", "//crates/nuxie-scripting:nuxie-scripting__editor", "//crates/nuxie-sriv:nuxie-sriv__editor"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__editor"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -464,7 +464,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__publisher", "//crates/nuxie-runtime:nuxie-runtime__publisher", "//crates/nuxie-scripting:nuxie-scripting__publisher", "//crates/nuxie-sriv:nuxie-sriv__publisher"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__publisher", "//crates/nuxie-runtime:nuxie-runtime__publisher", "//crates/nuxie-scripting:nuxie-scripting__publisher", "//crates/nuxie-sriv:nuxie-sriv__publisher"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -478,7 +478,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__publisher", "//crates/nuxie-runtime:nuxie-runtime__publisher", "//crates/nuxie-scripting:nuxie-scripting__publisher", "//crates/nuxie-sriv:nuxie-sriv__publisher"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__publisher"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__publisher", "//crates/nuxie-runtime:nuxie-runtime__publisher", "//crates/nuxie-scripting:nuxie-scripting__publisher", "//crates/nuxie-sriv:nuxie-sriv__publisher"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__publisher"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -492,7 +492,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-runtime:nuxie-runtime__webgpu", "//crates/nuxie-scripting:nuxie-scripting__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-runtime:nuxie-runtime__webgpu", "//crates/nuxie-scripting:nuxie-scripting__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -506,7 +506,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-runtime:nuxie-runtime__webgpu", "//crates/nuxie-scripting:nuxie-scripting__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgpu"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-runtime:nuxie-runtime__webgpu", "//crates/nuxie-scripting:nuxie-scripting__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgpu"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -520,7 +520,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgl2", "//crates/nuxie-runtime:nuxie-runtime__webgl2", "//crates/nuxie-scripting:nuxie-scripting__webgl2", "//crates/nuxie-sriv:nuxie-sriv__webgl2"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgl2", "//crates/nuxie-runtime:nuxie-runtime__webgl2", "//crates/nuxie-scripting:nuxie-scripting__webgl2", "//crates/nuxie-sriv:nuxie-sriv__webgl2"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -534,7 +534,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgl2", "//crates/nuxie-runtime:nuxie-runtime__webgl2", "//crates/nuxie-scripting:nuxie-scripting__webgl2", "//crates/nuxie-sriv:nuxie-sriv__webgl2"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgl2"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgl2", "//crates/nuxie-runtime:nuxie-runtime__webgl2", "//crates/nuxie-scripting:nuxie-scripting__webgl2", "//crates/nuxie-sriv:nuxie-sriv__webgl2"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgl2"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -548,7 +548,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple", "//crates/nuxie-scripting:nuxie-scripting__apple", "//crates/nuxie-sriv:nuxie-sriv__apple"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple", "//crates/nuxie-scripting:nuxie-scripting__apple", "//crates/nuxie-sriv:nuxie-sriv__apple"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -562,7 +562,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple", "//crates/nuxie-scripting:nuxie-scripting__apple", "//crates/nuxie-sriv:nuxie-sriv__apple"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__apple"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple", "//crates/nuxie-scripting:nuxie-scripting__apple", "//crates/nuxie-sriv:nuxie-sriv__apple"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__apple"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -576,7 +576,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android", "//crates/nuxie-scripting:nuxie-scripting__android", "//crates/nuxie-sriv:nuxie-sriv__android"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus"),
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android", "//crates/nuxie-scripting:nuxie-scripting__android", "//crates/nuxie-sriv:nuxie-sriv__android"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -590,7 +590,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android", "//crates/nuxie-scripting:nuxie-scripting__android", "//crates/nuxie-sriv:nuxie-sriv__android"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__android"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android", "//crates/nuxie-scripting:nuxie-scripting__android", "//crates/nuxie-sriv:nuxie-sriv__android"] + crate_deps(["anyhow", "serde", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__android"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

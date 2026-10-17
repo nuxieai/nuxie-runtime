@@ -1347,31 +1347,6 @@ impl NestedArtboard {
         true
     }
 
-    pub(crate) fn natural_size_for_layout(&self) -> Option<Vec2D> {
-        self.instance.as_ref().map(|instance| {
-            instance
-                .with_artboard(|board| Vec2D::new(board.original_width(), board.original_height()))
-        })
-    }
-
-    /// The natural size about the mounted artboard's origin, as it draws
-    /// (make_translate).
-    pub(crate) fn natural_bounds_for_layout(
-        &self,
-    ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
-        self.instance.as_ref().map(|instance| {
-            instance.with_artboard(|board| {
-                let (width, height) = (board.original_width(), board.original_height());
-                crate::mechanical_port::source::math::aabb::Aabb::from_ltwh(
-                    -board.base.origin_x() * width,
-                    -board.base.origin_y() * height,
-                    width,
-                    height,
-                )
-            })
-        })
-    }
-
     pub fn measure_layout(
         &self,
         width: f32,

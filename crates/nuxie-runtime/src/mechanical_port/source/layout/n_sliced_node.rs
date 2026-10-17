@@ -48,12 +48,6 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl NSlicedNode {
-    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
-        self.base
-            .layout_natural
-            .get(Vec2D::new(self.base.width(), self.base.height()))
-    }
-
     pub const TYPE_KEY: u16 = NSlicedNodeBase::TYPE_KEY;
     pub fn new(base: NSlicedNodeBase) -> Self {
         Self {
@@ -216,11 +210,8 @@ impl NSlicedNode {
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        let current = Vec2D::new(self.base.width(), self.base.height());
-        self.base.layout_natural.begin_control(current);
         self.set_width(size.x);
         self.set_height(size.y);
-        self.base.layout_natural.end_control();
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty_recursive(false);
     }

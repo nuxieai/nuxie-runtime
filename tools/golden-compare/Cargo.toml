@@ -6,6 +6,5 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-sha2 = "0.10"
 anyhow = "1"
 nuxie-binary = { path = "../../crates/nuxie-binary" }

@@ -166,6 +166,151 @@ pub fn add_overflow_clip(
     }
 }
 
+/// A shadow's corner radii after CSS spread (CSS Backgrounds 3, "Shadow
+/// Shape, Spread, and Knockout"): each radius grows by the spread, less so
+/// while it is smaller than the spread, so a square corner stays square. A
+/// negative spread shrinks radii, floored at zero.
+pub fn spread_radii(radii: Radii, spread: f32) -> Radii {
+    let grow = |radius: f32| {
+        if spread <= 0.0 {
+            (radius + spread).max(0.0)
+        } else if radius >= spread {
+            radius + spread
+        } else {
+            let ratio = radius / spread - 1.0;
+            radius + spread * (1.0 + ratio * ratio * ratio)
+        }
+    };
+    radii.map(|radius| {
+        let grown = Vec2D::new(grow(radius.x), grow(radius.y));
+        if grown.x <= 0.0 || grown.y <= 0.0 {
+            Vec2D::default()
+        } else {
+            grown
+        }
+    })
+}
+
+/// `bounds` grown by `amount` on every side (shrunk when negative, never
+/// past its centre).
+pub fn outset(bounds: Aabb, amount: f32) -> Aabb {
+    let (cx, cy) = (
+        (bounds.left() + bounds.right()) / 2.0,
+        (bounds.top() + bounds.bottom()) / 2.0,
+    );
+    Aabb::new(
+        (bounds.left() - amount).min(cx),
+        (bounds.top() - amount).min(cy),
+        (bounds.right() + amount).max(cx),
+        (bounds.bottom() + amount).max(cy),
+    )
+}
+
+/// A region as an outline and holes: the holes wind the other way, so the
+/// non-zero rule leaves them out whatever fill rules a renderer's clips
+/// support.
+#[derive(Default)]
+pub struct Region {
+    pub outline: RawPath,
+    pub holes: RawPath,
+}
+
+/// The geometry a CSS box draws one of its special paints with, in the
+/// box's own space: the region to draw and the region it is clipped to.
+#[derive(Default)]
+pub struct PaintGeometry {
+    pub path: Region,
+    pub clip: Option<Region>,
+}
+
+/// A CSS `box-shadow` drawn by a feathered fill (docs/CSS_LAYOUT.md, 4.2).
+/// `reach` is how far the shadow can extend past its shape (blur and
+/// offset), which bounds the region that stands in for "everywhere".
+/// An outer shadow is the border box grown by the spread, drawn only
+/// outside the border box. An inset shadow is everything outside the
+/// padding box shrunk by the spread (its hole), drawn only inside the
+/// padding box.
+pub fn box_shadow(
+    border_box: Aabb,
+    radii: Radii,
+    padding: Aabb,
+    inner: Radii,
+    spread: f32,
+    inset: bool,
+    reach: f32,
+) -> PaintGeometry {
+    let margin = reach.max(0.0) + spread.abs() + 2.0;
+    let mut geometry = PaintGeometry::default();
+    let mut clip = Region::default();
+    if inset {
+        let hole = outset(padding, -spread);
+        add_rounded_rect(
+            &mut geometry.path.outline,
+            outset(padding, margin),
+            [Vec2D::default(); 4],
+        );
+        add_rounded_rect(&mut geometry.path.holes, hole, spread_radii(inner, -spread));
+        add_rounded_rect(&mut clip.outline, padding, inner);
+    } else {
+        add_rounded_rect(
+            &mut geometry.path.outline,
+            outset(border_box, spread),
+            spread_radii(radii, spread),
+        );
+        let everywhere = outset(border_box, margin + spread.max(0.0));
+        add_rounded_rect(&mut clip.outline, everywhere, [Vec2D::default(); 4]);
+        add_rounded_rect(&mut clip.holes, border_box, radii);
+    }
+    geometry.clip = Some(clip);
+    geometry
+}
+
+/// A per-side CSS border (`BoxBorder`): the ring between the border box and
+/// the padding box, limited to the sides in `sides` (1 top, 2 right,
+/// 4 bottom, 8 left). Adjacent sides meet on the line from each outer
+/// corner to the matching inner corner.
+pub fn box_border(
+    border_box: Aabb,
+    radii: Radii,
+    padding: Aabb,
+    inner: Radii,
+    sides: u8,
+) -> PaintGeometry {
+    let mut geometry = PaintGeometry::default();
+    add_rounded_rect(&mut geometry.path.outline, border_box, radii);
+    add_rounded_rect(&mut geometry.path.holes, padding, inner);
+    if sides & 15 != 15 {
+        let outer = [
+            Vec2D::new(border_box.left(), border_box.top()),
+            Vec2D::new(border_box.right(), border_box.top()),
+            Vec2D::new(border_box.right(), border_box.bottom()),
+            Vec2D::new(border_box.left(), border_box.bottom()),
+        ];
+        let inner_corner = [
+            Vec2D::new(padding.left(), padding.top()),
+            Vec2D::new(padding.right(), padding.top()),
+            Vec2D::new(padding.right(), padding.bottom()),
+            Vec2D::new(padding.left(), padding.bottom()),
+        ];
+        let mut clip = Region::default();
+        // Side n runs from corner n to corner n + 1: top, right, bottom, left.
+        // Each wedge winds clockwise, as the box does.
+        for side in 0..4 {
+            if sides & (1 << side) == 0 {
+                continue;
+            }
+            let next = (side + 1) % 4;
+            clip.outline.move_to_point(outer[side]);
+            clip.outline.line_to_point(outer[next]);
+            clip.outline.line_to_point(inner_corner[next]);
+            clip.outline.line_to_point(inner_corner[side]);
+            clip.outline.close();
+        }
+        geometry.clip = Some(clip);
+    }
+    geometry
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

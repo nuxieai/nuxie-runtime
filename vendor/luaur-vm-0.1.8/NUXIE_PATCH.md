@@ -99,3 +99,15 @@ Provenance:
   and direct-userdata load/mark paths after upstream flag retirement.
 - Preserve the enabled profile; experimental classes and heap enumeration
   are not claimed as newly implemented features. See docs/luau-fork.md.
+
+## Re-dispatch off the fetch path
+
+- `luau_execute`'s five `VM_CONTINUE(op)` sites (CALL feedback fallthrough,
+  BREAK, and the GETUDATAKS/SETUDATAKS/NAMECALLUDATA slow paths) set `op` and
+  continue an inner `'redispatch` loop around the opcode `match` instead of
+  setting an `Option` the fetch checks on every instruction. `VM_NEXT()`
+  (`continue 'dispatch`) refetches `*pc` as before; the single-step hook runs
+  on fresh fetches only, as it did. Same opcodes execute in the same order;
+  each instruction's dispatch drops the `Option` test and its reset.
+- Touched file: `src/functions/luau_execute.rs` (the wrapped `match` is
+  re-indented by rustfmt).

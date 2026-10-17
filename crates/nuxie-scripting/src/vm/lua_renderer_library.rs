@@ -148,11 +148,7 @@ impl RendererBindings {
             .flatten()
     }
     pub(crate) fn ore_context(&self) -> Option<OreContextHandle> {
-        if let Some(context) = self
-            .render_context
-            .try_with_factory(|factory| factory.ore())
-            .flatten()
-        {
+        if let Some(context) = self.render_context.ore() {
             return Some(context);
         }
         // Upstream's final fallback uses only the explicitly supplied device.

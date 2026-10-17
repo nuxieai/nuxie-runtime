@@ -186,105 +186,101 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 # Previous review scroll_threshold-all-scroll: frame 0, op 62 (addRawPath), field point: expected (500, 0), got (1500, 0)
 # Previous review scroll_threshold-horizontal-scroll: frame 0, op 59 (addRawPath), field point: expected (500, 0), got (1700, 0)
 # Previous review text_input: frame 0, op 20 (addRawPath), field point: expected (200, 0), got (492.99805, 0)
+# Previous review (d8217e4476) collapsing_elements: frame 0, op 612 (addRawPath), field point: expected (500, -0.0 (0x80000000)), got (499.95004, -0.0 (0x80000000)); now exact with C++
+# Previous review (d8217e4476) draw_index_list: frame 0, op 54 (color): expected color, got makeRenderPaint; now exact with C++
+# Previous review (d8217e4476) layout_scroll_snap_carousel: frame 0, op 58 (addRawPath), field point: expected (105, -0.0 (0x80000000)), got (94.75, -0.0 (0x80000000)); now exact with C++
+# Previous review (d8217e4476) superbowl: frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218; now exact with C++
+# Previous review (d8217e4476) text_layout_7_3: frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422; now exact with C++
+# Previous review (d8217e4476) text_layout_pre_7_3: frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422; now exact with C++
+# Previous review (d8217e4476) artboard_list_overrides_vertical: frame 0, op 78 (addRawPath), field point: expected (700, 0), got (500, 0)
+# Previous review (d8217e4476) component_list_child_origin: frame 0, op 105 (transform), field ty: expected 29, got 12.5
+# Previous review (d8217e4476) db_health_tracker: frame 0, op 7788 (transform), field tx: expected 864.3635, got 857.43286
+# Previous review (d8217e4476) global_view_models_scripting_test: frame 0, op 54 (transform), field tx: expected 500, got 482.14285
+# Previous review (d8217e4476) hittest_ab1_grand_parent: frame 0, op 149 (transform), field ty: expected 100, got 31.04248
+# Previous review (d8217e4476) hittest_ab1_parent: frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838
+# Previous review (d8217e4476) reset_phase_multi_main: frame 0, op 69 (addRawPath), field point: expected (62, -0.0 (0x80000000)), got (60, -0.0 (0x80000000))
 REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got '
                              '(273, 0)',
- 'artboard_list_overrides_vertical': 'frame 0, op 78 (addRawPath), field point: expected (700, 0), '
-                                     'got (500, 0)',
- 'collapsing_elements': 'frame 0, op 612 (addRawPath), field point: expected (500, -0.0 '
-                        '(0x80000000)), got (499.95004, -0.0 (0x80000000))',
- 'component_list_child_origin': 'frame 0, op 105 (transform), field ty: expected 29, got 12.5',
+ 'artboard_list_overrides_vertical': 'frame 0, op 73 (addRawPath), field point: expected (500, 0), '
+                                     'got (700, 0)',
+ 'bankcard': 'frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)',
+ 'component_list_child_origin': 'frame 1, op 546 (addRawPath), field point: expected (309.3333, '
+                                '250), got (309.33334, 312)',
  'data_viz_demo': 'frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, '
                   '16.325203), got (268.33334, 16.325203)',
- 'db_health_tracker': 'frame 0, op 7788 (transform), field tx: expected 864.3635, got 857.43286',
- 'draw_index_list': 'frame 0, op 54 (color): expected color, got makeRenderPaint',
- 'global_view_models_scripting_test': 'frame 0, op 54 (transform), field tx: expected 500, got '
-                                      '482.14285',
- 'hittest_ab1_grand_parent': 'frame 0, op 149 (transform), field ty: expected 100, got 31.04248',
- 'hittest_ab1_parent': 'frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838',
- 'layout_scroll_snap_carousel': 'frame 0, op 58 (addRawPath), field point: expected (105, -0.0 '
-                                '(0x80000000)), got (94.75, -0.0 (0x80000000))',
- 'reset_phase_multi_main': 'frame 0, op 69 (addRawPath), field point: expected (62, -0.0 '
-                           '(0x80000000)), got (60, -0.0 (0x80000000))',
- 'scroll_threshold-all-scroll': 'frame 0, op 90 (transform), field tx: expected 500, got 375',
- 'superbowl': 'frame 0, op 2964 (transform), field xx: expected 0.6741602, got 0.42949218',
- 'text_layout_7_3': 'frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422',
- 'text_layout_pre_7_3': 'frame 0, op 137 (transform), field tx: expected 35.7041, got 29.107422'}
+ 'db_health_tracker': 'frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, '
+                      '0)',
+ 'global_view_models_scripting_test': 'frame 0, op 49 (addRawPath), field point: expected (945, '
+                                      '0), got (980, 0)',
+ 'hittest_ab1_grand_parent': 'frame 0, op 149 (transform), field ty: expected 100, got 0',
+ 'hittest_ab1_parent': 'frame 0, op 129 (addRawPath), field point: expected (572, 0), got '
+                       '(738.65234, 0)',
+ 'number_to_list_nested_children': 'frame 0, op 190 (addRawPath), field point: expected (250, '
+                                   '59.791016), got (250, 61)',
+ 'reset_phase_multi_main': 'frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, '
+                           '0)',
+ 'scroll_threshold-all-scroll': 'frame 0, op 90 (transform), field tx: expected 500, got 375'}
 
 REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e00881c43f3f84f8d7d9c32ae2a6aad794a7d62e5681b6ce8023962ee1d0cb7d',
- 'artboard_list_overrides_vertical': '00170e4f8046ef98432522115d2a524430048669472027dd1bb62302ddd3b85c',
- 'collapsing_elements': '31aff50c0e18b22fde821a2bb136a57e47ef92273f335bdfa62d7778ee917d78',
- 'component_list_child_origin': '1fd79d63ca4f76bce2fff4e1969c433371cb9df3ec5be2fa9629750449a8dcc6',
+ 'artboard_list_overrides_vertical': '3dd7323dcd6b9c4cdb6aedd64ba15f00465bd9e76310ddac90a42df3542b1631',
+ 'bankcard': '86f2d3515f0d1b4c094e35e9f88c1468ee2a92c54b544acda15e79845abe43fe',
+ 'component_list_child_origin': '78c29b5c807a5731a1aff7e929895efe4c7cf099664ff9e3f15aeb5f5aff1c03',
  'data_viz_demo': 'f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b',
- 'db_health_tracker': '6c998223bc65747a468d9032fdb34d6e42947eba814981304373e1574fc0f1b2',
- 'draw_index_list': 'a58f57ec5f85f0ef9e283beb2d04df7e383711e8b5b0f75d6b6c75cc52ad92fb',
- 'global_view_models_scripting_test': '1ded320dbdca544cc281ee5c950d579bce4d1c69599541943d6f54e9f0cdc364',
- 'hittest_ab1_grand_parent': '851e237d5066b780524103ba1db0593725cc4973550ab9e9a98ff6dc07dda2c8',
- 'hittest_ab1_parent': 'a34fe44079a5866f5bb4f9608879c5bc9e92092e2b2978bce2b47c6cd8971107',
- 'layout_scroll_snap_carousel': 'a3d1eca149df767af713b355ece7a41f67615500c3034dbf654160b65429ac0d',
- 'reset_phase_multi_main': 'a8338f8b9f5da3996545abeba2ead24f6f28de655815bae9e0b95e828af11278',
- 'scroll_threshold-all-scroll': 'b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f',
- 'superbowl': '5a6903ca508cc59dd3aea3155055c5750fef0406bb4b5431eab89bcb39265815',
- 'text_layout_7_3': 'b8479337b21ca49d674c75d9d21d33898d51c62c95869a7ff7acf621c5705fbb',
- 'text_layout_pre_7_3': '989f4a77072cb02527a761655a55da1e18d6a7cdbc87385cad034c9465664bad'}
+ 'db_health_tracker': '95122ffa7516a8c686466e3ec58f964b6736e3c3e92640380b71a4d05f95a29d',
+ 'global_view_models_scripting_test': '301407ac55b4ab537717af38f61d635780c075a3030d760f0d44e0c408311c44',
+ 'hittest_ab1_grand_parent': 'aab2993936f2b1df51a30cc49504bd92f23fef02cd0010badf6e32fe5dc95cfb',
+ 'hittest_ab1_parent': '3a03f5dbf20a07e0244612a4827eec609abf1af5993a91a7dbe608f0c68ad61f',
+ 'number_to_list_nested_children': 'eb7c62208d624371c600de8498b62ca5b6669a74dfbf4bcc801aab50dbb50860',
+ 'reset_phase_multi_main': '2f9c57fd492cf31d67bee2e0225a59cbbd25800a72cbd91377f2ff030d61e3db',
+ 'scroll_threshold-all-scroll': 'b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f'}
 
 LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its '
                              '273-wide host instead of extending beyond it.',
- 'artboard_list_overrides_vertical': 'The viewport returns to 500 instead of the incorrect 700 '
-                                     'minimum. Its seven Fixed 100-point child artboards keep zero '
-                                     'minima and share the 500-point row, so their content path '
-                                     'changes from 700 to 500.',
- 'collapsing_elements': 'CSS flex-shrink 1 lets the nested Fixed 500 box fit its 33.33 percent '
-                        'host, 499.95004, instead of keeping the full 500.',
- 'component_list_child_origin': "CSS flex-shrink 1 lets a Fixed child artboard fit the list row's "
-                                'height; the half-height origin moves from 29 to 12.5 as its box '
-                                'shrinks from 58 to 25.',
+ 'artboard_list_overrides_vertical': "The list's seven child artboards keep their definite "
+                                     '100-point widths as automatic minima, so the list content is '
+                                     "700 points wide instead of C++'s 500 and its path runs to x "
+                                     '700.',
+ 'bankcard': 'In the card artboard the NoWrap card number has a 740.94-point min-content line. Its '
+             'box and the card root keep CSS automatic minima, so the root is 866.94 points wide '
+             'instead of the 850-point artboard and its clip path runs to x 826.94 instead of 810. '
+             'C++ keeps the number row at the 724-point content width.',
+ 'component_list_child_origin': 'Every list artboard keeps its definite 58-point height as its '
+                                'automatic minimum, as in C++, so the first frame compares exact. '
+                                "In frame 1 the first column's Hug list holds four of them and "
+                                'three 10-point gaps, so its CSS automatic minimum is 262 points '
+                                'instead of the 200-point offer that C++ clamps to; its path runs '
+                                'to y 312 instead of 250.',
  'data_viz_demo': 'The two 50-percent chart cells in the 772-point row have 34-point padding edges '
                   'and a 20-point gap. Their 352-point bases shrink to (772 - 68 - 20)/2 = 342. '
                   'The LineBars gradient endpoint is five sixths of the cell width after 20 '
                   'padding, changing from 276.66666 to 268.33334.',
- 'db_health_tracker': 'The panel returns to its 1008-point offer and no longer floors at the '
-                      'opaque 10000-point artboard contribution. Internal Fixed items still share '
-                      'shrink, moving the first remaining transform x from 864.3635 to 857.43286.',
- 'draw_index_list': 'Ten Fixed 50-point child artboards keep zero automatic minima. With nine '
-                    'negative 10-point gaps, they share the 100-point column at (100 + 90)/10 = 19 '
-                    'each. The visible overlapping carousel items change, so the first stream '
-                    'difference is color versus paint creation. Draw-index dispatch is unchanged '
-                    'and looping scrolling remains available.',
- 'global_view_models_scripting_test': 'The parent returns to width 945. Fixed bases 500 and 480 '
-                                      'share that offer by CSS shrink weights: Main becomes '
-                                      '482.14285 and GlobalName 462.85715, instead of keeping 500 '
-                                      'and 480.',
- 'hittest_ab1_grand_parent': 'The opaque nested artboard keeps zero minimum. Fixed bases 100 and '
-                             '572 share the 208.60547 column: the first item becomes 31.04248 and '
-                             'the following origin moves from 100 to 31.04248.',
- 'hittest_ab1_parent': 'Parent-clipper returns to width 572. Fixed bases 238.65234 and 500 share '
-                       'that offer with zero minima, becoming 184.80838 and 387.19162. The first '
-                       'nested transform x changes from 238.65234 to 184.80838.',
- 'layout_scroll_snap_carousel': 'Four Fixed 105-point child artboards keep zero automatic minima '
-                                'and share the 415-point row after three 12-point gaps: (415 - '
-                                '36)/4 = 94.75 each. Looping scroll and snap dispatch remain '
-                                'active; the whole swipe and settlement stream is pinned.',
- 'reset_phase_multi_main': 'The parent returns to width 180. Three Fixed child artboards with '
-                           '62-point bases keep zero minima and share the row equally at 60, '
-                           'rather than expanding the parent to 186.',
+ 'db_health_tracker': "The panel's CSS automatic minimum includes its definite 10000-point child "
+                      'artboard and the 174 points around it, so the panel is 10174 points wide '
+                      'instead of the 1008-point offer that C++ and main keep. Its rounded path '
+                      'runs to x 10134 instead of 968.',
+ 'global_view_models_scripting_test': 'The mounted Main and GlobalName artboards keep their '
+                                      'definite 500 and 480-point widths as automatic minima, so '
+                                      'their parent is 980 points wide instead of the 945-point '
+                                      'offer. C++ keeps 945 and lets them overflow.',
+ 'hittest_ab1_grand_parent': 'In the 208.60547-point grand-parent clipper the nested artboard '
+                             'keeps its definite 572-point height as its automatic minimum, so CSS '
+                             'flex-shrink 1 takes the overflow from the empty Fixed 100-point '
+                             'item, which shrinks to zero. The following origin moves from 100 to '
+                             '0.',
+ 'hittest_ab1_parent': 'Parent-clipper keeps the automatic minimum of its definite 238.65234 and '
+                       '500-point children, so it is 738.65234 points wide instead of the '
+                       '572-point offer that C++ keeps.',
+ 'number_to_list_nested_children': "The list box's CSS automatic minimum includes its definite "
+                                   '61-point child artboards, so it stays 61 points high instead '
+                                   'of the 59.79 points left under the header. C++ lets the '
+                                   '61-point items overflow.',
+ 'reset_phase_multi_main': "The parent's CSS automatic minimum includes its three child artboards' "
+                           'definite 62-point widths, so it is 186 points wide instead of the '
+                           '180-point offer. The children keep 62 as in C++.',
  'scroll_threshold-all-scroll': 'Overflow mapping keeps the viewport at 500 and the content at '
                                 '1500. Inside the content row, Fixed bases 500 and 1500 share 1500 '
                                 'by CSS shrink weights, becoming 375 and 1125. Scrolling keeps its '
-                                '1000-point range; every threshold-drag frame remains compared.',
- 'superbowl': 'In the second Summary, the Fixed Celebration box has a 171.82422-point basis and '
-              'shrinks to 85.89844. Its fitted square image therefore draws at 85.89844 instead of '
-              'the height-limited 134.83203; Silver scale changes from 0.6741602 to 0.42949218. '
-              'Image fitting code is unchanged.',
- 'text_layout_7_3': 'The small clock item is a Fixed vector box with authored basis 17.300781, not '
-                    'Hug text. Its drawing-only Solo content has zero minimum. The sibling label '
-                    'has a true longest-word minimum 49.89258, leaving 87 - 16 padding - 17 gap - '
-                    '49.89258 = 4.107422 for the Fixed box. The C++ following origin 35.7041 '
-                    'becomes 29.107422.',
- 'text_layout_pre_7_3': 'The small clock item is a Fixed vector box with authored basis 17.300781, '
-                        'not Hug text. Its drawing-only Solo content has zero minimum. The sibling '
-                        'label has a true longest-word minimum 49.89258, leaving 87 - 16 padding - '
-                        '17 gap - 49.89258 = 4.107422 for the Fixed box. The C++ following origin '
-                        '35.7041 becomes 29.107422.'})
+                                '1000-point range; every threshold-drag frame remains compared.'})
 
 
 def reviewed_divergence(silver_id: str) -> str | None:

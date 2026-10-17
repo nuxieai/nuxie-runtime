@@ -18,8 +18,6 @@ pub struct LayoutDivergence {
 }
 
 // Restored to the original exact C++ comparison after the minimum-contract fix:
-// s20__flex-row__none__shape__participant__fill__y-hug__sibling-fills__over
-// s20__flex-row__none__shape__participant__fill__y-hug__sibling-fills__over__unbounded
 // s18__flex-row__none__text__participant__tf-resizes-box
 // s18__flex-column__none__text__participant__tf-resizes-box
 // s18__flex-row__none__text__participant__tf-keeps-box
@@ -32,6 +30,11 @@ pub struct LayoutDivergence {
 // s2__flex-row__none__image__participant__c-follow-path
 // s2__flex-row__group__image__participant__c-translation
 // s2__flex-row__group__image__participant__c-follow-path
+//
+// Reviewed again after shapes took their natural minimum (UNIV-4844), having
+// been restored to exact while shapes kept a zero minimum:
+// s20__flex-row__none__shape__participant__fill__y-hug__sibling-fills__over
+// s20__flex-row__none__shape__participant__fill__y-hug__sibling-fills__over__unbounded
 
 pub const LAYOUT_DIVERGENCES: &[LayoutDivergence] = &[
     LayoutDivergence {
@@ -194,789 +197,705 @@ pub const LAYOUT_DIVERGENCES: &[LayoutDivergence] = &[
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 0 != 60
+    // Previous reviewed first difference: Subject.world[4]: 56.115105 != 60
     LayoutDivergence {
         fixture: "s20__flex-row__none__layout-component__hug__leaf-content__over",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 143.88489 points wide. Rive controlSize writes the solved primitive size back into its measurement; the retained second solve uses that smaller basis.",
-        first_difference: "Subject.world[4]: 56.115105 != 60",
+        reason: "layout-diverges:In the 200x120 row the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content: fit-content keeps the Hug box at 260 instead of clamping it to the 200 offer, and flex-shrink 1 reduces the empty Fixed sibling from its 60 basis to zero. Rive clamps the leaf measure to the offer.",
+        first_difference: "Subject.world[4]: 0 != 60",
         pins: &[
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 56.115105.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 60.0,
-                css: 56.115105,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 56.115105.
             ScalarPin {
                 field: "layoutBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 56.115105,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 260.0.
+            // Previous reviewed CSS value: 143.88489.
             ScalarPin {
                 field: "layoutBounds",
                 index: 2,
                 upstream: 200.0,
-                css: 143.88489,
+                css: 260.0,
             },
-            // Previous reviewed CSS value: 260.0.
+            // Previous reviewed CSS value: 143.88489.
             ScalarPin {
                 field: "localBounds",
                 index: 2,
                 upstream: 200.0,
-                css: 143.88489,
+                css: 260.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 56.115105.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 56.115105,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 260.0.
+            // Previous reviewed CSS value: 143.88489.
             ScalarPin {
                 field: "worldBounds",
                 index: 2,
                 upstream: 200.0,
-                css: 143.88489,
+                css: 260.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 56.115105.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 60.0,
-                css: 56.115105,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 56.115105.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 60.0,
-                css: 56.115105,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 56.115105.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 60.0,
-                css: 56.115105,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 260.0.
+            // Previous reviewed CSS value: 143.88489.
             ScalarPin {
                 field: "computedSize",
                 index: 0,
                 upstream: 200.0,
-                css: 143.88489,
+                css: 260.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 0 != 60
+    // Previous reviewed first difference: Subject.world[4]: 53.932583 != 60
     LayoutDivergence {
         fixture: "s20__flex-row__none__layout-component__hug__leaf-content__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 146.06741 points wide. Rive controlSize writes the solved primitive size back into its measurement; the retained second solve uses that smaller basis.",
-        first_difference: "Subject.world[4]: 53.932583 != 60",
+        reason: "layout-diverges:The Hug box keeps 260 as in C++ because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content. CSS flex-shrink 1 takes the 60-point overflow from the empty Fixed sibling, which shrinks from 60 to zero, so the subject starts at 0 instead of 60.",
+        first_difference: "Subject.world[4]: 0 != 60",
         pins: &[
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "layoutBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "layoutBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 146.06741,
-            },
-            ScalarPin {
-                field: "localBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 146.06741,
-            },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 146.06741,
-            },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
-            },
-            ScalarPin {
-                field: "computedSize",
-                index: 0,
-                upstream: 260.0,
-                css: 146.06741,
+                css: 0.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[0]: 1 != 0.7692
+    // Previous reviewed first difference: Subject.world[0]: 0.591716 != 0.7692
     LayoutDivergence {
         fixture: "s20__flex-row__none__shape__participant__hug__over",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 153.84616 points wide. The participant retains the natural primitive basis.",
-        first_difference: "Subject.world[0]: 0.591716 != 0.7692",
+        reason: "layout-diverges:In the 200x120 row the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content: the Hug participant keeps 260 and draws unscaled instead of at 200/260 = 0.7692, and flex-shrink 1 reduces the empty Fixed sibling from 60 to zero, moving the shape's center from 160 to 130. Rive clamps the leaf measure to the offer.",
+        first_difference: "Subject.world[0]: 1 != 0.7692",
         pins: &[
-            // Previous reviewed CSS value: 1.0.
+            // Previous reviewed CSS value: 0.591716.
             ScalarPin {
                 field: "world",
                 index: 0,
                 upstream: 0.7692,
-                css: 0.591716,
+                css: 1.0,
             },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 123.07693.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 160.0,
-                css: 123.07693,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 46.153847.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 46.153847,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 260.0.
+            // Previous reviewed CSS value: 153.84616.
             ScalarPin {
                 field: "worldBounds",
                 index: 2,
                 upstream: 200.0,
-                css: 153.84616,
+                css: 260.0,
             },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 123.07693.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 160.0,
-                css: 123.07693,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 123.07693.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 160.0,
-                css: 123.07693,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 123.07693.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 160.0,
-                css: 123.07693,
+                css: 130.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 130 != 190
+    // Previous reviewed first difference: Subject.world[0]: 0.625 != 1
     LayoutDivergence {
         fixture: "s20__flex-row__none__shape__participant__hug__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 162.5 points wide. The participant retains the natural primitive basis.",
-        first_difference: "Subject.world[0]: 0.625 != 1",
+        reason: "layout-diverges:The Hug participant keeps 260 as in C++ because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content. CSS flex-shrink 1 reduces the empty Fixed sibling from 60 to zero instead of letting the row overflow, moving the shape's center from 190 to 130.",
+        first_difference: "Subject.world[4]: 130 != 190",
         pins: &[
-            ScalarPin {
-                field: "world",
-                index: 0,
-                upstream: 1.0,
-                css: 0.625,
-            },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 190.0,
-                css: 118.75,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 37.5.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 37.5,
+                css: 0.0,
+            },
+            // Previous reviewed CSS value: 118.75.
+            ScalarPin {
+                field: "computedWorld",
+                index: 0,
+                upstream: 190.0,
+                css: 130.0,
+            },
+            // Previous reviewed CSS value: 118.75.
+            ScalarPin {
+                field: "computedRoot",
+                index: 0,
+                upstream: 190.0,
+                css: 130.0,
+            },
+            // Previous reviewed CSS value: 118.75.
+            ScalarPin {
+                field: "computedLocal",
+                index: 0,
+                upstream: 190.0,
+                css: 130.0,
+            },
+        ],
+    },
+    // Previous reviewed first difference: Subject.world[5]: 36.923077 != 40
+    LayoutDivergence {
+        fixture: "s20__flex-column__none__layout-component__hug__leaf-content__over",
+        reason: "layout-diverges:In the 200x120 column the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content on both axes: fit-content keeps the Hug box 260 wide, min-height:auto floors it at 180 instead of the 120 offer, and flex-shrink 1 reduces the empty Fixed sibling from its 40 basis to zero. Rive clamps both axes of the leaf measure to the offer.",
+        first_difference: "Subject.world[5]: 0 != 40",
+        pins: &[
+            // Previous reviewed CSS value: 36.923077.
+            ScalarPin {
+                field: "world",
+                index: 5,
+                upstream: 40.0,
+                css: 0.0,
+            },
+            // Previous reviewed CSS value: 36.923077.
+            ScalarPin {
+                field: "layoutBounds",
+                index: 1,
+                upstream: 40.0,
+                css: 0.0,
+            },
+            ScalarPin {
+                field: "layoutBounds",
+                index: 2,
+                upstream: 200.0,
+                css: 260.0,
+            },
+            // Previous reviewed CSS value: 83.07692.
+            ScalarPin {
+                field: "layoutBounds",
+                index: 3,
+                upstream: 120.0,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "localBounds",
+                index: 2,
+                upstream: 200.0,
+                css: 260.0,
+            },
+            // Previous reviewed CSS value: 83.07692.
+            ScalarPin {
+                field: "localBounds",
+                index: 3,
+                upstream: 120.0,
+                css: 180.0,
+            },
+            // Previous reviewed CSS value: 36.923077.
+            ScalarPin {
+                field: "worldBounds",
+                index: 1,
+                upstream: 40.0,
+                css: 0.0,
             },
             ScalarPin {
                 field: "worldBounds",
                 index: 2,
-                upstream: 260.0,
-                css: 162.5,
+                upstream: 200.0,
+                css: 260.0,
             },
-            // Previous reviewed CSS value: 130.0.
-            ScalarPin {
-                field: "computedWorld",
-                index: 0,
-                upstream: 190.0,
-                css: 118.75,
-            },
-            // Previous reviewed CSS value: 130.0.
-            ScalarPin {
-                field: "computedRoot",
-                index: 0,
-                upstream: 190.0,
-                css: 118.75,
-            },
-            // Previous reviewed CSS value: 130.0.
-            ScalarPin {
-                field: "computedLocal",
-                index: 0,
-                upstream: 190.0,
-                css: 118.75,
-            },
-        ],
-    },
-    // Previous reviewed first difference: Subject.world[5]: 0 != 40
-    LayoutDivergence {
-        fixture: "s20__flex-column__none__layout-component__hug__leaf-content__over",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 120-point column between the 40-point Fixed sibling and the Hug shape, weighted by their bases. The subject resolves to 83.07692 points high. Rive controlSize writes the solved primitive size back into its measurement, so the retained second solve uses that smaller basis.",
-        first_difference: "Subject.world[5]: 36.923077 != 40",
-        pins: &[
-            // Previous reviewed CSS value: 0.0.
-            ScalarPin {
-                field: "world",
-                index: 5,
-                upstream: 40.0,
-                css: 36.923077,
-            },
-            // Previous reviewed CSS value: 0.0.
-            ScalarPin {
-                field: "layoutBounds",
-                index: 1,
-                upstream: 40.0,
-                css: 36.923077,
-            },
-            // Previous reviewed CSS value: 180.0.
-            ScalarPin {
-                field: "layoutBounds",
-                index: 3,
-                upstream: 120.0,
-                css: 83.07692,
-            },
-            // Previous reviewed CSS value: 180.0.
-            ScalarPin {
-                field: "localBounds",
-                index: 3,
-                upstream: 120.0,
-                css: 83.07692,
-            },
-            // Previous reviewed CSS value: 0.0.
-            ScalarPin {
-                field: "worldBounds",
-                index: 1,
-                upstream: 40.0,
-                css: 36.923077,
-            },
-            // Previous reviewed CSS value: 180.0.
+            // Previous reviewed CSS value: 83.07692.
             ScalarPin {
                 field: "worldBounds",
                 index: 3,
                 upstream: 120.0,
-                css: 83.07692,
+                css: 180.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 36.923077.
             ScalarPin {
                 field: "computedWorld",
                 index: 1,
                 upstream: 40.0,
-                css: 36.923077,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 36.923077.
             ScalarPin {
                 field: "computedRoot",
                 index: 1,
                 upstream: 40.0,
-                css: 36.923077,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 36.923077.
             ScalarPin {
                 field: "computedLocal",
                 index: 1,
                 upstream: 40.0,
-                css: 36.923077,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 180.0.
+            ScalarPin {
+                field: "computedSize",
+                index: 0,
+                upstream: 200.0,
+                css: 260.0,
+            },
+            // Previous reviewed CSS value: 83.07692.
             ScalarPin {
                 field: "computedSize",
                 index: 1,
                 upstream: 120.0,
-                css: 83.07692,
+                css: 180.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[5]: 0 != 40
+    // Previous reviewed first difference: Subject.world[5]: 34.73684 != 40
     LayoutDivergence {
         fixture: "s20__flex-column__none__layout-component__hug__leaf-content__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 120-point column between the 40-point Fixed sibling and the Hug shape, weighted by their bases. The subject resolves to 85.26315 points high. Rive controlSize writes the solved primitive size back into its measurement, so the retained second solve uses that smaller basis.",
-        first_difference: "Subject.world[5]: 34.73684 != 40",
+        reason: "layout-diverges:The Hug box keeps 260x180 as in C++ because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content. CSS flex-shrink 1 takes the 100-point overflow from the empty Fixed sibling, which shrinks from 40 to zero, so the subject starts at 0 instead of 40.",
+        first_difference: "Subject.world[5]: 0 != 40",
         pins: &[
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 34.73684.
             ScalarPin {
                 field: "world",
                 index: 5,
                 upstream: 40.0,
-                css: 34.73684,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 34.73684.
             ScalarPin {
                 field: "layoutBounds",
                 index: 1,
                 upstream: 40.0,
-                css: 34.73684,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "layoutBounds",
-                index: 3,
-                upstream: 180.0,
-                css: 85.26315,
-            },
-            ScalarPin {
-                field: "localBounds",
-                index: 3,
-                upstream: 180.0,
-                css: 85.26315,
-            },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 34.73684.
             ScalarPin {
                 field: "worldBounds",
                 index: 1,
                 upstream: 40.0,
-                css: 34.73684,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 3,
-                upstream: 180.0,
-                css: 85.26315,
-            },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 34.73684.
             ScalarPin {
                 field: "computedWorld",
                 index: 1,
                 upstream: 40.0,
-                css: 34.73684,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 34.73684.
             ScalarPin {
                 field: "computedRoot",
                 index: 1,
                 upstream: 40.0,
-                css: 34.73684,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 34.73684.
             ScalarPin {
                 field: "computedLocal",
                 index: 1,
                 upstream: 40.0,
-                css: 34.73684,
-            },
-            ScalarPin {
-                field: "computedSize",
-                index: 1,
-                upstream: 180.0,
-                css: 85.26315,
+                css: 0.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[3]: 1 != 0.6667
+    // Previous reviewed first difference: Subject.world[3]: 0.5 != 0.6667
     LayoutDivergence {
         fixture: "s20__flex-column__none__shape__participant__hug__over",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 120-point column between the 40-point Fixed sibling and the Hug shape, weighted by their bases. The subject resolves to 90 points high. The participant retains the natural primitive basis.",
-        first_difference: "Subject.world[3]: 0.5 != 0.6667",
+        reason: "layout-diverges:In the 200x120 column the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content on both axes: the Hug participant keeps 260x180 and draws unscaled instead of at 200/260 and 120/180, and flex-shrink 1 reduces the empty Fixed sibling from 40 to zero, moving the shape's center from (100, 100) to (130, 90). Rive clamps the leaf measure to the offer.",
+        first_difference: "Subject.world[0]: 1 != 0.7692",
         pins: &[
-            // Previous reviewed CSS value: 1.0.
+            ScalarPin {
+                field: "world",
+                index: 0,
+                upstream: 0.7692,
+                css: 1.0,
+            },
+            // Previous reviewed CSS value: 0.5.
             ScalarPin {
                 field: "world",
                 index: 3,
                 upstream: 0.6667,
-                css: 0.5,
+                css: 1.0,
             },
-            // Previous reviewed CSS value: 90.0.
+            ScalarPin {
+                field: "world",
+                index: 4,
+                upstream: 100.0,
+                css: 130.0,
+            },
+            // Previous reviewed CSS value: 75.0.
             ScalarPin {
                 field: "world",
                 index: 5,
                 upstream: 100.0,
-                css: 75.0,
+                css: 90.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 30.0.
             ScalarPin {
                 field: "worldBounds",
                 index: 1,
                 upstream: 40.0,
-                css: 30.0,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 180.0.
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 200.0,
+                css: 260.0,
+            },
+            // Previous reviewed CSS value: 90.0.
             ScalarPin {
                 field: "worldBounds",
                 index: 3,
                 upstream: 120.0,
-                css: 90.0,
+                css: 180.0,
             },
-            // Previous reviewed CSS value: 90.0.
+            ScalarPin {
+                field: "computedWorld",
+                index: 0,
+                upstream: 100.0,
+                css: 130.0,
+            },
+            // Previous reviewed CSS value: 75.0.
             ScalarPin {
                 field: "computedWorld",
                 index: 1,
                 upstream: 100.0,
-                css: 75.0,
+                css: 90.0,
             },
-            // Previous reviewed CSS value: 90.0.
+            ScalarPin {
+                field: "computedRoot",
+                index: 0,
+                upstream: 100.0,
+                css: 130.0,
+            },
+            // Previous reviewed CSS value: 75.0.
             ScalarPin {
                 field: "computedRoot",
                 index: 1,
                 upstream: 100.0,
-                css: 75.0,
+                css: 90.0,
             },
-            // Previous reviewed CSS value: 90.0.
+            ScalarPin {
+                field: "computedLocal",
+                index: 0,
+                upstream: 100.0,
+                css: 130.0,
+            },
+            // Previous reviewed CSS value: 75.0.
             ScalarPin {
                 field: "computedLocal",
                 index: 1,
                 upstream: 100.0,
-                css: 75.0,
+                css: 90.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[5]: 90 != 130
+    // Previous reviewed first difference: Subject.world[3]: 0.54545456 != 1
     LayoutDivergence {
         fixture: "s20__flex-column__none__shape__participant__hug__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 120-point column between the 40-point Fixed sibling and the Hug shape, weighted by their bases. The subject resolves to 98.18182 points high. The participant retains the natural primitive basis.",
-        first_difference: "Subject.world[3]: 0.54545456 != 1",
+        reason: "layout-diverges:The Hug participant keeps 260x180 as in C++ because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content. CSS flex-shrink 1 reduces the empty Fixed sibling from 40 to zero instead of letting the column overflow, moving the shape's center y from 130 to 90.",
+        first_difference: "Subject.world[5]: 90 != 130",
         pins: &[
-            ScalarPin {
-                field: "world",
-                index: 3,
-                upstream: 1.0,
-                css: 0.54545456,
-            },
-            // Previous reviewed CSS value: 90.0.
+            // Previous reviewed CSS value: 70.909096.
             ScalarPin {
                 field: "world",
                 index: 5,
                 upstream: 130.0,
-                css: 70.909096,
+                css: 90.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 21.818184.
             ScalarPin {
                 field: "worldBounds",
                 index: 1,
                 upstream: 40.0,
-                css: 21.818184,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 3,
-                upstream: 180.0,
-                css: 98.18182,
-            },
-            // Previous reviewed CSS value: 90.0.
+            // Previous reviewed CSS value: 70.909096.
             ScalarPin {
                 field: "computedWorld",
                 index: 1,
                 upstream: 130.0,
-                css: 70.909096,
+                css: 90.0,
             },
-            // Previous reviewed CSS value: 90.0.
+            // Previous reviewed CSS value: 70.909096.
             ScalarPin {
                 field: "computedRoot",
                 index: 1,
                 upstream: 130.0,
-                css: 70.909096,
+                css: 90.0,
             },
-            // Previous reviewed CSS value: 90.0.
+            // Previous reviewed CSS value: 70.909096.
             ScalarPin {
                 field: "computedLocal",
                 index: 1,
                 upstream: 130.0,
-                css: 70.909096,
+                css: 90.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 20 != 60
+    // Previous reviewed first difference: Subject.world[4]: 53.932583 != 60
     LayoutDivergence {
         fixture: "s20__flex-row__none__layout-component__hug__k-max-over-fill__leaf-content__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 146.06741 points wide. Rive controlSize writes the solved primitive size back into its measurement; the retained second solve uses that smaller basis. The authored 180 maximum remains in force and is above this allocation.",
-        first_difference: "Subject.world[4]: 53.932583 != 60",
+        reason: "layout-diverges:The authored max-width 180 caps the natural 260 minimum, since the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so the subject stays 180 wide as in C++. CSS flex-shrink 1 reduces the empty Fixed sibling from 60 to 20, moving the subject's origin from 60 to 20.",
+        first_difference: "Subject.world[4]: 20 != 60",
         pins: &[
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 20.0,
             },
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "layoutBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 20.0,
             },
-            ScalarPin {
-                field: "layoutBounds",
-                index: 2,
-                upstream: 180.0,
-                css: 146.06741,
-            },
-            ScalarPin {
-                field: "localBounds",
-                index: 2,
-                upstream: 180.0,
-                css: 146.06741,
-            },
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 20.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 2,
-                upstream: 180.0,
-                css: 146.06741,
-            },
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 20.0,
             },
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 20.0,
             },
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
-            },
-            ScalarPin {
-                field: "computedSize",
-                index: 0,
-                upstream: 180.0,
-                css: 146.06741,
+                css: 20.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 0 != 60
+    // Previous reviewed first difference: Subject.world[4]: 53.932583 != 60
     LayoutDivergence {
         fixture: "s20__flex-row__none__layout-component__hug__y-fixed__leaf-content__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 146.06741 points wide. Rive controlSize writes the solved primitive size back into its measurement; the retained second solve uses that smaller basis. The authored cross-axis height stays 40.",
-        first_difference: "Subject.world[4]: 53.932583 != 60",
+        reason: "layout-diverges:The Hug box keeps 260 as in C++ because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content; the Fixed 40 height is unchanged. CSS flex-shrink 1 takes the overflow from the empty Fixed sibling, which shrinks from 60 to zero, so the subject starts at 0 instead of 60.",
+        first_difference: "Subject.world[4]: 0 != 60",
         pins: &[
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "layoutBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "layoutBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 146.06741,
-            },
-            ScalarPin {
-                field: "localBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 146.06741,
-            },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 146.06741,
-            },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
+                css: 0.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 53.932583.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 60.0,
-                css: 53.932583,
-            },
-            ScalarPin {
-                field: "computedSize",
-                index: 0,
-                upstream: 260.0,
-                css: 146.06741,
+                css: 0.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 110 != 150
+    // Previous reviewed first difference: Subject.world[0]: 0.625 != 0.6923
     LayoutDivergence {
         fixture: "s20__flex-row__none__shape__participant__hug__k-max-over-fill__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 162.5 points wide. The participant retains the natural primitive basis. The authored 180 maximum remains in force and is above this allocation.",
-        first_difference: "Subject.world[0]: 0.625 != 0.6923",
+        reason: "layout-diverges:The authored max-width 180 caps the natural 260 minimum, since the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so the participant stays 180 wide as in C++. CSS flex-shrink 1 reduces the empty Fixed sibling from 60 to 20, moving the shape's center from 150 to 110.",
+        first_difference: "Subject.world[4]: 110 != 150",
         pins: &[
-            ScalarPin {
-                field: "world",
-                index: 0,
-                upstream: 0.6923,
-                css: 0.625,
-            },
-            // Previous reviewed CSS value: 110.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 150.0,
-                css: 118.75,
+                css: 110.0,
             },
-            // Previous reviewed CSS value: 20.0.
+            // Previous reviewed CSS value: 37.5.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 37.5,
+                css: 20.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 2,
-                upstream: 180.0,
-                css: 162.5,
-            },
-            // Previous reviewed CSS value: 110.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 150.0,
-                css: 118.75,
+                css: 110.0,
             },
-            // Previous reviewed CSS value: 110.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 150.0,
-                css: 118.75,
+                css: 110.0,
             },
-            // Previous reviewed CSS value: 110.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 150.0,
-                css: 118.75,
+                css: 110.0,
             },
         ],
     },
-    // Previous reviewed first difference: Subject.world[4]: 130 != 190
+    // Previous reviewed first difference: Subject.world[0]: 0.625 != 1
     LayoutDivergence {
         fixture: "s20__flex-row__none__shape__participant__hug__y-fixed__over__unbounded",
-        reason: "layout-diverges:Shape measurement has no minimum contract and keeps zero automatic minimum. CSS flex-shrink 1 shares the 200-point row in proportion to each item basis: the 60-point Fixed sibling and the Hug shape. The subject resolves to 162.5 points wide. The participant retains the natural primitive basis. The authored cross-axis height stays 40.",
-        first_difference: "Subject.world[0]: 0.625 != 1",
+        reason: "layout-diverges:The Hug participant keeps 260 as in C++ because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content; the Fixed 40 height is unchanged. CSS flex-shrink 1 reduces the empty Fixed sibling from 60 to zero, moving the shape's center from 190 to 130.",
+        first_difference: "Subject.world[4]: 130 != 190",
         pins: &[
-            ScalarPin {
-                field: "world",
-                index: 0,
-                upstream: 1.0,
-                css: 0.625,
-            },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "world",
                 index: 4,
                 upstream: 190.0,
-                css: 118.75,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 0.0.
+            // Previous reviewed CSS value: 37.5.
             ScalarPin {
                 field: "worldBounds",
                 index: 0,
                 upstream: 60.0,
-                css: 37.5,
+                css: 0.0,
             },
-            ScalarPin {
-                field: "worldBounds",
-                index: 2,
-                upstream: 260.0,
-                css: 162.5,
-            },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "computedWorld",
                 index: 0,
                 upstream: 190.0,
-                css: 118.75,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "computedRoot",
                 index: 0,
                 upstream: 190.0,
-                css: 118.75,
+                css: 130.0,
             },
-            // Previous reviewed CSS value: 130.0.
+            // Previous reviewed CSS value: 118.75.
             ScalarPin {
                 field: "computedLocal",
                 index: 0,
                 upstream: 190.0,
-                css: 118.75,
+                css: 130.0,
             },
         ],
     },
@@ -2588,6 +2507,252 @@ pub const LAYOUT_DIVERGENCES: &[LayoutDivergence] = &[
                 index: 1,
                 upstream: 115.0,
                 css: 75.0,
+            },
+        ],
+    },
+    LayoutDivergence {
+        fixture: "s20__flex-row__none__shape__participant__fill__y-hug__sibling-fills__over",
+        reason: "layout-diverges:The Fill participant cannot shrink below 260 because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so its Fill fraction no longer squeezes it to 75 (scale 0.2885). The leading Fill sibling keeps its 50 content contribution and the pair overflows the 200 row, moving the shape's center from 162.5 to 180.",
+        first_difference: "Subject.world[0]: 1 != 0.2885",
+        pins: &[
+            ScalarPin {
+                field: "world",
+                index: 0,
+                upstream: 0.2885,
+                css: 1.0,
+            },
+            ScalarPin {
+                field: "world",
+                index: 4,
+                upstream: 162.5,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 0,
+                upstream: 125.0,
+                css: 50.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 75.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "computedWorld",
+                index: 0,
+                upstream: 162.5,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "computedRoot",
+                index: 0,
+                upstream: 162.5,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "computedLocal",
+                index: 0,
+                upstream: 162.5,
+                css: 180.0,
+            },
+        ],
+    },
+    LayoutDivergence {
+        fixture: "s20__flex-row__none__shape__participant__fill__y-hug__sibling-fills__over__unbounded",
+        reason: "layout-diverges:The Fill participant cannot shrink below 260 because the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so its Fill fraction no longer squeezes it to 75 (scale 0.2885). The leading Fill sibling keeps its 50 content contribution and the pair overflows the 200 row, moving the shape's center from 162.5 to 180.",
+        first_difference: "Subject.world[0]: 1 != 0.2885",
+        pins: &[
+            ScalarPin {
+                field: "world",
+                index: 0,
+                upstream: 0.2885,
+                css: 1.0,
+            },
+            ScalarPin {
+                field: "world",
+                index: 4,
+                upstream: 162.5,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 0,
+                upstream: 125.0,
+                css: 50.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 75.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "computedWorld",
+                index: 0,
+                upstream: 162.5,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "computedRoot",
+                index: 0,
+                upstream: 162.5,
+                css: 180.0,
+            },
+            ScalarPin {
+                field: "computedLocal",
+                index: 0,
+                upstream: 162.5,
+                css: 180.0,
+            },
+        ],
+    },
+    LayoutDivergence {
+        fixture: "s21__grid__none__layout-component__hug__auto__leaf-content__over__track-row-auto",
+        reason: "layout-diverges:Grid items keep CSS min-width:auto and the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so the auto column and the Hug box keep 260 above the 140 cell offer. Rive clamps the leaf measure to the cell.",
+        first_difference: "Subject.layoutBounds[2]: 260 != 140",
+        pins: &[
+            ScalarPin {
+                field: "layoutBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "localBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "computedSize",
+                index: 0,
+                upstream: 140.0,
+                css: 260.0,
+            },
+        ],
+    },
+    LayoutDivergence {
+        fixture: "s21__grid__none__layout-component__hug__auto__leaf-content__over__track-row-fr",
+        reason: "layout-diverges:Grid items keep CSS min-width:auto and the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so the auto column and the Hug box keep 260 above the 140 cell offer. Rive clamps the leaf measure to the cell.",
+        first_difference: "Subject.layoutBounds[2]: 260 != 140",
+        pins: &[
+            ScalarPin {
+                field: "layoutBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "localBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "computedSize",
+                index: 0,
+                upstream: 140.0,
+                css: 260.0,
+            },
+        ],
+    },
+    LayoutDivergence {
+        fixture: "s21__grid__none__shape__participant__hug__auto__over__track-row-auto",
+        reason: "layout-diverges:Grid items keep CSS min-width:auto and the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so the participant keeps 260 above the 140 cell offer and draws unscaled instead of at 140/260 = 0.5385, moving its center from 130 to 190. Rive clamps the leaf measure to the cell.",
+        first_difference: "Subject.world[0]: 1 != 0.5385",
+        pins: &[
+            ScalarPin {
+                field: "world",
+                index: 0,
+                upstream: 0.5385,
+                css: 1.0,
+            },
+            ScalarPin {
+                field: "world",
+                index: 4,
+                upstream: 130.0,
+                css: 190.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "computedWorld",
+                index: 0,
+                upstream: 130.0,
+                css: 190.0,
+            },
+            ScalarPin {
+                field: "computedRoot",
+                index: 0,
+                upstream: 130.0,
+                css: 190.0,
+            },
+            ScalarPin {
+                field: "computedLocal",
+                index: 0,
+                upstream: 130.0,
+                css: 190.0,
+            },
+        ],
+    },
+    LayoutDivergence {
+        fixture: "s21__grid__none__shape__participant__hug__auto__over__track-row-fr",
+        reason: "layout-diverges:Grid items keep CSS min-width:auto and the 260x180 shape is non-reflowing content, so its natural size from authored geometry is its CSS min-content, so the participant keeps 260 above the 140 cell offer and draws unscaled instead of at 140/260 = 0.5385, moving its center from 130 to 190. Rive clamps the leaf measure to the cell.",
+        first_difference: "Subject.world[0]: 1 != 0.5385",
+        pins: &[
+            ScalarPin {
+                field: "world",
+                index: 0,
+                upstream: 0.5385,
+                css: 1.0,
+            },
+            ScalarPin {
+                field: "world",
+                index: 4,
+                upstream: 130.0,
+                css: 190.0,
+            },
+            ScalarPin {
+                field: "worldBounds",
+                index: 2,
+                upstream: 140.0,
+                css: 260.0,
+            },
+            ScalarPin {
+                field: "computedWorld",
+                index: 0,
+                upstream: 130.0,
+                css: 190.0,
+            },
+            ScalarPin {
+                field: "computedRoot",
+                index: 0,
+                upstream: 130.0,
+                css: 190.0,
+            },
+            ScalarPin {
+                field: "computedLocal",
+                index: 0,
+                upstream: 130.0,
+                css: 190.0,
             },
         ],
     },

@@ -38,12 +38,62 @@ pub enum VmState {
 
 type InterruptFn = Box<dyn Fn(&Lua) -> Result<VmState> + 'static>;
 
+/// Safepoint counters an interrupt settles without running its closure.
+///
+/// While `used` is below `limit` and the optional countdown is above zero, a
+/// safepoint increments `used`, decrements the countdown and continues: what
+/// a closure that counts safepoints against those limits would do, without
+/// building a [`Lua`] handle or calling it. Otherwise the closure runs and
+/// stays the authority for the exhausted case.
+#[derive(Clone)]
+pub struct InterruptBudget {
+    used: Rc<Cell<usize>>,
+    limit: usize,
+    countdown: Option<Rc<Cell<u32>>>,
+}
+
+impl InterruptBudget {
+    /// A budget of safepoints counted up in `used`, free below `limit`.
+    pub fn new(used: Rc<Cell<usize>>, limit: usize) -> Self {
+        Self {
+            used,
+            limit,
+            countdown: None,
+        }
+    }
+
+    /// Also count `remaining` down; a safepoint is free only while it is
+    /// above zero.
+    pub fn with_countdown(mut self, remaining: Rc<Cell<u32>>) -> Self {
+        self.countdown = Some(remaining);
+        self
+    }
+
+    /// Settle one safepoint when both counters allow it.
+    fn spend(&self) -> bool {
+        let used = self.used.get();
+        if used >= self.limit {
+            return false;
+        }
+        if let Some(countdown) = &self.countdown {
+            let remaining = countdown.get();
+            if remaining == 0 {
+                return false;
+            }
+            countdown.set(remaining - 1);
+        }
+        self.used.set(used + 1);
+        true
+    }
+}
+
 /// One VM's installed interrupt closure. `running` marks a call in progress:
 /// an interrupt reached while the closure runs (re-entrantly, from Lua it
 /// executes) is skipped, as when the closure was taken out of the map for the
 /// call. A closure installed meanwhile is a new entry that runs at once.
 struct InterruptEntry {
     callback: InterruptFn,
+    budget: Option<InterruptBudget>,
     running: Cell<bool>,
 }
 
@@ -69,11 +119,27 @@ impl Lua {
     where
         F: Fn(&Lua) -> Result<VmState> + crate::sync::MaybeSend + 'static,
     {
+        self.install_interrupt(Box::new(callback), None);
+    }
+
+    /// [`Lua::set_interrupt`] for a callback that counts safepoints against
+    /// `budget`: safepoints the budget settles do not call it (see
+    /// [`InterruptBudget`]). The callback must do exactly what the budget
+    /// does while it allows a safepoint.
+    pub fn set_interrupt_with_budget<F>(&self, budget: InterruptBudget, callback: F)
+    where
+        F: Fn(&Lua) -> Result<VmState> + crate::sync::MaybeSend + 'static,
+    {
+        self.install_interrupt(Box::new(callback), Some(budget));
+    }
+
+    fn install_interrupt(&self, callback: InterruptFn, budget: Option<InterruptBudget>) {
         let state = self.state();
         unsafe {
             let key = vm_key(state);
             let entry = Rc::new(InterruptEntry {
-                callback: Box::new(callback),
+                callback,
+                budget,
                 running: Cell::new(false),
             });
             INTERRUPTS.with(|m| {
@@ -124,14 +190,21 @@ unsafe fn interrupt_trampoline(
         return Ok(());
     }
     let key = unsafe { vm_key(state) };
-    // Hold the entry (not the map borrow) for the duration of the call, so a
-    // re-entrant `set_interrupt`/`remove_interrupt` from inside the callback
-    // can replace the map's entry freely.
-    let entry = INTERRUPTS.with(|m| m.borrow().get(&key).cloned());
+    // A safepoint reached while the closure runs is skipped, and one its
+    // budget settles needs no call. Otherwise hold the entry (not the map
+    // borrow) for the duration of the call, so a re-entrant
+    // `set_interrupt`/`remove_interrupt` from inside the callback can replace
+    // the map's entry freely.
+    let entry = INTERRUPTS.with(|m| {
+        let map = m.borrow();
+        let entry = map.get(&key)?;
+        if entry.running.get() || entry.budget.as_ref().is_some_and(InterruptBudget::spend) {
+            return None;
+        }
+        Some(Rc::clone(entry))
+    });
     let Some(entry) = entry else { return Ok(()) };
-    if entry.running.replace(true) {
-        return Ok(());
-    }
+    entry.running.set(true);
 
     let lua = unsafe { Lua::from_borrowed(state) };
     let result = (entry.callback)(&lua);

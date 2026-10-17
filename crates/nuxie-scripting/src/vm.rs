@@ -74,8 +74,8 @@ use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
-    Vector as LuaVector, VmState,
+    AnyUserData, FromLuaMulti, Function, InterruptBudget, IntoLuaMulti, Lua, MultiValue, Table,
+    Thread, Value, Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::lua_callbacks::lua_callbacks;
 use luaur_vm::functions::lua_getfield::lua_getfield;
@@ -2151,7 +2151,11 @@ impl ScriptVm {
         let script_cycle_active = Rc::new(Cell::new(false));
         let interrupt_safepoints = Rc::clone(&script_safepoints);
         let interrupt_resource_limits = resource_limits.clone();
-        lua.set_interrupt(move |_| {
+        // The budget settles every safepoint below the ceiling; the closure
+        // runs only to fail at it.
+        let budget =
+            InterruptBudget::new(Rc::clone(&script_safepoints), SCRIPT_SAFEPOINTS_PER_CYCLE);
+        lua.set_interrupt_with_budget(budget, move |_| {
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
                 return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
@@ -2226,7 +2230,14 @@ impl ScriptVm {
         let interrupt_budget = budget.clone();
         let interrupt_safepoints = Rc::clone(&vm.script_safepoints);
         let interrupt_resource_limits = vm.resource_limits.clone();
-        vm.lua.set_interrupt(move |_| {
+        // The budget settles every safepoint both counters allow; the closure
+        // runs only to fail at one of them.
+        let counters = InterruptBudget::new(
+            Rc::clone(&vm.script_safepoints),
+            SCRIPT_SAFEPOINTS_PER_CYCLE,
+        )
+        .with_countdown(Rc::clone(&budget.remaining));
+        vm.lua.set_interrupt_with_budget(counters, move |_| {
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
                 return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));

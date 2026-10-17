@@ -165,3 +165,16 @@
 - Touched files: `src/table.rs`, `src/function.rs`, `src/traits.rs`,
   `src/conversion.rs`, `src/lib.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/table_field_calls.rs`.
+
+## Interrupt budgets
+
+- `Lua::set_interrupt_with_budget` installs an interrupt closure with an
+  `InterruptBudget`: safepoint counters (a count up to a limit, optionally a
+  countdown) that the trampoline settles itself while both allow, without
+  building a `Lua` handle or calling the closure. The closure runs only when
+  a counter is exhausted and stays the authority for that case; it must do
+  exactly what the budget does while the budget allows a safepoint. Hosts
+  whose interrupt only counts safepoints against a ceiling pay a cell update
+  per safepoint instead of a closure call.
+- Touched files: `src/interrupt.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`.

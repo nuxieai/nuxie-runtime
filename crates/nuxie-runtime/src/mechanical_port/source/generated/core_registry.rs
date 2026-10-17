@@ -9198,6 +9198,15 @@ impl CoreRegistry {
             }
             return;
         }
+        if crate::css_layout::keys::field_id(property_key).is_some() {
+            crate::css_layout::record::set_property(
+                object.as_registry_any_mut(),
+                property_key as u16,
+                value as f32,
+                completion,
+            );
+            return;
+        }
         let field = match property_key {
             459 => CoreField::LayerMaskSourceId,
             460 => CoreField::LayerMaskMaskFlags,
@@ -9717,6 +9726,15 @@ impl CoreRegistry {
         value: f32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        if crate::css_layout::keys::field_id(property_key).is_some() {
+            crate::css_layout::record::set_property(
+                object.as_registry_any_mut(),
+                property_key as u16,
+                value as f32,
+                completion,
+            );
+            return;
+        }
         if crate::video::properties::field_id(property_key) == Some(2) {
             if let Some(video) = object
                 .as_registry_any_mut()
@@ -9880,6 +9898,13 @@ impl CoreRegistry {
                 .downcast_mut::<crate::text_decoration::TextStyleDecoration>()
         {
             return decoration.line();
+        }
+        if crate::css_layout::keys::field_id(property_key).is_some() {
+            return crate::css_layout::record::get_property(
+                object.as_registry_any(),
+                property_key as u16,
+            )
+            .map_or(0, |value| value.max(0.0) as u32);
         }
         let field = match property_key {
             459 => CoreField::LayerMaskSourceId,
@@ -10320,6 +10345,13 @@ impl CoreRegistry {
         object.get_bool(field)
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
+        if crate::css_layout::keys::field_id(property_key).is_some() {
+            return crate::css_layout::record::get_property(
+                object.as_registry_any(),
+                property_key as u16,
+            )
+            .unwrap_or(0.0);
+        }
         if crate::video::properties::field_id(property_key) == Some(2) {
             return object
                 .as_registry_any()
@@ -10682,6 +10714,9 @@ impl CoreRegistry {
         // Nuxie TextStyleDecoration.line is a uint.
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
             return 0;
+        }
+        if let Some(field) = crate::css_layout::keys::field_id(property_key) {
+            return field;
         }
         match property_key {
             486 => 1,
@@ -12005,6 +12040,12 @@ impl CoreRegistry {
         }
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
+        if let Some((owner, _)) = u16::try_from(property_key)
+            .ok()
+            .and_then(crate::css_layout::keys::owner)
+        {
+            return object.is_type_of(owner);
+        }
         if crate::video::properties::field_id(property_key as i32).is_some() {
             return object.as_registry_any().is::<crate::video::Video>();
         }

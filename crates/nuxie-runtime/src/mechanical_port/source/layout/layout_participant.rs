@@ -419,10 +419,11 @@ impl LayoutParticipant {
             } else {
                 0.0
             };
+            // Fill is CSS `flex: <fraction> 1 0%` (docs/CSS_LAYOUT.md, 2.2).
             style.flex_grow = grow;
-            style.flex_shrink = if main_fill { grow } else { 1.0 };
+            style.flex_shrink = 1.0;
             style.flex_basis = if main_fill {
-                Dimension::length(0.0)
+                Dimension::percent(0.0)
             } else {
                 Dimension::auto()
             };

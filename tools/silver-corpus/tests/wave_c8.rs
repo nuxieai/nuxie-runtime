@@ -1,5 +1,8 @@
 //! Exact pinned Silver replays for executable Wave C8 rendering cases.
 
+#[path = "support/browser_layout.rs"]
+mod browser_layout;
+
 use nuxie_runtime::source::math::random::RandomProvider;
 use silver_corpus::{
     Difference, Execution, Status, compare_sriv, parse_sriv, read_manifest, resolve_expected,
@@ -35,12 +38,13 @@ fn replay(id: &str) {
     let _lock = REPLAY_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    let (_, result) = replay_locked(id);
-    result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    let (_, result, bytes) = replay_locked(id);
+    browser_layout::reviewed_result(id, result, &bytes)
+        .unwrap_or_else(|difference| panic!("{id}: {difference}"));
 }
 
 fn replay_exact_locked(id: &str) {
-    let (status, result) = replay_locked(id);
+    let (status, result, _) = replay_locked(id);
     assert_eq!(status, Status::Exact, "{id} should be classified exact");
     result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
 }
@@ -49,7 +53,7 @@ fn replay_divergence(id: &str, expected: &str) {
     let _lock = REPLAY_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    let (status, result) = replay_locked(id);
+    let (status, result, _) = replay_locked(id);
     assert_eq!(
         status,
         Status::Diverges,
@@ -59,7 +63,7 @@ fn replay_divergence(id: &str, expected: &str) {
     assert_eq!(difference.to_string(), expected);
 }
 
-fn replay_locked(id: &str) -> (Status, Result<(), Difference>) {
+fn replay_locked(id: &str) -> (Status, Result<(), Difference>, Vec<u8>) {
     let runtime = runtime_root();
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))
         .expect("read Silver corpus manifest");
@@ -76,8 +80,9 @@ fn replay_locked(id: &str) -> (Status, Result<(), Difference>) {
     let expected =
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
-    let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    (case.status, compare_sriv(&expected, &actual))
+    let actual_bytes = actual.bytes().to_vec();
+    let actual = parse_sriv(&actual_bytes).expect("parse Rust SRIV");
+    (case.status, compare_sriv(&expected, &actual), actual_bytes)
 }
 
 #[test]

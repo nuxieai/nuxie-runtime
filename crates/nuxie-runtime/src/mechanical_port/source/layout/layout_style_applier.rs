@@ -264,12 +264,12 @@ pub enum RiveTrackLength {
 ///
 /// - every node is positioned: an absolute child is placed against its own
 ///   parent, never hoisted to a further ancestor;
-/// - `flex-direction: column`, `flex-shrink: 0`, `align-content: flex-start`,
+/// - `flex-direction: column`, `align-content: flex-start`,
 ///   `align-items: stretch` and `justify-content: flex-start`;
 /// - border-box sizing with zero margins, padding and borders.
 ///
-/// Minimum sizes stay `auto` here. A flex item's automatic minimum is resolved
-/// by [`apply_flex_item_minimums`], since Yoga gives flex items none.
+/// Flex shrinking and automatic minimum sizes follow CSS, including Fixed
+/// items. Taffy resolves `min-size: auto` from the content contribution.
 pub fn rive_default_style() -> Style {
     Style {
         display: Display::Flex,
@@ -294,24 +294,9 @@ pub fn rive_default_style() -> Style {
         flex_direction: FlexDirection::Column,
         flex_wrap: FlexWrap::NoWrap,
         flex_grow: 0.0,
-        flex_shrink: 0.0,
+        flex_shrink: 1.0,
         flex_basis: Dimension::auto(),
         ..Style::DEFAULT
-    }
-}
-
-/// Yoga flex items have no content-based automatic minimum size; only an
-/// authored minimum bounds them. CSS grid items keep `min-size: auto`, which
-/// matches Rive's grid. Applied with the parent's container kind.
-pub fn apply_flex_item_minimums(style: &mut Style, parent_is_grid: bool) {
-    if parent_is_grid {
-        return;
-    }
-    if style.min_size.width.is_auto() {
-        style.min_size.width = LengthPercentageAuto::length(0.0);
-    }
-    if style.min_size.height.is_auto() {
-        style.min_size.height = LengthPercentageAuto::length(0.0);
     }
 }
 

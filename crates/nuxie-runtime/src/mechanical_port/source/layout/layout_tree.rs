@@ -61,6 +61,10 @@ pub(crate) struct LayoutNodeContext {
     /// Measured through the owner's intrinsic size (text, images, scripted
     /// layouts, intrinsically sized layouts without layout children).
     pub(crate) measured: bool,
+    /// Whether this subtree supplies usable width and height minima. Hosted
+    /// artboards are opaque until their host protocol defines them.
+    pub(crate) minimum_supported: [bool; 2],
+    pub(crate) zero_auto_minimums: [bool; 2],
     /// Taffy-only grid items standing in for a virtualized grid's
     /// unrealized items; appended after the realized children.
     pub(crate) virtual_items: Vec<NodeId>,
@@ -85,6 +89,8 @@ impl LayoutTree {
                     owner: root_owner,
                     kind,
                     measured: false,
+                    minimum_supported: [true; 2],
+                    zero_auto_minimums: [false; 2],
                     virtual_items: Vec::new(),
                 },
             )
@@ -121,6 +127,8 @@ impl LayoutTree {
                     owner,
                     kind,
                     measured: false,
+                    minimum_supported: [true; 2],
+                    zero_auto_minimums: [false; 2],
                     virtual_items: Vec::new(),
                 },
             )
@@ -246,9 +254,9 @@ pub fn virtual_item_styles(rows: &[f32], columns: &[f32]) -> Vec<Style> {
 
 /// Map a Taffy measurement request onto Rive's intrinsic measure protocol.
 /// A known axis is measured exactly at its content-box size (Taffy's Definite
-/// available space already excludes padding and border). CSS min- and
-/// max-content both ask for the content's own size: Rive's measurers clamp
-/// to any bound they are given, so they report intrinsic size only unbounded.
+/// available space already excludes padding and border). Both intrinsic modes
+/// start unbounded because Rive clamps bounded answers. `measure_fit_content`
+/// replaces MinContent with a true minimum when the host supplies one.
 pub fn measure_axis(known: Option<f32>, available: AvailableSpace) -> (f32, LayoutMeasureMode) {
     let bounded = |value: f32| {
         if value.is_nan() {
@@ -304,29 +312,63 @@ pub(crate) fn content_width_limits(
     )
 }
 
+/// Content-box block-size limits for a replaced item's ratio transfer.
+pub(crate) fn content_height_limits(
+    style: &Style,
+    parent: taffy::geometry::Size<Option<f32>>,
+) -> (Option<f32>, Option<f32>) {
+    use taffy::util::{MaybeMath, MaybeResolve, ResolveOrZero};
+    let calc = |_: *const (), _: f32| 0.0;
+    let padding_border = style.padding.resolve_or_zero(parent.width, calc)
+        + style.border.resolve_or_zero(parent.width, calc);
+    let inset = if style.box_sizing == taffy::BoxSizing::BorderBox {
+        padding_border.vertical_axis_sum()
+    } else {
+        0.0
+    } + if style.overflow.x == taffy::Overflow::Scroll {
+        style.scrollbar_width
+    } else {
+        0.0
+    };
+    let content = |value: Option<f32>| value.map(|value| (value - inset).max(0.0));
+    (
+        content(
+            style
+                .min_size
+                .maybe_resolve(parent, calc)
+                .maybe_apply_aspect_ratio(style.aspect_ratio)
+                .height,
+        ),
+        content(style.max_size.height.maybe_resolve(parent.height, calc)),
+    )
+}
+
 /// Answer a bounded intrinsic inline-size offer using CSS fit-content:
-/// min(max-content, max(min-content, stretch-fit)). Taffy passes content-box
+/// min(max-content, max(min-content, stretch-fit)), or answer MinContent
+/// with the host's true intrinsic minimum. Taffy passes content-box
 /// offers here; width limits are resolved from the same style and box sizing.
 /// A host without a meaningful minimum keeps its existing measurement protocol.
-/// Exact and unbounded axes, including hugUnbounded, do not take this path.
+/// Exact widths and MaxContent keep their existing measurement modes.
 pub(crate) fn measure_fit_content(
     width: (f32, LayoutMeasureMode),
     height: (f32, LayoutMeasureMode),
     limits: (Option<f32>, Option<f32>),
+    min_content: bool,
     supports_minimum: bool,
     minimum: impl FnOnce() -> Option<f32>,
     mut measure: impl FnMut(f32, LayoutMeasureMode, f32, LayoutMeasureMode) -> Vec2D,
 ) -> Vec2D {
-    if supports_minimum && width.1 == LayoutMeasureMode::AtMost && width.0.is_finite() {
-        let maximum = measure(
-            f32::NAN,
-            LayoutMeasureMode::Undefined,
-            f32::NAN,
-            LayoutMeasureMode::Undefined,
-        );
+    if supports_minimum
+        && (min_content || (width.1 == LayoutMeasureMode::AtMost && width.0.is_finite()))
+    {
+        let maximum = measure(f32::NAN, LayoutMeasureMode::Undefined, height.0, height.1);
         if let Some(minimum) = minimum().filter(|minimum| minimum.is_finite()) {
             if maximum.x.is_finite() {
-                let inline = maximum.x.min(minimum.max(width.0));
+                let inline = if min_content {
+                    minimum
+                } else {
+                    maximum.x.min(minimum.max(width.0))
+                };
                 let mut wrapping_width = inline;
                 if let Some(maximum) = limits.1 {
                     wrapping_width = wrapping_width.min(maximum);

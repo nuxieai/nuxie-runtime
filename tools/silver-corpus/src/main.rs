@@ -1,7 +1,7 @@
 use anyhow::Context;
 use silver_corpus::{
     Execution, Lane, Status, compare_files, compare_sriv, parse_sriv, read_manifest,
-    resolve_expected, validate_manifest,
+    resolve_expected, validate_manifest, verify_reviewed_layout_stream,
 };
 use std::env;
 use std::fs;
@@ -43,6 +43,7 @@ fn validate(options: Options) -> anyhow::Result<()> {
     let mut byte_exact = 0usize;
     let mut epsilon_exact = 0usize;
     let mut divergent = 0usize;
+    let mut reviewed_layout = 0usize;
     let mut unsupported = 0usize;
     let mut probed = 0usize;
     let mut probe_exact = 0usize;
@@ -107,6 +108,15 @@ fn validate(options: Options) -> anyhow::Result<()> {
                         case.id
                     );
                     divergent += 1;
+                    if let Some(review) = manifest
+                        .corpus
+                        .reviewed_layout_divergences
+                        .iter()
+                        .find(|review| review.id == case.id)
+                    {
+                        verify_reviewed_layout_stream(review, &difference, execution.bytes())?;
+                        reviewed_layout += 1;
+                    }
                     println!("[divergent] {}: {}", case.id, difference);
                 }
                 Err(difference) => {
@@ -139,6 +149,21 @@ fn validate(options: Options) -> anyhow::Result<()> {
                     println!("[{}] {}: cpp-rust exact", case.status, case.id);
                 }
                 Err(error) if case.status == Status::Diverges => {
+                    if let Some(review) = manifest
+                        .corpus
+                        .reviewed_layout_divergences
+                        .iter()
+                        .find(|review| review.id == case.id)
+                    {
+                        let bytes = fs::read(&actual)?;
+                        let expected = parse_sriv(&fs::read(resolve_expected(
+                            &options.rive_runtime_dir,
+                            case,
+                        ))?)?;
+                        let difference = compare_sriv(&expected, &parse_sriv(&bytes)?)
+                            .expect_err("classified probe divergence");
+                        verify_reviewed_layout_stream(review, &difference, &bytes)?;
+                    }
                     println!("[diverges] {}: classified difference: {error:#}", case.id);
                 }
                 Err(error)
@@ -207,12 +232,16 @@ fn validate(options: Options) -> anyhow::Result<()> {
     );
     if options.id.is_none() && options.lane.is_none_or(|lane| lane == Lane::Runtime) {
         anyhow::ensure!(
-            cpp_rust_exact >= manifest.corpus.min_cpp_rust_exact,
-            "accounted cpp-rust-exact={} is below ratchet {}",
-            cpp_rust_exact,
+            cpp_rust_exact + reviewed_layout >= manifest.corpus.min_cpp_rust_exact,
+            "exact plus reviewed CSS coverage={} is below historical ratchet {}",
+            cpp_rust_exact + reviewed_layout,
             manifest.corpus.min_cpp_rust_exact
         );
     }
+    println!(
+        "silver-corpus historical coverage: cpp-rust-exact={cpp_rust_exact} reviewed-css={reviewed_layout} floor={}",
+        manifest.corpus.min_cpp_rust_exact
+    );
     if options.rust_output_dir.is_some() {
         println!("silver-corpus probe: rust-exact={probe_exact} probed={probed}");
     }

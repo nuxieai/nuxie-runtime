@@ -16,6 +16,7 @@ path = "lib.rs"
 "strict-fp" = ["nuxie-runtime/strict-fp"]
 
 [dependencies]
+"sha2" = { "version" = "0.10" }
 "anyhow" = { "version" = "1" }
 "nuxie-render-api" = { "path" = "../nuxie-render-api" }
 "nuxie-runtime" = { "path" = "../nuxie-runtime", "features" = ["tools"] }

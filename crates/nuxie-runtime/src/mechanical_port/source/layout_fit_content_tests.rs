@@ -1694,3 +1694,92 @@ fn css_authored_write_equal_to_a_controlled_size_is_kept() {
     widths.push(f.width());
     assert_eq!(widths, [80.0, 40.0, 40.0]);
 }
+
+/// A 100-point row holding a measured box and a Fixed 60-point sibling.
+/// The box hugs (`width` None) or is Fixed, optionally with min-width 0.
+struct SharedRow {
+    _arena: CoreArena,
+    root: CoreHandle,
+    subject: CoreHandle,
+}
+fn shared_row(
+    width: Option<f32>,
+    zero_minimum: bool,
+    content: impl FnOnce(&CoreArena, &CoreHandle),
+) -> SharedRow {
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(100.0), true);
+    let subject = layout(&arena, Some(&root), width, false);
+    content(&arena, &subject);
+    let sibling = layout(&arena, Some(&root), Some(60.0), false);
+    if zero_minimum {
+        subject
+            .with_downcast_mut::<LayoutComponent, _>(|l| {
+                l.with_style_mut(|s| {
+                    s.base.set_min_width_value(0.0);
+                    s.base.set_min_width_units_value_value(YGUnit::Point as u8);
+                });
+            })
+            .unwrap();
+    }
+    for node in [&sibling, &subject, &root] {
+        LayoutComponent::sync_style_occurrence(node);
+        LayoutComponent::sync_layout_children_occurrence(node);
+    }
+    SharedRow {
+        _arena: arena,
+        root,
+        subject,
+    }
+}
+impl SharedRow {
+    fn width(&self) -> f32 {
+        LayoutComponent::calculate_layout_occurrence(&self.root, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&self.root, false);
+        solved(&self.subject).width()
+    }
+}
+
+#[test]
+fn css_equal_authored_write_still_resizes_the_box() {
+    use crate::source::generated::core_registry::CoreField;
+    use crate::source::shapes::{rectangle::Rectangle, shape::Shape};
+    let mut path = None;
+    let f = shared_row(None, true, |arena, subject| {
+        let shape = arena.insert(Shape::default());
+        attach(arena, subject, &shape);
+        let rectangle = arena.insert(Rectangle::default());
+        rectangle
+            .with_mut(|o| {
+                o.set_double(CoreField::ParametricPathWidth, 80.0);
+                o.set_double(CoreField::ParametricPathHeight, 30.0);
+            })
+            .unwrap();
+        attach(arena, &shape, &rectangle);
+        shape
+            .with_downcast_mut::<Shape, _>(|s| s.add_path(rectangle.clone()))
+            .unwrap();
+        path = Some(rectangle);
+    });
+    let path = path.unwrap();
+    // The 80 and 60 bases share the 40-point deficit; layout writes the
+    // shrunk width into the path, and that write's own invalidation settles
+    // on the second solve.
+    let shrunk = [f.width(), f.width()];
+    for width in shrunk {
+        assert!((width - 57.142857).abs() < 0.0001, "{shrunk:?}");
+    }
+    let shrunk = shrunk[1];
+    let written = path
+        .with(|o| o.as_parametric_path().unwrap().base.width())
+        .unwrap();
+    assert_eq!(written, shrunk);
+    // Authoring that same width makes it the natural size: 57.14 and 60
+    // now share a 17.14-point deficit.
+    path.with_mut(|o| o.set_double(CoreField::ParametricPathWidth, written))
+        .unwrap();
+    let widths = [f.width(), f.width()];
+    for width in widths {
+        assert!((width - 48.780487).abs() < 0.0001, "{widths:?}");
+    }
+}

@@ -202,9 +202,10 @@ impl JoystickBase {
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
         // Recorded before the equality check: an authored write equal to a
-        // layout-written size is still authored.
-        self.layout_natural.assign_width(value);
-        if self.width == value {
+        // layout-written size is still authored, and changes the natural
+        // size, so it reports a change for the callbacks to lay out again.
+        let natural_changed = self.layout_natural.assign_width(value, self.width);
+        if self.width == value && !natural_changed {
             return false;
         }
         self.width = value;
@@ -223,9 +224,10 @@ impl JoystickBase {
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
         // Recorded before the equality check: an authored write equal to a
-        // layout-written size is still authored.
-        self.layout_natural.assign_height(value);
-        if self.height == value {
+        // layout-written size is still authored, and changes the natural
+        // size, so it reports a change for the callbacks to lay out again.
+        let natural_changed = self.layout_natural.assign_height(value, self.height);
+        if self.height == value && !natural_changed {
             return false;
         }
         self.height = value;

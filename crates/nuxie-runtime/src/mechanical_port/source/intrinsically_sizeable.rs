@@ -8,7 +8,7 @@ use crate::mechanical_port::source::transform_component::TransformComponent;
 /// Authored dimensions survive controlSize writing a solved size into the
 /// host. Every assignment outside layout control is authored, including one
 /// equal to the size layout last wrote, so the hosts' generated value setters
-/// record it before their equality check.
+/// record it before their equality check and report it as a change.
 #[derive(Default, Clone, Copy)]
 pub(crate) struct LayoutNaturalSize {
     width: Option<f32>,
@@ -31,15 +31,24 @@ impl LayoutNaturalSize {
     pub(crate) fn end_control(&mut self) {
         self.controlling = false;
     }
-    pub(crate) fn assign_width(&mut self, width: f32) {
-        if !self.controlling {
-            self.width = Some(width);
+    /// Records an authored width; true when that changes the natural width
+    /// the host had with `current` as its value.
+    pub(crate) fn assign_width(&mut self, width: f32, current: f32) -> bool {
+        if self.controlling {
+            return false;
         }
+        let before = self.width.unwrap_or(current);
+        self.width = Some(width);
+        before != width
     }
-    pub(crate) fn assign_height(&mut self, height: f32) {
-        if !self.controlling {
-            self.height = Some(height);
+    /// Records an authored height; true when that changes the natural height.
+    pub(crate) fn assign_height(&mut self, height: f32, current: f32) -> bool {
+        if self.controlling {
+            return false;
         }
+        let before = self.height.unwrap_or(current);
+        self.height = Some(height);
+        before != height
     }
     /// A copy carries the authored size but never an open control.
     pub(crate) fn copied(&self) -> Self {

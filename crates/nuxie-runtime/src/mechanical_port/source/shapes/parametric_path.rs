@@ -27,21 +27,12 @@ impl ParametricPath {
 #[derive(Default)]
 pub struct ParametricPath {
     pub base: ParametricPathBase,
-    layout_natural_size: crate::source::intrinsically_sizeable::LayoutNaturalSize,
 }
 impl ParametricPath {
     pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
-        self.layout_natural_size
+        self.base
+            .layout_natural
             .get(Vec2D::new(self.base.width(), self.base.height()))
-    }
-    pub fn copy(
-        &mut self,
-        source: &Self,
-        callbacks: &mut impl crate::source::generated::shapes::parametric_path_base::ParametricPathBaseCallbacks,
-    ) {
-        self.base.copy(&source.base, callbacks);
-        self.layout_natural_size
-            .copy_from(&source.layout_natural_size);
     }
     pub fn measure_layout(
         &self,
@@ -72,11 +63,11 @@ impl ParametricPath {
         _height: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        self.layout_natural_size
-            .begin_control(Vec2D::new(self.base.width(), self.base.height()));
+        let current = Vec2D::new(self.base.width(), self.base.height());
+        self.base.layout_natural.begin_control(current);
         self.set_width(size.x);
         self.set_height(size.y);
-        self.layout_natural_size.end_control();
+        self.base.layout_natural.end_control();
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty(false);
     }
@@ -145,7 +136,6 @@ impl ParametricPath {
         true
     }
     pub fn width_changed(&mut self) {
-        self.layout_natural_size.width_changed(self.base.width());
         self.mark_path_dirty(true);
     }
     pub fn set_width(&mut self, value: f32) {
@@ -167,7 +157,6 @@ impl ParametricPath {
         }
     }
     pub fn height_changed(&mut self) {
-        self.layout_natural_size.height_changed(self.base.height());
         self.mark_path_dirty(true);
     }
     pub fn origin_x_changed(&mut self) {

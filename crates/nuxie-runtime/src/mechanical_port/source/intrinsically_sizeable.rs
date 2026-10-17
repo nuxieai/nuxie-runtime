@@ -5,41 +5,48 @@ use crate::mechanical_port::source::layout::layout_measure_mode::LayoutMeasureMo
 use crate::mechanical_port::source::math::vec2d::Vec2D;
 use crate::mechanical_port::source::transform_component::TransformComponent;
 
-/// Authored geometry survives controlSize writing a solved size into the host.
+/// Authored dimensions survive controlSize writing a solved size into the
+/// host. Every assignment outside layout control is authored, including one
+/// equal to the size layout last wrote, so the hosts' generated value setters
+/// record it before their equality check.
 #[derive(Default, Clone, Copy)]
 pub(crate) struct LayoutNaturalSize {
-    size: Option<Vec2D>,
+    width: Option<f32>,
+    height: Option<f32>,
     controlling: bool,
 }
 
 impl LayoutNaturalSize {
     pub(crate) fn get(&self, current: Vec2D) -> Vec2D {
-        self.size.unwrap_or(current)
+        Vec2D::new(
+            self.width.unwrap_or(current.x),
+            self.height.unwrap_or(current.y),
+        )
     }
     pub(crate) fn begin_control(&mut self, current: Vec2D) {
-        self.size.get_or_insert(current);
+        self.width.get_or_insert(current.x);
+        self.height.get_or_insert(current.y);
         self.controlling = true;
     }
     pub(crate) fn end_control(&mut self) {
         self.controlling = false;
     }
-    pub(crate) fn width_changed(&mut self, width: f32) {
+    pub(crate) fn assign_width(&mut self, width: f32) {
         if !self.controlling {
-            if let Some(size) = &mut self.size {
-                size.x = width;
-            }
+            self.width = Some(width);
         }
     }
-    pub(crate) fn height_changed(&mut self, height: f32) {
+    pub(crate) fn assign_height(&mut self, height: f32) {
         if !self.controlling {
-            if let Some(size) = &mut self.size {
-                size.y = height;
-            }
+            self.height = Some(height);
         }
     }
-    pub(crate) fn copy_from(&mut self, source: &Self) {
-        self.size = source.size;
-        self.controlling = false;
+    /// A copy carries the authored size but never an open control.
+    pub(crate) fn copied(&self) -> Self {
+        Self {
+            controlling: false,
+            ..*self
+        }
     }
 }
 

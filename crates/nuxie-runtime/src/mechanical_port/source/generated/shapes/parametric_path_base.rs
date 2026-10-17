@@ -16,6 +16,9 @@ pub struct ParametricPathBase {
     height: f32,
     origin_x: f32,
     origin_y: f32,
+    /// UNIV-4844: authored width and height across layout control.
+    pub(crate) layout_natural:
+        crate::mechanical_port::source::intrinsically_sizeable::LayoutNaturalSize,
 }
 
 impl Default for ParametricPathBase {
@@ -26,6 +29,7 @@ impl Default for ParametricPathBase {
             height: 0.0,
             origin_x: 0.5,
             origin_y: 0.5,
+            layout_natural: Default::default(),
         }
     }
 }
@@ -59,6 +63,9 @@ impl ParametricPathBase {
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        // Recorded before the equality check: an authored write equal to a
+        // layout-written size is still authored.
+        self.layout_natural.assign_width(value);
         if self.width == value {
             return false;
         }
@@ -77,6 +84,9 @@ impl ParametricPathBase {
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        // Recorded before the equality check: an authored write equal to a
+        // layout-written size is still authored.
+        self.layout_natural.assign_height(value);
         if self.height == value {
             return false;
         }
@@ -128,6 +138,7 @@ impl ParametricPathBase {
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ParametricPathBaseCallbacks) {
         self.width = object.width;
         self.height = object.height;
+        self.layout_natural = object.layout_natural.copied();
         self.origin_x = object.origin_x;
         self.origin_y = object.origin_y;
         self.base.copy(&object.base, callbacks);

@@ -1799,3 +1799,48 @@ fn css_empty_shape_adds_no_bounds_to_a_group() {
     LayoutComponent::update_layout_bounds_occurrence(&root, false);
     assert_eq!(solved(&subject).width(), 80.0);
 }
+
+#[test]
+fn css_grouped_shape_paths_keep_intermediate_transforms() {
+    use crate::source::generated::core_registry::CoreField;
+    use crate::source::math::mat2d::Mat2D;
+    use crate::source::shapes::{rectangle::Rectangle, shape::Shape};
+    // A shape's path may sit under a node inside the shape. An 80-point
+    // rectangle below a node scaled 2 on x draws 160 points wide.
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(1000.0), true);
+    let subject = layout(&arena, Some(&root), None, false);
+    let group = arena.insert(crate::source::node::Node::default());
+    attach(&arena, &subject, &group);
+    let shape = arena.insert(Shape::default());
+    attach(&arena, &group, &shape);
+    let node = arena.insert(crate::source::node::Node::default());
+    attach(&arena, &shape, &node);
+    // Stand in for the update pass that composes the node's scale.
+    node.with_mut(|o| {
+        o.as_transform_component_mut()
+            .unwrap()
+            .with_transform_mut(|t| {
+                *t = Mat2D::identity();
+                t.scale_by_values(2.0, 1.0);
+            })
+    })
+    .unwrap();
+    let path = arena.insert(Rectangle::default());
+    path.with_mut(|o| {
+        o.set_double(CoreField::ParametricPathWidth, 80.0);
+        o.set_double(CoreField::ParametricPathHeight, 30.0);
+    })
+    .unwrap();
+    attach(&arena, &node, &path);
+    shape
+        .with_downcast_mut::<Shape, _>(|s| s.add_path(path.clone()))
+        .unwrap();
+    for layout in [&subject, &root] {
+        LayoutComponent::sync_style_occurrence(layout);
+        LayoutComponent::sync_layout_children_occurrence(layout);
+    }
+    LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+    LayoutComponent::update_layout_bounds_occurrence(&root, false);
+    assert_eq!(solved(&subject).width(), 160.0);
+}

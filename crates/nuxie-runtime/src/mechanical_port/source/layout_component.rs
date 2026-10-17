@@ -249,6 +249,91 @@ pub(crate) struct LayoutRenderPaths {
     /// CSS mode: the clip `overflow` implies, in world space, which is not
     /// the background (docs/CSS_LAYOUT.md, 4.2). Unused in translated mode.
     pub clip: ShapePaintPath,
+    /// CSS mode: the paints drawn with their own geometry (shadows with a
+    /// BoxShadow, borders with a BoxBorder), in the box's space.
+    pub css_paints: Vec<CssPaintPaths>,
+}
+
+/// One special paint of a CSS box and the paths it draws with.
+pub(crate) struct CssPaintPaths {
+    pub paint: CoreHandle,
+    pub path: ShapePaintPath,
+    pub clip: Option<ShapePaintPath>,
+    /// A BoxBorder's Stroke fills its ring instead of stroking.
+    pub fills_stroke: bool,
+    /// A shadow's feather offset, and whether it is in world space.
+    pub offset: Option<(Vec2D, bool)>,
+}
+
+/// What makes a paint special in CSS mode, read from its children.
+enum CssPaintKind {
+    Border {
+        sides: u8,
+    },
+    Shadow {
+        spread: f32,
+        inset: bool,
+        reach: f32,
+        offset: (Vec2D, bool),
+    },
+}
+
+fn css_paint_kind(paint: &CoreHandle) -> Option<CssPaintKind> {
+    use crate::css_layout::keys;
+    use crate::mechanical_port::source::shapes::paint::feather::Feather;
+    let children = paint
+        .with(|object| {
+            object
+                .as_container_component()
+                .map(|container| container.children().to_vec())
+        })
+        .flatten()?;
+    for child in &children {
+        if child.is_type_of(keys::BOX_BORDER) {
+            let sides = child
+                .with_downcast::<crate::css_layout::BoxBorder, _>(|record| {
+                    record.values().choice(keys::BORDER_SIDES)
+                })
+                .unwrap_or(15);
+            return Some(CssPaintKind::Border { sides });
+        }
+        let Some((feather, grandchildren)) = child
+            .with(|object| {
+                let feather = object.as_any().downcast_ref::<Feather>()?;
+                Some((
+                    (
+                        feather.base.strength(),
+                        feather.base.inner(),
+                        Vec2D::new(feather.base.offset_x(), feather.base.offset_y()),
+                        crate::mechanical_port::source::transform_space::TransformSpace::from(
+                            feather.base.space_value(),
+                        ) == crate::mechanical_port::source::transform_space::TransformSpace::World,
+                    ),
+                    object.as_container_component()?.children().to_vec(),
+                ))
+            })
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(spread) = grandchildren.iter().find_map(|grandchild| {
+            grandchild.with_downcast::<crate::css_layout::BoxShadow, _>(|record| {
+                record.values().number(keys::SHADOW_SPREAD)
+            })
+        }) else {
+            continue;
+        };
+        let (strength, inset, offset, world) = feather;
+        return Some(CssPaintKind::Shadow {
+            spread,
+            inset,
+            // A feather reaches 1.5 times its strength (three standard
+            // deviations, the feather texture's extent).
+            reach: 1.5 * strength.abs() + offset.x.abs() + offset.y.abs(),
+            offset: (offset, world),
+        });
+    }
+    None
 }
 
 struct VirtualGrid {
@@ -1793,7 +1878,14 @@ impl LayoutComponent {
         let world = self.shape_world_transform();
         // The paint list can't change while this LayoutComponent is borrowed.
         let paints = self.paints.cells().paints();
+        let css_paints = self
+            .render_paths
+            .as_ref()
+            .is_some_and(|paths| !paths.borrow().css_paints.is_empty());
         for paint in paints.iter() {
+            if css_paints && self.draw_css_paint(renderer, &paint.handle, world) {
+                continue;
+            }
             // A plain paint whose loan, and its mutator's, would succeed and run
             // nothing draws from its cells, as a Shape's plain paints do.
             if paint.cells.is_plain()
@@ -1863,6 +1955,68 @@ impl LayoutComponent {
                 );
             });
         }
+    }
+    /// Draw `paint` with its CSS geometry (docs/CSS_LAYOUT.md, 4.2), when it
+    /// has one. A shadow's feather blurs the path the box gives it, offset
+    /// past a clip that stays with the box. A BoxBorder's Stroke fills its
+    /// ring. Returns whether the paint was drawn here.
+    fn draw_css_paint(
+        &mut self,
+        renderer: &mut Renderer,
+        paint: &CoreHandle,
+        world: Mat2D,
+    ) -> bool {
+        let Some(paths) = self.render_paths.clone() else {
+            return false;
+        };
+        let mut paths = paths.borrow_mut();
+        let Some(special) = paths
+            .css_paints
+            .iter_mut()
+            .find(|special| &special.paint == paint)
+        else {
+            return false;
+        };
+        let Some((visible, render_paint)) = paint
+            .with_mut(|object| {
+                let behavior = object.as_shape_paint_behavior_mut()?;
+                Some((
+                    behavior.should_draw(),
+                    behavior.shape_paint_mut().render_paint_handle(),
+                ))
+            })
+            .flatten()
+        else {
+            return true;
+        };
+        let Some(render_paint) = render_paint.filter(|_| visible) else {
+            return true;
+        };
+        let Some(factory) = self.with_artboard(|artboard| artboard.factory()).flatten() else {
+            return true;
+        };
+        renderer.save();
+        if let Some((offset, true)) = special.offset {
+            renderer.translate(offset.x, offset.y);
+        }
+        renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+        if let Some(clip) = special.clip.as_mut() {
+            renderer.clip_path(clip.render_path(&factory));
+        }
+        if let Some((offset, false)) = special.offset {
+            renderer.translate(offset.x, offset.y);
+        }
+        let mut render_paint = render_paint.borrow_mut();
+        if special.fills_stroke {
+            render_paint.style(nuxie_render_api::RenderPaintStyle::Fill);
+        }
+        renderer.draw_path(special.path.render_path(&factory), render_paint.as_ref());
+        if special.fills_stroke {
+            render_paint.style(nuxie_render_api::RenderPaintStyle::Stroke);
+        }
+        drop(render_paint);
+        renderer.restore();
+        true
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.has_layout_flag(LayoutComponentFlags::ClipSaved) {
@@ -2001,6 +2155,45 @@ impl LayoutComponent {
             .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
         paths.clip.add_path(&clip, Some(&world));
         drop(paths_owner);
+        let local_path = |region: &paint::Region| {
+            let mut path = ShapePaintPath::new(true);
+            path.rewind_as(true, nuxie_render_api::FillRule::NonZero);
+            path.add_path(&region.outline, None);
+            path.add_path_backwards(&region.holes, None);
+            path
+        };
+        let css_paints = self
+            .paints
+            .shape_paints()
+            .iter()
+            .filter_map(|paint| {
+                let (geometry, fills_stroke, offset) = match css_paint_kind(paint)? {
+                    CssPaintKind::Border { sides } => (
+                        paint::box_border(bounds, radii, padding, inner, sides),
+                        true,
+                        None,
+                    ),
+                    CssPaintKind::Shadow {
+                        spread,
+                        inset,
+                        reach,
+                        offset,
+                    } => (
+                        paint::box_shadow(bounds, radii, padding, inner, spread, inset, reach),
+                        false,
+                        Some(offset),
+                    ),
+                };
+                Some(CssPaintPaths {
+                    paint: paint.clone(),
+                    path: local_path(&geometry.path),
+                    clip: geometry.clip.as_ref().map(local_path),
+                    fills_stroke,
+                    offset,
+                })
+            })
+            .collect();
+        self.mutable_render_paths().css_paints = css_paints;
         for paint in self.paints.shape_paints().iter().cloned() {
             let should_draw = paint
                 .with_mut(|paint| {

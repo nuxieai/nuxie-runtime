@@ -943,3 +943,47 @@ fn css_scroll_range_comes_from_scrollable_overflow() {
     assert_eq!(f.bounds("List"), [0.0, 0.0, 200.0, 120.0]);
     assert_eq!(f.max_offsets().1, -40.0);
 }
+
+/// CSS `position`: a static box is not a containing block, so an absolute
+/// grandchild is placed against the positioned frame, and its bounds stay
+/// relative to its own parent.
+#[test]
+fn css_absolute_box_skips_a_static_parent() {
+    const MARGIN_LEFT: u16 = 60071;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [[U(POSITION, 1)].as_slice(), &width(300.0), &height(200.0)].concat(),
+            vec![css(
+                "Static",
+                [
+                    [F(MARGIN_LEFT, 50.0)].as_slice(),
+                    &width(100.0),
+                    &height(40.0),
+                ]
+                .concat(),
+                vec![css(
+                    "Pinned",
+                    [
+                        [
+                            U(POSITION, 2),
+                            U(INSET_LEFT_KIND, 1),
+                            F(INSET_LEFT, 10.0),
+                            U(INSET_TOP_KIND, 1),
+                            F(INSET_TOP, 10.0),
+                        ]
+                        .as_slice(),
+                        &width(30.0),
+                        &height(30.0),
+                    ]
+                    .concat(),
+                    vec![],
+                )],
+            )],
+        ),
+    );
+    assert_eq!(f.bounds("Static"), [50.0, 0.0, 100.0, 40.0]);
+    // (10, 10) in the frame is (-40, 10) in the static box.
+    assert_eq!(f.bounds("Pinned"), [-40.0, 10.0, 30.0, 30.0]);
+}

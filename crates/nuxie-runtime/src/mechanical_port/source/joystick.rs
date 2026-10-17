@@ -260,12 +260,13 @@ impl Joystick {
         }
     }
 
-    /// A joystick's authored size is its natural size (UNIV-4844). Joysticks
-    /// are applied from the artboard's own list rather than updated in the
-    /// dependency order, so the update pass would not see the change: hand
-    /// it to that pass's measured-content check. Layout's own write-back is
-    /// excluded.
-    fn authored_size_changed(&mut self) {
+    /// A joystick's authored size, origin and position place its natural
+    /// bounds (UNIV-4844). Joysticks are applied from the artboard's own list
+    /// rather than updated in the dependency order, so the update pass would
+    /// not see the change: hand it to that pass's measured-content check.
+    /// Layout's own size write-back is excluded; its position write-back
+    /// leaves the natural size alone, which the check confirms.
+    fn measured_geometry_changed(&mut self) {
         if self.base.layout_natural.controlling() {
             return;
         }
@@ -329,12 +330,13 @@ impl IntrinsicallySizeable for Joystick {
     fn natural_size_for_layout(&self) -> Option<Vec2D> {
         Some(Joystick::natural_size_for_layout(self))
     }
-    /// Its pad sits about its origin, as Joystick::update bounds it.
+    /// A joystick has no transform: its pad sits at its position, about its
+    /// origin, as Joystick::update places and bounds it.
     fn natural_bounds_for_layout(&self) -> Option<Aabb> {
         let size = Joystick::natural_size_for_layout(self);
         Some(Aabb::from_ltwh(
-            -size.x * self.base.origin_x(),
-            -size.y * self.base.origin_y(),
+            self.base.pos_x() - size.x * self.base.origin_x(),
+            self.base.pos_y() - size.y * self.base.origin_y(),
             size.x,
             size.y,
         ))
@@ -399,17 +401,27 @@ impl JoystickBaseCallbacks for Joystick {
     }
     fn pos_x_changed(&mut self) {
         self.add_component_dirt();
+        self.measured_geometry_changed();
     }
     fn pos_y_changed(&mut self) {
         self.add_component_dirt();
+        self.measured_geometry_changed();
+    }
+    fn origin_x_changed(&mut self) {
+        self.add_component_dirt();
+        self.measured_geometry_changed();
+    }
+    fn origin_y_changed(&mut self) {
+        self.add_component_dirt();
+        self.measured_geometry_changed();
     }
     fn width_changed(&mut self) {
         self.add_component_dirt();
-        self.authored_size_changed();
+        self.measured_geometry_changed();
     }
     fn height_changed(&mut self) {
         self.add_component_dirt();
-        self.authored_size_changed();
+        self.measured_geometry_changed();
     }
 }
 

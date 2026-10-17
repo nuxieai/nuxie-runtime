@@ -128,6 +128,8 @@ struct Setup {
     sibling_width: Option<f32>,
     // min-width: 0 on the box.
     zero_minimum: bool,
+    // A second joystick beside the content, named "Second".
+    second_joystick: bool,
 }
 
 struct Scene {
@@ -161,6 +163,7 @@ fn scene(setup: Setup) -> Scene {
         Content::Rectangle => (None, Some(take(1))),
         Content::Joystick => (None, None),
     };
+    let second = setup.second_joystick.then(|| take(1));
     let sibling = setup.sibling_width.map(|_| take(1));
     let row_style = take(1);
     let subject_style = take(1);
@@ -200,6 +203,7 @@ fn scene(setup: Setup) -> Scene {
                 .string(ComponentBase::NAME_PROPERTY_KEY, "Content")
                 .float(JoystickBase::WIDTH_PROPERTY_KEY, 80.0)
                 .float(JoystickBase::HEIGHT_PROPERTY_KEY, 30.0)
+                .float(JoystickBase::ORIGIN_X_PROPERTY_KEY, 0.0)
                 .end();
         }
         Content::Rectangle | Content::Points => {
@@ -228,6 +232,15 @@ fn scene(setup: Setup) -> Scene {
             .string(ComponentBase::NAME_PROPERTY_KEY, "Path")
             .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 80.0)
             .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 30.0)
+            .end();
+    }
+    if second.is_some() {
+        riv.object(JoystickBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, content_parent)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Second")
+            .float(JoystickBase::WIDTH_PROPERTY_KEY, 80.0)
+            .float(JoystickBase::HEIGHT_PROPERTY_KEY, 30.0)
+            .float(JoystickBase::ORIGIN_X_PROPERTY_KEY, 0.0)
             .end();
     }
     if let (Some(_), Some(width)) = (sibling, setup.sibling_width) {
@@ -362,6 +375,7 @@ fn grouped(content: Content) -> Scene {
         row_width: 1000.0,
         sibling_width: None,
         zero_minimum: false,
+        second_joystick: false,
     })
 }
 
@@ -451,6 +465,7 @@ fn css_joystick_resize_refreshes_the_box_minimum() {
         row_width: 100.0,
         sibling_width: Some(60.0),
         zero_minimum: false,
+        second_joystick: false,
     });
     f.advance(3);
     let before = f.width();
@@ -473,6 +488,7 @@ fn css_settled_measured_content_does_no_layout_work() {
             row_width: 1000.0,
             sibling_width: None,
             zero_minimum: false,
+            second_joystick: false,
         }),
     ] {
         scene.advance(5);
@@ -524,6 +540,7 @@ fn css_equal_authored_write_still_resizes_the_box() {
         row_width: 100.0,
         sibling_width: Some(60.0),
         zero_minimum: true,
+        second_joystick: false,
     });
     f.advance(3);
     let shrunk = f.width();
@@ -538,4 +555,34 @@ fn css_equal_authored_write_still_resizes_the_box() {
     f.advance(2);
     let width = f.width();
     assert!((width - 48.780487).abs() < 0.0001, "{width}");
+}
+
+#[test]
+fn css_joystick_origin_and_position_changes_resize_the_box() {
+    // Two 80-point joysticks at origin x 0 overlap in their group. Moving
+    // the second's origin to 1 puts it left of the first; moving it right
+    // by 80 instead puts it beside the first. Either way the group spans
+    // 160 points.
+    let f = scene(Setup {
+        content: Content::Joystick,
+        grouped: true,
+        subject_width: None,
+        row_width: 1000.0,
+        sibling_width: None,
+        zero_minimum: false,
+        second_joystick: true,
+    });
+    f.advance(3);
+    let second = f.named::<crate::source::joystick::Joystick>("Second");
+    let mut widths = vec![f.width()];
+    set(&second, JoystickBase::ORIGIN_X_PROPERTY_KEY, 1.0);
+    f.advance(2);
+    widths.push(f.width());
+    set(&second, JoystickBase::ORIGIN_X_PROPERTY_KEY, 0.0);
+    f.advance(2);
+    widths.push(f.width());
+    set(&second, JoystickBase::POS_X_PROPERTY_KEY, 80.0);
+    f.advance(2);
+    widths.push(f.width());
+    assert_eq!(widths, [80.0, 160.0, 80.0, 160.0]);
 }

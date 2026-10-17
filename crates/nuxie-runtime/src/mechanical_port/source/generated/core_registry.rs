@@ -80945,6 +80945,7 @@ impl crate::mechanical_port::source::generated::constraints::scrolling::scroll_c
     }
 }
 impl crate::mechanical_port::source::generated::constraints::draggable_constraint_base::DraggableConstraintBaseCallbacks for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint {
+    forward_callback_methods!(crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint; direction_value_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::constraints::constraint::Constraint as crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }

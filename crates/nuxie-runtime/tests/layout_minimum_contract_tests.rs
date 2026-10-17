@@ -592,4 +592,107 @@ mod natural_minima {
         let sizes: Vec<_> = (1..=2).map(|kind| natural_sizes(kind, false)).collect();
         assert_eq!(sizes, vec![vec![80.0, 80.0, 40.0, 80.0, 80.0, 80.0]; 2]);
     }
+    #[test]
+    fn css_scroll_viewport_refreshes_after_direction_changes_and_runtime_additions() {
+        use nuxie_render_api::{NullFactory, PersistentFactory};
+        use nuxie_runtime::source::{
+            constraints::scrolling::scroll_constraint::ScrollConstraint,
+            generated::{
+                constraints::draggable_constraint_base::DraggableConstraintBase,
+                core_registry::CoreRegistry,
+            },
+        };
+        use nuxie_runtime::{File, RuntimeFactoryHandle};
+        use taffy::Overflow::{Hidden, Scroll};
+        let axes = |viewport: &CoreHandle| {
+            viewport
+                .with(|object| {
+                    let style = object.as_layout_component().unwrap().layout_style();
+                    (style.overflow.x, style.overflow.y)
+                })
+                .unwrap()
+        };
+        let mut after = Vec::new();
+        for runtime_addition in [false, true] {
+            let mut factory = PersistentFactory::new(NullFactory);
+            let file = File::import(
+                &std::fs::read(super::fixture_path("scroll_threshold.riv")).unwrap(),
+                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let board = file
+                .with_file(|file| file.artboard_named("horizontal-scroll"))
+                .unwrap();
+            let model_id = board.with_artboard(|board| board.view_model_id());
+            let model = file
+                .with_file_mut(|file| file.create_view_model_instance_at(model_id as usize, 0))
+                .unwrap();
+            board.bind_view_model_instance(Some(model.clone()));
+            let machine = board.state_machine_at(0).unwrap();
+            machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+            machine.advance_and_apply(0.1);
+            let scroll = board
+                .with_artboard(|board| {
+                    board
+                        .objects()
+                        .iter()
+                        .flatten()
+                        .find(|handle| {
+                            handle
+                                .with(|object| object.as_any().is::<ScrollConstraint>())
+                                .unwrap_or(false)
+                        })
+                        .cloned()
+                })
+                .unwrap();
+            let viewport = scroll
+                .with_downcast::<ScrollConstraint, _>(ScrollConstraint::viewport_handle)
+                .flatten()
+                .unwrap();
+            let content = scroll
+                .with(|object| object.component_parent_handle())
+                .flatten()
+                .unwrap();
+            let style = viewport
+                .with(|object| object.as_layout_component().unwrap().style_handle())
+                .flatten()
+                .unwrap();
+            viewport
+                .with_mut(|object| object.set_bool(CoreField::LayoutComponentClip, true))
+                .unwrap();
+            uint(&style, CoreField::LayoutComponentStyleOverflowValue, 0);
+            // Establish paint-only clipping before the event under test. The
+            // two events below must refresh style through normal advance.
+            LayoutComponent::sync_style_occurrence(&viewport);
+            board.advance_default(0.0);
+            assert_eq!(axes(&viewport), (Scroll, Hidden));
+            if runtime_addition {
+                let arena = board.with_artboard(|board| board.core_arena().clone());
+                let added = arena.insert(ScrollConstraint::default());
+                uint(&added, CoreField::ComponentParentId, 1);
+                let mut context = ParentContext {
+                    arena: &arena,
+                    parent: content,
+                };
+                assert_eq!(
+                    added.with_downcast_mut::<ScrollConstraint, _>(
+                        |scroll| scroll.on_added_dirty(&mut context)
+                    ),
+                    Some(StatusCode::Ok)
+                );
+            } else {
+                assert!(CoreRegistry::set_uint_handle(
+                    &scroll,
+                    i32::from(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY),
+                    1
+                ));
+            }
+            board.advance_default(0.0);
+            after.push(axes(&viewport));
+        }
+        assert_eq!(after, vec![(Hidden, Scroll), (Scroll, Scroll)]);
+    }
 }

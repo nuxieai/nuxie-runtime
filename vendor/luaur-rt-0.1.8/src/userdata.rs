@@ -32,7 +32,7 @@ use crate::state::{Lua, LuaRef};
 use crate::sync::{MaybeSend, MaybeSync, NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
 use crate::table::Table;
-use crate::traits::{stack_arg, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::traits::{stack_arg, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues};
 use crate::value::Value;
 
 type UserDataMetatableCache = crate::app_data::WordMap<TypeId, c_int>;
@@ -353,7 +353,7 @@ impl AnyUserData {
             .cell
             .try_borrow_mut()
             .map_err(|_| Error::UserDataBorrowMutError)?;
-        guard.take().ok_or(Error::UserDataDestructed)
+        guard.take().ok_or_else(|| Error::UserDataDestructed)
     }
 }
 
@@ -438,6 +438,10 @@ impl PartialEq for AnyUserData {
 impl<T: UserData + crate::sync::MaybeSend + crate::sync::MaybeSync + 'static> IntoLua for T {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         Ok(Value::UserData(lua.create_userdata(self)?))
+    }
+
+    fn into_return_value(self, lua: &Lua) -> Result<ReturnValues> {
+        userdata_return_value(lua, self)
     }
 }
 
@@ -574,7 +578,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_return_values(lua)
         });
@@ -598,7 +602,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_return_values(lua)
         });
@@ -640,7 +644,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_return_values(lua)
         });
@@ -664,7 +668,7 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_return_values(lua)
         });
@@ -704,7 +708,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data)?;
             r.into_return_values(lua)
         });
@@ -727,7 +731,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data)?;
             r.into_return_values(lua)
         });
@@ -751,7 +755,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             method(lua, data, val)?;
             ().into_return_values(lua)
         });
@@ -775,7 +779,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             method(lua, data, val)?;
             ().into_return_values(lua)
         });
@@ -957,7 +961,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_lua_multi(lua)
         });
@@ -983,7 +987,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_lua_multi(lua)
         });
@@ -1027,7 +1031,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_lua_multi(lua)
         });
@@ -1053,7 +1057,7 @@ impl<T> UserDataMethods<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data, a)?;
             r.into_lua_multi(lua)
         });
@@ -1095,7 +1099,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data)?;
             r.into_lua_multi(lua)
         });
@@ -1120,7 +1124,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow()
                 .map_err(|_| Error::UserDataBorrowError)?;
-            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_ref().ok_or_else(|| Error::UserDataDestructed)?;
             let r = method(lua, data)?;
             r.into_lua_multi(lua)
         });
@@ -1146,7 +1150,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             method(lua, data, val)?;
             ().into_lua_multi(lua)
         });
@@ -1172,7 +1176,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
                 .cell
                 .try_borrow_mut()
                 .map_err(|_| Error::UserDataBorrowMutError)?;
-            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            let data = borrowed.as_mut().ok_or_else(|| Error::UserDataDestructed)?;
             method(lua, data, val)?;
             ().into_lua_multi(lua)
         });
@@ -1443,37 +1447,139 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
     data: T,
 ) -> Result<AnyUserData> {
     let state = lua.state();
+    unsafe {
+        let _stack = crate::stack_guard::StackGuard::new(state);
+        push_userdata(lua, data)?;
+        // Take a ref to the userdata and return.
+        Ok(AnyUserData::from_ref(lua.try_pop_ref()?))
+    }
+}
+
+/// Push a new userdata holding `data` with `T`'s metatable. On error the
+/// stack is left as it was (an allocated userdata is left to the collector,
+/// which drops `data`).
+///
+/// # Safety
+/// The stack must have room for one more value.
+unsafe fn push_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
+    lua: &Lua,
+    data: T,
+) -> Result<()> {
+    let state = lua.state();
     let metatable = userdata_metatable::<T>(lua)?;
 
     // Allocate the userdata holding UserDataCell<T> and move `data` in.
     unsafe {
-        let _stack = crate::stack_guard::StackGuard::new(state);
-        let storage = lua_newuserdatadtor(
-            state,
-            core::mem::size_of::<UserDataCell<T>>(),
-            Some(userdata_dtor::<T>),
-        )
-        .map_err(|error| Error::from_vm(error))?;
-        if storage.is_null() {
-            return Err(Error::runtime("luaur-rt: failed to allocate userdata"));
+        let base = lua_gettop(state);
+        let pushed = (|| {
+            let storage = lua_newuserdatadtor(
+                state,
+                core::mem::size_of::<UserDataCell<T>>(),
+                Some(userdata_dtor::<T>),
+            )
+            .map_err(|error| Error::from_vm(error))?;
+            if storage.is_null() {
+                return Err(Error::runtime("luaur-rt: failed to allocate userdata"));
+            }
+            core::ptr::write(
+                storage as *mut UserDataCell<T>,
+                UserDataCell {
+                    type_id: TypeId::of::<T>(),
+                    cell: RefCell::new(Some(data)),
+                },
+            );
+
+            luaur_vm::functions::lua_rawgeti::lua_rawgeti(
+                state,
+                luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX,
+                metatable,
+            )
+            .map_err(|error| Error::from_vm(error))?;
+            lua_setmetatable(state, -2).map_err(|error| Error::from_vm(error))?;
+            Ok(())
+        })();
+        if pushed.is_err() {
+            let top = lua_gettop(state);
+            lua_pop(state, top - base).expect("shrinking the stack cannot fail");
         }
-        core::ptr::write(
-            storage as *mut UserDataCell<T>,
-            UserDataCell {
-                type_id: TypeId::of::<T>(),
-                cell: RefCell::new(Some(data)),
-            },
-        );
+        pushed
+    }
+}
 
-        luaur_vm::functions::lua_rawgeti::lua_rawgeti(
-            state,
-            luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX,
-            metatable,
-        )
-        .map_err(|error| Error::from_vm(error))?;
-        lua_setmetatable(state, -2).map_err(|error| Error::from_vm(error))?;
+/// A new userdata returned from a callback, created where the trampoline
+/// would push it: no registry handle is made for it. Without stack room it
+/// falls back to a handle, so the trampoline reports the overflow as before.
+pub(crate) fn userdata_return_value<T: UserData + MaybeSend + MaybeSync + 'static>(
+    lua: &Lua,
+    data: T,
+) -> Result<ReturnValues> {
+    let state = lua.state();
+    if unsafe { lua_checkstack(state, 1) } == 0 {
+        return Ok(ReturnValues::One(Value::UserData(create_userdata(
+            lua, data,
+        )?)));
+    }
+    unsafe { push_userdata(lua, data)? };
+    Ok(ReturnValues::Pushed(1))
+}
 
-        // Take a ref to the userdata and return.
-        Ok(AnyUserData::from_ref(lua.try_pop_ref()?))
+/// A userdata held in a stack slot by [`Lua::with_stack_userdata`], with no
+/// registry handle.
+pub struct StackUserData<'a, T> {
+    lua: &'a Lua,
+    slot: c_int,
+    _marker: PhantomData<T>,
+}
+
+impl<T: 'static> StackUserData<'_, T> {
+    /// Immutably borrow the value, as [`AnyUserData::borrow`] does.
+    pub fn borrow(&self) -> Result<UserDataRef<'_, T>> {
+        // The slot roots the userdata for the borrow's lifetime.
+        let cell = unsafe { cell_at::<T>(self.lua.state(), self.slot)? };
+        let guard = cell
+            .cell
+            .try_borrow()
+            .map_err(|_| Error::UserDataBorrowError)?;
+        if guard.is_none() {
+            return Err(Error::UserDataDestructed);
+        }
+        Ok(UserDataRef {
+            guard,
+            _marker: PhantomData,
+        })
+    }
+
+    /// The userdata as a call argument, pushed from its slot.
+    pub fn arg(&self) -> crate::table::StackArg<'_> {
+        crate::table::StackArg::new(self.lua, self.slot)
+    }
+}
+
+impl Lua {
+    /// Create a userdata holding `data` and run `with` while it is held in a
+    /// stack slot: no registry handle is made for it. It is collected like any
+    /// unreferenced userdata once `with` returns, unless Lua kept it.
+    pub fn with_stack_userdata<T, R>(
+        &self,
+        data: T,
+        with: impl FnOnce(&StackUserData<'_, T>) -> R,
+    ) -> Result<R>
+    where
+        T: UserData + MaybeSend + MaybeSync + 'static,
+    {
+        let state = self.state();
+        unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            if lua_checkstack(state, 1) == 0 {
+                return Err(Error::runtime("stack overflow: no room for a userdata"));
+            }
+            push_userdata(self, data)?;
+            let userdata = StackUserData {
+                lua: self,
+                slot: lua_gettop(state),
+                _marker: PhantomData,
+            };
+            Ok(with(&userdata))
+        }
     }
 }

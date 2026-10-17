@@ -51,6 +51,44 @@ impl FieldFunction<'_> {
     }
 }
 
+/// A value held in a stack slot (see [`Lua::with_stack_userdata`]), passed
+/// as a call argument without a registry handle.
+pub struct StackArg<'a> {
+    lua: &'a Lua,
+    slot: c_int,
+}
+
+impl<'a> StackArg<'a> {
+    pub(crate) fn new(lua: &'a Lua, slot: c_int) -> Self {
+        Self { lua, slot }
+    }
+}
+
+impl IntoLuaMulti for StackArg<'_> {
+    fn into_lua_multi(self, _lua: &Lua) -> Result<MultiValue> {
+        let mut values = MultiValue::with_capacity(1);
+        values.push_back(self.lua.value_from_stack(self.slot)?);
+        Ok(values)
+    }
+
+    fn push_call_args(self, lua: &Lua) -> Result<c_int> {
+        let state = lua.state();
+        if state != self.lua.state() {
+            // Another thread's stack: pass the value through a handle.
+            return self.into_lua_multi(lua)?.push_call_args(lua);
+        }
+        unsafe {
+            if lua_checkstack(state, 2) == 0 {
+                return Err(crate::error::Error::RuntimeError(
+                    "stack overflow: too many arguments to function call".to_string(),
+                ));
+            }
+            lua_pushvalue(state, self.slot).map_err(|error| crate::error::Error::from_vm(error))?;
+        }
+        Ok(1)
+    }
+}
+
 /// A handle to a Lua table.
 ///
 /// Mirrors `mlua::Table`. Holds a registry reference keeping the table alive.

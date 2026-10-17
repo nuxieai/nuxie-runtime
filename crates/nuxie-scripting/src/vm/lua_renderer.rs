@@ -54,28 +54,30 @@ impl RendererBindings {
         // An e949 artboard instance may use a different factory facade. Its
         // borrowed renderer is independent of the VM's retained allocation
         // factory, which remains installed for script-created resources.
+        // The renderer userdata lives for the call in a stack slot, as C++'s
+        // lua_newrive does, rather than behind a registry handle.
         let (scripted_renderer, _renderer_scope) =
-            ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
-        let result = table
-            .with_field_function("draw", |function| {
-                let _property_owner = owner.map(|owner| {
-                    super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
-                });
-                super::ProtectedScriptCall::protected_call::<()>(
-                    function,
-                    (table.clone(), scripted_renderer.clone()),
-                )
-            })?
-            // Legacy files advertise every optional method. C++ treats a
-            // currently missing or non-function draw field as a balanced
-            // no-op after installing the renderer userdata.
-            .unwrap_or(Ok(()));
+            ScriptedRenderer::call_scoped(renderer, self.clone());
+        lua.with_stack_userdata(scripted_renderer, |scripted_renderer| {
+            let result = table
+                .with_field_function("draw", |function| {
+                    let _property_owner = owner.map(|owner| {
+                        super::view_model::ScriptViewModelFrameContext::for_lua(&lua)
+                            .enter_owner(owner)
+                    });
+                    super::ProtectedScriptCall::protected_call::<()>(
+                        function,
+                        (table.clone(), scripted_renderer.arg()),
+                    )
+                })?
+                // Legacy files advertise every optional method. C++ treats a
+                // currently missing or non-function draw field as a balanced
+                // no-op after installing the renderer userdata.
+                .unwrap_or(Ok(()));
 
-        let balanced = {
-            let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;
-            scripted_renderer.end()
-        };
-        result.map(|_| balanced)
+            let balanced = scripted_renderer.borrow()?.end();
+            result.map(|_| balanced)
+        })?
     }
 }
 
@@ -200,13 +202,23 @@ impl ScriptedRenderer {
         renderer: &'a mut dyn Renderer,
         bindings: RendererBindings,
     ) -> Result<(AnyUserData, ScopedRendererAccess<'a>)> {
+        let (scripted_renderer, access) = Self::call_scoped(renderer, bindings);
+        let userdata = lua.create_userdata(scripted_renderer)?;
+        Ok((userdata, access))
+    }
+
+    /// A renderer valid while the returned access is held.
+    pub(super) fn call_scoped<'a>(
+        renderer: &'a mut dyn Renderer,
+        bindings: RendererBindings,
+    ) -> (Self, ScopedRendererAccess<'a>) {
         let access = ScopedRendererAccess::new(renderer);
-        let userdata = lua.create_userdata(Self {
+        let scripted_renderer = Self {
             target: RefCell::new(Some(RendererTarget::CallScoped(access.token))),
             bindings,
             save_count: Cell::new(0),
-        })?;
-        Ok((userdata, access))
+        };
+        (scripted_renderer, access)
     }
 
     pub(super) fn create_canvas_userdata(

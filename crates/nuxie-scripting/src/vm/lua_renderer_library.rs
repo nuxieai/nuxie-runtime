@@ -82,6 +82,12 @@ impl RendererBindings {
         }
     }
 
+    /// Whether any canvas frame is open; when none is, closing orphans from
+    /// any token closes nothing.
+    pub(crate) fn has_open_canvas_frames(&self) -> bool {
+        !self.open_canvas_frames.borrow().frames.is_empty()
+    }
+
     pub(crate) fn open_canvas_frame_count(&self) -> usize {
         self.open_canvas_frames.borrow().frames.len()
     }

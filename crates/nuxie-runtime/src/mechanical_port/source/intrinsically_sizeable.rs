@@ -31,6 +31,10 @@ impl LayoutNaturalSize {
     pub(crate) fn end_control(&mut self) {
         self.controlling = false;
     }
+    /// Whether layout is writing the solved size now.
+    pub(crate) fn controlling(&self) -> bool {
+        self.controlling
+    }
     /// Records an authored width; true when that changes the natural width
     /// the host had with `current` as its value.
     pub(crate) fn assign_width(&mut self, width: f32, current: f32) -> bool {
@@ -87,6 +91,52 @@ pub(crate) fn natural_size_for_layout_host(
             Vec2D::new(bounds.width(), bounds.height())
         })
     })
+}
+
+/// Marks the Layout box that measures the natural size `changed` feeds: the
+/// nearest Layout ancestor of `parent`, `changed`'s parent. A host's own size
+/// (`own_size`) is read by the box it sits in directly; anything changed
+/// below one of the box's drawing groups is read only by a leaf box that
+/// measures drawing content. `own_shape` is the Shape a path belongs to,
+/// which is part of the path's host rather than a group (UNIV-4844).
+pub(crate) fn mark_measuring_layout_dirty(
+    mut parent: Option<crate::source::core::CoreHandle>,
+    own_shape: Option<&crate::source::core::CoreHandle>,
+    own_size: bool,
+) {
+    use crate::source::{
+        generated::{
+            layout_component_base::LayoutComponentBase,
+            transform_component_base::TransformComponentBase,
+        },
+        layout_component::LayoutComponent,
+    };
+    let mut through_group = false;
+    while let Some(current) = parent {
+        if current.is_type_of(LayoutComponentBase::TYPE_KEY) {
+            let mark = if through_group {
+                current
+                    .with(|object| {
+                        object
+                            .as_layout_component()
+                            .is_some_and(LayoutComponent::measures_drawing_content)
+                    })
+                    .unwrap_or(false)
+            } else {
+                own_size
+            };
+            if mark {
+                LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
+            }
+            return;
+        }
+        if current.is_type_of(TransformComponentBase::TYPE_KEY) && own_shape != Some(&current) {
+            through_group = true;
+        }
+        parent = current
+            .with(|current| current.component_parent_handle())
+            .flatten();
+    }
 }
 
 /// `transform` maps the host's local space into the measured box's space;

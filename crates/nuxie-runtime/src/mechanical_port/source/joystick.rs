@@ -260,6 +260,18 @@ impl Joystick {
         }
     }
 
+    /// An authored width or height is this host's natural size, which the
+    /// box measuring it reads (UNIV-4844); layout's own writes are not.
+    fn authored_size_changed(&mut self) {
+        if !self.base.layout_natural.controlling() {
+            crate::source::intrinsically_sizeable::mark_measuring_layout_dirty(
+                self.base.base.parent_handle(),
+                None,
+                true,
+            );
+        }
+    }
+
     fn add_component_dirt(&mut self) {
         self.base
             .base
@@ -379,9 +391,11 @@ impl JoystickBaseCallbacks for Joystick {
     }
     fn width_changed(&mut self) {
         self.add_component_dirt();
+        self.authored_size_changed();
     }
     fn height_changed(&mut self) {
         self.add_component_dirt();
+        self.authored_size_changed();
     }
 }
 

@@ -2268,9 +2268,11 @@ impl LayoutComponent {
                 && (0..2).any(|axis| !self.natural_content_hosts(axis).is_empty())))
             && self.is_leaf()
     }
-    /// Whether this box has child layout nodes; without them it is a leaf.
-    pub(crate) fn has_layout_children(&self) -> bool {
-        !self.layout_children.is_empty()
+    /// Whether this box measures drawing content for its natural size: a
+    /// leaf (no child layout nodes) that hugs, or any leaf but an artboard,
+    /// as in is_intrinsic_leaf without resolving its content hosts.
+    pub(crate) fn measures_drawing_content(&self) -> bool {
+        self.layout_children.is_empty() && (self.hugs() || !self.is_artboard())
     }
     fn hugs(&self) -> bool {
         self.with_style(|style| style.intrinsically_sized())

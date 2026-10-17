@@ -613,29 +613,39 @@ enum TextDrawCommand {
 /// one draws after the colour glyphs that follow its first glyph. Styles
 /// without a line-through keep the upstream order.
 fn lift_line_through_styles(commands: &mut Vec<TextDrawCommand>) {
-    let Some(mut end) = commands
+    let Some(last_color) = commands
         .iter()
         .rposition(|command| matches!(command, TextDrawCommand::ColorGlyph { .. }))
     else {
         return;
     };
-    let mut index = 0;
-    while index < end {
-        let lifted = matches!(
-            &commands[index],
+    let lifts = |command: &TextDrawCommand| {
+        matches!(
+            command,
             TextDrawCommand::Style(style)
                 if crate::text_decoration::style_line(style)
                     & crate::text_decoration::LINE_THROUGH
                     != 0
-        );
-        if lifted {
-            let command = commands.remove(index);
-            commands.insert(end, command);
-            end -= 1;
+        )
+    };
+    if !commands[..last_color].iter().any(lifts) {
+        return;
+    }
+    let mut kept = Vec::with_capacity(commands.len());
+    let mut lifted = Vec::new();
+    for (index, command) in std::mem::take(commands).into_iter().enumerate() {
+        if index < last_color && lifts(&command) {
+            lifted.push(command);
         } else {
-            index += 1;
+            let last = index == last_color;
+            kept.push(command);
+            if last {
+                // In their own order, right after the last colour glyph.
+                kept.append(&mut lifted);
+            }
         }
     }
+    *commands = kept;
 }
 
 /// Nuxie addition: adds decoration lines to a style's glyph path, registering
@@ -1971,7 +1981,10 @@ impl Text {
                                 .push(TextDrawCommand::Style(style.clone()));
                         }
                         }
-                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {}
+                        crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {
+                            // Drawn by its cluster's colour picture.
+                            inked = true;
+                        }
                     }
                     // Nuxie addition: the run style's underline/line-through.
                     let decoration_line = crate::text_decoration::style_line(&style);

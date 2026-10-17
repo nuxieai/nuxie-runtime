@@ -17,6 +17,7 @@
 
 use crate::error::Result;
 use crate::multi::MultiValue;
+use crate::stack_slot::FrameSlot;
 use crate::state::Lua;
 use crate::sys::c_int;
 use crate::value::Value;
@@ -151,17 +152,96 @@ pub trait FromLuaMulti: Sized {
     /// Perform the conversion.
     fn from_lua_multi(values: MultiValue, lua: &Lua) -> Result<Self>;
 
-    /// Convert the `count` callback arguments at stack indices
-    /// `start..start + count` (the values [`FromLuaMulti::from_lua_multi`]
-    /// would receive) of the running callback. The default collects them into
-    /// a [`MultiValue`].
+    /// Convert the stack values `args` names (the values
+    /// [`FromLuaMulti::from_lua_multi`] would receive: a callback's
+    /// arguments, or a call's results). The default collects them into a
+    /// [`MultiValue`].
     #[doc(hidden)]
-    fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
-        let mut values = MultiValue::with_capacity(count.max(0) as usize);
-        for i in 0..count {
-            values.push_back(lua.value_from_stack(start + i)?);
+    fn from_stack_args(args: StackRange<'_>) -> Result<Self> {
+        Self::from_lua_multi(args.collect()?, args.lua())
+    }
+}
+
+/// A run of stack values luaur-rt hands to
+/// [`FromLuaMulti::from_stack_args`]. Only luaur-rt makes one, for values of
+/// the frame current when it does; every read checks that frame and the stack
+/// top again, so a range kept past them fails instead of reading other slots.
+#[doc(hidden)]
+#[derive(Clone, Copy)]
+pub struct StackRange<'a> {
+    lua: &'a Lua,
+    start: FrameSlot,
+    count: c_int,
+}
+
+impl<'a> StackRange<'a> {
+    /// The `count` values from `start` (a positive index) of the frame
+    /// current on `lua`'s state.
+    pub(crate) fn new(lua: &'a Lua, start: c_int, count: c_int) -> Self {
+        Self {
+            lua,
+            start: FrameSlot::current(lua.state(), start),
+            count: count.max(0),
         }
-        Self::from_lua_multi(values, lua)
+    }
+
+    pub(crate) fn lua(&self) -> &'a Lua {
+        self.lua
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.count as usize
+    }
+
+    /// The stack index of value `i` (below [`StackRange::len`]), checked
+    /// against the range's frame and the stack top.
+    pub(crate) fn slot(&self, i: usize) -> Result<c_int> {
+        let start = self.start.index()?;
+        if i >= self.len() {
+            return Err(crate::error::Error::runtime(
+                "luaur-rt: stack range read past its end",
+            ));
+        }
+        let slot = start + i as c_int;
+        if slot > unsafe { crate::sys::lua_gettop(self.lua.state()) } {
+            return Err(crate::error::Error::runtime(
+                "luaur-rt: stack range read past the stack top",
+            ));
+        }
+        Ok(slot)
+    }
+
+    /// Value `i` (0-based), or nil past the end, as
+    /// [`FromLuaMulti::from_lua_multi`]'s `pop_front` would see it.
+    pub(crate) fn value(&self, i: usize) -> Result<Value> {
+        if i >= self.len() {
+            return Ok(Value::Nil);
+        }
+        self.lua.value_from_stack(self.slot(i)?)
+    }
+
+    /// Value `i`'s slot, bound to the range's frame.
+    pub(crate) fn frame_slot(&self, i: usize) -> FrameSlot {
+        self.start.above(i.min(self.len()) as c_int)
+    }
+
+    /// The values after the first `n`.
+    pub(crate) fn skip(&self, n: usize) -> Self {
+        let n = n.min(self.len()) as c_int;
+        Self {
+            lua: self.lua,
+            start: self.start.above(n),
+            count: self.count - n,
+        }
+    }
+
+    /// Every value, as a [`MultiValue`].
+    pub(crate) fn collect(&self) -> Result<MultiValue> {
+        let mut values = MultiValue::with_capacity(self.len());
+        for i in 0..self.len() {
+            values.push_back(self.value(i)?);
+        }
+        Ok(values)
     }
 }
 
@@ -197,18 +277,7 @@ impl<T: FromLua> FromLuaMulti for T {
         T::from_lua(v, lua)
     }
 
-    fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
-        T::from_lua(stack_arg(lua, start, count, 0)?, lua)
-    }
-}
-
-/// The `i`th (0-based) of the `count` arguments at `start`, or nil past the
-/// end, as [`FromLuaMulti::from_lua_multi`]'s `pop_front` would see it.
-#[inline]
-pub(crate) fn stack_arg(lua: &Lua, start: c_int, count: c_int, i: c_int) -> Result<Value> {
-    if i < count {
-        lua.value_from_stack(start + i)
-    } else {
-        Ok(Value::Nil)
+    fn from_stack_args(args: StackRange<'_>) -> Result<Self> {
+        T::from_lua(args.value(0)?, args.lua())
     }
 }

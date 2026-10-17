@@ -151,7 +151,7 @@ pub use table::{FieldFunction, FieldValue, StackArg, Table, TablePairs, TableSeq
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 #[doc(hidden)]
-pub use traits::{PushedCount, ReturnValues};
+pub use traits::{PushedCount, ReturnValues, StackRange};
 
 /// Process-global `FFlag::LuauDirectFieldGet` control used by pinned Rive.
 ///

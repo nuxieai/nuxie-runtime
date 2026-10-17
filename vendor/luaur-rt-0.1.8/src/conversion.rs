@@ -8,7 +8,7 @@ use crate::state::Lua;
 use crate::string::LuaString;
 use crate::sys::c_int;
 use crate::table::Table;
-use crate::traits::{stack_arg, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ReturnValues, StackRange};
 use crate::value::{Integer, Number, Value};
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ impl FromLuaMulti for () {
         Ok(())
     }
 
-    fn from_stack_args(_lua: &Lua, _start: c_int, _count: c_int) -> Result<Self> {
+    fn from_stack_args(_args: StackRange<'_>) -> Result<Self> {
         Ok(())
     }
 }
@@ -1006,8 +1006,8 @@ macro_rules! impl_tuple_from {
                 Ok(($last::from_lua_multi(values, lua)?,))
             }
 
-            fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
-                Ok(($last::from_stack_args(lua, start, count)?,))
+            fn from_stack_args(args: StackRange<'_>) -> Result<Self> {
+                Ok(($last::from_stack_args(args)?,))
             }
         }
     };
@@ -1025,14 +1025,15 @@ macro_rules! impl_tuple_from {
                 Ok(($head0, $($head,)* $last,))
             }
 
-            fn from_stack_args(lua: &Lua, start: c_int, count: c_int) -> Result<Self> {
+            fn from_stack_args(args: StackRange<'_>) -> Result<Self> {
                 // The same per-element conversions as `from_lua_multi`, in
                 // order; the last element takes whatever arguments remain.
-                let mut i: c_int = 0;
-                let $head0 = $head0::from_lua(stack_arg(lua, start, count, i)?, lua)?;
+                let lua = args.lua();
+                let mut i: usize = 0;
+                let $head0 = $head0::from_lua(args.value(i)?, lua)?;
                 i += 1;
-                $( let $head = $head::from_lua(stack_arg(lua, start, count, i)?, lua)?; i += 1; )*
-                let $last = $last::from_stack_args(lua, start + i.min(count), (count - i).max(0))?;
+                $( let $head = $head::from_lua(args.value(i)?, lua)?; i += 1; )*
+                let $last = $last::from_stack_args(args.skip(i))?;
                 Ok(($head0, $($head,)* $last,))
             }
         }

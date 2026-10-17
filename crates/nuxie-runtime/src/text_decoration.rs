@@ -387,8 +387,14 @@ impl LineDecorations {
             }
             return;
         }
+        let metrics = font.decoration_metrics();
         if let Some(span) = open {
-            if span.style == *style && span.line == line {
+            // A fallback font's run takes its own font's lines.
+            if span.style == *style
+                && span.line == line
+                && span.size == size
+                && span.metrics == metrics
+            {
                 span.start_x = span.start_x.min(x);
                 span.end_x = span.end_x.max(x + advance);
                 return;
@@ -403,7 +409,7 @@ impl LineDecorations {
             open: true,
             baseline,
             size,
-            metrics: font.decoration_metrics(),
+            metrics,
         });
     }
 

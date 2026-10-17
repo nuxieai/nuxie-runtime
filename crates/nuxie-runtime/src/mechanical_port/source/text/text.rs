@@ -609,25 +609,33 @@ enum TextDrawCommand {
     },
 }
 
-/// Nuxie addition: adds a decorated span's lines to its style's glyph path.
-fn add_decoration_span(
-    render_styles: &mut Vec<CoreHandle>,
-    draw_commands: &mut Vec<TextDrawCommand>,
-    render_opacity: f32,
-    span: &crate::text_decoration::DecorationSpan,
-) {
-    let mut path = RawPath::default();
-    for rect in span.rects() {
-        path.add_rect(rect, PathDirection::Clockwise);
+/// Nuxie addition: a line-through paints over its glyphs, so a style with
+/// one draws after the colour glyphs that follow its first glyph. Styles
+/// without a line-through keep the upstream order.
+fn lift_line_through_styles(commands: &mut Vec<TextDrawCommand>) {
+    let Some(mut end) = commands
+        .iter()
+        .rposition(|command| matches!(command, TextDrawCommand::ColorGlyph { .. }))
+    else {
+        return;
+    };
+    let mut index = 0;
+    while index < end {
+        let lifted = matches!(
+            &commands[index],
+            TextDrawCommand::Style(style)
+                if crate::text_decoration::style_line(style)
+                    & crate::text_decoration::LINE_THROUGH
+                    != 0
+        );
+        if lifted {
+            let command = commands.remove(index);
+            commands.insert(end, command);
+            end -= 1;
+        } else {
+            index += 1;
+        }
     }
-    add_decoration(
-        render_styles,
-        draw_commands,
-        render_opacity,
-        &span.style,
-        &path,
-        1.0,
-    );
 }
 
 /// Nuxie addition: adds decoration lines to a style's glyph path, registering
@@ -1871,7 +1879,7 @@ impl Text {
                 let mut current_x = line.start_x;
                 minimum_x = minimum_x.min(current_x);
                 // Nuxie addition: decorated runs on this line (none upstream).
-                let mut decorations = crate::text_decoration::DecorationSpans::default();
+                let mut decorations = crate::text_decoration::LineDecorations::default();
                 for (run, glyph_index) in ordered_line {
                     let index = glyph_index as usize;
                     let offset = run.offsets[index];
@@ -1969,56 +1977,28 @@ impl Text {
                     let decoration_line = crate::text_decoration::style_line(&style);
                     let font = run.font.as_deref().expect("shaped text retains its font");
                     if let Some(modifier_transform) = modifier_transform {
-                        // Modified glyphs move, turn and fade one by one: each
-                        // carries its own piece of line, spaces included.
-                        if decoration_line != 0 {
-                            let to_text = Mat2D::from_translate(current_x + center_x, render_y)
-                                * modifier_transform;
-                            let mut path = RawPath::default();
-                            for rect in crate::text_decoration::line_rects(
-                                decoration_line,
-                                font.decoration_metrics(),
-                                run.size,
-                                -center_x,
-                                advance - center_x,
-                                0.0,
-                            ) {
-                                let corners = [
-                                    Vec2D::new(rect.left(), rect.top()),
-                                    Vec2D::new(rect.right(), rect.top()),
-                                    Vec2D::new(rect.right(), rect.bottom()),
-                                    Vec2D::new(rect.left(), rect.bottom()),
-                                ];
-                                path.move_to_point(to_text * corners[0]);
-                                for corner in &corners[1..] {
-                                    path.line_to_point(to_text * *corner);
-                                }
-                                path.close();
-                            }
-                            add_decoration(
-                                &mut self.render_styles,
-                                &mut self.draw_commands,
-                                self.base.render_opacity(),
-                                &style,
-                                &path,
-                                opacity,
-                            );
-                        }
-                    } else if let Some(span) = decorations.glyph(
-                        &style,
-                        decoration_line,
-                        current_x,
-                        advance,
-                        inked,
-                        render_y,
-                        run.size,
-                        font,
-                    ) {
-                        add_decoration_span(
-                            &mut self.render_styles,
-                            &mut self.draw_commands,
-                            self.base.render_opacity(),
-                            &span,
+                        decorations.modified_glyph(
+                            &style,
+                            decoration_line,
+                            current_x,
+                            advance,
+                            inked,
+                            Mat2D::from_translate(current_x + center_x, render_y)
+                                * modifier_transform,
+                            opacity,
+                            run.size,
+                            font,
+                        );
+                    } else {
+                        decorations.glyph(
+                            &style,
+                            decoration_line,
+                            current_x,
+                            advance,
+                            inked,
+                            render_y,
+                            run.size,
+                            font,
                         );
                     }
                     let background = style
@@ -2044,12 +2024,14 @@ impl Text {
                     }
                     current_x += advance;
                 }
-                if let Some(span) = decorations.finish() {
-                    add_decoration_span(
+                for decoration in decorations.finish() {
+                    add_decoration(
                         &mut self.render_styles,
                         &mut self.draw_commands,
                         self.base.render_opacity(),
-                        &span,
+                        &decoration.style,
+                        &decoration.path,
+                        decoration.opacity,
                     );
                 }
                 if line_index == info.ellipsis_line {
@@ -2063,6 +2045,7 @@ impl Text {
             }
             current_y += self.fit_paragraph_spacing();
         }
+        lift_line_through_styles(&mut self.draw_commands);
 
         let mut scale = 1.0f32;
         let mut x_offset = -self.bounds.width() * self.base.origin_x();

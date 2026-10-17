@@ -20,7 +20,7 @@ use crate::source::{
         text::text_style_paint_base::TextStylePaintBase,
     },
     importers::import_stack::ImportStack,
-    math::aabb::Aabb,
+    math::{aabb::Aabb, mat2d::Mat2D, path_types::PathDirection, raw_path::RawPath, vec2d::Vec2D},
     status_code::StatusCode,
     text::text_style_paint::TextStylePaint,
     text_engine::{DecorationMetric, DecorationMetrics, Font},
@@ -294,31 +294,6 @@ pub(crate) fn line_rects(
     rects
 }
 
-/// One decorated stretch of a drawn line: consecutive glyphs of one style.
-pub(crate) struct DecorationSpan {
-    pub style: CoreHandle,
-    line: u32,
-    start_x: f32,
-    end_x: f32,
-    baseline: f32,
-    size: f32,
-    metrics: DecorationMetrics,
-}
-
-impl DecorationSpan {
-    /// The rectangles this span draws, in the text's local space (y down).
-    pub fn rects(&self) -> Vec<Aabb> {
-        line_rects(
-            self.line,
-            self.metrics,
-            self.size,
-            self.start_x,
-            self.end_x,
-            self.baseline,
-        )
-    }
-}
-
 fn resolved(metric: Option<DecorationMetric>, fallback_offset: f32) -> DecorationMetric {
     let metric = metric.unwrap_or(DecorationMetric {
         offset: fallback_offset,
@@ -338,16 +313,60 @@ fn resolved(metric: Option<DecorationMetric>, fallback_offset: f32) -> Decoratio
     }
 }
 
-/// Collects decorated spans while a line's glyphs are laid out left to right.
-/// A span reaches the end of its last inked glyph: spaces inside a run are
-/// decorated, a line's trailing spaces are not.
-#[derive(Default)]
-pub(crate) struct DecorationSpans {
-    current: Option<DecorationSpan>,
+/// One decorated stretch of a drawn line: consecutive glyphs of one style.
+struct Span {
+    style: CoreHandle,
+    line: u32,
+    start_x: f32,
+    end_x: f32,
+    open: bool,
+    baseline: f32,
+    size: f32,
+    metrics: DecorationMetrics,
 }
 
-impl DecorationSpans {
-    /// Records one glyph. Returns the span it closes, if any.
+/// One modified glyph's own piece of line: modifiers move, turn and fade
+/// glyphs one by one, so each carries its line through its own transform.
+struct Piece {
+    style: CoreHandle,
+    line: u32,
+    x: f32,
+    advance: f32,
+    /// Maps the glyph's layout space (origin at its centre on the baseline)
+    /// to the text's local space.
+    transform: Mat2D,
+    opacity: f32,
+    size: f32,
+    metrics: DecorationMetrics,
+}
+
+/// A path to add to a style's glyph path, at an opacity.
+pub(crate) struct DecorationPath {
+    pub style: CoreHandle,
+    pub path: RawPath,
+    pub opacity: f32,
+}
+
+/// Collects one drawn line's decorations while its glyphs are laid out, and
+/// builds them when the line ends. A line reaches the end of the line's last
+/// inked glyph: spaces inside the line are decorated, its trailing spaces are
+/// not, with or without modifiers.
+#[derive(Default)]
+pub(crate) struct LineDecorations {
+    spans: Vec<Span>,
+    pieces: Vec<Piece>,
+    ink_end: Option<f32>,
+}
+
+impl LineDecorations {
+    fn ink(&mut self, x: f32, advance: f32, inked: bool) {
+        if inked {
+            let end = x + advance;
+            self.ink_end = Some(self.ink_end.map_or(end, |ink_end| ink_end.max(end)));
+        }
+    }
+
+    /// Records one laid-out glyph of a line no modifier touches.
     #[allow(clippy::too_many_arguments)]
     pub fn glyph(
         &mut self,
@@ -359,33 +378,118 @@ impl DecorationSpans {
         baseline: f32,
         size: f32,
         font: &dyn Font,
-    ) -> Option<DecorationSpan> {
+    ) {
+        self.ink(x, advance, inked);
+        let open = self.spans.last_mut().filter(|span| span.open);
         if line == 0 {
-            return self.current.take();
-        }
-        if let Some(span) = &mut self.current
-            && span.style == *style
-            && span.line == line
-        {
-            span.start_x = span.start_x.min(x);
-            if inked {
-                span.end_x = span.end_x.max(x + advance);
+            if let Some(span) = open {
+                span.open = false;
             }
-            return None;
+            return;
         }
-        self.current.replace(DecorationSpan {
+        if let Some(span) = open {
+            if span.style == *style && span.line == line {
+                span.start_x = span.start_x.min(x);
+                span.end_x = span.end_x.max(x + advance);
+                return;
+            }
+            span.open = false;
+        }
+        self.spans.push(Span {
             style: style.clone(),
             line,
             start_x: x,
-            end_x: if inked { x + advance } else { x },
+            end_x: x + advance,
+            open: true,
             baseline,
             size,
             metrics: font.decoration_metrics(),
-        })
+        });
     }
 
-    /// Closes the line's last span.
-    pub fn finish(&mut self) -> Option<DecorationSpan> {
-        self.current.take()
+    /// Records one glyph a modifier may have moved, turned or faded.
+    #[allow(clippy::too_many_arguments)]
+    pub fn modified_glyph(
+        &mut self,
+        style: &CoreHandle,
+        line: u32,
+        x: f32,
+        advance: f32,
+        inked: bool,
+        transform: Mat2D,
+        opacity: f32,
+        size: f32,
+        font: &dyn Font,
+    ) {
+        self.ink(x, advance, inked);
+        if line != 0 {
+            self.pieces.push(Piece {
+                style: style.clone(),
+                line,
+                x,
+                advance,
+                transform,
+                opacity,
+                size,
+                metrics: font.decoration_metrics(),
+            });
+        }
+    }
+
+    /// The line's decoration paths, trimmed at its last inked glyph.
+    pub fn finish(self) -> Vec<DecorationPath> {
+        let Some(ink_end) = self.ink_end else {
+            return Vec::new();
+        };
+        let mut paths = Vec::new();
+        for span in self.spans {
+            let mut path = RawPath::default();
+            for rect in line_rects(
+                span.line,
+                span.metrics,
+                span.size,
+                span.start_x,
+                span.end_x.min(ink_end),
+                span.baseline,
+            ) {
+                path.add_rect(rect, PathDirection::Clockwise);
+            }
+            paths.push(DecorationPath {
+                style: span.style,
+                path,
+                opacity: 1.0,
+            });
+        }
+        for piece in self.pieces {
+            let centre = piece.advance / 2.0;
+            let end = (piece.x + piece.advance).min(ink_end) - piece.x;
+            let mut path = RawPath::default();
+            for rect in line_rects(
+                piece.line,
+                piece.metrics,
+                piece.size,
+                -centre,
+                end - centre,
+                0.0,
+            ) {
+                let corners = [
+                    Vec2D::new(rect.left(), rect.top()),
+                    Vec2D::new(rect.right(), rect.top()),
+                    Vec2D::new(rect.right(), rect.bottom()),
+                    Vec2D::new(rect.left(), rect.bottom()),
+                ];
+                path.move_to_point(piece.transform * corners[0]);
+                for corner in &corners[1..] {
+                    path.line_to_point(piece.transform * *corner);
+                }
+                path.close();
+            }
+            paths.push(DecorationPath {
+                style: piece.style,
+                path,
+                opacity: piece.opacity,
+            });
+        }
+        paths
     }
 }

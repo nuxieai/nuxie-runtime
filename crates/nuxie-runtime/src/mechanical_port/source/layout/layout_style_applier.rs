@@ -534,6 +534,8 @@ pub struct LayoutSyncContext {
     pub parent_is_row: bool,
     pub is_ltr: bool,
     pub has_layout_parent: bool,
+    /// Which properties a `LayoutCssStyle` record contributes here.
+    pub css_role: crate::css_layout::CssRole,
 }
 
 pub trait LayoutStyleApplier {
@@ -542,4 +544,7 @@ pub trait LayoutStyleApplier {
     fn apply_item_style(&self, _style: &mut Style, _context: &LayoutSyncContext) {}
     /// Explicit grid placement follows item-style resets, independent of file order.
     fn apply_placement_style(&self, _style: &mut Style, _context: &LayoutSyncContext) {}
+    /// A `LayoutCssStyle` record, after every other sweep: in CSS mode its
+    /// values replace what the Rive modes translated to (docs/CSS_LAYOUT.md).
+    fn apply_css_style(&self, _style: &mut Style, _context: &LayoutSyncContext) {}
 }

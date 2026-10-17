@@ -1,5 +1,5 @@
 {
-  "checksum": "85c112866769961d71355b125875d3dc99e3206fb4a5e2100a8cab46f3707939",
+  "checksum": "14cc8afa3c320a9536a0e76f48307aa2d5276afc1b022715a8214409b1feb1ec",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -10262,6 +10262,8 @@
     "taffy 0.15.0": {
       "common_attrs": {
         "crate_features": [
+          "block_layout",
+          "content_size",
           "detailed_layout_info",
           "flexbox",
           "grid",

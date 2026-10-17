@@ -160,6 +160,13 @@ impl LayoutData {
                 }
             });
         }
+        for applier in appliers.iter() {
+            applier.with(|applier| {
+                if let Some(applier) = applier.as_layout_style_applier() {
+                    applier.apply_css_style(style, context);
+                }
+            });
+        }
     }
     #[cfg(feature = "tools")]
     pub fn clear_children(&mut self) {

@@ -5,6 +5,7 @@
 //! a [`Renderer`]. The complete upstream-shaped API is available in [`source`].
 
 #[doc(hidden)]
+pub mod css_layout;
 pub mod mechanical_port;
 
 pub mod utils;

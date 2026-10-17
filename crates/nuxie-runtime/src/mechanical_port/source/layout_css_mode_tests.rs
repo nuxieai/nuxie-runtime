@@ -13,6 +13,11 @@ use crate::source::{
             layout_sizing_style_base::LayoutSizingStyleBase,
         },
         layout_component_base::LayoutComponentBase,
+        node_base::NodeBase,
+        shapes::{
+            parametric_path_base::ParametricPathBase, rectangle_base::RectangleBase,
+            shape_base::ShapeBase,
+        },
     },
     layout::{
         layout_enums::LayoutScaleType,
@@ -92,6 +97,17 @@ struct B {
     /// Translated mode: `LayoutComponentStyle` keys.
     style: Vec<P>,
     children: Vec<B>,
+    /// Drawing content: rectangles, each a Shape with one Rectangle path.
+    content: Vec<Rect>,
+}
+
+/// A rectangle shape named `name` (its path is `name` + " path"), authored
+/// at `size`, directly in its box or inside a plain group.
+#[derive(Clone, Copy)]
+struct Rect {
+    name: &'static str,
+    size: (f32, f32),
+    grouped: bool,
 }
 
 fn css(name: &'static str, props: impl IntoIterator<Item = P>, children: Vec<B>) -> B {
@@ -131,6 +147,9 @@ struct Scene {
 enum Entry<'a> {
     Box(&'a B, u64),
     Record(&'a [P], u64),
+    Group(u64),
+    Shape(&'a Rect, u64),
+    Path(&'a Rect, u64),
 }
 
 fn write(riv: &mut Riv, props: &[P]) {
@@ -150,6 +169,15 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         entries.push(Entry::Box(node, parent));
         if let Some(props) = &node.css {
             entries.push(Entry::Record(props, index));
+        }
+        for rect in &node.content {
+            let mut parent = index;
+            if rect.grouped {
+                entries.push(Entry::Group(index));
+                parent = entries.len() as u64;
+            }
+            entries.push(Entry::Shape(rect, parent));
+            entries.push(Entry::Path(rect, entries.len() as u64));
         }
         for child in &node.children {
             walk(child, index, entries);
@@ -190,6 +218,28 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent);
                 write(&mut riv, props);
                 riv.end();
+            }
+            Entry::Group(parent) => {
+                riv.object(NodeBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .end();
+            }
+            Entry::Shape(rect, parent) => {
+                riv.object(ShapeBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, rect.name)
+                    .end();
+            }
+            Entry::Path(rect, parent) => {
+                riv.object(RectangleBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(
+                        ComponentBase::NAME_PROPERTY_KEY,
+                        &format!("{} path", rect.name),
+                    )
+                    .float(ParametricPathBase::WIDTH_PROPERTY_KEY, rect.size.0)
+                    .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, rect.size.1)
+                    .end();
             }
         }
     }
@@ -257,6 +307,26 @@ impl Scene {
             .with_downcast::<LayoutComponent, _>(|layout| layout.layout_bounds())
             .expect(name);
         [bounds.left(), bounds.top(), bounds.width(), bounds.height()]
+    }
+    /// A rectangle's current path size, which layout writes when it
+    /// resizes the shape.
+    fn path_size(&self, name: &str) -> (f32, f32) {
+        let path = format!("{name} path");
+        self.artboard
+            .with_artboard(|artboard| {
+                artboard.find_all_handles::<crate::source::shapes::rectangle::Rectangle>()
+            })
+            .into_iter()
+            .find_map(|handle| {
+                handle
+                    .with(|object| {
+                        let path_object = object.as_parametric_path()?;
+                        (object.as_component()?.base.name() == path)
+                            .then(|| (path_object.width(), path_object.height()))
+                    })
+                    .flatten()
+            })
+            .unwrap_or_else(|| panic!("{path}"))
     }
     fn record(&self, name: &str) -> CoreHandle {
         let owner = self.named(name);
@@ -630,4 +700,101 @@ fn translated_fill_shares_the_row_by_fraction() {
     );
     assert_eq!(f.bounds("Wide")[2], 150.0);
     assert_eq!(f.bounds("Empty"), [150.0, 0.0, 150.0, 100.0]);
+}
+
+/// CSS mode: a shape is content at its natural size, as an `<svg width>` is.
+/// Its box hugs it, keeps it as its automatic minimum, and never resizes it.
+#[test]
+fn css_shape_is_content_at_its_natural_size() {
+    let rect = |name| Rect {
+        name,
+        size: (80.0, 30.0),
+        grouped: false,
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(100.0), &height(40.0)].concat(),
+            vec![
+                B {
+                    content: vec![rect("Icon")],
+                    ..css("Hug", [], vec![])
+                },
+                css("Wide", width(100.0), vec![]),
+            ],
+        ),
+    );
+    // Hug's basis is 80 and its minimum 80; Wide gives up the overflow.
+    assert_eq!(f.bounds("Hug"), [0.0, 0.0, 80.0, 40.0]);
+    assert_eq!(f.bounds("Wide"), [80.0, 0.0, 20.0, 40.0]);
+    assert_eq!(f.path_size("Icon"), (80.0, 30.0));
+
+    // A box wider than its shape leaves the shape at its own size.
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            content: vec![rect("Icon")],
+            ..css("Box", [width(200.0), height(100.0)].concat(), vec![])
+        },
+    );
+    assert_eq!(f.bounds("Box"), [0.0, 0.0, 200.0, 100.0]);
+    assert_eq!(f.path_size("Icon"), (80.0, 30.0));
+}
+
+/// Translated mode: a shape the box resizes is the box's paint, so it adds
+/// nothing to the box's automatic minimum. The Fixed box shrinks with its
+/// sibling in proportion to their bases (80 and 100 sharing an 80 overflow).
+/// A grouped shape is content and keeps the minimum.
+#[test]
+fn translated_paint_shape_adds_no_minimum() {
+    let row = |grouped: bool| {
+        let fixed = |name: &'static str, width: f32, content: Vec<Rect>| B {
+            name,
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, width),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0),
+            ],
+            content,
+            ..B::default()
+        };
+        scene(
+            (400.0, 300.0),
+            B {
+                name: "Row",
+                component: vec![
+                    F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                    F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0),
+                ],
+                style: vec![U(
+                    LayoutComponentStyleBase::FLEX_DIRECTION_VALUE_PROPERTY_KEY,
+                    YGFlexDirection::Row as u64,
+                )],
+                children: vec![
+                    fixed(
+                        "Painted",
+                        80.0,
+                        vec![Rect {
+                            name: "Background",
+                            size: (80.0, 40.0),
+                            grouped,
+                        }],
+                    ),
+                    fixed("Sibling", 100.0, vec![]),
+                ],
+                ..B::default()
+            },
+        )
+    };
+    let close = |a: f32, b: f32| (a - b).abs() < 1e-3;
+    let f = row(false);
+    let painted = f.bounds("Painted")[2];
+    assert!(close(painted, 80.0 - 80.0 * 80.0 / 180.0), "{painted}");
+    assert!(close(f.bounds("Sibling")[2], 100.0 - 80.0 * 100.0 / 180.0));
+    // Layout resized the background to its box.
+    assert!(close(f.path_size("Background").0, painted));
+
+    let f = row(true);
+    assert_eq!(f.bounds("Painted")[2], 80.0);
+    assert_eq!(f.bounds("Sibling")[2], 20.0);
 }

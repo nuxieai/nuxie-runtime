@@ -102,6 +102,9 @@ struct B {
     /// A ScrollConstraint on this box (its content box), with its direction
     /// (0 horizontal, 1 vertical); its parent is the viewport.
     scroll: Option<u64>,
+    /// Participants: a rectangle shape hosting a LayoutParticipant and,
+    /// when Some, a LayoutCssStyle on the host.
+    participants: Vec<(Rect, Option<Vec<P>>)>,
 }
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
@@ -154,6 +157,7 @@ enum Entry<'a> {
     Shape(&'a Rect, u64),
     Path(&'a Rect, u64),
     Scroll(u64, u64),
+    Participant(u64),
 }
 
 fn write(riv: &mut Riv, props: &[P]) {
@@ -176,6 +180,15 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         }
         if let Some(direction) = node.scroll {
             entries.push(Entry::Scroll(index, direction));
+        }
+        for (rect, props) in &node.participants {
+            entries.push(Entry::Shape(rect, index));
+            let host = entries.len() as u64;
+            entries.push(Entry::Path(rect, host));
+            entries.push(Entry::Participant(host));
+            if let Some(props) = props {
+                entries.push(Entry::Record(props, host));
+            }
         }
         for rect in &node.content {
             let mut parent = index;
@@ -231,6 +244,11 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                 riv.object(crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, *direction)
+                    .end();
+            }
+            Entry::Participant(parent) => {
+                riv.object(crate::source::layout::layout_participant::LayoutParticipant::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .end();
             }
             Entry::Group(parent) => {
@@ -986,4 +1004,54 @@ fn css_absolute_box_skips_a_static_parent() {
     assert_eq!(f.bounds("Static"), [50.0, 0.0, 100.0, 40.0]);
     // (10, 10) in the frame is (-40, 10) in the static box.
     assert_eq!(f.bounds("Pinned"), [-40.0, 10.0, 30.0, 30.0]);
+}
+
+/// A participant's host carries the record: the participant takes its item
+/// properties (size, margins) and ignores its Rive sizing.
+#[test]
+fn css_record_on_a_participant_host() {
+    const MARGIN_LEFT: u16 = 60071;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            participants: vec![(
+                Rect {
+                    name: "Icon",
+                    size: (80.0, 30.0),
+                    grouped: false,
+                },
+                Some(
+                    [
+                        [F(MARGIN_LEFT, 10.0)].as_slice(),
+                        &width(50.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                ),
+            )],
+            ..css(
+                "Row",
+                [[U(DISPLAY, 1)].as_slice(), &width(300.0), &height(40.0)].concat(),
+                vec![],
+            )
+        },
+    );
+    let participant = f
+        .artboard
+        .with_artboard(|artboard| {
+            artboard
+                .find_all_handles::<crate::source::layout::layout_participant::LayoutParticipant>()
+        })
+        .into_iter()
+        .next()
+        .expect("a participant");
+    let bounds = participant
+        .with_downcast::<crate::source::layout::layout_participant::LayoutParticipant, _>(
+            |participant| participant.layout_bounds(),
+        )
+        .unwrap();
+    assert_eq!(
+        [bounds.left(), bounds.top(), bounds.width(), bounds.height()],
+        [10.0, 0.0, 50.0, 20.0]
+    );
 }

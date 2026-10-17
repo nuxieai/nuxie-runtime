@@ -7,8 +7,21 @@
 #[doc(hidden)]
 pub mod mechanical_port;
 
+pub mod text_decoration;
 pub mod utils;
 pub mod video;
+
+/// Makes a Nuxie-owned type (keys 60000 and up) or, for any other key, the
+/// upstream type. Nuxie types share the Rive record grammar and ordinary
+/// arena lifecycle.
+pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObject>> {
+    match type_key {
+        60000 => Some(Box::new(video::VideoAsset::default())),
+        60001 => Some(Box::new(video::Video::default())),
+        60002 => Some(Box::new(text_decoration::TextStyleDecoration::default())),
+        _ => source::generated::core_registry::CoreRegistry::make_core_box(type_key),
+    }
+}
 
 mod host_animation;
 mod host_artboard;

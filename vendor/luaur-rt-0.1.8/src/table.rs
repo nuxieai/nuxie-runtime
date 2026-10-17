@@ -5,8 +5,51 @@ use crate::multi::MultiValue;
 use crate::state::{Lua, LuaRef};
 use crate::sync::{NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
-use crate::traits::{FromLua, IntoLua, IntoLuaMulti};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::value::Value;
+
+/// A value read from a table field by [`Table::with_field`], held in its
+/// stack slot (not the registry) for the callback's duration.
+pub struct FieldValue<'a> {
+    function: FieldFunction<'a>,
+}
+
+impl<'a> FieldValue<'a> {
+    /// The value as a function, when it is one (`LUA_TFUNCTION` only, not
+    /// merely callable).
+    pub fn as_function(&self) -> Option<&FieldFunction<'a>> {
+        let function = &self.function;
+        let is_function =
+            unsafe { lua_type(function.lua.state(), function.slot) } == ttype::FUNCTION;
+        is_function.then_some(function)
+    }
+
+    /// The value itself, as [`Table::get_field`] returns it.
+    pub fn to_value(&self) -> Result<Value> {
+        self.function.lua.value_from_stack(self.function.slot)
+    }
+}
+
+/// A function read from a table field by [`Table::with_field`], held in its
+/// stack slot (not the registry) for the callback's duration.
+pub struct FieldFunction<'a> {
+    lua: &'a Lua,
+    slot: c_int,
+}
+
+impl FieldFunction<'_> {
+    /// The owning [`Lua`].
+    pub fn lua(&self) -> &Lua {
+        self.lua
+    }
+
+    /// Call the function with `args`, exactly as
+    /// [`Function::call`](crate::Function::call) calls a function handle.
+    pub fn call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+        let slot = self.slot;
+        unsafe { crate::function::call_pushed(self.lua, |state| lua_pushvalue(state, slot), args) }
+    }
+}
 
 /// A handle to a Lua table.
 ///
@@ -103,13 +146,26 @@ impl Table {
     unsafe fn take_pushed_field(&self, lua: &Lua) -> Result<Value> {
         let state = lua.state();
         unsafe {
+            // Leaves `[table, value]` (raw read) or `[value]` (protected read).
+            let consumed_table = self.read_pushed_field(lua)?;
+            let v = lua.value_from_stack(-1)?;
+            let pushed = if consumed_table { 1 } else { 2 };
+            lua_pop(state, pushed).expect("shrinking the stack cannot fail");
+            Ok(v)
+        }
+    }
+
+    /// Replace the pushed `[table, key]` with `table[key]` on top of the stack,
+    /// read as [`Table::take_pushed_field`] reads it. Returns whether the table
+    /// was consumed (`[value]`) rather than left beneath it (`[table, value]`).
+    unsafe fn read_pushed_field(&self, lua: &Lua) -> Result<bool> {
+        let state = lua.state();
+        unsafe {
             let has_metatable =
                 lua_getmetatable(state, -2).map_err(|error| crate::error::Error::from_vm(error))?;
             if has_metatable == 0 {
                 lua_rawget(state, -2); // [table, key] -> [table, value]
-                let v = lua.value_from_stack(-1)?;
-                lua_pop(state, 2).expect("shrinking the stack cannot fail"); // value + table
-                return Ok(v);
+                return Ok(false);
             }
             lua_pop(state, 1).expect("shrinking the stack cannot fail"); // the metatable
             let status =
@@ -117,10 +173,41 @@ impl Table {
             if status != 0 {
                 return Err(lua.pop_error(status));
             }
-            let v = lua.value_from_stack(-1)?;
-            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop the result value
-            Ok(v)
+            Ok(true) // [value]
         }
+    }
+
+    /// Read `self[field]` exactly as [`Table::get_field`] does and run `with`
+    /// on the value held on the stack: no registry-owned handle is made for
+    /// it unless `with` asks for one ([`FieldValue::to_value`]). The error is
+    /// the lookup's.
+    pub fn with_field<T>(&self, field: &str, with: impl FnOnce(&FieldValue<'_>) -> T) -> Result<T> {
+        let lua = self.lua();
+        let state = lua.state();
+        unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.push(); // table
+            lua_pushlstring(state, field.as_ptr() as *const c_char, field.len())
+                .expect("allocation failed in an infallible Lua string constructor");
+            self.read_pushed_field(&lua)?;
+            let value = FieldValue {
+                function: FieldFunction {
+                    lua: &lua,
+                    slot: lua_gettop(state),
+                },
+            };
+            Ok(with(&value))
+        }
+    }
+
+    /// [`Table::with_field`] for a field that should hold a function: `call`
+    /// runs only when it does. `Ok(None)` when the field is not a function.
+    pub fn with_field_function<T>(
+        &self,
+        field: &str,
+        call: impl FnOnce(&FieldFunction<'_>) -> T,
+    ) -> Result<Option<T>> {
+        self.with_field(field, |value| value.as_function().map(call))
     }
 
     /// Look up a table field and call it with a fixed zero-result contract.

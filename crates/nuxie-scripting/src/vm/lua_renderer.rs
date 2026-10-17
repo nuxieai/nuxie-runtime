@@ -6,7 +6,7 @@ use std::mem;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
+use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods};
 use nuxie_render_api::{Factory as RenderFactory, RenderCanvasFrame, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
@@ -56,22 +56,20 @@ impl RendererBindings {
         // factory, which remains installed for script-created resources.
         let (scripted_renderer, _renderer_scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
-        let field: Value = table.get_field("draw")?;
-        let result = match field {
-            Value::Function(function) => {
+        let result = table
+            .with_field_function("draw", |function| {
                 let _property_owner = owner.map(|owner| {
                     super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
                 });
                 super::ProtectedScriptCall::protected_call::<()>(
-                    &function,
+                    function,
                     (table.clone(), scripted_renderer.clone()),
                 )
-            }
+            })?
             // Legacy files advertise every optional method. C++ treats a
             // currently missing or non-function draw field as a balanced
             // no-op after installing the renderer userdata.
-            _ => Ok(()),
-        };
+            .unwrap_or(Ok(()));
 
         let balanced = {
             let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;

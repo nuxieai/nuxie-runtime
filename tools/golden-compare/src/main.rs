@@ -1235,7 +1235,10 @@ fn verify_known_divergence(
         validate_stream_hash(&entry.id, "lane Rust stream SHA-256", hash)?;
     }
     if let Some(recorded_hash) = hash {
-        let actual_hash = format!("{:x}", Sha256::digest(rust_stream.as_bytes()));
+        let actual_hash = format!(
+            "{:x}",
+            Sha256::digest(pinned_stream(&entry.path, rust_stream).as_bytes())
+        );
         if actual_hash != recorded_hash {
             return Err(format!(
                 "{} full Rust stream SHA-256 changed: recorded {recorded_hash}; actual {actual_hash}",
@@ -1244,6 +1247,40 @@ fn verify_known_divergence(
         }
     }
     Ok(())
+}
+
+/// The full-stream pin covers every byte the runner writes, except where the
+/// fixture checkout lives: runners echo the absolute fixture path in their
+/// source line, so that path is pinned relative to the corpus entry.
+fn pinned_stream<'a>(entry_path: &str, stream: &'a str) -> std::borrow::Cow<'a, str> {
+    const PREFIX: &str = "source file=\"";
+    let relative = |file: &str| {
+        file.strip_suffix(entry_path)
+            .is_some_and(|root| root.is_empty() || root.ends_with('/'))
+    };
+    if !stream.lines().any(|line| {
+        line.strip_prefix(PREFIX)
+            .and_then(|rest| rest.split_once('"'))
+            .is_some_and(|(file, _)| file != entry_path && relative(file))
+    }) {
+        return std::borrow::Cow::Borrowed(stream);
+    }
+    std::borrow::Cow::Owned(
+        stream
+            .split_inclusive('\n')
+            .map(|line| {
+                match line
+                    .strip_prefix(PREFIX)
+                    .and_then(|rest| rest.split_once('"'))
+                {
+                    Some((file, tail)) if relative(file) => {
+                        format!("{PREFIX}{entry_path}\"{tail}")
+                    }
+                    _ => line.to_owned(),
+                }
+            })
+            .collect(),
+    )
 }
 
 /// Verifies the one approved Yoga-to-Taffy semantic-bounds seam without
@@ -2550,6 +2587,31 @@ mod reviewed_layout_tests {
         assert!(entry.validate(1).is_err());
         entry.scripted_rust_stream_sha256 = Some("not-a-hash".to_owned());
         assert!(entry.validate(1).is_err());
+    }
+
+    #[test]
+    fn reviewed_layout_stream_pin_ignores_the_fixture_checkout_location() {
+        let entry = reviewed_stream_fixture();
+        let stream = |root: &str, file: &str| {
+            format!(
+                "rive-golden-stream-v1\nsource file=\"{root}{file}\" artboard=\"A\"\nvalue=2\nlater=3\n"
+            )
+        };
+        let pin = |text: &str| {
+            format!(
+                "{:x}",
+                Sha256::digest(pinned_stream(&entry.path, text).as_bytes())
+            )
+        };
+        let here = stream("/a/rive-runtime/", "fixture.riv");
+        assert_eq!(
+            pin(&here),
+            pin(&stream("/elsewhere/checkout/", "fixture.riv"))
+        );
+        assert_eq!(pin(&here), pin(&stream("", "fixture.riv")));
+        assert_ne!(pin(&here), pin(&stream("/a/rive-runtime/", "other.riv")));
+        assert_ne!(pin(&here), pin(&stream("/a/rive-runtime/x", "fixture.riv")));
+        assert_ne!(pin(&here), pin(&here.replace("later=3", "later=4")));
     }
 
     #[test]

@@ -10350,15 +10350,24 @@ impl CoreRegistry {
     }
 
     pub fn set_uint_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
-        // Nuxie TextStyleDecoration.line: rebuilds the owning Text.
-        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
-            && handle
+        // Nuxie TextStyleDecoration.line: rebuilds the owning Text and tells
+        // the property's observers, as the generated setters do.
+        if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
+            let mut completion = crate::source::core::PropertySetterCompletion::default();
+            let written = handle
                 .with_downcast_mut::<crate::text_decoration::TextStyleDecoration, _>(|decoration| {
-                    decoration.set_line(value)
+                    if decoration.set_line(value) {
+                        completion.record(
+                            crate::mechanical_port::source::core::CoreObject::core(decoration),
+                            crate::text_decoration::LINE_PROPERTY_KEY,
+                        );
+                    }
                 })
-                .is_some()
-        {
-            return true;
+                .is_some();
+            if written {
+                completion.finish();
+                return true;
+            }
         }
         if matches!(property_key, 586 | 587 | 660)
             && handle.is_type_of(

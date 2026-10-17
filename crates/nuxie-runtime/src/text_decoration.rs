@@ -57,10 +57,11 @@ impl TextStyleDecoration {
         self.line
     }
 
-    /// Changes the lines and has the owning Text rebuild its paths.
-    pub fn set_line(&mut self, line: u32) {
+    /// Changes the lines and has the owning Text rebuild its paths. Returns
+    /// whether the value changed.
+    pub fn set_line(&mut self, line: u32) -> bool {
         if self.line == line {
-            return;
+            return false;
         }
         self.line = line;
         let text = self.component.parent_handle().and_then(|style| {
@@ -75,6 +76,7 @@ impl TextStyleDecoration {
                 }
             });
         }
+        true
     }
 
     fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {

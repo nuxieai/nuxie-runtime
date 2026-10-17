@@ -116,6 +116,8 @@ enum Content {
     Rectangle,
     Points,
     Joystick,
+    // Two 100-point images, "Content" and "Second", at origin x 0.
+    Images,
 }
 
 /// What the measured box holds, and where it sits.
@@ -144,6 +146,24 @@ struct Scene {
 fn scene(setup: Setup) -> Scene {
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
+    if setup.content == Content::Images {
+        // Its asset has no bytes; an image takes the asset's size.
+        riv.object(crate::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "picture")
+            .uint(
+                crate::source::generated::assets::file_asset_base::FileAssetBase::ASSET_ID_PROPERTY_KEY,
+                1,
+            )
+            .float(
+                crate::source::generated::assets::drawable_asset_base::DrawableAssetBase::WIDTH_PROPERTY_KEY,
+                100.0,
+            )
+            .float(
+                crate::source::generated::assets::drawable_asset_base::DrawableAssetBase::HEIGHT_PROPERTY_KEY,
+                30.0,
+            )
+            .end();
+    }
     // Local indices: 0 artboard, 1 row, 2 subject, then the content in the
     // order written below, the sibling and the styles.
     let mut next = 3u64;
@@ -162,6 +182,10 @@ fn scene(setup: Setup) -> Scene {
         }
         Content::Rectangle => (None, Some(take(1))),
         Content::Joystick => (None, None),
+        Content::Images => {
+            take(1);
+            (None, None)
+        }
     };
     let second = setup.second_joystick.then(|| take(1));
     let sibling = setup.sibling_width.map(|_| take(1));
@@ -211,6 +235,16 @@ fn scene(setup: Setup) -> Scene {
                 .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, content_parent)
                 .string(ComponentBase::NAME_PROPERTY_KEY, "Content")
                 .end();
+        }
+        Content::Images => {
+            for name in ["Content", "Second"] {
+                riv.object(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, content_parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, name)
+                    .uint(crate::source::generated::shapes::image_base::ImageBase::ASSET_ID_PROPERTY_KEY, 0)
+                    .float(crate::source::generated::shapes::image_base::ImageBase::ORIGIN_X_PROPERTY_KEY, 0.0)
+                    .end();
+            }
         }
     }
     if let Some(points) = points_path {
@@ -352,6 +386,7 @@ impl Scene {
             Content::Rectangle | Content::Points => {
                 self.named::<crate::source::shapes::shape::Shape>("Content")
             }
+            Content::Images => self.named::<crate::source::shapes::image::Image>("Content"),
         }
     }
     fn advance(&self, frames: usize) {
@@ -585,4 +620,29 @@ fn css_joystick_origin_and_position_changes_resize_the_box() {
     f.advance(2);
     widths.push(f.width());
     assert_eq!(widths, [80.0, 160.0, 80.0, 160.0]);
+}
+
+#[test]
+fn css_image_origin_change_resizes_the_box() {
+    // Two overlapping 100-point images; moving one's origin to 1 puts it
+    // left of the other, so their group spans 200 points.
+    let f = scene(Setup {
+        content: Content::Images,
+        grouped: true,
+        subject_width: None,
+        row_width: 1000.0,
+        sibling_width: None,
+        zero_minimum: false,
+        second_joystick: false,
+    });
+    f.advance(3);
+    let before = f.width();
+    let second = f.named::<crate::source::shapes::image::Image>("Second");
+    set(
+        &second,
+        crate::source::generated::shapes::image_base::ImageBase::ORIGIN_X_PROPERTY_KEY,
+        1.0,
+    );
+    f.advance(2);
+    assert_eq!([before, f.width()], [100.0, 200.0]);
 }

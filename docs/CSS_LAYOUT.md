@@ -209,7 +209,7 @@ A box without a record gets this CSS. The runtime builds it in memory and runs t
 | Fill on the main axis | `flex: <fraction> 1 0%`: flex-grow is the fractional size, flex-shrink 1, flex-basis 0%; size auto. Siblings share the space by fraction, whatever their content |
 | Fill on the cross axis | `align-self: stretch`, size auto |
 | Fixed or Hug on the main axis | flex-grow 0, flex-shrink 1, flex-basis auto |
-| `flexBasis` authored as points or percent | that `flex-basis`, whatever the mode; auto leaves the row above in charge |
+| `flexBasis` authored as points or percent, on a Fill | that `flex-basis` in place of 0%, as Rive reads it only for Fill; Fixed and Hug keep `flex-basis: auto` (the Rive editor writes 0 points on every style) |
 | min and max sizes | `min-*` and `max-*` with their units; an unset minimum is `auto`, the browser's automatic minimum (no longer Yoga's zero) |
 | `layoutAlignmentType` | `justify-content` and `align-items` (and `align-content` from the cross value). Main axis: start, center, end or space-between. Cross axis: flex-start, center or flex-end. As today's mapping |
 | a grid parent | its items keep flex-grow 0 and flex-shrink 0, `justify-self` from `justifySelfValue`, and stretch when the item Fills, as today |

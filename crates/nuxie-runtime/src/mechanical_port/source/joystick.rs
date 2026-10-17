@@ -260,15 +260,19 @@ impl Joystick {
         }
     }
 
-    /// An authored width or height is this host's natural size, which the
-    /// box measuring it reads (UNIV-4844); layout's own writes are not.
+    /// A joystick's authored size is its natural size (UNIV-4844). Joysticks
+    /// are applied from the artboard's own list rather than updated in the
+    /// dependency order, so the update pass would not see the change: hand
+    /// it to that pass's measured-content check. Layout's own write-back is
+    /// excluded.
     fn authored_size_changed(&mut self) {
-        if !self.base.layout_natural.controlling() {
-            crate::source::intrinsically_sizeable::mark_measuring_layout_dirty(
-                self.base.base.parent_handle(),
-                None,
-                true,
-            );
+        if self.base.layout_natural.controlling() {
+            return;
+        }
+        if let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+            self.base
+                .base
+                .with_artboard_mut(|artboard| artboard.queue_measured_content(this));
         }
     }
 

@@ -88,15 +88,33 @@ impl ParametricPath {
             .expect("live ParametricPath");
         Self::send_layout_dirty(shape, parent);
     }
-    /// Upstream stops at an intervening Node. A leaf LayoutComponent also
-    /// measures drawing groups for their natural size (UNIV-4844), so a path
-    /// below a group still invalidates the nearest such leaf.
-    fn send_layout_dirty(shape: Option<CoreHandle>, parent: Option<CoreHandle>) {
-        crate::source::intrinsically_sizeable::mark_measuring_layout_dirty(
-            parent,
-            shape.as_ref(),
-            true,
-        );
+    fn send_layout_dirty(shape: Option<CoreHandle>, mut parent: Option<CoreHandle>) {
+        while let Some(current) = parent {
+            if current.is_type_of(
+                    crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
+                    break;
+                }
+            let is_node = current.is_type_of(
+                crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY,
+            );
+            if is_node {
+                if current
+                        .is_type_of(crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
+                        && shape.as_ref() == Some(&current)
+                    {
+                        parent = current
+                            .with(|current| current.component_parent_handle())
+                            .flatten();
+                        continue;
+                    }
+                break;
+            }
+            parent = current
+                .with(|current| current.component_parent_handle())
+                .flatten();
+        }
     }
     pub fn try_property_bounds(&self, result: &mut Aabb) -> bool {
         *result = Aabb::from_ltwh(

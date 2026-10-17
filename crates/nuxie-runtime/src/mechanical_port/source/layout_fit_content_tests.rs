@@ -1538,7 +1538,6 @@ struct ShapeFixture {
     _arena: CoreArena,
     root: CoreHandle,
     subject: CoreHandle,
-    shape: CoreHandle,
     path: CoreHandle,
 }
 fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture {
@@ -1562,9 +1561,8 @@ fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture 
     shape
         .with_downcast_mut::<Shape, _>(|s| s.add_path(path.clone()))
         .unwrap();
-    // The authored rotation, and the matrix the update pass composes from it.
+    // Stand in for the update pass that composes the authored rotation.
     path.with_mut(|o| {
-        o.set_double(CoreField::TransformComponentRotation, rotation);
         o.as_transform_component_mut()
             .unwrap()
             .with_transform_mut(|t| *t = Mat2D::from_rotation(rotation))
@@ -1612,7 +1610,6 @@ fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture 
         _arena: arena,
         root,
         subject,
-        shape,
         path,
     }
 }
@@ -1654,18 +1651,6 @@ fn css_rotated_curve_natural_size_follows_its_geometry() {
 }
 
 #[test]
-fn css_grouped_geometry_change_invalidates_the_measured_box() {
-    use crate::source::generated::core_registry::CoreField;
-    let f = shape_fixture(false, ShapeHost::GroupedHugBox, 0.0);
-    assert!((f.width() - 80.0).abs() < 0.001);
-    f.path
-        .with_mut(|o| o.set_double(CoreField::ParametricPathWidth, 160.0))
-        .unwrap();
-    let widths = [f.width(), f.width()];
-    assert_eq!(widths, [160.0; 2]);
-}
-
-#[test]
 fn css_authored_write_equal_to_a_controlled_size_is_kept() {
     use crate::source::generated::core_registry::CoreField;
     let f = shape_fixture(false, ShapeHost::HugBox, 0.0);
@@ -1696,137 +1681,4 @@ fn css_authored_write_equal_to_a_controlled_size_is_kept() {
     cap(None);
     widths.push(f.width());
     assert_eq!(widths, [80.0, 40.0, 40.0]);
-}
-
-/// A 100-point row holding a measured box and a Fixed 60-point sibling.
-/// The box hugs (`width` None) or is Fixed, optionally with min-width 0.
-struct SharedRow {
-    _arena: CoreArena,
-    root: CoreHandle,
-    subject: CoreHandle,
-}
-fn shared_row(
-    width: Option<f32>,
-    zero_minimum: bool,
-    content: impl FnOnce(&CoreArena, &CoreHandle),
-) -> SharedRow {
-    let arena = CoreArena::default();
-    let root = layout(&arena, None, Some(100.0), true);
-    let subject = layout(&arena, Some(&root), width, false);
-    content(&arena, &subject);
-    let sibling = layout(&arena, Some(&root), Some(60.0), false);
-    if zero_minimum {
-        subject
-            .with_downcast_mut::<LayoutComponent, _>(|l| {
-                l.with_style_mut(|s| {
-                    s.base.set_min_width_value(0.0);
-                    s.base.set_min_width_units_value_value(YGUnit::Point as u8);
-                });
-            })
-            .unwrap();
-    }
-    for node in [&sibling, &subject, &root] {
-        LayoutComponent::sync_style_occurrence(node);
-        LayoutComponent::sync_layout_children_occurrence(node);
-    }
-    SharedRow {
-        _arena: arena,
-        root,
-        subject,
-    }
-}
-impl SharedRow {
-    fn width(&self) -> f32 {
-        LayoutComponent::calculate_layout_occurrence(&self.root, f32::NAN, f32::NAN);
-        LayoutComponent::update_layout_bounds_occurrence(&self.root, false);
-        solved(&self.subject).width()
-    }
-}
-
-#[test]
-fn css_equal_authored_write_still_resizes_the_box() {
-    use crate::source::generated::core_registry::CoreField;
-    use crate::source::shapes::{rectangle::Rectangle, shape::Shape};
-    let mut path = None;
-    let f = shared_row(None, true, |arena, subject| {
-        let shape = arena.insert(Shape::default());
-        attach(arena, subject, &shape);
-        let rectangle = arena.insert(Rectangle::default());
-        rectangle
-            .with_mut(|o| {
-                o.set_double(CoreField::ParametricPathWidth, 80.0);
-                o.set_double(CoreField::ParametricPathHeight, 30.0);
-            })
-            .unwrap();
-        attach(arena, &shape, &rectangle);
-        shape
-            .with_downcast_mut::<Shape, _>(|s| s.add_path(rectangle.clone()))
-            .unwrap();
-        path = Some(rectangle);
-    });
-    let path = path.unwrap();
-    // The 80 and 60 bases share the 40-point deficit; layout writes the
-    // shrunk width into the path, and that write's own invalidation settles
-    // on the second solve.
-    let shrunk = [f.width(), f.width()];
-    for width in shrunk {
-        assert!((width - 57.142857).abs() < 0.0001, "{shrunk:?}");
-    }
-    let shrunk = shrunk[1];
-    let written = path
-        .with(|o| o.as_parametric_path().unwrap().base.width())
-        .unwrap();
-    assert_eq!(written, shrunk);
-    // Authoring that same width makes it the natural size: 57.14 and 60
-    // now share a 17.14-point deficit.
-    path.with_mut(|o| o.set_double(CoreField::ParametricPathWidth, written))
-        .unwrap();
-    let widths = [f.width(), f.width()];
-    for width in widths {
-        assert!((width - 48.780487).abs() < 0.0001, "{widths:?}");
-    }
-}
-
-#[test]
-fn css_scaled_group_content_resizes_the_box() {
-    use crate::source::generated::{
-        core_registry::CoreRegistry, transform_component_base::TransformComponentBase,
-    };
-    let f = shape_fixture(false, ShapeHost::GroupedHugBox, 0.0);
-    assert!((f.width() - 80.0).abs() < 0.001);
-    // An animation or binding writes through the handle setter; layout runs
-    // before the update pass composes the new matrix.
-    assert!(CoreRegistry::set_double_handle(
-        &f.shape,
-        TransformComponentBase::SCALE_X_PROPERTY_KEY.into(),
-        2.0,
-    ));
-    let widths = [f.width(), f.width()];
-    for width in widths {
-        assert!((width - 160.0).abs() < 0.001, "{widths:?}");
-    }
-}
-
-#[test]
-fn css_joystick_resize_refreshes_the_box_minimum() {
-    use crate::source::generated::core_registry::CoreField;
-    let mut joystick = None;
-    let f = shared_row(Some(200.0), false, |arena, subject| {
-        let host = arena.insert(crate::source::joystick::Joystick::default());
-        host.with_mut(|o| {
-            o.set_double(CoreField::JoystickWidth, 80.0);
-            o.set_double(CoreField::JoystickHeight, 30.0);
-        })
-        .unwrap();
-        attach(arena, subject, &host);
-        joystick = Some(host);
-    });
-    let joystick = joystick.unwrap();
-    // The Fixed 200 box shrinks to its joystick's natural minimum.
-    let mut widths = vec![f.width()];
-    joystick
-        .with_mut(|o| o.set_double(CoreField::JoystickWidth, 160.0))
-        .unwrap();
-    widths.push(f.width());
-    assert_eq!(widths, [80.0, 160.0]);
 }

@@ -5642,18 +5642,19 @@ impl LayoutComponent {
             };
             // Fill is CSS `flex: <fraction> 1 0%`: siblings share the line by
             // their fractions, whatever their content (docs/CSS_LAYOUT.md,
-            // 2.2). Fixed and Hug keep an automatic basis. An authored
-            // flexBasis in points or percent replaces either basis.
-            let basis = rive_dimension(flex_basis, flex_basis_units);
+            // 2.2). As in Rive, only a Fill reads the authored flexBasis (the
+            // editor writes 0 points on every style): points or percent
+            // replace its 0% basis. Fixed and Hug keep an automatic basis.
             let fill = main_scale == LayoutScaleType::Fill;
+            let basis = rive_dimension(flex_basis, flex_basis_units);
             style.flex_grow = if fill { grow(fraction) } else { 0.0 };
             style.flex_shrink = 1.0;
-            style.flex_basis = if !basis.is_auto() {
-                basis
-            } else if fill {
+            style.flex_basis = if !fill {
+                Dimension::auto()
+            } else if basis.is_auto() {
                 Dimension::percent(0.0)
             } else {
-                Dimension::auto()
+                basis
             };
             let cross_scale = if context.parent_is_row {
                 height_scale

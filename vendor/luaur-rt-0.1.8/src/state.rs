@@ -446,7 +446,7 @@ impl Lua {
         R: IntoLuaMulti,
     {
         let boxed: BoxedCallback = Box::new(move |lua, nargs| {
-            let a = A::from_stack_args(lua, 1, nargs)?;
+            let a = A::from_stack_args(crate::traits::StackRange::new(lua, 1, nargs))?;
             let r = func(lua, a)?;
             r.into_return_values(lua)
         });

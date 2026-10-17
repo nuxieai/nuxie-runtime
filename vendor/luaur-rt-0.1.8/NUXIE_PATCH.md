@@ -230,3 +230,8 @@
 - Touched files: `src/stack_slot.rs` (new), `src/table.rs`, `src/userdata.rs`,
   `src/traits.rs`, `src/callback.rs`, `src/function.rs`, `src/lib.rs`;
   coverage in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+- `FromLuaMulti::from_stack_args` takes a `StackRange`, which only luaur-rt
+  makes (a callback's arguments, a call's results) and which checks its
+  frame and the stack top on every read, instead of a raw start and count a
+  caller could aim anywhere. `CallArgs` reads through one, comparing indices
+  as `usize` before narrowing them: any index past the arguments is nil.

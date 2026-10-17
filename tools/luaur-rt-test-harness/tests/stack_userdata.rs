@@ -129,6 +129,16 @@ impl UserData for Sink {
             Ok(a.0)
         });
         methods.add_method_with_args("count", |_, _, args| Ok(args.len()));
+        // Indices past the arguments, however large, read as missing (nil).
+        methods.add_method_with_args("far", |_, _, args| {
+            let far: Value = args.get(usize::MAX)?;
+            let past = args.get::<Value>(args.len())?;
+            let error = args
+                .userdata(usize::MAX)
+                .err()
+                .map(|error| error.to_string());
+            Ok((far.is_nil() && past.is_nil(), error))
+        });
     }
 }
 
@@ -169,6 +179,12 @@ fn in_place_userdata_arguments_match_handle_arguments() -> Result<()> {
     }
     assert_eq!(lua.load("return sink:count(1, nil, 3)").eval::<i64>()?, 3);
     assert_eq!(lua.load("return sink:count()").eval::<i64>()?, 0);
+    let (nil, error): (bool, String) = lua.load("return sink:far(make(1))").eval()?;
+    assert!(nil);
+    assert!(
+        error.contains("error converting Lua nil to AnyUserData"),
+        "{error}"
+    );
     Ok(())
 }
 

@@ -533,6 +533,6 @@ pub(crate) unsafe fn call_pushed<R: FromLuaMulti>(
         }
         // Every value pushed above `base` is a result.
         let nresults = lua_gettop(state) - base;
-        R::from_stack_args(lua, base + 1, nresults)
+        R::from_stack_args(crate::traits::StackRange::new(lua, base + 1, nresults))
     }
 }

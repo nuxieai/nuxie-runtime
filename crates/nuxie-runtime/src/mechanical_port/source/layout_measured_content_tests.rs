@@ -132,6 +132,9 @@ struct Setup {
     zero_minimum: bool,
     // A second joystick beside the content, named "Second".
     second_joystick: bool,
+    // The group is a Solo, holding the content and a 160-point "Wide"
+    // shape, with the content active.
+    solo: bool,
 }
 
 struct Scene {
@@ -172,7 +175,7 @@ fn scene(setup: Setup) -> Scene {
         next += count;
         index
     };
-    let group = setup.grouped.then(|| take(1));
+    let group = (setup.grouped || setup.solo).then(|| take(1));
     let content = take(1);
     let (points_path, path) = match setup.content {
         Content::Points => {
@@ -188,6 +191,7 @@ fn scene(setup: Setup) -> Scene {
         }
     };
     let second = setup.second_joystick.then(|| take(1));
+    let wide = setup.solo.then(|| take(2));
     let sibling = setup.sibling_width.map(|_| take(1));
     let row_style = take(1);
     let subject_style = take(1);
@@ -214,7 +218,16 @@ fn scene(setup: Setup) -> Scene {
         .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, subject_style)
         .end();
     let content_parent = group.unwrap_or(2);
-    if group.is_some() {
+    if setup.solo {
+        riv.object(crate::source::generated::solo_base::SoloBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Group")
+            .uint(
+                crate::source::generated::solo_base::SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY,
+                content,
+            )
+            .end();
+    } else if group.is_some() {
         riv.object(NodeBase::TYPE_KEY)
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
             .string(ComponentBase::NAME_PROPERTY_KEY, "Group")
@@ -265,6 +278,17 @@ fn scene(setup: Setup) -> Scene {
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, content)
             .string(ComponentBase::NAME_PROPERTY_KEY, "Path")
             .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 80.0)
+            .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 30.0)
+            .end();
+    }
+    if let Some(wide) = wide {
+        riv.object(ShapeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, content_parent)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Wide")
+            .end();
+        riv.object(RectangleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, wide)
+            .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 160.0)
             .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 30.0)
             .end();
     }
@@ -411,6 +435,7 @@ fn grouped(content: Content) -> Scene {
         sibling_width: None,
         zero_minimum: false,
         second_joystick: false,
+        solo: false,
     })
 }
 
@@ -501,6 +526,7 @@ fn css_joystick_resize_refreshes_the_box_minimum() {
         sibling_width: Some(60.0),
         zero_minimum: false,
         second_joystick: false,
+        solo: false,
     });
     f.advance(3);
     let before = f.width();
@@ -524,6 +550,7 @@ fn css_settled_measured_content_does_no_layout_work() {
             sibling_width: None,
             zero_minimum: false,
             second_joystick: false,
+            solo: false,
         }),
     ] {
         scene.advance(5);
@@ -576,6 +603,7 @@ fn css_equal_authored_write_still_resizes_the_box() {
         sibling_width: Some(60.0),
         zero_minimum: true,
         second_joystick: false,
+        solo: false,
     });
     f.advance(3);
     let shrunk = f.width();
@@ -606,6 +634,7 @@ fn css_joystick_origin_and_position_changes_resize_the_box() {
         sibling_width: None,
         zero_minimum: false,
         second_joystick: true,
+        solo: false,
     });
     f.advance(3);
     let second = f.named::<crate::source::joystick::Joystick>("Second");
@@ -634,6 +663,7 @@ fn css_image_origin_change_resizes_the_box() {
         sibling_width: None,
         zero_minimum: false,
         second_joystick: false,
+        solo: false,
     });
     f.advance(3);
     let before = f.width();
@@ -645,4 +675,42 @@ fn css_image_origin_change_resizes_the_box() {
     );
     f.advance(2);
     assert_eq!([before, f.width()], [100.0, 200.0]);
+}
+
+#[test]
+fn css_solo_switch_resizes_the_box() {
+    // A Solo holds the 80-point content and a 160-point shape. Switching
+    // the active child only collapses one and uncollapses the other, which
+    // runs no update work, yet the group's natural size follows it.
+    let f = scene(Setup {
+        content: Content::Rectangle,
+        grouped: false,
+        subject_width: None,
+        row_width: 1000.0,
+        sibling_width: None,
+        zero_minimum: false,
+        second_joystick: false,
+        solo: true,
+    });
+    f.advance(3);
+    let solo = f.named::<crate::source::solo::Solo>("Group");
+    let wide = f.named::<crate::source::shapes::shape::Shape>("Wide");
+    let content = f.content();
+    let id = |handle: &CoreHandle| {
+        let index = f
+            .artboard
+            .with_artboard(|artboard| artboard.object_index(handle));
+        assert!(index >= 0, "object id");
+        index as u32
+    };
+    let key =
+        i32::from(crate::source::generated::solo_base::SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
+    let mut widths = vec![f.width()];
+    assert!(CoreRegistry::set_uint_handle(&solo, key, id(&wide)));
+    f.advance(2);
+    widths.push(f.width());
+    assert!(CoreRegistry::set_uint_handle(&solo, key, id(&content)));
+    f.advance(2);
+    widths.push(f.width());
+    assert_eq!(widths, [80.0, 160.0, 80.0]);
 }

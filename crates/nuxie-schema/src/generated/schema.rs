@@ -370,6 +370,7 @@ pub enum ObjectKind {
     AngularGradient,
     VideoAsset,
     Video,
+    TextStyleDecoration,
 }
 
 impl ObjectKind {
@@ -738,6 +739,7 @@ impl ObjectKind {
             Self::AngularGradient => &DEFINITIONS[360],
             Self::VideoAsset => &DEFINITIONS[361],
             Self::Video => &DEFINITIONS[362],
+            Self::TextStyleDecoration => &DEFINITIONS[363],
         }
     }
 
@@ -1115,6 +1117,7 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         1089 => Some(ObjectKind::AngularGradient),
         60000 => Some(ObjectKind::VideoAsset),
         60001 => Some(ObjectKind::Video),
+        60002 => Some(ObjectKind::TextStyleDecoration),
         _ => None,
     }
 }
@@ -1488,6 +1491,7 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "AngularGradient" => Some(&DEFINITIONS[360]),
         "VideoAsset" => Some(&DEFINITIONS[361]),
         "Video" => Some(&DEFINITIONS[362]),
+        "TextStyleDecoration" => Some(&DEFINITIONS[363]),
         _ => None,
     }
 }
@@ -2285,6 +2289,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         60019 => Some(CoreRegistryFieldKind::Bool),
         60020 => Some(CoreRegistryFieldKind::Double),
         60021 => Some(CoreRegistryFieldKind::Bool),
+        60022 => Some(CoreRegistryFieldKind::Uint),
         _ => None,
     }
 }
@@ -2985,6 +2990,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         60019 => Some(FieldKind::Bool),
         60020 => Some(FieldKind::Double),
         60021 => Some(FieldKind::Bool),
+        60022 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -3672,6 +3678,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         60019 => Some(FieldKind::Bool),
         60020 => Some(FieldKind::Double),
         60021 => Some(FieldKind::Bool),
+        60022 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -30041,6 +30048,46 @@ static DEF_362_PROPERTIES: &[Property] = &[
     },
 ];
 
+static DEF_363_ANCESTORS: &[&str] = &["Component"];
+
+static DEF_363_PROPERTIES: &[Property] = &[Property {
+    name: "line",
+    key: Key {
+        int: 60022,
+        name: "line",
+    },
+    alternates: &[],
+    declared_type: "uint",
+    runtime_type: FieldKind::Uint,
+    description: Some(
+        "Lines drawn on the parent style\'s runs: 1 underline, 2 line-through (a bit set).",
+    ),
+    initial_value: Some("0"),
+    initial_value_runtime: None,
+    group: None,
+    nullable: false,
+    override_set: false,
+    override_get: false,
+    virtual_: false,
+    editor_only: false,
+    coop: true,
+    with_rive_tools_only: false,
+    stores_data: true,
+    deserializes: true,
+    stores_field: true,
+    encoded: false,
+    bindable: false,
+    animates: false,
+    computed: false,
+    journal: None,
+    parentable: None,
+    records: None,
+    exports_to_runtime_conditionally: false,
+    pure_virtual: false,
+    passthrough: false,
+    bitmask_passthrough: None,
+}];
+
 static MIXIN_0_PROPERTIES: &[Property] = &[
     Property {
         name: "colorRed",
@@ -32440,6 +32487,9 @@ pub fn property_by_key_in_hierarchy(
         (60001, 60019) => Some(("Video", &DEF_362_PROPERTIES[16])),
         (60001, 60020) => Some(("Video", &DEF_362_PROPERTIES[17])),
         (60001, 60021) => Some(("Video", &DEF_362_PROPERTIES[18])),
+        (60002, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (60002, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (60002, 60022) => Some(("TextStyleDecoration", &DEF_363_PROPERTIES[0])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),
@@ -39598,5 +39648,24 @@ pub static DEFINITIONS: &[Definition] = &[
         cloneable: true,
         properties: DEF_362_PROPERTIES,
         ancestors: DEF_362_ANCESTORS,
+    },
+    Definition {
+        name: "TextStyleDecoration",
+        rust_variant: "TextStyleDecoration",
+        file: "nuxie/text_style_decoration.json",
+        type_key: Key {
+            int: 60002,
+            name: "textstyledecoration",
+        },
+        runtime_parent: Some("Component"),
+        raw_parent_file: Some("component.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_363_PROPERTIES,
+        ancestors: DEF_363_ANCESTORS,
     },
 ];

@@ -609,6 +609,34 @@ enum TextDrawCommand {
     },
 }
 
+/// Nuxie addition: adds a decorated span's lines to its style's glyph path,
+/// registering the style for drawing when it has no glyph path yet.
+fn add_decoration(
+    render_styles: &mut Vec<CoreHandle>,
+    draw_commands: &mut Vec<TextDrawCommand>,
+    render_opacity: f32,
+    span: &crate::text_decoration::DecorationSpan,
+) {
+    let mut path = RawPath::default();
+    for rect in span.rects() {
+        path.add_rect(rect, PathDirection::Clockwise);
+    }
+    if path.empty() {
+        return;
+    }
+    let first_path = span
+        .style
+        .with_downcast_mut::<TextStylePaint, _>(|style| style.add_path(&path, 1.0))
+        .unwrap_or(false);
+    if first_path {
+        render_styles.push(span.style.clone());
+        span.style.with_downcast_mut::<TextStylePaint, _>(|style| {
+            style.paints.propagate_opacity(render_opacity);
+        });
+        draw_commands.push(TextDrawCommand::Style(span.style.clone()));
+    }
+}
+
 fn compute_vertical_trim(
     lines: &[Vec<GlyphLine>],
     shape: &[Paragraph],
@@ -1824,6 +1852,8 @@ impl Text {
                 let ordered_line = self.ordered_lines.last().unwrap();
                 let mut current_x = line.start_x;
                 minimum_x = minimum_x.min(current_x);
+                // Nuxie addition: decorated runs on this line (none upstream).
+                let mut decorations = crate::text_decoration::DecorationSpans::default();
                 for (run, glyph_index) in ordered_line {
                     let index = glyph_index as usize;
                     let offset = run.offsets[index];
@@ -1868,6 +1898,28 @@ impl Text {
                         .with(TextValueRun::style)
                         .flatten()
                         .expect("TextValueRun style");
+                    let decoration_line = crate::text_decoration::style_line(&style);
+                    if let Some(span) = decorations.glyph(
+                        &style,
+                        decoration_line,
+                        current_x,
+                        advance,
+                        self.styled_text
+                            .unichars()
+                            .get(run.text_indices[index] as usize)
+                            .and_then(|&unichar| char::from_u32(unichar))
+                            .is_none_or(|character| !character.is_whitespace()),
+                        render_y,
+                        run.size,
+                        run.font.as_deref().expect("shaped text retains its font"),
+                    ) {
+                        add_decoration(
+                            &mut self.render_styles,
+                            &mut self.draw_commands,
+                            self.base.render_opacity(),
+                            &span,
+                        );
+                    }
                     match run.glyph_render_kind(index) {
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Color => {
                         let foreground_color = style
@@ -1931,6 +1983,14 @@ impl Text {
                         }
                     }
                     current_x += advance;
+                }
+                if let Some(span) = decorations.finish() {
+                    add_decoration(
+                        &mut self.render_styles,
+                        &mut self.draw_commands,
+                        self.base.render_opacity(),
+                        &span,
+                    );
                 }
                 if line_index == info.ellipsis_line {
                     break 'paragraphs;

@@ -1,0 +1,18 @@
+{
+  "name": "TextStyleDecoration",
+  "key": {
+    "int": 60002,
+    "string": "textstyledecoration"
+  },
+  "extends": "component.json",
+  "properties": {
+    "line": {
+      "type": "uint",
+      "key": {
+        "int": 60022
+      },
+      "initialValue": "0",
+      "description": "Lines drawn on the parent style's runs: 1 underline, 2 line-through (a bit set)."
+    }
+  }
+}

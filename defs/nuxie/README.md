@@ -12,6 +12,7 @@ resolved explicitly.
 
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
+- TextStyleDecoration: type 60002; property 60022.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.
@@ -41,3 +42,13 @@ Video loopStart (60014) and loopEnd (60015) are seconds. Zero loopEnd selects
 the source duration; explicit ends are exclusive and clamped to duration.
 Looping is enabled independently by property 60004. Invalid intervals reject
 scene import; a start beyond the loaded duration fails playback admission.
+
+TextStyleDecoration (60002) is a child of a TextStylePaint, as upstream's
+TextStyleBackground is. Its `line` (60022) is a bit set: 1 draws an underline
+and 2 a line-through on every run drawn with that style. Text adds one
+rectangle per decorated run on each drawn line to the style's own glyph path,
+so the lines share the glyphs' paint. Thickness and position come from the
+run font's `post` underline and `OS/2` strikeout metrics, with a fallback of
+0.06 em thick at 0.1 em below (underline) or 0.3 em above (line-through) the
+baseline. Readers without the type skip the record and its typed property, and
+draw the text undecorated.

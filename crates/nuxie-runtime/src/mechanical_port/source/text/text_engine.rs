@@ -300,17 +300,46 @@ impl Default for ColorGlyphLayer {
     }
 }
 
+/// Nuxie addition: one decoration line a font suggests, per unit font size.
+/// `offset` is the line's top above the baseline (y up, as fonts store it).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DecorationMetric {
+    pub offset: f32,
+    pub thickness: f32,
+}
+
+/// Nuxie addition: the underline (`post`) and strikeout (`OS/2`) lines a font
+/// suggests. Upstream Rive has no text decoration and never reads these.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DecorationMetrics {
+    pub underline: Option<DecorationMetric>,
+    pub strikeout: Option<DecorationMetric>,
+}
+
 pub struct FontBase {
     line_metrics: LineMetrics,
+    decoration_metrics: DecorationMetrics,
 }
 
 impl FontBase {
     pub fn new(line_metrics: LineMetrics) -> Self {
-        Self { line_metrics }
+        Self {
+            line_metrics,
+            decoration_metrics: DecorationMetrics::default(),
+        }
+    }
+
+    pub fn with_decoration_metrics(mut self, decoration_metrics: DecorationMetrics) -> Self {
+        self.decoration_metrics = decoration_metrics;
+        self
     }
 
     pub fn line_metrics(&self) -> &LineMetrics {
         &self.line_metrics
+    }
+
+    pub fn decoration_metrics(&self) -> DecorationMetrics {
+        self.decoration_metrics
     }
 }
 
@@ -338,6 +367,11 @@ pub trait Font: Any + Send + Sync {
 
     fn line_metrics(&self) -> &LineMetrics {
         self.base().line_metrics()
+    }
+
+    /// Nuxie addition: the font's suggested decoration lines.
+    fn decoration_metrics(&self) -> DecorationMetrics {
+        self.base().decoration_metrics()
     }
 
     fn ascent(&self, size: f32) -> f32 {

@@ -1,7 +1,7 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/math/lua_mat2d.cpp
 use luaur_rt::{
-    AnyUserData, Error, Lua, MultiValue, Result, UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, Error, Lua, Result, UserData, UserDataFields, UserDataMethods, Value,
     Vector as LuaVector,
 };
 use nuxie_render_api::Mat2D;
@@ -82,13 +82,13 @@ pub(super) fn install_mat2d_global(lua: &Lua) -> Result<()> {
     let table = lua.create_table();
     table.set(
         "identity",
-        lua.create_function(|lua, ()| lua.create_userdata(ScriptedMat2D(Mat2D::IDENTITY)))?,
+        lua.create_function(|_, ()| Ok(ScriptedMat2D(Mat2D::IDENTITY)))?,
     )?;
     table.set(
         "values",
         lua.create_function(
-            |lua, (xx, xy, yx, yy, tx, ty): (f32, f32, f32, f32, f32, f32)| {
-                lua.create_userdata(ScriptedMat2D(Mat2D([xx, xy, yx, yy, tx, ty])))
+            |_, (xx, xy, yx, yy, tx, ty): (f32, f32, f32, f32, f32, f32)| {
+                Ok(ScriptedMat2D(Mat2D([xx, xy, yx, yy, tx, ty])))
             },
         )?,
     )?;
@@ -105,31 +105,31 @@ pub(super) fn install_mat2d_global(lua: &Lua) -> Result<()> {
     )?;
     table.set(
         "withTranslation",
-        lua.create_function(|lua, args: MultiValue| {
-            let (x, y) = vec_or_numbers(&args)?;
-            lua.create_userdata(ScriptedMat2D(Mat2D([1.0, 0.0, 0.0, 1.0, x, y])))
+        lua.create_function(|_, (x, y): (Value, Value)| {
+            let (x, y) = vec_or_numbers(&[x, y])?;
+            Ok(ScriptedMat2D(Mat2D([1.0, 0.0, 0.0, 1.0, x, y])))
         })?,
     )?;
     table.set(
         "withScale",
-        lua.create_function(|lua, args: MultiValue| {
-            let (x, y) = vec_or_numbers_or_uniform(&args)?;
-            lua.create_userdata(ScriptedMat2D(Mat2D([x, 0.0, 0.0, y, 0.0, 0.0])))
+        lua.create_function(|_, (x, y): (Value, Value)| {
+            let (x, y) = vec_or_numbers_or_uniform(&[x, y])?;
+            Ok(ScriptedMat2D(Mat2D([x, 0.0, 0.0, y, 0.0, 0.0])))
         })?,
     )?;
     table.set(
         "withScaleAndTranslation",
-        lua.create_function(|lua, args: MultiValue| {
-            let (sx, sy, tx, ty) = scale_translation_args(&args)?;
-            lua.create_userdata(ScriptedMat2D(Mat2D([sx, 0.0, 0.0, sy, tx, ty])))
+        lua.create_function(|_, (sx, sy, tx, ty): (Value, Value, Value, Value)| {
+            let (sx, sy, tx, ty) = scale_translation_args(&[sx, sy, tx, ty])?;
+            Ok(ScriptedMat2D(Mat2D([sx, 0.0, 0.0, sy, tx, ty])))
         })?,
     )?;
     table.set(
         "withRotation",
-        lua.create_function(|lua, radians: f32| {
+        lua.create_function(|_, radians: f32| {
             let c = radians.cos();
             let s = radians.sin();
-            lua.create_userdata(ScriptedMat2D(Mat2D([c, s, -s, c, 0.0, 0.0])))
+            Ok(ScriptedMat2D(Mat2D([c, s, -s, c, 0.0, 0.0])))
         })?,
     )?;
     table.set_readonly(true);
@@ -137,8 +137,10 @@ pub(super) fn install_mat2d_global(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
-fn vec_or_numbers(args: &MultiValue) -> Result<(f32, f32)> {
-    match args.front() {
+// The constructors read a fixed number of arguments: a missing one is nil,
+// which every helper below treats as it treats an absent value.
+fn vec_or_numbers(args: &[Value]) -> Result<(f32, f32)> {
+    match args.first() {
         Some(Value::Vector(value)) => Ok((value.x(), value.y())),
         Some(Value::Integer(x)) => Ok((*x as f32, number_arg(args.get(1), "y")?)),
         Some(Value::Number(x)) => Ok((*x as f32, number_arg(args.get(1), "y")?)),
@@ -146,8 +148,8 @@ fn vec_or_numbers(args: &MultiValue) -> Result<(f32, f32)> {
     }
 }
 
-fn vec_or_numbers_or_uniform(args: &MultiValue) -> Result<(f32, f32)> {
-    match args.front() {
+fn vec_or_numbers_or_uniform(args: &[Value]) -> Result<(f32, f32)> {
+    match args.first() {
         Some(Value::Vector(value)) => Ok((value.x(), value.y())),
         Some(Value::Integer(x)) => Ok((
             *x as f32,
@@ -161,13 +163,13 @@ fn vec_or_numbers_or_uniform(args: &MultiValue) -> Result<(f32, f32)> {
     }
 }
 
-fn scale_translation_args(args: &MultiValue) -> Result<(f32, f32, f32, f32)> {
-    match (args.front(), args.get(1)) {
+fn scale_translation_args(args: &[Value]) -> Result<(f32, f32, f32, f32)> {
+    match (args.first(), args.get(1)) {
         (Some(Value::Vector(scale)), Some(Value::Vector(translation))) => {
             Ok((scale.x(), scale.y(), translation.x(), translation.y()))
         }
         _ => Ok((
-            number_arg(args.front(), "scaleX")?,
+            number_arg(args.first(), "scaleX")?,
             number_arg(args.get(1), "scaleY")?,
             number_arg(args.get(2), "translationX")?,
             number_arg(args.get(3), "translationY")?,

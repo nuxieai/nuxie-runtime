@@ -238,6 +238,10 @@ unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
                 //     (SIGTRAP) instead of erroring. Guard it and raise a
                 //     catchable error if the results cannot fit (mirroring mlua).
                 let n = results.len() as c_int;
+                if let ReturnValues::Pushed(_) = results {
+                    // Already on the stack top, in room the callback made.
+                    return Ok(n);
+                }
                 if lua_checkstack(state, n.max(1)) == 0 {
                     return raise_lua_error(state, "too many results to return to Lua");
                 }
@@ -245,6 +249,7 @@ unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
                     ReturnValues::None => Ok(()),
                     ReturnValues::One(v) => lua.push_value(v),
                     ReturnValues::Many(values) => values.iter().try_for_each(|v| lua.push_value(v)),
+                    ReturnValues::Pushed(_) => Ok(()),
                 };
                 if let Err(e) = pushed {
                     return raise_lua_error(state, &e.to_string());

@@ -146,7 +146,7 @@ pub use scope::Scope;
 pub use state::{Lua, WeakLua};
 pub use string::LuaString;
 pub use sync::{MaybeSend, MaybeSync};
-pub use table::{FieldFunction, FieldValue, Table, TablePairs, TableSequence};
+pub use table::{FieldFunction, FieldValue, StackArg, Table, TablePairs, TableSequence};
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 #[doc(hidden)]
@@ -180,7 +180,8 @@ pub use app_data::{AppDataRef, AppDataRefMut};
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use async_support::AsyncThread;
 pub use userdata::{
-    AnyUserData, UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRefMut,
+    AnyUserData, StackUserData, UserData, UserDataFields, UserDataMethods, UserDataRef,
+    UserDataRefMut,
 };
 pub use value::{Integer, Number, Value};
 pub use vector::Vector;

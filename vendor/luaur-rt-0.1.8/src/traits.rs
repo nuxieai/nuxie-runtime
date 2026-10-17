@@ -27,6 +27,13 @@ use crate::value::Value;
 pub trait IntoLua: Sized {
     /// Perform the conversion.
     fn into_lua(self, lua: &Lua) -> Result<Value>;
+
+    /// The same conversion as [`IntoLua::into_lua`], as a callback's return
+    /// value (a new userdata is created on the stack, needing no handle).
+    #[doc(hidden)]
+    fn into_return_value(self, lua: &Lua) -> Result<ReturnValues> {
+        Ok(ReturnValues::One(self.into_lua(lua)?))
+    }
 }
 
 /// Convert a single Lua [`Value`] into a Rust value.
@@ -57,6 +64,9 @@ pub enum ReturnValues {
     One(Value),
     /// Any number of values.
     Many(MultiValue),
+    /// This many values the callback already pushed onto the top of the
+    /// stack, having made room for them.
+    Pushed(c_int),
 }
 
 impl ReturnValues {
@@ -66,6 +76,7 @@ impl ReturnValues {
             ReturnValues::None => 0,
             ReturnValues::One(_) => 1,
             ReturnValues::Many(values) => values.len(),
+            ReturnValues::Pushed(count) => *count as usize,
         }
     }
 }
@@ -146,7 +157,7 @@ impl<T: IntoLua> IntoLuaMulti for T {
     }
 
     fn into_return_values(self, lua: &Lua) -> Result<ReturnValues> {
-        Ok(ReturnValues::One(self.into_lua(lua)?))
+        self.into_return_value(lua)
     }
 
     fn push_into_multi(self, lua: &Lua, out: &mut MultiValue) -> Result<()> {

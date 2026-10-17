@@ -1682,3 +1682,47 @@ fn css_authored_write_equal_to_a_controlled_size_is_kept() {
     widths.push(f.width());
     assert_eq!(widths, [80.0, 40.0, 40.0]);
 }
+
+#[test]
+fn css_grouped_hosts_keep_their_origins() {
+    use crate::source::generated::core_registry::CoreField;
+    // Two 100-point hosts in one group, at origin x 0 and 1: one spans
+    // [0, 100] and the other [-100, 0], so the group is 200 points wide.
+    let widths = [false, true].map(|joystick| {
+        let arena = CoreArena::default();
+        let root = layout(&arena, None, Some(1000.0), true);
+        let subject = layout(&arena, Some(&root), None, false);
+        let group = arena.insert(crate::source::node::Node::default());
+        attach(&arena, &subject, &group);
+        for origin in [0.0, 1.0] {
+            let host = if joystick {
+                let host = arena.insert(crate::source::joystick::Joystick::default());
+                host.with_mut(|o| {
+                    o.set_double(CoreField::JoystickWidth, 100.0);
+                    o.set_double(CoreField::JoystickHeight, 30.0);
+                    o.set_double(CoreField::JoystickOriginX, origin);
+                })
+                .unwrap();
+                host
+            } else {
+                let host = arena.insert(crate::source::shapes::image::Image::default());
+                host.with_mut(|o| o.set_double(CoreField::ImageOriginX, origin))
+                    .unwrap();
+                host.with_downcast_mut::<crate::source::shapes::image::Image, _>(|image| {
+                    image.set_runtime_size(100.0, 30.0)
+                })
+                .unwrap();
+                host
+            };
+            attach(&arena, &group, &host);
+        }
+        for node in [&subject, &root] {
+            LayoutComponent::sync_style_occurrence(node);
+            LayoutComponent::sync_layout_children_occurrence(node);
+        }
+        LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&root, false);
+        solved(&subject).width()
+    });
+    assert_eq!(widths, [200.0, 200.0]);
+}

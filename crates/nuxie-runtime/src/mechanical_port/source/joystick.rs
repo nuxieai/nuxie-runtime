@@ -329,6 +329,16 @@ impl IntrinsicallySizeable for Joystick {
     fn natural_size_for_layout(&self) -> Option<Vec2D> {
         Some(Joystick::natural_size_for_layout(self))
     }
+    /// Its pad sits about its origin, as Joystick::update bounds it.
+    fn natural_bounds_for_layout(&self) -> Option<Aabb> {
+        let size = Joystick::natural_size_for_layout(self);
+        Some(Aabb::from_ltwh(
+            -size.x * self.base.origin_x(),
+            -size.y * self.base.origin_y(),
+            size.x,
+            size.y,
+        ))
+    }
     fn measure_layout(
         &mut self,
         width: f32,

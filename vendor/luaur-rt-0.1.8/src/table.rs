@@ -79,18 +79,27 @@ impl IntoLuaMulti for StackArg<'_> {
 
     fn push_call_args(self, lua: &Lua) -> Result<c_int> {
         let state = lua.state();
-        if state != self.lua.state() {
-            // Another thread's stack: pass the value through a handle.
-            return self.into_lua_multi(lua)?.push_call_args(lua);
-        }
+        let holder = self.lua.state();
         let slot = self.slot.index()?;
         unsafe {
+            // Another thread of the same VM (a coroutine) can take a copy of
+            // the slot's value; another VM cannot hold it at all.
+            if state != holder && (*state).global != (*holder).global {
+                return Err(crate::error::Error::runtime(
+                    "luaur-rt: a stack-held value was passed to another Lua VM",
+                ));
+            }
             if lua_checkstack(state, 2) == 0 {
                 return Err(crate::error::Error::RuntimeError(
                     "stack overflow: too many arguments to function call".to_string(),
                 ));
             }
-            lua_pushvalue(state, slot).map_err(|error| crate::error::Error::from_vm(error))?;
+            let pushed = if state == holder {
+                lua_pushvalue(state, slot)
+            } else {
+                luaur_vm::functions::lua_xpush::lua_xpush(holder, state, slot)
+            };
+            pushed.map_err(|error| crate::error::Error::from_vm(error))?;
         }
         Ok(1)
     }

@@ -1,3 +1,8 @@
+// These closures share Rc counters with the test, so they are not Send: the
+// `send` feature, under which interrupt callbacks must be Send, does not
+// build them. The trampoline under test is the same in both builds.
+#![cfg(not(feature = "send"))]
+
 use std::cell::Cell;
 use std::rc::Rc;
 

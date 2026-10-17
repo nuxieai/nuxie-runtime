@@ -94,8 +94,8 @@ use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
-    Vector as LuaVector, VmState,
+    AnyUserData, FromLuaMulti, Function, InterruptBudget, IntoLuaMulti, Lua, MultiValue, Table,
+    Thread, Value, Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::lua_callbacks::lua_callbacks;
 use luaur_vm::functions::lua_getfield::lua_getfield;
@@ -2252,7 +2252,13 @@ impl ScriptVm {
         let interrupt_timing = module_execution_timing.clone();
         let interrupt_safepoints = Rc::clone(&script_safepoints);
         let interrupt_resource_limits = resource_limits.clone();
-        lua.set_interrupt(move |_| {
+        // The budget settles every safepoint below the ceiling; the closure
+        // runs only to fail at it. The module deadline is set only under
+        // `start_module_execution`'s scoped interrupt, which has no budget and
+        // checks it at every safepoint.
+        let budget =
+            InterruptBudget::new(Rc::clone(&script_safepoints), SCRIPT_SAFEPOINTS_PER_CYCLE);
+        lua.set_interrupt_with_budget(budget, move |_| {
             interrupt_timing.check()?;
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
@@ -2386,7 +2392,15 @@ impl ScriptVm {
         let interrupt_safepoints = Rc::clone(&vm.script_safepoints);
         let interrupt_resource_limits = vm.resource_limits.clone();
         let interrupt_timing = vm.module_execution_timing.clone();
-        vm.lua.set_interrupt(move |_| {
+        // The budget settles every safepoint both counters allow; the closure
+        // runs only to fail at one of them (see `ScriptVm::new` for the module
+        // deadline).
+        let counters = InterruptBudget::new(
+            Rc::clone(&vm.script_safepoints),
+            SCRIPT_SAFEPOINTS_PER_CYCLE,
+        )
+        .with_countdown(Rc::clone(&budget.remaining));
+        vm.lua.set_interrupt_with_budget(counters, move |_| {
             interrupt_timing.check()?;
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {

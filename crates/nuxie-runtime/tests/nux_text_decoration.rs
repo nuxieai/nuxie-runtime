@@ -63,7 +63,7 @@ fn style(parent: u64) -> [FixtureRecord; 3] {
 /// decoration. Artboard-local ids: Text 1, plain style 2-4, decorated style
 /// 5-7, decoration 8.
 fn scene(line: Option<u32>, width: f32, plain: &str, decorated: &str) -> Vec<u8> {
-    scene_with(line, width, plain, decorated, &[], &[])
+    scene_with(line, width, plain, decorated, &[], &[], None)
 }
 
 fn scene_with(
@@ -73,6 +73,7 @@ fn scene_with(
     decorated: &str,
     text_properties: &[(&str, u64)],
     modifier: &[(&str, FixtureValue)],
+    plain_line: Option<u32>,
 ) -> Vec<u8> {
     let mut records = vec![
         record("Backboard", vec![]),
@@ -116,14 +117,16 @@ fn scene_with(
         ));
         records.extend([paint, fill, color]);
     }
-    if let Some(line) = line {
-        records.push(record(
-            "TextStyleDecoration",
-            vec![
-                ("parentId", FixtureValue::Uint(5)),
-                ("line", FixtureValue::Uint(u64::from(line))),
-            ],
-        ));
+    for (style, line) in [(5, line), (2, plain_line)] {
+        if let Some(line) = line {
+            records.push(record(
+                "TextStyleDecoration",
+                vec![
+                    ("parentId", FixtureValue::Uint(style)),
+                    ("line", FixtureValue::Uint(u64::from(line))),
+                ],
+            ));
+        }
     }
     for (text, style) in [(plain, 2), (decorated, 5)] {
         records.push(record(
@@ -400,6 +403,7 @@ fn an_ellipsis_is_underlined_to_its_last_dot() {
         "ab ab ab ab ab ab",
         &[("wrapValue", 1), ("overflowValue", 3)],
         &[],
+        None,
     ));
     let found = rects(&built.decorated);
     assert_eq!(found.len(), 1, "{found:?}");
@@ -440,6 +444,7 @@ fn modified_glyphs_carry_their_decoration() {
             ("modifierFlags", FixtureValue::Uint(1 << 2)),
             ("x", FixtureValue::Double(100.0)),
         ],
+        None,
     ));
     let still = build(&scene(Some(UNDERLINE), 400.0, "aa ", "ab"));
     let left = |built: &Built| {
@@ -462,6 +467,56 @@ fn modified_glyphs_carry_their_decoration() {
             ("modifierFlags", FixtureValue::Uint(1 << 5)),
             ("opacity", FixtureValue::Double(0.0)),
         ],
+        None,
     ));
     assert!(rects(&faded.decorated).is_empty());
+}
+
+fn extent(built: &Built) -> (f32, f32) {
+    rects(&built.decorated)
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(left, right), rect| {
+            (left.min(rect[0]), right.max(rect[2]))
+        })
+}
+
+#[test]
+fn a_modifier_that_moves_nothing_keeps_the_trimmed_line() {
+    let plain = build(&scene(Some(UNDERLINE), 400.0, "aa ", "ab   "));
+    let modified = build(&scene_with(
+        Some(UNDERLINE),
+        400.0,
+        "aa ",
+        "ab   ",
+        &[],
+        &[("modifierFlags", FixtureValue::Uint(0))],
+        None,
+    ));
+    let (left, right) = extent(&plain);
+    let (modified_left, modified_right) = extent(&modified);
+    assert!((left - modified_left).abs() < 1e-3 && (right - modified_right).abs() < 1e-3);
+}
+
+#[test]
+fn spaces_between_two_decorated_styles_stay_decorated() {
+    let built = build(&scene_with(
+        Some(UNDERLINE),
+        400.0,
+        "ab ",
+        "ab",
+        &[],
+        &[],
+        Some(UNDERLINE),
+    ));
+    let plain = rects(&built.plain);
+    let decorated = rects(&built.decorated);
+    assert_eq!(
+        (plain.len(), decorated.len()),
+        (1, 1),
+        "{plain:?} {decorated:?}"
+    );
+    assert!(
+        (plain[0][2] - decorated[0][0]).abs() < 1e-3,
+        "{plain:?} meets {decorated:?}"
+    );
 }

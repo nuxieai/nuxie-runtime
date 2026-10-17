@@ -2268,6 +2268,10 @@ impl LayoutComponent {
                 && (0..2).any(|axis| !self.natural_content_hosts(axis).is_empty())))
             && self.is_leaf()
     }
+    /// Whether this box has child layout nodes; without them it is a leaf.
+    pub(crate) fn has_layout_children(&self) -> bool {
+        !self.layout_children.is_empty()
+    }
     fn hugs(&self) -> bool {
         self.with_style(|style| style.intrinsically_sized())
             .unwrap_or(false)

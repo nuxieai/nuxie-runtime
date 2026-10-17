@@ -1649,3 +1649,15 @@ fn css_rotated_curve_natural_size_follows_its_geometry() {
         "{square:?}"
     );
 }
+
+#[test]
+fn css_grouped_geometry_change_invalidates_the_measured_box() {
+    use crate::source::generated::core_registry::CoreField;
+    let f = shape_fixture(false, ShapeHost::GroupedHugBox, 0.0);
+    assert!((f.width() - 80.0).abs() < 0.001);
+    f.path
+        .with_mut(|o| o.set_double(CoreField::ParametricPathWidth, 160.0))
+        .unwrap();
+    let widths = [f.width(), f.width()];
+    assert_eq!(widths, [160.0; 2]);
+}

@@ -1,0 +1,131 @@
+{
+  "name": "BoxGradient",
+  "key": {
+    "int": 60004,
+    "string": "boxgradient"
+  },
+  "extends": "component.json",
+  "description": "Places its parent LinearGradient or RadialGradient over the padding box of the box that paints it, as CSS background positioning does.",
+  "properties": {
+    "angle": {
+      "type": "double",
+      "key": {
+        "int": 60106
+      },
+      "initialValue": "180",
+      "description": "Linear only: CSS degrees, 0 to top, clockwise.",
+      "bindable": true,
+      "animates": true
+    },
+    "shape": {
+      "type": "uint8",
+      "key": {
+        "int": 60107
+      },
+      "initialValue": "0",
+      "description": "Radial only: 0 ellipse, 1 circle.",
+      "bindable": true,
+      "animates": false
+    },
+    "size": {
+      "type": "uint8",
+      "key": {
+        "int": 60108
+      },
+      "initialValue": "0",
+      "description": "Radial only: 0 farthest-corner, 1 farthest-side, 2 closest-corner, 3 closest-side, 4 explicit.",
+      "bindable": true,
+      "animates": false
+    },
+    "centerX": {
+      "type": "double",
+      "key": {
+        "int": 60109
+      },
+      "initialValue": "0",
+      "description": "Radial at-position x, length part in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "centerXPercent": {
+      "type": "double",
+      "key": {
+        "int": 60110
+      },
+      "initialValue": "50",
+      "description": "Radial at-position x, percentage part.",
+      "bindable": true,
+      "animates": true
+    },
+    "centerY": {
+      "type": "double",
+      "key": {
+        "int": 60111
+      },
+      "initialValue": "0",
+      "description": "Radial at-position y, length part in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "centerYPercent": {
+      "type": "double",
+      "key": {
+        "int": 60112
+      },
+      "initialValue": "50",
+      "description": "Radial at-position y, percentage part.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusX": {
+      "type": "double",
+      "key": {
+        "int": 60113
+      },
+      "initialValue": "0",
+      "description": "Explicit radial size x, length part in points; a circle uses only radiusX.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusXPercent": {
+      "type": "double",
+      "key": {
+        "int": 60114
+      },
+      "initialValue": "0",
+      "description": "Explicit radial size x, percentage part.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusY": {
+      "type": "double",
+      "key": {
+        "int": 60115
+      },
+      "initialValue": "0",
+      "description": "Explicit radial size y (ellipse only), length part in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusYPercent": {
+      "type": "double",
+      "key": {
+        "int": 60116
+      },
+      "initialValue": "0",
+      "description": "Explicit radial size y (ellipse only), percentage part.",
+      "bindable": true,
+      "animates": true
+    },
+    "toCorner": {
+      "type": "uint8",
+      "key": {
+        "int": 60117
+      },
+      "initialValue": "0",
+      "description": "Linear only: 0 none (use angle), 1 to top right, 2 to bottom right, 3 to bottom left, 4 to top left.",
+      "bindable": true,
+      "animates": false
+    }
+  }
+}

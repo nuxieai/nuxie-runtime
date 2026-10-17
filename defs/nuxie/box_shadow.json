@@ -1,0 +1,21 @@
+{
+  "name": "BoxShadow",
+  "key": {
+    "int": 60005,
+    "string": "boxshadow"
+  },
+  "extends": "component.json",
+  "description": "Gives its parent Feather's shadow fill CSS spread and CSS clipping: an outer shadow draws only outside the border box, an inset one only inside the padding box.",
+  "properties": {
+    "spread": {
+      "type": "double",
+      "key": {
+        "int": 60118
+      },
+      "initialValue": "0",
+      "description": "CSS box-shadow spread, in points.",
+      "bindable": true,
+      "animates": true
+    }
+  }
+}

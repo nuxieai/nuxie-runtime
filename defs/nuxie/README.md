@@ -13,6 +13,10 @@ resolved explicitly.
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
+- LayoutCssStyle: type 60002; properties 60022–60104.
+- BoxBorder: type 60003; property 60105.
+- BoxGradient: type 60004; properties 60106–60117.
+- BoxShadow: type 60005; property 60118.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.
@@ -52,3 +56,6 @@ run font's `post` underline and `OS/2` strikeout metrics, with a fallback of
 0.06 em thick at 0.1 em below (underline) or 0.3 em above (line-through) the
 baseline. Readers without the type skip the record and its typed property, and
 draw the text undecorated.
+The CSS layout records (LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow)
+are specified in [docs/CSS_LAYOUT.md](../../docs/CSS_LAYOUT.md): their
+encodings, what is refused at load, and how the runtime uses them.

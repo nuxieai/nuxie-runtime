@@ -1,0 +1,21 @@
+{
+  "name": "BoxBorder",
+  "key": {
+    "int": 60003,
+    "string": "boxborder"
+  },
+  "extends": "component.json",
+  "description": "Draws its parent Stroke over the CSS border ring of the given sides of the box that paints it.",
+  "properties": {
+    "sides": {
+      "type": "uint8",
+      "key": {
+        "int": 60105
+      },
+      "initialValue": "15",
+      "description": "Bit mask of painted sides: 1 top, 2 right, 4 bottom, 8 left.",
+      "bindable": true,
+      "animates": false
+    }
+  }
+}

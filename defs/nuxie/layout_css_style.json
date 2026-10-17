@@ -1,0 +1,841 @@
+{
+  "name": "LayoutCssStyle",
+  "key": {
+    "int": 60002,
+    "string": "layoutcssstyle"
+  },
+  "extends": "component.json",
+  "description": "The CSS layout of one box or participant, as authored. A child of a LayoutComponent, an Artboard, or the Node that hosts a LayoutParticipant; at most one per parent. Its presence puts that node in CSS mode (docs/CSS_LAYOUT.md). Registers as a LayoutStyleApplier.",
+  "properties": {
+    "display": {
+      "type": "uint8",
+      "key": {
+        "int": 60022
+      },
+      "initialValue": "0",
+      "description": "CSS display: 0 block, 1 flex, 2 grid, 3 none, 4 flow-root.",
+      "bindable": true,
+      "animates": false
+    },
+    "boxSizing": {
+      "type": "uint8",
+      "key": {
+        "int": 60023
+      },
+      "initialValue": "0",
+      "description": "CSS box-sizing: 0 content-box, 1 border-box.",
+      "bindable": true,
+      "animates": false
+    },
+    "position": {
+      "type": "uint8",
+      "key": {
+        "int": 60024
+      },
+      "initialValue": "0",
+      "description": "CSS position: 0 static, 1 relative, 2 absolute.",
+      "bindable": true,
+      "animates": false
+    },
+    "overflowX": {
+      "type": "uint8",
+      "key": {
+        "int": 60025
+      },
+      "initialValue": "0",
+      "description": "CSS overflow-x: 0 visible, 1 clip, 2 hidden, 3 scroll, 4 auto.",
+      "bindable": true,
+      "animates": false
+    },
+    "overflowY": {
+      "type": "uint8",
+      "key": {
+        "int": 60026
+      },
+      "initialValue": "0",
+      "description": "CSS overflow-y: 0 visible, 1 clip, 2 hidden, 3 scroll, 4 auto.",
+      "bindable": true,
+      "animates": false
+    },
+    "direction": {
+      "type": "uint8",
+      "key": {
+        "int": 60027
+      },
+      "initialValue": "0",
+      "description": "CSS direction: 0 inherit, 1 ltr, 2 rtl.",
+      "bindable": true,
+      "animates": false
+    },
+    "flexDirection": {
+      "type": "uint8",
+      "key": {
+        "int": 60028
+      },
+      "initialValue": "0",
+      "description": "CSS flex-direction: 0 row, 1 row-reverse, 2 column, 3 column-reverse.",
+      "bindable": true,
+      "animates": false
+    },
+    "flexWrap": {
+      "type": "uint8",
+      "key": {
+        "int": 60029
+      },
+      "initialValue": "0",
+      "description": "CSS flex-wrap: 0 nowrap, 1 wrap, 2 wrap-reverse.",
+      "bindable": true,
+      "animates": false
+    },
+    "flexGrow": {
+      "type": "double",
+      "key": {
+        "int": 60030
+      },
+      "initialValue": "0",
+      "description": "CSS flex-grow.",
+      "bindable": true,
+      "animates": true
+    },
+    "flexShrink": {
+      "type": "double",
+      "key": {
+        "int": 60031
+      },
+      "initialValue": "1",
+      "description": "CSS flex-shrink.",
+      "bindable": true,
+      "animates": true
+    },
+    "flexBasisKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60032
+      },
+      "initialValue": "0",
+      "description": "CSS flex-basis. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage), 6 content.",
+      "bindable": true,
+      "animates": false
+    },
+    "flexBasis": {
+      "type": "double",
+      "key": {
+        "int": 60033
+      },
+      "initialValue": "0",
+      "description": "flex-basis length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "flexBasisPercent": {
+      "type": "double",
+      "key": {
+        "int": 60034
+      },
+      "initialValue": "0",
+      "description": "flex-basis percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "alignItems": {
+      "type": "uint8",
+      "key": {
+        "int": 60035
+      },
+      "initialValue": "0",
+      "description": "CSS align-items. Item alignment: 0 initial, 1 normal, 2 start, 3 end, 4 flex-start, 5 flex-end, 6 self-start, 7 self-end, 8 center, 9 baseline, 10 stretch.",
+      "bindable": true,
+      "animates": false
+    },
+    "alignSelf": {
+      "type": "uint8",
+      "key": {
+        "int": 60036
+      },
+      "initialValue": "0",
+      "description": "CSS align-self (0 auto). Item alignment: 0 initial, 1 normal, 2 start, 3 end, 4 flex-start, 5 flex-end, 6 self-start, 7 self-end, 8 center, 9 baseline, 10 stretch.",
+      "bindable": true,
+      "animates": false
+    },
+    "justifyItems": {
+      "type": "uint8",
+      "key": {
+        "int": 60037
+      },
+      "initialValue": "0",
+      "description": "CSS justify-items (0 legacy). Item alignment: 0 initial, 1 normal, 2 start, 3 end, 4 flex-start, 5 flex-end, 6 self-start, 7 self-end, 8 center, 9 baseline, 10 stretch.",
+      "bindable": true,
+      "animates": false
+    },
+    "justifySelf": {
+      "type": "uint8",
+      "key": {
+        "int": 60038
+      },
+      "initialValue": "0",
+      "description": "CSS justify-self (0 auto). Item alignment: 0 initial, 1 normal, 2 start, 3 end, 4 flex-start, 5 flex-end, 6 self-start, 7 self-end, 8 center, 9 baseline, 10 stretch.",
+      "bindable": true,
+      "animates": false
+    },
+    "alignContent": {
+      "type": "uint8",
+      "key": {
+        "int": 60039
+      },
+      "initialValue": "0",
+      "description": "CSS align-content. Content alignment: 0 normal, 1 start, 2 end, 3 flex-start, 4 flex-end, 5 center, 6 stretch, 7 space-between, 8 space-evenly, 9 space-around.",
+      "bindable": true,
+      "animates": false
+    },
+    "justifyContent": {
+      "type": "uint8",
+      "key": {
+        "int": 60040
+      },
+      "initialValue": "0",
+      "description": "CSS justify-content. Content alignment: 0 normal, 1 start, 2 end, 3 flex-start, 4 flex-end, 5 center, 6 stretch, 7 space-between, 8 space-evenly, 9 space-around.",
+      "bindable": true,
+      "animates": false
+    },
+    "gridAutoFlow": {
+      "type": "uint8",
+      "key": {
+        "int": 60041
+      },
+      "initialValue": "0",
+      "description": "CSS grid-auto-flow: 0 row, 1 column, 2 row dense, 3 column dense.",
+      "bindable": true,
+      "animates": false
+    },
+    "aspectRatio": {
+      "type": "double",
+      "key": {
+        "int": 60042
+      },
+      "initialValue": "0",
+      "description": "CSS aspect-ratio as width over height; 0 is auto.",
+      "bindable": true,
+      "animates": true
+    },
+    "widthKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60043
+      },
+      "initialValue": "0",
+      "description": "CSS width. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage).",
+      "bindable": true,
+      "animates": false
+    },
+    "width": {
+      "type": "double",
+      "key": {
+        "int": 60044
+      },
+      "initialValue": "0",
+      "description": "width length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "widthPercent": {
+      "type": "double",
+      "key": {
+        "int": 60045
+      },
+      "initialValue": "0",
+      "description": "width percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "heightKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60046
+      },
+      "initialValue": "0",
+      "description": "CSS height. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage).",
+      "bindable": true,
+      "animates": false
+    },
+    "height": {
+      "type": "double",
+      "key": {
+        "int": 60047
+      },
+      "initialValue": "0",
+      "description": "height length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "heightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60048
+      },
+      "initialValue": "0",
+      "description": "height percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "minWidthKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60049
+      },
+      "initialValue": "0",
+      "description": "CSS min-width: 0 auto, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "minWidth": {
+      "type": "double",
+      "key": {
+        "int": 60050
+      },
+      "initialValue": "0",
+      "description": "min-width length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "minWidthPercent": {
+      "type": "double",
+      "key": {
+        "int": 60051
+      },
+      "initialValue": "0",
+      "description": "min-width percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "minHeightKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60052
+      },
+      "initialValue": "0",
+      "description": "CSS min-height: 0 auto, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "minHeight": {
+      "type": "double",
+      "key": {
+        "int": 60053
+      },
+      "initialValue": "0",
+      "description": "min-height length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "minHeightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60054
+      },
+      "initialValue": "0",
+      "description": "min-height percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "maxWidthKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60055
+      },
+      "initialValue": "0",
+      "description": "CSS max-width: 0 none, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "maxWidth": {
+      "type": "double",
+      "key": {
+        "int": 60056
+      },
+      "initialValue": "0",
+      "description": "max-width length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "maxWidthPercent": {
+      "type": "double",
+      "key": {
+        "int": 60057
+      },
+      "initialValue": "0",
+      "description": "max-width percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "maxHeightKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60058
+      },
+      "initialValue": "0",
+      "description": "CSS max-height: 0 none, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "maxHeight": {
+      "type": "double",
+      "key": {
+        "int": 60059
+      },
+      "initialValue": "0",
+      "description": "max-height length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "maxHeightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60060
+      },
+      "initialValue": "0",
+      "description": "max-height percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "marginTopKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60061
+      },
+      "initialValue": "0",
+      "description": "CSS margin-top: 0 length-percentage, 1 auto.",
+      "bindable": true,
+      "animates": false
+    },
+    "marginTop": {
+      "type": "double",
+      "key": {
+        "int": 60062
+      },
+      "initialValue": "0",
+      "description": "margin-top length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "marginTopPercent": {
+      "type": "double",
+      "key": {
+        "int": 60063
+      },
+      "initialValue": "0",
+      "description": "margin-top percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "marginRightKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60064
+      },
+      "initialValue": "0",
+      "description": "CSS margin-right: 0 length-percentage, 1 auto.",
+      "bindable": true,
+      "animates": false
+    },
+    "marginRight": {
+      "type": "double",
+      "key": {
+        "int": 60065
+      },
+      "initialValue": "0",
+      "description": "margin-right length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "marginRightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60066
+      },
+      "initialValue": "0",
+      "description": "margin-right percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "marginBottomKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60067
+      },
+      "initialValue": "0",
+      "description": "CSS margin-bottom: 0 length-percentage, 1 auto.",
+      "bindable": true,
+      "animates": false
+    },
+    "marginBottom": {
+      "type": "double",
+      "key": {
+        "int": 60068
+      },
+      "initialValue": "0",
+      "description": "margin-bottom length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "marginBottomPercent": {
+      "type": "double",
+      "key": {
+        "int": 60069
+      },
+      "initialValue": "0",
+      "description": "margin-bottom percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "marginLeftKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60070
+      },
+      "initialValue": "0",
+      "description": "CSS margin-left: 0 length-percentage, 1 auto.",
+      "bindable": true,
+      "animates": false
+    },
+    "marginLeft": {
+      "type": "double",
+      "key": {
+        "int": 60071
+      },
+      "initialValue": "0",
+      "description": "margin-left length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "marginLeftPercent": {
+      "type": "double",
+      "key": {
+        "int": 60072
+      },
+      "initialValue": "0",
+      "description": "margin-left percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "insetTopKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60073
+      },
+      "initialValue": "0",
+      "description": "CSS top: 0 auto, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "insetTop": {
+      "type": "double",
+      "key": {
+        "int": 60074
+      },
+      "initialValue": "0",
+      "description": "top length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "insetTopPercent": {
+      "type": "double",
+      "key": {
+        "int": 60075
+      },
+      "initialValue": "0",
+      "description": "top percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "insetRightKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60076
+      },
+      "initialValue": "0",
+      "description": "CSS right: 0 auto, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "insetRight": {
+      "type": "double",
+      "key": {
+        "int": 60077
+      },
+      "initialValue": "0",
+      "description": "right length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "insetRightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60078
+      },
+      "initialValue": "0",
+      "description": "right percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "insetBottomKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60079
+      },
+      "initialValue": "0",
+      "description": "CSS bottom: 0 auto, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "insetBottom": {
+      "type": "double",
+      "key": {
+        "int": 60080
+      },
+      "initialValue": "0",
+      "description": "bottom length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "insetBottomPercent": {
+      "type": "double",
+      "key": {
+        "int": 60081
+      },
+      "initialValue": "0",
+      "description": "bottom percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "insetLeftKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60082
+      },
+      "initialValue": "0",
+      "description": "CSS left: 0 auto, 1 length-percentage.",
+      "bindable": true,
+      "animates": false
+    },
+    "insetLeft": {
+      "type": "double",
+      "key": {
+        "int": 60083
+      },
+      "initialValue": "0",
+      "description": "left length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "insetLeftPercent": {
+      "type": "double",
+      "key": {
+        "int": 60084
+      },
+      "initialValue": "0",
+      "description": "left percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingTop": {
+      "type": "double",
+      "key": {
+        "int": 60085
+      },
+      "initialValue": "0",
+      "description": "padding-top length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingTopPercent": {
+      "type": "double",
+      "key": {
+        "int": 60086
+      },
+      "initialValue": "0",
+      "description": "padding-top percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingRight": {
+      "type": "double",
+      "key": {
+        "int": 60087
+      },
+      "initialValue": "0",
+      "description": "padding-right length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingRightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60088
+      },
+      "initialValue": "0",
+      "description": "padding-right percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingBottom": {
+      "type": "double",
+      "key": {
+        "int": 60089
+      },
+      "initialValue": "0",
+      "description": "padding-bottom length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingBottomPercent": {
+      "type": "double",
+      "key": {
+        "int": 60090
+      },
+      "initialValue": "0",
+      "description": "padding-bottom percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingLeft": {
+      "type": "double",
+      "key": {
+        "int": 60091
+      },
+      "initialValue": "0",
+      "description": "padding-left length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "paddingLeftPercent": {
+      "type": "double",
+      "key": {
+        "int": 60092
+      },
+      "initialValue": "0",
+      "description": "padding-left percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "borderTop": {
+      "type": "double",
+      "key": {
+        "int": 60093
+      },
+      "initialValue": "0",
+      "description": "CSS border-top-width, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "borderRight": {
+      "type": "double",
+      "key": {
+        "int": 60094
+      },
+      "initialValue": "0",
+      "description": "CSS border-right-width, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "borderBottom": {
+      "type": "double",
+      "key": {
+        "int": 60095
+      },
+      "initialValue": "0",
+      "description": "CSS border-bottom-width, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "borderLeft": {
+      "type": "double",
+      "key": {
+        "int": 60096
+      },
+      "initialValue": "0",
+      "description": "CSS border-left-width, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "rowGap": {
+      "type": "double",
+      "key": {
+        "int": 60097
+      },
+      "initialValue": "0",
+      "description": "row-gap length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "rowGapPercent": {
+      "type": "double",
+      "key": {
+        "int": 60098
+      },
+      "initialValue": "0",
+      "description": "row-gap percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "columnGap": {
+      "type": "double",
+      "key": {
+        "int": 60099
+      },
+      "initialValue": "0",
+      "description": "column-gap length part, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "columnGapPercent": {
+      "type": "double",
+      "key": {
+        "int": 60100
+      },
+      "initialValue": "0",
+      "description": "column-gap percentage part (50 means 50%).",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusTopLeftPercent": {
+      "type": "double",
+      "key": {
+        "int": 60101
+      },
+      "initialValue": "0",
+      "description": "CSS border-top-left-radius percentage part, added to the LayoutComponentStyle point radius.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusTopRightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60102
+      },
+      "initialValue": "0",
+      "description": "CSS border-top-right-radius percentage part, added to the LayoutComponentStyle point radius.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusBottomRightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60103
+      },
+      "initialValue": "0",
+      "description": "CSS border-bottom-right-radius percentage part, added to the LayoutComponentStyle point radius.",
+      "bindable": true,
+      "animates": true
+    },
+    "radiusBottomLeftPercent": {
+      "type": "double",
+      "key": {
+        "int": 60104
+      },
+      "initialValue": "0",
+      "description": "CSS border-bottom-left-radius percentage part, added to the LayoutComponentStyle point radius.",
+      "bindable": true,
+      "animates": true
+    }
+  }
+}

@@ -551,6 +551,48 @@ impl LayoutComponent {
                 .expect("LayoutComponent receiver")
                 .reset_update_flags();
         });
+        if dirt.intersects(ComponentDirt::PATH | ComponentDirt::LAYOUT_STYLE) {
+            Self::refresh_box_gradients_occurrence(owner);
+        }
+    }
+    /// A CSS box's BoxGradients follow its size: their gradients rebuild
+    /// their shaders when the box's paths change (docs/CSS_LAYOUT.md, 4.2).
+    fn refresh_box_gradients_occurrence(owner: &CoreHandle) {
+        let Some(paints) = owner
+            .with(|object| {
+                let layout = object.as_layout_component()?;
+                layout
+                    .is_css_mode()
+                    .then(|| layout.paints.shape_paints().to_vec())
+            })
+            .flatten()
+        else {
+            return;
+        };
+        for paint in paints {
+            let children = paint
+                .with(|object| {
+                    object
+                        .as_container_component()
+                        .map(|container| container.children().to_vec())
+                })
+                .flatten()
+                .unwrap_or_default();
+            for gradient in children {
+                let placed = gradient
+                    .with(|object| {
+                        object.as_container_component().is_some_and(|container| {
+                            container.children().iter().any(|child| {
+                                child.is_type_of(crate::css_layout::keys::BOX_GRADIENT)
+                            })
+                        })
+                    })
+                    .unwrap_or(false);
+                if placed {
+                    gradient.with_mut(|object| object.component_add_dirt(ComponentDirt::PAINT, false));
+                }
+            }
+        }
     }
     pub fn painted_world_bounds(
         &mut self,

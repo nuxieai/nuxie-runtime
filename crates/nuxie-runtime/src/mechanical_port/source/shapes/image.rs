@@ -149,10 +149,11 @@ impl Image {
                         .downcast_ref::<crate::video::Video>()
                         .map(|video| video.image())
                 })?;
+                let (image, sampler) = owner.render_image_and_sampler()?;
                 Some((
-                    owner.render_image()?,
+                    image,
                     owner.mesh.clone(),
-                    owner.image_sampler(),
+                    sampler,
                     owner.base.needs_save_operation(),
                     owner.base.world_transform(),
                     owner.base.origin_x(),
@@ -636,6 +637,56 @@ impl Image {
     }
 
     pub fn image_sampler(&self) -> ImageSampler {
+        let asset = self.image_asset().and_then(|asset| {
+            asset.with_downcast::<ImageAsset, _>(|asset| {
+                (
+                    asset.base.sampler_filter(),
+                    asset.base.sampler_wrap_x(),
+                    asset.base.sampler_wrap_y(),
+                )
+            })
+        });
+        self.sampler_from(asset)
+    }
+
+    /// render_image() and image_sampler(), reading the asset on one loan.
+    fn render_image_and_sampler(
+        &self,
+    ) -> Option<(crate::mechanical_port::source::renderer::RenderImageRef, ImageSampler)> {
+        let asset = self.image_asset();
+        let (image, asset_sampler) = match (&self.runtime_frame, asset) {
+            (Some(frame), asset) => (
+                frame.clone(),
+                asset.and_then(|asset| {
+                    asset.with_downcast::<ImageAsset, _>(|asset| {
+                        (
+                            asset.base.sampler_filter(),
+                            asset.base.sampler_wrap_x(),
+                            asset.base.sampler_wrap_y(),
+                        )
+                    })
+                }),
+            ),
+            (None, asset) => {
+                let (image, sampler) = asset?.with_downcast::<ImageAsset, _>(|asset| {
+                    (
+                        asset.render_image().cloned(),
+                        (
+                            asset.base.sampler_filter(),
+                            asset.base.sampler_wrap_x(),
+                            asset.base.sampler_wrap_y(),
+                        ),
+                    )
+                })?;
+                (image?, Some(sampler))
+            }
+        };
+        Some((image, self.sampler_from(asset_sampler)))
+    }
+
+    /// The sampler from the asset's filter and wraps (when there is an
+    /// asset) and this image's own overrides.
+    fn sampler_from(&self, asset: Option<(u8, u8, u8)>) -> ImageSampler {
         fn filter_value(value: u8) -> ImageFilter {
             match value {
                 0 => ImageFilter::Bilinear,
@@ -654,15 +705,7 @@ impl Image {
         }
 
         let mut sampler = ImageSampler::linear_clamp();
-        if let Some(asset) = self.image_asset()
-            && let Some((filter, wrap_x, wrap_y)) = asset.with_downcast::<ImageAsset, _>(|asset| {
-                (
-                    asset.base.sampler_filter(),
-                    asset.base.sampler_wrap_x(),
-                    asset.base.sampler_wrap_y(),
-                )
-            })
-        {
+        if let Some((filter, wrap_x, wrap_y)) = asset {
             sampler.filter = filter_value(filter);
             sampler.wrap_x = wrap_value(wrap_x);
             sampler.wrap_y = wrap_value(wrap_y);

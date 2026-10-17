@@ -354,6 +354,7 @@ impl Image {
     pub fn asset_updated(&mut self) {
         self.update_image_scale();
         self.base.mark_world_transform_dirty();
+        self.measured_geometry_changed();
     }
 
     pub fn clone_definition(&self) -> Self {
@@ -615,11 +616,11 @@ impl Image {
         }
     }
 
-    /// An image's origin places its natural bounds inside a drawing group
-    /// (UNIV-4844), and no update work reads it, so the update pass would not
-    /// see the change: hand the image to that pass's measured-content check
-    /// and ask for the pass.
-    pub(crate) fn origin_changed(&mut self) {
+    /// An image's origin and its decoded size place its natural bounds inside
+    /// a drawing group (UNIV-4844), and neither sets dirt the update pass
+    /// recomputes from, so the pass would not see the change: hand the image
+    /// to that pass's measured-content check and ask for the pass.
+    pub(crate) fn measured_geometry_changed(&mut self) {
         let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
         else {
             return;

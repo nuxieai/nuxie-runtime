@@ -714,3 +714,67 @@ fn css_solo_switch_resizes_the_box() {
     widths.push(f.width());
     assert_eq!(widths, [80.0, 160.0, 80.0]);
 }
+
+#[derive(Clone)]
+struct SizedImage {
+    width: u32,
+    height: u32,
+    identity: std::rc::Rc<()>,
+}
+impl nuxie_render_api::RenderImage for SizedImage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn retain_image(&self) -> std::rc::Rc<dyn nuxie_render_api::RenderImage> {
+        std::rc::Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        std::rc::Rc::as_ptr(&self.identity) as usize
+    }
+    fn width(&self) -> u32 {
+        self.width
+    }
+    fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+#[test]
+fn css_image_asset_change_resizes_the_box() {
+    use crate::source::{assets::image_asset::ImageAsset, shapes::image::Image};
+    // The grouped images take their 100-point asset's size; a new decoded
+    // image 200 points wide makes the group 200 points wide.
+    let f = scene(Setup {
+        content: Content::Images,
+        grouped: true,
+        subject_width: None,
+        row_width: 1000.0,
+        sibling_width: None,
+        zero_minimum: false,
+        second_joystick: false,
+        solo: false,
+    });
+    f.advance(3);
+    let before = f.width();
+    let asset = f
+        ._file
+        .with_file(|file| file.assets().first().cloned())
+        .expect("image asset");
+    asset
+        .with_downcast_mut::<ImageAsset, _>(|asset| {
+            asset.restore_host_image(Some(std::rc::Rc::new(SizedImage {
+                width: 200,
+                height: 30,
+                identity: std::rc::Rc::new(()),
+            })))
+        })
+        .expect("ImageAsset");
+    // What the asset tells each image that references it.
+    for name in ["Content", "Second"] {
+        f.named::<Image>(name)
+            .with_downcast_mut::<Image, _>(Image::asset_updated)
+            .expect("Image");
+    }
+    f.advance(2);
+    assert_eq!([before, f.width()], [100.0, 200.0]);
+}

@@ -85048,10 +85048,10 @@ impl crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCal
     for crate::mechanical_port::source::shapes::image::Image
 {
     fn origin_x_changed(&mut self) {
-        crate::mechanical_port::source::shapes::image::Image::origin_changed(self);
+        crate::mechanical_port::source::shapes::image::Image::measured_geometry_changed(self);
     }
     fn origin_y_changed(&mut self) {
-        crate::mechanical_port::source::shapes::image::Image::origin_changed(self);
+        crate::mechanical_port::source::shapes::image::Image::measured_geometry_changed(self);
     }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)

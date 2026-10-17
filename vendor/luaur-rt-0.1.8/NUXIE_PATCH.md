@@ -213,3 +213,20 @@
   change which error is reported.
 - Touched files: `src/userdata.rs`, `src/lib.rs`; parity coverage against
   handle arguments in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+
+## Stack-held handles are bound to their call frame; counts are checked
+
+- A positive stack index names a slot of the call frame current when it is
+  used. `FieldValue`/`FieldFunction`, `StackUserData`/`StackArg` and
+  `CallArgs`/`ArgUserData` record the frame they were taken in (the state and
+  its `CallInfo` depth, `stack_slot::FrameSlot`) and fail with an error when
+  used from another frame, e.g. from a scoped callback Lua calls while the
+  handle is held, instead of reading whatever that frame's slot holds.
+  `FieldValue::as_function` therefore returns a `Result`.
+- `ReturnValues::Pushed` carries a `PushedCount` only luaur-rt can make, and
+  the trampoline checks it against the values above the callback's arguments
+  before the VM reads them. `Function::call` checks the count
+  `push_call_args` reports against the values actually pushed.
+- Touched files: `src/stack_slot.rs` (new), `src/table.rs`, `src/userdata.rs`,
+  `src/traits.rs`, `src/callback.rs`, `src/function.rs`, `src/lib.rs`;
+  coverage in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.

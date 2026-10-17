@@ -64,9 +64,26 @@ pub enum ReturnValues {
     One(Value),
     /// Any number of values.
     Many(MultiValue),
-    /// This many values the callback already pushed onto the top of the
+    /// Values a luaur-rt conversion already pushed onto the top of the
     /// stack, having made room for them.
-    Pushed(c_int),
+    Pushed(PushedCount),
+}
+
+/// How many values a luaur-rt conversion pushed for a callback's return.
+/// Only luaur-rt makes one, right after pushing; the trampoline also checks
+/// the count against the stack before the VM reads the values.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct PushedCount(c_int);
+
+impl PushedCount {
+    pub(crate) fn new(count: c_int) -> Self {
+        Self(count)
+    }
+
+    pub(crate) fn get(self) -> c_int {
+        self.0
+    }
 }
 
 impl ReturnValues {
@@ -76,7 +93,7 @@ impl ReturnValues {
             ReturnValues::None => 0,
             ReturnValues::One(_) => 1,
             ReturnValues::Many(values) => values.len(),
-            ReturnValues::Pushed(count) => *count as usize,
+            ReturnValues::Pushed(count) => count.get() as usize,
         }
     }
 }

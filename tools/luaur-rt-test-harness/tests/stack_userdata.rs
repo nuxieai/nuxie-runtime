@@ -171,3 +171,54 @@ fn in_place_userdata_arguments_match_handle_arguments() -> Result<()> {
     assert_eq!(lua.load("return sink:count()").eval::<i64>()?, 0);
     Ok(())
 }
+
+// A stack-held value names a slot of the frame it was taken in. Used from a
+// nested frame (a scoped callback Lua calls), the same index names another
+// value there, so the handle must refuse instead of reading it.
+#[test]
+fn stack_values_refuse_use_from_another_frame() -> Result<()> {
+    let lua = Lua::new();
+    lua.globals().set(
+        "make",
+        lua.create_function(|_, start: i64| Ok(Counter(start)))?,
+    )?;
+    let script: Table = lua
+        .load("return { get = function() return 1 end }")
+        .eval()?;
+    let outcomes = lua.with_stack_userdata(Counter(3), |counter| -> Result<_> {
+        assert_eq!(counter.borrow()?.0, 3);
+        lua.scope(|scope| {
+            let read = scope.create_function(|_, _: luaur_rt::MultiValue| {
+                Ok(match counter.borrow() {
+                    Ok(counter) => format!("read {}", counter.0),
+                    Err(error) => error.to_string(),
+                })
+            })?;
+            lua.globals().set("read", read)?;
+            // With and without a same-typed userdata in the nested frame's
+            // slots: neither may be mistaken for the held one.
+            let plain: String = lua.load("return read()").eval()?;
+            let decoy: String = lua.load("return read(make(9), make(9))").eval()?;
+            let called = script.with_field_function("get", |get| {
+                lua.scope(|inner| {
+                    let call = inner.create_function(|_, ()| {
+                        Ok(match get.call::<i64>(()) {
+                            Ok(value) => format!("called {value}"),
+                            Err(error) => error.to_string(),
+                        })
+                    })?;
+                    lua.globals().set("callGet", call)?;
+                    lua.load("return callGet()").eval::<String>()
+                })
+            })?;
+            Ok((plain, decoy, called))
+        })
+    })??;
+    let (plain, decoy, called) = outcomes;
+    for outcome in [&plain, &decoy] {
+        assert!(outcome.contains("outside the call frame"), "{outcome}");
+    }
+    let called = called.expect("get is a function")?;
+    assert!(called.contains("outside the call frame"), "{called}");
+    Ok(())
+}

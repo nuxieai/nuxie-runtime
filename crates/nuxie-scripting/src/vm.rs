@@ -1406,9 +1406,11 @@ impl LuaScriptInstance {
         let lua = table.lua();
         let called = table
             .with_field(method.as_str(), |field| {
-                let Some(function) = field.as_function() else {
+                let function = match field.as_function() {
+                    Ok(Some(function)) => function,
                     // Not a function: report what the field holds instead.
-                    return Err(field.to_value());
+                    Ok(None) => return Err(field.to_value()),
+                    Err(error) => return Err(Err(error)),
                 };
                 let mut call_args = MultiValue::with_capacity(args.len() + 1);
                 call_args.push_back(Value::Table(table.clone()));

@@ -1538,6 +1538,7 @@ struct ShapeFixture {
     _arena: CoreArena,
     root: CoreHandle,
     subject: CoreHandle,
+    shape: CoreHandle,
     path: CoreHandle,
 }
 fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture {
@@ -1561,8 +1562,9 @@ fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture 
     shape
         .with_downcast_mut::<Shape, _>(|s| s.add_path(path.clone()))
         .unwrap();
-    // Stand in for the update pass that composes the authored rotation.
+    // The authored rotation, and the matrix the update pass composes from it.
     path.with_mut(|o| {
+        o.set_double(CoreField::TransformComponentRotation, rotation);
         o.as_transform_component_mut()
             .unwrap()
             .with_transform_mut(|t| *t = Mat2D::from_rotation(rotation))
@@ -1610,6 +1612,7 @@ fn shape_fixture(ellipse: bool, host: ShapeHost, rotation: f32) -> ShapeFixture 
         _arena: arena,
         root,
         subject,
+        shape,
         path,
     }
 }
@@ -1781,6 +1784,26 @@ fn css_equal_authored_write_still_resizes_the_box() {
     let widths = [f.width(), f.width()];
     for width in widths {
         assert!((width - 48.780487).abs() < 0.0001, "{widths:?}");
+    }
+}
+
+#[test]
+fn css_scaled_group_content_resizes_the_box() {
+    use crate::source::generated::{
+        core_registry::CoreRegistry, transform_component_base::TransformComponentBase,
+    };
+    let f = shape_fixture(false, ShapeHost::GroupedHugBox, 0.0);
+    assert!((f.width() - 80.0).abs() < 0.001);
+    // An animation or binding writes through the handle setter; layout runs
+    // before the update pass composes the new matrix.
+    assert!(CoreRegistry::set_double_handle(
+        &f.shape,
+        TransformComponentBase::SCALE_X_PROPERTY_KEY.into(),
+        2.0,
+    ));
+    let widths = [f.width(), f.width()];
+    for width in widths {
+        assert!((width - 160.0).abs() < 0.001, "{widths:?}");
     }
 }
 

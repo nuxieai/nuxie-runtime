@@ -746,7 +746,15 @@ impl Shape {
                 if path.base.is_collapsed() {
                     return;
                 }
-                let matrix = outer * path.base.transform();
+                // The path's inputs as of now, since layout runs before the
+                // update pass; a participant keeps upstream's composed
+                // matrix, as compute_intrinsic_bounds does.
+                let participant = transform.is_none() && !measured_directly;
+                let local = (!participant)
+                    .then(|| crate::source::intrinsically_sizeable::authored_local_transform(object))
+                    .flatten()
+                    .unwrap_or_else(|| path.base.transform());
+                let matrix = outer * local;
                 if object.as_parametric_path().is_some() {
                     let natural = object.as_parametric_path().unwrap().natural_size_for_layout();
                     if measured_directly {

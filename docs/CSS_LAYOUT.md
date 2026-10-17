@@ -1,6 +1,6 @@
 # CSS layout contract
 
-Status: proposal for review. Nothing here is built yet.
+Status: accepted. Step 1 is built in the runtime (branch `claude/browser-css-layout`).
 Plan: browser-like layout on Taffy 0.15, step 1 (runtime). Refs [UNIV-5012](https://universe.basis.dev/issue/UNIV-5012).
 
 This is the contract between the runtime (this repository) and the nuxie-dev compiler. The compiler writes what this document describes, and the runtime lays out and paints exactly that. Everything here is our layer over Rive, not Rive-native, unless a line says Rive-native.
@@ -185,6 +185,14 @@ On an `Artboard` the artboard's own width and height define the root box. A reco
 
 On a participant the record contributes only item properties: display none, position, insets, size, minimum, maximum, aspect ratio, margins, flex-grow, flex-shrink, flex-basis, align-self and justify-self. Participants have no children to lay out.
 
+What the file must hold:
+
+- Every box keeps its `LayoutComponentStyle` (its `styleId`), as today: a `LayoutComponent` without one does not lay out, in either mode.
+- A record comes after its parent in the file, as every child does.
+- `position` is CSS's: a `static` box ignores its insets and is not the containing block of an absolute descendant, which is placed against its nearest positioned ancestor (or the artboard).
+
+At run time (animation, binding, scripts) values are stored as written. An enum outside its range reads as its initial value, and a length-percentage made mixed uses its percentage alone, until mixed values arrive (1.2).
+
 ### 2.2 Translation for files made in Rive
 
 A box without a record gets this CSS. The runtime builds it in memory and runs the same CSS-to-Taffy code as CSS mode. Nothing is written back.
@@ -263,7 +271,7 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | `background-image: linear-gradient()` or `radial-gradient()` | a `Fill` with a `LinearGradient` or `RadialGradient` and its `GradientStop`s, plus a `BoxGradient` (4.2) so its geometry follows the box |
 | uniform solid `border` (one width and one colour on all four sides) | a `Stroke` child, `position` 0 (inside), `thickness` the width. An inside stroke of the border box covers exactly the CSS border ring, inner radii included. The four border widths are also written in the record, because they take part in layout |
 | `border-radius` in points, circular | `LayoutComponentStyle` `cornerRadiusTL` (640), `TR` (641), `BL` (642), `BR` (643), with `linkCornerRadius` (639) false when they differ |
-| `box-shadow` | a `Fill` with a `SolidColor` (the shadow colour), written before the background `Fill` so it draws below it. Its `Feather` child has `strength` equal to the CSS blur radius (both are two standard deviations), `offsetX` and `offsetY` equal to the CSS offsets, and `inner` true for `inset`. Inset shadows go after the background. A shadow with spread, or any outer shadow, also gets a `BoxShadow` (4.2) |
+| `box-shadow` | a `Fill` with a `SolidColor` (the shadow colour), written before the background `Fill` so it draws below it. Its `Feather` child has `strength` equal to the CSS blur radius (both are two standard deviations), `offsetX` and `offsetY` equal to the CSS offsets, `spaceValue` 1 (local, so the shadow moves with its box as in CSS), and `inner` true for `inset`. Inset shadows go after the background. Every shadow also gets a `BoxShadow` (4.2), spread 0 when it has none: it gives the shadow CSS's clipping |
 | several backgrounds or shadows | several fills, in CSS's paint order (the first CSS layer is drawn last) |
 
 ### 4.2 Our additions
@@ -274,7 +282,7 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | Per-side borders | `BoxBorder` 60105 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner to the matching inner corner, as CSS. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
 | Box-relative gradients | `BoxGradient`, see the table below | | Recomputes its gradient's start and end (and, for an ellipse, the shader's scale) from the box's padding box at each layout, as CSS's background positioning area |
 | Shadow spread and CSS shadow clipping | `BoxShadow` 60118 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
-| Padding-box clip | none: implied by CSS mode | | A CSS box whose `overflow-x` or `overflow-y` is not visible clips its children to its padding box, with inner radii. `clip` and `hidden` on one axis leave the other axis unclipped when it is visible, as CSS computes. A translated box keeps Rive's clip at its outer edge from `LayoutComponent.clip` |
+| Padding-box clip | none: implied by CSS mode | | A CSS box whose computed `overflow-x` or `overflow-y` is not visible clips its children to its padding box, with inner radii when both axes clip. As CSS computes, `hidden`, `scroll` or `auto` on one axis turns `visible` on the other into `auto` (and `clip` into `hidden`), so both axes clip; `clip` with `visible` clips only its own axis, without radii. A translated box keeps Rive's clip at its outer edge from `LayoutComponent.clip` |
 
 `BoxGradient` keys:
 
@@ -290,6 +298,32 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | 60117 | `toCorner` | uint8 | linear only: 0 none (use angle), 1 to top right, 2 to bottom right, 3 to bottom left, 4 to top left (CSS's corner angle, which depends on the box's shape) | 0 |
 
 Stops keep Rive's `GradientStop` positions (0 to 1) and colours.
+
+### 4.3 Checked against Chrome
+
+The runtime's box paint is compared with Chrome 155's pixels for the same CSS
+(`crates/nuxie-renderer/src/deferred/gm/css_box_paint.rs`, references in
+`fixtures/css_layout/chrome/` from `tools/css-layout/chrome-references.sh`):
+
+- Shadows: a blur alone, offsets with spread, outer-only clipping, an inset shadow
+  inside a border, and a rounded box. With `strength` equal to the CSS blur
+  radius the mean difference is under half a level (of 255) in every case, and
+  half or double that strength is clearly worse, so Rive's feather is two
+  standard deviations, as CSS's blur radius is. Straight edges differ by at most
+  8 levels; the rounded knock-out's corner arcs are anti-aliased less than
+  Chrome's on under a hundred edge pixels.
+- Gradients: an angle, a corner, a farthest-corner ellipse and a closest-side
+  circle at a position, all within 2 levels.
+- Per-side borders with two colours and a radius: a mean difference of 0.27
+  levels; only pixels on the diagonal joins and curved edges differ.
+
+Known differences in step 1:
+
+- A gradient fills the border box with its end colours past the padding box,
+  where CSS repeats the background image (its initial `background-repeat`).
+  They differ only under a transparent border.
+- Shadows and per-side borders drawn by a `ForegroundLayoutDrawable` keep
+  Rive's own geometry.
 
 Refused in step 1:
 

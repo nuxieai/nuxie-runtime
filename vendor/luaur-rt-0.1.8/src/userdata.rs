@@ -28,6 +28,7 @@ use std::marker::PhantomData;
 
 use crate::callback::{create_callback_function, multi_value_callback, BoxedCallback};
 use crate::error::{Error, Result};
+use crate::stack_slot::FrameSlot;
 use crate::state::{Lua, LuaRef};
 use crate::sync::{MaybeSend, MaybeSync, NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
@@ -1576,14 +1577,14 @@ pub(crate) fn userdata_return_value<T: UserData + MaybeSend + MaybeSync + 'stati
         )?)));
     }
     unsafe { push_userdata(lua, data)? };
-    Ok(ReturnValues::Pushed(1))
+    Ok(ReturnValues::Pushed(crate::traits::PushedCount::new(1)))
 }
 
 /// A userdata held in a stack slot by [`Lua::with_stack_userdata`], with no
 /// registry handle.
 pub struct StackUserData<'a, T> {
     lua: &'a Lua,
-    slot: c_int,
+    slot: FrameSlot,
     _marker: PhantomData<T>,
 }
 
@@ -1631,13 +1632,18 @@ unsafe fn borrow_mut_at<'a, U: 'static>(lua: &Lua, slot: c_int) -> Result<UserDa
 /// from the callback's stack for the call's duration.
 pub struct CallArgs<'a> {
     lua: &'a Lua,
-    start: c_int,
+    /// The first argument's slot; usable only in the callback's own frame.
+    start: FrameSlot,
     count: c_int,
 }
 
 impl<'a> CallArgs<'a> {
     fn new(lua: &'a Lua, start: c_int, count: c_int) -> Self {
-        Self { lua, start, count }
+        Self {
+            lua,
+            start: FrameSlot::current(lua.state(), start),
+            count,
+        }
     }
 
     /// The number of arguments.
@@ -1654,7 +1660,7 @@ impl<'a> CallArgs<'a> {
     /// converts it.
     pub fn get<V: FromLua>(&self, i: usize) -> Result<V> {
         V::from_lua(
-            stack_arg(self.lua, self.start, self.count, i as c_int)?,
+            stack_arg(self.lua, self.start.index()?, self.count, i as c_int)?,
             self.lua,
         )
     }
@@ -1662,15 +1668,15 @@ impl<'a> CallArgs<'a> {
     /// Argument `i` as a userdata, failing as an [`AnyUserData`] argument
     /// does when it is not one.
     pub fn userdata(&self, i: usize) -> Result<ArgUserData<'_>> {
+        let start = self.start.index()?;
         let i = i as c_int;
-        let slot = self.start + i;
-        if i < self.count && unsafe { lua_type(self.lua.state(), slot) } == ttype::USERDATA {
+        if i < self.count && unsafe { lua_type(self.lua.state(), start + i) } == ttype::USERDATA {
             return Ok(ArgUserData {
                 lua: self.lua,
-                slot,
+                slot: self.start.above(i),
             });
         }
-        let value = stack_arg(self.lua, self.start, self.count, i)?;
+        let value = stack_arg(self.lua, start, self.count, i)?;
         match AnyUserData::from_lua(value, self.lua) {
             Err(error) => Err(error),
             // Only a full userdata converts, and those are read in place above.
@@ -1679,27 +1685,32 @@ impl<'a> CallArgs<'a> {
     }
 }
 
-/// A userdata argument held in its stack slot (see [`CallArgs::userdata`]).
+/// A userdata argument held in its stack slot (see [`CallArgs::userdata`]),
+/// usable only in the callback's own call frame.
 pub struct ArgUserData<'a> {
     lua: &'a Lua,
-    slot: c_int,
+    slot: FrameSlot,
 }
 
 impl ArgUserData<'_> {
     /// Immutably borrow the value as `U`, as [`AnyUserData::borrow`] does.
     pub fn borrow<U: 'static>(&self) -> Result<UserDataRef<'_, U>> {
         // The argument slot roots the userdata for the call.
-        unsafe { borrow_at::<U>(self.lua, self.slot) }
+        unsafe { borrow_at::<U>(self.lua, self.slot.index()?) }
     }
 
     /// Mutably borrow the value as `U`, as [`AnyUserData::borrow_mut`] does.
     pub fn borrow_mut<U: 'static>(&self) -> Result<UserDataRefMut<'_, U>> {
-        unsafe { borrow_mut_at::<U>(self.lua, self.slot) }
+        unsafe { borrow_mut_at::<U>(self.lua, self.slot.index()?) }
     }
 
-    /// Whether the value is a live `U`, as [`AnyUserData::is`] answers.
+    /// Whether the value is a live `U`, as [`AnyUserData::is`] answers
+    /// (`false` outside the callback's frame).
     pub fn is<U: 'static>(&self) -> bool {
-        match unsafe { cell_at::<U>(self.lua.state(), self.slot) } {
+        let Ok(slot) = self.slot.index() else {
+            return false;
+        };
+        match unsafe { cell_at::<U>(self.lua.state(), slot) } {
             Ok(cell) => cell.cell.borrow().is_some(),
             Err(_) => false,
         }
@@ -1707,15 +1718,16 @@ impl ArgUserData<'_> {
 
     /// A handle to the value.
     pub fn to_any(&self) -> Result<AnyUserData> {
-        AnyUserData::from_lua(self.lua.value_from_stack(self.slot)?, self.lua)
+        AnyUserData::from_lua(self.lua.value_from_stack(self.slot.index()?)?, self.lua)
     }
 }
 
 impl<T: 'static> StackUserData<'_, T> {
-    /// Immutably borrow the value, as [`AnyUserData::borrow`] does.
+    /// Immutably borrow the value, as [`AnyUserData::borrow`] does. Fails
+    /// outside the call frame that holds the slot.
     pub fn borrow(&self) -> Result<UserDataRef<'_, T>> {
         // The slot roots the userdata for the borrow's lifetime.
-        unsafe { borrow_at::<T>(self.lua, self.slot) }
+        unsafe { borrow_at::<T>(self.lua, self.slot.index()?) }
     }
 
     /// The userdata as a call argument, pushed from its slot.
@@ -1745,7 +1757,7 @@ impl Lua {
             push_userdata(self, data)?;
             let userdata = StackUserData {
                 lua: self,
-                slot: lua_gettop(state),
+                slot: FrameSlot::current(state, lua_gettop(state)),
                 _marker: PhantomData,
             };
             Ok(with(&userdata))

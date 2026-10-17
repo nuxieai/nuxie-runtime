@@ -36,7 +36,7 @@ fn field_functions_run_in_place() -> Result<()> {
     assert!(object.with_field_function("scale", |_| ())?.is_none());
     assert!(object.with_field_function("missing", |_| ())?.is_none());
     let scale = object.with_field("scale", |field| {
-        assert!(field.as_function().is_none());
+        assert!(field.as_function()?.is_none());
         field.to_value()
     })??;
     assert!(matches!(scale, Value::Integer(2)));

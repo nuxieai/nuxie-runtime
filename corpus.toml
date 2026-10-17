@@ -567,9 +567,12 @@ divergence_signature = "line 977: rust `drawPath path={id=2,fillRule=0,path={ver
 # Previous reviewed signature: line 3171: rust `transform matrix=[1,0,0,1,857.432861,628.212891]` vs c++ `transform matrix=[1,0,0,1,864.363525,628.212891]`
 scripted_divergence_signature = "line 977: rust `drawPath path={id=2,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,40),(0,17.9086094),(17.9086094,0),(40,0),(10134,0),(10156.0918,0)...[bytes=466 fnv1a=cfc8a8b8ac274407]` vs c++ `drawPath path={id=2,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,40),(0,17.9086094),(17.9086094,0),(40,0),(968,0),(990.09137,0),(1...[bytes=456 fnv1a=fe789a26b3c6be89]`"
 
-rust_stream_sha256 = "74aeedc555c29b5d03b38f8381a5881756377588ede21d603ae555706bafd1e4"
+# Previous reviewed stream (bca2243599): 74aeedc555c29b5d03b38f8381a5881756377588ede21d603ae555706bafd1e4. The update
+# pass now measures the grouped content at its laid-out transforms; line 3398 y scale 0.170283392 became C++'s 0.159999996.
+rust_stream_sha256 = "e8d7b74d8cc488aae3f54a81696c868cb20357c7abb283f3ed7b998d23e31e18"
 
-scripted_rust_stream_sha256 = "b64490df80162d38126597fcaa09f1b74c3cb852d7ce5b14da774fd853d9572d"
+# Previous reviewed scripted stream (bca2243599): b64490df80162d38126597fcaa09f1b74c3cb852d7ce5b14da774fd853d9572d.
+scripted_rust_stream_sha256 = "d0d09d455bc28b689b832d623c6f2b188844584b60e558d332e569d216180943"
 [[file]]
 id = "death_knight"
 path = "tests/unit_tests/assets/death_knight.riv"

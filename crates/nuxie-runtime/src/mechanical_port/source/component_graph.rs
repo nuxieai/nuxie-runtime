@@ -12,7 +12,7 @@
 //! dirt shares a cell with its scheduling bits, and occurrences outside the
 //! order (DrawTargets, cycle remnants); those keep the occurrence-handle path.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::mechanical_port::source::{
@@ -201,6 +201,121 @@ pub(crate) struct ComponentGraph {
     occurrences: Box<[ComponentOccurrenceHandle]>,
     outside: Box<[ComponentOccurrenceHandle]>,
     artboard: RuntimeArtboardDirtyHandle,
+    measured: MeasuredHosts,
+}
+
+/// The dirt whose update recomputes something a layout box can measure as
+/// natural size: a local transform, a path or its vertices, an n-slice.
+const MEASURED_INPUTS: ComponentDirt = ComponentDirt(
+    ComponentDirt::TRANSFORM.0
+        | ComponentDirt::PATH.0
+        | ComponentDirt::VERTICES.0
+        | ComponentDirt::N_SLICER.0,
+);
+const NO_HOST: u32 = u32::MAX;
+
+/// For each member below a layout box, the box's child that contains it: the
+/// host whose natural size the box measures (UNIV-4844). Fixed with the
+/// graph's edges; whether the box measures drawing content stays live.
+struct MeasuredHosts {
+    member_host: Box<[u32]>,
+    // (box, host) for each distinct host.
+    hosts: Box<[(CoreHandle, CoreHandle)]>,
+    pending: Box<[Cell<bool>]>,
+    queue: RefCell<Vec<u32>>,
+    // Content outside the dependency order (joysticks) queued by handle.
+    outside: RefCell<Vec<CoreHandle>>,
+}
+
+impl MeasuredHosts {
+    /// The box's child that contains `handle` (or is it), with that box: the
+    /// nearest LayoutComponent ancestor. A box's own transform is layout's
+    /// output, not its content.
+    fn host_of(handle: &CoreHandle) -> Option<(CoreHandle, CoreHandle)> {
+        use crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase;
+        if handle.is_type_of(LayoutComponentBase::TYPE_KEY) {
+            return None;
+        }
+        let mut child = handle.clone();
+        let mut parent = handle
+            .with(|object| object.component_parent_handle())
+            .flatten();
+        while let Some(current) = parent {
+            if current.is_type_of(LayoutComponentBase::TYPE_KEY) {
+                return Some((current, child));
+            }
+            parent = current
+                .with(|object| object.component_parent_handle())
+                .flatten();
+            child = current;
+        }
+        None
+    }
+
+    fn build(root: &CoreHandle, order: &[ComponentOccurrenceHandle]) -> Self {
+        let mut index = std::collections::HashMap::<CoreHandle, u32>::new();
+        let mut hosts = Vec::new();
+        let member_host = order
+            .iter()
+            .map(|occurrence| {
+                let ComponentOccurrenceHandle::Authored(handle) = occurrence else {
+                    return NO_HOST;
+                };
+                if handle == root {
+                    return NO_HOST;
+                }
+                let Some((owner, host)) = Self::host_of(handle) else {
+                    return NO_HOST;
+                };
+                *index.entry(host.clone()).or_insert_with(|| {
+                    hosts.push((owner, host));
+                    hosts.len() as u32 - 1
+                })
+            })
+            .collect();
+        Self {
+            member_host,
+            pending: (0..hosts.len()).map(|_| Cell::new(false)).collect(),
+            hosts: hosts.into_boxed_slice(),
+            queue: RefCell::new(Vec::new()),
+            outside: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Member `i` just updated with `dirt`: queue its host once per pass.
+    #[inline]
+    fn note(&self, i: usize, dirt: ComponentDirt) {
+        if !dirt.intersects(MEASURED_INPUTS) {
+            return;
+        }
+        let host = self.member_host[i];
+        if host == NO_HOST || self.pending[host as usize].replace(true) {
+            return;
+        }
+        self.queue.borrow_mut().push(host);
+    }
+
+    /// Compare each queued host's natural size with what its box measured.
+    fn check(&self) {
+        use crate::mechanical_port::source::layout_component::LayoutComponent;
+        if !self.outside.borrow().is_empty() {
+            let outside = std::mem::take(&mut *self.outside.borrow_mut());
+            for changed in outside {
+                if let Some((owner, host)) = Self::host_of(&changed) {
+                    LayoutComponent::check_measured_host_occurrence(&owner, &host);
+                }
+            }
+        }
+        if self.queue.borrow().is_empty() {
+            return;
+        }
+        let queue = std::mem::take(&mut *self.queue.borrow_mut());
+        for host in queue {
+            self.pending[host as usize].set(false);
+            let (owner, host) = &self.hosts[host as usize];
+            LayoutComponent::check_measured_host_occurrence(owner, host);
+        }
+    }
 }
 
 impl ComponentGraph {
@@ -319,6 +434,7 @@ impl ComponentGraph {
             occurrences: order.to_vec().into_boxed_slice(),
             outside: outside.into_boxed_slice(),
             artboard,
+            measured: MeasuredHosts::build(root, order),
         });
         for (index, occurrence) in order.iter().enumerate() {
             if graph.nodes[index].on_dirty.is_outside() {
@@ -335,6 +451,15 @@ impl ComponentGraph {
         // them, whatever an earlier walk measured.
         graph.artboard.collapse_changed();
         graph
+    }
+
+    /// `changed` is outside the dependency order but holds content a layout
+    /// box may measure; check it at the end of the next update step.
+    pub(crate) fn queue_measured_content(&self, changed: CoreHandle) {
+        let mut outside = self.measured.outside.borrow_mut();
+        if !outside.contains(&changed) {
+            outside.push(changed);
+        }
     }
 
     /// Member `i`'s Component dirt, wherever it lives.
@@ -700,6 +825,9 @@ impl ComponentGraph {
                 }
                 i += 1;
             }
+            // Natural sizes read the matrices and paths this step computed;
+            // a box whose measured content moved lays out on the next pass.
+            self.measured.check();
             step += 1;
         }
     }
@@ -738,6 +866,7 @@ impl ComponentGraph {
             }
             Update::Handler | Update::Receiver => self.update_owner(i, handle, dirt),
         }
+        self.measured.note(i, dirt);
         true
     }
 

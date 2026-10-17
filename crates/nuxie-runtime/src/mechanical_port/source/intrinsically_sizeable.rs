@@ -93,106 +93,6 @@ pub(crate) fn natural_size_for_layout_host(
     })
 }
 
-/// Marks the Layout box that measures the natural size `changed` feeds: the
-/// nearest Layout ancestor of `parent`, `changed`'s parent. A host's own size
-/// (`own_size`) is read by the box it sits in directly; anything changed
-/// below one of the box's drawing groups is read only by a leaf box that
-/// measures drawing content. `own_shape` is the Shape a path belongs to,
-/// which is part of the path's host rather than a group (UNIV-4844).
-pub(crate) fn mark_measuring_layout_dirty(
-    mut parent: Option<crate::source::core::CoreHandle>,
-    own_shape: Option<&crate::source::core::CoreHandle>,
-    own_size: bool,
-) {
-    use crate::source::{
-        generated::{
-            layout_component_base::LayoutComponentBase,
-            transform_component_base::TransformComponentBase,
-        },
-        layout_component::LayoutComponent,
-    };
-    let mut through_group = false;
-    while let Some(current) = parent {
-        if current.is_type_of(LayoutComponentBase::TYPE_KEY) {
-            let mark = if through_group {
-                current
-                    .with(|object| {
-                        object
-                            .as_layout_component()
-                            .is_some_and(LayoutComponent::measures_drawing_content)
-                    })
-                    .unwrap_or(false)
-            } else {
-                own_size
-            };
-            if mark {
-                LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
-            }
-            return;
-        }
-        if current.is_type_of(TransformComponentBase::TYPE_KEY) && own_shape != Some(&current) {
-            through_group = true;
-        }
-        parent = current
-            .with(|current| current.component_parent_handle())
-            .flatten();
-    }
-}
-
-/// Whether `property_key` is an authored input of a local transform.
-pub(crate) fn is_transform_input(property_key: i32) -> bool {
-    use crate::source::generated::{
-        bones::{bone_base::BoneBase, root_bone_base::RootBoneBase},
-        node_base::NodeBase,
-        transform_component_base::TransformComponentBase,
-    };
-    u16::try_from(property_key).is_ok_and(|key| {
-        matches!(
-            key,
-            NodeBase::X_PROPERTY_KEY
-                | NodeBase::Y_PROPERTY_KEY
-                | RootBoneBase::X_PROPERTY_KEY
-                | RootBoneBase::Y_PROPERTY_KEY
-                | BoneBase::LENGTH_PROPERTY_KEY
-                | TransformComponentBase::ROTATION_PROPERTY_KEY
-                | TransformComponentBase::SCALE_X_PROPERTY_KEY
-                | TransformComponentBase::SCALE_Y_PROPERTY_KEY
-        )
-    })
-}
-
-/// An authored transform input of `changed` moved: a leaf box that measures
-/// it below one of its children sizes it again. A child's own transform is
-/// not part of that box's natural size; a path's is, through its shape.
-pub(crate) fn transform_input_changed(changed: &crate::source::core::CoreHandle) {
-    let parent = changed
-        .with(|object| object.component_parent_handle())
-        .flatten();
-    mark_measuring_layout_dirty(parent, None, false);
-}
-
-/// A drawing child's local transform from its current inputs, as
-/// TransformComponent composes it. Layout runs before the update pass
-/// recomputes the cached matrix, so a group measures the move, turn or scale
-/// applied this frame. Layout boxes keep their cached, layout-placed matrix.
-pub(crate) fn authored_local_transform(
-    object: &dyn crate::source::core::CoreObject,
-) -> Option<crate::source::math::mat2d::Mat2D> {
-    use crate::source::math::mat2d::Mat2D;
-    let component = object.as_transform_component()?;
-    if object.as_layout_component().is_some()
-        || (object.as_node().is_none() && object.as_bone().is_none())
-    {
-        return Some(component.transform());
-    }
-    let translation = object.transform_component_translation();
-    let mut transform = Mat2D::from_rotation(component.base.rotation());
-    transform[4] = translation.x;
-    transform[5] = translation.y;
-    transform.scale_by_values(component.base.scale_x(), component.base.scale_y());
-    Some(transform)
-}
-
 /// `transform` maps the host's local space into the measured box's space;
 /// None is the measured host itself. Shapes bound their actual geometry, so a
 /// rotated curve keeps its precise extent rather than a rotated box.
@@ -265,7 +165,9 @@ fn natural_bounds_for_layout_host(
             let mut result: Option<Aabb> = None;
             for child in children {
                 let local = child.with(|object| {
-                    authored_local_transform(object).unwrap_or_else(Mat2D::identity)
+                    object
+                        .as_transform_component()
+                        .map_or_else(Mat2D::identity, |transform| transform.transform())
                 })?;
                 if let Some(bounds) = natural_bounds_for_layout_host(&child, Some(outer * local))? {
                     if let Some(result) = &mut result {

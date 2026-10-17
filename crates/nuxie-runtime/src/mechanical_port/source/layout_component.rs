@@ -297,6 +297,8 @@ pub struct LayoutComponent {
     forced_width: f32,
     forced_height: f32,
     virtual_grid: Option<Box<VirtualGrid>>,
+    /// The natural size this box last measured for each host (UNIV-4844).
+    measured_natural: RefCell<Vec<(CoreHandle, Option<Vec2D>)>>,
     grid_column_lines: Vec<f32>,
     grid_row_lines: Vec<f32>,
     grid_column_gap: f32,
@@ -343,6 +345,7 @@ impl Default for LayoutComponent {
             forced_width: f32::NAN,
             forced_height: f32::NAN,
             virtual_grid: None,
+            measured_natural: RefCell::new(Vec::new()),
             grid_column_lines: Vec::new(),
             grid_row_lines: Vec::new(),
             grid_column_gap: 0.0,
@@ -2268,6 +2271,57 @@ impl LayoutComponent {
                 && (0..2).any(|axis| !self.natural_content_hosts(axis).is_empty())))
             && self.is_leaf()
     }
+    /// Records the natural size this box measured for `host`.
+    fn note_measured_natural(&self, host: &CoreHandle, natural: Option<Vec2D>) {
+        let mut measured = self.measured_natural.borrow_mut();
+        match measured.iter_mut().find(|(measured, _)| measured == host) {
+            Some(entry) => entry.1 = natural,
+            None => measured.push((host.clone(), natural)),
+        }
+    }
+    /// The update pass recomputed something inside `host`, a child of
+    /// `owner`. When `owner` measures drawing content and measured `host`,
+    /// compare its natural size now, from the matrices and paths the pass
+    /// computed, with the one measured; a change marks the box, which lays
+    /// out on the next pass, as upstream does for a participant whose
+    /// intrinsic bounds change (PathComposer::intrinsicBoundsChanged).
+    /// Layout's own write-back is not authored, so it never registers.
+    pub(crate) fn check_measured_host_occurrence(owner: &CoreHandle, host: &CoreHandle) {
+        let measured = owner
+            .with(|object| {
+                let layout = object.as_layout_component()?;
+                if !layout.measures_drawing_content() {
+                    return None;
+                }
+                layout
+                    .measured_natural
+                    .borrow()
+                    .iter()
+                    .find(|(measured, _)| measured == host)
+                    .map(|(_, natural)| *natural)
+            })
+            .flatten();
+        let Some(measured) = measured else {
+            return;
+        };
+        let natural = crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
+        // Within a few ULPs, as upstream compares a participant's bounds.
+        let moved =
+            |a: f32, b: f32| (a - b).abs() > 16.0 * f32::EPSILON * a.abs().max(b.abs()).max(1.0);
+        let changed = match (measured, natural) {
+            (Some(a), Some(b)) => moved(a.x, b.x) || moved(a.y, b.y),
+            (a, b) => a.is_some() != b.is_some(),
+        };
+        if !changed {
+            return;
+        }
+        owner.with(|object| {
+            if let Some(layout) = object.as_layout_component() {
+                layout.note_measured_natural(host, natural);
+            }
+        });
+        Self::mark_layout_node_dirty_occurrence(owner, false);
+    }
     /// Whether this box measures drawing content for its natural size: a
     /// leaf (no child layout nodes) that hugs, or any leaf but an artboard,
     /// as in is_intrinsic_leaf without resolving its content hosts.
@@ -2300,8 +2354,15 @@ impl LayoutComponent {
                         && child
                             .with(|object| object.as_nested_artboard().is_some())
                             .unwrap_or(false))
-                    && crate::source::intrinsically_sizeable::natural_size_for_layout_host(child)
-                        .is_some()
+                    && {
+                        let natural =
+                            crate::source::intrinsically_sizeable::natural_size_for_layout_host(
+                                child,
+                            );
+                        // What the update pass compares against (UNIV-4844).
+                        self.note_measured_natural(child, natural);
+                        natural.is_some()
+                    }
             })
             .cloned()
             .collect()
@@ -3380,7 +3441,15 @@ impl LayoutComponent {
             {
                 None
             } else {
-                crate::source::intrinsically_sizeable::natural_size_for_layout_host(host)
+                let natural =
+                    crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
+                // What the update pass compares against (UNIV-4844).
+                owner.with(|object| {
+                    if let Some(layout) = object.as_layout_component() {
+                        layout.note_measured_natural(host, natural);
+                    }
+                });
+                natural
             };
             let mut measured = if let Some(natural) = natural {
                 let axis = |natural: f32, offer: f32, mode| {
@@ -5273,3 +5342,7 @@ mod packed_layout_tests {
 #[cfg(test)]
 #[path = "layout_fit_content_tests.rs"]
 mod layout_fit_content_tests;
+
+#[cfg(test)]
+#[path = "layout_measured_content_tests.rs"]
+mod layout_measured_content_tests;

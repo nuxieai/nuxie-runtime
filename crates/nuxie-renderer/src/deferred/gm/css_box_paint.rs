@@ -97,6 +97,18 @@ const LAYOUT_CSS_STYLE: u16 = 60002;
 const BOX_SHADOW: u16 = 60005;
 const STROKE: u16 = 24;
 const BOX_BORDER: u16 = 60003;
+const LINEAR_GRADIENT: u16 = 22;
+const RADIAL_GRADIENT: u16 = 17;
+const GRADIENT_STOP: u16 = 19;
+const STOP_COLOR: u16 = 38;
+const STOP_POSITION: u16 = 39;
+const BOX_GRADIENT: u16 = 60004;
+const GRADIENT_ANGLE: u16 = 60106;
+const GRADIENT_SHAPE: u16 = 60107;
+const GRADIENT_SIZE: u16 = 60108;
+const GRADIENT_CENTER_X_PERCENT: u16 = 60110;
+const GRADIENT_CENTER_Y_PERCENT: u16 = 60112;
+const GRADIENT_TO_CORNER: u16 = 60117;
 const BORDER_SIDES: u16 = 60105;
 const PARENT_ID: u16 = 5;
 const WIDTH: u16 = 7;
@@ -462,5 +474,133 @@ fn css_border_sides_match_chrome() {
     assert!(
         mean <= 1.0 && outliers <= 150,
         "border_sides: mean {mean}, max {max}, {outliers} outliers"
+    );
+}
+
+/// A 100 by 60 CSS box at (50, 70) with one gradient background and its
+/// BoxGradient (`placement`: uint and float properties).
+fn gradient_scene(radial: bool, colors: [u32; 2], placement: &[(u16, f32)]) -> Vec<u8> {
+    let mut riv = Riv::default();
+    riv.object(BACKBOARD).end();
+    // 0 artboard, 1 box, 2 record, 3 fill, 4 gradient, 5 and 6 stops,
+    // 7 BoxGradient, 8 and 9 styles.
+    riv.object(ARTBOARD)
+        .float(WIDTH, SIZE as f32)
+        .float(HEIGHT, SIZE as f32)
+        .uint(STYLE_ID, 8)
+        .end();
+    riv.object(LAYOUT_COMPONENT)
+        .uint(PARENT_ID, 0)
+        .uint(STYLE_ID, 9)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(PARENT_ID, 1)
+        .uint(CSS_POSITION, 2)
+        .uint(CSS_INSET_LEFT_KIND, 1)
+        .float(CSS_INSET_LEFT, 50.0)
+        .uint(CSS_INSET_TOP_KIND, 1)
+        .float(CSS_INSET_TOP, 70.0)
+        .uint(CSS_WIDTH_KIND, 1)
+        .float(CSS_WIDTH, 100.0)
+        .uint(CSS_HEIGHT_KIND, 1)
+        .float(CSS_HEIGHT, 60.0)
+        .end();
+    riv.object(FILL).uint(PARENT_ID, 1).end();
+    riv.object(if radial {
+        RADIAL_GRADIENT
+    } else {
+        LINEAR_GRADIENT
+    })
+    .uint(PARENT_ID, 3)
+    .end();
+    for (color, position) in colors.into_iter().zip([0.0, 1.0]) {
+        riv.object(GRADIENT_STOP)
+            .uint(PARENT_ID, 4)
+            .color(STOP_COLOR, color)
+            .float(STOP_POSITION, position)
+            .end();
+    }
+    riv.object(BOX_GRADIENT).uint(PARENT_ID, 4);
+    for &(key, value) in placement {
+        if matches!(key, GRADIENT_SHAPE | GRADIENT_SIZE | GRADIENT_TO_CORNER) {
+            riv.uint(key, value as u64);
+        } else {
+            riv.float(key, value);
+        }
+    }
+    riv.end();
+    riv.object(LAYOUT_COMPONENT_STYLE).uint(PARENT_ID, 0).end();
+    riv.object(LAYOUT_COMPONENT_STYLE).uint(PARENT_ID, 1).end();
+    riv.bytes()
+}
+
+fn check_gradient(name: &str, bytes: &[u8]) {
+    let reference = chrome(name);
+    let ours = render(bytes);
+    let (mean, max, outliers) = difference(&reference, &ours);
+    let path = std::env::temp_dir().join(format!("nuxie-css-{name}.png"));
+    pixel_compare::RgbaImage::new(SIZE, SIZE, ours)
+        .unwrap()
+        .write_png(&path)
+        .unwrap();
+    eprintln!(
+        "{name}: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
+        path.display()
+    );
+    // Interpolation and dithering differ by a level or two.
+    assert!(
+        mean <= 1.0 && max <= 8,
+        "{name}: mean {mean}, max {max}, {outliers} outliers"
+    );
+}
+
+/// `linear-gradient(135deg, red, blue)`: the line through the centre whose
+/// ends' perpendiculars touch the far corners.
+#[test]
+fn css_gradient_linear_angle_matches_chrome() {
+    check_gradient(
+        "gradient_linear_angle",
+        &gradient_scene(false, [0xffff0000, 0xff0000ff], &[(GRADIENT_ANGLE, 135.0)]),
+    );
+}
+
+/// `linear-gradient(to top right, lime, black)`: CSS's corner angle, which
+/// depends on the box's shape.
+#[test]
+fn css_gradient_linear_corner_matches_chrome() {
+    check_gradient(
+        "gradient_linear_corner",
+        &gradient_scene(
+            false,
+            [0xff00ff00, 0xff000000],
+            &[(GRADIENT_TO_CORNER, 1.0)],
+        ),
+    );
+}
+
+/// `radial-gradient(white, black)`: a farthest-corner ellipse at the centre.
+#[test]
+fn css_gradient_radial_ellipse_matches_chrome() {
+    check_gradient(
+        "gradient_radial_ellipse",
+        &gradient_scene(true, [0xffffffff, 0xff000000], &[]),
+    );
+}
+
+/// `radial-gradient(circle closest-side at 30% 40%, red, blue)`.
+#[test]
+fn css_gradient_radial_circle_matches_chrome() {
+    check_gradient(
+        "gradient_radial_circle",
+        &gradient_scene(
+            true,
+            [0xffff0000, 0xff0000ff],
+            &[
+                (GRADIENT_SHAPE, 1.0),
+                (GRADIENT_SIZE, 3.0),
+                (GRADIENT_CENTER_X_PERCENT, 30.0),
+                (GRADIENT_CENTER_Y_PERCENT, 40.0),
+            ],
+        ),
     );
 }

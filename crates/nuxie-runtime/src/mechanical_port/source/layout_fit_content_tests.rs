@@ -1726,3 +1726,46 @@ fn css_grouped_hosts_keep_their_origins() {
     });
     assert_eq!(widths, [200.0, 200.0]);
 }
+
+#[test]
+fn css_empty_shape_adds_no_bounds_to_a_group() {
+    use crate::source::generated::core_registry::CoreField;
+    use crate::source::math::mat2d::Mat2D;
+    use crate::source::shapes::{rectangle::Rectangle, shape::Shape};
+    // An 80-point shape placed away from the group origin, beside a shape
+    // with no paths: the group is 80 points wide, not 80 plus the gap.
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(1000.0), true);
+    let subject = layout(&arena, Some(&root), None, false);
+    let group = arena.insert(crate::source::node::Node::default());
+    attach(&arena, &subject, &group);
+    let shape = arena.insert(Shape::default());
+    let path = arena.insert(Rectangle::default());
+    path.with_mut(|o| {
+        o.set_double(CoreField::ParametricPathWidth, 80.0);
+        o.set_double(CoreField::ParametricPathHeight, 30.0);
+    })
+    .unwrap();
+    attach(&arena, &shape, &path);
+    shape
+        .with_downcast_mut::<Shape, _>(|s| s.add_path(path.clone()))
+        .unwrap();
+    // Stand in for the update pass that composes the shape's position.
+    shape
+        .with_mut(|o| {
+            o.as_transform_component_mut()
+                .unwrap()
+                .with_transform_mut(|t| *t = Mat2D::from_translate(140.0, 0.0))
+        })
+        .unwrap();
+    attach(&arena, &group, &shape);
+    let empty = arena.insert(Shape::default());
+    attach(&arena, &group, &empty);
+    for node in [&subject, &root] {
+        LayoutComponent::sync_style_occurrence(node);
+        LayoutComponent::sync_layout_children_occurrence(node);
+    }
+    LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+    LayoutComponent::update_layout_bounds_occurrence(&root, false);
+    assert_eq!(solved(&subject).width(), 80.0);
+}

@@ -106,7 +106,8 @@ fn natural_bounds_for_layout_host(
         solo::Solo,
     };
     enum Content {
-        Placed(Aabb),
+        // None: no geometry, which a group does not union.
+        Placed(Option<Aabb>),
         Rect(Aabb),
         Children(Vec<crate::source::core::CoreHandle>),
         Unknown,
@@ -160,7 +161,7 @@ fn natural_bounds_for_layout_host(
         )
     })?;
     match content {
-        Content::Placed(bounds) => Some(Some(bounds)),
+        Content::Placed(bounds) => Some(bounds),
         // A transformed rectangle's bounds are its mapped corners exactly.
         Content::Rect(bounds) => {
             Some(Some(transform.map_or(bounds, |transform| {

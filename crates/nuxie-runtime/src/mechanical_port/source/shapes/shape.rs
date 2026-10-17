@@ -732,7 +732,8 @@ impl Shape {
     /// width and height. Other paths, participants and shapes inside drawing
     /// groups answer with the precise bounds of their geometry at the
     /// authored size, mapped by `transform` into the measured box's space.
-    pub(crate) fn natural_bounds_for_layout(&self, transform: Option<Mat2D>) -> Aabb {
+    /// None when no path has geometry, so a group does not union a point.
+    pub(crate) fn natural_bounds_for_layout(&self, transform: Option<Mat2D>) -> Option<Aabb> {
         let measured_directly = transform.is_none() && !self.is_participating_in_layout();
         let outer = transform.unwrap_or_else(Mat2D::identity);
         let mut size = Vec2D::default();
@@ -782,9 +783,9 @@ impl Shape {
             });
         }
         if measured_directly {
-            Aabb::from_ltwh(0.0, 0.0, size.x, size.y)
+            Some(Aabb::from_ltwh(0.0, 0.0, size.x, size.y))
         } else {
-            result.unwrap_or_default()
+            result
         }
     }
 
@@ -832,8 +833,10 @@ impl Shape {
     }
 
     pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
-        let bounds = self.natural_bounds_for_layout(None);
-        Vec2D::new(bounds.width(), bounds.height())
+        self.natural_bounds_for_layout(None)
+            .map_or(Vec2D::default(), |bounds| {
+                Vec2D::new(bounds.width(), bounds.height())
+            })
     }
 
     pub(crate) fn invalidate_intrinsic_bounds(&mut self) {

@@ -1055,3 +1055,74 @@ fn css_record_on_a_participant_host() {
         [10.0, 0.0, 50.0, 20.0]
     );
 }
+
+/// Translated mode: Rive reads the authored flexBasis only for Fill. The
+/// editor writes 0 points on every style, so a Fixed 50% box beside a Fill
+/// keeps its 50% (computed_values_test), and the Fill takes the rest.
+#[test]
+fn translated_fixed_box_ignores_the_authored_flex_basis() {
+    let basis = [
+        U(
+            LayoutComponentStyleBase::FLEX_BASIS_UNITS_VALUE_PROPERTY_KEY,
+            YGUnit::Point as u64,
+        ),
+        F(LayoutComponentStyleBase::FLEX_BASIS_PROPERTY_KEY, 0.0),
+    ];
+    let row_style = |extra: &[P]| {
+        [
+            [U(
+                LayoutComponentStyleBase::FLEX_DIRECTION_VALUE_PROPERTY_KEY,
+                YGFlexDirection::Row as u64,
+            )]
+            .as_slice(),
+            &basis,
+            extra,
+        ]
+        .concat()
+    };
+    let f = scene(
+        (400.0, 100.0),
+        B {
+            name: "Row",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0),
+            ],
+            style: row_style(&[]),
+            children: vec![
+                B {
+                    name: "Half",
+                    component: vec![
+                        F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 50.0),
+                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0),
+                    ],
+                    style: [
+                        basis.as_slice(),
+                        &[U(
+                            LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY,
+                            YGUnit::Percent as u64,
+                        )],
+                    ]
+                    .concat(),
+                    ..B::default()
+                },
+                B {
+                    name: "Rest",
+                    component: vec![F(LayoutComponentBase::FRACTIONAL_WIDTH_PROPERTY_KEY, 1.0)],
+                    style: [
+                        basis.as_slice(),
+                        &[U(
+                            LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                            LayoutScaleType::Fill as u64,
+                        )],
+                    ]
+                    .concat(),
+                    ..B::default()
+                },
+            ],
+            ..B::default()
+        },
+    );
+    assert_eq!(f.bounds("Half")[2], 200.0);
+    assert_eq!(f.bounds("Rest"), [200.0, 0.0, 200.0, 0.0]);
+}

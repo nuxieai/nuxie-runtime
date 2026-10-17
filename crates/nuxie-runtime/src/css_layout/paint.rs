@@ -311,6 +311,118 @@ pub fn box_border(
     geometry
 }
 
+/// Where a gradient goes over a box (`BoxGradient`, docs/CSS_LAYOUT.md,
+/// 4.2): its start and end in the box's space, and the shader transform an
+/// elliptical radial gradient needs (identity otherwise).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GradientGeometry {
+    pub start: Vec2D,
+    pub end: Vec2D,
+    pub transform: crate::source::math::mat2d::Mat2D,
+}
+
+/// CSS's gradient geometry over `area`, the box's padding box (the
+/// background positioning area). Linear: the gradient line through the
+/// centre at `angle` (or toward a corner), as long as CSS makes it, so its
+/// ends' perpendiculars touch the far corners. Radial: the ending shape
+/// from `shape` and `size` at the `at` position; an ellipse is a circle of
+/// its horizontal radius scaled vertically. None for a degenerate radius.
+pub fn gradient_geometry(
+    values: super::CssValues<'_>,
+    area: Aabb,
+    radial: bool,
+) -> Option<GradientGeometry> {
+    use super::keys;
+    use crate::source::math::mat2d::Mat2D;
+    let (width, height) = (area.width(), area.height());
+    let identity = Mat2D::identity();
+    if !radial {
+        let direction = match values.choice(keys::GRADIENT_TO_CORNER) {
+            1 => Vec2D::new(height, -width),
+            2 => Vec2D::new(height, width),
+            3 => Vec2D::new(-height, width),
+            4 => Vec2D::new(-height, -width),
+            _ => {
+                let angle = values.number(keys::GRADIENT_ANGLE).to_radians();
+                Vec2D::new(angle.sin(), -angle.cos())
+            }
+        };
+        let length = (direction.x * direction.x + direction.y * direction.y).sqrt();
+        if length <= 0.0 || !length.is_finite() {
+            return None;
+        }
+        let unit = Vec2D::new(direction.x / length, direction.y / length);
+        let half = (width * unit.x.abs() + height * unit.y.abs()) / 2.0;
+        let center = Vec2D::new(area.left() + width / 2.0, area.top() + height / 2.0);
+        return Some(GradientGeometry {
+            start: Vec2D::new(center.x - unit.x * half, center.y - unit.y * half),
+            end: Vec2D::new(center.x + unit.x * half, center.y + unit.y * half),
+            transform: identity,
+        });
+    }
+    let part = |key: u16, basis: f32| values.number(key) + values.number(key + 1) / 100.0 * basis;
+    let center = Vec2D::new(
+        area.left() + part(keys::GRADIENT_CENTER_X, width),
+        area.top() + part(keys::GRADIENT_CENTER_Y, height),
+    );
+    let sides = (
+        (center.x - area.left()).abs(),
+        (area.right() - center.x).abs(),
+        (center.y - area.top()).abs(),
+        (area.bottom() - center.y).abs(),
+    );
+    let near = Vec2D::new(sides.0.min(sides.1), sides.2.min(sides.3));
+    let far = Vec2D::new(sides.0.max(sides.1), sides.2.max(sides.3));
+    let circle = values.choice(keys::GRADIENT_SHAPE) == 1;
+    let corner_distance = |corner: Vec2D| corner.x.hypot(corner.y);
+    // The ellipse through `corner` with the aspect ratio of `side`.
+    let through = |corner: Vec2D, side: Vec2D| {
+        if circle {
+            let radius = corner_distance(corner);
+            Vec2D::new(radius, radius)
+        } else if side.y <= 0.0 {
+            Vec2D::default()
+        } else {
+            let ratio = side.x / side.y;
+            let y = ((corner.x / ratio).powi(2) + corner.y * corner.y).sqrt();
+            Vec2D::new(ratio * y, y)
+        }
+    };
+    let radii = match values.choice(keys::GRADIENT_SIZE) {
+        1 if circle => Vec2D::new(far.x.max(far.y), far.x.max(far.y)),
+        1 => far,
+        2 => through(near, near),
+        3 if circle => Vec2D::new(near.x.min(near.y), near.x.min(near.y)),
+        3 => near,
+        4 => {
+            let x = part(keys::GRADIENT_RADIUS_X, width).max(0.0);
+            let y = if circle {
+                x
+            } else {
+                part(keys::GRADIENT_RADIUS_Y, height).max(0.0)
+            };
+            Vec2D::new(x, y)
+        }
+        // farthest-corner, the initial size.
+        _ => through(far, far),
+    };
+    if radii.x <= 0.0 || radii.y <= 0.0 || !radii.x.is_finite() || !radii.y.is_finite() {
+        return None;
+    }
+    let transform = if radii.x == radii.y {
+        identity
+    } else {
+        Mat2D::from_translate(center.x, center.y)
+            * Mat2D::from_scale(1.0, radii.y / radii.x)
+            * Mat2D::from_translate(-center.x, -center.y)
+    };
+    Some(GradientGeometry {
+        start: center,
+        end: Vec2D::new(center.x + radii.x, center.y),
+        transform,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,6 +454,59 @@ mod tests {
         assert_eq!(
             padding_box(Aabb::new(0.0, 0.0, 100.0, 50.0), [4.0, 8.0, 12.0, 2.0]),
             Aabb::new(2.0, 4.0, 92.0, 38.0)
+        );
+    }
+
+    #[test]
+    fn gradient_lines_reach_the_far_corners_as_css_does() {
+        use crate::css_layout::{CssValues, keys};
+        let area = Aabb::new(10.0, 20.0, 210.0, 120.0);
+        let values = |overrides: &[(u16, f32)]| {
+            let (first, count) = keys::range(keys::BOX_GRADIENT).unwrap();
+            let mut values: Vec<f32> = (first..first + count as u16)
+                .map(keys::default_value)
+                .collect();
+            for (key, value) in overrides {
+                values[usize::from(key - first)] = *value;
+            }
+            values
+        };
+        let geometry = |overrides: &[(u16, f32)], radial: bool| {
+            let values = values(overrides);
+            gradient_geometry(
+                CssValues {
+                    first: keys::GRADIENT_ANGLE,
+                    values: &values,
+                },
+                area,
+                radial,
+            )
+            .unwrap()
+        };
+        // 180deg (to bottom): the vertical centre line, top to bottom.
+        let down = geometry(&[], false);
+        assert_eq!(
+            (down.start, down.end),
+            (Vec2D::new(110.0, 20.0), Vec2D::new(110.0, 120.0))
+        );
+        // 90deg (to right).
+        let right = geometry(&[(keys::GRADIENT_ANGLE, 90.0)], false);
+        assert!((right.start.x - 10.0).abs() < 1e-4 && (right.end.x - 210.0).abs() < 1e-4);
+        // Farthest-corner ellipse at the centre of a 200 by 100 area: the
+        // farthest-side ellipse (100 by 50) scaled by sqrt(2).
+        let ellipse = geometry(&[], true);
+        assert_eq!(ellipse.start, Vec2D::new(110.0, 70.0));
+        assert!((ellipse.end.x - 110.0 - 100.0 * 2f32.sqrt()).abs() < 1e-3);
+        assert!(ellipse.transform != crate::source::math::mat2d::Mat2D::identity());
+        // A closest-side circle.
+        let circle = geometry(
+            &[(keys::GRADIENT_SHAPE, 1.0), (keys::GRADIENT_SIZE, 3.0)],
+            true,
+        );
+        assert_eq!(circle.end, Vec2D::new(160.0, 70.0));
+        assert_eq!(
+            circle.transform,
+            crate::source::math::mat2d::Mat2D::identity()
         );
     }
 }

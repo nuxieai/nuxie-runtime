@@ -186,6 +186,14 @@ impl LinearGradient {
     ) {
         let mut start = Vec2D::new(self.base.start_x(), self.base.start_y());
         let mut end = Vec2D::new(self.base.end_x(), self.base.end_y());
+        // Our layer (docs/CSS_LAYOUT.md, 4.2): a BoxGradient places this
+        // gradient over its CSS box's padding box, as CSS positions a
+        // background, in place of its authored ends.
+        let box_geometry = self.box_gradient_geometry(kind);
+        if let Some(geometry) = box_geometry {
+            start = geometry.start;
+            end = geometry.end;
+        }
         let world = self.shape_paint_container.as_ref().and_then(|container| {
             container
                 .with(|container| {
@@ -235,6 +243,59 @@ impl LinearGradient {
             };
         }
         self.make_gradient_with_kind(paint, start, end, &self.color_storage, &positions, kind);
+        if let Some(geometry) = box_geometry
+            && !matches!(kind, GradientKind::Angular)
+        {
+            let transform = if paints_in_world_space {
+                Mat2D::identity()
+            } else {
+                geometry.transform
+            };
+            paint.shader_transform(nuxie_render_api::Mat2D(*transform.values()));
+        }
+    }
+
+    /// The BoxGradient child's placement over the CSS box that paints this
+    /// gradient, when there is one.
+    fn box_gradient_geometry(
+        &self,
+        kind: GradientKind,
+    ) -> Option<crate::css_layout::paint::GradientGeometry> {
+        let record = self
+            .base
+            .children()
+            .iter()
+            .find(|child| child.is_type_of(crate::css_layout::keys::BOX_GRADIENT))?
+            .clone();
+        let (width, height, border) = self
+            .shape_paint_container
+            .as_ref()?
+            .with(|container| {
+                container
+                    .as_layout_component()
+                    .filter(|layout| layout.is_css_mode())
+                    .map(|layout| {
+                        (
+                            layout.layout_width(),
+                            layout.layout_height(),
+                            layout.solved_border(),
+                        )
+                    })
+            })
+            .flatten()?;
+        let area = crate::css_layout::paint::padding_box(
+            crate::source::math::aabb::Aabb::new(0.0, 0.0, width, height),
+            border,
+        );
+        record
+            .with_downcast::<crate::css_layout::BoxGradient, _>(|record| {
+                crate::css_layout::paint::gradient_geometry(
+                    record.values(),
+                    area,
+                    matches!(kind, GradientKind::Radial),
+                )
+            })
+            .flatten()
     }
 
     pub fn make_gradient(

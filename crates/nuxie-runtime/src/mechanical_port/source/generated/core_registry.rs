@@ -10452,6 +10452,20 @@ impl CoreRegistry {
     }
 
     pub fn set_double_handle(handle: &CoreHandle, property_key: i32, value: f32) -> bool {
+        // A drawing group's natural size reads its content's transform inputs
+        // (UNIV-4844), so a write that moves one tells the box measuring it.
+        if !crate::source::intrinsically_sizeable::is_transform_input(property_key) {
+            return Self::set_double_handle_value(handle, property_key, value);
+        }
+        let unchanged = Self::get_double_handle(handle, property_key) == Some(value);
+        let written = Self::set_double_handle_value(handle, property_key, value);
+        if written && !unchanged {
+            crate::source::intrinsically_sizeable::transform_input_changed(handle);
+        }
+        written
+    }
+
+    fn set_double_handle_value(handle: &CoreHandle, property_key: i32, value: f32) -> bool {
         // Every dedicated path below, and the layout participant's, begins
         // with its property key; other keys go straight to the plain setter.
         if !SPECIAL_DOUBLE_SETTERS

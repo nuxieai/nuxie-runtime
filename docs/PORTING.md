@@ -642,12 +642,20 @@ decode queue. Bidi and audio retain their separately tracked status below.
     children stay with their parent). Flex shrinking follows the browser.
     Levi decided (2026-10-16,
     [UNIV-4844](https://universe.basis.dev/issue/UNIV-4844)) that Hug and
-    Fixed shrink with flex-shrink 1, that Fill is unchanged, and that items
-    use the browser's automatic minimum: "aim to be more like a browser moving
-    forward". Hug and Fixed therefore use grow 0, shrink 1 and an automatic
-    basis on either main axis, for both LayoutComponent and LayoutParticipant;
-    Fixed dimensions supply the basis rather than disabling shrinking. Fill
-    keeps grow and shrink from its fraction, with its existing basis mapping.
+    Fixed shrink with flex-shrink 1 and that items use the browser's
+    automatic minimum: "aim to be more like a browser moving forward". On
+    2026-10-17 ([UNIV-5012](https://universe.basis.dev/issue/UNIV-5012)) he
+    decided that Fill does what CSS does, that box sizing follows the browser,
+    and that files made in Rive are kept only to validate our system (these
+    gates) and to import Rive documents as nested components. Hug, Fixed and
+    Fill are therefore a load-time translation into CSS
+    (`docs/CSS_LAYOUT.md`, section 2), for both LayoutComponent and
+    LayoutParticipant. Hug and Fixed use grow 0, shrink 1 and an automatic
+    basis on either main axis; Fixed dimensions supply the basis rather than
+    disabling shrinking. Fill along the main axis is `flex: <fraction> 1 0%`,
+    so siblings share the line by their fractions, whatever their content.
+    As in Rive, only a Fill reads the authored flexBasis (the editor writes 0
+    points on every style); points or percent replace its 0% basis.
     Flex items keep CSS `min-width: auto` and `min-height: auto`; authored
     minima still win, and Taffy caps the content minimum by specified sizes
     and maxima. This change implements that rule for Rive's leaves as
@@ -659,8 +667,11 @@ decode queue. Bidi and audio retain their separately tracked status below.
     A nested artboard uses its artboard's authored size. A LayoutComponent
     leaf that does not hug but holds such content answers min-content queries
     from it, so a Fixed or Fill box keeps that content's natural size as its
-    automatic minimum; every other request, and any text it holds, keeps
-    upstream's unmeasured answer, so Fill bases are unchanged. Containers,
+    automatic minimum. A shape that layout resizes (a parametric shape reached
+    directly or through Solos) is the box's paint, not its content: it gives
+    no automatic minimum, as a CSS background gives none. Every other
+    request, and any text it holds, keeps upstream's unmeasured answer.
+    Containers,
     including a mounted artboard's root, keep CSS auto
     minima, so a definite child size contributes its basis. Text whose
     overflow is Hidden, Clipped, Ellipsis, Fit or FitFontSize gets a zero
@@ -683,10 +694,30 @@ decode queue. Bidi and audio retain their separately tracked status below.
     Percentages use Taffy's native 0..1 representation. Direction inherits as
     in CSS. A layout root without an authored size fills its host's offer.
     Rive's sizing modes are CSS sizing keywords: a bounded hug is
-    `fit-content`, `hugUnbounded` is `max-content`, Fill with an automatic
-    basis is `flex-basis: fit-content`, and an absolutely positioned hug stays
-    `auto` (shrink-to-fit, or stretch between two insets). `justify-self` is
-    a grid property in Rive and is left `auto` for flex children.
+    `fit-content`, `hugUnbounded` is `max-content`, Fill along the main axis
+    has a 0% basis and across it is `align-self: stretch`, and an absolutely
+    positioned hug stays `auto` (shrink-to-fit, or stretch between two
+    insets). `justify-self` is a grid property in Rive and is left `auto` for
+    flex children.
+  - *CSS mode.* A `LayoutCssStyle` record (type 60002) on a LayoutComponent,
+    artboard or participant host puts that box in CSS mode, specified in
+    `docs/CSS_LAYOUT.md`. A fifth style pass
+    (`LayoutStyleApplier::apply_css_style`, after Rive's four) builds the
+    node's whole Taffy style from the record, with CSS initial values for the
+    fields it leaves out; the layout fields of the box's LayoutComponentStyle
+    are ignored, while its corner radii, layout animation settings and grid
+    tracks still apply. A CSS box measures all its content as a hugging box
+    does, and layout does not resize that content: an image keeps its natural
+    size, as an `<img>` does, and a shape its authored geometry, as an `<svg>`
+    with a width. Absolute boxes are hoisted to their containing block,
+    and their published offset is made relative to their parent again. A
+    CSS box clips at its padding box when its computed overflow is not
+    visible, and its scroll range is Taffy's scrollable overflow. Its
+    background, border, gradient and shadow records draw with CSS
+    geometry (elliptical radii, physical corners, outer shadows outside the
+    border box only, inset shadows inside the padding box); the feather
+    strength equals the CSS blur radius, checked against Chrome pixels.
+    Files without the record never enter CSS mode.
   - *Persistent tree.* `layout/layout_tree.rs` keeps one Taffy tree per layout
     root; each LayoutComponent/LayoutParticipant (hosted artboards included)
     owns a stable node. Style appliers write the owner's style and queue its

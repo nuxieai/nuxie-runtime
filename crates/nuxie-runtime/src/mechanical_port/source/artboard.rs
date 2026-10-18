@@ -2943,11 +2943,31 @@ impl Artboard {
             crate::css_layout::paint::add_overflow_clip(&mut raw, padding, geometry.inner, clips)
                 .then_some(raw)
         });
+        // A record's BoxBorders and BoxShadows draw the artboard's paints
+        // with CSS geometry, in the background's space.
+        let css_paints = css.then(|| {
+            self.base
+                .base
+                .css_box_geometry()
+                .map(|geometry| {
+                    let moved = background.left() != 0.0 || background.top() != 0.0;
+                    self.base.base.css_paint_paths(
+                        &geometry,
+                        moved.then(|| {
+                            Mat2D::from_translation(Vec2D::new(background.left(), background.top()))
+                        }),
+                    )
+                })
+                .unwrap_or_default()
+        });
         let mut paths = self.base.base.mutable_render_paths();
         paths.local.rewind();
         paths.local.add_rect(background, PathDirection::Clockwise);
         paths.world.rewind();
         paths.world.add_rect(clip, PathDirection::Clockwise);
+        if let Some(css_paints) = css_paints {
+            paths.css_paints = css_paints;
+        }
         if css {
             paths
                 .clip
@@ -2958,7 +2978,7 @@ impl Artboard {
         }
     }
     /// Whether a record's overflow clips this artboard's content.
-    fn css_clips(&self) -> bool {
+    pub(crate) fn css_clips(&self) -> bool {
         self.base.base.is_css_mode() && self.base.base.clips()
     }
 
@@ -3892,6 +3912,19 @@ impl Artboard {
                 break;
             };
             paint_index += 1;
+            // Our layer: a CSS artboard's BoxBorder or BoxShadow paint.
+            let drawn = Self::with_root_mut(root, receiver, |artboard| {
+                let world = artboard.world_transform();
+                let factory = artboard.factory();
+                artboard
+                    .base
+                    .base
+                    .draw_css_paint_with(renderer, &paint, world, factory)
+            })
+            .unwrap_or(false);
+            if drawn {
+                continue;
+            }
             paint.with_mut(|paint| {
                 let Some(behavior) = paint.as_shape_paint_behavior_mut() else { return; };
                 if !behavior.should_draw() { return; }

@@ -266,6 +266,7 @@ pub(crate) struct CssPaintPaths {
 }
 
 /// A CSS box's geometry in its own space (docs/CSS_LAYOUT.md, 4).
+#[derive(Clone, Copy)]
 pub(crate) struct CssBoxGeometry {
     pub bounds: Aabb,
     pub radii: crate::css_layout::paint::Radii,
@@ -401,6 +402,9 @@ pub struct LayoutComponent {
     /// scroll range (scroll width and height), which CSS mode paints and
     /// scrolls with (docs/CSS_LAYOUT.md, sections 3 and 4).
     solved_border: [f32; 4],
+    /// CSS mode: the content box size last given to the content layout
+    /// resizes, so a padding or border change alone resizes it again.
+    propagated_content: Option<Vec2D>,
     scroll_range: Vec2D,
     grid_column_lines: Vec<f32>,
     grid_row_lines: Vec<f32>,
@@ -450,6 +454,7 @@ impl Default for LayoutComponent {
             virtual_grid: None,
             measured_natural: RefCell::new(Vec::new()),
             solved_border: [0.0; 4],
+            propagated_content: None,
             scroll_range: Vec2D::default(),
             grid_column_lines: Vec::new(),
             grid_row_lines: Vec::new(),
@@ -2059,11 +2064,22 @@ impl LayoutComponent {
     /// has one. A shadow's feather blurs the path the box gives it, offset
     /// past a clip that stays with the box. A BoxBorder's Stroke fills its
     /// ring. Returns whether the paint was drawn here.
-    fn draw_css_paint(
+    pub(crate) fn draw_css_paint(
         &mut self,
         renderer: &mut Renderer,
         paint: &CoreHandle,
         world: Mat2D,
+    ) -> bool {
+        self.draw_css_paint_with(renderer, paint, world, None)
+    }
+    /// As [`Self::draw_css_paint`], with the renderer factory given, as an
+    /// artboard drawing its own paints passes it.
+    pub(crate) fn draw_css_paint_with(
+        &mut self,
+        renderer: &mut Renderer,
+        paint: &CoreHandle,
+        world: Mat2D,
+        factory: Option<crate::RuntimeFactoryHandle>,
     ) -> bool {
         let Some(paths) = self.render_paths.clone() else {
             return false;
@@ -2076,13 +2092,19 @@ impl LayoutComponent {
         else {
             return false;
         };
+        let fills_stroke = special.fills_stroke;
         let Some((visible, render_paint)) = paint
             .with_mut(|object| {
                 let behavior = object.as_shape_paint_behavior_mut()?;
-                Some((
-                    behavior.should_draw(),
-                    behavior.shape_paint_mut().render_paint_handle(),
-                ))
+                // A BoxBorder ignores its Stroke's thickness, which a
+                // Stroke's own visibility reads.
+                let visible = if fills_stroke {
+                    behavior.shape_paint().base.is_visible()
+                        && behavior.shape_paint().mutator_is_visible()
+                } else {
+                    behavior.should_draw()
+                };
+                Some((visible, behavior.shape_paint_mut().render_paint_handle()))
             })
             .flatten()
         else {
@@ -2091,7 +2113,9 @@ impl LayoutComponent {
         let Some(render_paint) = render_paint.filter(|_| visible) else {
             return true;
         };
-        let Some(factory) = self.with_artboard(|artboard| artboard.factory()).flatten() else {
+        let Some(factory) =
+            factory.or_else(|| self.with_artboard(|artboard| artboard.factory()).flatten())
+        else {
             return true;
         };
         renderer.save();
@@ -2231,6 +2255,60 @@ impl LayoutComponent {
             overflow,
         })
     }
+    /// The paths this box's special paints (BoxBorder and BoxShadow) draw
+    /// with, from its CSS geometry (docs/CSS_LAYOUT.md, 4.2), moved by
+    /// `translation` when its drawing space is not its layout's.
+    pub(crate) fn css_paint_paths(
+        &self,
+        geometry: &CssBoxGeometry,
+        translation: Option<Mat2D>,
+    ) -> Vec<CssPaintPaths> {
+        use crate::css_layout::paint;
+        let CssBoxGeometry {
+            bounds,
+            radii,
+            padding,
+            inner,
+            ..
+        } = *geometry;
+        let local_path = |region: &paint::Region| {
+            let mut path = ShapePaintPath::new(true);
+            path.rewind_as(true, nuxie_render_api::FillRule::NonZero);
+            path.add_path(&region.outline, translation.as_ref());
+            path.add_path_backwards(&region.holes, translation.as_ref());
+            path
+        };
+        self.paints
+            .shape_paints()
+            .iter()
+            .filter_map(|paint| {
+                let (geometry, fills_stroke, offset) = match css_paint_kind(paint)? {
+                    CssPaintKind::Border { sides } => (
+                        paint::box_border(bounds, radii, padding, inner, sides),
+                        true,
+                        None,
+                    ),
+                    CssPaintKind::Shadow {
+                        spread,
+                        inset,
+                        reach,
+                        offset,
+                    } => (
+                        paint::box_shadow(bounds, radii, padding, inner, spread, inset, reach),
+                        false,
+                        Some(offset),
+                    ),
+                };
+                Some(CssPaintPaths {
+                    paint: paint.clone(),
+                    path: local_path(&geometry.path),
+                    clip: geometry.clip.as_ref().map(local_path),
+                    fills_stroke,
+                    offset,
+                })
+            })
+            .collect()
+    }
     /// CSS mode's box paths (docs/CSS_LAYOUT.md, 4): the border box with CSS
     /// radii (points from the style, percentages from the record, scaled
     /// together when they overlap) and, when `overflow` clips, the padding
@@ -2274,44 +2352,16 @@ impl LayoutComponent {
             .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
         paths.clip.add_path(&clip, Some(&world));
         drop(paths_owner);
-        let local_path = |region: &paint::Region| {
-            let mut path = ShapePaintPath::new(true);
-            path.rewind_as(true, nuxie_render_api::FillRule::NonZero);
-            path.add_path(&region.outline, None);
-            path.add_path_backwards(&region.holes, None);
-            path
-        };
-        let css_paints = self
-            .paints
-            .shape_paints()
-            .iter()
-            .filter_map(|paint| {
-                let (geometry, fills_stroke, offset) = match css_paint_kind(paint)? {
-                    CssPaintKind::Border { sides } => (
-                        paint::box_border(bounds, radii, padding, inner, sides),
-                        true,
-                        None,
-                    ),
-                    CssPaintKind::Shadow {
-                        spread,
-                        inset,
-                        reach,
-                        offset,
-                    } => (
-                        paint::box_shadow(bounds, radii, padding, inner, spread, inset, reach),
-                        false,
-                        Some(offset),
-                    ),
-                };
-                Some(CssPaintPaths {
-                    paint: paint.clone(),
-                    path: local_path(&geometry.path),
-                    clip: geometry.clip.as_ref().map(local_path),
-                    fills_stroke,
-                    offset,
-                })
-            })
-            .collect();
+        let css_paints = self.css_paint_paths(
+            &CssBoxGeometry {
+                bounds,
+                radii,
+                padding,
+                inner,
+                overflow,
+            },
+            None,
+        );
         self.mutable_render_paths().css_paints = css_paints;
         for paint in self.paints.shape_paints().iter().cloned() {
             let should_draw = paint
@@ -3136,10 +3186,14 @@ impl LayoutComponent {
                 direction,
             )
         });
+        let size = self.propagated_size();
+        if self.is_css_mode() {
+            self.propagated_content = Some(size);
+        }
         Self::propagate_size_to_children(
             self.base.children().to_vec(),
             self.is_hidden(),
-            self.propagated_size(),
+            size,
             style,
             self.is_css_mode(),
         );
@@ -3255,6 +3309,13 @@ impl LayoutComponent {
         }) else {
             return;
         };
+        if css {
+            owner.with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    layout.propagated_content = Some(size);
+                }
+            });
+        }
         Self::propagate_size_to_children(children, hidden, size, style, css);
     }
     pub fn layout_solve_available_size(
@@ -4051,7 +4112,17 @@ impl LayoutComponent {
                     .is_ok_and(|style| style.display == taffy::Display::Flex)
             });
             let zero = supported.map(|known| !known && parent_is_flex);
-            if changed || zero != old_zero {
+            // A mounted artboard's minimum reads its parent's style: a
+            // percentage maximum resolves against the parent's length.
+            let parent_dependent = id != tree.root
+                && tree
+                    .taffy
+                    .parent(id)
+                    .is_some_and(|parent| affected.contains(&parent))
+                && owner
+                    .with(|object| object.as_artboard().is_some())
+                    .unwrap_or(false);
+            if changed || zero != old_zero || parent_dependent {
                 let mut style = authored_style();
                 if id == tree.root {
                     style = root_style(&style, tree.root_available);
@@ -4189,8 +4260,11 @@ impl LayoutComponent {
                     .flatten()
             };
             let mut measured = if let Some(natural) = natural {
+                // CSS content keeps its natural size past its box, so its
+                // overflow reaches the scrollable area; Rive's measure
+                // clamps it to the offer.
                 let axis = |natural: f32, offer: f32, mode| {
-                    if mode == LayoutMeasureMode::Undefined {
+                    if mode == LayoutMeasureMode::Undefined || css_owner {
                         natural
                     } else {
                         natural.min(offer)
@@ -4837,6 +4911,19 @@ impl LayoutComponent {
                 }
             });
             changed = true;
+        }
+        // A CSS box whose padding or border alone changed resizes its
+        // content too (docs/CSS_LAYOUT.md, 5).
+        let content_changed = owner
+            .with(|object| {
+                object.as_layout_component().is_some_and(|layout| {
+                    layout.is_css_mode()
+                        && layout.propagated_content != Some(layout.propagated_size())
+                })
+            })
+            .unwrap_or(false);
+        if content_changed && !changed {
+            Self::propagate_size_occurrence(owner);
         }
         if changed {
             Self::propagate_size_occurrence(owner);

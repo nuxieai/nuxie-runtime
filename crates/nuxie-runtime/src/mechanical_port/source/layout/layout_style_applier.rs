@@ -536,6 +536,9 @@ pub struct LayoutSyncContext {
     pub has_layout_parent: bool,
     /// Which properties a `LayoutCssStyle` record contributes here.
     pub css_role: crate::css_layout::CssRole,
+    /// This node is in CSS mode: its record, not the Rive layout type,
+    /// says whether it is a grid (docs/CSS_LAYOUT.md, 2.1).
+    pub css: bool,
 }
 
 pub trait LayoutStyleApplier {

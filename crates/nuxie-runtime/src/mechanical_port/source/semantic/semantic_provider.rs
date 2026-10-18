@@ -185,12 +185,14 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
                     .clip()
                     .then(|| (bounds_corners(artboard.bounds()), Some(owner.clone())))
             } else {
+                // A CSS box clips by its computed overflow, at its padding
+                // box (docs/CSS_LAYOUT.md, 4.2).
                 object
                     .as_layout_component()
-                    .filter(|layout| layout.base.clip())
+                    .filter(|layout| layout.clips())
                     .map(|layout| {
                         (
-                            bounds_corners(layout.local_bounds())
+                            bounds_corners(layout.clip_local_bounds())
                                 .map(|point| layout.shape_world_transform() * point),
                             layout.artboard_handle(),
                         )
@@ -201,7 +203,7 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
                 let path = if is_artboard {
                     layout.local_path()
                 } else {
-                    layout.world_path()
+                    layout.clip_world_path()
                 };
                 let path = path.map(|path| (path.raw_path().clone(), path.fill_rule()));
                 (corners, artboard, path)

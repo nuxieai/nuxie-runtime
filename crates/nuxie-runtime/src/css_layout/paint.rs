@@ -166,6 +166,61 @@ pub fn add_overflow_clip(
     }
 }
 
+/// Whether `point`, in the box's space, is inside the clip `overflow`
+/// implies: the padding box on the clipped axes, with its inner radii when
+/// both clip (as [`add_overflow_clip`] draws it).
+pub fn overflow_clip_contains(
+    point: Vec2D,
+    padding: Aabb,
+    inner: Radii,
+    clips: (bool, bool),
+) -> bool {
+    let (x, y) = clips;
+    if x && !(point.x >= padding.left() && point.x <= padding.right()) {
+        return false;
+    }
+    if y && !(point.y >= padding.top() && point.y <= padding.bottom()) {
+        return false;
+    }
+    if !(x && y) {
+        return true;
+    }
+    // Each corner's ellipse centre and the quadrant it rounds.
+    let corners = [
+        (
+            Vec2D::new(padding.left() + inner[0].x, padding.top() + inner[0].y),
+            -1.0,
+            -1.0,
+        ),
+        (
+            Vec2D::new(padding.right() - inner[1].x, padding.top() + inner[1].y),
+            1.0,
+            -1.0,
+        ),
+        (
+            Vec2D::new(padding.right() - inner[2].x, padding.bottom() - inner[2].y),
+            1.0,
+            1.0,
+        ),
+        (
+            Vec2D::new(padding.left() + inner[3].x, padding.bottom() - inner[3].y),
+            -1.0,
+            1.0,
+        ),
+    ];
+    corners
+        .iter()
+        .zip(inner)
+        .all(|(&(centre, sx, sy), radius)| {
+            let (dx, dy) = (point.x - centre.x, point.y - centre.y);
+            if radius.x <= 0.0 || radius.y <= 0.0 || dx * sx <= 0.0 || dy * sy <= 0.0 {
+                return true;
+            }
+            let (u, v) = (dx / radius.x, dy / radius.y);
+            u * u + v * v <= 1.0
+        })
+}
+
 /// A shadow's corner radii after CSS spread (CSS Backgrounds 3, "Shadow
 /// Shape, Spread, and Knockout"): each radius grows by the spread, less so
 /// while it is smaller than the spread, so a square corner stays square. A
@@ -268,7 +323,8 @@ pub fn box_shadow(
 /// A per-side CSS border (`BoxBorder`): the ring between the border box and
 /// the padding box, limited to the sides in `sides` (1 top, 2 right,
 /// 4 bottom, 8 left). Adjacent sides meet on the line from each outer
-/// corner to the matching inner corner.
+/// corner through the matching inner corner, continued to the end of the
+/// corner's curve, so a rounded ring is shared between its two sides.
 pub fn box_border(
     border_box: Aabb,
     radii: Radii,
@@ -292,6 +348,24 @@ pub fn box_border(
             Vec2D::new(padding.right(), padding.bottom()),
             Vec2D::new(padding.left(), padding.bottom()),
         ];
+        // Where each corner's join line leaves the corner's region: its
+        // curve, and at least its border widths.
+        let join_end: [Vec2D; 4] = std::array::from_fn(|corner| {
+            let outer = outer[corner];
+            let step = inner_corner[corner] - outer;
+            let (width, height) = (step.x.abs(), step.y.abs());
+            let reach =
+                |extent: f32, border: f32| (border > 0.0).then(|| extent.max(border) / border);
+            let t = match (
+                reach(radii[corner].x, width),
+                reach(radii[corner].y, height),
+            ) {
+                (Some(x), Some(y)) => x.min(y),
+                (Some(t), None) | (None, Some(t)) => t,
+                (None, None) => 0.0,
+            };
+            Vec2D::new(outer.x + step.x * t, outer.y + step.y * t)
+        });
         let mut clip = Region::default();
         // Side n runs from corner n to corner n + 1: top, right, bottom, left.
         // Each wedge winds clockwise, as the box does.
@@ -302,8 +376,8 @@ pub fn box_border(
             let next = (side + 1) % 4;
             clip.outline.move_to_point(outer[side]);
             clip.outline.line_to_point(outer[next]);
-            clip.outline.line_to_point(inner_corner[next]);
-            clip.outline.line_to_point(inner_corner[side]);
+            clip.outline.line_to_point(join_end[next]);
+            clip.outline.line_to_point(join_end[side]);
             clip.outline.close();
         }
         geometry.clip = Some(clip);

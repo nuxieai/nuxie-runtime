@@ -265,6 +265,15 @@ pub(crate) struct CssPaintPaths {
     pub offset: Option<(Vec2D, bool)>,
 }
 
+/// A CSS box's geometry in its own space (docs/CSS_LAYOUT.md, 4).
+struct CssBoxGeometry {
+    bounds: Aabb,
+    radii: crate::css_layout::paint::Radii,
+    padding: Aabb,
+    inner: crate::css_layout::paint::Radii,
+    overflow: taffy::geometry::Point<taffy::style::Overflow>,
+}
+
 /// What makes a paint special in CSS mode, read from its children.
 enum CssPaintKind {
     Border {
@@ -599,8 +608,16 @@ impl LayoutComponent {
         &mut self,
         out: &mut crate::mechanical_port::source::math::aabb::Aabb,
     ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        // A CSS box's special paths (a spread shadow) reach past it; the
+        // paints' feathers and offsets add their reach as for any paint.
+        let mut local = self.local_bounds();
+        if let Some(paths) = self.render_paths.as_ref() {
+            for paint in &paths.borrow().css_paints {
+                local.expand(paint.path.raw_path().bounds());
+            }
+        }
         crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
-            &self.local_bounds(),
+            &local,
             &self.base.world_transform(),
             Some(&self.paints),
             out,
@@ -1673,17 +1690,21 @@ impl LayoutComponent {
             if let Some(origin) = root_origin {
                 local += origin;
             }
-            // Past a clip, only the axes it clips: CSS's `overflow-x: clip`
-            // with a visible y axis passes points below the box.
-            let (x, y) = if skip_on_unclipped {
-                self.clipped_axes()
-            } else {
-                (true, true)
+            // Through a CSS box's clip (a hit on a descendant), its clip as
+            // its children draw: the padding box on the clipped axes, with
+            // inner radii when both clip. The box itself is its border box.
+            let inside = match self.css_box_geometry() {
+                Some(geometry) if skip_on_unclipped && !primary => {
+                    crate::css_layout::paint::overflow_clip_contains(
+                        local,
+                        geometry.padding,
+                        geometry.inner,
+                        self.clipped_axes(),
+                    )
+                }
+                _ => self.local_bounds().contains(local),
             };
-            let bounds = self.local_bounds();
-            if (x && !(local.x >= bounds.left() && local.x <= bounds.right()))
-                || (y && !(local.y >= bounds.top() && local.y <= bounds.bottom()))
-            {
+            if !inside {
                 return false;
             }
         }
@@ -2170,11 +2191,11 @@ impl LayoutComponent {
             }
         }
     }
-    /// CSS mode's box paths (docs/CSS_LAYOUT.md, 4): the border box with CSS
-    /// radii (points from the style, percentages from the record, scaled
-    /// together when they overlap) and, when `overflow` clips, the padding
-    /// box with its inner radii. Radii are physical: no RTL swap.
-    fn update_css_render_path(&mut self) {
+    /// A CSS box's geometry in its own space (docs/CSS_LAYOUT.md, 4): its
+    /// border box with CSS radii (points from the style, percentages from
+    /// the record, scaled together when they overlap), its padding box with
+    /// the inner radii, and its computed overflow. None in translated mode.
+    fn css_box_geometry(&self) -> Option<CssBoxGeometry> {
         use crate::css_layout::{keys, paint};
         let points = self
             .with_style(|style| {
@@ -2190,22 +2211,42 @@ impl LayoutComponent {
                 }
             })
             .unwrap_or([0.0; 4]);
-        let Some((percents, overflow)) = self.with_css(|css| {
+        let (percents, overflow) = self.with_css(|css| {
             (
                 std::array::from_fn(|corner| {
                     css.number(keys::RADIUS_TOP_LEFT_PERCENT + corner as u16)
                 }),
                 css.overflow(),
             )
-        }) else {
-            return;
-        };
+        })?;
         let (width, height) = (self.layout.width(), self.layout.height());
         let bounds = Aabb::new(0.0, 0.0, width, height);
         let radii = paint::border_radii(width, height, points, percents);
         let border = self.solved_border;
-        let padding = paint::padding_box(bounds, border);
-        let inner = paint::inner_radii(radii, border);
+        Some(CssBoxGeometry {
+            bounds,
+            radii,
+            padding: paint::padding_box(bounds, border),
+            inner: paint::inner_radii(radii, border),
+            overflow,
+        })
+    }
+    /// CSS mode's box paths (docs/CSS_LAYOUT.md, 4): the border box with CSS
+    /// radii (points from the style, percentages from the record, scaled
+    /// together when they overlap) and, when `overflow` clips, the padding
+    /// box with its inner radii. Radii are physical: no RTL swap.
+    fn update_css_render_path(&mut self) {
+        use crate::css_layout::paint;
+        let Some(CssBoxGeometry {
+            bounds,
+            radii,
+            padding,
+            inner,
+            overflow,
+        }) = self.css_box_geometry()
+        else {
+            return;
+        };
         let world = self.base.base.base.base.world_transform();
         let mut paths_owner = self.mutable_render_paths();
         let paths = &mut *paths_owner;
@@ -2614,9 +2655,12 @@ impl LayoutComponent {
         })
         .unwrap_or(false)
     }
+    /// A Rive stack; a CSS box never is one.
     pub fn is_stack_container(&self) -> bool {
-        self.with_style(LayoutComponentStyle::is_stack)
-            .unwrap_or(false)
+        !self.is_css_mode()
+            && self
+                .with_style(LayoutComponentStyle::is_stack)
+                .unwrap_or(false)
     }
     pub fn layout_node_key(&self, index: usize) -> Option<LayoutNodeKey> {
         let provider = self.base.base.base.base.base.handle()?;
@@ -2697,6 +2741,7 @@ impl LayoutComponent {
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
             css_role: crate::css_layout::record::role(self.is_artboard(), false),
+            css: self.is_css_mode(),
         })
     }
     pub fn sync_style(&mut self) {
@@ -3035,10 +3080,25 @@ impl LayoutComponent {
         Self::propagate_size_to_children(
             self.base.children().to_vec(),
             self.is_hidden(),
-            Vec2D::new(self.layout.width(), self.layout.height()),
+            self.propagated_size(),
             style,
             self.is_css_mode(),
         );
+    }
+    /// The size this box gives the content layout resizes: its border box,
+    /// as Rive gives it, or in CSS mode its content box, where Taffy
+    /// measured that content (docs/CSS_LAYOUT.md, 5).
+    fn propagated_size(&self) -> Vec2D {
+        let (width, height) = (self.layout.width(), self.layout.height());
+        if !self.is_css_mode() {
+            return Vec2D::new(width, height);
+        }
+        let [top, right, bottom, left] = self.solved_border;
+        let padding = self.layout_padding;
+        Vec2D::new(
+            (width - padding.left() - padding.right() - left - right).max(0.0),
+            (height - padding.top() - padding.bottom() - top - bottom).max(0.0),
+        )
     }
     // Plain groups contain free content; Solo children still receive the
     // enclosing layout's content size. Provider collection remains separately
@@ -3123,7 +3183,7 @@ impl LayoutComponent {
             (
                 object.as_container_component().unwrap().children().to_vec(),
                 layout.is_hidden(),
-                Vec2D::new(layout.layout.width(), layout.layout.height()),
+                layout.propagated_size(),
                 layout.with_style(|style| {
                     (
                         style.width_scale_type(),
@@ -4093,7 +4153,9 @@ impl LayoutComponent {
             if known.height.is_none()
                 && available.height == taffy::prelude::AvailableSpace::MinContent
             {
-                if let Some(minimum) = host_min_content_height(host, known.width, width_limits) {
+                if let Some(minimum) =
+                    host_min_content_height(host, known.width, width_limits, css_owner)
+                {
                     measured.y = minimum;
                 }
             }
@@ -4200,7 +4262,14 @@ impl LayoutComponent {
                             width_limits,
                             min_content,
                             (intrinsic_width || min_content) && supports,
-                            || host_min_content_width(&host, known.height, height_limits),
+                            || {
+                                host_min_content_width(
+                                    &host,
+                                    known.height,
+                                    height_limits,
+                                    css_owner,
+                                )
+                            },
                             |width, width_mode, height, height_mode| {
                                 measure_host(&host, width, width_mode, height, height_mode)
                             },
@@ -4247,8 +4316,13 @@ impl LayoutComponent {
                             (intrinsic_width || min_content) && supports,
                             || {
                                 children.iter().try_fold(0.0f32, |minimum, child| {
-                                    host_min_content_width(child, known.height, height_limits)
-                                        .map(|next| minimum.max(next))
+                                    host_min_content_width(
+                                        child,
+                                        known.height,
+                                        height_limits,
+                                        css_owner,
+                                    )
+                                    .map(|next| minimum.max(next))
                                 })
                             },
                             |width, width_mode, height, height_mode| {
@@ -5484,6 +5558,36 @@ impl LayoutComponent {
             .as_ref()
             .map(|paths| std::cell::RefMut::map(paths.borrow_mut(), |paths| &mut paths.world))
     }
+    /// The path this box clips its children to, in world space: Rive's box
+    /// path, or in CSS mode the clip its overflow implies.
+    pub fn clip_world_path(&mut self) -> Option<std::cell::RefMut<'_, ShapePaintPath>> {
+        let css = self.is_css_mode();
+        self.render_paths.as_ref().map(|paths| {
+            std::cell::RefMut::map(paths.borrow_mut(), |paths| {
+                if css {
+                    &mut paths.clip
+                } else {
+                    &mut paths.world
+                }
+            })
+        })
+    }
+    /// The rectangle this box clips its children to, in its own space: its
+    /// bounds, or in CSS mode its padding box on the clipped axes.
+    pub fn clip_local_bounds(&self) -> Aabb {
+        let Some(geometry) = self.css_box_geometry() else {
+            return self.local_bounds();
+        };
+        let (x, y) = self.clipped_axes();
+        let padding = geometry.padding;
+        let far = 1.0e7;
+        Aabb::new(
+            if x { padding.left() } else { -far },
+            if y { padding.top() } else { -far },
+            if x { padding.right() } else { far },
+            if y { padding.bottom() } else { far },
+        )
+    }
     pub fn local_path(&mut self) -> Option<std::cell::RefMut<'_, ShapePaintPath>> {
         self.render_paths
             .as_ref()
@@ -5510,7 +5614,7 @@ impl LayoutComponent {
     pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
         self.layout_data.add_applier(applier);
     }
-    pub fn apply_container_style(&self, style: &mut Style, _context: &LayoutSyncContext) {
+    pub fn apply_container_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         use crate::source::{
             constraints::{
                 draggable_constraint::DraggableConstraintDirection,
@@ -5574,8 +5678,10 @@ impl LayoutComponent {
                 };
             }
         }
+        // A CSS box reads its GridTracks whatever the Rive layout type.
         let justify = self.with_style(|component_style| {
-            (!component_style.is_stack()).then_some(component_style.base.justify_items_value())
+            (context.css || !component_style.is_stack())
+                .then_some(component_style.base.justify_items_value())
         });
         if let Some(Some(justify)) = justify {
             crate::mechanical_port::source::layout::grid_track::GridTrack::sync_container_style(

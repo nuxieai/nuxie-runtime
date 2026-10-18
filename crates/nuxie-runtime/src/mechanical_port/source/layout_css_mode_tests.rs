@@ -4256,3 +4256,76 @@ fn css_inset_shadow_bounds_stay_in_its_padding_box() {
     let names = f.geometry_names(&visible);
     assert!(!names.contains(&"Outside".to_owned()), "{names:?}");
 }
+
+/// A translated child that layout places absolutely is positioned in its
+/// CSS parent's painting order: it paints above a later static sibling.
+#[test]
+fn css_translated_absolute_child_paints_above_static_siblings() {
+    let f = frame(vec![
+        B {
+            name: "Red",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 50.0),
+            ],
+            style: vec![U(
+                LayoutComponentStyleBase::POSITION_TYPE_VALUE_PROPERTY_KEY,
+                2,
+            )],
+            paints: vec![Paint::Fill(0xff00_0001)],
+            ..B::default()
+        },
+        painted("Blue", 0xff00_0002, sized(&[])),
+    ]);
+    let names = f.draw_names_top_first();
+    let at = |name: &str| names.iter().position(|n| n == name).unwrap();
+    assert!(at("Red") < at("Blue"), "{names:?}");
+}
+
+/// A hidden shadow adds nothing to its box's painted bounds: the visible
+/// geometry is the background alone.
+#[test]
+fn css_hidden_shadow_adds_no_painted_bounds() {
+    const MARGIN_LEFT: u16 = 60071;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![
+                Paint::Shadow {
+                    color: 0x8000_0000,
+                    strength: 0.0,
+                    spread: 20.0,
+                },
+                Paint::Fill(0xff11_2233),
+            ],
+            ..css(
+                "Card",
+                [
+                    [F(MARGIN_TOP, 50.0), F(MARGIN_LEFT, 50.0)].as_slice(),
+                    &width(100.0),
+                    &height(50.0),
+                ]
+                .concat(),
+                vec![],
+            )
+        },
+    );
+    let bounds = |f: &Scene| {
+        let visible = f.host().visible_geometry_with_bounds();
+        let bounds = visible[0].bounds;
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
+    };
+    assert_eq!(bounds(&f), (30.0, 30.0, 170.0, 120.0));
+    let shadow = f
+        .named("Card")
+        .with_downcast::<LayoutComponent, _>(|layout| layout.paints.shape_paints()[0].clone())
+        .unwrap();
+    assert!(CoreRegistry::set_bool_handle(
+        &shadow,
+        crate::source::generated::shapes::paint::shape_paint_base::ShapePaintBase::IS_VISIBLE_PROPERTY_KEY
+            .into(),
+        false
+    ));
+    f.advance(2);
+    assert_eq!(bounds(&f), (50.0, 50.0, 150.0, 100.0));
+}

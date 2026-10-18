@@ -1,7 +1,7 @@
 {
   "name": "BoxBorder",
   "key": {
-    "int": 60003,
+    "int": 61001,
     "string": "boxborder"
   },
   "extends": "component.json",
@@ -10,7 +10,7 @@
     "sides": {
       "type": "uint8",
       "key": {
-        "int": 60105
+        "int": 61083
       },
       "initialValue": "15",
       "description": "Bit mask of painted sides: 1 top, 2 right, 4 bottom, 8 left.",

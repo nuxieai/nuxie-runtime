@@ -1,7 +1,7 @@
 {
   "name": "BoxShadow",
   "key": {
-    "int": 60005,
+    "int": 61003,
     "string": "boxshadow"
   },
   "extends": "component.json",
@@ -10,7 +10,7 @@
     "spread": {
       "type": "double",
       "key": {
-        "int": 60118
+        "int": 61096
       },
       "initialValue": "0",
       "description": "CSS box-shadow spread, in points.",

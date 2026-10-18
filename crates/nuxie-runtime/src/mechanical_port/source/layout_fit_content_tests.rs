@@ -271,9 +271,9 @@ fn css_mode_text_takes_the_content_box() {
         .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
         .unwrap();
     // width: 100px, and 10 points of padding on every side.
-    assert!(CoreRegistry::set_uint_handle(&record, 60043, 1));
-    assert!(CoreRegistry::set_double_handle(&record, 60044, 100.0));
-    for key in [60085, 60087, 60089, 60091] {
+    assert!(CoreRegistry::set_uint_handle(&record, 61021, 1));
+    assert!(CoreRegistry::set_double_handle(&record, 61022, 100.0));
+    for key in [61063, 61065, 61067, 61069] {
         assert!(CoreRegistry::set_double_handle(&record, key, 10.0));
     }
     LayoutComponent::sync_style_occurrence(&f.label);
@@ -324,9 +324,9 @@ fn css_mode_text_follows_padding_in_a_fixed_box() {
         .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
         .unwrap();
     // box-sizing: border-box; width: 200px.
-    assert!(CoreRegistry::set_uint_handle(&record, 60023, 1));
-    assert!(CoreRegistry::set_uint_handle(&record, 60043, 1));
-    assert!(CoreRegistry::set_double_handle(&record, 60044, 200.0));
+    assert!(CoreRegistry::set_uint_handle(&record, 61001, 1));
+    assert!(CoreRegistry::set_uint_handle(&record, 61021, 1));
+    assert!(CoreRegistry::set_double_handle(&record, 61022, 200.0));
     LayoutComponent::sync_style_occurrence(&f.label);
     assert_eq!(f.solve().width(), 200.0);
     LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
@@ -337,7 +337,7 @@ fn css_mode_text_follows_padding_in_a_fixed_box() {
     };
     assert_eq!(width(), 200.0);
     // padding-left: 30px.
-    assert!(CoreRegistry::set_double_handle(&record, 60091, 30.0));
+    assert!(CoreRegistry::set_double_handle(&record, 61069, 30.0));
     LayoutComponent::sync_style_occurrence(&f.label);
     assert_eq!(f.solve().width(), 200.0);
     LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
@@ -444,8 +444,8 @@ fn css_participant_text_wraps_at_its_css_width() {
         .unwrap();
     let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
     attach(&f.arena, &f.text, &record);
-    assert!(CoreRegistry::set_uint_handle(&record, 60043, 1));
-    assert!(CoreRegistry::set_double_handle(&record, 60044, 338.0));
+    assert!(CoreRegistry::set_uint_handle(&record, 61021, 1));
+    assert!(CoreRegistry::set_double_handle(&record, 61022, 338.0));
     f.label
         .with_downcast_mut::<LayoutParticipant, _>(|p| p.add_layout_style_applier(record.clone()))
         .unwrap();
@@ -491,10 +491,10 @@ fn css_leaf_minimum_height_skips_hidden_text() {
     // The root: a CSS column 50 points tall; the label: a CSS box.
     let column = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
     attach(&f.arena, &f.root, &column);
-    assert!(CoreRegistry::set_uint_handle(&column, 60022, 1));
-    assert!(CoreRegistry::set_uint_handle(&column, 60028, 2));
-    assert!(CoreRegistry::set_uint_handle(&column, 60046, 1));
-    assert!(CoreRegistry::set_double_handle(&column, 60047, 50.0));
+    assert!(CoreRegistry::set_uint_handle(&column, 61000, 1));
+    assert!(CoreRegistry::set_uint_handle(&column, 61006, 2));
+    assert!(CoreRegistry::set_uint_handle(&column, 61024, 1));
+    assert!(CoreRegistry::set_double_handle(&column, 61025, 50.0));
     f.root
         .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(column.clone()))
         .unwrap();

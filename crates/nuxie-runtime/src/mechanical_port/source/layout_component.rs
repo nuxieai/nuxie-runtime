@@ -2252,9 +2252,13 @@ impl LayoutComponent {
         };
         self.css_geometry_of(bounds)
     }
-    /// The size this box's BoxPaint gives its paint, if it has one.
+    /// The size this box's BoxPaint gives its paint at its current layout
+    /// size, if it has one.
     pub(crate) fn box_paint_size(&self) -> Option<(f32, f32)> {
-        crate::css_layout::record::box_paint_size(self.base.base.base.base.base.children())
+        crate::css_layout::record::box_paint_size(
+            self.base.base.base.base.base.children(),
+            (self.layout.width(), self.layout.height()),
+        )
     }
     fn css_geometry_of(&self, bounds: Aabb) -> Option<CssBoxGeometry> {
         use crate::css_layout::{keys, paint};

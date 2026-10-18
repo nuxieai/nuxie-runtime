@@ -2614,12 +2614,19 @@ impl LayoutComponent {
     /// What a CSS box tells its children's sync context: whether it is a
     /// grid (never a Rive stack) and its justify-items as Rive numbers it.
     pub(crate) fn css_child_context(&self) -> Option<(bool, bool, u8)> {
+        use crate::mechanical_port::source::layout::layout_style_applier::YGJustify;
         self.with_css(|css| {
+            // Rive's grid items read whether the container stretches.
+            let justify = match css.choice(crate::css_layout::keys::JUSTIFY_ITEMS) {
+                2 | 4 | 6 | 9 => YGJustify::FlexStart,
+                3 | 5 | 7 => YGJustify::FlexEnd,
+                8 => YGJustify::Center,
+                _ => YGJustify::Stretch,
+            };
             (
                 css.choice(crate::css_layout::keys::DISPLAY) == 2,
                 false,
-                crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
-                    as u8,
+                justify as u8,
             )
         })
     }
@@ -4857,7 +4864,6 @@ impl LayoutComponent {
         for (_, provider) in Self::layout_providers_occurrence(owner) {
             Self::update_provider_layout_bounds(&provider, animate);
         }
-        Self::place_css_content_occurrence(owner);
         let (next, old, just_added, animates, force, current) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
@@ -4942,6 +4948,9 @@ impl LayoutComponent {
             )
             .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
         }
+        // After the new layout is in place: an artboard places its content
+        // from its current size.
+        Self::place_css_content_occurrence(owner);
         owner.with_mut(|object| {
             object
                 .as_layout_component_mut()
@@ -5419,6 +5428,11 @@ impl LayoutComponent {
             }
             self.propagate_size();
         }
+    }
+    /// Only this box's layout data, for an owner that marks its artboard
+    /// itself (an artboard marking its own layout).
+    pub(crate) fn mark_layout_data_dirty(&mut self) {
+        self.layout_data.mark_dirty();
     }
     pub fn mark_layout_node_dirty(&mut self, force: bool) {
         if force {

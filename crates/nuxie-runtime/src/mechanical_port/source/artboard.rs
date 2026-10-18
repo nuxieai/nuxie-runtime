@@ -4929,6 +4929,16 @@ impl Artboard {
 
     fn origin_changed_with_host(&mut self, borrowed_host: Option<&mut dyn ArtboardHost>) {
         self.add_dirt(ComponentDirt::PATH | ComponentDirt::COMPONENTS, false);
+        // Our layer: a CSS leaf artboard places its content from its origin
+        // at its next layout (docs/CSS_LAYOUT.md, 5).
+        if self.base.base.is_css_mode() {
+            self.base.base.mark_layout_data_dirty();
+            if let Some(this) =
+                crate::mechanical_port::source::core::CoreObject::core(self).handle()
+            {
+                self.mark_layout_dirty(this);
+            }
+        }
         if let Some(borrowed_host) = borrowed_host {
             if let Some(host) = self.begin_host_transform_dirty() {
                 assert_eq!(borrowed_host.host_component().as_ref(), Some(&host));

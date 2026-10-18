@@ -789,6 +789,9 @@ pub struct Text {
     layout_width_scale_type: u8,
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
+    /// Our layer: a CSS box lays this text out (docs/CSS_LAYOUT.md, 5), so
+    /// layout owns its width whatever the box's Rive sizing modes.
+    css_owned: bool,
     file_features: u8,
     emoji_image_cache: ColorGlyphImageCache,
     draw_commands: Vec<TextDrawCommand>,
@@ -830,6 +833,7 @@ impl Default for Text {
             layout_width_scale_type: u8::MAX,
             layout_height_scale_type: u8::MAX,
             layout_direction: LayoutDirection::Inherit,
+            css_owned: false,
             file_features: FILE_FEATURES_ALL,
             emoji_image_cache: Vec::new(),
             draw_commands: Vec::new(),
@@ -1099,15 +1103,21 @@ impl Text {
         self.base.fit_font_size_resizes_box()
             && self.has_file_feature(FILE_FEATURE_FIT_FONT_SIZE_RESIZES_BOX)
     }
+    /// Marks this text as content a CSS box lays out, or not.
+    pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
+        self.css_owned = owned;
+    }
     pub fn layout_owns_width(&self) -> bool {
-        self.layout_participant().is_some_and(|participant| {
-            participant
-                .with_downcast::<LayoutParticipant, _>(|participant| {
-                    let scale = participant.layout_width_scale_type();
-                    scale == LayoutScaleType::Fixed as u8 || scale == LayoutScaleType::Fill as u8
-                })
-                .expect("live layout participant")
-        })
+        self.css_owned
+            || self.layout_participant().is_some_and(|participant| {
+                participant
+                    .with_downcast::<LayoutParticipant, _>(|participant| {
+                        let scale = participant.layout_width_scale_type();
+                        scale == LayoutScaleType::Fixed as u8
+                            || scale == LayoutScaleType::Fill as u8
+                    })
+                    .expect("live layout participant")
+            })
     }
     pub fn layout_box_width(&self) -> f32 {
         if self.has_file_feature(FILE_FEATURE_LAYOUT_SIZES_BOX) {

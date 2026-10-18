@@ -92,7 +92,7 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     e(2),   // 60029 flexWrap
     N,      // 60030 flexGrow
     n(1.0), // 60031 flexShrink
-    e(6),   // 60032 flexBasisKind
+    e(7),   // 60032 flexBasisKind
     N,      // 60033 flexBasis
     N,      // 60034 flexBasisPercent
     e(10),  // 60035 alignItems
@@ -103,22 +103,22 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     e(9),   // 60040 justifyContent
     e(3),   // 60041 gridAutoFlow
     N,      // 60042 aspectRatio
-    e(5),   // 60043 widthKind
+    e(7),   // 60043 widthKind
     N,      // 60044 width
     N,      // 60045 widthPercent
-    e(5),   // 60046 heightKind
+    e(7),   // 60046 heightKind
     N,      // 60047 height
     N,      // 60048 heightPercent
-    e(1),   // 60049 minWidthKind
+    e(2),   // 60049 minWidthKind
     N,      // 60050 minWidth
     N,      // 60051 minWidthPercent
-    e(1),   // 60052 minHeightKind
+    e(2),   // 60052 minHeightKind
     N,      // 60053 minHeight
     N,      // 60054 minHeightPercent
-    e(1),   // 60055 maxWidthKind
+    e(2),   // 60055 maxWidthKind
     N,      // 60056 maxWidth
     N,      // 60057 maxWidthPercent
-    e(1),   // 60058 maxHeightKind
+    e(2),   // 60058 maxHeightKind
     N,      // 60059 maxHeight
     N,      // 60060 maxHeightPercent
     e(1),   // 60061 marginTopKind

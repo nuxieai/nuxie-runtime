@@ -1837,3 +1837,50 @@ fn css_shape_content_is_measured_with_its_path_transform() {
     );
     assert_eq!(f.bounds("Leaf")[2], 160.0);
 }
+
+/// A CSS box's flex direction written at run time re-translates its Rive
+/// children, whose Fill follows their parent's main axis.
+#[test]
+fn css_flex_direction_written_at_run_time_retranslates_rive_children() {
+    const FLEX_DIRECTION: u16 = 60028;
+    const COLUMN: u32 = 2;
+    let f = scene(
+        (300.0, 100.0),
+        css(
+            "Flow",
+            [[U(DISPLAY, 1)].as_slice(), &width(300.0), &height(100.0)].concat(),
+            vec![
+                B {
+                    name: "Grow",
+                    component: vec![
+                        F(LayoutComponentBase::FRACTIONAL_WIDTH_PROPERTY_KEY, 1.0),
+                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 20.0),
+                    ],
+                    style: vec![U(
+                        LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                        LayoutScaleType::Fill as u64,
+                    )],
+                    ..B::default()
+                },
+                B {
+                    name: "Fixed",
+                    component: vec![
+                        F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 20.0),
+                    ],
+                    ..B::default()
+                },
+            ],
+        ),
+    );
+    assert_eq!(f.bounds("Grow"), [0.0, 0.0, 200.0, 20.0]);
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record("Flow"),
+        FLEX_DIRECTION.into(),
+        COLUMN
+    ));
+    f.advance(2);
+    // Its Fill width is now across the column: it stretches, and it keeps
+    // its fixed height along the column.
+    assert_eq!(f.bounds("Grow"), [0.0, 0.0, 300.0, 20.0]);
+}

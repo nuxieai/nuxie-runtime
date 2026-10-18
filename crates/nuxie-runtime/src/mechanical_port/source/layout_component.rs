@@ -1690,7 +1690,9 @@ impl LayoutComponent {
         if !self.base.world_transform().invert(&mut inverse) {
             return false;
         }
-        if !(skip_on_unclipped && !self.clips()) {
+        // A CSS artboard keeps its own clip around its record's.
+        let artboard_clip = self.is_css_mode() && self.is_artboard() && self.base.clip();
+        if !(skip_on_unclipped && !self.clips() && !artboard_clip) {
             let mut local = inverse * *position;
             if let Some(origin) = root_origin {
                 local += origin;
@@ -1705,7 +1707,7 @@ impl LayoutComponent {
                         geometry.padding,
                         geometry.inner,
                         self.clipped_axes(),
-                    )
+                    ) && (!artboard_clip || self.local_bounds().contains(local))
                 }
                 _ => self.local_bounds().contains(local),
             };
@@ -4261,6 +4263,14 @@ impl LayoutComponent {
          -> Vec2D {
             #[cfg(test)]
             layout_fit_content_tests::note_host_measure();
+            // A CSS box owns its text's width (docs/CSS_LAYOUT.md, 5).
+            if css_owner {
+                host.with_mut(|object| {
+                    if let Some(text) = object.as_text_mut() {
+                        text.set_owned_by_css_layout(true);
+                    }
+                });
+            }
             // Image already measures exact offers as exact sizes. Preserve that
             // protocol; controlled geometry and drawing groups use authored bounds.
             // In a CSS box an image is content and keeps its natural size.

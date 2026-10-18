@@ -310,9 +310,15 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
             apply_item(values, style);
         }
         CssRole::Artboard => {
-            // The artboard's width and height are its border box.
+            // The artboard's width and height are its border box, and its
+            // Rive style's item limits do not apply.
             style.box_sizing = BoxSizing::BorderBox;
             style.display = values.display();
+            style.min_size = Size::auto();
+            style.max_size = Size::auto();
+            style.margin = Rect::zero();
+            style.inset = Rect::auto();
+            style.aspect_ratio = None;
         }
     }
 }

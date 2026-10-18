@@ -17,6 +17,7 @@ resolved explicitly.
 - BoxBorder: type 60003; property 60105.
 - BoxGradient: type 60004; properties 60106–60117.
 - BoxShadow: type 60005; property 60118.
+- BoxPaint: type 60006; properties 60119–60120.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.

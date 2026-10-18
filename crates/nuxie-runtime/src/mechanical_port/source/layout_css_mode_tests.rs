@@ -123,6 +123,13 @@ struct B {
     /// A data binding from the file's one view model number to this record
     /// property.
     bind: Option<u16>,
+    /// A BoxPaint record: its width and height.
+    box_paint: Option<(f32, f32)>,
+    /// A data binding from the view model number to a BoxPaint property.
+    box_paint_bind: Option<u16>,
+    /// BoxPaint properties keyed by the file's one animation: (key, frames
+    /// and values at 60 frames a second, linear).
+    box_paint_keys: Vec<(u16, Vec<(u32, f32)>)>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -152,6 +159,9 @@ const DIRECTION: u16 = 60027;
 const BORDER_SIDES: u16 = 60105;
 const GRADIENT_ANGLE: u16 = 60106;
 const SHADOW_SPREAD: u16 = 60118;
+const BOX_PAINT: u16 = 60006;
+const PAINT_WIDTH: u16 = 60119;
+const PAINT_HEIGHT: u16 = 60120;
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
 /// at `size`, directly in its box or inside a plain group.
@@ -211,6 +221,8 @@ enum Entry<'a> {
     Stop(u32, f32, u64),
     NamedShape(&'static str, u64),
     Bind(u16),
+    /// A record property keyed by the animation: the record's object index.
+    Keys(u64, u16, &'a [(u32, f32)]),
     PathAt(f32, (f32, f32), u64),
     Group(u64),
     Shape(&'a Rect, u64),
@@ -272,7 +284,7 @@ fn push_paints(paints: &[Paint], index: u64, entries: &mut Vec<Entry<'_>>) {
 fn slots(entries: &[Entry]) -> u64 {
     entries
         .iter()
-        .filter(|entry| !matches!(entry, Entry::Bind(..)))
+        .filter(|entry| !matches!(entry, Entry::Bind(..) | Entry::Keys(..)))
         .count() as u64
 }
 
@@ -332,6 +344,20 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
             if let Some(key) = node.bind {
                 entries.push(Entry::Bind(key));
+            }
+        }
+        if let Some((width, height)) = node.box_paint {
+            let record = slots(entries) + 1;
+            entries.push(Entry::Record(
+                BOX_PAINT,
+                vec![F(PAINT_WIDTH, width), F(PAINT_HEIGHT, height)],
+                index,
+            ));
+            if let Some(key) = node.box_paint_bind {
+                entries.push(Entry::Bind(key));
+            }
+            for (key, keys) in &node.box_paint_keys {
+                entries.push(Entry::Keys(record, *key, keys));
             }
         }
         push_paints(&node.paints, index, entries);
@@ -452,6 +478,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 write(&mut riv, props);
                 riv.end();
             }
+            Entry::Keys(..) => {}
             Entry::Bind(key) => {
                 use crate::source::generated::data_bind::{
                     data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase,
@@ -584,9 +611,50 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     style(&mut riv, 0, &spec.style);
     let mut index = 0u64;
     for entry in &entries {
+        if matches!(entry, Entry::Bind(..) | Entry::Keys(..)) {
+            continue;
+        }
         index += 1;
         if let Entry::Box(node, _) = entry {
             style(&mut riv, index, &node.style);
+        }
+    }
+    // One animation, a second at 60 frames, keying every Keys entry.
+    let keyed = entries
+        .iter()
+        .filter_map(|entry| match entry {
+            Entry::Keys(object, key, keys) => Some((*object, *key, *keys)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if !keyed.is_empty() {
+        use crate::source::generated::animation::{
+            interpolating_keyframe_base::InterpolatingKeyFrameBase,
+            keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
+            keyframe_base::KeyFrameBase, keyframe_double_base::KeyFrameDoubleBase,
+            linear_animation_base::LinearAnimationBase,
+        };
+        riv.object(LinearAnimationBase::TYPE_KEY)
+            .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+            .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 60)
+            .end();
+        for (object, key, keys) in keyed {
+            riv.object(KeyedObjectBase::TYPE_KEY)
+                .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, object)
+                .end();
+            riv.object(KeyedPropertyBase::TYPE_KEY)
+                .uint(KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY, u64::from(key))
+                .end();
+            for &(frame, value) in keys {
+                riv.object(KeyFrameDoubleBase::TYPE_KEY)
+                    .uint(KeyFrameBase::FRAME_PROPERTY_KEY, u64::from(frame))
+                    .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, value)
+                    .uint(
+                        InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+                        1,
+                    )
+                    .end();
+            }
         }
     }
     let mut factory = PersistentFactory::new(RecordingFactory::new());
@@ -3042,4 +3110,145 @@ fn css_artboard_rounded_clip_stops_hits_in_its_corners() {
     assert!(hits(200.0, 150.0));
     // The top left corner is cut away by the 200 by 150 elliptical radius.
     assert!(!hits(5.0, 5.0));
+}
+
+/// A box painted at a BoxPaint's size: `width: 200px; height: 100px` with a
+/// 100 by 40 BoxPaint draws its background centred, from (50, 30).
+fn painted_row(paint: Option<(f32, f32)>, extra: impl FnOnce(B) -> B) -> Scene {
+    scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(400.0), &height(100.0)].concat(),
+            vec![
+                extra(B {
+                    paints: vec![Paint::Fill(0xff11_2233)],
+                    box_paint: paint,
+                    ..css(
+                        "Painted",
+                        [
+                            [F(FLEX_SHRINK, 0.0)].as_slice(),
+                            &width(200.0),
+                            &height(100.0),
+                        ]
+                        .concat(),
+                        vec![],
+                    )
+                }),
+                css(
+                    "Sibling",
+                    [
+                        [F(FLEX_SHRINK, 0.0)].as_slice(),
+                        &width(50.0),
+                        &height(50.0),
+                    ]
+                    .concat(),
+                    vec![],
+                ),
+            ],
+        ),
+    )
+}
+
+fn background_bounds(f: &Scene, name: &str) -> crate::source::math::aabb::Aabb {
+    let (points, _, _) = f.paths(name);
+    let mut bounds = crate::source::math::aabb::Aabb::new(
+        f32::INFINITY,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NEG_INFINITY,
+    );
+    for point in points {
+        bounds.expand(aabb(point.x, point.y, point.x, point.y));
+    }
+    bounds
+}
+
+/// A BoxPaint paints the box at its own size, centred on the border box,
+/// while layout keeps the box's size.
+#[test]
+fn css_box_paint_sizes_the_painted_box() {
+    let f = painted_row(Some((100.0, 40.0)), |b| b);
+    assert_eq!(f.bounds("Painted"), [0.0, 0.0, 200.0, 100.0]);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(50.0, 30.0, 150.0, 70.0)
+    );
+}
+
+/// A BoxPaint keyed by an animation repaints the box, centred, and nothing
+/// reflows: the box and its sibling keep their places.
+#[test]
+fn css_box_paint_keyed_by_an_animation_does_not_reflow() {
+    let f = painted_row(Some((100.0, 40.0)), |b| B {
+        box_paint_keys: vec![
+            (PAINT_WIDTH, vec![(0, 100.0), (60, 200.0)]),
+            (PAINT_HEIGHT, vec![(0, 40.0), (60, 80.0)]),
+        ],
+        ..b
+    });
+    let mut instance =
+        crate::ArtboardInstance::from_native_handle(f._file.clone(), 0, f.artboard.clone());
+    let mut animation = instance
+        .linear_animation_instance(0)
+        .expect("the animation");
+    instance
+        .apply_linear_animation_instance_at(&mut animation, 0.5, 1.0)
+        .unwrap();
+    f.advance(2);
+    // Halfway: 150 by 60, centred on the 200 by 100 box.
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(25.0, 20.0, 175.0, 80.0)
+    );
+    assert_eq!(f.bounds("Painted"), [0.0, 0.0, 200.0, 100.0]);
+    assert_eq!(f.bounds("Sibling"), [200.0, 0.0, 50.0, 50.0]);
+}
+
+/// A BoxPaint size bound to a view model follows its value.
+#[test]
+fn css_box_paint_follows_bound_values() {
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    let f = painted_row(Some((100.0, 40.0)), |b| B {
+        box_paint_bind: Some(PAINT_WIDTH),
+        ..b
+    });
+    let number = f.bind_number();
+    assert!(CoreRegistry::set_double_handle(
+        &number,
+        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+        120.0
+    ));
+    f.advance(3);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(40.0, 30.0, 160.0, 70.0)
+    );
+}
+
+/// A shadow grows from the BoxPaint's rectangle, and a gradient covers it.
+#[test]
+fn css_box_paint_carries_its_shadow_and_gradient() {
+    let f = painted_row(Some((100.0, 40.0)), |b| B {
+        paints: vec![
+            Paint::Shadow {
+                color: 0x8000_0000,
+                strength: 0.0,
+                spread: 4.0,
+            },
+            Paint::Gradient(90.0),
+        ],
+        ..b
+    });
+    assert_eq!(f.css_paints("Painted")[0].0, aabb(46.0, 26.0, 154.0, 74.0));
+    let lines = f.stream_lines();
+    let gradient = lines
+        .iter()
+        .rev()
+        .find(|line| line.starts_with("makeLinearGradient"))
+        .expect("a gradient");
+    assert!(
+        gradient.contains("start=(50,50) end=(150,50)"),
+        "{gradient}"
+    );
 }

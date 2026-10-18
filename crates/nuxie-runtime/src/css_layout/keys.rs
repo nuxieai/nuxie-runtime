@@ -232,43 +232,28 @@ pub fn default_value(key: u16) -> f32 {
 mod tests {
     use super::*;
 
-    /// The table is checked against the authoritative definition files.
+    /// The table is checked against the schema generated from the
+    /// authoritative definition files in defs/nuxie/.
     #[test]
     fn keys_match_the_nuxie_definitions() {
-        macro_rules! def {
-            ($file:literal) => {
-                (
-                    $file,
-                    include_str!(concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/../../defs/nuxie/",
-                        $file
-                    )),
-                )
-            };
-        }
         let mut seen = 0;
-        for ((file, text), type_key) in [
-            (def!("layout_css_style.json"), LAYOUT_CSS_STYLE),
-            (def!("box_border.json"), BOX_BORDER),
-            (def!("box_gradient.json"), BOX_GRADIENT),
-            (def!("box_shadow.json"), BOX_SHADOW),
+        for (file, type_key) in [
+            ("nuxie/layout_css_style.json", LAYOUT_CSS_STYLE),
+            ("nuxie/box_border.json", BOX_BORDER),
+            ("nuxie/box_gradient.json", BOX_GRADIENT),
+            ("nuxie/box_shadow.json", BOX_SHADOW),
         ] {
-            let json: serde_json::Value = serde_json::from_str(text).expect(file);
-            assert_eq!(json["key"]["int"], u64::from(type_key), "{file}");
-            for (name, property) in json["properties"].as_object().expect(file) {
-                let key = property["key"]["int"].as_u64().expect(name) as u16;
+            let definition = nuxie_schema::definition_by_type_key(type_key).expect(file);
+            assert_eq!(definition.file, file, "{file}");
+            for property in definition.properties {
+                let (name, key) = (property.name, property.key.int);
                 assert_eq!(owner(key).map(|(owner, _)| owner), Some(type_key), "{name}");
-                let initial: f32 = property["initialValue"]
-                    .as_str()
-                    .expect(name)
-                    .parse()
-                    .expect(name);
-                match (property["type"].as_str(), field(key)) {
-                    (Some("uint8"), Some(Field::Enum { default, .. })) => {
+                let initial: f32 = property.initial_value.expect(name).parse().expect(name);
+                match (property.declared_type, field(key)) {
+                    ("uint8", Some(Field::Enum { default, .. })) => {
                         assert_eq!(f32::from(default), initial, "{name}")
                     }
-                    (Some("double"), Some(Field::Number { default })) => {
+                    ("double", Some(Field::Number { default })) => {
                         assert_eq!(default, initial, "{name}")
                     }
                     other => panic!("{name}: {other:?}"),

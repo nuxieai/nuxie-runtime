@@ -601,6 +601,38 @@ mod tests {
         assert!(radius > 0.0 && radius < 0.01, "{radius}");
     }
 
+    /// A closest-corner ellipse whose closest side has no width (its centre
+    /// on the left edge) is CSS's zero-width degenerate ellipse: vanishingly
+    /// thin and very tall, not the Rive gradient's authored ends.
+    #[test]
+    fn zero_width_closest_corner_ellipses_are_degenerate() {
+        use crate::css_layout::{CssValues, keys};
+        let (first, count) = keys::range(keys::BOX_GRADIENT).unwrap();
+        let mut values: Vec<f32> = (first..first + count as u16)
+            .map(keys::default_value)
+            .collect();
+        values[usize::from(keys::GRADIENT_SIZE - first)] = 2.0;
+        values[usize::from(keys::GRADIENT_CENTER_X + 1 - first)] = 0.0;
+        let geometry = gradient_geometry(
+            CssValues {
+                first,
+                values: &values,
+            },
+            Aabb::new(0.0, 0.0, 100.0, 100.0),
+            true,
+        )
+        .expect("a box gradient");
+        assert_eq!(geometry.start, Vec2D::new(0.0, 50.0));
+        let radius = geometry.end.x - geometry.start.x;
+        assert!(radius > 0.0 && radius < 0.01, "{radius}");
+        // Scaled vertically to the very long axis.
+        assert!(
+            geometry.transform.values()[3] > 1.0e6,
+            "{:?}",
+            geometry.transform
+        );
+    }
+
     #[test]
     fn gradient_lines_reach_the_far_corners_as_css_does() {
         use crate::css_layout::{CssValues, keys};

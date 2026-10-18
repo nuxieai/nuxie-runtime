@@ -254,6 +254,32 @@ fn css_mode_box_sizes_to_its_text() {
         assert_width(&f, expected);
     }
 }
+/// A CSS box gives its text its content box, where Taffy measured it:
+/// `width: 100px; padding: 10px` lays the text out 100 wide, not 120.
+#[test]
+fn css_mode_text_takes_the_content_box() {
+    use crate::source::generated::core_registry::CoreRegistry;
+    let f = Fixture::new("Unlock premium", 338.0, false);
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.label, &record);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+        .unwrap();
+    // width: 100px, and 10 points of padding on every side.
+    assert!(CoreRegistry::set_uint_handle(&record, 60043, 1));
+    assert!(CoreRegistry::set_double_handle(&record, 60044, 100.0));
+    for key in [60085, 60087, 60089, 60091] {
+        assert!(CoreRegistry::set_double_handle(&record, key, 10.0));
+    }
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_eq!(f.solve().width(), 120.0);
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    let text = f
+        .text
+        .with_downcast::<Text, _>(|text| (text.effective_width(), text.effective_height()));
+    let height = f.solve().height() - 20.0;
+    assert_eq!(text, Some((100.0, height)));
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

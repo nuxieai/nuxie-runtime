@@ -117,6 +117,9 @@ struct B {
     images: Vec<&'static str>,
     /// The box's own paints, in draw order.
     paints: Vec<Paint>,
+    /// Shapes of several rectangle paths: the shape's name and each path's
+    /// x position and size.
+    multi_path: Vec<(&'static str, Vec<(f32, (f32, f32))>)>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -203,6 +206,8 @@ enum Entry<'a> {
     Feather(f32, u64),
     LinearGradient(u64),
     Stop(u32, f32, u64),
+    NamedShape(&'static str, u64),
+    PathAt(f32, (f32, f32), u64),
     Group(u64),
     Shape(&'a Rect, u64),
     Path(&'a Rect, u64),
@@ -291,6 +296,13 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                 entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), host));
             }
         }
+        for (name, paths) in &node.multi_path {
+            entries.push(Entry::NamedShape(name, index));
+            let shape = entries.len() as u64;
+            for &(x, size) in paths {
+                entries.push(Entry::PathAt(x, size, shape));
+            }
+        }
         for rect in &node.content {
             let mut parent = index;
             if rect.grouped {
@@ -355,6 +367,23 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent);
                 write(&mut riv, props);
                 riv.end();
+            }
+            Entry::NamedShape(name, parent) => {
+                riv.object(ShapeBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, name)
+                    .end();
+            }
+            Entry::PathAt(x, size, parent) => {
+                riv.object(RectangleBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .float(
+                        crate::source::generated::node_base::NodeBase::X_PROPERTY_KEY,
+                        *x,
+                    )
+                    .float(ParametricPathBase::WIDTH_PROPERTY_KEY, size.0)
+                    .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, size.1)
+                    .end();
             }
             Entry::Fill(parent) => {
                 riv.object(FillBase::TYPE_KEY)
@@ -1883,4 +1912,209 @@ fn css_flex_direction_written_at_run_time_retranslates_rive_children() {
     // Its Fill width is now across the column: it stretches, and it keeps
     // its fixed height along the column.
     assert_eq!(f.bounds("Grow"), [0.0, 0.0, 300.0, 20.0]);
+}
+
+/// A CSS leaf keeps its shape content's CSS size as its automatic minimum:
+/// an 80-point path scaled by 2 holds a 160-point box in a 100-point row.
+#[test]
+fn css_shape_content_minimum_uses_its_path_transform() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(100.0), &height(100.0)].concat(),
+            vec![B {
+                content: vec![Rect {
+                    name: "Wide",
+                    size: (80.0, 30.0),
+                    grouped: false,
+                    path_scale_x: 2.0,
+                }],
+                ..css("Leaf", [], vec![])
+            }],
+        ),
+    );
+    assert_eq!(f.bounds("Leaf")[2], 160.0);
+}
+
+/// A CSS leaf measures a shape's paths together: rectangles of 80 points
+/// centred at x 0 and x 120 span 200.
+#[test]
+fn css_shape_paths_are_measured_together() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(400.0), &height(100.0)].concat(),
+            vec![B {
+                multi_path: vec![("Pair", vec![(0.0, (80.0, 30.0)), (120.0, (80.0, 30.0))])],
+                ..css("Leaf", [], vec![])
+            }],
+        ),
+    );
+    assert_eq!(f.bounds("Leaf")[2], 200.0);
+}
+
+/// A CSS grid reads its GridTracks whatever the Rive style's layout type:
+/// a style left as a stack does not turn the grid into one cell.
+#[test]
+fn css_grid_ignores_a_rive_stack_layout_type() {
+    const POINTS: u64 = 1;
+    const STACK: u64 = 2;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            tracks: vec![(0, POINTS, 100.0), (0, POINTS, 200.0)],
+            style: vec![U(
+                LayoutComponentStyleBase::LAYOUT_TYPE_VALUE_PROPERTY_KEY,
+                STACK,
+            )],
+            ..css(
+                "Grid",
+                [[U(DISPLAY, 2)].as_slice(), &width(300.0), &height(40.0)].concat(),
+                vec![css("First", [], vec![]), css("Second", [], vec![])],
+            )
+        },
+    );
+    assert_eq!(f.bounds("First"), [0.0, 0.0, 100.0, 40.0]);
+    assert_eq!(f.bounds("Second"), [100.0, 0.0, 200.0, 40.0]);
+}
+
+/// A rounded per-side border reaches into its corners: the top side's
+/// region follows each corner's join line until the corner's curve ends,
+/// so the curved ring inside the padding rectangle is drawn.
+#[test]
+fn css_rounded_side_border_reaches_into_its_corners() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Border(0xff44_5566, 1)],
+            style: vec![F(
+                LayoutComponentStyleBase::CORNER_RADIUS_TL_PROPERTY_KEY,
+                40.0,
+            )],
+            ..css(
+                "Edge",
+                [
+                    [
+                        U(BOX_SIZING, 1),
+                        F(BORDER_TOP, 4.0),
+                        F(BORDER_RIGHT, 4.0),
+                        F(BORDER_BOTTOM, 4.0),
+                        F(BORDER_LEFT, 4.0),
+                    ]
+                    .as_slice(),
+                    &width(100.0),
+                    &height(100.0),
+                ]
+                .concat(),
+                vec![],
+            )
+        },
+    );
+    // Each join line runs from an outer corner through the inner corner
+    // to the edge of the corner's 40-point curve.
+    assert_eq!(f.css_paints("Edge")[0].1, Some(aabb(0.0, 0.0, 100.0, 40.0)));
+}
+
+/// Hit testing through a CSS box's clip uses its padding box and inner
+/// radii, as its children are drawn; the box itself keeps its border box.
+#[test]
+fn css_clip_hit_test_uses_the_padding_box() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            style: vec![F(
+                LayoutComponentStyleBase::CORNER_RADIUS_TL_PROPERTY_KEY,
+                30.0,
+            )],
+            ..css(
+                "Frame",
+                [
+                    [
+                        U(BOX_SIZING, 1),
+                        U(OVERFLOW_X, 2),
+                        U(OVERFLOW_Y, 2),
+                        F(BORDER_TOP, 10.0),
+                        F(BORDER_RIGHT, 10.0),
+                        F(BORDER_BOTTOM, 10.0),
+                        F(BORDER_LEFT, 10.0),
+                    ]
+                    .as_slice(),
+                    &width(100.0),
+                    &height(100.0),
+                ]
+                .concat(),
+                vec![],
+            )
+        },
+    );
+    let hits = |x: f32, y: f32, primary: bool| {
+        f.named("Frame")
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.hit_test_point(&crate::source::math::vec2d::Vec2D::new(x, y), true, primary)
+            })
+            .unwrap()
+    };
+    // In the border: clipped for children, part of the box itself.
+    assert!(!hits(5.0, 50.0, false));
+    assert!(hits(5.0, 50.0, true));
+    // Inside the padding rectangle but outside its 20-point inner corner.
+    assert!(!hits(12.0, 12.0, false));
+    assert!(hits(50.0, 50.0, false));
+}
+
+/// A CSS box's overflow clips its children's rendered semantic bounds: a
+/// child wholly outside an `overflow: hidden` box has none.
+#[test]
+fn css_overflow_clips_semantic_bounds() {
+    const COLUMN: u64 = 2;
+    let fixed = |name: &'static str, h: f32| {
+        css(
+            name,
+            [[F(FLEX_SHRINK, 0.0)].as_slice(), &width(100.0), &height(h)].concat(),
+            vec![],
+        )
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [
+                [U(DISPLAY, 1), U(60028, COLUMN), U(OVERFLOW_Y, 2)].as_slice(),
+                &width(100.0),
+                &height(50.0),
+            ]
+            .concat(),
+            vec![fixed("In", 50.0), fixed("Out", 20.0)],
+        ),
+    );
+    use crate::source::semantic::semantic_provider::rendered_geometry_bounds;
+    let inside = rendered_geometry_bounds(Some(&f.named("In")));
+    assert_eq!(
+        (inside.min_x, inside.min_y, inside.max_x, inside.max_y),
+        (0.0, 0.0, 100.0, 50.0)
+    );
+    assert!(rendered_geometry_bounds(Some(&f.named("Out"))).is_empty_or_nan());
+}
+
+/// A shadow's spread counts towards its box's painted bounds.
+#[test]
+fn css_shadow_spread_is_in_the_painted_bounds() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Shadow {
+                color: 0x8000_0000,
+                strength: 0.0,
+                spread: 30.0,
+            }],
+            ..css("Lifted", border_box(&[]), vec![])
+        },
+    );
+    let mut bounds = crate::source::math::aabb::Aabb::default();
+    f.named("Lifted")
+        .with_downcast_mut::<LayoutComponent, _>(|layout| layout.painted_world_bounds(&mut bounds))
+        .unwrap();
+    assert_eq!(bounds, aabb(-30.0, -30.0, 130.0, 80.0));
 }

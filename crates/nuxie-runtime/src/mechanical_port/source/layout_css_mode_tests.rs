@@ -2770,3 +2770,91 @@ fn css_artboard_gradient_follows_its_origin() {
         "{gradient}"
     );
 }
+
+/// A CSS grid's `justify-items` reaches its Rive children: a Hug child
+/// with an automatic `justify-self` is centred in a centred grid.
+#[test]
+fn css_grid_justify_items_reaches_rive_children() {
+    const POINTS: u64 = 1;
+    const JUSTIFY_ITEMS: u16 = 60037;
+    const CENTER: u64 = 8;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            tracks: vec![(0, POINTS, 200.0)],
+            ..css(
+                "Grid",
+                [
+                    [U(DISPLAY, 2), U(JUSTIFY_ITEMS, CENTER)].as_slice(),
+                    &width(200.0),
+                    &height(40.0),
+                ]
+                .concat(),
+                vec![B {
+                    name: "Hug",
+                    style: vec![
+                        U(
+                            LayoutComponentStyleBase::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY,
+                            1,
+                        ),
+                        U(
+                            LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                            LayoutScaleType::Hug as u64,
+                        ),
+                        U(
+                            LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+                            LayoutScaleType::Hug as u64,
+                        ),
+                    ],
+                    content: vec![Rect {
+                        name: "Dot",
+                        size: (40.0, 20.0),
+                        grouped: false,
+                        path_scale_x: 1.0,
+                    }],
+                    ..B::default()
+                }],
+            )
+        },
+    );
+    assert_eq!(f.bounds("Hug")[..3], [80.0, 0.0, 40.0]);
+}
+
+/// A CSS leaf artboard keeps its content at its content box when it
+/// resizes or its origin moves.
+#[test]
+fn css_leaf_artboard_content_follows_its_size_and_origin() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![F(BORDER_LEFT, 2.0), F(PADDING_LEFT, 10.0)]),
+            content: vec![Rect {
+                name: "Dot",
+                size: (40.0, 20.0),
+                grouped: false,
+                path_scale_x: 1.0,
+            }],
+            origin_x: 0.5,
+            ..ArtboardSpec::default()
+        },
+        None,
+    )
+    .expect("the scene imports");
+    // The background runs from -200: the content box starts 12 past it.
+    assert_eq!(f.world_origin("Dot").0, -188.0);
+    let artboard = f.artboard.core_handle();
+    assert!(CoreRegistry::set_double_handle(
+        &artboard,
+        LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
+        600.0
+    ));
+    f.advance(2);
+    assert_eq!(f.world_origin("Dot").0, -288.0);
+    assert!(CoreRegistry::set_double_handle(
+        &artboard,
+        ArtboardBase::ORIGIN_X_PROPERTY_KEY.into(),
+        0.0
+    ));
+    f.advance(2);
+    assert_eq!(f.world_origin("Dot").0, 12.0);
+}

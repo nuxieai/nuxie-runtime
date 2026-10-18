@@ -1,6 +1,6 @@
-//! The four CSS layout record types as ordinary components of the Rive
-//! record stream: `LayoutCssStyle`, `BoxBorder`, `BoxGradient` and
-//! `BoxShadow` (docs/CSS_LAYOUT.md, section 1). Each stores its values in
+//! The five CSS layout record types as ordinary components of the Rive
+//! record stream: `LayoutCssStyle`, `BoxBorder`, `BoxGradient`, `BoxShadow`
+//! and `BoxPaint` (docs/CSS_LAYOUT.md, section 1). Each stores its values in
 //! one slot per property key, outside the mechanical upstream registry.
 use super::{
     keys::{self, Field},
@@ -42,6 +42,7 @@ pub type LayoutCssStyle = CssRecord<{ keys::LAYOUT_CSS_STYLE }>;
 pub type BoxBorder = CssRecord<{ keys::BOX_BORDER }>;
 pub type BoxGradient = CssRecord<{ keys::BOX_GRADIENT }>;
 pub type BoxShadow = CssRecord<{ keys::BOX_SHADOW }>;
+pub type BoxPaint = CssRecord<{ keys::BOX_PAINT }>;
 
 struct NoCallbacks;
 impl ComponentBaseCallbacks for NoCallbacks {
@@ -165,6 +166,8 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                 parent
                     .with_mut(|gradient| gradient.component_add_dirt(ComponentDirt::PAINT, false));
             }
+            // A BoxPaint sizes only its box's paint: nothing reflows.
+            keys::BOX_PAINT => LayoutComponent::css_paint_changed_occurrence(&parent),
             _ => {}
         }
     }
@@ -179,6 +182,8 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                 parent.is_type_of(LayoutComponentBase::TYPE_KEY)
                     || parent.is_type_of(TransformComponentBase::TYPE_KEY)
             }
+            // A box or an artboard; it paints only in CSS mode.
+            keys::BOX_PAINT => parent.is_type_of(LayoutComponentBase::TYPE_KEY),
             keys::BOX_BORDER => parent.is_type_of(StrokeBase::TYPE_KEY),
             // RadialGradient extends LinearGradient.
             keys::BOX_GRADIENT => parent.is_type_of(LinearGradientBase::TYPE_KEY),
@@ -207,23 +212,27 @@ impl<const TYPE: u16> CssRecord<TYPE> {
         else {
             return StatusCode::Ok;
         };
-        if TYPE != keys::LAYOUT_CSS_STYLE {
+        if TYPE != keys::LAYOUT_CSS_STYLE && TYPE != keys::BOX_PAINT {
             return StatusCode::Ok;
         }
-        // At most one record per parent.
+        // At most one record of each of these types per parent.
         let first = parent
             .with(|parent| {
                 parent.as_container_component().and_then(|container| {
                     container
                         .children()
                         .iter()
-                        .find(|child| child.is_type_of(keys::LAYOUT_CSS_STYLE))
+                        .find(|child| child.is_type_of(TYPE))
                         .cloned()
                 })
             })
             .flatten();
         if first.as_ref() != Some(&this) {
             return StatusCode::InvalidObject;
+        }
+        if TYPE == keys::BOX_PAINT {
+            LayoutComponent::css_paint_changed_occurrence(&parent);
+            return StatusCode::Ok;
         }
         if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
             parent.with_mut(|object| {
@@ -312,7 +321,7 @@ pub(crate) fn set_property(
             })*
         };
     }
-    try_set!(LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow);
+    try_set!(LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow, BoxPaint);
     false
 }
 
@@ -324,7 +333,7 @@ pub(crate) fn get_property(object: &dyn Any, key: u16) -> Option<f32> {
             })*
         };
     }
-    try_get!(LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow);
+    try_get!(LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow, BoxPaint);
     None
 }
 
@@ -497,6 +506,23 @@ impl<const TYPE: u16> CoreCapabilities for CssRecord<TYPE> {
 /// The record of a box, read for its CSS mode questions.
 pub fn with_values<R>(record: &CoreHandle, f: impl FnOnce(CssValues<'_>) -> R) -> Option<R> {
     record.with_downcast::<LayoutCssStyle, _>(|record| f(record.values()))
+}
+
+/// The paint size a box's `BoxPaint` gives, if its children hold one
+/// (docs/CSS_LAYOUT.md, 4.2): its width and height, never below zero.
+pub(crate) fn box_paint_size(children: &[CoreHandle]) -> Option<(f32, f32)> {
+    children
+        .iter()
+        .find(|child| child.is_type_of(keys::BOX_PAINT))?
+        .with_downcast::<BoxPaint, _>(|record| {
+            let size = |key| {
+                record
+                    .number(key)
+                    .filter(|value| value.is_finite() && *value > 0.0)
+                    .unwrap_or(0.0)
+            };
+            (size(keys::PAINT_WIDTH), size(keys::PAINT_HEIGHT))
+        })
 }
 
 /// The role a sync context gives a node's record.

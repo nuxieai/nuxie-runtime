@@ -330,6 +330,8 @@ struct ArtboardSpec {
     paints: Vec<Paint>,
     content: Vec<Rect>,
     origin_x: f32,
+    /// The artboard's BoxPaint: its width and height.
+    box_paint: Option<(f32, f32)>,
 }
 
 /// Imports one artboard of `size` described by `spec`, holding `root` when
@@ -402,6 +404,13 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     let mut entries = Vec::new();
     if let Some(props) = &artboard_css {
         entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), 0));
+    }
+    if let Some((width, height)) = spec.box_paint {
+        entries.push(Entry::Record(
+            BOX_PAINT,
+            vec![F(PAINT_WIDTH, width), F(PAINT_HEIGHT, height)],
+            0,
+        ));
     }
     push_paints(artboard_paints, 0, &mut entries);
     for rect in &spec.content {
@@ -2826,6 +2835,16 @@ fn css_artboard_gradient_follows_its_origin() {
         .rev()
         .find(|line| line.starts_with("makeLinearGradient"))
         .expect("a gradient");
+    // To the right across the background, which runs from -200 to 200.
+    assert_eq!(
+        gradient_ends(gradient),
+        ((-200.0, 150.0), (200.0, 150.0)),
+        "{gradient}"
+    );
+}
+
+/// A recorded gradient's start and end, to a hundredth.
+fn gradient_ends(gradient: &str) -> ((f32, f32), (f32, f32)) {
     let point = |label: &str| -> (f32, f32) {
         let rest = &gradient[gradient.find(label).expect(label) + label.len()..];
         let (x, rest) = rest.split_once(',').unwrap();
@@ -2833,12 +2852,7 @@ fn css_artboard_gradient_follows_its_origin() {
         let round = |value: &str| (value.parse::<f32>().unwrap() * 100.0).round() / 100.0;
         (round(x), round(y))
     };
-    // To the right across the background, which runs from -200 to 200.
-    assert_eq!(
-        (point("start=("), point("end=(")),
-        ((-200.0, 150.0), (200.0, 150.0)),
-        "{gradient}"
-    );
+    (point("start=("), point("end=("))
 }
 
 /// A CSS grid's `justify-items` reaches its Rive children: a Hug child
@@ -3247,9 +3261,41 @@ fn css_box_paint_carries_its_shadow_and_gradient() {
         .rev()
         .find(|line| line.starts_with("makeLinearGradient"))
         .expect("a gradient");
-    assert!(
-        gradient.contains("start=(50,50) end=(150,50)"),
+    assert_eq!(
+        gradient_ends(gradient),
+        ((50.0, 50.0), (150.0, 50.0)),
         "{gradient}"
+    );
+}
+
+/// A CSS artboard's BoxPaint moves its background, not its own clip.
+#[test]
+fn css_artboard_box_paint_keeps_its_clip() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            box_paint: Some((100.0, 50.0)),
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let lines = f.draw_lines();
+    let clip = lines
+        .iter()
+        .find(|line| line.starts_with("clipPath"))
+        .unwrap_or_else(|| panic!("{}", lines.join("\n")));
+    // The artboard's bounds; its background starts at -0.
+    assert!(clip.contains("(400,-0),(400,300),(-0,300)"), "{clip}");
+    let background = lines
+        .iter()
+        .find(|line| line.starts_with("drawPath") && line.contains("color=0xff112233"))
+        .unwrap_or_else(|| panic!("{}", lines.join("\n")));
+    assert!(
+        background.contains("(150,125),(250,125),(250,175),(150,175)"),
+        "{background}"
     );
 }
 

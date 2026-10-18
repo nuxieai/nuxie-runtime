@@ -267,7 +267,9 @@ impl LinearGradient {
             .iter()
             .find(|child| child.is_type_of(crate::css_layout::keys::BOX_GRADIENT))?
             .clone();
-        let (width, height, border, start) = self
+        // The positioning area is the padding box of the rectangle the box
+        // paints: its BoxPaint's when it has one, else its border box.
+        let area = self
             .shape_paint_container
             .as_ref()?
             .with(|container| {
@@ -281,27 +283,11 @@ impl LinearGradient {
                         )
                     });
                 container
-                    .as_layout_component()
-                    .filter(|layout| layout.is_css_mode())
-                    .map(|layout| {
-                        (
-                            layout.layout_width(),
-                            layout.layout_height(),
-                            layout.solved_border(),
-                            start,
-                        )
-                    })
+                    .as_layout_component()?
+                    .css_paint_geometry()
+                    .map(|geometry| geometry.padding.offset(start.x, start.y))
             })
             .flatten()?;
-        let area = crate::css_layout::paint::padding_box(
-            crate::source::math::aabb::Aabb::new(
-                start.x,
-                start.y,
-                start.x + width,
-                start.y + height,
-            ),
-            border,
-        );
         record
             .with_downcast::<crate::css_layout::BoxGradient, _>(|record| {
                 crate::css_layout::paint::gradient_geometry(

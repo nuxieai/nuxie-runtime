@@ -252,6 +252,9 @@ pub(crate) struct LayoutRenderPaths {
     /// CSS mode: the paints drawn with their own geometry (shadows with a
     /// BoxShadow, borders with a BoxBorder), in the box's space.
     pub css_paints: Vec<CssPaintPaths>,
+    /// A CSS artboard with a BoxPaint: its own clip, its bounds, which its
+    /// background no longer is (docs/CSS_LAYOUT.md, 4.2).
+    pub frame_clip: Option<ShapePaintPath>,
 }
 
 /// One special paint of a CSS box and the paths it draws with.
@@ -613,9 +616,12 @@ impl LayoutComponent {
         &mut self,
         out: &mut crate::mechanical_port::source::math::aabb::Aabb,
     ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
-        // A CSS box's special paths (a spread shadow) reach past it; the
-        // paints' feathers and offsets add their reach as for any paint.
-        let mut local = self.local_bounds();
+        // A CSS box paints its BoxPaint's rectangle when it has one, and its
+        // special paths (a spread shadow) reach past it; the paints'
+        // feathers and offsets add their reach as for any paint.
+        let mut local = self
+            .css_paint_geometry()
+            .map_or_else(|| self.local_bounds(), |geometry| geometry.bounds);
         if let Some(paths) = self.render_paths.as_ref() {
             for paint in &paths.borrow().css_paints {
                 local.expand(paint.path.raw_path().bounds());
@@ -2228,6 +2234,29 @@ impl LayoutComponent {
     /// the record, scaled together when they overlap), its padding box with
     /// the inner radii, and its computed overflow. None in translated mode.
     pub(crate) fn css_box_geometry(&self) -> Option<CssBoxGeometry> {
+        let (width, height) = (self.layout.width(), self.layout.height());
+        self.css_geometry_of(Aabb::new(0.0, 0.0, width, height))
+    }
+    /// The geometry this box's own paints draw with (docs/CSS_LAYOUT.md,
+    /// 4.2): its BoxPaint's rectangle, centred on the border box, with radii
+    /// resolved against it, or the border box when it has no BoxPaint.
+    /// Layout, the content clip and hit testing keep the border box.
+    pub(crate) fn css_paint_geometry(&self) -> Option<CssBoxGeometry> {
+        let (width, height) = (self.layout.width(), self.layout.height());
+        let bounds = match self.box_paint_size() {
+            Some((paint_width, paint_height)) => {
+                let (left, top) = ((width - paint_width) / 2.0, (height - paint_height) / 2.0);
+                Aabb::new(left, top, left + paint_width, top + paint_height)
+            }
+            None => Aabb::new(0.0, 0.0, width, height),
+        };
+        self.css_geometry_of(bounds)
+    }
+    /// The size this box's BoxPaint gives its paint, if it has one.
+    pub(crate) fn box_paint_size(&self) -> Option<(f32, f32)> {
+        crate::css_layout::record::box_paint_size(self.base.base.base.base.base.children())
+    }
+    fn css_geometry_of(&self, bounds: Aabb) -> Option<CssBoxGeometry> {
         use crate::css_layout::{keys, paint};
         let points = self
             .with_style(|style| {
@@ -2251,9 +2280,7 @@ impl LayoutComponent {
                 css.overflow(),
             )
         })?;
-        let (width, height) = (self.layout.width(), self.layout.height());
-        let bounds = Aabb::new(0.0, 0.0, width, height);
-        let radii = paint::border_radii(width, height, points, percents);
+        let radii = paint::border_radii(bounds.width(), bounds.height(), points, percents);
         let border = self.solved_border;
         Some(CssBoxGeometry {
             bounds,
@@ -2323,16 +2350,18 @@ impl LayoutComponent {
     /// box with its inner radii. Radii are physical: no RTL swap.
     fn update_css_render_path(&mut self) {
         use crate::css_layout::paint;
-        let Some(CssBoxGeometry {
-            bounds,
-            radii,
-            padding,
-            inner,
-            overflow,
-        }) = self.css_box_geometry()
+        let (Some(geometry), Some(painted)) = (self.css_box_geometry(), self.css_paint_geometry())
         else {
             return;
         };
+        // The box's own paint follows its BoxPaint; its clip does not.
+        let CssBoxGeometry {
+            padding,
+            inner,
+            overflow,
+            ..
+        } = geometry;
+        let CssBoxGeometry { bounds, radii, .. } = painted;
         let world = self.base.base.base.base.world_transform();
         let mut paths_owner = self.mutable_render_paths();
         let paths = &mut *paths_owner;
@@ -2360,16 +2389,7 @@ impl LayoutComponent {
             .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
         paths.clip.add_path(&clip, Some(&world));
         drop(paths_owner);
-        let css_paints = self.css_paint_paths(
-            &CssBoxGeometry {
-                bounds,
-                radii,
-                padding,
-                inner,
-                overflow,
-            },
-            None,
-        );
+        let css_paints = self.css_paint_paths(&painted, None);
         self.mutable_render_paths().css_paints = css_paints;
         for paint in self.paints.shape_paints().iter().cloned() {
             let should_draw = paint

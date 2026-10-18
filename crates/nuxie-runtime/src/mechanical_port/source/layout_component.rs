@@ -646,6 +646,17 @@ impl LayoutComponent {
             ),
         }
     }
+    /// Whether `paint` draws with its own CSS geometry (a BoxBorder or a
+    /// BoxShadow) rather than the box's background path.
+    fn special_paint(&self, paint: &CoreHandle) -> bool {
+        self.render_paths.as_ref().is_some_and(|paths| {
+            paths
+                .borrow()
+                .css_paints
+                .iter()
+                .any(|special| &special.paint == paint)
+        })
+    }
     /// A CSS box's own painted area (docs/CSS_LAYOUT.md, 4.5), mapped by
     /// `transform` from the space its paint paths are in: `painted`, its
     /// paint rectangle, when an ordinary paint draws it, and each special
@@ -659,6 +670,8 @@ impl LayoutComponent {
         out: &mut Aabb,
     ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
         use crate::mechanical_port::source::drawable::{BoundsFidelity, Drawable};
+        // A special paint that does not draw (hidden, or fully transparent
+        // as Rive decides) adds nothing.
         let specials: Vec<(CoreHandle, Aabb, Option<Aabb>)> = self
             .render_paths
             .as_ref()
@@ -667,6 +680,7 @@ impl LayoutComponent {
                     .borrow()
                     .css_paints
                     .iter()
+                    .filter(|special| css_paint_draws(&special.paint))
                     .map(|special| {
                         (
                             special.paint.clone(),
@@ -682,7 +696,7 @@ impl LayoutComponent {
                 .paints
                 .shape_paints()
                 .iter()
-                .any(|paint| !specials.iter().any(|(special, ..)| special == paint));
+                .any(|paint| !self.special_paint(paint) && css_paint_draws(paint));
         let mut result: Option<Aabb> = None;
         let mut fidelity = BoundsFidelity::Exact;
         let parts = plain
@@ -5809,6 +5823,22 @@ impl LayoutComponent {
         });
         if changed.is_some() {
             Self::mark_layout_node_dirty_occurrence(owner, false);
+            // Our layer: a CSS parent paints an absolute child as positioned
+            // (docs/CSS_LAYOUT.md, 4.4).
+            let css_parent = owner
+                .with(|object| object.component_parent_handle())
+                .flatten()
+                .and_then(|parent| {
+                    parent.with(|object| {
+                        object
+                            .as_layout_component()
+                            .is_some_and(LayoutComponent::is_css_mode)
+                    })
+                })
+                .unwrap_or(false);
+            if css_parent {
+                crate::css_layout::record::mark_draw_order_dirty(owner);
+            }
         }
     }
     pub(crate) fn scale_type_changed_from_style(

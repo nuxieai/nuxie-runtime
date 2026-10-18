@@ -6,8 +6,9 @@
 //! (later on top), then positioned children with z-index auto or 0 in tree
 //! order, then positive z-index ascending. Each child keeps its subtree
 //! together, so a positioned descendant does not leave its parent's box.
-//! A participant orders by its host's record, as a box does. Translated
-//! (Rive) boxes keep Rive's order.
+//! A participant orders by its host's record, as a box does, and a
+//! translated child placed absolutely is positioned. Translated (Rive)
+//! boxes keep Rive's order among their own children.
 use super::keys;
 use crate::source::{
     core::CoreHandle, drawable::RuntimeDrawableOccurrence,
@@ -72,12 +73,18 @@ pub(crate) fn container_of(component: &CoreHandle) -> Container {
 
 /// A child's paint layer, bottom first, and its z-index within the layer.
 /// A box reads its record; a participant's host reads the record among
-/// its children.
+/// its children. A translated box is positioned when layout places it
+/// absolutely, with z-index auto.
 fn layer_of(child: &CoreHandle, parent: Container) -> (u8, i32) {
+    use crate::source::layout::layout_style_applier::YGPositionType;
     let read = |css: super::CssValues<'_>| (css.choice(keys::POSITION) != 0, css.z_index());
     let css = child
         .with(|object| match object.as_layout_component() {
-            Some(layout) => layout.with_css(read),
+            Some(layout) if layout.is_css_mode() => layout.with_css(read),
+            Some(layout) => layout
+                .with_style(|style| style.position_type() == YGPositionType::Absolute)
+                .filter(|absolute| *absolute)
+                .map(|_| (true, None)),
             None => object
                 .as_container_component()
                 .and_then(|container| super::record::find_in(container.children()))

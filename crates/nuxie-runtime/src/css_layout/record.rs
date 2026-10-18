@@ -264,7 +264,7 @@ pub fn find_in(children: &[CoreHandle]) -> Option<CoreHandle> {
 }
 
 /// `owner`'s artboard sorts its draw order again.
-fn mark_draw_order_dirty(owner: &CoreHandle) {
+pub(crate) fn mark_draw_order_dirty(owner: &CoreHandle) {
     let artboard =
         if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
             Some(owner.clone())

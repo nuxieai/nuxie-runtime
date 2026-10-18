@@ -489,9 +489,20 @@ pub fn gradient_geometry(
         // farthest-corner, the initial size.
         _ => through(far, far),
     };
-    if radii.x <= 0.0 || radii.y <= 0.0 || !radii.x.is_finite() || !radii.y.is_finite() {
+    if !radii.x.is_finite() || !radii.y.is_finite() {
         return None;
     }
+    // A zero-sized ending shape draws as CSS draws it (CSS Images 3,
+    // "Degenerate Radial Gradients"): a circle of a vanishing radius, or an
+    // ellipse vanishingly thin on its zero axis and very long on the other.
+    const VANISHING: f32 = 1.0e-3;
+    const VAST: f32 = 1.0e6;
+    let radii = match (radii.x > 0.0, radii.y > 0.0) {
+        (true, true) => radii,
+        (false, true) => Vec2D::new(VANISHING, VAST),
+        (true, false) => Vec2D::new(VAST, VANISHING),
+        (false, false) => Vec2D::new(VANISHING, VANISHING),
+    };
     let transform = if radii.x == radii.y {
         identity
     } else {

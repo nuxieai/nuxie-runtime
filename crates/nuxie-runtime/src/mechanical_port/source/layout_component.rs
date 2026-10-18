@@ -1707,7 +1707,13 @@ impl LayoutComponent {
                         geometry.padding,
                         geometry.inner,
                         self.clipped_axes(),
-                    ) && (!artboard_clip || self.local_bounds().contains(local))
+                    ) && (!artboard_clip
+                        || crate::css_layout::paint::overflow_clip_contains(
+                            local,
+                            geometry.bounds,
+                            geometry.radii,
+                            (true, true),
+                        ))
                 }
                 _ => self.local_bounds().contains(local),
             };
@@ -4353,6 +4359,8 @@ impl LayoutComponent {
         // Taffy caps its automatic minimum by the specified size itself.
         let min_content =
             known.width.is_none() && available.width == taffy::prelude::AvailableSpace::MinContent;
+        let min_content_height = known.height.is_none()
+            && available.height == taffy::prelude::AvailableSpace::MinContent;
         let (width, width_mode) = measure_axis(known.width, available.width);
         let (height, height_mode) = measure_axis(known.height, available.height);
         let layout_parent = owner
@@ -4522,7 +4530,14 @@ impl LayoutComponent {
                                     let next =
                                         measure_host(child, width, width_mode, height, height_mode);
                                     measured.x = measured.x.max(next.x);
-                                    measured.y = measured.y.max(next.y);
+                                    // In a CSS box a content without a
+                                    // minimum adds no minimum height either.
+                                    if !(css_owner
+                                        && min_content_height
+                                        && !host_supports_min_content_width(child))
+                                    {
+                                        measured.y = measured.y.max(next.y);
+                                    }
                                 }
                                 measured
                             },

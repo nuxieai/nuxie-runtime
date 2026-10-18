@@ -356,6 +356,22 @@ impl ScrollConstraint {
         self.with_viewport(|viewport| viewport.is_css_mode().then(|| viewport.scroll_range()))
             .flatten()
     }
+    /// A right-to-left CSS viewport: its content starts at its right edge
+    /// and scrolls toward its left, so its horizontal offset (0 at the
+    /// start, negative toward the end) moves the content right.
+    fn css_rtl(&self) -> bool {
+        self.css_scroll_range().is_some()
+            && self
+                .with_viewport(|viewport| {
+                    viewport.actual_direction()
+                        == crate::source::layout::layout_enums::LayoutDirection::Rtl
+                })
+                .unwrap_or(false)
+    }
+    /// A physical horizontal movement as an offset change, and back.
+    fn logical_x(&self, x: f32) -> f32 {
+        if self.css_rtl() { -x } else { x }
+    }
     pub fn max_offset_x(&self) -> f32 {
         if self.loops_x() {
             f32::NEG_INFINITY
@@ -839,7 +855,7 @@ impl ScrollConstraint {
         self.resolve_scroll_intents();
         self.scroll_transform = Mat2D::from_translate(
             if self.base.constrains_horizontal() {
-                self.clamped_offset_x()
+                self.logical_x(self.clamped_offset_x())
             } else {
                 0.0
             },
@@ -1001,7 +1017,7 @@ impl ScrollConstraint {
 
     pub fn drag_view(&mut self, delta: Vec2D, time_stamp: f32, track_velocity: bool) {
         let scaled = Vec2D::new(
-            delta.x * self.base.drag_multiplier(),
+            self.logical_x(delta.x * self.base.drag_multiplier()),
             delta.y * self.base.drag_multiplier(),
         );
         if self.physics.is_some() {
@@ -1044,7 +1060,7 @@ impl ScrollConstraint {
     }
     pub fn scaled_delta(&self, delta: Vec2D) -> Vec2D {
         Vec2D::new(
-            delta.x * self.drag_multiplier(),
+            self.logical_x(delta.x * self.drag_multiplier()),
             delta.y * self.drag_multiplier(),
         )
     }

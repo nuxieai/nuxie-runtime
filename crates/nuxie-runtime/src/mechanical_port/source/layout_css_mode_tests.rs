@@ -2991,12 +2991,12 @@ fn css_rtl_viewport_scrolls_toward_its_left() {
                         &height(20.0),
                     ]
                     .concat(),
-                    vec![],
+                    vec![css("Item", [width(300.0), height(20.0)].concat(), vec![])],
                 )
             }],
         ),
     );
-    assert_eq!(f.world_origin("Content").0, -200.0);
+    assert_eq!(f.world_origin("Item").0, -200.0);
     let drag = |dx: f32| {
         use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
         let scroll = f
@@ -3013,9 +3013,9 @@ fn css_rtl_viewport_scrolls_toward_its_left() {
         f.advance(2);
     };
     drag(50.0);
-    assert_eq!(f.world_origin("Content").0, -150.0);
+    assert_eq!(f.world_origin("Item").0, -150.0);
     drag(500.0);
-    assert_eq!(f.world_origin("Content").0, 0.0);
+    assert_eq!(f.world_origin("Item").0, 0.0);
 }
 
 /// A CSS artboard with rounded corners and its own clip draws its children

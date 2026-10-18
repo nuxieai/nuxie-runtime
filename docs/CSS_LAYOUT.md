@@ -350,7 +350,7 @@ Rive draws a box's children in reverse file order, so its first child draws on t
 4. positioned children with `z-index` auto or 0, in tree order;
 5. positioned children with a positive `z-index`, ascending.
 
-A flex or grid item's `z-index` applies when it is not positioned too, as CSS says. A participant (a shape, image or text hosting a `LayoutParticipant`) orders by its host's record, as a box does. The order is computed by the runtime when the draw order is sorted, and again when `position`, `z-index` or `display` change at run time (a binding, an animation, a script), so the compiler writes no order of its own. Hit testing follows the same order: the topmost painted box is hit first.
+A flex or grid item's `z-index` applies when it is not positioned too, as CSS says. A participant (a shape, image or text hosting a `LayoutParticipant`) orders by its host's record, as a box does. A translated child of a CSS box is positioned, with `z-index` auto, when layout places it absolutely. The order is computed by the runtime when the draw order is sorted, and again when `position`, `z-index` or `display` change at run time (a binding, an animation, a script), so the compiler writes no order of its own. Hit testing follows the same order: the topmost painted box is hit first.
 
 Step 1 orders each box's own children: a child keeps its whole subtree together, so a positioned descendant paints with its parent's child, not in its nearest stacking context as a browser would let it escape. Escaping, and opacity and transforms as stacking-context triggers, are a follow-up. Translated (Rive) boxes keep Rive's order, and an artboard with draw rules keeps Rive's order throughout.
 
@@ -358,7 +358,7 @@ Step 1 orders each box's own children: a child keeps its whole subtree together,
 
 A CSS box or CSS artboard whose own paints include a visible one is host geometry, as a painted shape is:
 
-- visible geometry: its painted area (the border box, or its `BoxPaint`'s rectangle) with its paints' outsets (strokes, feathers, shadow spread), clipped as it draws by its clipping shapes and its ancestors' clips within its artboard: their paths, rounded corners and a CSS artboard's padding-box clip included, but not its own content clip. A box clipped away is left out. A `BoxBorder` counts as visible whatever its `Stroke`'s thickness, as it draws. A CSS artboard's visible geometry is its painted area inside its own clip;
+- visible geometry: its painted area (the border box, or its `BoxPaint`'s rectangle) with its paints' outsets (strokes, feathers, shadow spread), clipped as it draws by its clipping shapes and its ancestors' clips within its artboard: their paths, rounded corners and a CSS artboard's padding-box clip included, but not its own content clip. A box clipped away is left out. A `BoxBorder` counts as visible whatever its `Stroke`'s thickness, as it draws, and a paint that does not draw (hidden, say) adds nothing. A CSS artboard's visible geometry is its painted area inside its own clip;
 - hit testing: its border box (an artboard's bounds), whatever its `BoxPaint`, in the painting order of 4.4, when its render opacity is above 0;
 - retained geometry: every CSS box with paints.
 

@@ -565,8 +565,11 @@ TEST_CASE("renders selected board", "[silver]")
     def test_css_reviews_preserve_historical_exact_obligations(self):
         reviews = generate_manifest.REVIEWED_LAYOUT_DIVERGENCES
         self.assertEqual(len(generate_manifest.EXACT), 206)
-        # Six reviews returned to exact C++ and two were added (UNIV-4844).
-        self.assertEqual(len(reviews), 12)
+        # Twelve from browser row shrink (UNIV-4844: six returned to exact
+        # C++ and two were added), and four from Fill as `flex: 1` and the
+        # paint-shape rule: hittest_ab_text_parent, list_focus_order,
+        # list_items and superbowl.
+        self.assertEqual(len(reviews), 16)
         self.assertTrue(set(reviews).issubset(generate_manifest.EXACT))
         for silver_id, difference in reviews.items():
             with self.subTest(silver_id=silver_id):

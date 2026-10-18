@@ -1126,3 +1126,79 @@ fn translated_fixed_box_ignores_the_authored_flex_basis() {
     assert_eq!(f.bounds("Half")[2], 200.0);
     assert_eq!(f.bounds("Rest"), [200.0, 0.0, 200.0, 0.0]);
 }
+
+/// A participant host's record with `display: none` hides the host, as a
+/// participant's own display none does, and takes it out of flow.
+#[test]
+fn css_display_none_on_a_participant_hides_its_host() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            participants: vec![
+                (
+                    Rect {
+                        name: "Gone",
+                        size: (80.0, 30.0),
+                        grouped: false,
+                    },
+                    Some([[U(DISPLAY, NONE as u64)].as_slice(), &width(50.0)].concat()),
+                ),
+                (
+                    Rect {
+                        name: "Kept",
+                        size: (80.0, 30.0),
+                        grouped: false,
+                    },
+                    Some(width(40.0).to_vec()),
+                ),
+            ],
+            ..css(
+                "Row",
+                [[U(DISPLAY, 1)].as_slice(), &width(300.0), &height(40.0)].concat(),
+                vec![],
+            )
+        },
+    );
+    let shape = |name: &str| {
+        f.artboard
+            .with_artboard(|artboard| {
+                artboard.find_all_handles::<crate::source::shapes::shape::Shape>()
+            })
+            .into_iter()
+            .find(|handle| {
+                handle
+                    .with(|object| {
+                        object
+                            .as_component()
+                            .is_some_and(|component| component.base.name() == name)
+                    })
+                    .unwrap_or(false)
+            })
+            .unwrap()
+    };
+    let collapsed = |name: &str| {
+        shape(name)
+            .with(|object| object.as_component().unwrap().is_collapsed())
+            .unwrap()
+    };
+    assert!(collapsed("Gone"));
+    assert!(!collapsed("Kept"));
+    // The kept participant starts the row: the hidden one is out of flow.
+    let kept = f
+        .artboard
+        .with_artboard(|artboard| {
+            artboard
+                .find_all_handles::<crate::source::layout::layout_participant::LayoutParticipant>()
+        })
+        .into_iter()
+        .map(|handle| {
+            handle
+                .with_downcast::<crate::source::layout::layout_participant::LayoutParticipant, _>(
+                    |participant| participant.layout_bounds(),
+                )
+                .unwrap()
+        })
+        .find(|bounds| bounds.width() == 40.0)
+        .expect("the kept participant");
+    assert_eq!(kept.left(), 0.0);
+}

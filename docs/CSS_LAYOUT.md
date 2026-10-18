@@ -350,6 +350,16 @@ A flex or grid item's `z-index` applies when it is not positioned too, as CSS sa
 
 Step 1 orders each box's own children: a child keeps its whole subtree together, so a positioned descendant paints with its parent's child, not in its nearest stacking context as a browser would let it escape. Escaping, and opacity and transforms as stacking-context triggers, are a follow-up. Translated (Rive) boxes keep Rive's order, and an artboard with draw rules keeps Rive's order throughout.
 
+### 4.5 Host geometry
+
+A CSS box or CSS artboard whose own paints include a visible one is host geometry, as a painted shape is:
+
+- visible geometry: its painted area (the border box) with its paints' outsets (strokes, feathers, shadow spread), inside its ancestors' clips; a box clipped away is left out;
+- hit testing: its border box, in the painting order of 4.4, when its render opacity is above 0;
+- retained geometry: every CSS box with paints.
+
+Translated boxes keep today's catalogue, which counts painted shapes, text and text fields.
+
 ## 5. Leaf measurement
 
 A box with layout children lays them out. Its non-layout children do not take part in its layout; they draw where they are authored. A box without layout children measures its content. In CSS mode the compiler makes each `<img>`, `<svg>` or text run that must sit in flow among siblings its own box or participant.

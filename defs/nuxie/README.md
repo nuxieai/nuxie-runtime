@@ -13,7 +13,7 @@ resolved explicitly.
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
-- LayoutCssStyle: type 60002; properties 60022–60104.
+- LayoutCssStyle: type 60002; properties 60022–60104 and 60121–60122.
 - BoxBorder: type 60003; property 60105.
 - BoxGradient: type 60004; properties 60106–60117.
 - BoxShadow: type 60005; property 60118.

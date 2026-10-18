@@ -79,7 +79,8 @@ impl<const TYPE: u16> CssRecord<TYPE> {
     fn slot(&self, key: u16) -> Option<usize> {
         let (first, count) = keys::range(TYPE)?;
         let index = usize::from(key.checked_sub(first)?);
-        (index < count).then_some(index)
+        // A slot inside the span that another type owns is not this one's.
+        (index < count && keys::owner(key).is_some_and(|(owner, _)| owner == TYPE)).then_some(index)
     }
     pub fn number(&self, key: u16) -> Option<f32> {
         self.slot(key).map(|slot| self.values[slot])

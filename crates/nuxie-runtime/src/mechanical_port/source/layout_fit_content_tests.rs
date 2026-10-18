@@ -307,6 +307,37 @@ fn css_mode_ignores_a_legacy_hug_unbounded() {
     LayoutComponent::sync_style_occurrence(&f.label);
     assert_width(&f, 338.0);
 }
+/// Padding written at run time narrows a CSS box's text, though the box
+/// keeps its border-box size.
+#[test]
+fn css_mode_text_follows_padding_in_a_fixed_box() {
+    use crate::source::generated::core_registry::CoreRegistry;
+    let f = Fixture::new("Unlock premium", 338.0, false);
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.label, &record);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+        .unwrap();
+    // box-sizing: border-box; width: 200px.
+    assert!(CoreRegistry::set_uint_handle(&record, 60023, 1));
+    assert!(CoreRegistry::set_uint_handle(&record, 60043, 1));
+    assert!(CoreRegistry::set_double_handle(&record, 60044, 200.0));
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_eq!(f.solve().width(), 200.0);
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    let width = || {
+        f.text
+            .with_downcast::<Text, _>(Text::effective_width)
+            .unwrap()
+    };
+    assert_eq!(width(), 200.0);
+    // padding-left: 30px.
+    assert!(CoreRegistry::set_double_handle(&record, 60091, 30.0));
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_eq!(f.solve().width(), 200.0);
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    assert_eq!(width(), 170.0);
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

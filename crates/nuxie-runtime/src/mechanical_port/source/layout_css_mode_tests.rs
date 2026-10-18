@@ -221,6 +221,53 @@ enum Entry<'a> {
     Image(&'static str, u64),
 }
 
+/// A box's (or the artboard's) paints and their CSS records.
+fn push_paints(paints: &[Paint], index: u64, entries: &mut Vec<Entry<'_>>) {
+    for paint in paints {
+        let paint_index = slots(entries) + 1;
+        match *paint {
+            Paint::Fill(color) => {
+                entries.push(Entry::Fill(index));
+                entries.push(Entry::Solid(color, paint_index));
+            }
+            Paint::Border(color, sides) => {
+                entries.push(Entry::Stroke(index));
+                entries.push(Entry::Solid(color, paint_index));
+                entries.push(Entry::Record(
+                    BOX_BORDER,
+                    vec![U(BORDER_SIDES, sides)],
+                    paint_index,
+                ));
+            }
+            Paint::Shadow {
+                color,
+                strength,
+                spread,
+            } => {
+                entries.push(Entry::Fill(index));
+                entries.push(Entry::Solid(color, paint_index));
+                entries.push(Entry::Feather(strength, paint_index));
+                entries.push(Entry::Record(
+                    BOX_SHADOW,
+                    vec![F(SHADOW_SPREAD, spread)],
+                    paint_index + 2,
+                ));
+            }
+            Paint::Gradient(angle) => {
+                entries.push(Entry::Fill(index));
+                entries.push(Entry::LinearGradient(paint_index));
+                entries.push(Entry::Stop(0xff00_00ff, 0.0, paint_index + 1));
+                entries.push(Entry::Stop(0xffff_0000, 1.0, paint_index + 1));
+                entries.push(Entry::Record(
+                    BOX_GRADIENT,
+                    vec![F(GRADIENT_ANGLE, angle)],
+                    paint_index + 1,
+                ));
+            }
+        }
+    }
+}
+
 /// The artboard object slots `entries` take: a data binding takes none.
 fn slots(entries: &[Entry]) -> u64 {
     entries
@@ -241,6 +288,16 @@ fn write(riv: &mut Riv, props: &[P]) {
 /// Imports one artboard of `size` holding `root`, or None when the file is
 /// refused. `artboard_css` puts a record on the artboard itself.
 fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<Scene> {
+    try_scene_painted(size, artboard_css, &[], root)
+}
+
+/// As [`try_scene`], with the artboard's own paints.
+fn try_scene_painted(
+    size: (f32, f32),
+    artboard_css: Option<Vec<P>>,
+    artboard_paints: &[Paint],
+    root: B,
+) -> Option<Scene> {
     fn walk<'a>(node: &'a B, parent: u64, entries: &mut Vec<Entry<'a>>) {
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
@@ -250,49 +307,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                 entries.push(Entry::Bind(key));
             }
         }
-        for paint in &node.paints {
-            let paint_index = slots(entries) + 1;
-            match *paint {
-                Paint::Fill(color) => {
-                    entries.push(Entry::Fill(index));
-                    entries.push(Entry::Solid(color, paint_index));
-                }
-                Paint::Border(color, sides) => {
-                    entries.push(Entry::Stroke(index));
-                    entries.push(Entry::Solid(color, paint_index));
-                    entries.push(Entry::Record(
-                        BOX_BORDER,
-                        vec![U(BORDER_SIDES, sides)],
-                        paint_index,
-                    ));
-                }
-                Paint::Shadow {
-                    color,
-                    strength,
-                    spread,
-                } => {
-                    entries.push(Entry::Fill(index));
-                    entries.push(Entry::Solid(color, paint_index));
-                    entries.push(Entry::Feather(strength, paint_index));
-                    entries.push(Entry::Record(
-                        BOX_SHADOW,
-                        vec![F(SHADOW_SPREAD, spread)],
-                        paint_index + 2,
-                    ));
-                }
-                Paint::Gradient(angle) => {
-                    entries.push(Entry::Fill(index));
-                    entries.push(Entry::LinearGradient(paint_index));
-                    entries.push(Entry::Stop(0xff00_00ff, 0.0, paint_index + 1));
-                    entries.push(Entry::Stop(0xffff_0000, 1.0, paint_index + 1));
-                    entries.push(Entry::Record(
-                        BOX_GRADIENT,
-                        vec![F(GRADIENT_ANGLE, angle)],
-                        paint_index + 1,
-                    ));
-                }
-            }
-        }
+        push_paints(&node.paints, index, entries);
         if let Some(direction) = node.scroll {
             entries.push(Entry::Scroll(index, direction));
         }
@@ -335,6 +350,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
     if let Some(props) = &artboard_css {
         entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), 0));
     }
+    push_paints(artboard_paints, 0, &mut entries);
     walk(&root, 0, &mut entries);
     // Styles follow every other object: the artboard's, then one per box.
     let first_style = slots(&entries) + 1;
@@ -2484,5 +2500,117 @@ fn css_shadow_feather_made_inner_at_run_time_draws_inset() {
     assert_eq!(
         f.css_paints("Lifted")[0].1,
         Some(aabb(4.0, 4.0, 96.0, 46.0))
+    );
+}
+
+/// CSS content keeps its natural size past its box: an image overflowing
+/// its fixed content box adds to its scroll viewport's range.
+#[test]
+fn css_content_overflow_reaches_the_scroll_range() {
+    const ALL: u64 = 2;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [
+                [U(OVERFLOW_X, 3), U(OVERFLOW_Y, 3)].as_slice(),
+                &width(50.0),
+                &height(20.0),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(ALL),
+                images: vec!["Picture"],
+                ..css("Content", [width(50.0), height(20.0)].concat(), vec![])
+            }],
+        ),
+    );
+    // The 100 by 30 image overflows the 50 by 20 box by 50 and 10.
+    assert_eq!(f.max_offsets(), (-50.0, -10.0));
+}
+
+/// An artboard record's BoxBorder draws its CSS ring, from the record's
+/// border widths, not the Stroke's own thickness.
+#[test]
+fn css_artboard_paints_with_css_geometry() {
+    let f = try_scene_painted(
+        (400.0, 300.0),
+        Some(vec![
+            F(BORDER_TOP, 10.0),
+            F(BORDER_RIGHT, 10.0),
+            F(BORDER_BOTTOM, 10.0),
+            F(BORDER_LEFT, 10.0),
+        ]),
+        &[Paint::Border(0xff44_5566, 15)],
+        css("Child", [width(50.0), height(50.0)].concat(), vec![]),
+    )
+    .expect("the scene imports");
+    let lines = f.draw_lines();
+    let border = lines
+        .iter()
+        .find(|line| line.starts_with("drawPath") && line.contains("color=0xff445566"))
+        .unwrap_or_else(|| panic!("{}", lines.join("\n")));
+    // A filled ring: the border box, and the padding box as its hole.
+    assert!(border.contains("style=fill"), "{border}");
+    assert!(border.contains("(10,10)"), "{border}");
+}
+
+/// A CSS artboard's overflow clips its children's semantic bounds too.
+#[test]
+fn css_artboard_overflow_clips_semantic_bounds() {
+    const MARGIN_LEFT: u16 = 60071;
+    let f = try_scene(
+        (400.0, 300.0),
+        Some(vec![
+            U(OVERFLOW_X, 2),
+            U(OVERFLOW_Y, 2),
+            F(BORDER_TOP, 10.0),
+            F(BORDER_LEFT, 10.0),
+        ]),
+        css(
+            "Corner",
+            [
+                [F(MARGIN_TOP, -10.0), F(MARGIN_LEFT, -10.0)].as_slice(),
+                &width(5.0),
+                &height(5.0),
+            ]
+            .concat(),
+            vec![],
+        ),
+    )
+    .expect("the scene imports");
+    assert_eq!(f.bounds("Corner")[..2], [0.0, 0.0]);
+    use crate::source::semantic::semantic_provider::rendered_geometry_bounds;
+    assert!(rendered_geometry_bounds(Some(&f.named("Corner"))).is_empty_or_nan());
+}
+
+/// A BoxBorder draws its ring whatever its Stroke's thickness, which the
+/// contract ignores: a zero-thickness Stroke still draws the border.
+#[test]
+fn css_box_border_ignores_its_stroke_thickness() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Border(0xff44_5566, 15)],
+            ..css("Edge", border_box(&[]), vec![])
+        },
+    );
+    let stroke = f
+        .named("Edge")
+        .with_downcast::<LayoutComponent, _>(|layout| layout.paints.shape_paints()[0].clone())
+        .unwrap();
+    assert!(CoreRegistry::set_double_handle(
+        &stroke,
+        StrokeBase::THICKNESS_PROPERTY_KEY.into(),
+        0.0
+    ));
+    f.advance(2);
+    let lines = f.draw_lines();
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.starts_with("drawPath") && line.contains("color=0xff445566")),
+        "{}",
+        lines.join("\n")
     );
 }

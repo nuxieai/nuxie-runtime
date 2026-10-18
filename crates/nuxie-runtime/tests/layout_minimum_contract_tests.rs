@@ -942,3 +942,98 @@ mod natural_minima {
         assert_eq!(after, vec![(Hidden, Scroll), (Scroll, Scroll)]);
     }
 }
+
+#[test]
+fn a_percentage_maximum_follows_its_parent_s_resize() {
+    use nuxie_runtime::source::generated::{
+        core_registry::CoreRegistry, layout::layout_sizing_style_base::LayoutSizingStyleBase,
+        layout_component_base::LayoutComponentBase,
+    };
+    let mut factory = PersistentFactory::new(NullFactory);
+    let file = File::import(
+        &std::fs::read(fixture_path("component_list_child_origin.riv")).unwrap(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let board = file.with_file(|f| f.artboard_named("Artboard")).unwrap();
+    let model_id = board.with_artboard(|a| a.view_model_id());
+    let model = file
+        .with_file_mut(|f| f.create_view_model_instance_at(model_id as usize, 0))
+        .unwrap();
+    board.bind_view_model_instance(Some(model.clone()));
+    let machine = board.state_machine_at(0).unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.1);
+    // The first list and its mounted items.
+    let (list, items) = board
+        .with_artboard(|a| {
+            a.objects().iter().flatten().find_map(|handle| {
+                handle
+                    .with(|object| {
+                        object
+                            .as_any()
+                            .downcast_ref::<nuxie_runtime::source::artboard_component_list::ArtboardComponentList>()
+                            .map(|list| {
+                                (0..list.artboard_count())
+                                    .filter_map(|i| list.artboard_instance(i as i32))
+                                    .collect::<Vec<_>>()
+                            })
+                    })
+                    .flatten()
+                    .map(|items| (handle.clone(), items))
+            })
+        })
+        .expect("a component list");
+    let column = list
+        .with(|object| object.component_parent_handle())
+        .flatten()
+        .expect("the list's box");
+    let column_style = column
+        .with(|object| object.as_layout_component().unwrap().style_handle())
+        .flatten()
+        .expect("the box's style");
+    // A definite 200-point column, and items with max-height 25%.
+    assert!(CoreRegistry::set_uint_handle(
+        &column_style,
+        LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY.into(),
+        0,
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &column,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+        200.0,
+    ));
+    for item in &items {
+        let style = item
+            .with_artboard(|item| item.style_handle())
+            .expect("item style");
+        assert!(CoreRegistry::set_uint_handle(
+            &style,
+            LayoutSizingStyleBase::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY.into(),
+            2,
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &style,
+            LayoutSizingStyleBase::MAX_HEIGHT_PROPERTY_KEY.into(),
+            25.0,
+        ));
+    }
+    for _ in 0..3 {
+        machine.advance_and_apply(0.1);
+    }
+    let height = || items[0].with_artboard(|item| item.layout_height());
+    assert_eq!(height(), 50.0);
+    // The column shrinks to 100: 25% of it is 25.
+    assert!(CoreRegistry::set_double_handle(
+        &column,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+        100.0,
+    ));
+    for _ in 0..3 {
+        machine.advance_and_apply(0.1);
+    }
+    assert_eq!(height(), 25.0);
+}

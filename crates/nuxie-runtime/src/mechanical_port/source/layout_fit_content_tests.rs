@@ -477,6 +477,36 @@ fn css_leaf_minimum_skips_only_the_contents_without_one() {
     LayoutComponent::sync_style_occurrence(&f.label);
     assert_width(&f, 145.4414);
 }
+/// Text with hidden overflow adds nothing to a CSS box's minimum height
+/// either: in a 50-point column the box shrinks past its wrapped title.
+#[test]
+fn css_leaf_minimum_height_skips_hidden_text() {
+    use crate::source::generated::core_registry::CoreRegistry;
+    let f = Fixture::new(TITLE, 338.0, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_overflow_value_value(1);
+        })
+        .unwrap();
+    // The root: a CSS column 50 points tall; the label: a CSS box.
+    let column = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.root, &column);
+    assert!(CoreRegistry::set_uint_handle(&column, 60022, 1));
+    assert!(CoreRegistry::set_uint_handle(&column, 60028, 2));
+    assert!(CoreRegistry::set_uint_handle(&column, 60046, 1));
+    assert!(CoreRegistry::set_double_handle(&column, 60047, 50.0));
+    f.root
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(column.clone()))
+        .unwrap();
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.label, &record);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.root);
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_eq!(f.solve().height(), 50.0);
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

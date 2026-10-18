@@ -1,17 +1,18 @@
 //! Keys, value kinds and defaults of the CSS layout records, as
 //! defs/nuxie/*.json allocate them (docs/CSS_LAYOUT.md, section 1).
 //!
-//! The four record types share one contiguous property band, 60022 to
-//! 60118, so a key alone names its owner type and its slot.
+//! The five record types share one contiguous property band, 60022 to
+//! 60120, so a key alone names its owner type and its slot.
 
 /// The first and last property keys of the CSS record band.
 pub const FIRST_KEY: u16 = 60022;
-pub const LAST_KEY: u16 = 60118;
+pub const LAST_KEY: u16 = 60120;
 
 pub const LAYOUT_CSS_STYLE: u16 = 60002;
 pub const BOX_BORDER: u16 = 60003;
 pub const BOX_GRADIENT: u16 = 60004;
 pub const BOX_SHADOW: u16 = 60005;
+pub const BOX_PAINT: u16 = 60006;
 
 // LayoutCssStyle.
 pub const DISPLAY: u16 = 60022;
@@ -63,6 +64,8 @@ pub const GRADIENT_RADIUS_X: u16 = 60113;
 pub const GRADIENT_RADIUS_Y: u16 = 60115;
 pub const GRADIENT_TO_CORNER: u16 = 60117;
 pub const SHADOW_SPREAD: u16 = 60118;
+pub const PAINT_WIDTH: u16 = 60119;
+pub const PAINT_HEIGHT: u16 = 60120;
 
 /// How one property is stored. Enums are `uint8` on the wire and their
 /// largest valid value is given; numbers are `double` (an f32 at run time).
@@ -182,6 +185,8 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     N,      // 60116 radiusYPercent
     e(4),   // 60117 toCorner
     N,      // 60118 BoxShadow spread
+    N,      // 60119 BoxPaint width
+    N,      // 60120 height
 ];
 
 /// The type that owns `key`, and its first property key.
@@ -191,6 +196,7 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
         BORDER_SIDES => Some((BOX_BORDER, BORDER_SIDES)),
         60106..=60117 => Some((BOX_GRADIENT, GRADIENT_ANGLE)),
         SHADOW_SPREAD => Some((BOX_SHADOW, SHADOW_SPREAD)),
+        PAINT_WIDTH..=PAINT_HEIGHT => Some((BOX_PAINT, PAINT_WIDTH)),
         _ => None,
     }
 }
@@ -202,6 +208,7 @@ pub fn range(type_key: u16) -> Option<(u16, usize)> {
         BOX_BORDER => Some((BORDER_SIDES, 1)),
         BOX_GRADIENT => Some((GRADIENT_ANGLE, 12)),
         BOX_SHADOW => Some((SHADOW_SPREAD, 1)),
+        BOX_PAINT => Some((PAINT_WIDTH, 2)),
         _ => None,
     }
 }
@@ -242,6 +249,7 @@ mod tests {
             ("nuxie/box_border.json", BOX_BORDER),
             ("nuxie/box_gradient.json", BOX_GRADIENT),
             ("nuxie/box_shadow.json", BOX_SHADOW),
+            ("nuxie/box_paint.json", BOX_PAINT),
         ] {
             let definition = nuxie_schema::definition_by_type_key(type_key).expect(file);
             assert_eq!(definition.file, file, "{file}");

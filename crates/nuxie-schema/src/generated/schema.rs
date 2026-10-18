@@ -374,6 +374,7 @@ pub enum ObjectKind {
     BoxBorder,
     BoxGradient,
     BoxShadow,
+    BoxPaint,
 }
 
 impl ObjectKind {
@@ -746,6 +747,7 @@ impl ObjectKind {
             Self::BoxBorder => &DEFINITIONS[364],
             Self::BoxGradient => &DEFINITIONS[365],
             Self::BoxShadow => &DEFINITIONS[366],
+            Self::BoxPaint => &DEFINITIONS[367],
         }
     }
 
@@ -1127,6 +1129,7 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         60003 => Some(ObjectKind::BoxBorder),
         60004 => Some(ObjectKind::BoxGradient),
         60005 => Some(ObjectKind::BoxShadow),
+        60006 => Some(ObjectKind::BoxPaint),
         _ => None,
     }
 }
@@ -1504,6 +1507,7 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "BoxBorder" => Some(&DEFINITIONS[364]),
         "BoxGradient" => Some(&DEFINITIONS[365]),
         "BoxShadow" => Some(&DEFINITIONS[366]),
+        "BoxPaint" => Some(&DEFINITIONS[367]),
         _ => None,
     }
 }
@@ -2398,6 +2402,8 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         60116 => Some(CoreRegistryFieldKind::Double),
         60117 => Some(CoreRegistryFieldKind::Uint),
         60118 => Some(CoreRegistryFieldKind::Double),
+        60119 => Some(CoreRegistryFieldKind::Double),
+        60120 => Some(CoreRegistryFieldKind::Double),
         _ => None,
     }
 }
@@ -3195,6 +3201,8 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         60116 => Some(FieldKind::Double),
         60117 => Some(FieldKind::Uint),
         60118 => Some(FieldKind::Double),
+        60119 => Some(FieldKind::Double),
+        60120 => Some(FieldKind::Double),
         _ => None,
     }
 }
@@ -3979,6 +3987,8 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         60116 => Some(FieldKind::Double),
         60117 => Some(FieldKind::Uint),
         60118 => Some(FieldKind::Double),
+        60119 => Some(FieldKind::Double),
+        60120 => Some(FieldKind::Double),
         _ => None,
     }
 }
@@ -33791,6 +33801,81 @@ static DEF_366_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
+static DEF_367_ANCESTORS: &[&str] = &["Component"];
+
+static DEF_367_PROPERTIES: &[Property] = &[
+    Property {
+        name: "width",
+        key: Key {
+            int: 60119,
+            name: "width",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: Some("The painted box\'s width, in points."),
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: true,
+        animates: true,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "height",
+        key: Key {
+            int: 60120,
+            name: "height",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: Some("The painted box\'s height, in points."),
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: true,
+        animates: true,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+];
+
 static MIXIN_0_PROPERTIES: &[Property] = &[
     Property {
         name: "colorRed",
@@ -36295,6 +36380,10 @@ pub fn property_by_key_in_hierarchy(
         (60005, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (60005, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (60005, 60118) => Some(("BoxShadow", &DEF_366_PROPERTIES[0])),
+        (60006, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (60006, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (60006, 60119) => Some(("BoxPaint", &DEF_367_PROPERTIES[0])),
+        (60006, 60120) => Some(("BoxPaint", &DEF_367_PROPERTIES[1])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),
@@ -43529,5 +43618,24 @@ pub static DEFINITIONS: &[Definition] = &[
         cloneable: true,
         properties: DEF_366_PROPERTIES,
         ancestors: DEF_366_ANCESTORS,
+    },
+    Definition {
+        name: "BoxPaint",
+        rust_variant: "BoxPaint",
+        file: "nuxie/box_paint.json",
+        type_key: Key {
+            int: 60006,
+            name: "boxpaint",
+        },
+        runtime_parent: Some("Component"),
+        raw_parent_file: Some("component.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_367_PROPERTIES,
+        ancestors: DEF_367_ANCESTORS,
     },
 ];

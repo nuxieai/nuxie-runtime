@@ -1,0 +1,31 @@
+{
+  "name": "BoxPaint",
+  "key": {
+    "int": 60006,
+    "string": "boxpaint"
+  },
+  "extends": "component.json",
+  "description": "A CSS box's (or CSS artboard's) paint rectangle: its own paints draw at this size, centred on its border box, in place of the border box. Layout, the content clip, hit testing and semantics ignore it.",
+  "properties": {
+    "width": {
+      "type": "double",
+      "key": {
+        "int": 60119
+      },
+      "initialValue": "0",
+      "description": "The painted box's width, in points.",
+      "bindable": true,
+      "animates": true
+    },
+    "height": {
+      "type": "double",
+      "key": {
+        "int": 60120
+      },
+      "initialValue": "0",
+      "description": "The painted box's height, in points.",
+      "bindable": true,
+      "animates": true
+    }
+  }
+}

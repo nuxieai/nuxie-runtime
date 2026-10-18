@@ -298,6 +298,31 @@ fn try_scene_painted(
     artboard_paints: &[Paint],
     root: B,
 ) -> Option<Scene> {
+    try_scene_spec(
+        size,
+        ArtboardSpec {
+            css: artboard_css,
+            paints: artboard_paints.to_vec(),
+            ..ArtboardSpec::default()
+        },
+        Some(root),
+    )
+}
+
+/// The artboard itself: its record, paints, direct content and origin.
+#[derive(Default)]
+struct ArtboardSpec {
+    css: Option<Vec<P>>,
+    paints: Vec<Paint>,
+    content: Vec<Rect>,
+    origin_x: f32,
+}
+
+/// Imports one artboard of `size` described by `spec`, holding `root` when
+/// there is one, or None when the file is refused.
+fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Option<Scene> {
+    let artboard_css = spec.css.clone();
+    let artboard_paints = spec.paints.as_slice();
     fn walk<'a>(node: &'a B, parent: u64, entries: &mut Vec<Entry<'a>>) {
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
@@ -351,7 +376,13 @@ fn try_scene_painted(
         entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), 0));
     }
     push_paints(artboard_paints, 0, &mut entries);
-    walk(&root, 0, &mut entries);
+    for rect in &spec.content {
+        entries.push(Entry::Shape(rect, 0));
+        entries.push(Entry::Path(rect, slots(&entries)));
+    }
+    if let Some(root) = &root {
+        walk(root, 0, &mut entries);
+    }
     // Styles follow every other object: the artboard's, then one per box.
     let first_style = slots(&entries) + 1;
     let mut riv = Riv::default();
@@ -391,6 +422,9 @@ fn try_scene_painted(
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, size.0)
         .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, size.1)
         .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style);
+    if spec.origin_x != 0.0 {
+        riv.float(ArtboardBase::ORIGIN_X_PROPERTY_KEY, spec.origin_x);
+    }
     if binds {
         riv.uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0);
     }
@@ -2612,5 +2646,127 @@ fn css_box_border_ignores_its_stroke_thickness() {
             .any(|line| line.starts_with("drawPath") && line.contains("color=0xff445566")),
         "{}",
         lines.join("\n")
+    );
+}
+
+/// A zero percentage is not a zero length: against an indefinite height,
+/// `flex-basis: 0%` (what `flex: 1` writes) is the content's size and
+/// `max-height: 0%` is none, where 0px would collapse the box.
+#[test]
+fn css_zero_percentages_resolve_against_an_indefinite_size() {
+    const COLUMN: u64 = 2;
+    const FLEX_BASIS_KIND: u16 = 60032;
+    const MIN_HEIGHT_KIND: u16 = 60052;
+    const MAX_HEIGHT_KIND: u16 = 60058;
+    const PERCENTAGE: u64 = 7;
+    const LIMIT_PERCENTAGE: u64 = 2;
+    let leaf = |name, props: Vec<P>| B {
+        images: vec!["Picture"],
+        ..css(name, props, vec![])
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Column",
+            [[U(DISPLAY, 1), U(60028, COLUMN)].as_slice(), &width(200.0)].concat(),
+            vec![
+                leaf(
+                    "Basis",
+                    vec![
+                        F(FLEX_GROW, 1.0),
+                        U(FLEX_BASIS_KIND, PERCENTAGE),
+                        U(MIN_HEIGHT_KIND, 1),
+                    ],
+                ),
+                leaf("Capped", vec![U(MAX_HEIGHT_KIND, LIMIT_PERCENTAGE)]),
+            ],
+        ),
+    );
+    assert_eq!(f.bounds("Basis")[3], 30.0);
+    assert_eq!(f.bounds("Capped")[3], 30.0);
+}
+
+/// A CSS artboard without layout children places its content at its
+/// content box's origin, as a CSS leaf box does.
+#[test]
+fn css_leaf_artboard_places_its_content() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![
+                F(BORDER_TOP, 2.0),
+                F(BORDER_LEFT, 2.0),
+                F(PADDING_TOP, 10.0),
+                F(PADDING_LEFT, 10.0),
+            ]),
+            content: vec![Rect {
+                name: "Dot",
+                size: (40.0, 20.0),
+                grouped: false,
+                path_scale_x: 1.0,
+            }],
+            ..ArtboardSpec::default()
+        },
+        None,
+    )
+    .expect("the scene imports");
+    assert_eq!(f.world_origin("Dot"), (12.0, 12.0));
+}
+
+/// A CSS artboard's background follows its CSS radii, as a box's does.
+#[test]
+fn css_artboard_background_is_rounded() {
+    const RADIUS_PERCENT: [u16; 4] = [60101, 60102, 60103, 60104];
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(RADIUS_PERCENT.map(|key| F(key, 50.0)).to_vec()),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let lines = f.draw_lines();
+    let background = lines
+        .iter()
+        .find(|line| line.starts_with("drawPath") && line.contains("color=0xff112233"))
+        .unwrap_or_else(|| panic!("{}", lines.join("\n")));
+    assert!(background.contains("cubic"), "{background}");
+}
+
+/// A CSS artboard's BoxGradient covers its background where it is drawn,
+/// past the artboard's origin.
+#[test]
+fn css_artboard_gradient_follows_its_origin() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            paints: vec![Paint::Gradient(90.0)],
+            origin_x: 0.5,
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let lines = f.stream_lines();
+    let gradient = lines
+        .iter()
+        .rev()
+        .find(|line| line.starts_with("makeLinearGradient"))
+        .expect("a gradient");
+    let point = |label: &str| -> (f32, f32) {
+        let rest = &gradient[gradient.find(label).expect(label) + label.len()..];
+        let (x, rest) = rest.split_once(',').unwrap();
+        let y = rest.split_once(')').unwrap().0;
+        let round = |value: &str| (value.parse::<f32>().unwrap() * 100.0).round() / 100.0;
+        (round(x), round(y))
+    };
+    // To the right across the background, which runs from -200 to 200.
+    assert_eq!(
+        (point("start=("), point("end=(")),
+        ((-200.0, 150.0), (200.0, 150.0)),
+        "{gradient}"
     );
 }

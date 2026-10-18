@@ -3967,7 +3967,17 @@ impl LayoutComponent {
                 })
             })
             .flatten();
-        hosts.map(|hosts| [hosts.iter().all(host_supports_min_content_width); 2])
+        // A CSS box's contents without a minimum add nothing to it, and the
+        // rest still count (docs/CSS_LAYOUT.md, 5).
+        let css = kind == LayoutNodeKind::Layout
+            && owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .is_some_and(LayoutComponent::is_css_mode)
+                })
+                .unwrap_or(false);
+        hosts.map(|hosts| [css || hosts.iter().all(host_supports_min_content_width); 2])
     }
 
     /// A mounted artboard is an opaque host. On an axis where it has a
@@ -4481,7 +4491,10 @@ impl LayoutComponent {
                 let width = offer(width, width_mode);
                 let height = offer(height, height_mode);
                 let measure_children = |children: &[CoreHandle]| {
-                    let supports = children.iter().all(host_supports_min_content_width);
+                    // In a CSS box a content without a minimum adds nothing,
+                    // and the rest still count.
+                    let supports =
+                        css_owner || children.iter().all(host_supports_min_content_width);
                     minimum_contract(
                         measure_fit_content(
                             (width, width_mode),
@@ -4491,6 +4504,9 @@ impl LayoutComponent {
                             (intrinsic_width || min_content) && supports,
                             || {
                                 children.iter().try_fold(0.0f32, |minimum, child| {
+                                    if css_owner && !host_supports_min_content_width(child) {
+                                        return Some(minimum);
+                                    }
                                     host_min_content_width(
                                         child,
                                         known.height,

@@ -1112,8 +1112,10 @@ impl Text {
             || self.layout_participant().is_some_and(|participant| {
                 participant
                     .with_downcast::<LayoutParticipant, _>(|participant| {
+                        // A participant with a CSS record is sized by it.
                         let scale = participant.layout_width_scale_type();
-                        scale == LayoutScaleType::Fixed as u8
+                        participant.css_record().is_some()
+                            || scale == LayoutScaleType::Fixed as u8
                             || scale == LayoutScaleType::Fill as u8
                     })
                     .expect("live layout participant")

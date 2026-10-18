@@ -754,6 +754,25 @@ impl LayoutParticipant {
         true
     }
 
+    /// Whether this participant's display is none: its host's CSS record
+    /// decides in CSS mode (docs/CSS_LAYOUT.md, 2.1), its own style otherwise.
+    fn display_none(&self) -> bool {
+        let record = self
+            .layout_data
+            .as_deref()
+            .and_then(|data| data.appliers.as_deref())
+            .and_then(|appliers| {
+                appliers
+                    .iter()
+                    .find(|applier| applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE))
+                    .cloned()
+            });
+        record
+            .and_then(|record| {
+                crate::css_layout::record::with_values(&record, |css| css.display_none())
+            })
+            .unwrap_or_else(|| YGDisplay::from(self.base.display_value()) == YGDisplay::None)
+    }
     fn host_collapse_request(&self) -> Option<(CoreHandle, bool)> {
         let owner = self.owner_handle();
         let mut parent_hides_host = owner
@@ -782,10 +801,7 @@ impl LayoutParticipant {
                     parent_hides_host |= owner_id != Some(active_id);
                 }
             }
-            return Some((
-                owner,
-                parent_hides_host || YGDisplay::from(self.base.display_value()) == YGDisplay::None,
-            ));
+            return Some((owner, parent_hides_host || self.display_none()));
         }
         None
     }

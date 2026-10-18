@@ -8,6 +8,7 @@ use super::{
 };
 use crate::source::{
     component::Component,
+    component_dirt::ComponentDirt,
     core::{
         Core, CoreHandle, CoreObject, CoreType, PropertySetterCompletion,
         binary_reader::BinaryReader,
@@ -121,6 +122,10 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                         let hidden = self.values().display_none();
                         LayoutComponent::css_display_changed_occurrence(&parent, hidden);
                     }
+                    // Boxes that inherit the direction follow it.
+                    if key == keys::DIRECTION {
+                        LayoutComponent::direction_changed_occurrence(&parent);
+                    }
                     // What only the box's paint and clip read.
                     if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4)
                         .contains(&key)
@@ -132,6 +137,19 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     }
                 }
                 mark_owner_dirty(&parent);
+            }
+            // A Stroke's BoxBorder and a Feather's BoxShadow shape the paths
+            // their box draws them with.
+            keys::BOX_BORDER => css_paint_changed(Some(parent)),
+            keys::BOX_SHADOW => css_paint_changed(
+                parent
+                    .with(|feather| feather.component_parent_handle())
+                    .flatten(),
+            ),
+            // A BoxGradient places its gradient, which rebuilds its shader.
+            keys::BOX_GRADIENT => {
+                parent
+                    .with_mut(|gradient| gradient.component_add_dirt(ComponentDirt::PAINT, false));
             }
             _ => {}
         }
@@ -219,6 +237,20 @@ pub fn find_in(children: &[CoreHandle]) -> Option<CoreHandle> {
         .iter()
         .find(|child| child.is_type_of(keys::LAYOUT_CSS_STYLE))
         .cloned()
+}
+
+/// `paint`'s box redraws its CSS paint paths, when it is a box.
+pub(crate) fn css_paint_changed(paint: Option<CoreHandle>) {
+    let owner = paint
+        .and_then(|paint| {
+            paint
+                .with(|paint| paint.component_parent_handle())
+                .flatten()
+        })
+        .filter(|owner| owner.is_type_of(LayoutComponentBase::TYPE_KEY));
+    if let Some(owner) = owner {
+        LayoutComponent::css_paint_changed_occurrence(&owner);
+    }
 }
 
 fn mark_owner_dirty(parent: &CoreHandle) {

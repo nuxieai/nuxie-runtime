@@ -735,13 +735,19 @@ impl Shape {
     }
 
     /// UNIV-4844: a shape's natural size from authored geometry, never from
-    /// a size layout wrote back. Measured directly without participating, a
-    /// parametric path answers as upstream's measure does, with its authored
-    /// width and height. Other paths, participants and shapes inside drawing
-    /// groups answer with the precise bounds of their geometry at the
-    /// authored size, mapped by `transform` into the measured box's space.
-    /// None when no path has geometry, so a group does not union a point.
-    pub(crate) fn natural_bounds_for_layout(&self, transform: Option<Mat2D>) -> Option<Aabb> {
+    /// a size layout wrote back. Measured directly by a translated box
+    /// without participating, a parametric path answers as upstream's
+    /// measure does, with its authored width and height. Other paths,
+    /// participants, shapes inside drawing groups and shapes in a CSS box
+    /// (`css`, docs/CSS_LAYOUT.md, 5) answer with the precise bounds of their
+    /// geometry at the authored size, through their paths' transforms and
+    /// mapped by `transform` into the measured box's space. None when no
+    /// path has geometry, so a group does not union a point.
+    pub(crate) fn natural_bounds_for_layout(
+        &self,
+        transform: Option<Mat2D>,
+        css: bool,
+    ) -> Option<Aabb> {
         let measured_directly = transform.is_none() && !self.is_participating_in_layout();
         let participant = transform.is_none() && !measured_directly;
         let outer = transform.unwrap_or_else(Mat2D::identity);
@@ -768,7 +774,7 @@ impl Shape {
                     };
                 if object.as_parametric_path().is_some() {
                     let natural = object.as_parametric_path().unwrap().natural_size_for_layout();
-                    if measured_directly {
+                    if measured_directly && !css {
                         size = Vec2D::new(size.x.max(natural.x), size.y.max(natural.y));
                         return;
                     }
@@ -879,7 +885,7 @@ impl Shape {
     }
 
     pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
-        self.natural_bounds_for_layout(None)
+        self.natural_bounds_for_layout(None, false)
             .map_or(Vec2D::default(), |bounds| {
                 Vec2D::new(bounds.width(), bounds.height())
             })

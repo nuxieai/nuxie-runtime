@@ -289,9 +289,13 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
             apply_item(values, style);
         }
         CssRole::Participant => {
-            if values.display_none() {
-                style.display = Display::None;
-            }
+            // A participant has no children: the record decides only
+            // whether it shows, over its Rive display.
+            style.display = if values.display_none() {
+                Display::None
+            } else {
+                Display::Flex
+            };
             apply_item(values, style);
         }
         CssRole::Artboard => {

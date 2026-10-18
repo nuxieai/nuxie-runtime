@@ -251,6 +251,16 @@ impl Feather {
             },
             false,
         );
+        // Our layer: a CSS box shapes a shadow's paths from its feather's
+        // strength and offset (docs/CSS_LAYOUT.md, 4.2).
+        if self
+            .base
+            .children()
+            .iter()
+            .any(|child| child.is_type_of(crate::css_layout::keys::BOX_SHADOW))
+        {
+            crate::css_layout::record::css_paint_changed(self.base.parent_handle());
+        }
     }
     pub fn offset_x_changed(&mut self) {
         self.strength_changed();

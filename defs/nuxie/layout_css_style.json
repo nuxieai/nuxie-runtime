@@ -113,7 +113,7 @@
         "int": 60032
       },
       "initialValue": "0",
-      "description": "CSS flex-basis. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage), 6 content.",
+      "description": "CSS flex-basis. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage), 6 content, 7 percentage.",
       "bindable": true,
       "animates": false
     },
@@ -223,7 +223,7 @@
         "int": 60043
       },
       "initialValue": "0",
-      "description": "CSS width. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage).",
+      "description": "CSS width. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage), 7 percentage.",
       "bindable": true,
       "animates": false
     },
@@ -253,7 +253,7 @@
         "int": 60046
       },
       "initialValue": "0",
-      "description": "CSS height. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage).",
+      "description": "CSS height. Size kind: 0 auto, 1 length-percentage, 2 min-content, 3 max-content, 4 fit-content, 5 fit-content(length-percentage), 7 percentage.",
       "bindable": true,
       "animates": false
     },
@@ -283,7 +283,7 @@
         "int": 60049
       },
       "initialValue": "0",
-      "description": "CSS min-width: 0 auto, 1 length-percentage.",
+      "description": "CSS min-width: 0 auto, 1 length-percentage, 2 percentage.",
       "bindable": true,
       "animates": false
     },
@@ -313,7 +313,7 @@
         "int": 60052
       },
       "initialValue": "0",
-      "description": "CSS min-height: 0 auto, 1 length-percentage.",
+      "description": "CSS min-height: 0 auto, 1 length-percentage, 2 percentage.",
       "bindable": true,
       "animates": false
     },
@@ -343,7 +343,7 @@
         "int": 60055
       },
       "initialValue": "0",
-      "description": "CSS max-width: 0 none, 1 length-percentage.",
+      "description": "CSS max-width: 0 none, 1 length-percentage, 2 percentage.",
       "bindable": true,
       "animates": false
     },
@@ -373,7 +373,7 @@
         "int": 60058
       },
       "initialValue": "0",
-      "description": "CSS max-height: 0 none, 1 length-percentage.",
+      "description": "CSS max-height: 0 none, 1 length-percentage, 2 percentage.",
       "bindable": true,
       "animates": false
     },

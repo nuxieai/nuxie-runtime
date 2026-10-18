@@ -2960,11 +2960,32 @@ impl Artboard {
                 })
                 .unwrap_or_default()
         });
+        // A CSS artboard's background, and its own clip, follow its CSS
+        // radii, as a box's do.
+        let css_radii = css
+            .then(|| {
+                self.base
+                    .base
+                    .css_box_geometry()
+                    .map(|geometry| geometry.radii)
+            })
+            .flatten()
+            .filter(|radii| radii.iter().any(|radius| radius.x > 0.0 && radius.y > 0.0));
         let mut paths = self.base.base.mutable_render_paths();
         paths.local.rewind();
-        paths.local.add_rect(background, PathDirection::Clockwise);
         paths.world.rewind();
-        paths.world.add_rect(clip, PathDirection::Clockwise);
+        if let Some(radii) = css_radii {
+            let rounded = |bounds| {
+                let mut raw = RawPath::default();
+                crate::css_layout::paint::add_rounded_rect(&mut raw, bounds, radii);
+                raw
+            };
+            paths.local.add_path(&rounded(background), None);
+            paths.world.add_path(&rounded(clip), None);
+        } else {
+            paths.local.add_rect(background, PathDirection::Clockwise);
+            paths.world.add_rect(clip, PathDirection::Clockwise);
+        }
         if let Some(css_paints) = css_paints {
             paths.css_paints = css_paints;
         }

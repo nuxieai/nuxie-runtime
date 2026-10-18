@@ -267,10 +267,19 @@ impl LinearGradient {
             .iter()
             .find(|child| child.is_type_of(crate::css_layout::keys::BOX_GRADIENT))?
             .clone();
-        let (width, height, border) = self
+        let (width, height, border, start) = self
             .shape_paint_container
             .as_ref()?
             .with(|container| {
+                // An artboard draws its background from its origin.
+                let start = container
+                    .as_artboard()
+                    .map_or(Vec2D::default(), |artboard| {
+                        Vec2D::new(
+                            -artboard.layout_width() * artboard.origin_x(),
+                            -artboard.layout_height() * artboard.origin_y(),
+                        )
+                    });
                 container
                     .as_layout_component()
                     .filter(|layout| layout.is_css_mode())
@@ -279,12 +288,18 @@ impl LinearGradient {
                             layout.layout_width(),
                             layout.layout_height(),
                             layout.solved_border(),
+                            start,
                         )
                     })
             })
             .flatten()?;
         let area = crate::css_layout::paint::padding_box(
-            crate::source::math::aabb::Aabb::new(0.0, 0.0, width, height),
+            crate::source::math::aabb::Aabb::new(
+                start.x,
+                start.y,
+                start.x + width,
+                start.y + height,
+            ),
             border,
         );
         record

@@ -2672,13 +2672,23 @@ impl LayoutComponent {
         let Some((offset, children)) = owner
             .with(|object| {
                 let layout = object.as_layout_component()?;
-                if !layout.is_css_mode() || layout.is_artboard() {
+                if !layout.is_css_mode() {
                     return None;
                 }
+                // An artboard draws its background from its origin.
+                let start = object.as_artboard().map_or(Vec2D::default(), |artboard| {
+                    Vec2D::new(
+                        -artboard.layout_width() * artboard.origin_x(),
+                        -artboard.layout_height() * artboard.origin_y(),
+                    )
+                });
                 let offset = if layout.is_leaf() {
                     let [top, _, _, left] = layout.solved_border;
                     let padding = layout.solved_padding;
-                    Vec2D::new(left + padding.left(), top + padding.top())
+                    Vec2D::new(
+                        start.x + left + padding.left(),
+                        start.y + top + padding.top(),
+                    )
                 } else {
                     Vec2D::default()
                 };

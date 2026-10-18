@@ -89,9 +89,9 @@ Doubles are bindable and animate. Enums are bindable and do not animate.
 | `aspect-ratio` | 60042 `aspectRatio` | double | width over height; 0 auto | auto |
 | `width` | 60043 `widthKind`, 60044 `width`, 60045 `widthPercent` | uint8, double, double | size kinds | auto |
 | `height` | 60046 `heightKind`, 60047 `height`, 60048 `heightPercent` | uint8, double, double | size kinds | auto |
-| `min-width` | 60049 `minWidthKind`, 60050 `minWidth`, 60051 `minWidthPercent` | uint8, double, double | 0 auto, 1 length-percentage | auto (the browser's automatic minimum) |
+| `min-width` | 60049 `minWidthKind`, 60050 `minWidth`, 60051 `minWidthPercent` | uint8, double, double | 0 auto, 1 length-percentage, 2 percentage (as size kind 7) | auto (the browser's automatic minimum) |
 | `min-height` | 60052 to 60054, as min-width | | | auto |
-| `max-width` | 60055 `maxWidthKind`, 60056 `maxWidth`, 60057 `maxWidthPercent` | uint8, double, double | 0 none, 1 length-percentage | none |
+| `max-width` | 60055 `maxWidthKind`, 60056 `maxWidth`, 60057 `maxWidthPercent` | uint8, double, double | 0 none, 1 length-percentage, 2 percentage (as size kind 7) | none |
 | `max-height` | 60058 to 60060, as max-width | | | none |
 | `margin-top`, `-right`, `-bottom`, `-left` | 60061 to 60063, 60064 to 60066, 60067 to 60069, 60070 to 60072: `margin<Side>Kind`, `margin<Side>`, `margin<Side>Percent` | uint8, double, double | 0 length-percentage, 1 auto | 0 |
 | `top`, `right`, `bottom`, `left` | 60073 to 60075, 60076 to 60078, 60079 to 60081, 60082 to 60084: `inset<Side>Kind`, `inset<Side>`, `inset<Side>Percent` | uint8, double, double | 0 auto, 1 length-percentage | auto |
@@ -112,6 +112,7 @@ Size kinds (`width`, `height`, `flex-basis`):
 | 4 | fit-content |
 | 5 | `fit-content(<length-percentage>)` |
 | 6 | `content` (flex-basis only) |
+| 7 | a percentage: the percent field alone, also when it is 0. `0%` and `0px` differ against an indefinite size: `flex: 1` writes `flex-basis: 0%`, which there is the content's size, not 0. Kind 1 with a non-zero percent part still reads as that percentage |
 
 Item alignment (`align-items`, `align-self`, `justify-items`, `justify-self`):
 
@@ -261,7 +262,7 @@ It changes no part of the file format.
 
 ## 4. Box paint
 
-A box paints itself at the size layout gives it: its border box, a rounded rectangle. Its paint never counts towards any size. An artboard with a record paints its own fills and strokes the same way, with its `BoxBorder` and `BoxShadow` records, in its own drawing space.
+A box paints itself at the size layout gives it: its border box, a rounded rectangle. Its paint never counts towards any size. An artboard with a record paints its own fills and strokes the same way (CSS radii, `BoxBorder`, `BoxShadow` and `BoxGradient`), in its own drawing space, which starts at its origin.
 
 ### 4.1 What the compiler writes on the box (Rive-native)
 
@@ -338,7 +339,7 @@ Refused in step 1:
 
 A box with layout children lays them out. Its non-layout children do not take part in its layout; they draw where they are authored. A box without layout children measures its content. In CSS mode the compiler makes each `<img>`, `<svg>` or text run that must sit in flow among siblings its own box or participant.
 
-**Where a CSS leaf puts its content.** A CSS box without layout children places its content (text, images, shapes, drawing groups, nested artboards) at its content box's origin: its left border plus left padding, and its top border plus top padding, as a browser does. The compiler authors that content at (0, 0), and the runtime adds the origin before the content's own transform, at each layout. Padding and border written at run time (a binding, an animation, a breakpoint, a script) move the content at the next layout. The content box is physical, so the origin is the same right to left. A translated box, and a CSS box with layout children, leave their content where it was authored, as Rive does.
+**Where a CSS leaf puts its content.** A CSS box without layout children, an artboard included (from its drawing origin), places its content (text, images, shapes, drawing groups, nested artboards) at its content box's origin: its left border plus left padding, and its top border plus top padding, as a browser does. The compiler authors that content at (0, 0), and the runtime adds the origin before the content's own transform, at each layout. Padding and border written at run time (a binding, an animation, a breakpoint, a script) move the content at the next layout. The content box is physical, so the origin is the same right to left. A translated box, and a CSS box with layout children, leave their content where it was authored, as Rive does.
 
 | Content | Natural size | Does layout resize it? |
 |---|---|---|

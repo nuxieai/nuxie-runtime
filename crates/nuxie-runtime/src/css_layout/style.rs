@@ -81,6 +81,13 @@ pub fn refusal(values: CssValues<'_>, type_key: u16) -> Option<String> {
     let read_when = |kind: u16, read: &[u8]| read.contains(&values.choice(kind));
     match type_key {
         keys::LAYOUT_CSS_STYLE => {
+            for kind_key in [keys::WIDTH_KIND, keys::HEIGHT_KIND] {
+                if values.choice(kind_key) == 6 {
+                    return Some(format!(
+                        "property {kind_key}: `content` is a flex-basis value only"
+                    ));
+                }
+            }
             let mut checks: Vec<u16> = Vec::new();
             for (kind_key, read) in [
                 (keys::FLEX_BASIS_KIND, &[1u8, 5][..]),
@@ -152,16 +159,20 @@ impl CssValues<'_> {
             5 => Dimension::fit_content_px(length),
             // `content` is accepted for flex-basis only.
             6 if kind_key == keys::FLEX_BASIS_KIND => Dimension::content(),
+            // A percentage, also 0%: against an indefinite size it is not
+            // a zero length (`flex: 1` is `flex-basis: 0%`).
+            7 => Dimension::percent(percent / 100.0),
             _ => Dimension::auto(),
         }
     }
     /// A minimum (`auto`) or maximum (`none`), both Taffy's `auto`.
     fn limit(&self, kind_key: u16) -> LengthPercentageAuto {
-        if self.choice(kind_key) == 1 {
-            let (length, percent) = non_negative(self.parts(kind_key + 1));
-            length_percentage_auto(length, percent)
-        } else {
-            LengthPercentageAuto::auto()
+        let (length, percent) = non_negative(self.parts(kind_key + 1));
+        match self.choice(kind_key) {
+            1 => length_percentage_auto(length, percent),
+            // A percentage, also 0%.
+            2 => LengthPercentageAuto::percent(percent / 100.0),
+            _ => LengthPercentageAuto::auto(),
         }
     }
     fn margin(&self, kind_key: u16) -> LengthPercentageAuto {

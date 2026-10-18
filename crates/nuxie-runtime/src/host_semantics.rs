@@ -784,6 +784,94 @@ fn drawable_chain(
     result
 }
 
+/// Our layer (docs/CSS_LAYOUT.md, 4): a CSS box paints itself, so a box
+/// whose own paints include a visible one is geometry, as a painted shape
+/// is. Retained geometry counts every CSS box with paints.
+fn css_box_paints(
+    object: &dyn crate::source::core::CoreObject,
+    visibility: GeometryVisibility,
+) -> bool {
+    let Some(layout) = object.as_layout_component() else {
+        return false;
+    };
+    if !layout.is_css_mode() || object.as_artboard().is_some() {
+        return false;
+    }
+    let paints = object
+        .as_shape_paint_container()
+        .map(|container| container.shape_paints().to_vec())
+        .unwrap_or_default();
+    if visibility == GeometryVisibility::Retained {
+        return !paints.is_empty();
+    }
+    let opacity = object
+        .as_drawable()
+        .map_or(0.0, |drawable| drawable.render_opacity());
+    opacity.is_finite()
+        && opacity > 0.0
+        && paints.iter().any(|paint| {
+            paint
+                .with(|paint| {
+                    paint
+                        .as_shape_paint_behavior()
+                        .is_some_and(|paint| paint.should_draw())
+                })
+                .unwrap_or(false)
+        })
+}
+
+/// A painted CSS box's visible bounds in its artboard: its painted area
+/// with paint outsets, inside its ancestors' clips. None when clipped away.
+fn css_box_visible_bounds(handle: &CoreHandle, clip: bool) -> Option<NativeAabb> {
+    let mut bounds = handle
+        .with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let mut bounds = NativeAabb::default();
+            layout.painted_world_bounds(&mut bounds);
+            Some(bounds)
+        })
+        .flatten()?;
+    if !clip {
+        return Some(bounds);
+    }
+    let mut current = handle
+        .with(|object| object.component_parent_handle())
+        .flatten();
+    while let Some(ancestor) = current {
+        let (rect, parent) = ancestor.with(|object| {
+            let rect = if let Some(artboard) = object.as_artboard() {
+                artboard.clip().then(|| artboard.bounds())
+            } else if let Some(layout) = object.as_layout_component() {
+                layout.clips().then(|| {
+                    layout
+                        .base
+                        .base
+                        .base
+                        .base
+                        .world_transform()
+                        .map_bounding_box(layout.clip_local_bounds())
+                })
+            } else {
+                None
+            };
+            (rect, object.component_parent_handle())
+        })?;
+        if let Some(rect) = rect {
+            bounds = NativeAabb::new(
+                bounds.left().max(rect.left()),
+                bounds.top().max(rect.top()),
+                bounds.right().min(rect.right()),
+                bounds.bottom().min(rect.bottom()),
+            );
+            if !(bounds.width() > 0.0 && bounds.height() > 0.0) {
+                return None;
+            }
+        }
+        current = parent;
+    }
+    Some(bounds)
+}
+
 fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisibility) -> bool {
     handle
         .with(|object| {
@@ -846,9 +934,71 @@ fn collect_geometry(
     let Some(artboard_global_id) = source_artboard_global_id(artboard) else {
         return;
     };
+    // Our layer: a CSS artboard that paints itself is the bottom geometry.
+    if let Some((handle, bounds)) = artboard.with_artboard(|instance| {
+        let root = &instance.base;
+        let layout = &root.base.base;
+        let visible = layout.is_css_mode()
+            && layout
+                .shape_paint_container()
+                .shape_paints()
+                .iter()
+                .any(|paint| {
+                    paint
+                        .with(|paint| {
+                            paint.as_shape_paint_behavior().is_some_and(|paint| {
+                                visibility == GeometryVisibility::Retained || paint.should_draw()
+                            })
+                        })
+                        .unwrap_or(false)
+                });
+        visible
+            .then(|| {
+                Some((
+                    crate::source::core::CoreObject::core(root).handle()?,
+                    root.bounds(),
+                ))
+            })
+            .flatten()
+    }) && let Some(local_id) = local_id_for_handle(artboard, &handle)
+        && let Some(bounds) = semantic_bounds(bounds, artboard_to_root)
+        && query.is_none_or(|point| bounds.contains(point))
+    {
+        let mut path = path_prefix.to_vec();
+        path.push(RuntimeGeometryHitPathSegment {
+            artboard_global_id,
+            local_id,
+        });
+        output.push(RuntimeGeometryHit {
+            path,
+            occurrence: occurrence.to_vec(),
+            bounds,
+            text_value: None,
+        });
+    }
     for drawable in drawable_chain(artboard, visibility) {
-        let Some(handle) = drawable.authored_handle() else {
-            continue;
+        // A CSS box's own paint draws through its proxy, below its children.
+        let (handle, painted_box) = match drawable.authored_handle() {
+            Some(handle) => {
+                let painted = visibility == GeometryVisibility::Retained
+                    && handle
+                        .with(|object| css_box_paints(object, visibility))
+                        .unwrap_or(false);
+                (handle, painted)
+            }
+            None => {
+                let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = &drawable else {
+                    continue;
+                };
+                let owner = proxy.borrow().owner_handle();
+                if !owner
+                    .with(|object| css_box_paints(object, visibility))
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                (owner, true)
+            }
         };
         let Some(local_id) = local_id_for_handle(artboard, &handle) else {
             continue;
@@ -858,6 +1008,41 @@ fn collect_geometry(
             artboard_global_id,
             local_id,
         });
+
+        if painted_box {
+            let Some(bounds) =
+                css_box_visible_bounds(&handle, visibility == GeometryVisibility::Visible)
+                    .map(|bounds| artboard_to_root.map_bounding_box(bounds))
+                    .filter(|bounds| !bounds.is_empty_or_nan())
+                    .map(native_to_render_bounds)
+            else {
+                continue;
+            };
+            if let Some(point) = query {
+                if !bounds.contains(point) {
+                    continue;
+                }
+                let mut inverse = NativeMat2D::identity();
+                if !artboard_to_root.invert(&mut inverse) {
+                    continue;
+                }
+                let local_point = inverse * render_to_native_point(point);
+                let hit = handle
+                    .with_mut(|object| object.component_hit_test_point(&local_point, false, true))
+                    .flatten()
+                    .unwrap_or(false);
+                if !hit {
+                    continue;
+                }
+            }
+            output.push(RuntimeGeometryHit {
+                path,
+                occurrence: occurrence.to_vec(),
+                bounds,
+                text_value: None,
+            });
+            continue;
+        }
 
         if let Some((child, host_transform)) = handle
             .with(|object| {

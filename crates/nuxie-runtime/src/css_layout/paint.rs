@@ -531,6 +531,29 @@ mod tests {
         );
     }
 
+    /// A centre or radius made mixed at run time resolves as its percentage
+    /// alone, as layout lengths do (docs/CSS_LAYOUT.md, 2.1).
+    #[test]
+    fn mixed_gradient_values_use_their_percentage() {
+        use crate::css_layout::{CssValues, keys};
+        let (first, count) = keys::range(keys::BOX_GRADIENT).unwrap();
+        let mut values: Vec<f32> = (first..first + count as u16)
+            .map(keys::default_value)
+            .collect();
+        // centerX 10 points beside the default 50%.
+        values[usize::from(keys::GRADIENT_CENTER_X - first)] = 10.0;
+        let geometry = gradient_geometry(
+            CssValues {
+                first,
+                values: &values,
+            },
+            Aabb::new(0.0, 0.0, 100.0, 100.0),
+            true,
+        )
+        .unwrap();
+        assert_eq!(geometry.start, Vec2D::new(50.0, 50.0));
+    }
+
     #[test]
     fn gradient_lines_reach_the_far_corners_as_css_does() {
         use crate::css_layout::{CssValues, keys};

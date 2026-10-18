@@ -2320,3 +2320,169 @@ fn translated_box_leaves_its_content_where_authored() {
     );
     assert_eq!(f.world_origin("Dot"), (0.0, 0.0));
 }
+
+/// An absolute box placed against an ancestor above its static parent is
+/// republished when that containing block resizes, and when a static
+/// ancestor between them moves, though its parent's layout holds.
+#[test]
+fn css_hoisted_box_follows_its_containing_block_and_static_ancestors() {
+    const MARGIN_LEFT: u16 = 60071;
+    const INSET_RIGHT_KIND: u16 = 60076;
+    const INSET_RIGHT: u16 = 60077;
+    let f = scene(
+        (500.0, 300.0),
+        css(
+            "Frame",
+            [[U(POSITION, 1)].as_slice(), &width(300.0), &height(200.0)].concat(),
+            vec![css(
+                "Outer",
+                [
+                    [F(MARGIN_LEFT, 50.0)].as_slice(),
+                    &width(200.0),
+                    &height(60.0),
+                ]
+                .concat(),
+                vec![css(
+                    "Static",
+                    [width(100.0), height(40.0)].concat(),
+                    vec![css(
+                        "Pinned",
+                        [
+                            [
+                                U(POSITION, 2),
+                                U(INSET_RIGHT_KIND, 1),
+                                F(INSET_RIGHT, 10.0),
+                                U(INSET_TOP_KIND, 1),
+                                F(INSET_TOP, 0.0),
+                            ]
+                            .as_slice(),
+                            &width(30.0),
+                            &height(10.0),
+                        ]
+                        .concat(),
+                        vec![],
+                    )],
+                )],
+            )],
+        ),
+    );
+    // 300 - 10 - 30 = 260 in the frame, 210 in the static box at x 50.
+    assert_eq!(f.bounds("Pinned"), [210.0, 0.0, 30.0, 10.0]);
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Frame"),
+        WIDTH.into(),
+        400.0
+    ));
+    f.advance(2);
+    assert_eq!(f.bounds("Pinned"), [310.0, 0.0, 30.0, 10.0]);
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Outer"),
+        MARGIN_LEFT.into(),
+        80.0
+    ));
+    f.advance(2);
+    assert_eq!(f.bounds("Static")[0], 0.0);
+    assert_eq!(f.bounds("Pinned"), [280.0, 0.0, 30.0, 10.0]);
+}
+
+/// A record on the artboard clips the artboard's content at its padding
+/// box when its overflow is not visible.
+#[test]
+fn css_artboard_overflow_clips_its_content() {
+    let clip_points = |overflow: u64| {
+        let f = try_scene(
+            (400.0, 300.0),
+            Some(vec![
+                U(OVERFLOW_X, overflow),
+                U(OVERFLOW_Y, overflow),
+                F(BORDER_TOP, 10.0),
+                F(BORDER_RIGHT, 10.0),
+                F(BORDER_BOTTOM, 10.0),
+                F(BORDER_LEFT, 10.0),
+            ]),
+            B {
+                paints: vec![Paint::Fill(0xff77_8899)],
+                ..css("Child", [width(500.0), height(500.0)].concat(), vec![])
+            },
+        )
+        .expect("the scene imports");
+        f.draw_lines()
+            .into_iter()
+            .filter(|line| line.starts_with("clipPath"))
+            .collect::<Vec<_>>()
+    };
+    let visible = clip_points(0);
+    let hidden = clip_points(2);
+    assert_eq!(hidden.len(), visible.len() + 1, "{hidden:?}");
+    assert!(
+        hidden
+            .last()
+            .unwrap()
+            .contains("(10,10),(390,10),(390,290),(10,290)"),
+        "{hidden:?}"
+    );
+}
+
+/// A CSS box inherits its parent's direction through its record, whatever
+/// its Rive style's direction says.
+#[test]
+fn css_direction_inherits_past_a_legacy_style_direction() {
+    const RTL: u64 = 2;
+    const LTR: u64 = 1;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [
+                [U(DISPLAY, 1), U(DIRECTION, RTL)].as_slice(),
+                &width(200.0),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![B {
+                style: vec![U(
+                    LayoutComponentStyleBase::DIRECTION_VALUE_PROPERTY_KEY,
+                    LTR,
+                )],
+                ..css(
+                    "Middle",
+                    [[U(DISPLAY, 1)].as_slice(), &width(200.0), &height(20.0)].concat(),
+                    vec![css("Dot", [width(20.0), height(20.0)].concat(), vec![])],
+                )
+            }],
+        ),
+    );
+    assert_eq!(f.bounds("Dot")[0], 180.0);
+}
+
+/// A shadow Feather made inner at run time redraws as an inset shadow,
+/// inside the padding box.
+#[test]
+fn css_shadow_feather_made_inner_at_run_time_draws_inset() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Shadow {
+                color: 0x8000_0000,
+                strength: 10.0,
+                spread: 0.0,
+            }],
+            ..css("Lifted", border_box(&[]), vec![])
+        },
+    );
+    assert_eq!(
+        f.css_paints("Lifted")[0].1,
+        Some(aabb(-17.0, -17.0, 117.0, 67.0))
+    );
+    assert!(CoreRegistry::set_bool_handle(
+        &f.paint_child("Lifted", FeatherBase::TYPE_KEY),
+        FeatherBase::INNER_PROPERTY_KEY.into(),
+        true
+    ));
+    f.advance(2);
+    // Inset: clipped to the padding box inside the 4-point border.
+    assert_eq!(
+        f.css_paints("Lifted")[0].1,
+        Some(aabb(4.0, 4.0, 96.0, 46.0))
+    );
+}

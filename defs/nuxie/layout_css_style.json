@@ -836,6 +836,26 @@
       "description": "CSS border-bottom-left-radius percentage part, added to the LayoutComponentStyle point radius.",
       "bindable": true,
       "animates": true
+    },
+    "zIndexKind": {
+      "type": "uint8",
+      "key": {
+        "int": 60121
+      },
+      "initialValue": "0",
+      "description": "CSS z-index: 0 auto, 1 an integer (zIndex).",
+      "bindable": true,
+      "animates": false
+    },
+    "zIndex": {
+      "type": "double",
+      "key": {
+        "int": 60122
+      },
+      "initialValue": "0",
+      "description": "CSS z-index integer, read when zIndexKind is 1; a fraction rounds to the nearest integer.",
+      "bindable": true,
+      "animates": true
     }
   }
 }

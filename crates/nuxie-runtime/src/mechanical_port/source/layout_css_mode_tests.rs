@@ -3252,3 +3252,175 @@ fn css_box_paint_carries_its_shadow_and_gradient() {
         "{gradient}"
     );
 }
+
+const Z_INDEX_KIND: u16 = 60121;
+const Z_INDEX: u16 = 60122;
+
+/// Where a draw of `color` sits in `lines`, the order paint happens in.
+fn draw_at(lines: &[String], color: u32) -> usize {
+    let color = format!("color=0x{color:08x}");
+    lines
+        .iter()
+        .position(|line| line.starts_with("drawPath") && line.contains(&color))
+        .unwrap_or_else(|| panic!("a draw with {color}:\n{}", lines.join("\n")))
+}
+
+/// A painted CSS box: a Fill of `color` on a box with `props`.
+fn painted(name: &'static str, color: u32, props: Vec<P>) -> B {
+    B {
+        paints: vec![Paint::Fill(color)],
+        ..css(name, props, vec![])
+    }
+}
+
+fn sized(extra: &[P]) -> Vec<P> {
+    [extra, &width(100.0), &height(50.0)].concat()
+}
+
+/// The frame every paint order test draws in: a positioned flex column.
+fn frame(children: Vec<B>) -> Scene {
+    scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [
+                [U(POSITION, 1), U(DISPLAY, 1), U(60028, 2)].as_slice(),
+                &width(200.0),
+                &height(200.0),
+            ]
+            .concat(),
+            children,
+        ),
+    )
+}
+
+/// CSS paints a box's children in tree order: a later sibling draws on
+/// top of an earlier one (Rive draws the first child on top).
+#[test]
+fn css_later_siblings_paint_on_top() {
+    let f = frame(vec![
+        painted("A", 0xff00_0001, sized(&[])),
+        painted("B", 0xff00_0002, sized(&[])),
+    ]);
+    let lines = f.draw_lines();
+    assert!(draw_at(&lines, 0xff00_0001) < draw_at(&lines, 0xff00_0002));
+}
+
+/// An early `position: absolute; inset: 0` background stays below what
+/// follows it when that is positioned too (tree order among positioned
+/// boxes), or when it has a negative z-index.
+#[test]
+fn css_early_absolute_background_stays_below() {
+    let inset = |kind: u16| [U(kind, 1), F(kind + 1, 0.0)];
+    let background = |extra: &[P]| {
+        painted(
+            "Background",
+            0xff00_0001,
+            [
+                [U(POSITION, 2)].as_slice(),
+                &inset(INSET_TOP_KIND),
+                &inset(60076),
+                &inset(60079),
+                &inset(INSET_LEFT_KIND),
+                extra,
+            ]
+            .concat(),
+        )
+    };
+    let f = frame(vec![
+        background(&[]),
+        painted("Content", 0xff00_0002, sized(&[U(POSITION, 1)])),
+    ]);
+    let lines = f.draw_lines();
+    assert!(draw_at(&lines, 0xff00_0001) < draw_at(&lines, 0xff00_0002));
+    let f = frame(vec![
+        background(&[U(Z_INDEX_KIND, 1), F(Z_INDEX, -1.0)]),
+        painted("Content", 0xff00_0002, sized(&[])),
+    ]);
+    let lines = f.draw_lines();
+    assert!(draw_at(&lines, 0xff00_0001) < draw_at(&lines, 0xff00_0002));
+}
+
+/// Positioned boxes paint over in-flow ones, whatever their tree order,
+/// and in-flow boxes paint in tree order.
+#[test]
+fn css_positioned_boxes_paint_over_in_flow_ones() {
+    let f = frame(vec![
+        painted("Raised", 0xff00_0001, sized(&[U(POSITION, 1)])),
+        painted("Flat", 0xff00_0002, sized(&[])),
+        painted("Later", 0xff00_0003, sized(&[])),
+    ]);
+    let lines = f.draw_lines();
+    let mut colors = [1u32, 2, 3];
+    colors.sort_by_key(|color| draw_at(&lines, 0xff00_0000 + color));
+    assert_eq!(colors, [2, 3, 1]);
+}
+
+/// z-index orders positioned boxes: negative below the in-flow content,
+/// positive above it, ascending, and a z-index written at run time
+/// reorders them.
+#[test]
+fn css_z_index_orders_positioned_boxes() {
+    let z = |value: f32| [U(POSITION, 1), U(Z_INDEX_KIND, 1), F(Z_INDEX, value)];
+    let f = frame(vec![
+        painted("Below", 0xff00_0001, sized(&z(-1.0))),
+        painted("Flow", 0xff00_0002, sized(&[])),
+        painted("Two", 0xff00_0003, sized(&z(2.0))),
+        painted("One", 0xff00_0004, sized(&z(1.0))),
+    ]);
+    let order = |f: &Scene| {
+        let lines = f.draw_lines();
+        let mut colors = [1u32, 2, 3, 4];
+        colors.sort_by_key(|color| draw_at(&lines, 0xff00_0000 + color));
+        colors
+    };
+    assert_eq!(order(&f), [1, 2, 4, 3]);
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Below"),
+        Z_INDEX.into(),
+        3.0
+    ));
+    f.advance(2);
+    assert_eq!(order(&f), [2, 4, 3, 1]);
+}
+
+/// Hits follow the paint order: the topmost painted box comes first in
+/// the order the state machine hit-tests in.
+#[test]
+fn css_hit_order_follows_the_paint_order() {
+    let f = frame(vec![
+        painted("A", 0xff00_0001, sized(&[])),
+        painted("B", 0xff00_0002, sized(&[])),
+    ]);
+    // The draw list from its top, as StateMachineInstance sorts its hits.
+    let top_first = f.artboard.with_artboard(|artboard| {
+        let mut top = artboard.first_drawable();
+        while let Some(previous) = top.as_ref().and_then(|drawable| {
+            drawable
+                .with(|drawable| drawable.prev.as_ref().and_then(|prev| prev.upgrade()))
+                .flatten()
+        }) {
+            top = Some(previous);
+        }
+        let mut names = Vec::new();
+        while let Some(drawable) = top {
+            if let Some(name) = drawable.authored_handle().and_then(|handle| {
+                handle
+                    .with(|object| {
+                        object
+                            .as_layout_component()
+                            .map(|layout| layout.base.base.base.base.base.name().to_owned())
+                    })
+                    .flatten()
+            }) {
+                names.push(name);
+            }
+            top = drawable
+                .with(|drawable| drawable.next.as_ref().and_then(|next| next.upgrade()))
+                .flatten();
+        }
+        names
+    });
+    let at = |name: &str| top_first.iter().position(|n| n == name).unwrap();
+    assert!(at("B") < at("A"), "{top_first:?}");
+}

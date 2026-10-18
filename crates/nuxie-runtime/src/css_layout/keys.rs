@@ -2,11 +2,13 @@
 //! defs/nuxie/*.json allocate them (docs/CSS_LAYOUT.md, section 1).
 //!
 //! The five record types share one contiguous property band, 60022 to
-//! 60120, so a key alone names its owner type and its slot.
+//! 60122, so a key alone names its owner type and its slot.
+//! `LayoutCssStyle`'s z-index keys (60121 and 60122) came after the band
+//! filled; its slots span the band, and only its own keys are its.
 
 /// The first and last property keys of the CSS record band.
 pub const FIRST_KEY: u16 = 60022;
-pub const LAST_KEY: u16 = 60120;
+pub const LAST_KEY: u16 = 60122;
 
 pub const LAYOUT_CSS_STYLE: u16 = 60002;
 pub const BOX_BORDER: u16 = 60003;
@@ -66,6 +68,8 @@ pub const GRADIENT_TO_CORNER: u16 = 60117;
 pub const SHADOW_SPREAD: u16 = 60118;
 pub const PAINT_WIDTH: u16 = 60119;
 pub const PAINT_HEIGHT: u16 = 60120;
+pub const Z_INDEX_KIND: u16 = 60121;
+pub const Z_INDEX: u16 = 60122;
 
 /// How one property is stored. Enums are `uint8` on the wire and their
 /// largest valid value is given; numbers are `double` (an f32 at run time).
@@ -187,6 +191,8 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     N,      // 60118 BoxShadow spread
     N,      // 60119 BoxPaint width
     N,      // 60120 height
+    e(1),   // 60121 LayoutCssStyle zIndexKind
+    N,      // 60122 zIndex
 ];
 
 /// The type that owns `key`, and its first property key.
@@ -197,6 +203,7 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
         60106..=60117 => Some((BOX_GRADIENT, GRADIENT_ANGLE)),
         SHADOW_SPREAD => Some((BOX_SHADOW, SHADOW_SPREAD)),
         PAINT_WIDTH..=PAINT_HEIGHT => Some((BOX_PAINT, PAINT_WIDTH)),
+        Z_INDEX_KIND..=Z_INDEX => Some((LAYOUT_CSS_STYLE, 60022)),
         _ => None,
     }
 }
@@ -204,7 +211,8 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
 /// The property range of a record type, as (first key, count).
 pub fn range(type_key: u16) -> Option<(u16, usize)> {
     match type_key {
-        LAYOUT_CSS_STYLE => Some((60022, 83)),
+        // Its slots span the band to its z-index keys.
+        LAYOUT_CSS_STYLE => Some((60022, 101)),
         BOX_BORDER => Some((BORDER_SIDES, 1)),
         BOX_GRADIENT => Some((GRADIENT_ANGLE, 12)),
         BOX_SHADOW => Some((SHADOW_SPREAD, 1)),

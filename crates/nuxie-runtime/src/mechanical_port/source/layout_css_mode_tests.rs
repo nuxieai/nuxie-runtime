@@ -15,7 +15,13 @@ use crate::source::{
         layout_component_base::LayoutComponentBase,
         node_base::NodeBase,
         shapes::{
-            parametric_path_base::ParametricPathBase, rectangle_base::RectangleBase,
+            paint::{
+                feather_base::FeatherBase, fill_base::FillBase,
+                gradient_stop_base::GradientStopBase, linear_gradient_base::LinearGradientBase,
+                solid_color_base::SolidColorBase, stroke_base::StrokeBase,
+            },
+            parametric_path_base::ParametricPathBase,
+            rectangle_base::RectangleBase,
             shape_base::ShapeBase,
         },
     },
@@ -109,7 +115,37 @@ struct B {
     tracks: Vec<(u64, u64, f32)>,
     /// Images of the file's one 100 by 30 image asset, by name.
     images: Vec<&'static str>,
+    /// The box's own paints, in draw order.
+    paints: Vec<Paint>,
 }
+
+/// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
+#[derive(Clone, Copy)]
+enum Paint {
+    /// A Fill with a SolidColor.
+    Fill(u32),
+    /// A Stroke with a SolidColor and a BoxBorder over `sides`.
+    Border(u32, u64),
+    /// A shadow: a Fill with a SolidColor and a local Feather of
+    /// `strength`, whose BoxShadow has `spread`.
+    Shadow {
+        color: u32,
+        strength: f32,
+        spread: f32,
+    },
+    /// A Fill with a two-stop LinearGradient whose BoxGradient has `angle`.
+    Gradient(f32),
+}
+
+const BOX_BORDER: u16 = 60003;
+const BOX_GRADIENT: u16 = 60004;
+const BOX_SHADOW: u16 = 60005;
+const OVERFLOW_X: u16 = 60025;
+const OVERFLOW_Y: u16 = 60026;
+const DIRECTION: u16 = 60027;
+const BORDER_SIDES: u16 = 60105;
+const GRADIENT_ANGLE: u16 = 60106;
+const SHADOW_SPREAD: u16 = 60118;
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
 /// at `size`, directly in its box or inside a plain group.
@@ -118,6 +154,8 @@ struct Rect {
     name: &'static str,
     size: (f32, f32),
     grouped: bool,
+    /// The path's own horizontal scale inside its shape.
+    path_scale_x: f32,
 }
 
 fn css(name: &'static str, props: impl IntoIterator<Item = P>, children: Vec<B>) -> B {
@@ -152,11 +190,19 @@ fn point_units() -> Vec<P> {
 struct Scene {
     _file: RuntimeFileHandle,
     artboard: RuntimeArtboardInstanceHandle,
+    factory: PersistentFactory<RecordingFactory>,
 }
 
 enum Entry<'a> {
     Box(&'a B, u64),
-    Record(&'a [P], u64),
+    /// A CSS record of a type with its properties.
+    Record(u16, Vec<P>, u64),
+    Fill(u64),
+    Stroke(u64),
+    Solid(u32, u64),
+    Feather(f32, u64),
+    LinearGradient(u64),
+    Stop(u32, f32, u64),
     Group(u64),
     Shape(&'a Rect, u64),
     Path(&'a Rect, u64),
@@ -182,7 +228,50 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         let index = entries.len() as u64 + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(props) = &node.css {
-            entries.push(Entry::Record(props, index));
+            entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
+        }
+        for paint in &node.paints {
+            let paint_index = entries.len() as u64 + 1;
+            match *paint {
+                Paint::Fill(color) => {
+                    entries.push(Entry::Fill(index));
+                    entries.push(Entry::Solid(color, paint_index));
+                }
+                Paint::Border(color, sides) => {
+                    entries.push(Entry::Stroke(index));
+                    entries.push(Entry::Solid(color, paint_index));
+                    entries.push(Entry::Record(
+                        BOX_BORDER,
+                        vec![U(BORDER_SIDES, sides)],
+                        paint_index,
+                    ));
+                }
+                Paint::Shadow {
+                    color,
+                    strength,
+                    spread,
+                } => {
+                    entries.push(Entry::Fill(index));
+                    entries.push(Entry::Solid(color, paint_index));
+                    entries.push(Entry::Feather(strength, paint_index));
+                    entries.push(Entry::Record(
+                        BOX_SHADOW,
+                        vec![F(SHADOW_SPREAD, spread)],
+                        paint_index + 2,
+                    ));
+                }
+                Paint::Gradient(angle) => {
+                    entries.push(Entry::Fill(index));
+                    entries.push(Entry::LinearGradient(paint_index));
+                    entries.push(Entry::Stop(0xff00_00ff, 0.0, paint_index + 1));
+                    entries.push(Entry::Stop(0xffff_0000, 1.0, paint_index + 1));
+                    entries.push(Entry::Record(
+                        BOX_GRADIENT,
+                        vec![F(GRADIENT_ANGLE, angle)],
+                        paint_index + 1,
+                    ));
+                }
+            }
         }
         if let Some(direction) = node.scroll {
             entries.push(Entry::Scroll(index, direction));
@@ -199,7 +288,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
             entries.push(Entry::Path(rect, host));
             entries.push(Entry::Participant(host));
             if let Some(props) = props {
-                entries.push(Entry::Record(props, host));
+                entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), host));
             }
         }
         for rect in &node.content {
@@ -217,7 +306,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
     }
     let mut entries = Vec::new();
     if let Some(props) = &artboard_css {
-        entries.push(Entry::Record(props, 0));
+        entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), 0));
     }
     walk(&root, 0, &mut entries);
     // Styles follow every other object: the artboard's, then one per box.
@@ -261,11 +350,47 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                 riv.end();
                 boxes.push(*node);
             }
-            Entry::Record(props, parent) => {
-                riv.object(LAYOUT_CSS_STYLE)
+            Entry::Record(kind, props, parent) => {
+                riv.object(*kind)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent);
                 write(&mut riv, props);
                 riv.end();
+            }
+            Entry::Fill(parent) => {
+                riv.object(FillBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .end();
+            }
+            Entry::Stroke(parent) => {
+                riv.object(StrokeBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .float(StrokeBase::THICKNESS_PROPERTY_KEY, 4.0)
+                    .end();
+            }
+            Entry::Solid(color, parent) => {
+                riv.object(SolidColorBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, *color)
+                    .end();
+            }
+            Entry::Feather(strength, parent) => {
+                riv.object(FeatherBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(FeatherBase::SPACE_VALUE_PROPERTY_KEY, 1)
+                    .float(FeatherBase::STRENGTH_PROPERTY_KEY, *strength)
+                    .end();
+            }
+            Entry::LinearGradient(parent) => {
+                riv.object(LinearGradientBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .end();
+            }
+            Entry::Stop(color, position, parent) => {
+                riv.object(GradientStopBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .color(GradientStopBase::COLOR_VALUE_PROPERTY_KEY, *color)
+                    .float(GradientStopBase::POSITION_PROPERTY_KEY, *position)
+                    .end();
             }
             Entry::Scroll(parent, direction) => {
                 use crate::source::generated::constraints::draggable_constraint_base::DraggableConstraintBase;
@@ -318,6 +443,10 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                     )
                     .float(ParametricPathBase::WIDTH_PROPERTY_KEY, rect.size.0)
                     .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, rect.size.1)
+                    .float(
+                        crate::source::generated::transform_component_base::TransformComponentBase::SCALE_X_PROPERTY_KEY,
+                        rect.path_scale_x,
+                    )
                     .end();
             }
         }
@@ -349,6 +478,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
     let scene = Scene {
         _file: file,
         artboard,
+        factory,
     };
     scene.advance(3);
     Some(scene)
@@ -373,6 +503,73 @@ impl Scene {
                     .unwrap_or(false)
             })
             .unwrap_or_else(|| panic!("{name}"))
+    }
+    /// The stream lines one draw of the artboard records.
+    fn draw_lines(&self) -> Vec<String> {
+        let before = self.factory.borrow().stream().lines().count();
+        let mut renderer = self.factory.borrow().make_renderer();
+        self.artboard.draw(&mut renderer);
+        let stream = self.factory.borrow().stream();
+        stream.lines().skip(before).map(str::to_owned).collect()
+    }
+    /// Every stream line recorded so far.
+    fn stream_lines(&self) -> Vec<String> {
+        self.factory
+            .borrow()
+            .stream()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+    /// A box's special CSS paints: each path's bounds and its clip's.
+    fn css_paints(
+        &self,
+        name: &str,
+    ) -> Vec<(
+        crate::source::math::aabb::Aabb,
+        Option<crate::source::math::aabb::Aabb>,
+    )> {
+        self.named(name)
+            .with_downcast::<LayoutComponent, _>(|layout| {
+                let paths = layout.render_paths_handle().expect("render paths");
+                let paths = paths.borrow();
+                paths
+                    .css_paints
+                    .iter()
+                    .map(|paint| {
+                        (
+                            paint.path.raw_path().bounds(),
+                            paint.clip.as_ref().map(|clip| clip.raw_path().bounds()),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap()
+    }
+    /// The first child of `type_key` under any of `name`'s paints.
+    fn paint_child(&self, name: &str, type_key: u16) -> CoreHandle {
+        fn find(handle: &CoreHandle, type_key: u16) -> Option<CoreHandle> {
+            if handle.is_type_of(type_key) {
+                return Some(handle.clone());
+            }
+            let children = handle
+                .with(|object| {
+                    object
+                        .as_container_component()
+                        .map(|container| container.children().to_vec())
+                })
+                .flatten()
+                .unwrap_or_default();
+            children.iter().find_map(|child| find(child, type_key))
+        }
+        let paints = self
+            .named(name)
+            .with_downcast::<LayoutComponent, _>(|layout| layout.paints.shape_paints().to_vec())
+            .unwrap();
+        paints
+            .iter()
+            .find_map(|paint| find(paint, type_key))
+            .unwrap_or_else(|| panic!("{name} has a {type_key}"))
     }
     fn advance(&self, frames: usize) {
         for _ in 0..frames {
@@ -766,6 +963,7 @@ fn try_two_records() -> Option<Scene> {
     Some(Scene {
         _file: file,
         artboard,
+        factory,
     })
 }
 
@@ -826,6 +1024,7 @@ fn css_shape_is_content_at_its_natural_size() {
         name,
         size: (80.0, 30.0),
         grouped: false,
+        path_scale_x: 1.0,
     };
     let f = scene(
         (400.0, 300.0),
@@ -894,6 +1093,7 @@ fn translated_paint_shape_adds_no_minimum() {
                             name: "Background",
                             size: (80.0, 40.0),
                             grouped,
+                            path_scale_x: 1.0,
                         }],
                     ),
                     fixed("Sibling", 100.0, vec![]),
@@ -1066,6 +1266,7 @@ fn css_record_on_a_participant_host() {
                     name: "Icon",
                     size: (80.0, 30.0),
                     grouped: false,
+                    path_scale_x: 1.0,
                 },
                 Some(
                     [
@@ -1187,6 +1388,7 @@ fn css_display_none_on_a_participant_hides_its_host() {
                         name: "Gone",
                         size: (80.0, 30.0),
                         grouped: false,
+                        path_scale_x: 1.0,
                     },
                     Some([[U(DISPLAY, NONE as u64)].as_slice(), &width(50.0)].concat()),
                 ),
@@ -1195,6 +1397,7 @@ fn css_display_none_on_a_participant_hides_its_host() {
                         name: "Kept",
                         size: (80.0, 30.0),
                         grouped: false,
+                        path_scale_x: 1.0,
                     },
                     Some(width(40.0).to_vec()),
                 ),
@@ -1304,4 +1507,333 @@ fn css_image_is_content_at_its_natural_size() {
     // 80-point height, and the image keeps its own scale.
     assert_eq!(f.bounds("Hug"), [0.0, 0.0, 100.0, 80.0]);
     assert_eq!(image_scale(&f), (1.0, 1.0));
+}
+
+fn border_box(props: &[P]) -> Vec<P> {
+    [
+        [
+            U(BOX_SIZING, 1),
+            F(BORDER_TOP, 4.0),
+            F(BORDER_RIGHT, 4.0),
+            F(BORDER_BOTTOM, 4.0),
+            F(BORDER_LEFT, 4.0),
+        ]
+        .as_slice(),
+        &width(100.0),
+        &height(50.0),
+        props,
+    ]
+    .concat()
+}
+
+fn aabb(left: f32, top: f32, right: f32, bottom: f32) -> crate::source::math::aabb::Aabb {
+    crate::source::math::aabb::Aabb::new(left, top, right, bottom)
+}
+
+/// CSS's overflow clips a box's content, not the box: its background and
+/// border draw before its padding-box clip, and its children inside it.
+#[test]
+fn css_box_paints_itself_before_clipping_its_children() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Fill(0xff11_2233), Paint::Border(0xff44_5566, 15)],
+            ..css(
+                "Clip",
+                border_box(&[U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)]),
+                vec![B {
+                    paints: vec![Paint::Fill(0xff77_8899)],
+                    ..css("Child", [width(200.0), height(200.0)].concat(), vec![])
+                }],
+            )
+        },
+    );
+    let lines = f.draw_lines();
+    let draw = |color: &str| {
+        lines
+            .iter()
+            .position(|line| line.starts_with("drawPath") && line.contains(color))
+            .unwrap_or_else(|| panic!("a draw with {color}:\n{}", lines.join("\n")))
+    };
+    let clip = lines
+        .iter()
+        .rposition(|line| line.starts_with("clipPath"))
+        .expect("the box's clip");
+    assert!(draw("color=0xff112233") < clip, "{}", lines.join("\n"));
+    assert!(draw("color=0xff445566") < clip, "{}", lines.join("\n"));
+    assert!(clip < draw("color=0xff778899"), "{}", lines.join("\n"));
+}
+
+/// A BoxBorder's sides written at run time redraw its ring.
+#[test]
+fn css_border_sides_written_at_run_time_redraw_the_border() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Border(0xff44_5566, 15)],
+            ..css("Edge", border_box(&[]), vec![])
+        },
+    );
+    assert_eq!(f.css_paints("Edge")[0].1, None);
+    assert!(CoreRegistry::set_uint_handle(
+        &f.paint_child("Edge", BOX_BORDER),
+        BORDER_SIDES.into(),
+        1
+    ));
+    f.advance(2);
+    // Only the top side: its wedge from the outer to the inner corners.
+    assert_eq!(f.css_paints("Edge")[0].1, Some(aabb(0.0, 0.0, 100.0, 4.0)));
+}
+
+/// A BoxShadow's spread written at run time regrows the shadow.
+#[test]
+fn css_shadow_spread_written_at_run_time_regrows_the_shadow() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Shadow {
+                color: 0x8000_0000,
+                strength: 0.0,
+                spread: 4.0,
+            }],
+            ..css("Lifted", border_box(&[]), vec![])
+        },
+    );
+    assert_eq!(f.css_paints("Lifted")[0].0, aabb(-4.0, -4.0, 104.0, 54.0));
+    assert!(CoreRegistry::set_double_handle(
+        &f.paint_child("Lifted", BOX_SHADOW),
+        SHADOW_SPREAD.into(),
+        20.0
+    ));
+    f.advance(2);
+    assert_eq!(f.css_paints("Lifted")[0].0, aabb(-20.0, -20.0, 120.0, 70.0));
+}
+
+/// A shadow's Feather strength written at run time widens the region the
+/// shadow may draw in, which reaches 1.5 times the strength past the box.
+#[test]
+fn css_shadow_feather_written_at_run_time_widens_its_reach() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Shadow {
+                color: 0x8000_0000,
+                strength: 10.0,
+                spread: 0.0,
+            }],
+            ..css("Lifted", border_box(&[]), vec![])
+        },
+    );
+    // 1.5 times 10, plus a margin of 2.
+    assert_eq!(
+        f.css_paints("Lifted")[0].1,
+        Some(aabb(-17.0, -17.0, 117.0, 67.0))
+    );
+    assert!(CoreRegistry::set_double_handle(
+        &f.paint_child("Lifted", FeatherBase::TYPE_KEY),
+        FeatherBase::STRENGTH_PROPERTY_KEY.into(),
+        20.0
+    ));
+    f.advance(2);
+    assert_eq!(
+        f.css_paints("Lifted")[0].1,
+        Some(aabb(-32.0, -32.0, 132.0, 82.0))
+    );
+}
+
+/// A BoxGradient's angle written at run time moves its gradient line.
+#[test]
+fn css_gradient_angle_written_at_run_time_moves_the_gradient() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Gradient(180.0)],
+            ..css("Painted", border_box(&[]), vec![])
+        },
+    );
+    let last_gradient = || {
+        let lines = f.stream_lines();
+        let line = lines
+            .iter()
+            .rev()
+            .find(|line| line.starts_with("makeLinearGradient"))
+            .expect("a linear gradient")
+            .clone();
+        let numbers = |label: &str| -> (f32, f32) {
+            let rest = &line[line.find(label).expect(label) + label.len()..];
+            let (x, rest) = rest.split_once(',').unwrap();
+            let y = rest.split_once(')').unwrap().0;
+            (x.parse().unwrap(), y.parse().unwrap())
+        };
+        let (start, end) = (numbers("start=("), numbers("end=("));
+        [start.0, start.1, end.0, end.1].map(|value| (value * 1000.0).round() / 1000.0)
+    };
+    // To the bottom, down the middle of the padding box: the 100 by 50
+    // box less its 4-point border.
+    assert_eq!(last_gradient(), [50.0, 4.0, 50.0, 46.0]);
+    assert!(CoreRegistry::set_double_handle(
+        &f.paint_child("Painted", BOX_GRADIENT),
+        GRADIENT_ANGLE.into(),
+        90.0
+    ));
+    f.advance(2);
+    // To the right, across the middle.
+    assert_eq!(last_gradient(), [4.0, 25.0, 96.0, 25.0]);
+}
+
+/// A CSS box whose overflow becomes hidden at run time clips its
+/// children, though it has no paints of its own.
+#[test]
+fn css_overflow_written_at_run_time_clips() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [width(100.0), height(50.0)].concat(),
+            vec![B {
+                paints: vec![Paint::Fill(0xff77_8899)],
+                ..css("Child", [width(200.0), height(200.0)].concat(), vec![])
+            }],
+        ),
+    );
+    let clips = |lines: Vec<String>| {
+        lines
+            .iter()
+            .filter(|line| line.starts_with("clipPath"))
+            .count()
+    };
+    let before = clips(f.draw_lines());
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record("Frame"),
+        OVERFLOW_X.into(),
+        2
+    ));
+    f.advance(2);
+    assert_eq!(clips(f.draw_lines()), before + 1);
+}
+
+/// A direction written at run time reaches the boxes that inherit it.
+#[test]
+fn css_direction_written_at_run_time_cascades() {
+    const COLUMN: u64 = 2;
+    const RTL: u32 = 2;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Outer",
+            [
+                [U(DISPLAY, 1), U(60028, COLUMN)].as_slice(),
+                &width(200.0),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![css(
+                "Inner",
+                [[U(DISPLAY, 1)].as_slice(), &width(200.0), &height(20.0)].concat(),
+                vec![css("Dot", [width(20.0), height(20.0)].concat(), vec![])],
+            )],
+        ),
+    );
+    assert_eq!(f.bounds("Dot")[0], 0.0);
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record("Outer"),
+        DIRECTION.into(),
+        RTL
+    ));
+    f.advance(2);
+    assert_eq!(f.bounds("Dot")[0], 180.0);
+}
+
+/// A participant host's record decides whether it shows: a visible record
+/// shows it though its Rive display is none.
+#[test]
+fn css_record_shows_a_participant_whose_rive_display_is_none() {
+    const DISPLAY_VALUE: u16 = 596;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            participants: vec![(
+                Rect {
+                    name: "Icon",
+                    size: (80.0, 30.0),
+                    grouped: false,
+                    path_scale_x: 1.0,
+                },
+                Some([width(50.0), height(20.0)].concat()),
+            )],
+            ..css(
+                "Row",
+                [[U(DISPLAY, 1)].as_slice(), &width(300.0), &height(40.0)].concat(),
+                vec![],
+            )
+        },
+    );
+    let participant = f
+        .artboard
+        .with_artboard(|artboard| {
+            artboard
+                .find_all_handles::<crate::source::layout::layout_participant::LayoutParticipant>()
+        })
+        .into_iter()
+        .next()
+        .expect("a participant");
+    assert!(CoreRegistry::set_uint_handle(
+        &participant,
+        DISPLAY_VALUE.into(),
+        1
+    ));
+    f.advance(2);
+    let bounds = participant
+        .with_downcast::<crate::source::layout::layout_participant::LayoutParticipant, _>(
+            |participant| participant.layout_bounds(),
+        )
+        .unwrap();
+    assert_eq!((bounds.width(), bounds.height()), (50.0, 20.0));
+}
+
+/// Hit testing follows the clip's axes: `overflow-x: clip` with a visible
+/// y axis passes points below the box and stops points beside it.
+#[test]
+fn css_hit_test_follows_the_clipped_axes() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Strip",
+            [[U(OVERFLOW_X, 1)].as_slice(), &width(100.0), &height(50.0)].concat(),
+            vec![css("Tall", [width(100.0), height(200.0)].concat(), vec![])],
+        ),
+    );
+    let hits = |x: f32, y: f32| {
+        f.named("Strip")
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.hit_test_point(&crate::source::math::vec2d::Vec2D::new(x, y), true, false)
+            })
+            .unwrap()
+    };
+    assert!(hits(50.0, 25.0));
+    assert!(hits(50.0, 150.0));
+    assert!(!hits(150.0, 25.0));
+}
+
+/// A CSS box measures its shape content with the path's own transforms:
+/// an 80-point rectangle path scaled by 2 is 160 wide.
+#[test]
+fn css_shape_content_is_measured_with_its_path_transform() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(400.0), &height(100.0)].concat(),
+            vec![B {
+                content: vec![Rect {
+                    name: "Wide",
+                    size: (80.0, 30.0),
+                    grouped: false,
+                    path_scale_x: 2.0,
+                }],
+                ..css("Leaf", [], vec![])
+            }],
+        ),
+    );
+    assert_eq!(f.bounds("Leaf")[2], 160.0);
 }

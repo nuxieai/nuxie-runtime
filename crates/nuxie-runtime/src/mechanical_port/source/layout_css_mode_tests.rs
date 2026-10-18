@@ -3424,3 +3424,150 @@ fn css_hit_order_follows_the_paint_order() {
     let at = |name: &str| top_first.iter().position(|n| n == name).unwrap();
     assert!(at("B") < at("A"), "{top_first:?}");
 }
+
+impl Scene {
+    fn host(&self) -> crate::ArtboardInstance {
+        crate::ArtboardInstance::from_native_handle(self._file.clone(), 0, self.artboard.clone())
+    }
+    /// The object names a geometry list's last path segments point at.
+    fn geometry_names(&self, hits: &[crate::RuntimeGeometryHit]) -> Vec<String> {
+        hits.iter()
+            .map(|hit| {
+                let local_id = hit.path.last().expect("a path").local_id;
+                self.artboard
+                    .with_artboard(|artboard| artboard.objects()[local_id].clone())
+                    .and_then(|handle| {
+                        handle
+                            .with(|object| object.as_component().map(|c| c.name().to_owned()))
+                            .flatten()
+                    })
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+}
+
+/// A CSS box that paints itself is geometry: visible with its border box,
+/// retained, and hit; a box without paint is not.
+#[test]
+fn css_painted_box_is_catalogued_geometry() {
+    let f = frame(vec![
+        painted("Card", 0xff00_0001, sized(&[])),
+        css("Plain", sized(&[]), vec![]),
+    ]);
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    let names = f.geometry_names(&visible);
+    assert_eq!(names, ["Card"], "{names:?}");
+    let bounds = visible[0].bounds;
+    assert_eq!(
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+        (0.0, 0.0, 100.0, 50.0)
+    );
+    let retained = host.retained_geometry_with_bounds();
+    assert!(f.geometry_names(&retained).contains(&"Card".to_owned()));
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(10.0, 10.0));
+    assert_eq!(f.geometry_names(&hits), ["Card"]);
+}
+
+/// Hits follow the CSS painting order: of two painted boxes over each
+/// other, the later one is on top and hit first.
+#[test]
+fn css_painted_box_hits_follow_the_paint_order() {
+    let inset = |kind: u16| [U(kind, 1), F(kind + 1, 0.0)];
+    let layer = |name, color| {
+        painted(
+            name,
+            color,
+            [
+                [U(POSITION, 2)].as_slice(),
+                &inset(INSET_TOP_KIND),
+                &inset(60076),
+                &inset(60079),
+                &inset(INSET_LEFT_KIND),
+            ]
+            .concat(),
+        )
+    };
+    let f = frame(vec![
+        layer("Lower", 0xff00_0001),
+        layer("Upper", 0xff00_0002),
+    ]);
+    let hits = f
+        .host()
+        .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(10.0, 10.0));
+    assert_eq!(f.geometry_names(&hits), ["Upper", "Lower"]);
+}
+
+/// A painted box outside its ancestor's clip is not visible geometry.
+#[test]
+fn css_painted_box_outside_a_clip_is_not_visible() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [
+                [
+                    U(DISPLAY, 1),
+                    U(60028, 2),
+                    U(OVERFLOW_X, 2),
+                    U(OVERFLOW_Y, 2),
+                ]
+                .as_slice(),
+                &width(100.0),
+                &height(50.0),
+            ]
+            .concat(),
+            vec![
+                css(
+                    "Spacer",
+                    [
+                        [F(FLEX_SHRINK, 0.0)].as_slice(),
+                        &width(100.0),
+                        &height(60.0),
+                    ]
+                    .concat(),
+                    vec![],
+                ),
+                painted(
+                    "Out",
+                    0xff00_0001,
+                    [
+                        [F(FLEX_SHRINK, 0.0)].as_slice(),
+                        &width(100.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                ),
+            ],
+        ),
+    );
+    let visible = f.host().visible_geometry_with_bounds();
+    assert!(
+        f.geometry_names(&visible).is_empty(),
+        "{:?}",
+        f.geometry_names(&visible)
+    );
+}
+
+/// A CSS artboard that paints itself is geometry too.
+#[test]
+fn css_painted_artboard_is_catalogued_geometry() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let visible = f.host().visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Artboard"]);
+    let bounds = visible[0].bounds;
+    assert_eq!(
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+        (0.0, 0.0, 400.0, 300.0)
+    );
+}

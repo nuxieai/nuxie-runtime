@@ -39,32 +39,32 @@ use nuxie_render_api::{PersistentFactory, RecordingFactory};
 const FRAME: f32 = 1.0 / 60.0;
 
 /// The record type and the keys these tests write (defs/nuxie/layout_css_style.json).
-const LAYOUT_CSS_STYLE: u16 = 60002;
-const DISPLAY: u16 = 60022;
-const BOX_SIZING: u16 = 60023;
-const POSITION: u16 = 60024;
-const FLEX_GROW: u16 = 60030;
-const FLEX_SHRINK: u16 = 60031;
-const WIDTH_KIND: u16 = 60043;
-const WIDTH: u16 = 60044;
-const WIDTH_PERCENT: u16 = 60045;
-const HEIGHT_KIND: u16 = 60046;
-const HEIGHT: u16 = 60047;
-const MARGIN_TOP: u16 = 60062;
-const MARGIN_BOTTOM: u16 = 60068;
-const INSET_TOP_KIND: u16 = 60073;
-const INSET_TOP: u16 = 60074;
-const INSET_LEFT_KIND: u16 = 60082;
-const INSET_LEFT: u16 = 60083;
-const PADDING_TOP: u16 = 60085;
-const PADDING_RIGHT: u16 = 60087;
-const PADDING_BOTTOM: u16 = 60089;
-const PADDING_LEFT: u16 = 60091;
-const BORDER_TOP: u16 = 60093;
-const BORDER_RIGHT: u16 = 60094;
-const BORDER_BOTTOM: u16 = 60095;
-const BORDER_LEFT: u16 = 60096;
-const COLUMN_GAP: u16 = 60099;
+const LAYOUT_CSS_STYLE: u16 = 61000;
+const DISPLAY: u16 = 61000;
+const BOX_SIZING: u16 = 61001;
+const POSITION: u16 = 61002;
+const FLEX_GROW: u16 = 61008;
+const FLEX_SHRINK: u16 = 61009;
+const WIDTH_KIND: u16 = 61021;
+const WIDTH: u16 = 61022;
+const WIDTH_PERCENT: u16 = 61023;
+const HEIGHT_KIND: u16 = 61024;
+const HEIGHT: u16 = 61025;
+const MARGIN_TOP: u16 = 61040;
+const MARGIN_BOTTOM: u16 = 61046;
+const INSET_TOP_KIND: u16 = 61051;
+const INSET_TOP: u16 = 61052;
+const INSET_LEFT_KIND: u16 = 61060;
+const INSET_LEFT: u16 = 61061;
+const PADDING_TOP: u16 = 61063;
+const PADDING_RIGHT: u16 = 61065;
+const PADDING_BOTTOM: u16 = 61067;
+const PADDING_LEFT: u16 = 61069;
+const BORDER_TOP: u16 = 61071;
+const BORDER_RIGHT: u16 = 61072;
+const BORDER_BOTTOM: u16 = 61073;
+const BORDER_LEFT: u16 = 61074;
+const COLUMN_GAP: u16 = 61077;
 
 const FLEX: f32 = 1.0;
 const NONE: f32 = 3.0;
@@ -152,20 +152,20 @@ enum Paint {
     Gradient(f32),
 }
 
-const BOX_BORDER: u16 = 60003;
-const BOX_GRADIENT: u16 = 60004;
-const BOX_SHADOW: u16 = 60005;
-const OVERFLOW_X: u16 = 60025;
-const OVERFLOW_Y: u16 = 60026;
-const DIRECTION: u16 = 60027;
-const BORDER_SIDES: u16 = 60105;
-const GRADIENT_ANGLE: u16 = 60106;
-const SHADOW_SPREAD: u16 = 60118;
-const BOX_PAINT: u16 = 60006;
-const PAINT_WIDTH: u16 = 60119;
-const PAINT_HEIGHT: u16 = 60120;
-const PAINT_WIDTH_PERCENT: u16 = 60123;
-const PAINT_HEIGHT_PERCENT: u16 = 60124;
+const BOX_BORDER: u16 = 61001;
+const BOX_GRADIENT: u16 = 61002;
+const BOX_SHADOW: u16 = 61003;
+const OVERFLOW_X: u16 = 61003;
+const OVERFLOW_Y: u16 = 61004;
+const DIRECTION: u16 = 61005;
+const BORDER_SIDES: u16 = 61083;
+const GRADIENT_ANGLE: u16 = 61084;
+const SHADOW_SPREAD: u16 = 61096;
+const BOX_PAINT: u16 = 61004;
+const PAINT_WIDTH: u16 = 61097;
+const PAINT_HEIGHT: u16 = 61098;
+const PAINT_WIDTH_PERCENT: u16 = 61101;
+const PAINT_HEIGHT_PERCENT: u16 = 61102;
 
 /// BoxPaint values for a size in points alone: both percentages 0.
 fn paint_points(width: f32, height: f32) -> Vec<P> {
@@ -1368,9 +1368,9 @@ fn translated_paint_shape_adds_no_minimum() {
 /// (on by default, but CSS mode ignores it). The background has CSS radii.
 #[test]
 fn css_overflow_clips_at_the_padding_box() {
-    const OVERFLOW_X: u16 = 60025;
-    const OVERFLOW_Y: u16 = 60026;
-    const RADIUS_TL_PERCENT: u16 = 60101;
+    const OVERFLOW_X: u16 = 61003;
+    const OVERFLOW_Y: u16 = 61004;
+    const RADIUS_TL_PERCENT: u16 = 61079;
     let border = [
         F(BORDER_TOP, 4.0),
         F(BORDER_RIGHT, 4.0),
@@ -1441,7 +1441,7 @@ fn css_overflow_clips_at_the_padding_box() {
 /// box: a 120-point block list in an 80-point view stops at 40.
 #[test]
 fn css_scroll_range_comes_from_scrollable_overflow() {
-    const OVERFLOW_Y: u16 = 60026;
+    const OVERFLOW_Y: u16 = 61004;
     let item = |name| css(name, height(60.0), vec![]);
     let f = scene(
         (400.0, 300.0),
@@ -1463,7 +1463,7 @@ fn css_scroll_range_comes_from_scrollable_overflow() {
 /// relative to its own parent.
 #[test]
 fn css_absolute_box_skips_a_static_parent() {
-    const MARGIN_LEFT: u16 = 60071;
+    const MARGIN_LEFT: u16 = 61049;
     let f = scene(
         (400.0, 300.0),
         css(
@@ -1506,7 +1506,7 @@ fn css_absolute_box_skips_a_static_parent() {
 /// properties (size, margins) and ignores its Rive sizing.
 #[test]
 fn css_record_on_a_participant_host() {
-    const MARGIN_LEFT: u16 = 60071;
+    const MARGIN_LEFT: u16 = 61049;
     let f = scene(
         (400.0, 300.0),
         B {
@@ -1971,7 +1971,7 @@ fn css_direction_written_at_run_time_cascades() {
         css(
             "Outer",
             [
-                [U(DISPLAY, 1), U(60028, COLUMN)].as_slice(),
+                [U(DISPLAY, 1), U(61006, COLUMN)].as_slice(),
                 &width(200.0),
                 &height(100.0),
             ]
@@ -2091,7 +2091,7 @@ fn css_shape_content_is_measured_with_its_path_transform() {
 /// children, whose Fill follows their parent's main axis.
 #[test]
 fn css_flex_direction_written_at_run_time_retranslates_rive_children() {
-    const FLEX_DIRECTION: u16 = 60028;
+    const FLEX_DIRECTION: u16 = 61006;
     const COLUMN: u32 = 2;
     let f = scene(
         (300.0, 100.0),
@@ -2301,7 +2301,7 @@ fn css_overflow_clips_semantic_bounds() {
         css(
             "Frame",
             [
-                [U(DISPLAY, 1), U(60028, COLUMN), U(OVERFLOW_Y, 2)].as_slice(),
+                [U(DISPLAY, 1), U(61006, COLUMN), U(OVERFLOW_Y, 2)].as_slice(),
                 &width(100.0),
                 &height(50.0),
             ]
@@ -2472,9 +2472,9 @@ fn translated_box_leaves_its_content_where_authored() {
 /// ancestor between them moves, though its parent's layout holds.
 #[test]
 fn css_hoisted_box_follows_its_containing_block_and_static_ancestors() {
-    const MARGIN_LEFT: u16 = 60071;
-    const INSET_RIGHT_KIND: u16 = 60076;
-    const INSET_RIGHT: u16 = 60077;
+    const MARGIN_LEFT: u16 = 61049;
+    const INSET_RIGHT_KIND: u16 = 61054;
+    const INSET_RIGHT: u16 = 61055;
     let f = scene(
         (500.0, 300.0),
         css(
@@ -2688,7 +2688,7 @@ fn css_artboard_paints_with_css_geometry() {
 /// A CSS artboard's overflow clips its children's semantic bounds too.
 #[test]
 fn css_artboard_overflow_clips_semantic_bounds() {
-    const MARGIN_LEFT: u16 = 60071;
+    const MARGIN_LEFT: u16 = 61049;
     let f = try_scene(
         (400.0, 300.0),
         Some(vec![
@@ -2751,9 +2751,9 @@ fn css_box_border_ignores_its_stroke_thickness() {
 #[test]
 fn css_zero_percentages_resolve_against_an_indefinite_size() {
     const COLUMN: u64 = 2;
-    const FLEX_BASIS_KIND: u16 = 60032;
-    const MIN_HEIGHT_KIND: u16 = 60052;
-    const MAX_HEIGHT_KIND: u16 = 60058;
+    const FLEX_BASIS_KIND: u16 = 61010;
+    const MIN_HEIGHT_KIND: u16 = 61030;
+    const MAX_HEIGHT_KIND: u16 = 61036;
     const PERCENTAGE: u64 = 7;
     const LIMIT_PERCENTAGE: u64 = 2;
     let leaf = |name, props: Vec<P>| B {
@@ -2764,7 +2764,7 @@ fn css_zero_percentages_resolve_against_an_indefinite_size() {
         (400.0, 300.0),
         css(
             "Column",
-            [[U(DISPLAY, 1), U(60028, COLUMN)].as_slice(), &width(200.0)].concat(),
+            [[U(DISPLAY, 1), U(61006, COLUMN)].as_slice(), &width(200.0)].concat(),
             vec![
                 leaf(
                     "Basis",
@@ -2812,7 +2812,7 @@ fn css_leaf_artboard_places_its_content() {
 /// A CSS artboard's background follows its CSS radii, as a box's does.
 #[test]
 fn css_artboard_background_is_rounded() {
-    const RADIUS_PERCENT: [u16; 4] = [60101, 60102, 60103, 60104];
+    const RADIUS_PERCENT: [u16; 4] = [61079, 61080, 61081, 61082];
     let f = try_scene_spec(
         (400.0, 300.0),
         ArtboardSpec {
@@ -2877,7 +2877,7 @@ fn gradient_ends(gradient: &str) -> ((f32, f32), (f32, f32)) {
 #[test]
 fn css_grid_justify_items_reaches_rive_children() {
     const POINTS: u64 = 1;
-    const JUSTIFY_ITEMS: u16 = 60037;
+    const JUSTIFY_ITEMS: u16 = 61015;
     const CENTER: u64 = 8;
     let f = scene(
         (400.0, 300.0),
@@ -2965,7 +2965,7 @@ fn css_leaf_artboard_content_follows_its_size_and_origin() {
 #[test]
 fn css_grid_justify_items_written_at_run_time_moves_rive_children() {
     const POINTS: u64 = 1;
-    const JUSTIFY_ITEMS: u16 = 60037;
+    const JUSTIFY_ITEMS: u16 = 61015;
     const CENTER: u32 = 8;
     let f = scene(
         (400.0, 300.0),
@@ -3121,7 +3121,7 @@ fn css_rtl_viewport_scrolls_toward_its_left() {
 /// through the rounded clip, so they are not hit in the cut corners.
 #[test]
 fn css_artboard_rounded_clip_stops_hits_in_its_corners() {
-    const RADIUS_PERCENT: [u16; 4] = [60101, 60102, 60103, 60104];
+    const RADIUS_PERCENT: [u16; 4] = [61079, 61080, 61081, 61082];
     let f = try_scene_spec(
         (400.0, 300.0),
         ArtboardSpec {
@@ -3431,8 +3431,8 @@ fn css_artboard_box_paint_keeps_its_clip() {
     );
 }
 
-const Z_INDEX_KIND: u16 = 60121;
-const Z_INDEX: u16 = 60122;
+const Z_INDEX_KIND: u16 = 61099;
+const Z_INDEX: u16 = 61100;
 
 /// Where a draw of `color` sits in `lines`, the order paint happens in.
 fn draw_at(lines: &[String], color: u32) -> usize {
@@ -3462,7 +3462,7 @@ fn frame(children: Vec<B>) -> Scene {
         css(
             "Frame",
             [
-                [U(POSITION, 1), U(DISPLAY, 1), U(60028, 2)].as_slice(),
+                [U(POSITION, 1), U(DISPLAY, 1), U(61006, 2)].as_slice(),
                 &width(200.0),
                 &height(200.0),
             ]
@@ -3497,8 +3497,8 @@ fn css_early_absolute_background_stays_below() {
             [
                 [U(POSITION, 2)].as_slice(),
                 &inset(INSET_TOP_KIND),
-                &inset(60076),
-                &inset(60079),
+                &inset(61054),
+                &inset(61057),
                 &inset(INSET_LEFT_KIND),
                 extra,
             ]
@@ -3633,8 +3633,8 @@ fn css_painted_box_hits_follow_the_paint_order() {
             [
                 [U(POSITION, 2)].as_slice(),
                 &inset(INSET_TOP_KIND),
-                &inset(60076),
-                &inset(60079),
+                &inset(61054),
+                &inset(61057),
                 &inset(INSET_LEFT_KIND),
             ]
             .concat(),
@@ -3660,7 +3660,7 @@ fn css_painted_box_outside_a_clip_is_not_visible() {
             [
                 [
                     U(DISPLAY, 1),
-                    U(60028, 2),
+                    U(61006, 2),
                     U(OVERFLOW_X, 2),
                     U(OVERFLOW_Y, 2),
                 ]
@@ -3806,7 +3806,7 @@ fn css_positioned_participant_paints_above_static_siblings() {
                 ..css(
                     "Frame",
                     [
-                        [U(POSITION, 1), U(DISPLAY, 1), U(60028, 2)].as_slice(),
+                        [U(POSITION, 1), U(DISPLAY, 1), U(61006, 2)].as_slice(),
                         &width(200.0),
                         &height(200.0),
                     ]
@@ -3910,7 +3910,7 @@ fn css_artboard_box_paint_is_its_visible_geometry() {
 /// lying in a rounded clip's cut corner, are not visible geometry.
 #[test]
 fn css_painted_boxes_follow_rendered_clips() {
-    const MARGIN_LEFT: u16 = 60071;
+    const MARGIN_LEFT: u16 = 61049;
     let f = try_scene_spec(
         (400.0, 300.0),
         ArtboardSpec {
@@ -3938,7 +3938,7 @@ fn css_painted_boxes_follow_rendered_clips() {
                     "Round",
                     [
                         [U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)].as_slice(),
-                        &[60101, 60102, 60103, 60104].map(|key| F(key, 50.0)),
+                        &[61079, 61080, 61081, 61082].map(|key| F(key, 50.0)),
                         &width(100.0),
                         &height(100.0),
                     ]
@@ -3946,7 +3946,7 @@ fn css_painted_boxes_follow_rendered_clips() {
                     vec![painted("Cut", 0xff00_0002, sized_to(10.0, 10.0))],
                 ),
             ],
-            ..css("Column", [U(DISPLAY, 1), U(60028, 2)], vec![])
+            ..css("Column", [U(DISPLAY, 1), U(61006, 2)], vec![])
         }),
     )
     .expect("the scene imports");
@@ -4215,7 +4215,7 @@ fn css_scroll_bar_ratio_follows_the_scrollable_extent() {
 /// outside its parent's clip is not visible geometry.
 #[test]
 fn css_inset_shadow_bounds_stay_in_its_padding_box() {
-    const MARGIN_LEFT: u16 = 60071;
+    const MARGIN_LEFT: u16 = 61049;
     let f = scene(
         (400.0, 300.0),
         css(
@@ -4286,7 +4286,7 @@ fn css_translated_absolute_child_paints_above_static_siblings() {
 /// geometry is the background alone.
 #[test]
 fn css_hidden_shadow_adds_no_painted_bounds() {
-    const MARGIN_LEFT: u16 = 60071;
+    const MARGIN_LEFT: u16 = 61049;
     let f = scene(
         (400.0, 300.0),
         B {

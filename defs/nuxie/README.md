@@ -13,11 +13,14 @@ resolved explicitly.
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
-- LayoutCssStyle: type 60002; properties 60022–60104 and 60121–60122.
-- BoxBorder: type 60003; property 60105.
-- BoxGradient: type 60004; properties 60106–60117.
-- BoxShadow: type 60005; property 60118.
-- BoxPaint: type 60006; properties 60119–60120 and 60123–60124.
+- LayoutCssStyle: type 61000; properties 61000–61082 and 61099–61100.
+- BoxBorder: type 61001; property 61083.
+- BoxGradient: type 61002; properties 61084–61095.
+- BoxShadow: type 61003; property 61096.
+- BoxPaint: type 61004; properties 61097–61098 and 61101–61102.
+
+Types 61000–61099 and properties 61000–61999 are reserved for CSS layout and
+box paint (docs/CSS_LAYOUT.md); other definitions allocate outside that block.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.

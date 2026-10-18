@@ -1,7 +1,7 @@
 {
   "name": "BoxGradient",
   "key": {
-    "int": 60004,
+    "int": 61002,
     "string": "boxgradient"
   },
   "extends": "component.json",
@@ -10,7 +10,7 @@
     "angle": {
       "type": "double",
       "key": {
-        "int": 60106
+        "int": 61084
       },
       "initialValue": "180",
       "description": "Linear only: CSS degrees, 0 to top, clockwise.",
@@ -20,7 +20,7 @@
     "shape": {
       "type": "uint8",
       "key": {
-        "int": 60107
+        "int": 61085
       },
       "initialValue": "0",
       "description": "Radial only: 0 ellipse, 1 circle.",
@@ -30,7 +30,7 @@
     "size": {
       "type": "uint8",
       "key": {
-        "int": 60108
+        "int": 61086
       },
       "initialValue": "0",
       "description": "Radial only: 0 farthest-corner, 1 farthest-side, 2 closest-corner, 3 closest-side, 4 explicit.",
@@ -40,7 +40,7 @@
     "centerX": {
       "type": "double",
       "key": {
-        "int": 60109
+        "int": 61087
       },
       "initialValue": "0",
       "description": "Radial at-position x, length part in points.",
@@ -50,7 +50,7 @@
     "centerXPercent": {
       "type": "double",
       "key": {
-        "int": 60110
+        "int": 61088
       },
       "initialValue": "50",
       "description": "Radial at-position x, percentage part.",
@@ -60,7 +60,7 @@
     "centerY": {
       "type": "double",
       "key": {
-        "int": 60111
+        "int": 61089
       },
       "initialValue": "0",
       "description": "Radial at-position y, length part in points.",
@@ -70,7 +70,7 @@
     "centerYPercent": {
       "type": "double",
       "key": {
-        "int": 60112
+        "int": 61090
       },
       "initialValue": "50",
       "description": "Radial at-position y, percentage part.",
@@ -80,7 +80,7 @@
     "radiusX": {
       "type": "double",
       "key": {
-        "int": 60113
+        "int": 61091
       },
       "initialValue": "0",
       "description": "Explicit radial size x, length part in points; a circle uses only radiusX.",
@@ -90,7 +90,7 @@
     "radiusXPercent": {
       "type": "double",
       "key": {
-        "int": 60114
+        "int": 61092
       },
       "initialValue": "0",
       "description": "Explicit radial size x, percentage part.",
@@ -100,7 +100,7 @@
     "radiusY": {
       "type": "double",
       "key": {
-        "int": 60115
+        "int": 61093
       },
       "initialValue": "0",
       "description": "Explicit radial size y (ellipse only), length part in points.",
@@ -110,7 +110,7 @@
     "radiusYPercent": {
       "type": "double",
       "key": {
-        "int": 60116
+        "int": 61094
       },
       "initialValue": "0",
       "description": "Explicit radial size y (ellipse only), percentage part.",
@@ -120,7 +120,7 @@
     "toCorner": {
       "type": "uint8",
       "key": {
-        "int": 60117
+        "int": 61095
       },
       "initialValue": "0",
       "description": "Linear only: 0 none (use angle), 1 to top right, 2 to bottom right, 3 to bottom left, 4 to top left.",

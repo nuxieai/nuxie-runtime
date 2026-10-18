@@ -26,20 +26,20 @@ It follows the precedent of Rive's `GridItemPlacement`:
 
 Its presence is also the switch between CSS mode and translated mode (section 2). Upstream may later start reading its unused flex keys (520 to 522, 600 to 603); this record never collides with them.
 
-Allocation, after Video:
+Allocation, in a block of its own that `defs/nuxie/README.md` reserves for CSS layout and box paint (types 61000 to 61099, properties 61000 to 61999), so other Nuxie definitions, which allocate one after another from 60000, never reach it:
 
-- **Type keys**: 60002 to 60006.
-- **Property keys**: 60022 to 60124.
+- **Type keys**: 61000 to 61004.
+- **Property keys**: 61000 to 61102.
 
-The definition files are added in `defs/nuxie/` beside `video.json` when this contract is accepted, and the README's allocation list gains these lines.
+The definition files live in `defs/nuxie/` beside `video.json`, and the README's allocation list names them.
 
 | Type | Key | Extends | Parent | Rive-native or ours |
 |---|---|---|---|---|
-| `LayoutCssStyle` | 60002 | `component.json` | a box, or a participant's host; at most one per parent | ours |
-| `BoxBorder` | 60003 | `component.json` | a `Stroke` painted by a box | ours |
-| `BoxGradient` | 60004 | `component.json` | a `LinearGradient` or `RadialGradient` painted by a box | ours |
-| `BoxShadow` | 60005 | `component.json` | a `Feather` on a `Fill` painted by a box | ours |
-| `BoxPaint` | 60006 | `component.json` | a box or a CSS artboard; at most one per parent | ours |
+| `LayoutCssStyle` | 61000 | `component.json` | a box, or a participant's host; at most one per parent | ours |
+| `BoxBorder` | 61001 | `component.json` | a `Stroke` painted by a box | ours |
+| `BoxGradient` | 61002 | `component.json` | a `LinearGradient` or `RadialGradient` painted by a box | ours |
+| `BoxShadow` | 61003 | `component.json` | a `Feather` on a `Fill` painted by a box | ours |
+| `BoxPaint` | 61004 | `component.json` | a box or a CSS artboard; at most one per parent | ours |
 
 ### 1.2 Value encodings
 
@@ -69,39 +69,39 @@ Doubles are bindable and animate. Enums are bindable and do not animate.
 
 | CSS | Keys | Type | Values | CSS initial (value 0 or default) |
 |---|---|---|---|---|
-| `display` | 60022 `display` | uint8 | 0 block, 1 flex, 2 grid, 3 none, 4 flow-root | `inline` in CSS, which we do not have; 0 block is the `div` default |
-| `box-sizing` | 60023 `boxSizing` | uint8 | 0 content-box, 1 border-box | content-box |
-| `position` | 60024 `position` | uint8 | 0 static, 1 relative, 2 absolute | static |
-| `z-index` | 60121 `zIndexKind`, 60122 `zIndex` | uint8, double | kind 0 auto, 1 an integer (the double, rounded) | auto |
-| `overflow-x` | 60025 `overflowX` | uint8 | 0 visible, 1 clip, 2 hidden, 3 scroll, 4 auto | visible |
-| `overflow-y` | 60026 `overflowY` | uint8 | as overflow-x | visible |
-| `direction` | 60027 `direction` | uint8 | 0 inherit, 1 ltr, 2 rtl | inherited (ltr at the root) |
-| `flex-direction` | 60028 `flexDirection` | uint8 | 0 row, 1 row-reverse, 2 column, 3 column-reverse | row |
-| `flex-wrap` | 60029 `flexWrap` | uint8 | 0 nowrap, 1 wrap, 2 wrap-reverse | nowrap |
-| `flex-grow` | 60030 `flexGrow` | double | number | 0 |
-| `flex-shrink` | 60031 `flexShrink` | double | number | 1 |
-| `flex-basis` | 60032 `flexBasisKind`, 60033 `flexBasis`, 60034 `flexBasisPercent` | uint8, double, double | size kinds, plus 6 content | auto |
-| `align-items` | 60035 `alignItems` | uint8 | item alignment | normal |
-| `align-self` | 60036 `alignSelf` | uint8 | item alignment, 0 auto | auto |
-| `justify-items` | 60037 `justifyItems` | uint8 | item alignment | legacy (behaves as normal) |
-| `justify-self` | 60038 `justifySelf` | uint8 | item alignment, 0 auto | auto |
-| `align-content` | 60039 `alignContent` | uint8 | content alignment | normal |
-| `justify-content` | 60040 `justifyContent` | uint8 | content alignment | normal |
-| `grid-auto-flow` | 60041 `gridAutoFlow` | uint8 | 0 row, 1 column, 2 row dense, 3 column dense | row |
-| `aspect-ratio` | 60042 `aspectRatio` | double | width over height; 0 auto | auto |
-| `width` | 60043 `widthKind`, 60044 `width`, 60045 `widthPercent` | uint8, double, double | size kinds | auto |
-| `height` | 60046 `heightKind`, 60047 `height`, 60048 `heightPercent` | uint8, double, double | size kinds | auto |
-| `min-width` | 60049 `minWidthKind`, 60050 `minWidth`, 60051 `minWidthPercent` | uint8, double, double | 0 auto, 1 length-percentage, 2 percentage (as size kind 7) | auto (the browser's automatic minimum) |
-| `min-height` | 60052 to 60054, as min-width | | | auto |
-| `max-width` | 60055 `maxWidthKind`, 60056 `maxWidth`, 60057 `maxWidthPercent` | uint8, double, double | 0 none, 1 length-percentage, 2 percentage (as size kind 7) | none |
-| `max-height` | 60058 to 60060, as max-width | | | none |
-| `margin-top`, `-right`, `-bottom`, `-left` | 60061 to 60063, 60064 to 60066, 60067 to 60069, 60070 to 60072: `margin<Side>Kind`, `margin<Side>`, `margin<Side>Percent` | uint8, double, double | 0 length-percentage, 1 auto | 0 |
-| `top`, `right`, `bottom`, `left` | 60073 to 60075, 60076 to 60078, 60079 to 60081, 60082 to 60084: `inset<Side>Kind`, `inset<Side>`, `inset<Side>Percent` | uint8, double, double | 0 auto, 1 length-percentage | auto |
-| `padding-top`, `-right`, `-bottom`, `-left` | 60085 and 60086, 60087 and 60088, 60089 and 60090, 60091 and 60092: `padding<Side>`, `padding<Side>Percent` | double, double | length-percentage | 0 |
-| `border-top-width`, `-right-`, `-bottom-`, `-left-` | 60093 `borderTop`, 60094 `borderRight`, 60095 `borderBottom`, 60096 `borderLeft` | double | points | 0 (CSS's `medium` is used only when a border style is set; the compiler writes the used width) |
-| `row-gap` | 60097 `rowGap`, 60098 `rowGapPercent` | double, double | length-percentage | normal (0 in flex and grid) |
-| `column-gap` | 60099 `columnGap`, 60100 `columnGapPercent` | double, double | length-percentage | normal (0) |
-| `border-*-radius`, percent part | 60101 `radiusTopLeftPercent`, 60102 `radiusTopRightPercent`, 60103 `radiusBottomRightPercent`, 60104 `radiusBottomLeftPercent` | double | CSS percentage | 0 |
+| `display` | 61000 `display` | uint8 | 0 block, 1 flex, 2 grid, 3 none, 4 flow-root | `inline` in CSS, which we do not have; 0 block is the `div` default |
+| `box-sizing` | 61001 `boxSizing` | uint8 | 0 content-box, 1 border-box | content-box |
+| `position` | 61002 `position` | uint8 | 0 static, 1 relative, 2 absolute | static |
+| `z-index` | 61099 `zIndexKind`, 61100 `zIndex` | uint8, double | kind 0 auto, 1 an integer (the double, rounded) | auto |
+| `overflow-x` | 61003 `overflowX` | uint8 | 0 visible, 1 clip, 2 hidden, 3 scroll, 4 auto | visible |
+| `overflow-y` | 61004 `overflowY` | uint8 | as overflow-x | visible |
+| `direction` | 61005 `direction` | uint8 | 0 inherit, 1 ltr, 2 rtl | inherited (ltr at the root) |
+| `flex-direction` | 61006 `flexDirection` | uint8 | 0 row, 1 row-reverse, 2 column, 3 column-reverse | row |
+| `flex-wrap` | 61007 `flexWrap` | uint8 | 0 nowrap, 1 wrap, 2 wrap-reverse | nowrap |
+| `flex-grow` | 61008 `flexGrow` | double | number | 0 |
+| `flex-shrink` | 61009 `flexShrink` | double | number | 1 |
+| `flex-basis` | 61010 `flexBasisKind`, 61011 `flexBasis`, 61012 `flexBasisPercent` | uint8, double, double | size kinds, plus 6 content | auto |
+| `align-items` | 61013 `alignItems` | uint8 | item alignment | normal |
+| `align-self` | 61014 `alignSelf` | uint8 | item alignment, 0 auto | auto |
+| `justify-items` | 61015 `justifyItems` | uint8 | item alignment | legacy (behaves as normal) |
+| `justify-self` | 61016 `justifySelf` | uint8 | item alignment, 0 auto | auto |
+| `align-content` | 61017 `alignContent` | uint8 | content alignment | normal |
+| `justify-content` | 61018 `justifyContent` | uint8 | content alignment | normal |
+| `grid-auto-flow` | 61019 `gridAutoFlow` | uint8 | 0 row, 1 column, 2 row dense, 3 column dense | row |
+| `aspect-ratio` | 61020 `aspectRatio` | double | width over height; 0 auto | auto |
+| `width` | 61021 `widthKind`, 61022 `width`, 61023 `widthPercent` | uint8, double, double | size kinds | auto |
+| `height` | 61024 `heightKind`, 61025 `height`, 61026 `heightPercent` | uint8, double, double | size kinds | auto |
+| `min-width` | 61027 `minWidthKind`, 61028 `minWidth`, 61029 `minWidthPercent` | uint8, double, double | 0 auto, 1 length-percentage, 2 percentage (as size kind 7) | auto (the browser's automatic minimum) |
+| `min-height` | 61030 to 61032, as min-width | | | auto |
+| `max-width` | 61033 `maxWidthKind`, 61034 `maxWidth`, 61035 `maxWidthPercent` | uint8, double, double | 0 none, 1 length-percentage, 2 percentage (as size kind 7) | none |
+| `max-height` | 61036 to 61038, as max-width | | | none |
+| `margin-top`, `-right`, `-bottom`, `-left` | 61039 to 61041, 61042 to 61044, 61045 to 61047, 61048 to 61050: `margin<Side>Kind`, `margin<Side>`, `margin<Side>Percent` | uint8, double, double | 0 length-percentage, 1 auto | 0 |
+| `top`, `right`, `bottom`, `left` | 61051 to 61053, 61054 to 61056, 61057 to 61059, 61060 to 61062: `inset<Side>Kind`, `inset<Side>`, `inset<Side>Percent` | uint8, double, double | 0 auto, 1 length-percentage | auto |
+| `padding-top`, `-right`, `-bottom`, `-left` | 61063 and 61064, 61065 and 61066, 61067 and 61068, 61069 and 61070: `padding<Side>`, `padding<Side>Percent` | double, double | length-percentage | 0 |
+| `border-top-width`, `-right-`, `-bottom-`, `-left-` | 61071 `borderTop`, 61072 `borderRight`, 61073 `borderBottom`, 61074 `borderLeft` | double | points | 0 (CSS's `medium` is used only when a border style is set; the compiler writes the used width) |
+| `row-gap` | 61075 `rowGap`, 61076 `rowGapPercent` | double, double | length-percentage | normal (0 in flex and grid) |
+| `column-gap` | 61077 `columnGap`, 61078 `columnGapPercent` | double, double | length-percentage | normal (0) |
+| `border-*-radius`, percent part | 61079 `radiusTopLeftPercent`, 61080 `radiusTopRightPercent`, 61081 `radiusBottomRightPercent`, 61082 `radiusBottomLeftPercent` | double | CSS percentage | 0 |
 
 Size kinds (`width`, `height`, `flex-basis`):
 
@@ -283,25 +283,25 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 
 | Addition | Keys | Values | What the runtime does |
 |---|---|---|---|
-| Percent radii | `LayoutCssStyle` 60101 to 60104 | CSS percentage per corner | The corner's horizontal radius is its point radius plus that percentage of the box width, and its vertical radius is the same with the height, so a non-square box gets elliptical corners, as CSS. Overlapping radii scale down by CSS's rule |
-| Per-side borders | `BoxBorder` 60105 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
+| Percent radii | `LayoutCssStyle` 61079 to 61082 | CSS percentage per corner | The corner's horizontal radius is its point radius plus that percentage of the box width, and its vertical radius is the same with the height, so a non-square box gets elliptical corners, as CSS. Overlapping radii scale down by CSS's rule |
+| Per-side borders | `BoxBorder` 61083 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
 | Box-relative gradients | `BoxGradient`, see the table below | | Recomputes its gradient's start and end (and, for an ellipse, the shader's scale) from the box's padding box at each layout, as CSS's background positioning area |
-| Shadow spread and CSS shadow clipping | `BoxShadow` 60118 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
-| Paint size | `BoxPaint` 60119 `width` and 60123 `widthPercent`, 60120 `height` and 60124 `heightPercent`, doubles; points default 0, percentages default 100; keyable and bindable | each axis a length-percentage of the border box: points plus that percentage of the border box's size on the axis. Mixed values are allowed, since BoxPaint never goes through Taffy | While a box (or CSS artboard) has a `BoxPaint`, its own paint uses a rectangle of that size, centred on its border box and recomputed at each layout, in place of the border box: its fills and strokes, `BoxBorder` rings, `BoxShadow` paths (spread grows from that rectangle), `BoxGradient` positioning area (that rectangle's padding box), and its corner radii, with percentages resolved against it. At rest (0 points, 100%) the paint is the border box and follows it through any resize. An animation interpolates the points and the percentage separately, so (0, 100%) to (120, 0%) moves smoothly from the box's size to 120 points, as CSS interpolates a mixed length-percentage. A negative or non-finite result counts as 0. Layout, the content clip (still the padding box), an artboard's own clip, the box's hit testing and its semantics ignore it, so animating it reflows nothing; the box's painted bounds are that rectangle. In translated mode it has no effect |
+| Shadow spread and CSS shadow clipping | `BoxShadow` 61096 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
+| Paint size | `BoxPaint` 61097 `width` and 61101 `widthPercent`, 61098 `height` and 61102 `heightPercent`, doubles; points default 0, percentages default 100; keyable and bindable | each axis a length-percentage of the border box: points plus that percentage of the border box's size on the axis. Mixed values are allowed, since BoxPaint never goes through Taffy | While a box (or CSS artboard) has a `BoxPaint`, its own paint uses a rectangle of that size, centred on its border box and recomputed at each layout, in place of the border box: its fills and strokes, `BoxBorder` rings, `BoxShadow` paths (spread grows from that rectangle), `BoxGradient` positioning area (that rectangle's padding box), and its corner radii, with percentages resolved against it. At rest (0 points, 100%) the paint is the border box and follows it through any resize. An animation interpolates the points and the percentage separately, so (0, 100%) to (120, 0%) moves smoothly from the box's size to 120 points, as CSS interpolates a mixed length-percentage. A negative or non-finite result counts as 0. Layout, the content clip (still the padding box), an artboard's own clip, the box's hit testing and its semantics ignore it, so animating it reflows nothing; the box's painted bounds are that rectangle. In translated mode it has no effect |
 | Padding-box clip | none: implied by CSS mode | | A CSS box whose computed `overflow-x` or `overflow-y` is not visible clips its children to its padding box, with inner radii when both axes clip. As CSS computes, `hidden`, `scroll` or `auto` on one axis turns `visible` on the other into `auto` (and `clip` into `hidden`), so both axes clip; `clip` with `visible` clips only its own axis, without radii. The clip is for the content: the box's own fills, borders and shadows draw before it. A hit on a child, and a child's semantic visibility, pass through the same clip; the box itself is hit anywhere in its border box. On an artboard, the record's overflow clips the artboard's content the same way, inside the artboard's own clip and after its own paints. A translated box keeps Rive's clip at its outer edge from `LayoutComponent.clip`, which also clips its own paints |
 
 `BoxGradient` keys:
 
 | Key | Name | Type | Values | Default |
 |---|---|---|---|---|
-| 60106 | `angle` | double | linear only: CSS degrees, 0 to top, clockwise | 180 (to bottom) |
-| 60107 | `shape` | uint8 | radial only: 0 ellipse, 1 circle | 0 |
-| 60108 | `size` | uint8 | radial only: 0 farthest-corner, 1 farthest-side, 2 closest-corner, 3 closest-side, 4 explicit | 0 |
-| 60109, 60110 | `centerX`, `centerXPercent` | double, double | radial `at` position, length-percentage | 0 and 50 |
-| 60111, 60112 | `centerY`, `centerYPercent` | double, double | as centerX | 0 and 50 |
-| 60113, 60114 | `radiusX`, `radiusXPercent` | double, double | explicit size; a circle uses only radiusX | 0 and 0 |
-| 60115, 60116 | `radiusY`, `radiusYPercent` | double, double | explicit size, ellipse only | 0 and 0 |
-| 60117 | `toCorner` | uint8 | linear only: 0 none (use angle), 1 to top right, 2 to bottom right, 3 to bottom left, 4 to top left (CSS's corner angle, which depends on the box's shape) | 0 |
+| 61084 | `angle` | double | linear only: CSS degrees, 0 to top, clockwise | 180 (to bottom) |
+| 61085 | `shape` | uint8 | radial only: 0 ellipse, 1 circle | 0 |
+| 61086 | `size` | uint8 | radial only: 0 farthest-corner, 1 farthest-side, 2 closest-corner, 3 closest-side, 4 explicit | 0 |
+| 61087, 61088 | `centerX`, `centerXPercent` | double, double | radial `at` position, length-percentage | 0 and 50 |
+| 61089, 61090 | `centerY`, `centerYPercent` | double, double | as centerX | 0 and 50 |
+| 61091, 61092 | `radiusX`, `radiusXPercent` | double, double | explicit size; a circle uses only radiusX | 0 and 0 |
+| 61093, 61094 | `radiusY`, `radiusYPercent` | double, double | explicit size, ellipse only | 0 and 0 |
+| 61095 | `toCorner` | uint8 | linear only: 0 none (use angle), 1 to top right, 2 to bottom right, 3 to bottom left, 4 to top left (CSS's corner angle, which depends on the box's shape) | 0 |
 
 Stops keep Rive's `GradientStop` positions (0 to 1) and colours.
 

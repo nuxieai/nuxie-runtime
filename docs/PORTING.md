@@ -699,7 +699,7 @@ decode queue. Bidi and audio retain their separately tracked status below.
     positioned hug stays `auto` (shrink-to-fit, or stretch between two
     insets). `justify-self` is a grid property in Rive and is left `auto` for
     flex children.
-  - *CSS mode.* A `LayoutCssStyle` record (type 60002) on a LayoutComponent,
+  - *CSS mode.* A `LayoutCssStyle` record (type 61000) on a LayoutComponent,
     artboard or participant host puts that box in CSS mode, specified in
     `docs/CSS_LAYOUT.md`. A fifth style pass
     (`LayoutStyleApplier::apply_css_style`, after Rive's four) builds the

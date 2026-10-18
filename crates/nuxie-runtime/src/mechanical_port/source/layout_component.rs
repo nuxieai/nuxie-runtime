@@ -2607,6 +2607,60 @@ impl LayoutComponent {
             }
         }
     }
+    /// A CSS leaf box places its content (text, images, shapes, groups,
+    /// nested artboards) at its content box's origin, its border and
+    /// padding, as a browser does, at each layout: bound, animated and
+    /// breakpoint padding all follow. The content is authored at (0, 0).
+    /// Translated boxes leave content where it was authored, as Rive does,
+    /// and so does a box with layout children (docs/CSS_LAYOUT.md, 5).
+    fn place_css_content_occurrence(owner: &CoreHandle) {
+        let Some((offset, children)) = owner
+            .with(|object| {
+                let layout = object.as_layout_component()?;
+                if !layout.is_css_mode() || layout.is_artboard() {
+                    return None;
+                }
+                let offset = if layout.is_leaf() {
+                    let [top, _, _, left] = layout.solved_border;
+                    let padding = layout.solved_padding;
+                    Vec2D::new(left + padding.left(), top + padding.top())
+                } else {
+                    Vec2D::default()
+                };
+                Some((offset, layout.base.children().to_vec()))
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let mut changed = false;
+        for child in children {
+            // Laid-out children and the box's own foreground paint stay.
+            if child.is_type_of(LayoutComponentBase::TYPE_KEY)
+                || child.is_type_of(
+                    crate::source::generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase::TYPE_KEY,
+                )
+            {
+                continue;
+            }
+            changed |= child
+                .with_mut(|object| {
+                    object.layout_provider_handle().is_none()
+                        && object
+                            .as_transform_component_mut()
+                            .is_some_and(|transform| transform.set_layout_content_offset(offset))
+                })
+                .unwrap_or(false);
+        }
+        // The content's world transforms follow, as when the box moves.
+        if changed {
+            owner.with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    CoreCapabilities::world_transform_mark_dirty(layout);
+                }
+            });
+        }
+    }
     /// A record value that only the box's paint reads changed.
     pub(crate) fn css_paint_changed_occurrence(owner: &CoreHandle) {
         owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
@@ -4665,6 +4719,7 @@ impl LayoutComponent {
         for (_, provider) in Self::layout_providers_occurrence(owner) {
             Self::update_provider_layout_bounds(&provider, animate);
         }
+        Self::place_css_content_occurrence(owner);
         let (next, old, just_added, animates, force, current) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();

@@ -105,6 +105,8 @@ struct B {
     /// Participants: a rectangle shape hosting a LayoutParticipant and,
     /// when Some, a LayoutCssStyle on the host.
     participants: Vec<(Rect, Option<Vec<P>>)>,
+    /// Rive GridTracks on this box: (collection, track type, value).
+    tracks: Vec<(u64, u64, f32)>,
 }
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
@@ -158,6 +160,7 @@ enum Entry<'a> {
     Path(&'a Rect, u64),
     Scroll(u64, u64),
     Participant(u64),
+    Track((u64, u64, f32), u64),
 }
 
 fn write(riv: &mut Riv, props: &[P]) {
@@ -180,6 +183,9 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         }
         if let Some(direction) = node.scroll {
             entries.push(Entry::Scroll(index, direction));
+        }
+        for track in &node.tracks {
+            entries.push(Entry::Track(*track, index));
         }
         for (rect, props) in &node.participants {
             entries.push(Entry::Shape(rect, index));
@@ -244,6 +250,15 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                 riv.object(crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, *direction)
+                    .end();
+            }
+            Entry::Track((collection, kind, value), parent) => {
+                use crate::source::generated::layout::grid_track_base::GridTrackBase;
+                riv.object(GridTrackBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(GridTrackBase::COLLECTION_PROPERTY_KEY, *collection)
+                    .uint(GridTrackBase::TRACK_TYPE_PROPERTY_KEY, *kind)
+                    .float(GridTrackBase::TRACK_VALUE_PROPERTY_KEY, *value)
                     .end();
             }
             Entry::Participant(parent) => {
@@ -1201,4 +1216,25 @@ fn css_display_none_on_a_participant_hides_its_host() {
         .find(|bounds| bounds.width() == 40.0)
         .expect("the kept participant");
     assert_eq!(kept.left(), 0.0);
+}
+
+/// `display: grid` in CSS mode lays out with Rive's own GridTrack records:
+/// columns of 100 points and 1fr in a 300-point box.
+#[test]
+fn css_grid_uses_rive_grid_tracks() {
+    const POINTS: u64 = 1;
+    const FR: u64 = 3;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            tracks: vec![(0, POINTS, 100.0), (0, FR, 1.0)],
+            ..css(
+                "Grid",
+                [[U(DISPLAY, 2)].as_slice(), &width(300.0), &height(40.0)].concat(),
+                vec![css("First", [], vec![]), css("Second", [], vec![])],
+            )
+        },
+    );
+    assert_eq!(f.bounds("First"), [0.0, 0.0, 100.0, 40.0]);
+    assert_eq!(f.bounds("Second"), [100.0, 0.0, 200.0, 40.0]);
 }

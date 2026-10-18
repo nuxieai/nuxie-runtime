@@ -39692,6 +39692,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
         match field {
             CoreField::FeatherInner => {
                 if self.base.set_inner_value(value) {
+                    // Our layer: a CSS box's shadow paths read it.
+                    self.css_shadow_changed();
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::feather_base::FeatherBase::INNER_PROPERTY_KEY);
                 }
             }

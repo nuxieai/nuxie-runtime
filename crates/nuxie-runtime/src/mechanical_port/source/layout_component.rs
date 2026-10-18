@@ -266,12 +266,12 @@ pub(crate) struct CssPaintPaths {
 }
 
 /// A CSS box's geometry in its own space (docs/CSS_LAYOUT.md, 4).
-struct CssBoxGeometry {
-    bounds: Aabb,
-    radii: crate::css_layout::paint::Radii,
-    padding: Aabb,
-    inner: crate::css_layout::paint::Radii,
-    overflow: taffy::geometry::Point<taffy::style::Overflow>,
+pub(crate) struct CssBoxGeometry {
+    pub bounds: Aabb,
+    pub radii: crate::css_layout::paint::Radii,
+    pub padding: Aabb,
+    pub inner: crate::css_layout::paint::Radii,
+    pub overflow: taffy::geometry::Point<taffy::style::Overflow>,
 }
 
 /// What makes a paint special in CSS mode, read from its children.
@@ -1713,7 +1713,7 @@ impl LayoutComponent {
     /// The axes this box clips its children on: both in translated mode
     /// when it clips, and in CSS mode each axis whose overflow is not
     /// visible.
-    fn clipped_axes(&self) -> (bool, bool) {
+    pub(crate) fn clipped_axes(&self) -> (bool, bool) {
         match self.with_css(|css| css.overflow()) {
             Some(overflow) => (
                 overflow.x != taffy::style::Overflow::Visible,
@@ -2195,7 +2195,7 @@ impl LayoutComponent {
     /// border box with CSS radii (points from the style, percentages from
     /// the record, scaled together when they overlap), its padding box with
     /// the inner radii, and its computed overflow. None in translated mode.
-    fn css_box_geometry(&self) -> Option<CssBoxGeometry> {
+    pub(crate) fn css_box_geometry(&self) -> Option<CssBoxGeometry> {
         use crate::css_layout::{keys, paint};
         let points = self
             .with_style(|style| {
@@ -2362,6 +2362,11 @@ impl LayoutComponent {
         mut height_mode: LayoutMeasureMode,
     ) -> (LayoutMeasureMode, LayoutMeasureMode) {
         use crate::mechanical_port::source::layout::layout_measure_mode::unbound_measure_mode;
+        // A CSS box measures with Taffy's modes: the Rive style's Hug and
+        // hugUnbounded are not its sizing (docs/CSS_LAYOUT.md, 2.1).
+        if self.is_css_mode() {
+            return (width_mode, height_mode);
+        }
         if self
             .with_style(|style| style.hug_unbounded())
             .unwrap_or(false)
@@ -4468,8 +4473,10 @@ impl LayoutComponent {
                 current = tree.taffy.parent(node);
             }
         }
-        let mut stack = vec![tree.root];
-        while let Some(id) = stack.pop() {
+        // Each node, and whether it was reached only past an unchanged static
+        // box (below).
+        let mut stack = vec![(tree.root, false)];
+        while let Some((id, past_static)) = stack.pop() {
             let Some(context) = tree.taffy.get_node_context(id) else {
                 continue;
             };
@@ -4550,8 +4557,46 @@ impl LayoutComponent {
                     }
                 })
                 .unwrap_or(false);
+            let position = |node| {
+                tree.taffy
+                    .style(node)
+                    .map_or(taffy::style::Position::Relative, |style| style.position)
+            };
+            if changed && past_static {
+                // The bounds update descends only through boxes with a new
+                // layout: open the way down to this one.
+                let mut ancestor = tree.taffy.parent(id);
+                while let Some(node) = ancestor {
+                    if let Some(context) = tree.taffy.get_node_context(node) {
+                        context.owner.with_mut(|object| {
+                            if let Some(layout) = object.as_layout_component_mut() {
+                                layout.layout_data.has_new_layout = true;
+                            } else if let Some(data) = Self::layout_data_of(object) {
+                                data.has_new_layout = true;
+                            }
+                        });
+                    }
+                    ancestor = tree.taffy.parent(node);
+                }
+            }
             if changed || touched {
-                stack.extend(tree.taffy.child_ids(id));
+                stack.extend(tree.taffy.child_ids(id).map(|child| (child, false)));
+            } else if position(id) == taffy::style::Position::Static {
+                // CSS mode: a static box is no containing block. An absolute
+                // box below it is placed against an ancestor above, which may
+                // have changed, and its published offset subtracts the static
+                // boxes between, which may have moved.
+                stack.extend(
+                    tree.taffy
+                        .child_ids(id)
+                        .filter(|&child| {
+                            matches!(
+                                position(child),
+                                taffy::style::Position::Static | taffy::style::Position::Absolute
+                            )
+                        })
+                        .map(|child| (child, true)),
+                );
             }
         }
     }
@@ -4573,6 +4618,15 @@ impl LayoutComponent {
             .or_else(|| self.with_style(|style| style.display() == YGDisplay::None))
             .unwrap_or(false);
         self.set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, hidden);
+    }
+    /// Whether this box sets its own direction rather than inheriting it:
+    /// its record's in CSS mode, its style's otherwise.
+    fn has_own_direction(&self) -> bool {
+        if self.is_css_mode() {
+            return self.with_css(|css| css.direction()).flatten().is_some();
+        }
+        self.with_style(|style| style.direction() != YGDirection::Inherit)
+            .unwrap_or(false)
     }
     pub fn actual_direction(&self) -> LayoutDirection {
         if self.is_css_mode() {
@@ -4818,15 +4872,12 @@ impl LayoutComponent {
                 false
             };
             let old = layout.inherited_direction;
-            layout.inherited_direction = if direction == LayoutDirection::Inherit
-                || layout
-                    .with_style(|style| style.direction() != YGDirection::Inherit)
-                    .unwrap_or(false)
-            {
-                LayoutDirection::Inherit
-            } else {
-                direction
-            };
+            layout.inherited_direction =
+                if direction == LayoutDirection::Inherit || layout.has_own_direction() {
+                    LayoutDirection::Inherit
+                } else {
+                    direction
+                };
             (updated, old != layout.inherited_direction)
         }) else {
             return false;
@@ -5350,15 +5401,12 @@ impl LayoutComponent {
             false
         };
         let old = self.inherited_direction;
-        self.inherited_direction = if direction == LayoutDirection::Inherit
-            || self
-                .with_style(|style| style.direction() != YGDirection::Inherit)
-                .unwrap_or(false)
-        {
-            LayoutDirection::Inherit
-        } else {
-            direction
-        };
+        self.inherited_direction =
+            if direction == LayoutDirection::Inherit || self.has_own_direction() {
+                LayoutDirection::Inherit
+            } else {
+                direction
+            };
         if old != self.inherited_direction {
             self.mark_layout_node_dirty(true);
             CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);

@@ -771,7 +771,7 @@ impl LayoutParticipant {
     /// Whether this participant's display is none: its host's CSS record
     /// decides in CSS mode (docs/CSS_LAYOUT.md, 2.1), its own style otherwise.
     /// The host's `LayoutCssStyle`, when the participant is in CSS mode.
-    fn css_record(&self) -> Option<CoreHandle> {
+    pub(crate) fn css_record(&self) -> Option<CoreHandle> {
         self.layout_data
             .as_deref()
             .and_then(|data| data.appliers.as_deref())

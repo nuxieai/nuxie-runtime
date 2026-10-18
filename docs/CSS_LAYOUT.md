@@ -352,6 +352,8 @@ A box with layout children lays them out. Its non-layout children do not take pa
 | Mounted artboard (a component-list item) or nested artboard | its artboard's own size, like an image: a box hugs to it, and on an axis where it has a definite size that size is its automatic minimum. That minimum is clamped by a length maximum or by a percentage of a parent's definite length. It gives no minimum on a scroll-container axis | As today |
 | Text input, scripted layout, artboard without an instance | zero | |
 
+A CSS box's automatic minimum is the largest of its contents' own: content with a zero minimum (the rows above that say so) adds nothing, and the rest still count. A translated box keeps a zero automatic minimum when any of its measured content has none, as today.
+
 **The update-pass check stays.** It keeps these natural sizes current. The component graph's update loop queues the measured host of each member that recomputes:
 
 - a local transform (Transform dirt);

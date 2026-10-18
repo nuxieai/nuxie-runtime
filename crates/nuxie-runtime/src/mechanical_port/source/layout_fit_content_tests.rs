@@ -48,6 +48,32 @@ fn attach(arena: &CoreArena, parent: &CoreHandle, child: &CoreHandle) {
         Some(StatusCode::Ok)
     );
 }
+/// A Text with one run of `content` in Inter Bold 28 on line height 36.
+fn make_text(arena: &CoreArena, content: &str) -> (CoreHandle, CoreHandle) {
+    let asset = arena.insert(FontAsset::default());
+    let font_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .expect("set RIVE_RUNTIME_DIR to the pinned upstream fixture checkout");
+    let font = std::fs::read(
+        std::path::PathBuf::from(font_root)
+            .join("tests/unit_tests/assets/fonts/Inter_28pt-Bold.ttf"),
+    )
+    .unwrap();
+    FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&font).unwrap()));
+    let mut style = TextStyle::default();
+    style.base.set_font_size_value(28.0);
+    style.base.set_line_height_value(36.0);
+    let style = arena.insert(style);
+    TextStyle::set_asset_occurrence(&style, Some(asset));
+    let mut run = TextValueRun::default();
+    run.base.set_text_value(content.into());
+    run.set_style(style);
+    let run = arena.insert(run);
+    let mut text = Text::default();
+    text.add_run(run.clone());
+    let text = arena.insert(text);
+    attach(&arena, &text, &run);
+    (text, run)
+}
 fn layout(
     arena: &CoreArena,
     parent: Option<&CoreHandle>,
@@ -123,28 +149,7 @@ impl Fixture {
             })
         })
         .unwrap();
-        let asset = arena.insert(FontAsset::default());
-        let font_root = std::env::var_os("RIVE_RUNTIME_DIR")
-            .expect("set RIVE_RUNTIME_DIR to the pinned upstream fixture checkout");
-        let font = std::fs::read(
-            std::path::PathBuf::from(font_root)
-                .join("tests/unit_tests/assets/fonts/Inter_28pt-Bold.ttf"),
-        )
-        .unwrap();
-        FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&font).unwrap()));
-        let mut style = TextStyle::default();
-        style.base.set_font_size_value(28.0);
-        style.base.set_line_height_value(36.0);
-        let style = arena.insert(style);
-        TextStyle::set_asset_occurrence(&style, Some(asset));
-        let mut run = TextValueRun::default();
-        run.base.set_text_value(content.into());
-        run.set_style(style);
-        let run = arena.insert(run);
-        let mut text = Text::default();
-        text.add_run(run.clone());
-        let text = arena.insert(text);
-        attach(&arena, &text, &run);
+        let (text, run) = make_text(&arena, content);
         let label = if participant {
             attach(&arena, &root, &text);
             let mut p = LayoutParticipant::default();
@@ -337,6 +342,57 @@ fn css_mode_text_follows_padding_in_a_fixed_box() {
     assert_eq!(f.solve().width(), 200.0);
     LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
     assert_eq!(width(), 170.0);
+}
+/// A participant whose host has a record measures by its CSS: the Rive
+/// hugUnbounded does not unbind its width, so the title wraps at the offer.
+#[test]
+fn css_participant_ignores_a_legacy_hug_unbounded() {
+    let f = Fixture::new_host(TITLE, 338.0, false, true);
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.text, &record);
+    f.label
+        .with_downcast_mut::<LayoutParticipant, _>(|p| {
+            p.base.set_hug_unbounded_value(true);
+            p.add_layout_style_applier(record.clone());
+        })
+        .unwrap();
+    LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+    assert_width(&f, 338.0);
+}
+
+/// A CSS leaf artboard gives its text its content box, as a CSS box does.
+#[test]
+fn css_leaf_artboard_gives_its_text_the_content_box() {
+    use crate::source::artboard::Artboard;
+    let arena = CoreArena::default();
+    let artboard = arena.insert(Artboard::default());
+    let style = arena.insert(LayoutComponentStyle::default());
+    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&arena, &artboard, &record);
+    artboard
+        .with_downcast_mut::<Artboard, _>(|a| {
+            let layout = &mut a.base.base;
+            layout.set_style(Some(style.clone()));
+            layout.add_layout_style_applier(artboard.clone());
+            layout.add_layout_style_applier(style.clone());
+            layout.add_layout_style_applier(record.clone());
+        })
+        .unwrap();
+    let (text, _run) = make_text(&arena, "Unlock premium");
+    attach(&arena, &artboard, &text);
+    artboard
+        .with_downcast_mut::<Artboard, _>(|a| {
+            let layout = &mut a.base.base;
+            layout.layout = Layout::new(0.0, 0.0, 200.0, 100.0);
+            layout.solved_padding = LayoutPadding::new(10.0, 0.0, 20.0, 0.0);
+            layout.layout_padding = layout.solved_padding;
+        })
+        .unwrap();
+    LayoutComponent::propagate_size_occurrence(&artboard);
+    let width = text
+        .with_downcast::<Text, _>(Text::effective_width)
+        .unwrap();
+    assert_eq!(width, 170.0);
 }
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {

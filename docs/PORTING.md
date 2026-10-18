@@ -717,6 +717,9 @@ decode queue. Bidi and audio retain their separately tracked status below.
     geometry (elliptical radii, physical corners, outer shadows outside the
     border box only, inset shadows inside the padding box); the feather
     strength equals the CSS blur radius, checked against Chrome pixels.
+    A CSS box paints its children in CSS painting order rather than Rive's
+    reverse file order, and hits follow that order; a `BoxPaint` record
+    sizes the box's own paint without changing its layout.
     Files without the record never enter CSS mode.
   - *Persistent tree.* `layout/layout_tree.rs` keeps one Taffy tree per layout
     root; each LayoutComponent/LayoutParticipant (hosted artboards included)

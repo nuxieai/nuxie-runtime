@@ -127,6 +127,13 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     if key == keys::DIRECTION {
                         LayoutComponent::direction_changed_occurrence(&parent);
                     }
+                    // CSS painting order reads these (docs/CSS_LAYOUT.md, 4.4).
+                    if matches!(
+                        key,
+                        keys::DISPLAY | keys::POSITION | keys::Z_INDEX_KIND | keys::Z_INDEX
+                    ) {
+                        mark_draw_order_dirty(&parent);
+                    }
                     if key == keys::DISPLAY
                         || key == keys::FLEX_DIRECTION
                         || key == keys::JUSTIFY_ITEMS
@@ -244,6 +251,21 @@ pub fn find_in(children: &[CoreHandle]) -> Option<CoreHandle> {
         .iter()
         .find(|child| child.is_type_of(keys::LAYOUT_CSS_STYLE))
         .cloned()
+}
+
+/// `owner`'s artboard sorts its draw order again.
+fn mark_draw_order_dirty(owner: &CoreHandle) {
+    let artboard =
+        if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
+            Some(owner.clone())
+        } else {
+            owner
+                .with(|object| object.component_artboard_handle())
+                .flatten()
+        };
+    if let Some(artboard) = artboard {
+        artboard.with_mut(|object| object.component_add_dirt(ComponentDirt::DRAW_ORDER, false));
+    }
 }
 
 /// `paint`'s box redraws its CSS paint paths, when it is a box.

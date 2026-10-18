@@ -71,6 +71,7 @@ Doubles are bindable and animate. Enums are bindable and do not animate.
 | `display` | 60022 `display` | uint8 | 0 block, 1 flex, 2 grid, 3 none, 4 flow-root | `inline` in CSS, which we do not have; 0 block is the `div` default |
 | `box-sizing` | 60023 `boxSizing` | uint8 | 0 content-box, 1 border-box | content-box |
 | `position` | 60024 `position` | uint8 | 0 static, 1 relative, 2 absolute | static |
+| `z-index` | 60121 `zIndexKind`, 60122 `zIndex` | uint8, double | kind 0 auto, 1 an integer (the double, rounded) | auto |
 | `overflow-x` | 60025 `overflowX` | uint8 | 0 visible, 1 clip, 2 hidden, 3 scroll, 4 auto | visible |
 | `overflow-y` | 60026 `overflowY` | uint8 | as overflow-x | visible |
 | `direction` | 60027 `direction` | uint8 | 0 inherit, 1 ltr, 2 rtl | inherited (ltr at the root) |
@@ -334,6 +335,20 @@ Refused in step 1:
 - border styles other than solid;
 - `border-image`;
 - radii with the slash syntax (separate horizontal and vertical values).
+
+### 4.4 Painting order
+
+Rive draws a box's children in reverse file order, so its first child draws on top. A CSS box (or CSS artboard) paints its children in CSS's order instead (CSS 2.1 Appendix E), bottom first:
+
+1. the box's own paint (fills, strokes, shadows, borders), then its content clip;
+2. children positioned (`relative` or `absolute`) with a negative `z-index`, ascending;
+3. in-flow children, and the box's own drawing content, in tree order: a later sibling on top;
+4. positioned children with `z-index` auto or 0, in tree order;
+5. positioned children with a positive `z-index`, ascending.
+
+A flex or grid item's `z-index` applies when it is not positioned too, as CSS says. The order is computed by the runtime when the draw order is sorted, and again when `position`, `z-index` or `display` change at run time (a binding, an animation, a script), so the compiler writes no order of its own. Hit testing follows the same order: the topmost painted box is hit first.
+
+Step 1 orders each box's own children: a child keeps its whole subtree together, so a positioned descendant paints with its parent's child, not in its nearest stacking context as a browser would let it escape. Escaping, and opacity and transforms as stacking-context triggers, are a follow-up. Translated (Rive) boxes keep Rive's order, and an artboard with draw rules keeps Rive's order throughout.
 
 ## 5. Leaf measurement
 

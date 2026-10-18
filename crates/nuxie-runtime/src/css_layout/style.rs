@@ -221,6 +221,10 @@ impl CssValues<'_> {
             _ => None,
         }
     }
+    /// CSS z-index: None for auto.
+    pub fn z_index(&self) -> Option<i32> {
+        (self.choice(keys::Z_INDEX_KIND) == 1).then(|| self.number(keys::Z_INDEX).round() as i32)
+    }
     pub fn display_none(&self) -> bool {
         self.choice(keys::DISPLAY) == 3
     }

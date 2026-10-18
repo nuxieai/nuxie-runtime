@@ -3,6 +3,7 @@
 //! mode; Taffy then lays it out with its own CSS algorithms.
 pub mod keys;
 pub mod paint;
+pub(crate) mod paint_order;
 pub mod record;
 pub mod style;
 

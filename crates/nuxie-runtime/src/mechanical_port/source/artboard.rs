@@ -3076,22 +3076,15 @@ impl Artboard {
             self.layout_width(),
             self.layout_height(),
         );
-        let mut local = geometry.bounds.offset(background.left(), background.top());
-        if let Some(paths) = layout.render_paths_handle() {
-            for paint in &paths.borrow().css_paints {
-                local.expand(paint.path.raw_path().bounds());
-            }
-        }
         let frame = self.bounds();
         let shift = Mat2D::from_translate(
             frame.left() - background.left(),
             frame.top() - background.top(),
         );
         let mut painted = Aabb::default();
-        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
-            &local,
+        layout.css_painted_bounds(
+            geometry.bounds.offset(background.left(), background.top()),
             &shift,
-            Some(layout.shape_paint_container()),
             &mut painted,
         );
         if self.clip() {

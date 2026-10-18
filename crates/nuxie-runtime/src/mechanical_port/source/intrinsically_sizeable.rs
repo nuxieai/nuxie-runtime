@@ -216,9 +216,12 @@ fn natural_bounds_for_layout_host(
                         .as_transform_component()
                         .map_or_else(Mat2D::identity, |transform| transform.transform())
                 })?;
-                if let Some(bounds) =
-                    natural_bounds_for_layout_host(&child, Some(outer * local), resized_reach, css)?
-                {
+                let bounds =
+                    natural_bounds_for_layout_host(&child, Some(outer * local), resized_reach, css);
+                // In a CSS box, a child without a natural size of its own (a
+                // text, say) adds nothing; its siblings keep their geometry.
+                let bounds = if css { bounds.flatten() } else { bounds? };
+                if let Some(bounds) = bounds {
                     if let Some(result) = &mut result {
                         result.expand(bounds);
                     } else {

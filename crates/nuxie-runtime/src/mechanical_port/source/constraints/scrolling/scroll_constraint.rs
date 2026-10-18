@@ -327,6 +327,9 @@ impl ScrollConstraint {
         }
     }
     pub fn visible_width_ratio(&self) -> f32 {
+        if let Some(ratio) = self.css_visible_ratio(true) {
+            return ratio;
+        }
         if self.content_width() == 0.0 {
             1.0
         } else {
@@ -334,11 +337,37 @@ impl ScrollConstraint {
         }
     }
     pub fn visible_height_ratio(&self) -> f32 {
+        if let Some(ratio) = self.css_visible_ratio(false) {
+            return ratio;
+        }
         if self.content_height() == 0.0 {
             1.0
         } else {
             1.0_f32.min(self.viewport_height() / self.content_height())
         }
+    }
+    /// A CSS viewport's visible share of its scrollable extent on one axis:
+    /// its padding box over the padding box plus its scroll range, as a
+    /// browser sizes its scroll bar's thumb.
+    fn css_visible_ratio(&self, horizontal: bool) -> Option<f32> {
+        let range = self.css_scroll_range()?;
+        let visible = self
+            .with_viewport(|viewport| {
+                let [top, right, bottom, left] = viewport.solved_border();
+                if horizontal {
+                    viewport.layout_width() - left - right
+                } else {
+                    viewport.layout_height() - top - bottom
+                }
+            })?
+            .max(0.0);
+        let range = if horizontal { range.x } else { range.y };
+        let extent = visible + range.max(0.0);
+        Some(if extent > 0.0 {
+            (visible / extent).min(1.0)
+        } else {
+            1.0
+        })
     }
     pub fn min_offset_x(&self) -> f32 {
         if self.loops_x() { f32::INFINITY } else { 0.0 }
@@ -1701,6 +1730,28 @@ impl ScrollConstraint {
         self.intent_y.space = ScrollSpace::None;
     }
 
+    /// An item's bounds as indexed scrolling reads them, from the start
+    /// edge: in an RTL CSS viewport that is the right, so they are mirrored
+    /// about the content box (docs/CSS_LAYOUT.md, section 3).
+    fn from_start(&self, bounds: Aabb) -> Aabb {
+        if !self.css_rtl() {
+            return bounds;
+        }
+        let width = self.content_width();
+        Aabb::new(
+            width - bounds.right(),
+            bounds.top(),
+            width - bounds.left(),
+            bounds.bottom(),
+        )
+    }
+    fn indexed_flat_bounds(&self, index: usize) -> Aabb {
+        self.from_start(self.bounds_for_flat_index(index))
+    }
+    fn indexed_child_bounds(&self, child: &CoreHandle, local: usize) -> Aabb {
+        self.from_start(self.layout_child_bounds_for_node(child, local))
+    }
+
     fn position_at_index(&self, index: f32) -> Option<Vec2D> {
         if index.is_nan() || (self.base.infinite() && !index.is_finite()) {
             return Some(Vec2D::default());
@@ -1730,7 +1781,7 @@ impl ScrollConstraint {
         let fraction = normalized - floor_index;
         let target_index = floor_index as usize;
         if !self.has_list_children {
-            let bounds = self.bounds_for_flat_index(target_index);
+            let bounds = self.indexed_flat_bounds(target_index);
             if !self.is_bounds_collapsed(bounds) {
                 return Some(Vec2D::new(
                     -bounds.left() - (bounds.width() + content_gap.x) * fraction,
@@ -1738,21 +1789,21 @@ impl ScrollConstraint {
                 ));
             }
             for index in target_index + 1..count {
-                let bounds = self.bounds_for_flat_index(index);
+                let bounds = self.indexed_flat_bounds(index);
                 if !self.is_bounds_collapsed(bounds) {
                     return Some(Vec2D::new(-bounds.left(), -bounds.top()));
                 }
             }
             if self.base.infinite() {
                 for index in 0..target_index {
-                    let bounds = self.bounds_for_flat_index(index);
+                    let bounds = self.indexed_flat_bounds(index);
                     if !self.is_bounds_collapsed(bounds) {
                         return Some(Vec2D::new(-bounds.left(), -bounds.top()));
                     }
                 }
             } else {
                 for index in (0..target_index).rev() {
-                    let bounds = self.bounds_for_flat_index(index);
+                    let bounds = self.indexed_flat_bounds(index);
                     if !self.is_bounds_collapsed(bounds) {
                         return Some(Vec2D::new(-bounds.left(), -bounds.top()));
                     }
@@ -1769,7 +1820,7 @@ impl ScrollConstraint {
             let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                 .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
             for local in 0..count {
-                let bounds = self.layout_child_bounds_for_node(child, local);
+                let bounds = self.indexed_child_bounds(child, local);
                 if flat_index < target_index {
                     if !self.is_bounds_collapsed(bounds) {
                         last_visible = Vec2D::new(-bounds.left(), -bounds.top());
@@ -1807,7 +1858,7 @@ impl ScrollConstraint {
                     if flat_index >= target_index {
                         return None;
                     }
-                    let bounds = self.layout_child_bounds_for_node(child, local);
+                    let bounds = self.indexed_child_bounds(child, local);
                     if !self.is_bounds_collapsed(bounds) {
                         return Some(Vec2D::new(-bounds.left(), -bounds.top()));
                     }
@@ -1850,7 +1901,7 @@ impl ScrollConstraint {
             let count = self.layout_children.len();
             if self.indexes_horizontally() {
                 for index in 0..count {
-                    let bounds = self.layout_child_bounds_for_node(&self.layout_children[index], 0);
+                    let bounds = self.indexed_child_bounds(&self.layout_children[index], 0);
                     let step = bounds.width() + gap.x;
                     if position.x > -bounds.left() - step {
                         return if step != 0.0 {
@@ -1863,7 +1914,7 @@ impl ScrollConstraint {
                 return count as f32;
             } else if self.base.constrains_vertical() {
                 for index in 0..count {
-                    let bounds = self.layout_child_bounds_for_node(&self.layout_children[index], 0);
+                    let bounds = self.indexed_child_bounds(&self.layout_children[index], 0);
                     let step = bounds.height() + gap.y;
                     if position.y > -bounds.top() - step {
                         return if step != 0.0 {
@@ -1883,7 +1934,7 @@ impl ScrollConstraint {
                 let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                     .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
                 for local in 0..count {
-                    let bounds = self.layout_child_bounds_for_node(child, local);
+                    let bounds = self.indexed_child_bounds(child, local);
                     let step = bounds.width() + gap.x;
                     if position.x > -bounds.left() - step {
                         return if step != 0.0 {
@@ -1901,7 +1952,7 @@ impl ScrollConstraint {
                 let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                     .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
                 for local in 0..count {
-                    let bounds = self.layout_child_bounds_for_node(child, local);
+                    let bounds = self.indexed_child_bounds(child, local);
                     let step = bounds.height() + gap.y;
                     if position.y > -bounds.top() - step {
                         return if step != 0.0 {

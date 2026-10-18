@@ -2858,3 +2858,54 @@ fn css_leaf_artboard_content_follows_its_size_and_origin() {
     f.advance(2);
     assert_eq!(f.world_origin("Dot").0, 12.0);
 }
+
+/// A CSS grid's `justify-items` written at run time moves its Rive Hug
+/// children.
+#[test]
+fn css_grid_justify_items_written_at_run_time_moves_rive_children() {
+    const POINTS: u64 = 1;
+    const JUSTIFY_ITEMS: u16 = 60037;
+    const CENTER: u32 = 8;
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            tracks: vec![(0, POINTS, 200.0)],
+            ..css(
+                "Grid",
+                [[U(DISPLAY, 2)].as_slice(), &width(200.0), &height(40.0)].concat(),
+                vec![B {
+                    name: "Hug",
+                    style: vec![
+                        U(
+                            LayoutComponentStyleBase::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY,
+                            1,
+                        ),
+                        U(
+                            LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                            LayoutScaleType::Hug as u64,
+                        ),
+                        U(
+                            LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+                            LayoutScaleType::Hug as u64,
+                        ),
+                    ],
+                    content: vec![Rect {
+                        name: "Dot",
+                        size: (40.0, 20.0),
+                        grouped: false,
+                        path_scale_x: 1.0,
+                    }],
+                    ..B::default()
+                }],
+            )
+        },
+    );
+    assert_eq!(f.bounds("Hug")[0], 0.0);
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record("Grid"),
+        JUSTIFY_ITEMS.into(),
+        CENTER
+    ));
+    f.advance(2);
+    assert_eq!(f.bounds("Hug")[0], 80.0);
+}

@@ -291,6 +291,25 @@ enum CssPaintKind {
     },
 }
 
+/// Whether `paint`, one of a CSS box's (or CSS artboard's) own paints,
+/// draws as the box draws it: a BoxBorder's Stroke whatever its thickness
+/// (docs/CSS_LAYOUT.md, 4.2), any other paint as Rive decides.
+pub(crate) fn css_paint_draws(paint: &CoreHandle) -> bool {
+    let border = matches!(css_paint_kind(paint), Some(CssPaintKind::Border { .. }));
+    paint
+        .with(|object| {
+            object.as_shape_paint_behavior().is_some_and(|behavior| {
+                if border {
+                    behavior.shape_paint().base.is_visible()
+                        && behavior.shape_paint().mutator_is_visible()
+                } else {
+                    behavior.should_draw()
+                }
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn css_paint_kind(paint: &CoreHandle) -> Option<CssPaintKind> {
     use crate::css_layout::keys;
     use crate::mechanical_port::source::shapes::paint::feather::Feather;
@@ -5863,6 +5882,17 @@ impl LayoutComponent {
                 } else {
                     &mut paths.world
                 }
+            })
+        })
+    }
+    /// The path an artboard clips its content to, in its drawing space: its
+    /// background, or its bounds when a BoxPaint moved its background
+    /// (docs/CSS_LAYOUT.md, 4.2).
+    pub(crate) fn frame_clip_path(&mut self) -> Option<std::cell::RefMut<'_, ShapePaintPath>> {
+        self.render_paths.as_ref().map(|paths| {
+            std::cell::RefMut::map(paths.borrow_mut(), |paths| match &mut paths.frame_clip {
+                Some(clip) => clip,
+                None => &mut paths.local,
             })
         })
     }

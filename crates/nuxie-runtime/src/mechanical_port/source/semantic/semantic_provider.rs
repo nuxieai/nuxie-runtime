@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     artboard::Artboard,
     core::CoreHandle,
     generated::{container_component_base::ContainerComponentBase, node_base::NodeBase},
-    math::{aabb::Aabb, vec2d::Vec2D},
+    math::{aabb::Aabb, raw_path::RawPath, vec2d::Vec2D},
     semantic::{
         semantic_clip::SemanticClipRegion,
         semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics},
@@ -167,14 +167,60 @@ fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
 }
 
 fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
+    clip_region(component, polygon, true, true)
+}
+
+/// Our layer (docs/CSS_LAYOUT.md, 4.5): a CSS box's painted `polygon`, in
+/// its artboard's drawing space, clipped as the box's own paint draws: by
+/// its clipping shapes and every ancestor's clip within its artboard, but
+/// not by its own content clip, which its paint draws before. Its bounds in
+/// that space, or None when nothing of it is left.
+pub(crate) fn painted_box_visible_bounds(
+    component: &CoreHandle,
+    polygon: [Vec2D; 4],
+) -> Option<Bounds> {
+    let region = clip_region(component, polygon.to_vec(), false, false);
+    (!region.is_empty()).then(|| region.bounds())
+}
+
+/// Clip `polygon` by `component`'s rendered clips and its ancestors'. With
+/// `to_root`, through nested artboards' hosts in the root artboard's space;
+/// without, within `component`'s artboard, in its space. Without
+/// `own_clip`, `component`'s own clip of its content is left out.
+fn clip_region(
+    component: &CoreHandle,
+    polygon: Vec<Vec2D>,
+    to_root: bool,
+    own_clip: bool,
+) -> SemanticClipRegion {
     let mut region = SemanticClipRegion::from_polygon(&polygon);
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     let mut applied_shapes = std::collections::HashSet::new();
+    // A path in an artboard's drawing space, in the space the walk uses.
+    let in_space = |artboard: &CoreHandle, path: RawPath| {
+        if to_root {
+            artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                path.morph(|point| artboard.semantic_root_transform(point))
+            })
+        } else {
+            Some(path)
+        }
+    };
+    let point_in_space = |artboard: &CoreHandle, corners: [Vec2D; 4]| {
+        if to_root {
+            artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                corners.map(|point| artboard.semantic_root_transform(point))
+            })
+        } else {
+            Some(corners)
+        }
+    };
     while let Some(owner) = current {
         if !visited.insert(owner.clone()) {
             return SemanticClipRegion::default();
         }
+        let skip_own = !own_clip && &owner == component;
         let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
             // A CSS artboard's record clips its content at its padding box,
@@ -187,10 +233,14 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
                     let paths = paths.borrow();
                     (paths.clip.raw_path().clone(), paths.clip.fill_rule())
                 });
-            let parent = object
-                .component_parent_handle()
-                .or_else(|| object.as_artboard().and_then(Artboard::host));
-            let fallback = if let Some(artboard) = object.as_artboard() {
+            let parent = object.component_parent_handle().or_else(|| {
+                to_root
+                    .then(|| object.as_artboard().and_then(Artboard::host))
+                    .flatten()
+            });
+            let fallback = if skip_own {
+                None
+            } else if let Some(artboard) = object.as_artboard() {
                 artboard
                     .clip()
                     .then(|| (bounds_corners(artboard.bounds()), Some(owner.clone())))
@@ -211,7 +261,7 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
             let clip = fallback.map(|(corners, artboard)| {
                 let layout = object.as_layout_component_mut().expect("layout clip owner");
                 let path = if is_artboard {
-                    layout.local_path()
+                    layout.frame_clip_path()
                 } else {
                     layout.clip_world_path()
                 };
@@ -222,10 +272,8 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
         }) else {
             return SemanticClipRegion::default();
         };
-        if let Some((path, rule)) = css_artboard_clip {
-            let Some(mapped) = owner.with_downcast_mut::<Artboard, _>(|artboard| {
-                path.morph(|point| artboard.semantic_root_transform(point))
-            }) else {
+        if let Some((path, rule)) = css_artboard_clip.filter(|_| !skip_own) {
+            let Some(mapped) = in_space(&owner, path) else {
                 return SemanticClipRegion::default();
             };
             region.intersect_path(&mapped, rule);
@@ -265,9 +313,7 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
                 return SemanticClipRegion::default();
             };
             if let Some(artboard) = artboard {
-                let Some(mapped) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                    path.morph(|point| artboard.semantic_root_transform(point))
-                }) else {
+                let Some(mapped) = in_space(&artboard, path) else {
                     return SemanticClipRegion::default();
                 };
                 path = mapped;
@@ -279,22 +325,16 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
         }
         if let Some((mut corners, artboard, mut path)) = clip {
             if let Some(artboard) = artboard {
-                let Some((mapped, mapped_path)) =
-                    artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                        let corners = corners.map(|point| artboard.semantic_root_transform(point));
-                        let path = path.map(|(path, rule)| {
-                            (
-                                path.morph(|point| artboard.semantic_root_transform(point)),
-                                rule,
-                            )
-                        });
-                        (corners, path)
-                    })
-                else {
+                let Some(mapped) = point_in_space(&artboard, corners) else {
                     return SemanticClipRegion::default();
                 };
                 corners = mapped;
-                path = mapped_path;
+                if let Some((raw, rule)) = path {
+                    let Some(mapped) = in_space(&artboard, raw) else {
+                        return SemanticClipRegion::default();
+                    };
+                    path = Some((mapped, rule));
+                }
             }
             if let Some((path, rule)) = path {
                 region.intersect_path(&path, rule);

@@ -2554,6 +2554,18 @@ impl LayoutComponent {
         Self::propagate_resolved_collapse_occurrence(owner, collapsed, None, None);
         Self::mark_layout_node_dirty_occurrence(owner, false);
     }
+    /// A CSS box's display or flex direction changed. Its children's
+    /// styles read its main axis and whether it is a grid, so each syncs
+    /// again on the next style pass.
+    pub(crate) fn css_flow_changed_occurrence(owner: &CoreHandle) {
+        for (_, provider) in Self::layout_providers_occurrence(owner) {
+            if provider.is_type_of(LayoutComponentBase::TYPE_KEY) {
+                Self::mark_layout_node_dirty_occurrence(&provider, false);
+            } else {
+                provider.with_mut(|object| object.layout_provider_mark_node_dirty(false));
+            }
+        }
+    }
     /// A record value that only the box's paint reads changed.
     pub(crate) fn css_paint_changed_occurrence(owner: &CoreHandle) {
         owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));

@@ -126,6 +126,9 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     if key == keys::DIRECTION {
                         LayoutComponent::direction_changed_occurrence(&parent);
                     }
+                    if key == keys::DISPLAY || key == keys::FLEX_DIRECTION {
+                        LayoutComponent::css_flow_changed_occurrence(&parent);
+                    }
                     // What only the box's paint and clip read.
                     if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4)
                         .contains(&key)

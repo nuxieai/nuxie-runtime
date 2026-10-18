@@ -279,6 +279,15 @@ fn css_mode_text_takes_the_content_box() {
         .with_downcast::<Text, _>(|text| (text.effective_width(), text.effective_height()));
     let height = f.solve().height() - 20.0;
     assert_eq!(text, Some((100.0, height)));
+    // And it is placed at the content box's origin, past the padding.
+    let offset = f.text.with(|object| {
+        let offset = object
+            .as_transform_component()
+            .expect("a transform")
+            .layout_content_offset();
+        (offset.x, offset.y)
+    });
+    assert_eq!(offset, Some((10.0, 10.0)));
 }
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {

@@ -77,6 +77,12 @@ impl Riv {
         self.objects.extend_from_slice(value.as_bytes());
         self
     }
+    pub(super) fn color(&mut self, key: u16, value: u32) -> &mut Self {
+        self.toc.insert(key, 3);
+        varuint(&mut self.objects, key.into());
+        self.objects.extend_from_slice(&value.to_le_bytes());
+        self
+    }
     pub(super) fn float(&mut self, key: u16, value: f32) -> &mut Self {
         self.toc.insert(key, 2);
         varuint(&mut self.objects, key.into());

@@ -128,13 +128,6 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     if key == keys::DIRECTION {
                         LayoutComponent::direction_changed_occurrence(&parent);
                     }
-                    // CSS painting order reads these (docs/CSS_LAYOUT.md, 4.4).
-                    if matches!(
-                        key,
-                        keys::DISPLAY | keys::POSITION | keys::Z_INDEX_KIND | keys::Z_INDEX
-                    ) {
-                        mark_draw_order_dirty(&parent);
-                    }
                     if key == keys::DISPLAY
                         || key == keys::FLEX_DIRECTION
                         || key == keys::JUSTIFY_ITEMS
@@ -150,6 +143,14 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     {
                         LayoutComponent::css_paint_changed_occurrence(&parent);
                     }
+                }
+                // CSS painting order reads these, for a box or a
+                // participant (docs/CSS_LAYOUT.md, 4.4).
+                if matches!(
+                    key,
+                    keys::DISPLAY | keys::POSITION | keys::Z_INDEX_KIND | keys::Z_INDEX
+                ) {
+                    mark_draw_order_dirty(&parent);
                 }
                 mark_owner_dirty(&parent);
             }

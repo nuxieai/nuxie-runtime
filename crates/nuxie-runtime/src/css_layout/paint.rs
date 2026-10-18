@@ -458,13 +458,17 @@ pub fn gradient_geometry(
     let far = Vec2D::new(sides.0.max(sides.1), sides.2.max(sides.3));
     let circle = values.choice(keys::GRADIENT_SHAPE) == 1;
     let corner_distance = |corner: Vec2D| corner.x.hypot(corner.y);
-    // The ellipse through `corner` with the aspect ratio of `side`.
+    // The ellipse through `corner` with the aspect ratio of `side`. A side
+    // with no width or no height gives an ellipse with none either, which
+    // the degenerate rule below draws.
     let through = |corner: Vec2D, side: Vec2D| {
         if circle {
             let radius = corner_distance(corner);
             Vec2D::new(radius, radius)
+        } else if side.x <= 0.0 {
+            Vec2D::new(0.0, corner.y)
         } else if side.y <= 0.0 {
-            Vec2D::default()
+            Vec2D::new(corner.x, 0.0)
         } else {
             let ratio = side.x / side.y;
             let y = ((corner.x / ratio).powi(2) + corner.y * corner.y).sqrt();
@@ -499,9 +503,10 @@ pub fn gradient_geometry(
     const VAST: f32 = 1.0e6;
     let radii = match (radii.x > 0.0, radii.y > 0.0) {
         (true, true) => radii,
-        (false, true) => Vec2D::new(VANISHING, VAST),
+        (false, false) if circle => Vec2D::new(VANISHING, VANISHING),
+        // Zero width, whatever the height, before zero height.
+        (false, _) => Vec2D::new(VANISHING, VAST),
         (true, false) => Vec2D::new(VAST, VANISHING),
-        (false, false) => Vec2D::new(VANISHING, VANISHING),
     };
     let transform = if radii.x == radii.y {
         identity

@@ -6,7 +6,8 @@
 //! (later on top), then positioned children with z-index auto or 0 in tree
 //! order, then positive z-index ascending. Each child keeps its subtree
 //! together, so a positioned descendant does not leave its parent's box.
-//! Translated (Rive) boxes keep Rive's order.
+//! A participant orders by its host's record, as a box does. Translated
+//! (Rive) boxes keep Rive's order.
 use super::keys;
 use crate::source::{
     core::CoreHandle, drawable::RuntimeDrawableOccurrence,
@@ -70,12 +71,17 @@ pub(crate) fn container_of(component: &CoreHandle) -> Container {
 }
 
 /// A child's paint layer, bottom first, and its z-index within the layer.
+/// A box reads its record; a participant's host reads the record among
+/// its children.
 fn layer_of(child: &CoreHandle, parent: Container) -> (u8, i32) {
+    let read = |css: super::CssValues<'_>| (css.choice(keys::POSITION) != 0, css.z_index());
     let css = child
-        .with(|object| {
-            object.as_layout_component().and_then(|layout| {
-                layout.with_css(|css| (css.choice(keys::POSITION) != 0, css.z_index()))
-            })
+        .with(|object| match object.as_layout_component() {
+            Some(layout) => layout.with_css(read),
+            None => object
+                .as_container_component()
+                .and_then(|container| super::record::find_in(container.children()))
+                .and_then(|record| super::record::with_values(&record, read)),
         })
         .flatten();
     let Some((positioned, z)) = css else {

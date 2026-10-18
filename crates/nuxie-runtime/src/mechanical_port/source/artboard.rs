@@ -3063,6 +3063,47 @@ impl Artboard {
             }
         }
     }
+    /// A CSS artboard's painted area in the space of [`Self::bounds`]
+    /// (docs/CSS_LAYOUT.md, 4.5): its BoxPaint's rectangle, or its
+    /// background, with its special paths and its paints' outsets, inside
+    /// its own clip. None in translated mode.
+    pub(crate) fn css_painted_bounds(&self) -> Option<Aabb> {
+        let layout = &self.base.base;
+        let geometry = layout.css_paint_geometry()?;
+        let background = Aabb::from_ltwh(
+            -self.layout_width() * self.origin_x(),
+            -self.layout_height() * self.origin_y(),
+            self.layout_width(),
+            self.layout_height(),
+        );
+        let mut local = geometry.bounds.offset(background.left(), background.top());
+        if let Some(paths) = layout.render_paths_handle() {
+            for paint in &paths.borrow().css_paints {
+                local.expand(paint.path.raw_path().bounds());
+            }
+        }
+        let frame = self.bounds();
+        let shift = Mat2D::from_translate(
+            frame.left() - background.left(),
+            frame.top() - background.top(),
+        );
+        let mut painted = Aabb::default();
+        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+            &local,
+            &shift,
+            Some(layout.shape_paint_container()),
+            &mut painted,
+        );
+        if self.clip() {
+            painted = Aabb::new(
+                painted.left().max(frame.left()),
+                painted.top().max(frame.top()),
+                painted.right().min(frame.right()),
+                painted.bottom().min(frame.bottom()),
+            );
+        }
+        Some(painted)
+    }
     /// Whether a record's overflow clips this artboard's content.
     pub(crate) fn css_clips(&self) -> bool {
         self.base.base.is_css_mode() && self.base.base.clips()

@@ -372,6 +372,23 @@ impl ScrollConstraint {
     fn logical_x(&self, x: f32) -> f32 {
         if self.css_rtl() { -x } else { x }
     }
+    /// How far the content is drawn moved, physically, on each axis it
+    /// constrains: its clamped offset, mirrored horizontally in a CSS RTL
+    /// viewport.
+    pub fn displacement(&self) -> Vec2D {
+        Vec2D::new(
+            if self.base.constrains_horizontal() {
+                self.logical_x(self.clamped_offset_x())
+            } else {
+                0.0
+            },
+            if self.base.constrains_vertical() {
+                self.clamped_offset_y()
+            } else {
+                0.0
+            },
+        )
+    }
     pub fn max_offset_x(&self) -> f32 {
         if self.loops_x() {
             f32::NEG_INFINITY
@@ -853,18 +870,8 @@ impl ScrollConstraint {
     // retained parent pointers without borrowing the supplied component.
     pub fn constrain(&mut self, _component: &CoreHandle) {
         self.resolve_scroll_intents();
-        self.scroll_transform = Mat2D::from_translate(
-            if self.base.constrains_horizontal() {
-                self.logical_x(self.clamped_offset_x())
-            } else {
-                0.0
-            },
-            if self.base.constrains_vertical() {
-                self.clamped_offset_y()
-            } else {
-                0.0
-            },
-        );
+        let displacement = self.displacement();
+        self.scroll_transform = Mat2D::from_translate(displacement.x, displacement.y);
         self.child_constraint_applied_count = 0;
     }
 

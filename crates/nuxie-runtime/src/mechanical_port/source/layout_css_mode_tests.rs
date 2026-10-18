@@ -3558,34 +3558,7 @@ fn css_hit_order_follows_the_paint_order() {
         painted("B", 0xff00_0002, sized(&[])),
     ]);
     // The draw list from its top, as StateMachineInstance sorts its hits.
-    let top_first = f.artboard.with_artboard(|artboard| {
-        let mut top = artboard.first_drawable();
-        while let Some(previous) = top.as_ref().and_then(|drawable| {
-            drawable
-                .with(|drawable| drawable.prev.as_ref().and_then(|prev| prev.upgrade()))
-                .flatten()
-        }) {
-            top = Some(previous);
-        }
-        let mut names = Vec::new();
-        while let Some(drawable) = top {
-            if let Some(name) = drawable.authored_handle().and_then(|handle| {
-                handle
-                    .with(|object| {
-                        object
-                            .as_layout_component()
-                            .map(|layout| layout.base.base.base.base.base.name().to_owned())
-                    })
-                    .flatten()
-            }) {
-                names.push(name);
-            }
-            top = drawable
-                .with(|drawable| drawable.next.as_ref().and_then(|next| next.upgrade()))
-                .flatten();
-        }
-        names
-    });
+    let top_first = f.draw_names_top_first();
     let at = |name: &str| top_first.iter().position(|n| n == name).unwrap();
     assert!(at("B") < at("A"), "{top_first:?}");
 }
@@ -3735,4 +3708,348 @@ fn css_painted_artboard_is_catalogued_geometry() {
         (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
         (0.0, 0.0, 400.0, 300.0)
     );
+}
+
+impl Scene {
+    /// Any component named `name`.
+    fn object(&self, name: &str) -> CoreHandle {
+        self.artboard
+            .with_artboard(|artboard| artboard.objects().to_vec())
+            .into_iter()
+            .flatten()
+            .find(|handle: &CoreHandle| {
+                handle
+                    .with(|object| object.as_component().is_some_and(|c| c.name() == name))
+                    .unwrap_or(false)
+            })
+            .unwrap_or_else(|| panic!("an object named {name}"))
+    }
+    /// The artboard-local id of the component named `name`.
+    fn local_id(&self, name: &str) -> usize {
+        let wanted = self.object(name);
+        self.artboard
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .position(|handle| handle.as_ref() == Some(&wanted))
+            })
+            .unwrap_or_else(|| panic!("{name} has a local id"))
+    }
+    /// The names of the drawables' components, the top of the draw list
+    /// first, as hits are tested.
+    fn draw_names_top_first(&self) -> Vec<String> {
+        self.artboard.with_artboard(|artboard| {
+            let mut top = artboard.first_drawable();
+            while let Some(previous) = top.as_ref().and_then(|drawable| {
+                drawable
+                    .with(|drawable| drawable.prev.as_ref().and_then(|prev| prev.upgrade()))
+                    .flatten()
+            }) {
+                top = Some(previous);
+            }
+            let mut names = Vec::new();
+            while let Some(drawable) = top {
+                if let Some(name) = drawable.authored_handle().and_then(|handle| {
+                    handle
+                        .with(|object| object.as_component().map(|c| c.name().to_owned()))
+                        .flatten()
+                }) {
+                    names.push(name);
+                }
+                top = drawable
+                    .with(|drawable| drawable.next.as_ref().and_then(|next| next.upgrade()))
+                    .flatten();
+            }
+            names
+        })
+    }
+}
+
+/// A positioned participant paints above a later static sibling, as a
+/// positioned box does, and a run-time position write sorts again.
+#[test]
+fn css_positioned_participant_paints_above_static_siblings() {
+    let with_icon = |position: u64| {
+        scene(
+            (400.0, 300.0),
+            B {
+                participants: vec![(
+                    Rect {
+                        name: "Icon",
+                        size: (20.0, 20.0),
+                        grouped: false,
+                        path_scale_x: 1.0,
+                    },
+                    Some(
+                        [
+                            [U(POSITION, position)].as_slice(),
+                            &width(20.0),
+                            &height(20.0),
+                        ]
+                        .concat(),
+                    ),
+                )],
+                ..css(
+                    "Frame",
+                    [
+                        [U(POSITION, 1), U(DISPLAY, 1), U(60028, 2)].as_slice(),
+                        &width(200.0),
+                        &height(200.0),
+                    ]
+                    .concat(),
+                    vec![painted("Later", 0xff00_0001, sized(&[]))],
+                )
+            },
+        )
+    };
+    let above = |f: &Scene| {
+        let names = f.draw_names_top_first();
+        let at = |name: &str| names.iter().position(|n| n == name).unwrap();
+        at("Icon") < at("Later")
+    };
+    assert!(!above(&with_icon(0)));
+    assert!(above(&with_icon(1)));
+    let f = with_icon(0);
+    let record = f
+        .object("Icon")
+        .with(|object| {
+            object
+                .as_container_component()
+                .and_then(|container| crate::css_layout::record::find_in(container.children()))
+        })
+        .flatten()
+        .expect("the icon's record");
+    assert!(CoreRegistry::set_uint_handle(&record, POSITION.into(), 1));
+    f.advance(2);
+    assert!(above(&f), "{:?}", f.draw_names_top_first());
+}
+
+/// A box is hit anywhere in its border box, outside a smaller BoxPaint,
+/// while its visible geometry is the painted rectangle.
+#[test]
+fn css_box_paint_leaves_hits_on_the_border_box() {
+    let f = painted_row(Some(paint_points(100.0, 40.0)), |b| b);
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    let bounds = visible[f
+        .geometry_names(&visible)
+        .iter()
+        .position(|n| n == "Painted")
+        .unwrap()]
+    .bounds;
+    assert_eq!(
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+        (50.0, 30.0, 150.0, 70.0)
+    );
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(10.0, 10.0));
+    assert!(f.geometry_names(&hits).contains(&"Painted".to_owned()));
+}
+
+/// A CSS artboard's BoxPaint leaves its own clip, so a child outside the
+/// painted rectangle stays semantically visible.
+#[test]
+fn css_artboard_box_paint_keeps_semantic_visibility() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            box_paint: Some(paint_points(100.0, 50.0)),
+            ..ArtboardSpec::default()
+        },
+        Some(css("Corner", [width(5.0), height(5.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    use crate::source::semantic::semantic_provider::rendered_geometry_bounds;
+    let bounds = rendered_geometry_bounds(Some(&f.named("Corner")));
+    assert!(!bounds.is_empty_or_nan(), "{bounds:?}");
+}
+
+/// A CSS artboard's visible geometry is its painted rectangle, and it is
+/// still hit anywhere in its bounds.
+#[test]
+fn css_artboard_box_paint_is_its_visible_geometry() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            box_paint: Some(paint_points(100.0, 50.0)),
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Artboard"]);
+    let bounds = visible[0].bounds;
+    assert_eq!(
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+        (150.0, 125.0, 250.0, 175.0)
+    );
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(390.0, 290.0));
+    assert_eq!(f.geometry_names(&hits), ["Artboard"]);
+}
+
+/// Painted boxes clipped away by a CSS artboard's padding-box clip, or
+/// lying in a rounded clip's cut corner, are not visible geometry.
+#[test]
+fn css_painted_boxes_follow_rendered_clips() {
+    const MARGIN_LEFT: u16 = 60071;
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![
+                U(OVERFLOW_X, 2),
+                U(OVERFLOW_Y, 2),
+                F(BORDER_TOP, 10.0),
+                F(BORDER_LEFT, 10.0),
+            ]),
+            ..ArtboardSpec::default()
+        },
+        Some(B {
+            children: vec![
+                painted(
+                    "Hidden",
+                    0xff00_0001,
+                    [
+                        [F(MARGIN_TOP, -10.0), F(MARGIN_LEFT, -10.0)].as_slice(),
+                        &width(5.0),
+                        &height(5.0),
+                    ]
+                    .concat(),
+                ),
+                css(
+                    "Round",
+                    [
+                        [U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)].as_slice(),
+                        &[60101, 60102, 60103, 60104].map(|key| F(key, 50.0)),
+                        &width(100.0),
+                        &height(100.0),
+                    ]
+                    .concat(),
+                    vec![painted("Cut", 0xff00_0002, sized_to(10.0, 10.0))],
+                ),
+            ],
+            ..css("Column", [U(DISPLAY, 1), U(60028, 2)], vec![])
+        }),
+    )
+    .expect("the scene imports");
+    assert_eq!(f.bounds("Cut")[..2], [0.0, 0.0]);
+    let visible = f.host().visible_geometry_with_bounds();
+    let names = f.geometry_names(&visible);
+    assert!(
+        !names.contains(&"Hidden".to_owned()) && !names.contains(&"Cut".to_owned()),
+        "{names:?}"
+    );
+}
+
+fn sized_to(width_value: f32, height_value: f32) -> Vec<P> {
+    [width(width_value), height(height_value)].concat()
+}
+
+/// A box painted only by a BoxBorder is visible geometry whatever its
+/// Stroke's thickness, as it draws; on a CSS artboard too.
+#[test]
+fn css_box_border_alone_is_catalogued_geometry() {
+    let zero_thickness = |f: &Scene, owner: CoreHandle| {
+        let stroke = owner
+            .with(|object| {
+                let paints = match object.as_artboard() {
+                    Some(artboard) => artboard.base.base.shape_paint_container().shape_paints(),
+                    None => object.as_shape_paint_container()?.shape_paints(),
+                };
+                paints.first().cloned()
+            })
+            .flatten()
+            .unwrap();
+        assert!(CoreRegistry::set_double_handle(
+            &stroke,
+            StrokeBase::THICKNESS_PROPERTY_KEY.into(),
+            0.0
+        ));
+        f.advance(2);
+    };
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Border(0xff44_5566, 15)],
+            ..css("Edge", border_box(&[]), vec![])
+        },
+    );
+    zero_thickness(&f, f.named("Edge"));
+    let visible = f.host().visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Edge"]);
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![F(BORDER_TOP, 4.0)]),
+            paints: vec![Paint::Border(0xff44_5566, 15)],
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    zero_thickness(&f, f.object("Artboard"));
+    let visible = f.host().visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Artboard"]);
+}
+
+/// The host's scrolled layout bounds move content as an RTL viewport draws
+/// it: a drag to the right moves it right.
+#[test]
+fn css_rtl_scroll_projection_follows_the_drawn_content() {
+    const RTL: u64 = 2;
+    const HORIZONTAL: u64 = 0;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [
+                [U(DISPLAY, 1), U(DIRECTION, RTL), U(OVERFLOW_X, 3)].as_slice(),
+                &width(100.0),
+                &height(20.0),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(HORIZONTAL),
+                ..css(
+                    "Content",
+                    [
+                        [F(FLEX_SHRINK, 0.0)].as_slice(),
+                        &width(300.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                    vec![css("Item", [width(300.0), height(20.0)].concat(), vec![])],
+                )
+            }],
+        ),
+    );
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    let scroll = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .next()
+        .expect("a scroll constraint");
+    scroll
+        .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+            scroll.drag_view(
+                crate::source::math::vec2d::Vec2D::new(50.0, 0.0),
+                0.0,
+                false,
+            )
+        })
+        .unwrap();
+    f.advance(2);
+    assert_eq!(f.world_origin("Item").0, -150.0);
+    let projected = f
+        .host()
+        .scrolled_layout_bounds(f.local_id("Item"))
+        .expect("scrolled bounds");
+    // Item sits at its content box's origin, moved right by the drag.
+    assert_eq!(projected.x, 50.0);
 }

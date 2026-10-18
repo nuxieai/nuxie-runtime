@@ -77,6 +77,13 @@ impl Riv {
         self.objects.extend_from_slice(value.as_bytes());
         self
     }
+    pub(super) fn byte_field(&mut self, key: u16, value: &[u8]) -> &mut Self {
+        self.toc.insert(key, 1);
+        varuint(&mut self.objects, key.into());
+        varuint(&mut self.objects, value.len() as u64);
+        self.objects.extend_from_slice(value);
+        self
+    }
     pub(super) fn color(&mut self, key: u16, value: u32) -> &mut Self {
         self.toc.insert(key, 3);
         varuint(&mut self.objects, key.into());

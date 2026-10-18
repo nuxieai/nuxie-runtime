@@ -120,6 +120,9 @@ struct B {
     /// Shapes of several rectangle paths: the shape's name and each path's
     /// x position and size.
     multi_path: Vec<(&'static str, Vec<(f32, (f32, f32))>)>,
+    /// A data binding from the file's one view model number to this record
+    /// property.
+    bind: Option<u16>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -207,6 +210,7 @@ enum Entry<'a> {
     LinearGradient(u64),
     Stop(u32, f32, u64),
     NamedShape(&'static str, u64),
+    Bind(u16),
     PathAt(f32, (f32, f32), u64),
     Group(u64),
     Shape(&'a Rect, u64),
@@ -215,6 +219,14 @@ enum Entry<'a> {
     Participant(u64),
     Track((u64, u64, f32), u64),
     Image(&'static str, u64),
+}
+
+/// The artboard object slots `entries` take: a data binding takes none.
+fn slots(entries: &[Entry]) -> u64 {
+    entries
+        .iter()
+        .filter(|entry| !matches!(entry, Entry::Bind(..)))
+        .count() as u64
 }
 
 fn write(riv: &mut Riv, props: &[P]) {
@@ -230,13 +242,16 @@ fn write(riv: &mut Riv, props: &[P]) {
 /// refused. `artboard_css` puts a record on the artboard itself.
 fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<Scene> {
     fn walk<'a>(node: &'a B, parent: u64, entries: &mut Vec<Entry<'a>>) {
-        let index = entries.len() as u64 + 1;
+        let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(props) = &node.css {
             entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
+            if let Some(key) = node.bind {
+                entries.push(Entry::Bind(key));
+            }
         }
         for paint in &node.paints {
-            let paint_index = entries.len() as u64 + 1;
+            let paint_index = slots(entries) + 1;
             match *paint {
                 Paint::Fill(color) => {
                     entries.push(Entry::Fill(index));
@@ -289,7 +304,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         }
         for (rect, props) in &node.participants {
             entries.push(Entry::Shape(rect, index));
-            let host = entries.len() as u64;
+            let host = slots(entries);
             entries.push(Entry::Path(rect, host));
             entries.push(Entry::Participant(host));
             if let Some(props) = props {
@@ -298,7 +313,7 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         }
         for (name, paths) in &node.multi_path {
             entries.push(Entry::NamedShape(name, index));
-            let shape = entries.len() as u64;
+            let shape = slots(entries);
             for &(x, size) in paths {
                 entries.push(Entry::PathAt(x, size, shape));
             }
@@ -307,10 +322,10 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
             let mut parent = index;
             if rect.grouped {
                 entries.push(Entry::Group(index));
-                parent = entries.len() as u64;
+                parent = slots(entries);
             }
             entries.push(Entry::Shape(rect, parent));
-            entries.push(Entry::Path(rect, entries.len() as u64));
+            entries.push(Entry::Path(rect, slots(entries)));
         }
         for child in &node.children {
             walk(child, index, entries);
@@ -322,9 +337,23 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
     }
     walk(&root, 0, &mut entries);
     // Styles follow every other object: the artboard's, then one per box.
-    let first_style = entries.len() as u64 + 1;
+    let first_style = slots(&entries) + 1;
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
+    let binds = entries.iter().any(|entry| matches!(entry, Entry::Bind(..)));
+    if binds {
+        // One view model with one number property: path [0, 0].
+        use crate::source::generated::viewmodel::{
+            viewmodel_base::ViewModelBase, viewmodel_component_base::ViewModelComponentBase,
+            viewmodel_property_number_base::ViewModelPropertyNumberBase,
+        };
+        riv.object(ViewModelBase::TYPE_KEY)
+            .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "Model")
+            .end();
+        riv.object(ViewModelPropertyNumberBase::TYPE_KEY)
+            .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "inset")
+            .end();
+    }
     if entries
         .iter()
         .any(|entry| matches!(entry, Entry::Image(..)))
@@ -345,8 +374,11 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         .string(ComponentBase::NAME_PROPERTY_KEY, "Artboard")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, size.0)
         .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, size.1)
-        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style)
-        .end();
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style);
+    if binds {
+        riv.uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0);
+    }
+    riv.end();
     let mut boxes = Vec::new();
     for entry in &entries {
         match entry {
@@ -367,6 +399,16 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent);
                 write(&mut riv, props);
                 riv.end();
+            }
+            Entry::Bind(key) => {
+                use crate::source::generated::data_bind::{
+                    data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase,
+                };
+                riv.object(DataBindContextBase::TYPE_KEY)
+                    .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, u64::from(*key))
+                    .uint(DataBindBase::FLAGS_PROPERTY_KEY, 0)
+                    .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+                    .end();
             }
             Entry::NamedShape(name, parent) => {
                 riv.object(ShapeBase::TYPE_KEY)
@@ -532,6 +574,38 @@ impl Scene {
                     .unwrap_or(false)
             })
             .unwrap_or_else(|| panic!("{name}"))
+    }
+    /// A drawing node's world translation, by name.
+    fn world_origin(&self, name: &str) -> (f32, f32) {
+        let node = self
+            .artboard
+            .with_artboard(|artboard| artboard.find_handle::<crate::source::node::Node>(name))
+            .unwrap_or_else(|| panic!("{name}"));
+        node.with(|object| {
+            let world = object
+                .as_world_transform_component()
+                .expect("a transform")
+                .world_transform();
+            (world.tx(), world.ty())
+        })
+        .unwrap()
+    }
+    /// Binds a new instance of the file's view model and returns its number.
+    fn bind_number(&self) -> CoreHandle {
+        let artboard = self.artboard.core_handle();
+        let instance = self
+            ._file
+            .with_file(|file| file.create_view_model_instance_for_artboard(artboard))
+            .expect("a view model instance");
+        self.artboard
+            .bind_view_model_instance(Some(instance.clone()));
+        instance
+            .with_downcast::<crate::source::viewmodel::viewmodel_instance::ViewModelInstance, _>(
+                |instance: &crate::source::viewmodel::viewmodel_instance::ViewModelInstance| {
+                    instance.property_values()[0].clone()
+                },
+            )
+            .expect("the number")
     }
     /// The stream lines one draw of the artboard records.
     fn draw_lines(&self) -> Vec<String> {
@@ -2117,4 +2191,132 @@ fn css_shadow_spread_is_in_the_painted_bounds() {
         .with_downcast_mut::<LayoutComponent, _>(|layout| layout.painted_world_bounds(&mut bounds))
         .unwrap();
     assert_eq!(bounds, aabb(-30.0, -30.0, 130.0, 80.0));
+}
+
+const PADDING_PROPS: [P; 4] = [
+    F(PADDING_TOP, 6.0),
+    F(PADDING_RIGHT, 30.0),
+    F(PADDING_BOTTOM, 4.0),
+    F(PADDING_LEFT, 10.0),
+];
+
+/// A padded CSS leaf with content authored at (0, 0): a shape, a shape
+/// in a group and an image. Its 2-point border and its padding place the
+/// content box at (12, 8).
+fn padded_leaf(extra: &[P], bind: Option<u16>) -> Scene {
+    let rect = |name, grouped| Rect {
+        name,
+        size: (40.0, 20.0),
+        grouped,
+        path_scale_x: 1.0,
+    };
+    scene(
+        (400.0, 300.0),
+        B {
+            content: vec![rect("Dot", false), rect("Grouped", true)],
+            images: vec!["Picture"],
+            bind,
+            ..css(
+                "Pad",
+                [
+                    [
+                        F(BORDER_TOP, 2.0),
+                        F(BORDER_RIGHT, 2.0),
+                        F(BORDER_BOTTOM, 2.0),
+                        F(BORDER_LEFT, 2.0),
+                    ]
+                    .as_slice(),
+                    &PADDING_PROPS,
+                    extra,
+                ]
+                .concat(),
+                vec![],
+            )
+        },
+    )
+}
+
+/// A CSS leaf places its content at its content box's origin, past its
+/// border and padding, as a browser does.
+#[test]
+fn css_leaf_places_its_content_at_the_content_box() {
+    let f = padded_leaf(&[], None);
+    for name in ["Dot", "Grouped", "Picture"] {
+        assert_eq!(f.world_origin(name), (12.0, 8.0), "{name}");
+    }
+}
+
+/// Padding and border written at run time move the content with them.
+#[test]
+fn css_leaf_content_follows_padding_written_at_run_time() {
+    let f = padded_leaf(&[], None);
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Pad"),
+        PADDING_LEFT.into(),
+        20.0
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Pad"),
+        BORDER_TOP.into(),
+        5.0
+    ));
+    f.advance(2);
+    for name in ["Dot", "Grouped", "Picture"] {
+        assert_eq!(f.world_origin(name), (22.0, 11.0), "{name}");
+    }
+}
+
+/// Bound padding moves the content as its view model value changes.
+#[test]
+fn css_leaf_content_follows_bound_padding() {
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    let f = padded_leaf(&[], Some(PADDING_LEFT));
+    let number = f.bind_number();
+    assert!(CoreRegistry::set_double_handle(
+        &number,
+        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+        25.0
+    ));
+    f.advance(3);
+    assert_eq!(
+        CoreRegistry::get_double_handle(&f.record("Pad"), PADDING_LEFT.into()),
+        Some(25.0)
+    );
+    assert_eq!(f.world_origin("Dot"), (27.0, 8.0));
+}
+
+/// Right to left, the content box is the same physical rectangle: the
+/// content starts past the left border and padding.
+#[test]
+fn css_leaf_content_box_is_physical_right_to_left() {
+    const RTL: u64 = 2;
+    let f = padded_leaf(&[U(DIRECTION, RTL)], None);
+    assert_eq!(f.world_origin("Dot"), (12.0, 8.0));
+}
+
+/// A translated box leaves its content where it was authored, as Rive does.
+#[test]
+fn translated_box_leaves_its_content_where_authored() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            name: "Pad",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 50.0),
+            ],
+            style: vec![
+                F(LayoutComponentStyleBase::PADDING_LEFT_PROPERTY_KEY, 10.0),
+                F(LayoutComponentStyleBase::PADDING_TOP_PROPERTY_KEY, 6.0),
+            ],
+            content: vec![Rect {
+                name: "Dot",
+                size: (40.0, 20.0),
+                grouped: false,
+                path_scale_x: 1.0,
+            }],
+            ..B::default()
+        },
+    );
+    assert_eq!(f.world_origin("Dot"), (0.0, 0.0));
 }

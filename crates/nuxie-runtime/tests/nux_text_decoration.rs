@@ -13,7 +13,7 @@ use nuxie_runtime::source::{
     text::{text::Text, text_style_paint::TextStylePaint},
 };
 use nuxie_runtime::text_decoration::{LINE_THROUGH, TextStyleDecoration, UNDERLINE};
-use nuxie_runtime::{Artboard, CoreHandle, File, RuntimeFactoryHandle};
+use nuxie_runtime::{Artboard, ArtboardInstance, CoreHandle, File, RuntimeFactoryHandle};
 
 const FONT: &[u8] = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
 const FONT_SIZE: f32 = 20.0;
@@ -76,6 +76,27 @@ fn scene_with(
     modifier: &[(&str, FixtureValue)],
     plain_line: Option<u32>,
 ) -> Vec<u8> {
+    let records = scene_records(
+        line,
+        width,
+        plain,
+        decorated,
+        text_properties,
+        modifier,
+        plain_line,
+    );
+    encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap()
+}
+
+fn scene_records(
+    line: Option<u32>,
+    width: f32,
+    plain: &str,
+    decorated: &str,
+    text_properties: &[(&str, u64)],
+    modifier: &[(&str, FixtureValue)],
+    plain_line: Option<u32>,
+) -> Vec<FixtureRecord> {
     let mut records = vec![
         record("Backboard", vec![]),
         record("FontAsset", vec![("assetId", FixtureValue::Uint(0))]),
@@ -150,7 +171,7 @@ fn scene_with(
             vec![("parentId", FixtureValue::Uint(group))],
         ));
     }
-    encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap()
+    records
 }
 
 struct Built {
@@ -526,4 +547,53 @@ fn spaces_between_two_decorated_styles_stay_decorated() {
         (plain[0][2] - decorated[0][0]).abs() < 1e-3,
         "{plain:?} meets {decorated:?}"
     );
+}
+
+#[test]
+fn a_keyframed_line_survives_import_and_applies() {
+    // The decoration is artboard-local object 8 (see `scene`).
+    const DECORATION: usize = 8;
+    let key = nuxie_runtime::text_decoration::LINE_PROPERTY_KEY;
+    let mut records = scene_records(Some(UNDERLINE), 400.0, "aa ", "ab", &[], &[], None);
+    records.extend([
+        record(
+            "LinearAnimation",
+            vec![
+                ("fps", FixtureValue::Uint(60)),
+                ("duration", FixtureValue::Uint(60)),
+            ],
+        ),
+        record(
+            "KeyedObject",
+            vec![("objectId", FixtureValue::Uint(DECORATION as u64))],
+        ),
+        record(
+            "KeyedProperty",
+            vec![("propertyKey", FixtureValue::Uint(key.into()))],
+        ),
+        record(
+            "KeyFrameUint",
+            vec![
+                ("frame", FixtureValue::Uint(0)),
+                ("value", FixtureValue::Uint(u64::from(LINE_THROUGH))),
+            ],
+        ),
+    ]);
+    let bytes = encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("keyed decoration imports");
+    let mut artboard = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+    assert_eq!(artboard.uint_property(DECORATION, key), Some(UNDERLINE));
+    let mut animation = artboard.linear_animation_instance(0).unwrap();
+    artboard
+        .apply_linear_animation_instance_at(&mut animation, 0.0, 1.0)
+        .unwrap();
+    assert_eq!(artboard.uint_property(DECORATION, key), Some(LINE_THROUGH));
 }

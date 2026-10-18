@@ -130,6 +130,8 @@ struct B {
     /// BoxPaint properties keyed by the file's one animation: (key, frames
     /// and values at 60 frames a second, linear).
     box_paint_keys: Vec<(u16, Vec<(u32, f32)>)>,
+    /// An empty Text beside each grouped content rectangle, in its group.
+    text_in_groups: bool,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -243,6 +245,8 @@ enum Entry<'a> {
     Participant(u64),
     Track((u64, u64, f32), u64),
     Image(&'static str, u64),
+    /// A Text with no runs.
+    EmptyText(u64),
 }
 
 /// A box's (or the artboard's) paints and their CSS records.
@@ -404,6 +408,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             }
             entries.push(Entry::Shape(rect, parent));
             entries.push(Entry::Path(rect, slots(entries)));
+            if rect.grouped && node.text_in_groups {
+                entries.push(Entry::EmptyText(parent));
+            }
         }
         for child in &node.children {
             walk(child, index, entries);
@@ -589,6 +596,12 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             Entry::Group(parent) => {
                 riv.object(NodeBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .end();
+            }
+            Entry::EmptyText(parent) => {
+                riv.object(crate::source::generated::text::text_base::TextBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, "Note")
                     .end();
             }
             Entry::Shape(rect, parent) => {
@@ -4052,4 +4065,194 @@ fn css_rtl_scroll_projection_follows_the_drawn_content() {
         .expect("scrolled bounds");
     // Item sits at its content box's origin, moved right by the drag.
     assert_eq!(projected.x, 50.0);
+}
+
+/// A grouped shape keeps its geometry beside a sibling with no natural
+/// size of its own: an empty Text in its group adds nothing.
+#[test]
+fn css_group_keeps_its_shape_beside_an_unmeasured_sibling() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(200.0), &height(40.0)].concat(),
+            vec![B {
+                content: vec![Rect {
+                    name: "Icon",
+                    size: (80.0, 30.0),
+                    grouped: true,
+                    path_scale_x: 1.0,
+                }],
+                text_in_groups: true,
+                ..css("Hug", [], vec![])
+            }],
+        ),
+    );
+    assert_eq!(f.bounds("Hug"), [0.0, 0.0, 80.0, 40.0]);
+}
+
+/// Indexed scrolling in an RTL CSS viewport counts from its start, the
+/// right edge: index 2 brings the third item, the leftmost, to the
+/// viewport.
+#[test]
+fn css_rtl_index_scrolling_counts_from_the_start() {
+    const RTL: u64 = 2;
+    const HORIZONTAL: u64 = 0;
+    let item = |name: &'static str| {
+        css(
+            name,
+            [
+                [F(FLEX_SHRINK, 0.0)].as_slice(),
+                &width(100.0),
+                &height(20.0),
+            ]
+            .concat(),
+            vec![],
+        )
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [
+                [U(DISPLAY, 1), U(DIRECTION, RTL), U(OVERFLOW_X, 3)].as_slice(),
+                &width(100.0),
+                &height(20.0),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(HORIZONTAL),
+                ..css(
+                    "Content",
+                    [
+                        [U(DISPLAY, 1), F(FLEX_SHRINK, 0.0)].as_slice(),
+                        &width(300.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                    vec![item("A"), item("B"), item("C")],
+                )
+            }],
+        ),
+    );
+    assert_eq!(f.world_origin("A").0, 0.0);
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    let scroll = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .next()
+        .expect("a scroll constraint");
+    scroll
+        .with_downcast_mut::<ScrollConstraint, _>(|scroll| scroll.set_scroll_index(2.0))
+        .unwrap();
+    f.advance(2);
+    assert_eq!(f.world_origin("C").0, 0.0);
+    let index = scroll
+        .with_downcast::<ScrollConstraint, _>(|scroll| (scroll.offset_x(), scroll.scroll_index()))
+        .unwrap();
+    assert_eq!(index, (-200.0, 2.0));
+}
+
+/// A CSS viewport's scroll bar thumb shows its visible share of the
+/// scrollable extent, LTR or RTL: 100 of 300 points.
+#[test]
+fn css_scroll_bar_ratio_follows_the_scrollable_extent() {
+    const RTL: u64 = 2;
+    const HORIZONTAL: u64 = 0;
+    let ratio = |direction: u64, content_width: f32| {
+        let f = scene(
+            (400.0, 300.0),
+            css(
+                "Viewport",
+                [
+                    [U(DISPLAY, 1), U(DIRECTION, direction), U(OVERFLOW_X, 3)].as_slice(),
+                    &width(100.0),
+                    &height(20.0),
+                ]
+                .concat(),
+                vec![B {
+                    scroll: Some(HORIZONTAL),
+                    ..css(
+                        "Content",
+                        [
+                            [U(DISPLAY, 1), F(FLEX_SHRINK, 0.0)].as_slice(),
+                            &width(content_width),
+                            &height(20.0),
+                        ]
+                        .concat(),
+                        vec![css(
+                            "Item",
+                            [
+                                [F(FLEX_SHRINK, 0.0)].as_slice(),
+                                &width(300.0),
+                                &height(20.0),
+                            ]
+                            .concat(),
+                            vec![],
+                        )],
+                    )
+                }],
+            ),
+        );
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        f.artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+            .into_iter()
+            .next()
+            .expect("a scroll constraint")
+            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::visible_width_ratio)
+            .unwrap()
+    };
+    let close = |value: f32| (value - 1.0 / 3.0).abs() < 1e-5;
+    // A 100-point content box overflowed by its 300-point item.
+    assert!(close(ratio(1, 100.0)), "{}", ratio(1, 100.0));
+    // An RTL content box of 300 points, placed at -200.
+    assert!(close(ratio(RTL, 300.0)), "{}", ratio(RTL, 300.0));
+}
+
+/// An inset shadow is bounded by its clip, the padding box: a box just
+/// outside its parent's clip is not visible geometry.
+#[test]
+fn css_inset_shadow_bounds_stay_in_its_padding_box() {
+    const MARGIN_LEFT: u16 = 60071;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Clip",
+            [
+                [U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)].as_slice(),
+                &width(100.0),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![B {
+                paints: vec![Paint::Shadow {
+                    color: 0x8000_0000,
+                    strength: 0.0,
+                    spread: 0.0,
+                }],
+                ..css(
+                    "Outside",
+                    [
+                        [F(MARGIN_LEFT, 101.0)].as_slice(),
+                        &width(10.0),
+                        &height(10.0),
+                    ]
+                    .concat(),
+                    vec![],
+                )
+            }],
+        ),
+    );
+    assert!(CoreRegistry::set_bool_handle(
+        &f.paint_child("Outside", FeatherBase::TYPE_KEY),
+        FeatherBase::INNER_PROPERTY_KEY.into(),
+        true
+    ));
+    f.advance(2);
+    assert_eq!(f.bounds("Outside")[..2], [101.0, 0.0]);
+    let visible = f.host().visible_geometry_with_bounds();
+    let names = f.geometry_names(&visible);
+    assert!(!names.contains(&"Outside".to_owned()), "{names:?}");
 }

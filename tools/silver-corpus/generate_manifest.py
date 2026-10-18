@@ -155,8 +155,11 @@ SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
 # changes after the recorded first difference also fail validation.
 LAYOUT_DIVERGENCES: dict[str, str] = {
     "collapse_data_binds-test_1": (
-        "a collapsed layout sibling shifts the following item 1.18px less than "
-        "Yoga does (the same difference the Taffy fork already carried)"
+        "Fill is CSS flex: 1 1 0%, so the four Fill cells of the 500-point row share it "
+        "equally at 125 points each whatever their text, where C++ sizes each Fill from "
+        "its content first (118.98, 118.98, 118.98 and 143.05). The last cell's text moves "
+        "to x 419.16; C++ places it at 411.32, which already differed by 1.18 points "
+        "because a collapsed sibling shifts the item less than Yoga does"
     ),
     "layout_aspect_ratio": (
         "CSS sizing resolves the aspect-ratio box to 142x133 where Yoga keeps "
@@ -173,6 +176,8 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 }
 
 
+# Previous stream (UNIV-4844 final) db_health_tracker: f7c6d803e6b9873b07ab7dd4ab8f0acd31b01d5516b4500d07192925687fbb68.
+# Previous difference (main) collapse_data_binds-test_1: frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672
 # UNIV-4844: historical EXACT IDs and the numeric floor stay unchanged.
 # Each reviewed replacement pins the first difference and every Rust stream byte.
 # Previous review artboard_list_overrides_vertical: frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)
@@ -204,6 +209,10 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 # Previous review (d8217e4476) reset_phase_multi_main: frame 0, op 69 (addRawPath), field point: expected (62, -0.0 (0x80000000)), got (60, -0.0 (0x80000000))
 REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got '
                              '(273, 0)',
+ 'hittest_ab_text_parent': 'frame 0, op 189 (transform), field ty: expected 358.17838, got 333.33334',
+ 'list_focus_order': 'frame 0, op 67 (transform), field ty: expected 362.79947, got 333.33334',
+ 'list_items': 'frame 0, op 48 (transform), field tx: expected 317.5, got 250',
+ 'superbowl': 'frame 0, op 3208 (transform), field ty: expected 184.33334, got 225',
  'artboard_list_overrides_vertical': 'frame 0, op 73 (addRawPath), field point: expected (500, 0), '
                                      'got (700, 0)',
  'bankcard': 'frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)',
@@ -225,11 +234,15 @@ REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'fram
  'scroll_threshold-all-scroll': 'frame 0, op 90 (transform), field tx: expected 500, got 375'}
 
 REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e00881c43f3f84f8d7d9c32ae2a6aad794a7d62e5681b6ce8023962ee1d0cb7d',
+ 'hittest_ab_text_parent': '8be660a737ee025a5030acf941de273a610986bfb33c7ee90cdf504983b0dcd7',
+ 'list_focus_order': '5258c290ba1fef3227858057b0da3b5c11bf73d5451180142785da8c7d9a9c86',
+ 'list_items': '92388e8df708294c6d99b0a043d9a41f909648a9d70ac8d8a8b0fe69d453686d',
+ 'superbowl': '180ea9a1137368605e133d43ba8a23c744ebaeb3a6707cea7a88b24fa8986f52',
  'artboard_list_overrides_vertical': '3dd7323dcd6b9c4cdb6aedd64ba15f00465bd9e76310ddac90a42df3542b1631',
  'bankcard': '86f2d3515f0d1b4c094e35e9f88c1468ee2a92c54b544acda15e79845abe43fe',
  'component_list_child_origin': '78c29b5c807a5731a1aff7e929895efe4c7cf099664ff9e3f15aeb5f5aff1c03',
  'data_viz_demo': 'f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b',
- 'db_health_tracker': 'f7c6d803e6b9873b07ab7dd4ab8f0acd31b01d5516b4500d07192925687fbb68',
+ 'db_health_tracker': 'f384916c59fd4cad91674f5b8d3e212bbc2a99ae976c291bbbd4a36f4e6d78af',
  'global_view_models_scripting_test': '301407ac55b4ab537717af38f61d635780c075a3030d760f0d44e0c408311c44',
  'hittest_ab1_grand_parent': 'aab2993936f2b1df51a30cc49504bd92f23fef02cd0010badf6e32fe5dc95cfb',
  'hittest_ab1_parent': '3a03f5dbf20a07e0244612a4827eec609abf1af5993a91a7dbe608f0c68ad61f',
@@ -237,7 +250,11 @@ REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e0
  'reset_phase_multi_main': '2f9c57fd492cf31d67bee2e0225a59cbbd25800a72cbd91377f2ff030d61e3db',
  'scroll_threshold-all-scroll': 'b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f'}
 
-LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its '
+LAYOUT_DIVERGENCES.update({'hittest_ab_text_parent': 'Fill is CSS flex: 1 1 0%. In the nested ab-text artboard the three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first, so the third row starts at y 333.33 instead of 358.18.',
+ 'list_focus_order': 'Fill is CSS flex: 1 1 0%. The three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first (137.20, 225.60 and 137.20), so the last row starts at y 333.33 instead of 362.80.',
+ 'list_items': 'Fill is CSS flex: 1 1 0%. Once the actions append a list item, the two Fill columns that hold the lists still share the 500-point row equally at 250 points, where C++ sizes each from its list first, so the second column starts at x 250 instead of 317.5.',
+ 'superbowl': 'Fill is CSS flex: 1 1 0%. The three Fill rows of the 216-point panel take 61, 61 and 94 points: equal shares of 72, except the last row, whose 94-point content is its automatic minimum. C++ sizes them from their content first (40.67, 40.67 and 134.67), so content in the last row moves from y 184.33 to 225.',
+ 'animated_clipping-layout': 'CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its '
                              '273-wide host instead of extending beyond it.',
  'artboard_list_overrides_vertical': "The list's seven child artboards keep their definite "
                                      '100-point widths as automatic minima, so the list content is '
@@ -260,7 +277,9 @@ LAYOUT_DIVERGENCES.update({'animated_clipping-layout': 'CSS flex-shrink 1 lets t
  'db_health_tracker': "The panel's CSS automatic minimum includes its definite 10000-point child "
                       'artboard and the 174 points around it, so the panel is 10174 points wide '
                       'instead of the 1008-point offer that C++ and main keep. Its rounded path '
-                      'runs to x 10134 instead of 968.',
+                      'runs to x 10134 instead of 968. A bar box that its background shape held '
+                      'at 51 points is 20 points high again, as in C++, since a shape that layout '
+                      'resizes is the box\'s paint and gives it no automatic minimum.',
  'global_view_models_scripting_test': 'The mounted Main and GlobalName artboards keep their '
                                       'definite 500 and 480-point widths as automatic minima, so '
                                       'their parent is 980 points wide instead of the 945-point '
@@ -2517,7 +2536,7 @@ DIVERGENCES = dict(
 bidirectional_binding_source|frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save
 data_binding_artboards_test|frame 7, op 580 (frame): expected frame, got makeRenderPaint
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
-collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672
+collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 419.16016
 data_converter_to_number|frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443
 focus_traversal|frame 0, op 95 (color): expected color, got save
 hittest_ab1|frame 1, op 153 (color): expected color, got save

@@ -2657,9 +2657,9 @@ impl LayoutComponent {
         Self::propagate_resolved_collapse_occurrence(owner, collapsed, None, None);
         Self::mark_layout_node_dirty_occurrence(owner, false);
     }
-    /// A CSS box's display or flex direction changed. Its children's
-    /// styles read its main axis and whether it is a grid, so each syncs
-    /// again on the next style pass.
+    /// A CSS box's display, flex direction or justify-items changed. Its
+    /// children's styles read its main axis, whether it is a grid and how
+    /// it justifies, so each syncs again on the next style pass.
     pub(crate) fn css_flow_changed_occurrence(owner: &CoreHandle) {
         for (_, provider) in Self::layout_providers_occurrence(owner) {
             if provider.is_type_of(LayoutComponentBase::TYPE_KEY) {
@@ -3306,7 +3306,17 @@ impl LayoutComponent {
             crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
         ) {
             Artboard::propagate_size_handle(owner);
-            return;
+            // Our layer: a CSS artboard sizes its content as a CSS box does.
+            let css = owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .is_some_and(LayoutComponent::is_css_mode)
+                })
+                .unwrap_or(false);
+            if !css {
+                return;
+            }
         }
         let Some((children, hidden, size, style, css)) = owner.with(|object| {
             let layout = object.as_layout_component().unwrap();
@@ -4386,8 +4396,13 @@ impl LayoutComponent {
                 let Some((host, width_mode, height_mode)) = owner
                     .with(|object| {
                         let participant = object.as_any().downcast_ref::<LayoutParticipant>()?;
+                        // A CSS participant measures with Taffy's modes.
+                        let legacy = participant.css_record().is_none();
                         let hug = |scale: u8, mode: LayoutMeasureMode| {
-                            if participant.hug_unbounded() && scale == LayoutScaleType::Hug as u8 {
+                            if legacy
+                                && participant.hug_unbounded()
+                                && scale == LayoutScaleType::Hug as u8
+                            {
                                 unbound_measure_mode(mode)
                             } else {
                                 mode

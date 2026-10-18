@@ -126,7 +126,10 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     if key == keys::DIRECTION {
                         LayoutComponent::direction_changed_occurrence(&parent);
                     }
-                    if key == keys::DISPLAY || key == keys::FLEX_DIRECTION {
+                    if key == keys::DISPLAY
+                        || key == keys::FLEX_DIRECTION
+                        || key == keys::JUSTIFY_ITEMS
+                    {
                         LayoutComponent::css_flow_changed_occurrence(&parent);
                     }
                     // What only the box's paint and clip read.

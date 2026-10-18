@@ -289,6 +289,24 @@ fn css_mode_text_takes_the_content_box() {
     });
     assert_eq!(offset, Some((10.0, 10.0)));
 }
+/// A CSS box measures by its record alone: the Rive style's hugUnbounded
+/// does not unbind its width, so the title still wraps at the offer.
+#[test]
+fn css_mode_ignores_a_legacy_hug_unbounded() {
+    let f = Fixture::new(TITLE, 338.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| {
+            o.with_style_mut(|s| s.base.set_hug_unbounded_value(true))
+        })
+        .unwrap();
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.label, &record);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_width(&f, 338.0);
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

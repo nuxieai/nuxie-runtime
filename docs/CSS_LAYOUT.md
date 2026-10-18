@@ -257,6 +257,8 @@ It changes no part of the file format.
 - Rive's `ScrollConstraint` keeps moving one content box inside it.
 - In CSS mode the compiler gives that content box CSS that does not shrink to the viewport: `display: block` for a vertical list, or a row with `width: max-content` (or `flex: none`) and items at `flex-shrink: 0` for a horizontal one.
 - The scroll range of a CSS viewport is Taffy's `scroll_width` and `scroll_height` of that viewport, replacing the content size minus viewport size minus end padding used today.
+- A right-to-left CSS viewport starts at its right edge: its horizontal offset is 0 there and negative toward the end, and moves the content right, as a browser's RTL scroll position does. Indexed scrolling counts its items from that edge, and the host's scrolled layout bounds move content as it is drawn.
+- A `ScrollBarConstraint` thumb on a CSS viewport shows its visible share of the scrollable extent: the viewport's padding box over the padding box plus the scroll range.
 - A translated viewport keeps today's range.
 - Virtualised and looping lists keep their own extents (Rive-native).
 
@@ -374,7 +376,7 @@ A box with layout children lays them out. Its non-layout children do not take pa
 | Image | its image's natural size and ratio, transferred through a known cross size and clamped through the cross minimum and maximum, as a CSS replaced element | CSS mode: no, as content it keeps its natural size, past its box if the box is smaller, and its overflow counts towards a scroll container's range; as a participant, its CSS sizes it and Rive's fit draws inside. Translated mode: as today |
 | Shape (CSS mode) | the union of its paths' geometry at their authored sizes, through each path's transforms; an empty shape adds nothing. Like an `<svg width="24">`. Its minimum is the same size | No |
 | Shape resized by layout (translated mode: a box's direct shape child, which Rive resizes to the box) | the box's paint: it gives a size only to a box that hugs it, through Rive's own measure (the path's authored size), and adds nothing to any other box's automatic minimum | Yes, as Rive does |
-| Drawing group | the union of its content, each child placed by its local transform (a path's transform composed through any nodes inside its shape; images and joysticks about their origin, joysticks at their position) | No |
+| Drawing group | the union of its content, each child placed by its local transform (a path's transform composed through any nodes inside its shape; images and joysticks about their origin, joysticks at their position). A child without a natural size of its own (a text inside the group) adds nothing | No |
 | N-slice, joystick | its authored width and height | As today |
 | Mounted artboard (a component-list item) or nested artboard | its artboard's own size, like an image: a box hugs to it, and on an axis where it has a definite size that size is its automatic minimum. That minimum is clamped by a length maximum or by a percentage of a parent's definite length. It gives no minimum on a scroll-container axis | As today |
 | Text input, scripted layout, artboard without an instance | zero | |

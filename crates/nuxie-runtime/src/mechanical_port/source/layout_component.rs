@@ -635,23 +635,98 @@ impl LayoutComponent {
         &mut self,
         out: &mut crate::mechanical_port::source::math::aabb::Aabb,
     ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
-        // A CSS box paints its BoxPaint's rectangle when it has one, and its
-        // special paths (a spread shadow) reach past it; the paints'
-        // feathers and offsets add their reach as for any paint.
-        let mut local = self
-            .css_paint_geometry()
-            .map_or_else(|| self.local_bounds(), |geometry| geometry.bounds);
-        if let Some(paths) = self.render_paths.as_ref() {
-            for paint in &paths.borrow().css_paints {
-                local.expand(paint.path.raw_path().bounds());
+        let world = self.base.world_transform();
+        match self.css_paint_geometry() {
+            Some(geometry) => self.css_painted_bounds(geometry.bounds, &world, out),
+            None => crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+                &self.local_bounds(),
+                &world,
+                Some(&self.paints),
+                out,
+            ),
+        }
+    }
+    /// A CSS box's own painted area (docs/CSS_LAYOUT.md, 4.5), mapped by
+    /// `transform` from the space its paint paths are in: `painted`, its
+    /// paint rectangle, when an ordinary paint draws it, and each special
+    /// path (a spread shadow, a border ring), all with their paints'
+    /// outsets, each special path within its own clip, so an inset shadow
+    /// stays inside the padding box.
+    pub(crate) fn css_painted_bounds(
+        &self,
+        painted: Aabb,
+        transform: &Mat2D,
+        out: &mut Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        use crate::mechanical_port::source::drawable::{BoundsFidelity, Drawable};
+        let specials: Vec<(CoreHandle, Aabb, Option<Aabb>)> = self
+            .render_paths
+            .as_ref()
+            .map(|paths| {
+                paths
+                    .borrow()
+                    .css_paints
+                    .iter()
+                    .map(|special| {
+                        (
+                            special.paint.clone(),
+                            special.path.raw_path().bounds(),
+                            special.clip.as_ref().map(|clip| clip.raw_path().bounds()),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let plain = specials.is_empty()
+            || self
+                .paints
+                .shape_paints()
+                .iter()
+                .any(|paint| !specials.iter().any(|(special, ..)| special == paint));
+        let mut result: Option<Aabb> = None;
+        let mut fidelity = BoundsFidelity::Exact;
+        let parts = plain
+            .then_some((painted, None))
+            .into_iter()
+            .chain(specials.iter().map(|(_, path, clip)| (*path, *clip)));
+        for (local, clip) in parts {
+            let mut bounds = Aabb::default();
+            let part = Drawable::painted_bounds_from_local(
+                &local,
+                transform,
+                Some(&self.paints),
+                &mut bounds,
+            );
+            if part == BoundsFidelity::None {
+                continue;
+            }
+            if part == BoundsFidelity::Approximate {
+                fidelity = part;
+            }
+            if let Some(clip) = clip {
+                let clip = transform.map_bounding_box(clip);
+                bounds = Aabb::new(
+                    bounds.left().max(clip.left()),
+                    bounds.top().max(clip.top()),
+                    bounds.right().min(clip.right()),
+                    bounds.bottom().min(clip.bottom()),
+                );
+                if bounds.is_empty_or_nan() {
+                    continue;
+                }
+            }
+            match &mut result {
+                Some(result) => result.expand(bounds),
+                None => result = Some(bounds),
             }
         }
-        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
-            &local,
-            &self.base.world_transform(),
-            Some(&self.paints),
-            out,
-        )
+        match result {
+            Some(bounds) => {
+                *out = bounds;
+                fidelity
+            }
+            None => BoundsFidelity::None,
+        }
     }
     pub(crate) fn has_layout_flag(&self, flag: LayoutComponentFlags) -> bool {
         self.layout_flags.get() & flag as u16 != 0

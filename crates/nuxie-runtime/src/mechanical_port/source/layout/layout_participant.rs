@@ -60,14 +60,26 @@ pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
     .unwrap_or(false)
 }
 
+/// A host's natural size for its minimum: measured as a CSS box measures
+/// it when `css`, else as a Rive box does (docs/CSS_LAYOUT.md, 5).
+fn natural_for_minimum(host: &CoreHandle, css: bool) -> Option<Vec2D> {
+    if css {
+        crate::source::intrinsically_sizeable::natural_css_size_for_layout_host(host)
+    } else {
+        crate::source::intrinsically_sizeable::natural_size_for_layout_host(host)
+    }
+}
+
 /// Called after the unbounded measure populated Text's measured-shape cache.
+/// `css`: the measuring box is a CSS box.
 pub(crate) fn host_min_content_width(
     host: &CoreHandle,
     known_height: Option<f32>,
     cross_limits: (Option<f32>, Option<f32>),
+    css: bool,
 ) -> Option<f32> {
     use crate::mechanical_port::source::shapes::image::Image;
-    let natural = crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
+    let natural = natural_for_minimum(host, css);
     host.with_mut(|object| {
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
             return Some(transferred_image_minimum(
@@ -120,9 +132,10 @@ pub(crate) fn host_min_content_height(
     host: &CoreHandle,
     known_width: Option<f32>,
     cross_limits: (Option<f32>, Option<f32>),
+    css: bool,
 ) -> Option<f32> {
     use crate::source::shapes::image::Image;
-    let natural = crate::source::intrinsically_sizeable::natural_size_for_layout_host(host);
+    let natural = natural_for_minimum(host, css);
     host.with_mut(|object| {
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
             return Some(transferred_image_minimum(
@@ -723,6 +736,7 @@ impl LayoutParticipant {
             is_ltr: direction_ltr,
             has_layout_parent: layout.is_some(),
             css_role: crate::css_layout::CssRole::Participant,
+            css: self.css_record().is_some(),
         };
         let Some(data) = self.layout_data.as_deref_mut() else {
             return false;
@@ -756,9 +770,9 @@ impl LayoutParticipant {
 
     /// Whether this participant's display is none: its host's CSS record
     /// decides in CSS mode (docs/CSS_LAYOUT.md, 2.1), its own style otherwise.
-    fn display_none(&self) -> bool {
-        let record = self
-            .layout_data
+    /// The host's `LayoutCssStyle`, when the participant is in CSS mode.
+    fn css_record(&self) -> Option<CoreHandle> {
+        self.layout_data
             .as_deref()
             .and_then(|data| data.appliers.as_deref())
             .and_then(|appliers| {
@@ -766,8 +780,10 @@ impl LayoutParticipant {
                     .iter()
                     .find(|applier| applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE))
                     .cloned()
-            });
-        record
+            })
+    }
+    fn display_none(&self) -> bool {
+        self.css_record()
             .and_then(|record| {
                 crate::css_layout::record::with_values(&record, |css| css.display_none())
             })

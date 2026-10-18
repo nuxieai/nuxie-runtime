@@ -242,7 +242,7 @@ impl LayoutComponentStyle {
             rive_length(self.base.padding_top(), self.padding_top_units()),
             rive_length(self.base.padding_bottom(), self.padding_bottom_units()),
         );
-        if self.is_stack() {
+        if self.is_stack() && !context.css {
             GridTrack::sync_stack_container_style(
                 style,
                 u32::from(self.base.justify_items_value()),

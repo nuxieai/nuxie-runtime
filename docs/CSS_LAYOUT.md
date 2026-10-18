@@ -257,7 +257,7 @@ It changes no part of the file format.
 - A translated viewport keeps today's range.
 - Virtualised and looping lists keep their own extents (Rive-native).
 
-**Grid.** `display: grid` in CSS mode selects Taffy's grid, with the box's `GridTrack` and `GridItemPlacement` records, `gridAutoFlow`, the gaps and the alignment from the record. `layoutTypeValue` is ignored in CSS mode.
+**Grid.** `display: grid` in CSS mode selects Taffy's grid, with the box's `GridTrack` and `GridItemPlacement` records, `gridAutoFlow`, the gaps and the alignment from the record. `layoutTypeValue` is ignored in CSS mode: a style left as a Rive stack does not make a CSS box a stack.
 
 ## 4. Box paint
 
@@ -279,10 +279,10 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | Addition | Keys | Values | What the runtime does |
 |---|---|---|---|
 | Percent radii | `LayoutCssStyle` 60101 to 60104 | CSS percentage per corner | The corner's horizontal radius is its point radius plus that percentage of the box width, and its vertical radius is the same with the height, so a non-square box gets elliptical corners, as CSS. Overlapping radii scale down by CSS's rule |
-| Per-side borders | `BoxBorder` 60105 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner to the matching inner corner, as CSS. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
+| Per-side borders | `BoxBorder` 60105 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
 | Box-relative gradients | `BoxGradient`, see the table below | | Recomputes its gradient's start and end (and, for an ellipse, the shader's scale) from the box's padding box at each layout, as CSS's background positioning area |
 | Shadow spread and CSS shadow clipping | `BoxShadow` 60118 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
-| Padding-box clip | none: implied by CSS mode | | A CSS box whose computed `overflow-x` or `overflow-y` is not visible clips its children to its padding box, with inner radii when both axes clip. As CSS computes, `hidden`, `scroll` or `auto` on one axis turns `visible` on the other into `auto` (and `clip` into `hidden`), so both axes clip; `clip` with `visible` clips only its own axis, without radii. The clip is for the content: the box's own fills, borders and shadows draw before it, and hit testing past it checks only the axes it clips. A translated box keeps Rive's clip at its outer edge from `LayoutComponent.clip`, which also clips its own paints |
+| Padding-box clip | none: implied by CSS mode | | A CSS box whose computed `overflow-x` or `overflow-y` is not visible clips its children to its padding box, with inner radii when both axes clip. As CSS computes, `hidden`, `scroll` or `auto` on one axis turns `visible` on the other into `auto` (and `clip` into `hidden`), so both axes clip; `clip` with `visible` clips only its own axis, without radii. The clip is for the content: the box's own fills, borders and shadows draw before it. A hit on a child, and a child's semantic visibility, pass through the same clip; the box itself is hit anywhere in its border box. A translated box keeps Rive's clip at its outer edge from `LayoutComponent.clip`, which also clips its own paints |
 
 `BoxGradient` keys:
 
@@ -340,9 +340,9 @@ A box with layout children lays them out. Its non-layout children do not take pa
 
 | Content | Natural size | Does layout resize it? |
 |---|---|---|
-| Text | Rive's `Text::measure` and `Text::measure_layout`, unchanged. max-content is the unwrapped width; min-content is the longest word (the fit-content work already on main). Hidden, Clipped, Ellipsis, Fit and FitFontSize text has a zero automatic minimum, as a CSS scroll container would | Yes, in both modes: its width follows its box's content width, as inline text flows |
+| Text | Rive's `Text::measure` and `Text::measure_layout`, unchanged. max-content is the unwrapped width; min-content is the longest word (the fit-content work already on main). Hidden, Clipped, Ellipsis, Fit and FitFontSize text has a zero automatic minimum, as a CSS scroll container would | Yes, in both modes: its width follows its box's content width, as inline text flows. In CSS mode the text is given the box's content box (the border box less padding and border), where it was measured; translated boxes give their border box, as Rive does |
 | Image | its image's natural size and ratio, transferred through a known cross size and clamped through the cross minimum and maximum, as a CSS replaced element | CSS mode: no, as content it keeps its natural size; as a participant, its CSS sizes it and Rive's fit draws inside. Translated mode: as today |
-| Shape (CSS mode) | its path geometry at its authored size, with its transforms; an empty shape adds nothing. Like an `<svg width="24">` | No |
+| Shape (CSS mode) | the union of its paths' geometry at their authored sizes, through each path's transforms; an empty shape adds nothing. Like an `<svg width="24">`. Its minimum is the same size | No |
 | Shape resized by layout (translated mode: a box's direct shape child, which Rive resizes to the box) | the box's paint: it gives a size only to a box that hugs it, through Rive's own measure (the path's authored size), and adds nothing to any other box's automatic minimum | Yes, as Rive does |
 | Drawing group | the union of its content, each child placed by its local transform (a path's transform composed through any nodes inside its shape; images and joysticks about their origin, joysticks at their position) | No |
 | N-slice, joystick | its authored width and height | As today |

@@ -748,8 +748,11 @@ impl Shape {
         transform: Option<Mat2D>,
         css: bool,
     ) -> Option<Aabb> {
-        let measured_directly = transform.is_none() && !self.is_participating_in_layout();
-        let participant = transform.is_none() && !measured_directly;
+        // Upstream's measure answers a translated box with the largest path
+        // size; a CSS box measures the paths' union, as an `<svg>` bounds
+        // its content.
+        let participant = transform.is_none() && self.is_participating_in_layout();
+        let measured_directly = transform.is_none() && !participant && !css;
         let outer = transform.unwrap_or_else(Mat2D::identity);
         let shape = crate::mechanical_port::source::core::CoreObject::core(self).handle();
         let mut size = Vec2D::default();
@@ -774,7 +777,7 @@ impl Shape {
                     };
                 if object.as_parametric_path().is_some() {
                     let natural = object.as_parametric_path().unwrap().natural_size_for_layout();
-                    if measured_directly && !css {
+                    if measured_directly {
                         size = Vec2D::new(size.x.max(natural.x), size.y.max(natural.y));
                         return;
                     }

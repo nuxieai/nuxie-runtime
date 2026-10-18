@@ -2963,3 +2963,83 @@ fn css_artboard_keeps_its_own_clip_for_hits() {
     assert!(hits(100.0, 50.0));
     assert!(!hits(450.0, 50.0));
 }
+
+/// Right to left, a CSS viewport's content starts at its right edge and
+/// scrolls toward its left: dragging right reveals the left side, up to
+/// the content's left edge.
+#[test]
+fn css_rtl_viewport_scrolls_toward_its_left() {
+    const RTL: u64 = 2;
+    const HORIZONTAL: u64 = 0;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [
+                [U(DISPLAY, 1), U(DIRECTION, RTL), U(OVERFLOW_X, 3)].as_slice(),
+                &width(100.0),
+                &height(20.0),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(HORIZONTAL),
+                ..css(
+                    "Content",
+                    [
+                        [F(FLEX_SHRINK, 0.0)].as_slice(),
+                        &width(300.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                    vec![],
+                )
+            }],
+        ),
+    );
+    assert_eq!(f.world_origin("Content").0, -200.0);
+    let drag = |dx: f32| {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        let scroll = f
+            .artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+            .into_iter()
+            .next()
+            .expect("a scroll constraint");
+        scroll
+            .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                scroll.drag_view(crate::source::math::vec2d::Vec2D::new(dx, 0.0), 0.0, false)
+            })
+            .unwrap();
+        f.advance(2);
+    };
+    drag(50.0);
+    assert_eq!(f.world_origin("Content").0, -150.0);
+    drag(500.0);
+    assert_eq!(f.world_origin("Content").0, 0.0);
+}
+
+/// A CSS artboard with rounded corners and its own clip draws its children
+/// through the rounded clip, so they are not hit in the cut corners.
+#[test]
+fn css_artboard_rounded_clip_stops_hits_in_its_corners() {
+    const RADIUS_PERCENT: [u16; 4] = [60101, 60102, 60103, 60104];
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(RADIUS_PERCENT.map(|key| F(key, 50.0)).to_vec()),
+            ..ArtboardSpec::default()
+        },
+        Some(css("Wide", [width(400.0), height(300.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let hits = |x: f32, y: f32| {
+        f.named("Wide")
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.hit_test_point(&crate::source::math::vec2d::Vec2D::new(x, y), true, true)
+            })
+            .unwrap()
+    };
+    assert!(hits(200.0, 150.0));
+    // The top left corner is cut away by the 200 by 150 elliptical radius.
+    assert!(!hits(5.0, 5.0));
+}

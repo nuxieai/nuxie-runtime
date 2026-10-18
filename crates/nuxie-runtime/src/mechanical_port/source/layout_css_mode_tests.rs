@@ -313,6 +313,8 @@ fn try_scene_painted(
 #[derive(Default)]
 struct ArtboardSpec {
     css: Option<Vec<P>>,
+    /// The artboard's own LayoutComponentStyle keys.
+    style: Vec<P>,
     paints: Vec<Paint>,
     content: Vec<Rect>,
     origin_x: f32,
@@ -579,7 +581,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         write(riv, props);
         riv.end();
     };
-    style(&mut riv, 0, &[]);
+    style(&mut riv, 0, &spec.style);
     let mut index = 0u64;
     for entry in &entries {
         index += 1;
@@ -2908,4 +2910,56 @@ fn css_grid_justify_items_written_at_run_time_moves_rive_children() {
     ));
     f.advance(2);
     assert_eq!(f.bounds("Hug")[0], 80.0);
+}
+
+/// A CSS artboard is its own size: the Rive style's maximum does not
+/// shrink it.
+#[test]
+fn css_artboard_ignores_legacy_limits() {
+    let f = try_scene_spec(
+        (200.0, 100.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            style: vec![
+                U(
+                    LayoutSizingStyleBase::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY,
+                    YGUnit::Point as u64,
+                ),
+                F(LayoutSizingStyleBase::MAX_WIDTH_PROPERTY_KEY, 80.0),
+            ],
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let artboard = f
+        .artboard
+        .with_artboard(|artboard| artboard.layout_bounds());
+    assert_eq!(artboard.width(), 200.0);
+}
+
+/// A CSS artboard keeps its own clip for hits: content past the artboard
+/// is not hit though the record's overflow is visible.
+#[test]
+fn css_artboard_keeps_its_own_clip_for_hits() {
+    let f = try_scene_spec(
+        (400.0, 300.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            ..ArtboardSpec::default()
+        },
+        Some(css("Wide", [width(500.0), height(100.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let clips = f.artboard.with_artboard(|artboard| artboard.clip());
+    assert!(clips, "artboards clip by default");
+    let hits = |x: f32, y: f32| {
+        f.named("Wide")
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.hit_test_point(&crate::source::math::vec2d::Vec2D::new(x, y), true, true)
+            })
+            .unwrap()
+    };
+    assert!(hits(100.0, 50.0));
+    assert!(!hits(450.0, 50.0));
 }

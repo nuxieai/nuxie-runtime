@@ -394,6 +394,41 @@ fn css_leaf_artboard_gives_its_text_the_content_box() {
         .unwrap();
     assert_eq!(width, 170.0);
 }
+/// A CSS box measures its text by CSS whatever its Rive style's sizing
+/// modes: after layout gives the text its size, the next solve still
+/// wraps the title at the offer, with the same height.
+#[test]
+fn css_mode_text_remeasures_by_css_after_its_first_layout() {
+    let f = Fixture::new(TITLE, 338.0, false);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| {
+            o.with_style_mut(|s| {
+                s.base
+                    .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                s.base
+                    .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                s.base.set_intrinsically_sized_value_value(false);
+            })
+        })
+        .unwrap();
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.label, &record);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+        .unwrap();
+    LayoutComponent::sync_style_occurrence(&f.label);
+    let first = f.solve();
+    assert_eq!(first.width(), 338.0);
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    // Lay out again from scratch.
+    LayoutComponent::mark_layout_node_dirty_occurrence(&f.label, true);
+    LayoutComponent::sync_style_occurrence(&f.label);
+    let second = f.solve();
+    assert_eq!(
+        (second.width(), second.height()),
+        (first.width(), first.height())
+    );
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

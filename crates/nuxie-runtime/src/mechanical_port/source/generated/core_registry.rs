@@ -12001,6 +12001,12 @@ impl CoreRegistry {
         if crate::video::properties::field_id(property_key as i32).is_some() {
             return object.as_registry_any().is::<crate::video::Video>();
         }
+        // Nuxie TextStyleDecoration.line, so keyed and host writes reach it.
+        if property_key == u32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
+            return object
+                .as_registry_any()
+                .is::<crate::text_decoration::TextStyleDecoration>();
+        }
         if matches!(property_key, 118 | 136 | 210 | 218) {
             return ColorChannelsBase::from(object).is_some();
         }

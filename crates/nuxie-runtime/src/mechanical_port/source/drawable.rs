@@ -963,6 +963,10 @@ impl DrawableProxy {
     pub fn is_hidden(&self) -> bool {
         self.proxy_drawing.is_proxy_hidden()
     }
+    /// The component this proxy draws for.
+    pub(crate) fn owner_handle(&self) -> CoreHandle {
+        self.proxy_drawing.owner_handle()
+    }
     pub fn hittable_component(&self) -> Option<CoreHandle> {
         self.proxy_drawing.hittable_component()
     }

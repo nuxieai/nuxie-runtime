@@ -1639,8 +1639,54 @@ impl Artboard {
         StatusCode::Ok
     }
 
+    /// Our layer: CSS boxes paint their children in CSS painting order
+    /// (docs/CSS_LAYOUT.md, 4.4). Draw rules keep Rive's order.
+    fn apply_css_paint_order(&mut self) {
+        use crate::css_layout::paint_order;
+        if !self.draw_targets.is_empty() {
+            return;
+        }
+        let root_css = self.base.base.is_css_mode();
+        let any_css = root_css
+            || self.drawables.iter().any(|drawable| {
+                drawable.authored_handle().is_some_and(|handle| {
+                    handle
+                        .with(|object| {
+                            object.as_layout_component().is_some_and(
+                                crate::source::layout_component::LayoutComponent::is_css_mode,
+                            )
+                        })
+                        .unwrap_or(false)
+                })
+            });
+        let Some(root) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return;
+        };
+        if !any_css {
+            return;
+        }
+        let file_order = self
+            .objects
+            .iter()
+            .enumerate()
+            .filter_map(|(index, object)| object.clone().map(|object| (object, index)))
+            .collect::<std::collections::HashMap<_, _>>();
+        let kind = paint_order::Container {
+            css: root_css,
+            flex_or_grid: self
+                .base
+                .base
+                .with_css(|css| matches!(css.choice(crate::css_layout::keys::DISPLAY), 1 | 2))
+                .unwrap_or(false),
+        };
+        let items = std::mem::take(&mut self.drawables);
+        self.drawables = paint_order::order(&root, kind, items, &file_order);
+    }
+
     fn sort_draw_order(&mut self) {
         let _relinking = self.draw_links.relinking();
+        self.apply_css_paint_order();
         let counter = &self.dirty_state.0.draw_order_change_counter;
         counter.set(if counter.get() == u8::MAX {
             0

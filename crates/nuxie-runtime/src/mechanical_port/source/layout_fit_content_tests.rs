@@ -429,6 +429,54 @@ fn css_mode_text_remeasures_by_css_after_its_first_layout() {
         (first.width(), first.height())
     );
 }
+/// A participant whose host has a record lays its text out at its CSS
+/// width: AutoHeight text authored 20 wide, with `width: 338px` on its
+/// host, wraps at 338 as a CSS box's text does.
+#[test]
+fn css_participant_text_wraps_at_its_css_width() {
+    use crate::source::generated::core_registry::CoreRegistry;
+    let f = Fixture::new_host(TITLE, 338.0, false, true);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_sizing_value_value(1);
+            text.base.set_width_value(20.0);
+        })
+        .unwrap();
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.text, &record);
+    assert!(CoreRegistry::set_uint_handle(&record, 60043, 1));
+    assert!(CoreRegistry::set_double_handle(&record, 60044, 338.0));
+    f.label
+        .with_downcast_mut::<LayoutParticipant, _>(|p| p.add_layout_style_applier(record.clone()))
+        .unwrap();
+    LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+    let solved = f.solve();
+    // Two lines at 338, as the CSS box's title above.
+    assert_eq!((solved.width(), solved.height()), (338.0, 70.30176));
+}
+
+/// A CSS leaf's minimum is its contents' largest: text with hidden overflow
+/// adds nothing, and the other text still holds the box at its longest
+/// word in a narrow offer.
+#[test]
+fn css_leaf_minimum_skips_only_the_contents_without_one() {
+    let f = Fixture::new("Unlock premium", 40.0, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_overflow_value_value(1);
+        })
+        .unwrap();
+    let (second, _run) = make_text(&f.arena, TITLE);
+    attach(&f.arena, &f.label, &second);
+    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&f.arena, &f.label, &record);
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
+        .unwrap();
+    LayoutComponent::sync_layout_children_occurrence(&f.label);
+    LayoutComponent::sync_style_occurrence(&f.label);
+    assert_width(&f, 145.4414);
+}
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

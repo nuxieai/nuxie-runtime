@@ -589,7 +589,8 @@ impl LayoutComponent {
                     })
                     .unwrap_or(false);
                 if placed {
-                    gradient.with_mut(|object| object.component_add_dirt(ComponentDirt::PAINT, false));
+                    gradient
+                        .with_mut(|object| object.component_add_dirt(ComponentDirt::PAINT, false));
                 }
             }
         }
@@ -635,16 +636,14 @@ impl LayoutComponent {
     /// Whether this box clips its children: Rive's clip at its outer edge in
     /// translated mode, and in CSS mode an `overflow` other than visible.
     pub fn clips(&self) -> bool {
-        match self.with_css(|css| css.overflow()) {
-            Some(overflow) => {
-                overflow.x != taffy::style::Overflow::Visible
-                    || overflow.y != taffy::style::Overflow::Visible
-            }
-            None => self.base.clip(),
-        }
+        let (x, y) = self.clipped_axes();
+        x || y
     }
+    /// A CSS box always keeps its proxy: its overflow is a record value,
+    /// which animation, binding and scripts can change.
     pub fn needs_drawable_proxy(&self) -> bool {
         self.clips()
+            || self.is_css_mode()
             || !self.paints.shape_paints().is_empty()
             || self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy)
     }
@@ -1674,11 +1673,33 @@ impl LayoutComponent {
             if let Some(origin) = root_origin {
                 local += origin;
             }
-            if !self.local_bounds().contains(local) {
+            // Past a clip, only the axes it clips: CSS's `overflow-x: clip`
+            // with a visible y axis passes points below the box.
+            let (x, y) = if skip_on_unclipped {
+                self.clipped_axes()
+            } else {
+                (true, true)
+            };
+            let bounds = self.local_bounds();
+            if (x && !(local.x >= bounds.left() && local.x <= bounds.right()))
+                || (y && !(local.y >= bounds.top() && local.y <= bounds.bottom()))
+            {
                 return false;
             }
         }
         self.base.base.hit_test_point(position, true, primary)
+    }
+    /// The axes this box clips its children on: both in translated mode
+    /// when it clips, and in CSS mode each axis whose overflow is not
+    /// visible.
+    fn clipped_axes(&self) -> (bool, bool) {
+        match self.with_css(|css| css.overflow()) {
+            Some(overflow) => (
+                overflow.x != taffy::style::Overflow::Visible,
+                overflow.y != taffy::style::Overflow::Visible,
+            ),
+            None => (self.base.clip(), self.base.clip()),
+        }
     }
     /// Execute the local part of `LayoutComponent::update` after the complete
     /// TransformComponent super call. Returning true requests the pinned
@@ -1901,22 +1922,37 @@ impl LayoutComponent {
     }
     pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
         let save_for_clip = self.clips();
-        if save_for_clip {
-            renderer.save();
-            let factory = self
-                .with_artboard(|artboard| artboard.factory())
-                .flatten()
-                .expect("a drawable LayoutComponent has its imported factory");
-            let css = self.is_css_mode();
-            let mut paths = self.mutable_render_paths();
-            let clip = if css {
-                &mut paths.clip
-            } else {
-                &mut paths.world
-            };
-            renderer.clip_path(clip.render_path(&factory));
+        // Rive clips the box's own paints with its children. CSS's overflow
+        // clips only the content: the box paints first (docs/CSS_LAYOUT.md,
+        // 4.2).
+        let css = self.is_css_mode();
+        if save_for_clip && !css {
+            self.save_clip(renderer);
+        }
+        self.draw_own_paints(renderer);
+        if save_for_clip && css {
+            self.save_clip(renderer);
         }
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
+    }
+    /// Save the renderer and clip to this box's clip path, which `draw`
+    /// restores after its children.
+    fn save_clip(&mut self, renderer: &mut Renderer) {
+        renderer.save();
+        let factory = self
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+            .expect("a drawable LayoutComponent has its imported factory");
+        let css = self.is_css_mode();
+        let mut paths = self.mutable_render_paths();
+        let clip = if css {
+            &mut paths.clip
+        } else {
+            &mut paths.world
+        };
+        renderer.clip_path(clip.render_path(&factory));
+    }
+    fn draw_own_paints(&mut self, renderer: &mut Renderer) {
         let world = self.shape_world_transform();
         // The paint list can't change while this LayoutComponent is borrowed.
         let paints = self.paints.cells().paints();
@@ -2825,12 +2861,15 @@ impl LayoutComponent {
             .cloned()
             .collect()
     }
-    /// The natural size of `host`, a child of this box. A box that hugs
-    /// (and every CSS box) measures all its content; a translated box that
-    /// does not hug leaves out the shapes it resizes, its paint
+    /// The natural size of `host`, a child of this box. A CSS box measures
+    /// all its content through its paths' transforms, and a translated box
+    /// that hugs all its content as Rive does; a translated box that does
+    /// not hug leaves out the shapes it resizes, its paint
     /// (docs/CSS_LAYOUT.md, 5).
     pub(crate) fn natural_of(&self, host: &CoreHandle) -> Option<Vec2D> {
-        if self.hugs() {
+        if self.is_css_mode() {
+            crate::source::intrinsically_sizeable::natural_css_size_for_layout_host(host)
+        } else if self.hugs() {
             crate::source::intrinsically_sizeable::natural_size_for_layout_host(host)
         } else {
             crate::source::intrinsically_sizeable::natural_content_size_for_layout_host(host)

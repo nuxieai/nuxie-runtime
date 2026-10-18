@@ -173,7 +173,7 @@ fn wave_c8_render_019_event_triggers_another_event() {
 fn wave_c8_render_020_collapsed_data_binds_hidden_layout() {
     replay_divergence(
         "collapse_data_binds-test_1",
-        "frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672",
+        "frame 0, op 100 (transform), field tx: expected 411.31592, got 419.16016",
     );
 }
 

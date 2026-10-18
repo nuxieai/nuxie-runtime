@@ -16,7 +16,23 @@ use nuxie_runtime::source::{
 use nuxie_runtime::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
 };
-use silver_corpus::{Action, ActionTarget, PointerCoordinate, compare_sriv, parse_sriv};
+use silver_corpus::{
+    Action, ActionTarget, PointerCoordinate, ReviewedLayoutDivergence, compare_sriv, parse_sriv,
+    verify_reviewed_layout_stream,
+};
+
+/// Scripted cases whose difference from C++ is a reviewed CSS layout
+/// difference (docs/CSS_LAYOUT.md, 2.2), each with its first difference and
+/// the SHA-256 of the whole Rust stream, as the runtime lane's ledger pins.
+/// list_index_script_access: Fill is CSS flex: 1 1 0%, so once the script
+/// fills the lists the three Fill rows of the 500-point column are 166.67
+/// points each, where C++ sizes them from their content first (239.33,
+/// 130.33 and 130.33); the last row starts at y 333.33 instead of 369.67.
+const REVIEWED_SCRIPTED_LAYOUT: &[(&str, &str, &str)] = &[(
+    "list_index_script_access",
+    "frame 0, op 70 (transform), field ty: expected 369.66666, got 333.33334",
+    "e52f737b071059b5fd95e8f63679fdad4ab81026aa35d4d93152f9865226ff45",
+)];
 
 #[path = "../src/scripting.rs"]
 mod native_scripting;
@@ -186,7 +202,22 @@ fn run_exact_scripted_silver(
         .join(format!("{id}.sriv"));
     let expected = parse_sriv(&std::fs::read(&expected_path)?)?;
     let actual = parse_sriv(&actual_bytes)?;
-    compare_sriv(&expected, &actual).map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
+    let result = compare_sriv(&expected, &actual);
+    if let Some((_, first_difference, stream)) = REVIEWED_SCRIPTED_LAYOUT
+        .iter()
+        .find(|(reviewed, _, _)| *reviewed == id)
+    {
+        let difference = result
+            .err()
+            .with_context(|| format!("{id}: the reviewed CSS layout difference disappeared"))?;
+        let review = ReviewedLayoutDivergence {
+            id: id.to_owned(),
+            first_difference: (*first_difference).to_owned(),
+            rust_stream_sha256: (*stream).to_owned(),
+        };
+        return verify_reviewed_layout_stream(&review, &difference, &actual_bytes);
+    }
+    result.map_err(|difference| anyhow::anyhow!("{id}: {difference}"))
 }
 
 fn exact_view_model(

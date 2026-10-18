@@ -175,8 +175,18 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
         if !visited.insert(owner.clone()) {
             return SemanticClipRegion::default();
         }
-        let Some((clip, parent)) = owner.with_mut(|object| {
+        let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
+            // A CSS artboard's record clips its content at its padding box,
+            // inside its own clip (docs/CSS_LAYOUT.md, 4.2).
+            let css_artboard_clip = object
+                .as_artboard()
+                .filter(|artboard| artboard.css_clips())
+                .and_then(|artboard| artboard.base.base.render_paths_handle())
+                .map(|paths| {
+                    let paths = paths.borrow();
+                    (paths.clip.raw_path().clone(), paths.clip.fill_rule())
+                });
             let parent = object
                 .component_parent_handle()
                 .or_else(|| object.as_artboard().and_then(Artboard::host));
@@ -208,10 +218,21 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
                 let path = path.map(|path| (path.raw_path().clone(), path.fill_rule()));
                 (corners, artboard, path)
             });
-            (clip, parent)
+            (clip, parent, css_artboard_clip)
         }) else {
             return SemanticClipRegion::default();
         };
+        if let Some((path, rule)) = css_artboard_clip {
+            let Some(mapped) = owner.with_downcast_mut::<Artboard, _>(|artboard| {
+                path.morph(|point| artboard.semantic_root_transform(point))
+            }) else {
+                return SemanticClipRegion::default();
+            };
+            region.intersect_path(&mapped, rule);
+            if region.is_empty() {
+                return region;
+            }
+        }
         let shapes = owner
             .with(|object| {
                 object

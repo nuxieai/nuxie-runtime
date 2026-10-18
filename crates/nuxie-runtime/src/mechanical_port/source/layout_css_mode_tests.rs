@@ -123,8 +123,8 @@ struct B {
     /// A data binding from the file's one view model number to this record
     /// property.
     bind: Option<u16>,
-    /// A BoxPaint record: its width and height.
-    box_paint: Option<(f32, f32)>,
+    /// A BoxPaint record and the values it writes.
+    box_paint: Option<Vec<P>>,
     /// A data binding from the view model number to a BoxPaint property.
     box_paint_bind: Option<u16>,
     /// BoxPaint properties keyed by the file's one animation: (key, frames
@@ -162,6 +162,18 @@ const SHADOW_SPREAD: u16 = 60118;
 const BOX_PAINT: u16 = 60006;
 const PAINT_WIDTH: u16 = 60119;
 const PAINT_HEIGHT: u16 = 60120;
+const PAINT_WIDTH_PERCENT: u16 = 60123;
+const PAINT_HEIGHT_PERCENT: u16 = 60124;
+
+/// BoxPaint values for a size in points alone: both percentages 0.
+fn paint_points(width: f32, height: f32) -> Vec<P> {
+    vec![
+        F(PAINT_WIDTH, width),
+        F(PAINT_WIDTH_PERCENT, 0.0),
+        F(PAINT_HEIGHT, height),
+        F(PAINT_HEIGHT_PERCENT, 0.0),
+    ]
+}
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
 /// at `size`, directly in its box or inside a plain group.
@@ -330,8 +342,8 @@ struct ArtboardSpec {
     paints: Vec<Paint>,
     content: Vec<Rect>,
     origin_x: f32,
-    /// The artboard's BoxPaint: its width and height.
-    box_paint: Option<(f32, f32)>,
+    /// The artboard's BoxPaint and the values it writes.
+    box_paint: Option<Vec<P>>,
 }
 
 /// Imports one artboard of `size` described by `spec`, holding `root` when
@@ -348,13 +360,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 entries.push(Entry::Bind(key));
             }
         }
-        if let Some((width, height)) = node.box_paint {
+        if let Some(props) = &node.box_paint {
             let record = slots(entries) + 1;
-            entries.push(Entry::Record(
-                BOX_PAINT,
-                vec![F(PAINT_WIDTH, width), F(PAINT_HEIGHT, height)],
-                index,
-            ));
+            entries.push(Entry::Record(BOX_PAINT, props.clone(), index));
             if let Some(key) = node.box_paint_bind {
                 entries.push(Entry::Bind(key));
             }
@@ -405,12 +413,8 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     if let Some(props) = &artboard_css {
         entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), 0));
     }
-    if let Some((width, height)) = spec.box_paint {
-        entries.push(Entry::Record(
-            BOX_PAINT,
-            vec![F(PAINT_WIDTH, width), F(PAINT_HEIGHT, height)],
-            0,
-        ));
+    if let Some(props) = &spec.box_paint {
+        entries.push(Entry::Record(BOX_PAINT, props.clone(), 0));
     }
     push_paints(artboard_paints, 0, &mut entries);
     for rect in &spec.content {
@@ -3128,7 +3132,7 @@ fn css_artboard_rounded_clip_stops_hits_in_its_corners() {
 
 /// A box painted at a BoxPaint's size: `width: 200px; height: 100px` with a
 /// 100 by 40 BoxPaint draws its background centred, from (50, 30).
-fn painted_row(paint: Option<(f32, f32)>, extra: impl FnOnce(B) -> B) -> Scene {
+fn painted_row(paint: Option<Vec<P>>, extra: impl FnOnce(B) -> B) -> Scene {
     scene(
         (400.0, 300.0),
         css(
@@ -3182,7 +3186,7 @@ fn background_bounds(f: &Scene, name: &str) -> crate::source::math::aabb::Aabb {
 /// while layout keeps the box's size.
 #[test]
 fn css_box_paint_sizes_the_painted_box() {
-    let f = painted_row(Some((100.0, 40.0)), |b| b);
+    let f = painted_row(Some(paint_points(100.0, 40.0)), |b| b);
     assert_eq!(f.bounds("Painted"), [0.0, 0.0, 200.0, 100.0]);
     assert_eq!(
         background_bounds(&f, "Painted"),
@@ -3194,7 +3198,7 @@ fn css_box_paint_sizes_the_painted_box() {
 /// reflows: the box and its sibling keep their places.
 #[test]
 fn css_box_paint_keyed_by_an_animation_does_not_reflow() {
-    let f = painted_row(Some((100.0, 40.0)), |b| B {
+    let f = painted_row(Some(paint_points(100.0, 40.0)), |b| B {
         box_paint_keys: vec![
             (PAINT_WIDTH, vec![(0, 100.0), (60, 200.0)]),
             (PAINT_HEIGHT, vec![(0, 40.0), (60, 80.0)]),
@@ -3223,7 +3227,7 @@ fn css_box_paint_keyed_by_an_animation_does_not_reflow() {
 #[test]
 fn css_box_paint_follows_bound_values() {
     use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
-    let f = painted_row(Some((100.0, 40.0)), |b| B {
+    let f = painted_row(Some(paint_points(100.0, 40.0)), |b| B {
         box_paint_bind: Some(PAINT_WIDTH),
         ..b
     });
@@ -3240,10 +3244,125 @@ fn css_box_paint_follows_bound_values() {
     );
 }
 
+/// Applies the file's one animation at `seconds` and settles the scene.
+fn animate(f: &Scene, seconds: f32) {
+    let mut instance =
+        crate::ArtboardInstance::from_native_handle(f._file.clone(), 0, f.artboard.clone());
+    let mut animation = instance
+        .linear_animation_instance(0)
+        .expect("the animation");
+    instance
+        .apply_linear_animation_instance_at(&mut animation, seconds, 1.0)
+        .unwrap();
+    f.advance(2);
+}
+
+/// Writes `value` to the scene's bound view model number and settles it.
+fn set_bound(f: &Scene, value: f32) {
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    let number = f.bind_number();
+    assert!(CoreRegistry::set_double_handle(
+        &number,
+        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+        value
+    ));
+    f.advance(3);
+}
+
+/// A BoxPaint with no values paints the border box, and follows it when
+/// layout resizes the box: each axis is 0 points plus 100%.
+#[test]
+fn css_box_paint_at_rest_follows_the_border_box() {
+    let f = painted_row(Some(vec![]), |b| B {
+        bind: Some(WIDTH),
+        ..b
+    });
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(0.0, 0.0, 200.0, 100.0)
+    );
+    set_bound(&f, 300.0);
+    assert_eq!(f.bounds("Painted"), [0.0, 0.0, 300.0, 100.0]);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(0.0, 0.0, 300.0, 100.0)
+    );
+}
+
+/// One axis keyed in points while the other follows the box's size.
+#[test]
+fn css_box_paint_keyed_axis_beside_a_following_axis() {
+    let f = painted_row(Some(vec![F(PAINT_HEIGHT_PERCENT, 0.0)]), |b| B {
+        bind: Some(WIDTH),
+        box_paint_keys: vec![(PAINT_HEIGHT, vec![(0, 40.0), (60, 80.0)])],
+        ..b
+    });
+    animate(&f, 0.5);
+    // 60 high, and as wide as the 200 point box.
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(0.0, 20.0, 200.0, 80.0)
+    );
+    set_bound(&f, 300.0);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(0.0, 20.0, 300.0, 80.0)
+    );
+}
+
+/// A timeline from (0 points, 100%) to (120 points, 0%) interpolates both
+/// parts, as CSS interpolates a mixed length-percentage.
+#[test]
+fn css_box_paint_interpolates_points_and_percent() {
+    let f = painted_row(Some(vec![]), |b| B {
+        box_paint_keys: vec![
+            (PAINT_WIDTH, vec![(0, 0.0), (60, 120.0)]),
+            (PAINT_WIDTH_PERCENT, vec![(0, 100.0), (60, 0.0)]),
+        ],
+        ..b
+    });
+    animate(&f, 0.0);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(0.0, 0.0, 200.0, 100.0)
+    );
+    // Halfway: 60 points plus 50% of 200.
+    animate(&f, 0.5);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(20.0, 0.0, 180.0, 100.0)
+    );
+    animate(&f, 1.0);
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(40.0, 0.0, 160.0, 100.0)
+    );
+}
+
+/// A BoxPaint percentage bound to a view model follows its value, and a
+/// negative result paints nothing wide.
+#[test]
+fn css_box_paint_follows_a_bound_percentage() {
+    let f = painted_row(Some(vec![F(PAINT_WIDTH, -150.0)]), |b| B {
+        box_paint_bind: Some(PAINT_WIDTH_PERCENT),
+        ..b
+    });
+    set_bound(&f, 125.0);
+    // -150 points plus 125% of 200.
+    assert_eq!(
+        background_bounds(&f, "Painted"),
+        aabb(50.0, 0.0, 150.0, 100.0)
+    );
+    set_bound(&f, 50.0);
+    // -50 counts as 0: whatever is left of the path lies on the centre.
+    let (points, _, _) = f.paths("Painted");
+    assert!(points.iter().all(|point| point.x == 100.0), "{points:?}");
+}
+
 /// A shadow grows from the BoxPaint's rectangle, and a gradient covers it.
 #[test]
 fn css_box_paint_carries_its_shadow_and_gradient() {
-    let f = painted_row(Some((100.0, 40.0)), |b| B {
+    let f = painted_row(Some(paint_points(100.0, 40.0)), |b| B {
         paints: vec![
             Paint::Shadow {
                 color: 0x8000_0000,
@@ -3276,7 +3395,7 @@ fn css_artboard_box_paint_keeps_its_clip() {
         ArtboardSpec {
             css: Some(vec![]),
             paints: vec![Paint::Fill(0xff11_2233)],
-            box_paint: Some((100.0, 50.0)),
+            box_paint: Some(paint_points(100.0, 50.0)),
             ..ArtboardSpec::default()
         },
         Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),

@@ -2932,11 +2932,34 @@ impl Artboard {
         } else {
             background
         };
+        // Our layer: a record's overflow clips the artboard's content at its
+        // padding box (docs/CSS_LAYOUT.md, 2.1 and 4.2), inside the artboard's
+        // own clip, in the space the background is drawn in.
+        let css = self.base.base.is_css_mode();
+        let css_clip = self.base.base.css_box_geometry().and_then(|geometry| {
+            let clips = self.base.base.clipped_axes();
+            let padding = geometry.padding.offset(background.left(), background.top());
+            let mut raw = crate::mechanical_port::source::math::raw_path::RawPath::default();
+            crate::css_layout::paint::add_overflow_clip(&mut raw, padding, geometry.inner, clips)
+                .then_some(raw)
+        });
         let mut paths = self.base.base.mutable_render_paths();
         paths.local.rewind();
         paths.local.add_rect(background, PathDirection::Clockwise);
         paths.world.rewind();
         paths.world.add_rect(clip, PathDirection::Clockwise);
+        if css {
+            paths
+                .clip
+                .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
+            if let Some(raw) = &css_clip {
+                paths.clip.add_path(raw, None);
+            }
+        }
+    }
+    /// Whether a record's overflow clips this artboard's content.
+    fn css_clips(&self) -> bool {
+        self.base.base.is_css_mode() && self.base.base.clips()
     }
 
     pub(crate) fn update_after_layout_super_handle(root: &CoreHandle, value: ComponentDirt) {
@@ -3813,7 +3836,7 @@ impl Artboard {
             let has_self = artboard.has_self_transform() && !artboard.skip_self_transform;
             (
                 has_self,
-                artboard.clip() || artboard.frame_origin || has_self,
+                artboard.clip() || artboard.frame_origin || has_self || artboard.css_clips(),
             )
         }) else {
             return;
@@ -3889,6 +3912,21 @@ impl Artboard {
                     None,
                 );
             });
+        }
+        // The artboard's paints draw first; its record's overflow clips the
+        // content after them, as a CSS box's does.
+        let css_clip = Self::with_root_mut(root, receiver, |artboard| {
+            if !artboard.css_clips() {
+                return None;
+            }
+            Some((
+                artboard.base.base.render_paths_handle()?,
+                artboard.factory().expect("Artboard renderer factory"),
+            ))
+        })
+        .flatten();
+        if let Some((paths, factory)) = css_clip {
+            renderer.clip_path(paths.borrow_mut().clip.render_path(&factory));
         }
         let (first_drawable, links) = Self::with_root(root, receiver, |artboard| {
             (artboard.first_drawable(), Rc::clone(&artboard.draw_links))

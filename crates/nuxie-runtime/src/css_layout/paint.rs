@@ -434,7 +434,16 @@ pub fn gradient_geometry(
             transform: identity,
         });
     }
-    let part = |key: u16, basis: f32| values.number(key) + values.number(key + 1) / 100.0 * basis;
+    // Until mixed values arrive (docs/CSS_LAYOUT.md, 1.2), a value made
+    // mixed at run time resolves as its percentage alone, as layout's do.
+    let part = |key: u16, basis: f32| {
+        let percent = values.number(key + 1);
+        if percent != 0.0 {
+            percent / 100.0 * basis
+        } else {
+            values.number(key)
+        }
+    };
     let center = Vec2D::new(
         area.left() + part(keys::GRADIENT_CENTER_X, width),
         area.top() + part(keys::GRADIENT_CENTER_Y, height),

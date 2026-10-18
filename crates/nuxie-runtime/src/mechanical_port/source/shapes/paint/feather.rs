@@ -251,8 +251,11 @@ impl Feather {
             },
             false,
         );
-        // Our layer: a CSS box shapes a shadow's paths from its feather's
-        // strength and offset (docs/CSS_LAYOUT.md, 4.2).
+        self.css_shadow_changed();
+    }
+    /// Our layer: a CSS box shapes a shadow's paths from its feather's
+    /// strength, offset and inner flag (docs/CSS_LAYOUT.md, 4.2).
+    pub(crate) fn css_shadow_changed(&self) {
         if self
             .base
             .children()

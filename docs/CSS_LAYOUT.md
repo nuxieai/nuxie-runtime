@@ -28,8 +28,8 @@ Its presence is also the switch between CSS mode and translated mode (section 2)
 
 Allocation, after Video:
 
-- **Type keys**: 60002 to 60005.
-- **Property keys**: 60022 to 60118.
+- **Type keys**: 60002 to 60006.
+- **Property keys**: 60022 to 60122.
 
 The definition files are added in `defs/nuxie/` beside `video.json` when this contract is accepted, and the README's allocation list gains these lines.
 
@@ -39,6 +39,7 @@ The definition files are added in `defs/nuxie/` beside `video.json` when this co
 | `BoxBorder` | 60003 | `component.json` | a `Stroke` painted by a box | ours |
 | `BoxGradient` | 60004 | `component.json` | a `LinearGradient` or `RadialGradient` painted by a box | ours |
 | `BoxShadow` | 60005 | `component.json` | a `Feather` on a `Fill` painted by a box | ours |
+| `BoxPaint` | 60006 | `component.json` | a box or a CSS artboard; at most one per parent | ours |
 
 ### 1.2 Value encodings
 
@@ -263,7 +264,7 @@ It changes no part of the file format.
 
 ## 4. Box paint
 
-A box paints itself at the size layout gives it: its border box, a rounded rectangle. Its paint never counts towards any size. An artboard with a record paints its own fills and strokes the same way (CSS radii, `BoxBorder`, `BoxShadow` and `BoxGradient`), in its own drawing space, which starts at its origin.
+A box paints itself at the size layout gives it: its border box, a rounded rectangle, unless a `BoxPaint` gives its paint another size (4.2). Its paint never counts towards any size. An artboard with a record paints its own fills and strokes the same way (CSS radii, `BoxBorder`, `BoxShadow` and `BoxGradient`), in its own drawing space, which starts at its origin.
 
 ### 4.1 What the compiler writes on the box (Rive-native)
 
@@ -284,6 +285,7 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | Per-side borders | `BoxBorder` 60105 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
 | Box-relative gradients | `BoxGradient`, see the table below | | Recomputes its gradient's start and end (and, for an ellipse, the shader's scale) from the box's padding box at each layout, as CSS's background positioning area |
 | Shadow spread and CSS shadow clipping | `BoxShadow` 60118 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
+| Paint size | `BoxPaint` 60119 `width` and 60120 `height`, doubles, points; default 0; keyable and bindable | | While a box (or CSS artboard) has a `BoxPaint`, its own paint uses a rectangle of that size, centred on its border box, in place of the border box: its fills and strokes, `BoxBorder` rings, `BoxShadow` paths (spread grows from that rectangle), `BoxGradient` positioning area (that rectangle's padding box), and its corner radii, with percentages resolved against it. Layout, the content clip (still the padding box), an artboard's own clip, the box's hit testing and its semantics ignore it, so animating it reflows nothing; the box's painted bounds are that rectangle. A negative or non-finite size counts as 0. In translated mode it has no effect |
 | Padding-box clip | none: implied by CSS mode | | A CSS box whose computed `overflow-x` or `overflow-y` is not visible clips its children to its padding box, with inner radii when both axes clip. As CSS computes, `hidden`, `scroll` or `auto` on one axis turns `visible` on the other into `auto` (and `clip` into `hidden`), so both axes clip; `clip` with `visible` clips only its own axis, without radii. The clip is for the content: the box's own fills, borders and shadows draw before it. A hit on a child, and a child's semantic visibility, pass through the same clip; the box itself is hit anywhere in its border box. On an artboard, the record's overflow clips the artboard's content the same way, inside the artboard's own clip and after its own paints. A translated box keeps Rive's clip at its outer edge from `LayoutComponent.clip`, which also clips its own paints |
 
 `BoxGradient` keys:
@@ -354,7 +356,7 @@ Step 1 orders each box's own children: a child keeps its whole subtree together,
 
 A CSS box or CSS artboard whose own paints include a visible one is host geometry, as a painted shape is:
 
-- visible geometry: its painted area (the border box) with its paints' outsets (strokes, feathers, shadow spread), inside its ancestors' clips; a box clipped away is left out;
+- visible geometry: its painted area (the border box, or its `BoxPaint`'s rectangle) with its paints' outsets (strokes, feathers, shadow spread), inside its ancestors' clips; a box clipped away is left out;
 - hit testing: its border box, in the painting order of 4.4, when its render opacity is above 0;
 - retained geometry: every CSS box with paints.
 

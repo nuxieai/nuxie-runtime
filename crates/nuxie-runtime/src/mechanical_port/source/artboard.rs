@@ -2990,15 +2990,16 @@ impl Artboard {
                 .then_some(raw)
         });
         // A record's BoxBorders and BoxShadows draw the artboard's paints
-        // with CSS geometry, in the background's space.
+        // with CSS geometry, in the background's space: its BoxPaint's
+        // rectangle when it has one (docs/CSS_LAYOUT.md, 4.2).
+        let painted = css.then(|| self.base.base.css_paint_geometry()).flatten();
         let css_paints = css.then(|| {
-            self.base
-                .base
-                .css_box_geometry()
+            painted
+                .as_ref()
                 .map(|geometry| {
                     let moved = background.left() != 0.0 || background.top() != 0.0;
                     self.base.base.css_paint_paths(
-                        &geometry,
+                        geometry,
                         moved.then(|| {
                             Mat2D::from_translation(Vec2D::new(background.left(), background.top()))
                         }),
@@ -3007,31 +3008,49 @@ impl Artboard {
                 .unwrap_or_default()
         });
         // A CSS artboard's background, and its own clip, follow its CSS
-        // radii, as a box's do.
-        let css_radii = css
+        // radii, as a box's do. Its background is its BoxPaint's rectangle
+        // when it has one; its clip stays its bounds.
+        let rounded = |radii: crate::css_layout::paint::Radii| {
+            radii
+                .iter()
+                .any(|radius| radius.x > 0.0 && radius.y > 0.0)
+                .then_some(radii)
+        };
+        let clip_radii = css
             .then(|| {
                 self.base
                     .base
                     .css_box_geometry()
-                    .map(|geometry| geometry.radii)
+                    .and_then(|geometry| rounded(geometry.radii))
             })
-            .flatten()
-            .filter(|radii| radii.iter().any(|radius| radius.x > 0.0 && radius.y > 0.0));
+            .flatten();
+        let (painted_bounds, painted_radii) = match painted {
+            Some(geometry) => (
+                geometry.bounds.offset(background.left(), background.top()),
+                rounded(geometry.radii),
+            ),
+            None => (background, clip_radii),
+        };
+        let has_box_paint = css && self.base.base.box_paint_size().is_some();
         let mut paths = self.base.base.mutable_render_paths();
         paths.local.rewind();
         paths.world.rewind();
-        if let Some(radii) = css_radii {
-            let rounded = |bounds| {
+        use crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath;
+        let add = |path: &mut ShapePaintPath, bounds, radii| match radii {
+            Some(radii) => {
                 let mut raw = RawPath::default();
                 crate::css_layout::paint::add_rounded_rect(&mut raw, bounds, radii);
-                raw
-            };
-            paths.local.add_path(&rounded(background), None);
-            paths.world.add_path(&rounded(clip), None);
-        } else {
-            paths.local.add_rect(background, PathDirection::Clockwise);
-            paths.world.add_rect(clip, PathDirection::Clockwise);
-        }
+                path.add_path(&raw, None);
+            }
+            None => path.add_rect(bounds, PathDirection::Clockwise),
+        };
+        add(&mut paths.local, painted_bounds, painted_radii);
+        add(&mut paths.world, clip, clip_radii);
+        paths.frame_clip = has_box_paint.then(|| {
+            let mut path = ShapePaintPath::default();
+            add(&mut path, background, clip_radii);
+            path
+        });
         if let Some(css_paints) = css_paints {
             paths.css_paints = css_paints;
         }
@@ -3961,7 +3980,11 @@ impl Artboard {
         })
         .flatten();
         if let Some((paths, factory)) = clipping {
-            renderer.clip_path(paths.borrow_mut().local.render_path(&factory));
+            // A BoxPaint moves the background, not the artboard's clip.
+            let mut paths = paths.borrow_mut();
+            let paths = &mut *paths;
+            let clip = paths.frame_clip.as_mut().unwrap_or(&mut paths.local);
+            renderer.clip_path(clip.render_path(&factory));
         }
         let mut paint_index = 0;
         loop {

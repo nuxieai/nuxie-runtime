@@ -107,6 +107,8 @@ struct B {
     participants: Vec<(Rect, Option<Vec<P>>)>,
     /// Rive GridTracks on this box: (collection, track type, value).
     tracks: Vec<(u64, u64, f32)>,
+    /// Images of the file's one 100 by 30 image asset, by name.
+    images: Vec<&'static str>,
 }
 
 /// A rectangle shape named `name` (its path is `name` + " path"), authored
@@ -161,6 +163,7 @@ enum Entry<'a> {
     Scroll(u64, u64),
     Participant(u64),
     Track((u64, u64, f32), u64),
+    Image(&'static str, u64),
 }
 
 fn write(riv: &mut Riv, props: &[P]) {
@@ -186,6 +189,9 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
         }
         for track in &node.tracks {
             entries.push(Entry::Track(*track, index));
+        }
+        for image in &node.images {
+            entries.push(Entry::Image(image, index));
         }
         for (rect, props) in &node.participants {
             entries.push(Entry::Shape(rect, index));
@@ -218,6 +224,22 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
     let first_style = entries.len() as u64 + 1;
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
+    if entries
+        .iter()
+        .any(|entry| matches!(entry, Entry::Image(..)))
+    {
+        // Its asset has no bytes; an image takes the asset's size.
+        use crate::source::generated::assets::{
+            drawable_asset_base::DrawableAssetBase, file_asset_base::FileAssetBase,
+            image_asset_base::ImageAssetBase,
+        };
+        riv.object(ImageAssetBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "picture")
+            .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 1)
+            .float(DrawableAssetBase::WIDTH_PROPERTY_KEY, 100.0)
+            .float(DrawableAssetBase::HEIGHT_PROPERTY_KEY, 30.0)
+            .end();
+    }
     riv.object(ArtboardBase::TYPE_KEY)
         .string(ComponentBase::NAME_PROPERTY_KEY, "Artboard")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, size.0)
@@ -250,6 +272,16 @@ fn try_scene(size: (f32, f32), artboard_css: Option<Vec<P>>, root: B) -> Option<
                 riv.object(crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, *direction)
+                    .end();
+            }
+            Entry::Image(name, parent) => {
+                use crate::source::generated::shapes::image_base::ImageBase;
+                riv.object(ImageBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, name)
+                    .uint(ImageBase::ASSET_ID_PROPERTY_KEY, 0)
+                    .float(ImageBase::ORIGIN_X_PROPERTY_KEY, 0.0)
+                    .float(ImageBase::ORIGIN_Y_PROPERTY_KEY, 0.0)
                     .end();
             }
             Entry::Track((collection, kind, value), parent) => {
@@ -1237,4 +1269,39 @@ fn css_grid_uses_rive_grid_tracks() {
     );
     assert_eq!(f.bounds("First"), [0.0, 0.0, 100.0, 40.0]);
     assert_eq!(f.bounds("Second"), [100.0, 0.0, 200.0, 40.0]);
+}
+
+/// CSS mode: an image is content at its natural size, as an `<img>` is: a
+/// box hugs it, and layout does not scale it to a wider box.
+#[test]
+fn css_image_is_content_at_its_natural_size() {
+    let image_scale = |f: &Scene| {
+        f.artboard
+            .with_artboard(|artboard| {
+                artboard.find_all_handles::<crate::source::shapes::image::Image>()
+            })
+            .into_iter()
+            .next()
+            .expect("an image")
+            .with(|object| {
+                let node = object.as_node().expect("image node");
+                (node.base.scale_x(), node.base.scale_y())
+            })
+            .unwrap()
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(300.0), &height(80.0)].concat(),
+            vec![B {
+                images: vec!["Picture"],
+                ..css("Hug", [], vec![])
+            }],
+        ),
+    );
+    // The box hugs the image's 100-point width; it stretches to the row's
+    // 80-point height, and the image keeps its own scale.
+    assert_eq!(f.bounds("Hug"), [0.0, 0.0, 100.0, 80.0]);
+    assert_eq!(image_scale(&f), (1.0, 1.0));
 }

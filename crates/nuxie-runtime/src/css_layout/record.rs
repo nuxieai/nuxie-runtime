@@ -509,19 +509,24 @@ pub fn with_values<R>(record: &CoreHandle, f: impl FnOnce(CssValues<'_>) -> R) -
 }
 
 /// The paint size a box's `BoxPaint` gives, if its children hold one
-/// (docs/CSS_LAYOUT.md, 4.2): its width and height, never below zero.
-pub(crate) fn box_paint_size(children: &[CoreHandle]) -> Option<(f32, f32)> {
+/// (docs/CSS_LAYOUT.md, 4.2): on each axis its points plus its percentage
+/// of the border box's `size` on that axis, never below zero.
+pub(crate) fn box_paint_size(children: &[CoreHandle], size: (f32, f32)) -> Option<(f32, f32)> {
     children
         .iter()
         .find(|child| child.is_type_of(keys::BOX_PAINT))?
         .with_downcast::<BoxPaint, _>(|record| {
-            let size = |key| {
-                record
-                    .number(key)
-                    .filter(|value| value.is_finite() && *value > 0.0)
-                    .unwrap_or(0.0)
+            let axis = |points, percent, border: f32| {
+                let value = record.number(points).unwrap_or(0.0)
+                    + record.number(percent).unwrap_or(0.0) / 100.0 * border;
+                Some(value)
+                    .filter(|value| value.is_finite())
+                    .map_or(0.0, |value| value.max(0.0))
             };
-            (size(keys::PAINT_WIDTH), size(keys::PAINT_HEIGHT))
+            (
+                axis(keys::PAINT_WIDTH, keys::PAINT_WIDTH_PERCENT, size.0),
+                axis(keys::PAINT_HEIGHT, keys::PAINT_HEIGHT_PERCENT, size.1),
+            )
         })
 }
 

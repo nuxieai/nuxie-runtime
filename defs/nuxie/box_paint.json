@@ -5,7 +5,7 @@
     "string": "boxpaint"
   },
   "extends": "component.json",
-  "description": "A CSS box's (or CSS artboard's) paint rectangle: its own paints draw at this size, centred on its border box, in place of the border box. Layout, the content clip, hit testing and semantics ignore it.",
+  "description": "A CSS box's (or CSS artboard's) paint rectangle: its own paints draw at this size, centred on its border box, in place of the border box. Each axis is a length-percentage of the border box (points plus a percentage), recomputed at each layout; at rest it is the border box. Layout, the content clip, hit testing and semantics ignore it.",
   "properties": {
     "width": {
       "type": "double",
@@ -13,7 +13,17 @@
         "int": 60119
       },
       "initialValue": "0",
-      "description": "The painted box's width, in points.",
+      "description": "The painted box's width: its points part, added to widthPercent of the border box's width.",
+      "bindable": true,
+      "animates": true
+    },
+    "widthPercent": {
+      "type": "double",
+      "key": {
+        "int": 60123
+      },
+      "initialValue": "100",
+      "description": "The painted box's width: its percentage of the border box's width, added to width. A negative result counts as 0.",
       "bindable": true,
       "animates": true
     },
@@ -23,7 +33,17 @@
         "int": 60120
       },
       "initialValue": "0",
-      "description": "The painted box's height, in points.",
+      "description": "The painted box's height: its points part, added to heightPercent of the border box's height.",
+      "bindable": true,
+      "animates": true
+    },
+    "heightPercent": {
+      "type": "double",
+      "key": {
+        "int": 60124
+      },
+      "initialValue": "100",
+      "description": "The painted box's height: its percentage of the border box's height, added to height. A negative result counts as 0.",
       "bindable": true,
       "animates": true
     }

@@ -22,10 +22,6 @@ pub struct TransformComponent {
     // The parent is a TransformComponent, whose childOpacity its cells hold.
     parent_is_transform: bool,
     constraints: Vec<CoreHandle>,
-    /// Our layer (docs/CSS_LAYOUT.md, 5): where a CSS leaf box places this
-    /// content, its content box's origin, in the box's space. It applies
-    /// before the local transform; zero everywhere else.
-    layout_content_offset: Vec2D,
 }
 
 /// Source virtual dispatch with the Rust occurrence lifetime made explicit.
@@ -211,7 +207,6 @@ impl Default for TransformComponent {
             parent_cells: None,
             parent_is_transform: false,
             constraints: Vec::new(),
-            layout_content_offset: Vec2D::default(),
         }
     }
 }
@@ -436,23 +431,15 @@ impl TransformComponent {
 
     /// Where a CSS leaf box places this content (docs/CSS_LAYOUT.md, 5).
     pub(crate) fn layout_content_offset(&self) -> Vec2D {
-        self.layout_content_offset
+        self.cells().content_offset()
     }
     /// Returns whether the offset changed.
     pub(crate) fn set_layout_content_offset(&mut self, offset: Vec2D) -> bool {
-        if self.layout_content_offset == offset {
-            return false;
-        }
-        self.layout_content_offset = offset;
-        true
+        self.cells().set_content_offset(offset)
     }
 
     pub fn compose_world_transform(&mut self) {
-        let mut transform = self.cells().local();
-        let offset = self.layout_content_offset;
-        if offset.x != 0.0 || offset.y != 0.0 {
-            transform = Mat2D::from_translation(offset) * transform;
-        }
+        let transform = self.cells().placed_local();
         let world = match self.parent_world_transform() {
             Some(parent) => parent * transform,
             None => transform,

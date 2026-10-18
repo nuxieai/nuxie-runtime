@@ -38,6 +38,10 @@ pub(crate) struct TransformCells {
     has_constraints: Cell<bool>,
     // A Node's cached local transform must be recomputed from its world.
     node_local_stale: Cell<bool>,
+    // Our layer (docs/CSS_LAYOUT.md, 5): where a CSS leaf box places this
+    // content, its content box's origin in the box's space, applied before
+    // the local transform. Zero everywhere else.
+    content_offset: Cell<Vec2D>,
 }
 
 impl Default for TransformCells {
@@ -56,6 +60,7 @@ impl Default for TransformCells {
             host_opacity: Cell::new(1.0),
             has_constraints: Cell::new(false),
             node_local_stale: Cell::new(false),
+            content_offset: Cell::new(Vec2D::default()),
         }
     }
 }
@@ -162,7 +167,7 @@ impl PlainTransform {
             if self.node {
                 cells.mark_node_local_stale();
             }
-            let local = cells.local();
+            let local = cells.placed_local();
             cells.set_world(match parent {
                 Some(parent) => parent.world() * local,
                 None => local,
@@ -239,6 +244,33 @@ impl TransformCells {
     #[inline]
     pub(crate) fn set_local(&self, local: Mat2D) {
         self.local.set(local);
+    }
+
+    /// Where a CSS leaf box places this content (docs/CSS_LAYOUT.md, 5).
+    pub(crate) fn content_offset(&self) -> Vec2D {
+        self.content_offset.get()
+    }
+
+    /// Returns whether the offset changed.
+    pub(crate) fn set_content_offset(&self, offset: Vec2D) -> bool {
+        if self.content_offset.get() == offset {
+            return false;
+        }
+        self.content_offset.set(offset);
+        true
+    }
+
+    /// The local transform as the parent composes it: placed at its content
+    /// offset when a CSS leaf box sets one.
+    #[inline]
+    pub(crate) fn placed_local(&self) -> Mat2D {
+        let local = self.local.get();
+        let offset = self.content_offset.get();
+        if offset.x == 0.0 && offset.y == 0.0 {
+            local
+        } else {
+            Mat2D::from_translation(offset) * local
+        }
     }
 
     #[inline]

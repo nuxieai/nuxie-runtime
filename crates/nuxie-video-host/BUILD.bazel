@@ -84,7 +84,8 @@ rust_test(
     crate = ":nuxie-video-host__test",
     crate_features = ["default"],
     deps = ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-schema:nuxie-schema__test"],
-    data = _compile_data,
+    data = _compile_data + [":nuxie-video-host__test__build_script"],
+    env = {"OUT_DIR": "$(rootpath :nuxie-video-host__test__build_script)"},
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-video-host"),
 )
 
@@ -94,7 +95,8 @@ rust_test(
     crate_root = "tests/video_properties.rs",
     srcs = _test_sources,
     compile_data = _compile_data,
-    data = _compile_data + [],
+    data = _compile_data + [":nuxie-video-host__test__build_script"],
+    env = {"OUT_DIR": "$(rootpath :nuxie-video-host__test__build_script)"},
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],

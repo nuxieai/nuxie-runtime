@@ -136,6 +136,45 @@ class CargoGraphTest(unittest.TestCase):
                 for target in libraries + tests:
                     self.assertNotIn(label, target.get("compile_data", []))
 
+    def test_tests_run_with_their_build_scripts_out_dir_as_cargo_runs_them(self):
+        # Cargo runs a package's tests with its build script's OUT_DIR set;
+        # Bazel sets it only while compiling, so the generator hands each
+        # test the script's output directory and names it OUT_DIR.
+        for name, has_build in (("scripted", True), ("plain", False)):
+            manifest = self.package(name, "")
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src/lib.rs").write_text("")
+            (manifest.parent / "tests").mkdir()
+            (manifest.parent / "tests/artifact.rs").write_text("")
+            if has_build:
+                (manifest.parent / "build.rs").write_text("fn main() {}")
+            package = collect_packages([manifest])[name]
+            graph = resolve_features({name: package}, {name: []}, include_dev=True)
+            rendered = render_package(package, {"test": graph}, lambda name, _: "//root:" + name,
+                                      fixture_labels=["//:fixtures"])
+            tests = []
+            def ignore(*args, **kwargs):
+                pass
+            class StarlarkDict(dict):
+                def items(self):
+                    return list(super().items())
+            scope = {"load": ignore, "package": ignore, "exports_files": ignore, "dict": StarlarkDict,
+                     "filegroup": ignore, "glob": lambda *args, **kwargs: [],
+                     "source_path": lambda *args: "crates/" + name,
+                     "provenance_env_file": lambda: None,
+                     "all_crate_deps": lambda **kwargs: [], "crate_deps": lambda *args, **kwargs: [],
+                     "rust_library": ignore, "cargo_build_script": ignore,
+                     "rust_test": lambda **kwargs: tests.append(kwargs)}
+            exec(rendered, scope)
+            self.assertEqual(len(tests), 2)
+            script = ":" + name + "__test__build_script"
+            for test in tests:
+                if has_build:
+                    self.assertIn(script, test["data"])
+                    self.assertEqual(test["env"], {"OUT_DIR": "$(rootpath " + script + ")"})
+                else:
+                    self.assertNotIn("env", test)
+
     def test_renderer_compiles_no_other_package_source(self):
         # Shared scene builders arrive through dependencies' test-support
         # features, so no package names another package's test sources.

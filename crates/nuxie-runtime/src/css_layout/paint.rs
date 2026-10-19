@@ -979,7 +979,9 @@ pub fn border_marks(
     );
     let [top_width, right_width, bottom_width, left_width] = border;
     let mut straight = BorderMarks::default();
-    let mut curved: Vec<(f32, BorderMarks)> = Vec::new();
+    // The curved sides by width: their sides and the thickest of their
+    // cuts. A group's marks are built once that thickness is known.
+    let mut curved: Vec<(f32, u8, f32)> = Vec::new();
     for side in 0..4 {
         let width = border[side];
         if sides & (1 << side) == 0 || !(width > 0.0) {
@@ -1021,46 +1023,45 @@ pub fn border_marks(
             * width
                 .max(border[(side + 1) % 4])
                 .max(border[(side + 3) % 4]);
-        match curved.iter_mut().find(|(group, _)| *group == width) {
-            Some((_, marks)) => {
-                marks.sides |= 1 << side;
-                if let Some(stroke) = marks.strokes.first_mut() {
-                    stroke.1 = stroke.1.max(thickness);
-                }
+        match curved.iter_mut().find(|(group, _, _)| *group == width) {
+            Some((_, group_sides, group_thickness)) => {
+                *group_sides |= 1 << side;
+                *group_thickness = group_thickness.max(thickness);
             }
-            None => {
-                let line = centre_line(border_box, radii, border);
-                let mut marks = BorderMarks {
-                    sides: 1 << side,
-                    ..BorderMarks::default()
-                };
-                let length = line.length().floor();
-                if draws_as_dashes(width, style) {
-                    let mut path = RawPath::default();
-                    line.add_dashes(
-                        &mut path,
-                        &mut marks.fills,
-                        thickness / 2.0,
-                        dash_pattern(length, width, style, true),
-                    );
-                    marks.strokes.push((path, thickness));
-                } else {
-                    let period = if length < 2.0 * width {
-                        2.0 * width
-                    } else {
-                        best_dash_gap(length, width, width, true) + width - DOT_EPSILON
-                    };
-                    line.add_dots(&mut marks.fills, width, period);
-                }
-                curved.push((width, marks));
-            }
+            None => curved.push((width, 1 << side, thickness)),
         }
     }
+    let curved = curved.into_iter().map(|(width, sides, thickness)| {
+        let line = centre_line(border_box, radii, border);
+        let mut marks = BorderMarks {
+            sides,
+            ..BorderMarks::default()
+        };
+        let length = line.length().floor();
+        if draws_as_dashes(width, style) {
+            let mut path = RawPath::default();
+            line.add_dashes(
+                &mut path,
+                &mut marks.fills,
+                thickness / 2.0,
+                dash_pattern(length, width, style, true),
+            );
+            marks.strokes.push((path, thickness));
+        } else {
+            let period = if length < 2.0 * width {
+                2.0 * width
+            } else {
+                best_dash_gap(length, width, width, true) + width - DOT_EPSILON
+            };
+            line.add_dots(&mut marks.fills, width, period);
+        }
+        marks
+    });
     let mut groups = Vec::new();
     if straight.sides != 0 {
         groups.push(straight);
     }
-    groups.extend(curved.into_iter().map(|(_, marks)| marks));
+    groups.extend(curved);
     groups
 }
 
@@ -1478,6 +1479,38 @@ mod tests {
             dashes[0]
         );
         assert!(near(dashes[1].0.x, 32.16), "{:?}", dashes[1]);
+    }
+
+    /// Equal-width curved sides share one centre line, drawn at the thickest
+    /// of their cuts: with top and right 4 points wide beside a 40-point
+    /// bottom, the right side's cut (2.2 times 40) sets the group's
+    /// thickness, and its dash outlines are built at it, not at the top's.
+    #[test]
+    fn grouped_rounded_dashes_are_built_at_the_group_thickness() {
+        let marks = border_marks(
+            Aabb::new(0.0, 0.0, 100.0, 100.0),
+            [Vec2D::new(45.0, 45.0); 4],
+            [4.0, 4.0, 40.0, 1.0],
+            15,
+            BorderStyle::Dashed,
+        );
+        let group = marks
+            .iter()
+            .find(|marks| marks.sides == 0b0011)
+            .expect("top and right share a group");
+        let (centres, thickness) = &group.strokes[0];
+        assert!(near(*thickness, 88.0), "{thickness}");
+        // A dash outline reaches half the thickness out from the centre line
+        // at the line's extremes, on every side of the box.
+        let (centre, outline) = (centres.bounds(), group.fills.bounds());
+        let reach = 0.9 * thickness / 2.0;
+        assert!(
+            outline.left() <= centre.left() - reach
+                && outline.top() <= centre.top() - reach
+                && outline.right() >= centre.right() + reach
+                && outline.bottom() >= centre.bottom() + reach,
+            "outline {outline:?}, centre line {centre:?}"
+        );
     }
 
     #[test]

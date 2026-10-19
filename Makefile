@@ -314,6 +314,8 @@ lint-gate:
 #   renderer-owned opaque Metal presenter, so it is wired into macOS ahead of
 #   that job's expensive reference-runtime build.
 # Both tiers report every failing entry rather than stopping at the first.
+# coverage-trace calls LLVM's profiling runtime, linked only under
+# -Cinstrument-coverage, so it is compiled that way, as the perf gate builds it.
 .PHONY: feature-compile-gate feature-compile-gate-portable feature-compile-gate-apple
 feature-compile-gate-portable:
 	@tools/report-all.sh "feature-compile-gate (portable)" \
@@ -325,7 +327,7 @@ feature-compile-gate-portable:
 		"nuxie-renderer exact Vulkan" "$(RUST_BUILD) check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
 		"nuxie-renderer exact WebGPU" "$(RUST_BUILD) check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
 		"nux-capi Android authored WGSL" "$(RUST_BUILD) check --locked -p nux-capi --no-default-features --features android-vulkan,scripting,android-authored-wgsl" \
-		"rust-golden-runner --features coverage-trace" "$(RUST_BUILD) check -p rust-golden-runner --features coverage-trace --all-targets" \
+		"rust-golden-runner --features coverage-trace" "RUSTFLAGS=-Cinstrument-coverage $(RUST_BUILD) check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "$(RUST_BUILD) check -p nuxie-scripting --no-default-features --lib" \
 		"nuxie --no-default-features" "$(RUST_BUILD) check -p nuxie --no-default-features --lib" \
 		"riv-inspect --features inspect" "$(RUST_BUILD) check -p nuxie-binary --features inspect --bin riv-inspect"

@@ -488,7 +488,11 @@ impl LinearAnimation {
             let fps = self.base.fps() as f32;
             time = (time * fps).floor() / fps;
         }
-        for (object, cells) in self.keyed_objects.iter().zip(self.keyed_object_cells.iter()) {
+        for (object, cells) in self
+            .keyed_objects
+            .iter()
+            .zip(self.keyed_object_cells.iter())
+        {
             apply_keyed_object_entry(artboard, object, cells, time, mix, context);
         }
     }
@@ -547,14 +551,18 @@ impl LinearAnimation {
         let start = self.start_time_with_multiplier(speed_direction);
         let at_start = start == from;
         if !at_start || !from_pong {
-            for (object, cells) in self.keyed_objects.iter().zip(self.keyed_object_cells.iter()) {
+            for (object, cells) in self
+                .keyed_objects
+                .iter()
+                .zip(self.keyed_object_cells.iter())
+            {
                 match cells {
                     Some(cells) => {
                         KeyedObject::report_keyed_callbacks_cells(cells, r, from, to, at_start)
                     }
-                    None => {
-                        KeyedObject::report_keyed_callbacks_occurrence(object, r, from, to, at_start)
-                    }
+                    None => KeyedObject::report_keyed_callbacks_occurrence(
+                        object, r, from, to, at_start,
+                    ),
                 }
             }
         }

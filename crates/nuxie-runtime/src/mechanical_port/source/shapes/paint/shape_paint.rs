@@ -544,7 +544,10 @@ impl ShapePaint {
                     })
                 })
                 .flatten();
-            let feather = self.feather.as_ref().expect("cells of an installed feather");
+            let feather = self
+                .feather
+                .as_ref()
+                .expect("cells of an installed feather");
             if let Some((path, effect_path_dirty)) = inner {
                 // Upstream's nonvirtual innerPath() returns its value member's
                 // address, represented by this non-null, stable Rc.

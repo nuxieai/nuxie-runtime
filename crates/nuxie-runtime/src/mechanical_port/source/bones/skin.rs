@@ -540,7 +540,9 @@ impl Skin {
         let cells = skinnable
             .with(|object| {
                 object.as_points_path()?;
-                object.as_path().map(|path| std::rc::Rc::clone(path.cells()))
+                object
+                    .as_path()
+                    .map(|path| std::rc::Rc::clone(path.cells()))
             })
             .flatten()?;
         Some((skinnable, cells))

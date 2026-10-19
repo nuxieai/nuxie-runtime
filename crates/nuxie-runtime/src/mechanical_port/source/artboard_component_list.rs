@@ -1120,7 +1120,8 @@ impl ArtboardComponentList {
                 QuietState::Busy
             };
         };
-        if machine.is_some_and(|machine| !machine.with_instance(|machine| machine.drives(artboard))) {
+        if machine.is_some_and(|machine| !machine.with_instance(|machine| machine.drives(artboard)))
+        {
             return QuietState::Busy;
         }
         let state = artboard.with_artboard(|artboard| artboard.row_quiet_state());
@@ -3055,7 +3056,9 @@ impl VirtualizingComponent for ArtboardComponentList {
 }
 
 impl ArtboardHost for ArtboardComponentList {
-    fn inactive_change_sequence_state(&self) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
+    fn inactive_change_sequence_state(
+        &self,
+    ) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
         self.inactive_change_sequence.clone()
     }
     fn data_bind_path_referencer(

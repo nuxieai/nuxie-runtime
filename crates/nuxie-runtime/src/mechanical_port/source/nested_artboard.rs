@@ -1786,7 +1786,9 @@ impl crate::mechanical_port::source::resetting_component::ResettingComponent for
 }
 
 impl ArtboardHost for NestedArtboard {
-    fn inactive_change_sequence_state(&self) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
+    fn inactive_change_sequence_state(
+        &self,
+    ) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
         self.inactive_change_sequence.clone()
     }
     fn data_bind_path_referencer(&self) -> &DataBindPathReferencer {

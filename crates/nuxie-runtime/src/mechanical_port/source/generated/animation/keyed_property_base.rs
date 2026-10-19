@@ -8,14 +8,19 @@ pub trait KeyedPropertyBaseCallbacks {
 
 pub struct KeyedPropertyBase {
     pub base: Core,
-    cells: std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells>,
+    cells:
+        std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells>,
 }
 
 impl Default for KeyedPropertyBase {
     fn default() -> Self {
         Self {
             base: Core::default(),
-            cells: std::rc::Rc::new(crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells::new(Core::INVALID_PROPERTY_KEY as u32)),
+            cells: std::rc::Rc::new(
+                crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells::new(
+                    Core::INVALID_PROPERTY_KEY as u32,
+                ),
+            ),
         }
     }
 }
@@ -34,7 +39,10 @@ impl KeyedPropertyBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub(crate) fn cells(&self) -> &std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells> {
+    pub(crate) fn cells(
+        &self,
+    ) -> &std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells>
+    {
         &self.cells
     }
     pub fn property_key(&self) -> u32 {

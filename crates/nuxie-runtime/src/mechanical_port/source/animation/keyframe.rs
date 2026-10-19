@@ -28,7 +28,8 @@ impl KeyFrame {
     }
 
     pub fn compute_seconds(&mut self, fps: i32) {
-        self.cells.set_seconds(self.base.frame() as f32 / fps as f32);
+        self.cells
+            .set_seconds(self.base.frame() as f32 / fps as f32);
     }
 
     pub(crate) fn cells(&self) -> &Rc<KeyFrameCells> {

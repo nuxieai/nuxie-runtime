@@ -153,13 +153,15 @@ impl DrawEntry {
             {
                 handle
                     .with(|object| {
-                        object.as_shape().map(|shape| ListedDraw::Shape(ShapeDraw {
-                            cells: Rc::clone(shape.cells()),
-                            drawable: shape.base.draw_cells(),
-                            dirt: handle
-                                .component_graph()
-                                .map(|(graph, order)| graph.dirt_binding(order)),
-                        }))
+                        object.as_shape().map(|shape| {
+                            ListedDraw::Shape(ShapeDraw {
+                                cells: Rc::clone(shape.cells()),
+                                drawable: shape.base.draw_cells(),
+                                dirt: handle
+                                    .component_graph()
+                                    .map(|(graph, order)| graph.dirt_binding(order)),
+                            })
+                        })
                     })
                     .flatten()
             }
@@ -168,12 +170,14 @@ impl DrawEntry {
             {
                 handle
                     .with(|object| {
-                        object.as_text().map(|text| ListedDraw::Text(TextDraw {
-                            drawable: text.base.draw_cells(),
-                            dirt: handle
-                                .component_graph()
-                                .map(|(graph, order)| graph.dirt_binding(order)),
-                        }))
+                        object.as_text().map(|text| {
+                            ListedDraw::Text(TextDraw {
+                                drawable: text.base.draw_cells(),
+                                dirt: handle
+                                    .component_graph()
+                                    .map(|(graph, order)| graph.dirt_binding(order)),
+                            })
+                        })
                     })
                     .flatten()
             }
@@ -182,13 +186,15 @@ impl DrawEntry {
             {
                 handle
                     .with(|object| {
-                        object.as_layout_component().map(|layout| ListedDraw::Layout(LayoutDraw {
-                            drawable: layout.base.base.draw_cells(),
-                            flags: layout.draw_flags(),
-                            dirt: handle
-                                .component_graph()
-                                .map(|(graph, order)| graph.dirt_binding(order)),
-                        }))
+                        object.as_layout_component().map(|layout| {
+                            ListedDraw::Layout(LayoutDraw {
+                                drawable: layout.base.base.draw_cells(),
+                                flags: layout.draw_flags(),
+                                dirt: handle
+                                    .component_graph()
+                                    .map(|(graph, order)| graph.dirt_binding(order)),
+                            })
+                        })
                     })
                     .flatten()
             }
@@ -208,7 +214,9 @@ impl DrawList {
         let mut drawable = Some(first.clone());
         while let Some(current) = drawable {
             entries.push(DrawEntry::of(&current));
-            drawable = current.with(Drawable::prev_drawable_for_draw_range).flatten();
+            drawable = current
+                .with(Drawable::prev_drawable_for_draw_range)
+                .flatten();
         }
         Self { version, entries }
     }

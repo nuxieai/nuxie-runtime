@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::mechanical_port::source::{
     bones::weight::Weight,
-    shapes::vertex_cells::WeightCells,
     component::Component,
     core::{binary_reader::BinaryReader, field_types::core_uint_type::CoreUintType},
+    shapes::vertex_cells::WeightCells,
 };
 
 pub trait WeightBaseCallbacks:

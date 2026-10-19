@@ -199,10 +199,8 @@ impl LinearAnimationInstance {
     }
     pub fn keep_going_with_multiplier(&self, m: f32) -> bool {
         self.loop_value() != Loop::OneShot.value() as i32
-            || (self.directed_speed() * m > 0.0
-                && self.time < self.cells.end_seconds())
-            || (self.directed_speed() * m < 0.0
-                && self.time > self.cells.start_seconds())
+            || (self.directed_speed() * m > 0.0 && self.time < self.cells.end_seconds())
+            || (self.directed_speed() * m < 0.0 && self.time > self.cells.start_seconds())
     }
     pub fn total_time(&self) -> f32 {
         self.total_time
@@ -243,8 +241,7 @@ impl LinearAnimationInstance {
     }
     pub fn set_loop_value(&mut self, value: i32) {
         if self.loop_value == value
-            || (self.loop_value == -1
-                && self.cells.loop_value() as i32 == value)
+            || (self.loop_value == -1 && self.cells.loop_value() as i32 == value)
         {
             return;
         }

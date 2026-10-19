@@ -63,9 +63,9 @@ impl FillBase {
     fn store_fill_rule(&mut self, value: u8) {
         self.fill_rule = value;
         self.base.cells().set_fill_rule(value);
-        self.base
-            .cells()
-            .set_path_flags(crate::mechanical_port::source::shapes::paint::fill::fill_rule_path_flags(value));
+        self.base.cells().set_path_flags(
+            crate::mechanical_port::source::shapes::paint::fill::fill_rule_path_flags(value),
+        );
     }
     pub fn clone_into(&self, callbacks: &mut impl FillBaseCallbacks) -> Fill {
         let mut cloned = Fill::default();

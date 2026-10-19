@@ -242,9 +242,8 @@ impl RuntimeArtboardDirtyHandle {
     /// advances the counters, which then advance once per notification.
     pub(crate) fn on_components_dirty(&self, count: u32, lowest_order: u32) {
         #[cfg(any(test, feature = "testing"))]
-        DIRT_NOTIFICATIONS.with(|notifications| {
-            notifications.set(notifications.get() + u64::from(count))
-        });
+        DIRT_NOTIFICATIONS
+            .with(|notifications| notifications.set(notifications.get() + u64::from(count)));
         self.wake_if_quiet_row();
         self.0.did_change.set(true);
         self.0
@@ -1635,7 +1634,11 @@ impl Artboard {
     fn sort_draw_order(&mut self) {
         let _relinking = self.draw_links.relinking();
         let counter = &self.dirty_state.0.draw_order_change_counter;
-        counter.set(if counter.get() == u8::MAX { 0 } else { counter.get() + 1 });
+        counter.set(if counter.get() == u8::MAX {
+            0
+        } else {
+            counter.get() + 1
+        });
         for target in &self.draw_targets {
             target.with_downcast_mut::<DrawTarget, _>(|target| {
                 target.first = None;
@@ -2712,7 +2715,9 @@ impl Artboard {
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
-        inactive_change_sequence: Option<crate::mechanical_port::source::artboard_host::InactiveChangeMark>,
+        inactive_change_sequence: Option<
+            crate::mechanical_port::source::artboard_host::InactiveChangeMark,
+        >,
     ) {
         let parent = self.set_host_state(host, parent_artboard, inactive_change_sequence);
         if let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
@@ -2752,7 +2757,9 @@ impl Artboard {
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
-        inactive_change_sequence: Option<crate::mechanical_port::source::artboard_host::InactiveChangeMark>,
+        inactive_change_sequence: Option<
+            crate::mechanical_port::source::artboard_host::InactiveChangeMark,
+        >,
     ) -> Option<CoreHandle> {
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
@@ -2988,8 +2995,12 @@ impl Artboard {
         for host in hosts.iter() {
             if host.is_type_of(NestedArtboard::TYPE_KEY) {
                 NestedArtboard::update_data_binds_occurrence(host);
-            } else if host.is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY) {
-                crate::source::shapes::paint::paint_image::PaintImage::update_data_binds_occurrence(host);
+            } else if host
+                .is_type_of(crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY)
+            {
+                crate::source::shapes::paint::paint_image::PaintImage::update_data_binds_occurrence(
+                    host,
+                );
             } else {
                 ArtboardComponentList::update_data_binds_occurrence(host);
             }
@@ -3783,9 +3794,9 @@ impl Artboard {
             return;
         }
         let previous = Self::with_root_mut(root, receiver, |a| {
-                std::mem::replace(&mut a.draw_visitor, visitor.clone())
-            })
-            .flatten();
+            std::mem::replace(&mut a.draw_visitor, visitor.clone())
+        })
+        .flatten();
         let _scope = DrawVisitorScope {
             artboard: root.clone(),
             previous,
@@ -3804,14 +3815,14 @@ impl Artboard {
         }
         // C++ reads each property after the preceding renderer callback.
         let frame_transform = Self::with_root(root, receiver, |artboard| {
-                artboard.frame_origin.then(|| {
-                    Mat2D::from_translate(
-                        artboard.layout_width() * artboard.origin_x(),
-                        artboard.layout_height() * artboard.origin_y(),
-                    )
-                })
+            artboard.frame_origin.then(|| {
+                Mat2D::from_translate(
+                    artboard.layout_width() * artboard.origin_x(),
+                    artboard.layout_height() * artboard.origin_y(),
+                )
             })
-            .flatten();
+        })
+        .flatten();
         if let Some(transform) = frame_transform {
             renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
         }
@@ -3821,31 +3832,31 @@ impl Artboard {
             }
         }
         let clipping = Self::with_root_mut(root, receiver, |artboard| {
-                if !artboard.clip() {
-                    return None;
-                }
-                drop(artboard.base.base.mutable_render_paths());
-                Some((
-                    artboard.base.base.render_paths_handle().unwrap(),
-                    artboard.factory().expect("Artboard renderer factory"),
-                ))
-            })
-            .flatten();
+            if !artboard.clip() {
+                return None;
+            }
+            drop(artboard.base.base.mutable_render_paths());
+            Some((
+                artboard.base.base.render_paths_handle().unwrap(),
+                artboard.factory().expect("Artboard renderer factory"),
+            ))
+        })
+        .flatten();
         if let Some((paths, factory)) = clipping {
             renderer.clip_path(paths.borrow_mut().local.render_path(&factory));
         }
         let mut paint_index = 0;
         loop {
             let paint = Self::with_root(root, receiver, |artboard| {
-                    artboard
-                        .base
-                        .base
-                        .shape_paint_container()
-                        .shape_paints()
-                        .get(paint_index)
-                        .cloned()
-                })
-                .flatten();
+                artboard
+                    .base
+                    .base
+                    .shape_paint_container()
+                    .shape_paints()
+                    .get(paint_index)
+                    .cloned()
+            })
+            .flatten();
             let Some(paint) = paint else {
                 break;
             };
@@ -3872,9 +3883,9 @@ impl Artboard {
             });
         }
         let (first_drawable, links) = Self::with_root(root, receiver, |artboard| {
-                (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
-            })
-            .map_or((None, None), |(first, links)| (first, Some(links)));
+            (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
+        })
+        .map_or((None, None), |(first, links)| (first, Some(links)));
         match links {
             Some(links) => Self::draw_listed_handle(root, renderer, first_drawable, &links),
             None => Self::draw_drawable_range_handle(root, renderer, first_drawable, None),
@@ -3927,8 +3938,10 @@ impl Artboard {
     ) -> bool {
         let mut moved = false;
         'draw: {
-            match current.draw_range_step(&mut state.empty_clips, !state.pending_clip_operations.is_empty())
-            {
+            match current.draw_range_step(
+                &mut state.empty_clips,
+                !state.pending_clip_operations.is_empty(),
+            ) {
                 DrawRangePrelude::Skip => {
                     break 'draw;
                 }
@@ -4076,7 +4089,8 @@ impl Artboard {
         // clip end, and no clip operation is pending. Shape::willDraw is
         // !isHidden() && renderOpacity() != 0.
         let hidden = shape.drawable.is_flagged_hidden()
-            || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
+            || dirt
+                .contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
         if hidden || shape.cells.render_opacity() == 0.0 || state.empty_clips > 0 {
             return true;
         }
@@ -4084,17 +4098,21 @@ impl Artboard {
         if state.has_visitor(root) && shape.drawable.has_custom_properties() {
             return false;
         }
-        shape.cells.draw(shape.drawable.needs_save_operation(), renderer, &|| {
-            handle
-                .with(|object| {
-                    object
-                        .as_component()
-                        .and_then(|component| component.with_artboard(|artboard| artboard.factory()))
-                        .flatten()
-                })
-                .flatten()
-                .expect("a drawing ShapePaint has its imported Artboard factory")
-        });
+        shape
+            .cells
+            .draw(shape.drawable.needs_save_operation(), renderer, &|| {
+                handle
+                    .with(|object| {
+                        object
+                            .as_component()
+                            .and_then(|component| {
+                                component.with_artboard(|artboard| artboard.factory())
+                            })
+                            .flatten()
+                    })
+                    .flatten()
+                    .expect("a drawing ShapePaint has its imported Artboard factory")
+            });
         true
     }
 
@@ -4121,7 +4139,8 @@ impl Artboard {
         };
         let dirt = dirt.get();
         let hidden = text.drawable.is_flagged_hidden()
-            || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
+            || dirt
+                .contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED);
         if hidden || state.empty_clips > 0 {
             return true;
         }
@@ -4159,7 +4178,8 @@ impl Artboard {
         };
         let dirt = dirt.get();
         let hidden = layout.drawable.is_flagged_hidden()
-            || dirt.contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED)
+            || dirt
+                .contains(crate::mechanical_port::source::component_dirt::ComponentDirt::COLLAPSED)
             || layout.flags.style_display_hidden();
         if hidden || state.empty_clips > 0 {
             return true;

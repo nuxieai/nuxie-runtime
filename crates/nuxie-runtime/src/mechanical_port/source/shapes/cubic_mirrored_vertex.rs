@@ -65,10 +65,16 @@ impl CubicMirroredVertex {
         )
     }
     pub fn compute_in(&mut self) {
-        self.base.base.cells().store_in_point(self.point() - self.vector());
+        self.base
+            .base
+            .cells()
+            .store_in_point(self.point() - self.vector());
     }
     pub fn compute_out(&mut self) {
-        self.base.base.cells().store_out_point(self.point() + self.vector());
+        self.base
+            .base
+            .cells()
+            .store_out_point(self.point() + self.vector());
     }
     pub fn rotation_changed(&mut self) {
         self.base.base.cells().set_in_valid(false);

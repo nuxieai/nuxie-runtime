@@ -1,7 +1,7 @@
 //! tests/gm/canvas_paint_image.cpp at fa2cd6e3.
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
-    deferred_replayer::{DeferredReplayer, snapshot_frame},
+    deferred_replayer::{snapshot_frame, DeferredReplayer},
     deferred_session::DeferredSession,
 };
 

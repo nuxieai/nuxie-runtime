@@ -70,7 +70,8 @@ impl ShapePaintBase {
     /// cells.
     pub(crate) fn share_blend(
         &self,
-    ) -> std::rc::Rc<crate::mechanical_port::source::shapes::paint::paint_cells::PaintBlendCells> {
+    ) -> std::rc::Rc<crate::mechanical_port::source::shapes::paint::paint_cells::PaintBlendCells>
+    {
         std::rc::Rc::clone(&self.blend)
     }
     pub fn blend_mode_value(&self) -> u8 {

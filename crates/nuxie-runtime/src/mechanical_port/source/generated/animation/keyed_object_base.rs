@@ -34,7 +34,10 @@ impl KeyedObjectBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub(crate) fn cells(&self) -> &std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells> {
+    pub(crate) fn cells(
+        &self,
+    ) -> &std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells>
+    {
         &self.cells
     }
     pub fn object_id(&self) -> u32 {

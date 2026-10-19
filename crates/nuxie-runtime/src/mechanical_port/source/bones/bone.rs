@@ -136,8 +136,7 @@ impl Bone {
     }
 
     pub fn tip_world_translation(&self) -> Vec2D {
-        self.transform_component().base.base.world_transform()
-            * Vec2D::new(self.base.length(), 0.0)
+        self.transform_component().base.base.world_transform() * Vec2D::new(self.base.length(), 0.0)
     }
 
     pub fn add_peer_constraint(&mut self, peer: CoreHandle) {

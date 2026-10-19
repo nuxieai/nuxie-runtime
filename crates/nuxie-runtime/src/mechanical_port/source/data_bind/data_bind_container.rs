@@ -493,7 +493,11 @@ impl DataBindContainer {
                 return;
             }
             let cells = bind
-                .with(|object| object.as_data_bind().map(|bind| Rc::clone(bind.advance_cells())))
+                .with(|object| {
+                    object
+                        .as_data_bind()
+                        .map(|bind| Rc::clone(bind.advance_cells()))
+                })
                 .flatten()
                 .unwrap_or_default();
             state.data_binds.push(bind.clone());

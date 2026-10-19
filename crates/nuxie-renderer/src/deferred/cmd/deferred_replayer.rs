@@ -237,7 +237,9 @@ impl DeferredReplayer {
         let open_content = RefCell::new((INVALID_RENDER_HANDLE, None::<RendererOwner>));
         let mut hooks = ReplayHooks {
             filter: ReplayFilter::Resources,
-            prep_image: Some(Box::new(|image| sink.borrow_mut().prep_foreign_image(image))),
+            prep_image: Some(Box::new(|image| {
+                sink.borrow_mut().prep_foreign_image(image)
+            })),
             canvas_image: Some(Box::new(|id| {
                 // Paint mutations retain the image in the resources pass,
                 // before content replay can otherwise allocate its backing.

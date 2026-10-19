@@ -153,20 +153,22 @@ impl TextStylePaint {
                 if let Some(path) = self.opacity_paths.get_mut(Opacity(1.0)) {
                     let handle = &paint.handle;
                     // The glyph path's own fill rule: no paint fill rule.
-                    paint.cells.draw_plain(renderer, path, *world, true, None, &|| {
-                        // The factory the paint's own draw would read.
-                        handle
-                            .with(|object| {
-                                object
-                                    .as_component()
-                                    .and_then(|component| {
-                                        component.with_artboard(|artboard| artboard.factory())
-                                    })
-                                    .flatten()
-                            })
-                            .flatten()
-                            .expect("a drawing ShapePaint has its imported Artboard factory")
-                    });
+                    paint
+                        .cells
+                        .draw_plain(renderer, path, *world, true, None, &|| {
+                            // The factory the paint's own draw would read.
+                            handle
+                                .with(|object| {
+                                    object
+                                        .as_component()
+                                        .and_then(|component| {
+                                            component.with_artboard(|artboard| artboard.factory())
+                                        })
+                                        .flatten()
+                                })
+                                .flatten()
+                                .expect("a drawing ShapePaint has its imported Artboard factory")
+                        });
                 }
                 // The pool grows as the paint's own draw grows it.
                 if self.paint_pool.len() < self.opacity_paths.len() {

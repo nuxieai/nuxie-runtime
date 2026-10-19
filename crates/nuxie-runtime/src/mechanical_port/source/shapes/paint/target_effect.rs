@@ -184,13 +184,12 @@ impl TargetEffect {
     }
     /// The group-side provider standing in for one of this target's providers.
     fn proxy(&self, provider: &PathProvider) -> Option<PathProvider> {
-        self.stroke
-            .with_path_mut(provider, |path| {
-                *path
-                    .as_target_mut()
-                    .expect("a TargetEffect's paths are TargetEffectPaths")
-                    .path_provider_proxy()
-            })
+        self.stroke.with_path_mut(provider, |path| {
+            *path
+                .as_target_mut()
+                .expect("a TargetEffect's paths are TargetEffectPaths")
+                .path_provider_proxy()
+        })
     }
     /// Every provider proxy, in the paths' iteration order.
     fn proxies(&self) -> Vec<PathProvider> {

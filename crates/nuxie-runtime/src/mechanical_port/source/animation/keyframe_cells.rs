@@ -158,7 +158,10 @@ impl KeyedPropertyCells {
     pub(crate) fn set_frames(&self, frames: std::rc::Rc<[KeyFrameEntry]>) {
         // A frame joins one property; its time changes mark this one stale.
         for frame in frames.iter() {
-            let _ = frame.cells.times_stale.set(std::rc::Rc::clone(&self.times_stale));
+            let _ = frame
+                .cells
+                .times_stale
+                .set(std::rc::Rc::clone(&self.times_stale));
         }
         self.times_stale.set(true);
         *self.frames.borrow_mut() = frames;

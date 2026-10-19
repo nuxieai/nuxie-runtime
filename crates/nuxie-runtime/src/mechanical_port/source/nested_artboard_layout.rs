@@ -365,7 +365,9 @@ impl LayoutNodeProvider for NestedArtboardLayout {
 }
 
 impl ArtboardHost for NestedArtboardLayout {
-    fn inactive_change_sequence_state(&self) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
+    fn inactive_change_sequence_state(
+        &self,
+    ) -> crate::mechanical_port::source::artboard_host::InactiveChangeMark {
         self.base.base.inactive_change_sequence_state()
     }
     fn data_bind_path_referencer(

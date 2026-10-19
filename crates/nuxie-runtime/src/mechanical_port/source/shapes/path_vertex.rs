@@ -60,7 +60,11 @@ impl PathVertex {
         };
         let cells = Rc::clone(self.vertex_cells());
         let added = parent
-            .with_mut(|parent| parent.as_path_mut().map(|parent| parent.add_vertex(this, cells)))
+            .with_mut(|parent| {
+                parent
+                    .as_path_mut()
+                    .map(|parent| parent.add_vertex(this, cells))
+            })
             .flatten()
             .is_some();
         if !added {

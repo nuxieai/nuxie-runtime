@@ -83,10 +83,16 @@ impl CubicDetachedVertex {
         )
     }
     pub fn compute_in(&mut self) {
-        self.base.base.cells().store_in_point(self.point() + self.in_vector());
+        self.base
+            .base
+            .cells()
+            .store_in_point(self.point() + self.in_vector());
     }
     pub fn compute_out(&mut self) {
-        self.base.base.cells().store_out_point(self.point() + self.out_vector());
+        self.base
+            .base
+            .cells()
+            .store_out_point(self.point() + self.out_vector());
     }
     pub fn in_rotation_changed(&mut self) {
         self.base.base.cells().set_in_valid(false);

@@ -86,7 +86,9 @@ impl InterpolatingKeyFrameBase {
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl InterpolatingKeyFrameBaseCallbacks) {
-        self.base.cells().set_interpolation_type(object.interpolation_type());
+        self.base
+            .cells()
+            .set_interpolation_type(object.interpolation_type());
         self.interpolator_id = object.interpolator_id;
         self.base.copy(&object.base, callbacks);
     }

@@ -10,6 +10,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
+/// The corpus-r binary, made absolute before a test runs it from another
+/// directory: Cargo names it absolutely, Bazel relative to the test's
+/// runfiles.
+fn corpus_r() -> std::path::PathBuf {
+    std::path::absolute(env!("CARGO_BIN_EXE_corpus-r")).expect("the corpus-r path")
+}
+
 #[test]
 fn static_corpus_selects_the_apple_paravirtual_reference() {
     let root = temporary_directory("adapter-reference-selection");
@@ -45,7 +52,7 @@ provenance = "reference-b.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Apple Paravirtual device")
         .env("FAKE_REPLAY_PNG", root.join("reference-b.png"))
@@ -113,7 +120,7 @@ provenance = "reference-a.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Unknown Adapter")
         .env("FAKE_REPLAY_PNG", root.join("reference-a.png"))
@@ -164,7 +171,7 @@ provenance = "reference-a.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "")
         .env("FAKE_REPLAY_PNG", root.join("reference-a.png"))
@@ -239,7 +246,7 @@ provenance = "reference-a.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Adapter A")
         .env("FAKE_REPLAY_PNG", root.join("reference-a.png"))
@@ -286,7 +293,7 @@ reference = "reference-a.png"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Adapter A")
         .env("FAKE_REPLAY_PNG", root.join("reference-a.png"))
@@ -337,7 +344,7 @@ provenance = "reference-a.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Adapter A")
         .env("FAKE_REPLAY_PNG", root.join("reference-a.png"))
@@ -395,7 +402,7 @@ provenance = "reference-b.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Adapter A")
         .env("FAKE_REPLAY_PNG", root.join("reference-a.png"))
@@ -445,7 +452,7 @@ provenance = "reference-a.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "")
         .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
@@ -492,7 +499,7 @@ mode = "clockwise-atomic"
     )
     .unwrap();
 
-    let normal = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let normal = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "")
         .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
@@ -516,7 +523,7 @@ mode = "clockwise-atomic"
         sha256(root.join("transparent.png"))
     );
 
-    let negative_control = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let negative_control = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "")
         .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
@@ -577,7 +584,7 @@ mode = "msaa"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "")
         .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
@@ -698,7 +705,7 @@ provenance = "reference-b.provenance"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_ADAPTER", "Apple Paravirtual device")
         .env("FAKE_REPLAY_PNG", root.join("reference-b.png"))

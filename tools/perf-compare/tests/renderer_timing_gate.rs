@@ -6,6 +6,18 @@ use std::process::{Command, Output, Stdio};
 
 const SCENE_SAMPLES_PER_LEG: usize = 16 * 7;
 
+/// `path` resolved to the real file it names, before a test runs from
+/// another directory: Cargo names its binaries and manifest directory
+/// absolutely, Bazel through runfiles symlinks relative to the test, and
+/// the gate pins only regular files, never a symlink.
+fn real_path(path: impl AsRef<Path>) -> PathBuf {
+    std::fs::canonicalize(path).expect("a real path")
+}
+
+fn manifest_dir() -> PathBuf {
+    real_path(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+}
+
 struct TempDir {
     path: PathBuf,
 }
@@ -189,26 +201,21 @@ fn run_gate(gate: Gate<'_>) -> Output {
 }
 
 fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
-    let script =
-        Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
-            .join("../renderer-timing-gate.sh");
+    let script = real_path(manifest_dir().join("../renderer-timing-gate.sh"));
     Command::new(script)
         .current_dir(gate.directory)
         .args(["--output-dir", "artifacts"])
         .env(
             "RENDERER_TIMING_GATE_RENDERER_PERF",
-            env!("CARGO_BIN_EXE_renderer-perf"),
+            real_path(env!("CARGO_BIN_EXE_renderer-perf")),
         )
         .env(
             "RENDERER_TIMING_GATE_COMPARATOR",
-            env!("CARGO_BIN_EXE_renderer-timing-compare"),
+            real_path(env!("CARGO_BIN_EXE_renderer-timing-compare")),
         )
         .env(
             "RENDERER_TIMING_GATE_MANIFEST",
-            Path::new(
-                option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
-            )
-            .join("renderer-scenes.toml"),
+            real_path(manifest_dir().join("renderer-scenes.toml")),
         )
         .env("RENDERER_TIMING_GATE_BASELINE_RUNNER", gate.baseline)
         .env("RENDERER_TIMING_GATE_A_RUNNER", gate.a)
@@ -259,7 +266,7 @@ fn decision(directory: &Path) -> serde_json::Value {
 }
 
 fn run_comparator(directory: &Path, a_first: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_renderer-timing-compare"))
+    Command::new(real_path(env!("CARGO_BIN_EXE_renderer-timing-compare")))
         .args([
             "--a-first",
             a_first.to_str().unwrap(),

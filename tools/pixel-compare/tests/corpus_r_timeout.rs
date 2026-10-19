@@ -9,9 +9,16 @@ use std::time::{Duration, Instant};
 
 static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
+/// The corpus-r binary, made absolute before a test runs it from another
+/// directory: Cargo names it absolutely, Bazel relative to the test's
+/// runfiles.
+fn corpus_r() -> std::path::PathBuf {
+    std::path::absolute(env!("CARGO_BIN_EXE_corpus-r")).expect("the corpus-r path")
+}
+
 #[test]
 fn rejects_a_zero_replay_timeout() {
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .args(["--replay-timeout-seconds", "0"])
         .output()
         .unwrap();
@@ -53,7 +60,7 @@ mode = "clockwise-atomic"
     let pid_path = root.join("replay.pid");
 
     let started = Instant::now();
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("REPLAY_PID", &pid_path)
         .args(["--manifest", "corpus.toml"])
@@ -126,7 +133,7 @@ mode = "msaa"
     .unwrap();
     let replay = install_verbose_failed_replay(&root);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .args(["--manifest", "corpus.toml"])
         .args(["--replay", replay.to_str().unwrap()])

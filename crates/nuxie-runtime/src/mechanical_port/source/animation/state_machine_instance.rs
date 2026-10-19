@@ -1640,6 +1640,9 @@ pub trait HitComponent {
     fn holds_drag(&self, _pointer_id: i32) -> bool {
         false
     }
+    /// A host drag handler took `pointer_id`'s drag: the drag handlers
+    /// inside this hit (a nested state machine's) let it go (4.5).
+    fn yield_drag(&self, _pointer_id: i32, _position: Vec2D, _timestamp: f32) {}
     fn process_scroll(
         &self,
         _position: Vec2D,
@@ -2097,6 +2100,18 @@ struct HitNestedArtboard {
 }
 
 impl HitComponent for HitNestedArtboard {
+    fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return;
+        };
+        for machine in nested_animations(&self.component)
+            .iter()
+            .filter(|animation| animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY))
+            .filter_map(nested_state_machine)
+        {
+            machine.with_instance_mut(|machine| machine.yield_css_drag(pointer_id, local, timestamp));
+        }
+    }
     fn holds_drag(&self, pointer_id: i32) -> bool {
         nested_animations(&self.component)
             .iter()
@@ -2362,6 +2377,19 @@ struct HitComponentList {
 }
 
 impl HitComponent for HitComponentList {
+    fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
+        for index in component_list_indices(&self.component) {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                machine.with_instance_mut(|machine| {
+                    machine.yield_css_drag(pointer_id, local, timestamp)
+                });
+            }
+        }
+    }
     fn holds_drag(&self, pointer_id: i32) -> bool {
         component_list_indices(&self.component)
             .into_iter()
@@ -4418,6 +4446,28 @@ impl StateMachineInstance {
         false
     }
 
+    /// A host machine's drag handler took `pointer_id`'s drag: every drag
+    /// handler here lets it go, translated or CSS, and none takes it until
+    /// the press ends (docs/CSS_LAYOUT.md, 4.5).
+    pub(crate) fn yield_css_drag(&mut self, pointer_id: i32, position: Vec2D, timestamp: f32) {
+        const HOST: usize = usize::MAX;
+        self.css_drag_owners.retain(|&(id, _)| id != pointer_id);
+        self.css_drag_owners.push((pointer_id, HOST));
+        for component in self.hit_components.clone() {
+            let Some(hit) = component.as_hit_drawable() else {
+                component.yield_drag(pointer_id, position, timestamp);
+                continue;
+            };
+            for listener in hit.listeners.borrow().clone() {
+                if listener.with_group(|listener| listener.takes_drag()) {
+                    listener.with_group(|listener| {
+                        listener.cancel_pointer(pointer_id, position, timestamp)
+                    });
+                }
+            }
+        }
+    }
+
     /// Whether a drag handler holds `pointer_id`'s drag (docs/CSS_LAYOUT.md,
     /// 4.5).
     pub(crate) fn holds_css_drag(&self, pointer_id: i32) -> bool {
@@ -4446,6 +4496,11 @@ impl StateMachineInstance {
         self.css_drag_owners.push((pointer_id, owner));
         for component in self.hit_components.clone() {
             let Some(hit) = component.as_hit_drawable() else {
+                // A nested machine's handlers let it go too, unless the
+                // drag is theirs.
+                if Rc::as_ptr(&component) as *const () as usize != owner {
+                    component.yield_drag(pointer_id, position, timestamp);
+                }
                 continue;
             };
             if !hit.in_css {
@@ -4531,14 +4586,18 @@ impl StateMachineInstance {
                     let result = hit.process_listeners(
                         self, position, hit_type, can_hit, bubbled, timestamp, pointer_id, button,
                     );
+                    // A press always bubbles; a move only to boxes that
+                    // hear moves, so a page of buttons costs no hit tests.
                     hovered_quietly = result == HitResult::None
                         && can_hit
                         && hit_type != ListenerType::Exit
                         && hit.early_outs(hit_type)
-                        && hit
-                            .css_boxes_around
-                            .iter()
-                            .any(|container| self.css_hover_boxes.contains(container))
+                        && !hit.css_boxes_around.is_empty()
+                        && (matches!(hit_type, ListenerType::Down | ListenerType::Up)
+                            || hit
+                                .css_boxes_around
+                                .iter()
+                                .any(|container| self.css_hover_boxes.contains(container)))
                         && hit.hit_test(position);
                     result
                 }

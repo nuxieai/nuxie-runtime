@@ -145,10 +145,16 @@ struct B {
     drag_listener: Option<&'static str>,
     /// A pointer enter listener on this box, firing an event of this name.
     enter_listener: Option<&'static str>,
+    /// A pointer down listener on this box, firing an event of this name.
+    down_listener: Option<&'static str>,
     /// A nested artboard as this box's content, of the file's second
     /// artboard: 200 by 40, a translated 180 by 40 box holding a field, with
     /// a state machine.
     nested_field: bool,
+    /// As `nested_field`, the nested artboard holding a translated
+    /// horizontal scroll view instead: a 200 by 40 viewport scrolling a 400
+    /// point list.
+    nested_scroller: bool,
     /// A text input as this box's content, focusable through its FocusData.
     text_input: bool,
     /// The text input's text.
@@ -479,7 +485,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 entries.push(Entry::EmptyText(parent));
             }
         }
-        if node.nested_field {
+        if node.nested_field || node.nested_scroller {
             entries.push(Entry::Nested(index));
             entries.push(Entry::NestedMachine(slots(entries)));
         }
@@ -529,6 +535,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 (ListenerType::Click, node.listener),
                 (ListenerType::Drag, node.drag_listener),
                 (ListenerType::Enter, node.enter_listener),
+                (ListenerType::Down, node.down_listener),
             ] {
                 if let Some(event) = event {
                     listened.push((index, kind, event));
@@ -593,6 +600,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     let nested = entries
         .iter()
         .any(|entry| matches!(entry, Entry::Nested(..)));
+    let nested_scroller = entries
+        .iter()
+        .any(|entry| matches!(entry, Entry::Box(node, _) if node.nested_scroller));
     if nested
         || entries
             .iter()
@@ -944,7 +954,61 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             riv.object(state).end();
         }
     }
-    if nested {
+    if nested_scroller {
+        // The nested artboard: 0 the artboard, 1 its viewport, 2 the list,
+        // 3 the list's ScrollConstraint, 4 to 6 the three styles.
+        use crate::source::generated::{
+            animation::{
+                any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+                exit_state_base::ExitStateBase, state_machine_base::StateMachineBase,
+                state_machine_layer_base::StateMachineLayerBase,
+            },
+            constraints::{
+                draggable_constraint_base::DraggableConstraintBase,
+                scrolling::scroll_constraint_base::ScrollConstraintBase,
+            },
+        };
+        riv.object(ArtboardBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4)
+            .end();
+        for (index, (name, width)) in [("Nested viewport", 200.0), ("Nested list", 400.0)]
+            .into_iter()
+            .enumerate()
+        {
+            riv.object(LayoutComponentBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, index as u64)
+                .string(ComponentBase::NAME_PROPERTY_KEY, name)
+                .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, width)
+                .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0)
+                .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5 + index as u64)
+                .end();
+        }
+        riv.object(ScrollConstraintBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, 0)
+            .end();
+        // The viewport stacks its list in a column, so the list keeps its
+        // width rather than shrinking along a row.
+        let column = [U(
+            LayoutComponentStyleBase::FLEX_DIRECTION_VALUE_PROPERTY_KEY,
+            YGFlexDirection::Column as u64,
+        )];
+        style(&mut riv, 0, &[]);
+        style(&mut riv, 1, &column);
+        style(&mut riv, 2, &[]);
+        riv.object(StateMachineBase::TYPE_KEY).end();
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        for state in [
+            EntryStateBase::TYPE_KEY,
+            AnyStateBase::TYPE_KEY,
+            ExitStateBase::TYPE_KEY,
+        ] {
+            riv.object(state).end();
+        }
+    } else if nested {
         // The nested artboard: 0 the artboard, 1 its box, 2 the field, 3 its
         // FocusData, 4 its text style, 5 and 6 the two styles.
         use crate::source::generated::{
@@ -5389,6 +5453,27 @@ fn press_and_drag(
 }
 
 impl Scene {
+    /// The offset of the nested artboard's ScrollConstraint.
+    fn nested_scroll_offset(&self) -> (f32, f32) {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        let nested = self
+            .artboard
+            .with_artboard(|artboard| {
+                artboard.find_handle::<crate::source::nested_artboard::NestedArtboard>("Nested")
+            })
+            .expect("the nested artboard");
+        let instance = nested
+            .with(|nested| nested.nested_artboard_instance_handle())
+            .flatten()
+            .expect("its instance");
+        instance
+            .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+            .into_iter()
+            .next()
+            .expect("its scroll constraint")
+            .with_downcast(|scroll: &ScrollConstraint| (scroll.offset_x(), scroll.offset_y()))
+            .expect("a live scroll constraint")
+    }
     /// The offset of the ScrollConstraint on the box named `content`.
     fn scroll_offset(&self, content: &str) -> (f32, f32) {
         use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
@@ -5933,4 +6018,101 @@ fn css_box_is_hovered_and_pressed_through_a_child_outside_it() {
             crate::source::pointer_button::PointerButton::Primary,
         )
     }));
+}
+
+/// Once a host's CSS scroll box takes a drag, the drag handlers inside a
+/// nested artboard under it let it go: a drag that scrolls the box
+/// vertically does not also scroll a nested horizontal list when it turns
+/// sideways.
+#[test]
+fn css_scroll_box_takes_a_drag_from_a_nested_artboard_under_it() {
+    let f = css_scroll_view(
+        None,
+        B {
+            nested_scroller: true,
+            ..css("Holder", [width(200.0), height(40.0)].concat(), vec![])
+        },
+    );
+    press_and_drag(
+        &f.machine(),
+        (100.0, 35.0),
+        &[(100.0, 25.0), (100.0, 15.0), (60.0, 15.0), (20.0, 15.0)],
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -20.0), "the box");
+    assert_eq!(f.nested_scroll_offset(), (0.0, 0.0), "the nested list");
+    let f = css_scroll_view(
+        None,
+        B {
+            nested_scroller: true,
+            ..css("Holder", [width(200.0), height(40.0)].concat(), vec![])
+        },
+    );
+    press_and_drag(&f.machine(), (100.0, 20.0), &[(60.0, 20.0), (20.0, 20.0)]);
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0), "a sideways drag");
+    assert!(f.nested_scroll_offset().0 < 0.0, "scrolls the nested list");
+}
+
+/// A field's tap belongs to its own pointer: a second finger that starts a
+/// scroll elsewhere does not cancel the first finger's tap on the field.
+#[test]
+fn css_field_tap_survives_another_pointers_scroll() {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let f = css_scroll_view(None, field_box(true, None, "hello world"));
+    let machine = f.machine();
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(Vec2D::new(90.0, 20.0), 0, PointerButton::Primary);
+        machine.pointer_move(Vec2D::new(100.0, 60.0), 0.0, 1);
+        machine.pointer_down(Vec2D::new(100.0, 60.0), 1, PointerButton::Primary);
+        machine.pointer_move(Vec2D::new(100.0, 45.0), 1.0 / 60.0, 1);
+    });
+    assert_eq!(
+        f.scroll_offset("List"),
+        (0.0, -15.0),
+        "the second finger scrolls"
+    );
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(Vec2D::new(90.0, 20.0), 0, PointerButton::Primary);
+    });
+    assert!(f.field_is_focused());
+}
+
+/// A press bubbles from a child outside its box both ways: a child that
+/// hears only the press going down still carries the release to its box's
+/// click.
+#[test]
+fn css_box_clicks_through_a_child_that_hears_only_the_press() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            listener: Some("card clicked"),
+            ..css(
+                "Card",
+                [[U(POSITION, 1)].as_slice(), &width(100.0), &height(40.0)].concat(),
+                vec![B {
+                    down_listener: Some("pop pressed"),
+                    ..css(
+                        "Pop",
+                        [
+                            [
+                                U(POSITION, 2),
+                                U(INSET_LEFT_KIND, 1),
+                                F(INSET_LEFT, 120.0),
+                                U(INSET_TOP_KIND, 1),
+                                F(INSET_TOP, 0.0),
+                            ]
+                            .as_slice(),
+                            &width(80.0),
+                            &height(40.0),
+                        ]
+                        .concat(),
+                        vec![],
+                    )
+                }],
+            )
+        },
+    );
+    assert_eq!(
+        press_and_drag(&f.machine(), (160.0, 20.0), &[]),
+        ["pop pressed", "card clicked"]
+    );
 }

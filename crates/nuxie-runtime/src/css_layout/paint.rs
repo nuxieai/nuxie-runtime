@@ -27,6 +27,12 @@ pub fn border_radii(width: f32, height: f32, points: [f32; 4], percents: [f32; 4
             radii[corner] = Vec2D::default();
         }
     }
+    fit_radii(width, height, radii)
+}
+
+/// `radii` scaled down together until adjacent ones fit a `width` by
+/// `height` box (CSS Backgrounds 3, "Overlapping Curves").
+pub fn fit_radii(width: f32, height: f32, mut radii: Radii) -> Radii {
     let ratio = |side: f32, a: f32, b: f32| {
         if a + b > 0.0 {
             side.max(0.0) / (a + b)
@@ -304,14 +310,15 @@ pub fn box_shadow(
             outset(padding, margin),
             [Vec2D::default(); 4],
         );
-        add_rounded_rect(&mut geometry.path.holes, hole, spread_radii(inner, -spread));
+        // Spread radii fitted to the spread rectangle, as Chrome constrains
+        // them: a shrinking spread shrinks the box faster than its corners.
+        let hole_radii = fit_radii(hole.width(), hole.height(), spread_radii(inner, -spread));
+        add_rounded_rect(&mut geometry.path.holes, hole, hole_radii);
         add_rounded_rect(&mut clip.outline, padding, inner);
     } else {
-        add_rounded_rect(
-            &mut geometry.path.outline,
-            outset(border_box, spread),
-            spread_radii(radii, spread),
-        );
+        let shape = outset(border_box, spread);
+        let shape_radii = fit_radii(shape.width(), shape.height(), spread_radii(radii, spread));
+        add_rounded_rect(&mut geometry.path.outline, shape, shape_radii);
         let everywhere = outset(border_box, margin + spread.max(0.0));
         add_rounded_rect(&mut clip.outline, everywhere, [Vec2D::default(); 4]);
         add_rounded_rect(&mut clip.holes, border_box, radii);
@@ -1479,6 +1486,29 @@ mod tests {
             dashes[0]
         );
         assert!(near(dashes[1].0.x, 32.16), "{:?}", dashes[1]);
+    }
+
+    /// A negative spread shrinks a shadow's rectangle faster than its radii,
+    /// so the radii are fitted to it again (CSS's overlap rule), as Chrome
+    /// constrains them, and the shape stays inside its rectangle; likewise
+    /// an inset shadow's hole.
+    #[test]
+    fn spread_shadow_radii_fit_the_spread_rectangle() {
+        let border_box = Aabb::new(0.0, 0.0, 100.0, 100.0);
+        let mut radii = [Vec2D::default(); 4];
+        radii[0] = Vec2D::new(100.0, 100.0);
+        let within = |bounds: Aabb| {
+            bounds.left() >= 40.0 - 1e-3
+                && bounds.top() >= 40.0 - 1e-3
+                && bounds.right() <= 60.0 + 1e-3
+                && bounds.bottom() <= 60.0 + 1e-3
+        };
+        let outer = box_shadow(border_box, radii, border_box, radii, -40.0, false, 0.0);
+        let bounds = outer.path.outline.bounds();
+        assert!(within(bounds), "{bounds:?}");
+        let inset = box_shadow(border_box, radii, border_box, radii, 40.0, true, 0.0);
+        let bounds = inset.path.holes.bounds();
+        assert!(within(bounds), "{bounds:?}");
     }
 
     /// Equal-width curved sides share one centre line, drawn at the thickest

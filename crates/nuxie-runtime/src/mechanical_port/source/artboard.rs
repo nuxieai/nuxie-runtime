@@ -4023,9 +4023,13 @@ impl Artboard {
         let mut paint_index = 0;
         loop {
             let paint = Self::with_root(root, receiver, |artboard| {
-                artboard
-                    .base
-                    .base
+                // Our layer: `display: none` hides a CSS artboard's own
+                // paints, as it hides a box's (docs/CSS_LAYOUT.md, 4).
+                let layout = &artboard.base.base;
+                if layout.is_css_mode() && layout.style_display_hidden() {
+                    return None;
+                }
+                layout
                     .shape_paint_container()
                     .shape_paints()
                     .get(paint_index)

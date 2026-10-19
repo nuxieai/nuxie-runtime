@@ -936,7 +936,10 @@ fn collect_geometry(
     if let Some((handle, painted, covers)) = artboard.with_artboard(|instance| {
         let root = &instance.base;
         let layout = &root.base.base;
+        // `display: none` leaves it nothing visible; retained geometry
+        // counts hidden geometry too.
         let visible = layout.is_css_mode()
+            && (visibility == GeometryVisibility::Retained || !layout.style_display_hidden())
             && layout
                 .shape_paint_container()
                 .shape_paints()

@@ -24,8 +24,9 @@ pub struct TextInputListenerGroup {
     /// press on it is a tap that focuses it on release, and its drag goes
     /// to what is around it; focused, it takes the drag to select.
     in_css: Cell<bool>,
-    /// A press on the unfocused CSS field, waiting to be a tap.
-    pending_tap: Cell<bool>,
+    /// The pointers pressing the unfocused CSS field, each waiting to be a
+    /// tap.
+    pending_taps: std::cell::RefCell<Vec<i32>>,
 }
 
 impl TextInputListenerGroup {
@@ -38,8 +39,16 @@ impl TextInputListenerGroup {
             last_click_time: Cell::new(0),
             last_click_position: Cell::new(Vec2D::new(0.0, 0.0)),
             in_css: Cell::new(false),
-            pending_tap: Cell::new(false),
+            pending_taps: std::cell::RefCell::new(Vec::new()),
         }
+    }
+
+    /// Ends `pointer_id`'s pending tap: whether it had one.
+    fn settle_tap(&self, pointer_id: i32) -> bool {
+        let mut taps = self.pending_taps.borrow_mut();
+        let pending = taps.contains(&pointer_id);
+        taps.retain(|&id| id != pointer_id);
+        pending
     }
 
     fn is_focused(&self) -> bool {
@@ -102,7 +111,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         self.base.tracked_pointer_ids()
     }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
-        self.pending_tap.set(false);
+        self.settle_tap(id);
         let was_dragging = self.base.cancel_pointer(id, position, timestamp);
         if self.dragging_pointer_id.get() == id {
             self.text_input.with_mut(|input| {
@@ -129,7 +138,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
     }
     fn disable(&self, id: i32) {
         // A scroll that starts under the press cancels its tap.
-        self.pending_tap.set(false);
+        self.settle_tap(id);
         self.base.disable(id);
     }
     fn is_consumed(&self) -> bool {
@@ -187,7 +196,10 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             if self.in_css.get() && !self.is_focused() {
                 // A tap focuses the field on release; a drag scrolls what
                 // is around it (docs/CSS_LAYOUT.md, 4.5).
-                self.pending_tap.set(true);
+                let mut taps = self.pending_taps.borrow_mut();
+                if !taps.contains(&pointer_id) {
+                    taps.push(pointer_id);
+                }
                 return ProcessEventResult::None;
             }
             self.count_click(position, timestamp);
@@ -231,7 +243,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             // threshold keep it.
             if previous == GestureClickPhase::Down
                 && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
-                && self.pending_tap.replace(false)
+                && self.settle_tap(pointer_id)
             {
                 if phase == GestureClickPhase::Clicked {
                     // The tap: focus the field with its caret where it was

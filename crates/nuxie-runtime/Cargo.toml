@@ -11,6 +11,9 @@ editor = []
 # Host test observability only; does not enable upstream TESTING behavior.
 policy-pass-counter = []
 testing = [] # Upstream TESTING observations; test harnesses only.
+# Shared test-only scene builders (src/test_support); never in a shipping build.
+# They construct artboards through the testing-only constructors.
+test-support = ["testing"]
 # Mirrors upstream --no_ffp_contract for the strict unit/Silver lane.
 # Shipping consumers, including default-features=false hosts, keep the
 # production contraction boundaries unless this feature is explicitly selected.

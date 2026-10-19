@@ -57,13 +57,13 @@ fn observe(player: *mut NuxPlayer, id: usize, kind: u32, generation: u64, value:
     }
     actions
 }
-struct Scene {
+struct Harness {
     file: *mut NuxFile,
     artboard: *mut NuxArtboardInstance,
     values: *mut NuxViewModelInstance,
     player: *mut NuxPlayer,
 }
-impl Scene {
+impl Harness {
     fn new(timeline: bool) -> Self {
         Self::from_fixture(&fixture::fixture(0, timeline), timeline)
     }
@@ -135,7 +135,7 @@ impl Scene {
         observe(self.player, 1, kind, generation, value)
     }
 }
-impl Drop for Scene {
+impl Drop for Harness {
     fn drop(&mut self) {
         unsafe {
             nux_player_free(self.player);
@@ -148,7 +148,7 @@ impl Drop for Scene {
 
 #[test]
 fn an_initial_bound_play_write_reaches_the_decoder() {
-    let s = Scene::unsettled(&fixture::fixture(0, false), false);
+    let s = Harness::unsettled(&fixture::fixture(0, false), false);
     // A control write made before the first player step must use the fixture's
     // source-first binding, just like later writes from this control.
     s.boolean(c"paused", false);
@@ -167,7 +167,7 @@ fn two_way_paused_load_uses_the_authored_binding_order() {
             } else {
                 !autoplay
             };
-            let s = Scene::from_fixture(
+            let s = Harness::from_fixture(
                 &fixture::load_fixture(autoplay, source_paused, source_first),
                 false,
             );
@@ -193,7 +193,7 @@ fn two_way_paused_load_uses_the_authored_binding_order() {
 
 #[test]
 fn bindings_control_video_and_decoder_observations_flow_back_in_one_step() {
-    let s = Scene::new(false);
+    let s = Harness::new(false);
     s.observe(1, 0, 12.5);
     s.step(0.0);
     assert_eq!(s.value(5).0, 12.5);
@@ -241,7 +241,7 @@ fn bindings_control_video_and_decoder_observations_flow_back_in_one_step() {
 
 #[test]
 fn linear_volume_key_reaches_decoder_at_half_a_second() {
-    let s = Scene::new(true);
+    let s = Harness::new(true);
     s.observe(1, 0, 12.5);
     s.step(0.5);
     assert!(s.observe(0, 0, 0.0).contains(&(4, 0.5, 0)));
@@ -250,8 +250,8 @@ fn linear_volume_key_reaches_decoder_at_half_a_second() {
 
 #[test]
 fn only_host_command_kinds_are_accepted_for_players_and_groups() {
-    let a = Scene::new(false);
-    let b = Scene::new(false);
+    let a = Harness::new(false);
+    let b = Harness::new(false);
     unsafe {
         let members = [
             NuxVideoSyncMember {
@@ -348,7 +348,7 @@ fn muted_binding_reaches_root_copy_and_list_row_decoder_queues() {
 
 #[test]
 fn reclaiming_a_decoder_publishes_opening_before_another_decoder_step() {
-    let s = Scene::new(false);
+    let s = Harness::new(false);
     s.observe(1, 0, 12.5);
     s.step(0.0);
     assert_eq!(s.value(8).0, 1.0);
@@ -372,7 +372,7 @@ fn reclaiming_a_decoder_publishes_opening_before_another_decoder_step() {
 
 #[test]
 fn blocked_play_publishes_paused_and_a_bound_false_retries() {
-    let s = Scene::new(false);
+    let s = Harness::new(false);
     s.observe(1, 0, 12.5);
     s.boolean(c"paused", false);
     assert!(s.observe(0, 0, 0.0).contains(&(0, 0.0, 0)));
@@ -390,7 +390,7 @@ fn blocked_play_publishes_paused_and_a_bound_false_retries() {
 #[test]
 fn removed_selected_seek_observation_is_refused() {
     unsafe extern "C" fn discard(_: *mut c_void, _: *const NuxVideoAction) {}
-    let s = Scene::new(false);
+    let s = Harness::new(false);
     assert_eq!(
         unsafe { nux_player_video_step(s.player, 1, 7, 0, 0.0, Some(discard), ptr::null_mut()) },
         NuxStatus::InvalidArgument
@@ -399,7 +399,7 @@ fn removed_selected_seek_observation_is_refused() {
 
 #[test]
 fn keyed_muted_boolean_changes_the_decoder_volume() {
-    let s = Scene::from_fixture(&fixture::bool_timeline(), true);
+    let s = Harness::from_fixture(&fixture::bool_timeline(), true);
     s.observe(1, 0, 12.5);
     s.step(0.5);
     s.observe(0, 0, 0.0);

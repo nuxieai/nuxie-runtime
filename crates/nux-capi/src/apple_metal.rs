@@ -468,7 +468,7 @@ impl crate::asset_hooks::AssetUploadFactory for AppleMetalFactory {
 
 impl Factory for AppleMetalFactory {
     fn supports_layer_mask(&self) -> bool {
-        nuxie::render_api::Factory::supports_layer_mask(&self.session)
+        Factory::supports_layer_mask(&self.session)
     }
     fn make_image_mesh_instances(
         &mut self,

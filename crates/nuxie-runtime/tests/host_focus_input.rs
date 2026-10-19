@@ -161,8 +161,7 @@ fn host_text_input_matches_upstream_focused_node_events() {
     values!(true, true, true);
 }
 
-#[path = "support/focus_input.rs"]
-mod focus_input;
+use nuxie_binary::focus_input_fixtures as focus_input;
 
 #[test]
 fn host_key_listener_moves_focus_to_another_node() {

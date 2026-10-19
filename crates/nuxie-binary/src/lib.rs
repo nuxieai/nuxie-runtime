@@ -11,6 +11,8 @@ pub use runtime_metadata::{
 };
 
 #[cfg(feature = "test-support")]
+pub mod focus_input_fixtures;
+#[cfg(feature = "test-support")]
 mod legacy_test_support;
 #[cfg(feature = "test-support")]
 #[doc(hidden)]

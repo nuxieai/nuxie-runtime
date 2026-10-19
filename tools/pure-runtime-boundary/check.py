@@ -277,9 +277,15 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
         "render_api": {"Aabb", "Fit", "Vec2D", "compute_alignment"},
     },
     "crates/nux-capi/src/android_vulkan/deferred.rs": {
+        # The Factory trait's own signature types, which the deferred
+        # replay factory implements and forwards: render API mechanics.
         "render_api": {
             "BlendMode",
             "DeferredCanvasHostHandle",
+            "ImageMeshInstancesHandle",
+            "LayerMaskMode",
+            "RenderCanvasFrameMode",
+            "StrokeParams",
             "ImageSampler",
             "OreContextHandle",
             "PersistentFactoryContext",
@@ -294,22 +300,29 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "OreMetalGpuCanvas",
             "OreMetalGpuCanvasImage",
         },
+        # As the Android factory: the Factory trait's own signature types.
         "render_api": {
             "BlendMode",
             "DeferredCanvasHostHandle",
+            "ImageMeshInstancesHandle",
             "ImageSampler",
+            "LayerMaskMode",
             "OreContextHandle",
             "OreFrameDescriptor",
             "PersistentFactoryContext",
             "RenderCanvas",
             "RenderCanvasError",
             "RenderCanvasFrame",
+            "RenderCanvasFrameMode",
             "RenderCanvasHandle",
+            "StrokeParams",
         },
     },
     "crates/nux-capi/src/asset_hooks.rs": {
+        # The deferred host's image-mesh factory hook returns this handle.
         "render_api": {
             "DeferredCanvasHostHandle",
+            "ImageMeshInstancesHandle",
             "OreContextHandle",
             "PersistentFactoryContext",
             "RenderCanvas",
@@ -335,6 +348,32 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
     "crates/nux-capi/src/data_binding.rs": {
         "runtime::core::CoreHandle", "runtime::text::text_value_run::TextValueRun",
     },
+    # The font hooks implement the runtime text engine's Font and fallback
+    # traits for host-provided fonts and glyph pictures.
+    "crates/nux-capi/src/fonts.rs": {
+        "runtime::math::raw_path::RawPath",
+        "runtime::text::font_hb::FileProbe", "runtime::text::font_hb::HbFont",
+        "runtime::text::font_hb::HostGlyphPicture", "runtime::text::font_hb::HostPictureScope",
+        "runtime::text::text_engine::ColorGlyphPaintType", "runtime::text::text_engine::Coord",
+        "runtime::text::text_engine::Font", "runtime::text::text_engine::FontRef",
+        "runtime::text::text_engine::TextRun", "runtime::text::text_engine::set_fallback_proc",
+    },
+    # Keyboard input reaches the runtime's focus keys.
+    "crates/nux-capi/src/lib.rs": {
+        "runtime::input::focusable::Key", "runtime::input::focusable::KeyModifiers",
+    },
+    # Published-file tests: a string write through the registry and the
+    # list and observer types they inspect.
+    "crates/nux-capi/src/field_read_tests.rs": {
+        "runtime::generated::core_registry::CoreRegistry",
+    },
+    "crates/nux-capi/src/list_acquire_tests.rs": {
+        "runtime::viewmodel::viewmodel_instance::ViewModelInstance",
+        "runtime::viewmodel::viewmodel_instance_list::ViewModelInstanceList",
+        "runtime::viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem",
+        "runtime::viewmodel::viewmodel_instance_value::ViewModelInstanceValueDelegate",
+        "runtime::viewmodel::viewmodel_instance_value::ViewModelInstanceValueDelegateHandle",
+    },
     "crates/nux-capi/tests/data_binding.rs": {
         "runtime::viewmodel::viewmodel_instance_value::ViewModelInstanceValueDelegate",
         "runtime::viewmodel::viewmodel_instance_value::ViewModelInstanceValueDelegateHandle",
@@ -343,6 +382,9 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::semantic::semantic_role::SemanticRole",
         "runtime::semantic::semantic_state::SemanticState",
         "runtime::semantic::semantic_trait::SemanticTrait",
+        # Its tests check the check-state values and the generated base.
+        "runtime::semantic::semantic_state::SemanticCheckState",
+        "runtime::generated::semantic::semantic_data_base::SemanticDataBase",
     },
     "crates/nux-capi/src/semantic_snapshot.rs": {
         "runtime::data_bind::data_context::DataContext",
@@ -386,6 +428,8 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "video::readiness::FirstFrameGate", "video::readiness::Readiness",
         "video::visibility::is_visible_in", "video::captions::CaptionTrack",
         "video::captions::Cue",
+        # Loop-range writes go through the video's property writes.
+        "video::properties::Write",
     },
     "crates/nux-capi/src/video_resources.rs": {
         "video::Video", "video::resources::Allocation", "video::resources::DecoderBudget",
@@ -394,6 +438,8 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "video::playback::SuspensionReason",
     },
     "crates/nux-capi/src/video_sync.rs": {
+        # A media clock report compares the video's position before and after.
+        "video::Video", "video::properties::POSITION",
         "video::playback::Command", "video::playback::PlaybackError",
         "video::sync::MediaClock", "video::sync::SyncError",
         "video::sync::SynchronizationGroup", "video::sync::report_media_clock",
@@ -696,6 +742,10 @@ ALLOWED_DYNAMIC_INCLUDES = {
         r'\s*"/vulkan_spirv_embedded\.rs"\s*\)\s*\)'
     ),
 }
+GENERATED_SHADER_SOURCE_INCLUDE = re.compile(
+    r'include_str!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
+    r'\s*"/mechanical_shader_generated/[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+"\s*\)\s*\)'
+)
 ALLOWED_DYNAMIC_DATA_INCLUDES = {
     "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs": re.compile(
         r'include_str!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)'
@@ -703,6 +753,16 @@ ALLOWED_DYNAMIC_DATA_INCLUDES = {
     "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs": re.compile(
         r'include_bytes!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)'
     ),
+    # The native Metal backend's shader compile plan and background compiler
+    # read the same generated shader sources and exports as the mechanical
+    # Metal port, by exact generated file name under OUT_DIR.
+    **{
+        path: GENERATED_SHADER_SOURCE_INCLUDE
+        for path in (
+            "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
+            "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+        )
+    },
 }
 
 BINARY_AUTHORING_COMPATIBILITY_FILE = (
@@ -754,6 +814,66 @@ def dependency_tables(
             table = target.get(table_name)
             if isinstance(table, dict):
                 yield ("target", str(selector), table_name), table
+
+
+# Packages whose non-default `test-support` feature carries test-only
+# fixtures. It must stay out of their default feature set.
+TEST_SUPPORT_FEATURE_PACKAGES = {"nuxie-binary", "nuxie-runtime"}
+# Runtime test support may reach no shipping build at all: only a
+# dev-dependency may enable it, never a normal, build or target dependency,
+# nor a feature forwarding.
+DEV_ONLY_TEST_SUPPORT_PACKAGES = {"nuxie-runtime"}
+
+
+def test_support_shipping_errors(
+    package: str,
+    manifest: dict[str, object],
+    workspace_dependencies: dict[str, object],
+) -> list[str]:
+    errors = []
+    # Every shipping dependency's local name, renamed or not, mapped to the
+    # package Cargo resolves it to, so feature forwarding through a rename is
+    # read as the package it enables.
+    shipping_packages: dict[str, str] = {}
+    for path, table in dependency_tables(manifest):
+        if path[-1] == "dev-dependencies":
+            continue
+        for name, specification in table.items():
+            if isinstance(specification, dict) and specification.get("workspace") is True:
+                # An inherited edge carries the [workspace.dependencies]
+                # declaration's features and package rename.
+                specification, inheritance_error = inherited_dependency_specification(
+                    name, specification, workspace_dependencies
+                )
+                if inheritance_error is not None:
+                    continue
+            dependency = normalized_package_name(dependency_package(name, specification))
+            shipping_packages[normalized_package_name(name)] = dependency
+            if (
+                dependency in DEV_ONLY_TEST_SUPPORT_PACKAGES
+                and isinstance(specification, dict)
+                and "test-support" in (specification.get("features") or [])
+            ):
+                errors.append(
+                    f"{package}/Cargo.toml: {dependency} test-support may be "
+                    f"enabled only by a dev-dependency, not [{'.'.join(path)}]"
+                )
+    features = manifest.get("features", {})
+    if isinstance(features, dict):
+        for feature_name, activations in features.items():
+            for activation in activations if isinstance(activations, list) else []:
+                if not isinstance(activation, str):
+                    continue
+                match = re.fullmatch(r"([A-Za-z0-9_-]+)\??/test-support", activation)
+                if not match:
+                    continue
+                name = normalized_package_name(match.group(1))
+                if shipping_packages.get(name, name) in DEV_ONLY_TEST_SUPPORT_PACKAGES:
+                    errors.append(
+                        f"{package}/Cargo.toml: feature {feature_name!r} forwards "
+                        f"{match.group(1)} test-support into a shipping feature"
+                    )
+    return errors
 
 
 def dependency_package(dependency_name: str, specification: object) -> str:
@@ -2094,10 +2214,13 @@ def check_repository(
         package_root = repo_root / package
         if package_name in PRODUCT_LAYER_PACKAGES:
             errors.extend(product_layer_source_errors(repo_root, package_root))
+        errors.extend(
+            test_support_shipping_errors(package, manifest, workspace_dependencies)
+        )
         if package_name in UNPROTECTED_WORKSPACE_PACKAGES:
             continue
         protected_count += 1
-        if package_name == "nuxie-binary":
+        if package_name in TEST_SUPPORT_FEATURE_PACKAGES:
             features = manifest.get("features", {})
             if isinstance(features, dict) and feature_reaches(
                 features, "default", "test-support"

@@ -48,26 +48,47 @@ fn published_f3_field_read_uses_delivered_native_name() {
                 })
                 .unwrap()
         };
-        let mut experience = ptr::null_mut();
+        // The screen input's one nested view-model property and the schema
+        // it references, as the catalog describes them.
+        let root_schema = schema("Runtime input scr_screens_sinput");
+        let (related_path, related_schema) = (0..catalog_info.property_count)
+            .find_map(|index| {
+                let mut property = NuxViewModelPropertyView::default();
+                property.struct_size = std::mem::size_of::<NuxViewModelPropertyView>() as u32;
+                assert_eq!(
+                    nux_view_model_catalog_property(catalog, index, &mut property),
+                    NuxStatus::Ok
+                );
+                (property.schema_index == root_schema
+                    && property.referenced_schema_index != usize::MAX)
+                    .then(|| {
+                        (
+                            std::str::from_utf8(std::slice::from_raw_parts(
+                                property.name.data.cast::<u8>(),
+                                property.name.len,
+                            ))
+                            .unwrap()
+                            .to_owned(),
+                            property.referenced_schema_index,
+                        )
+                    })
+            })
+            .expect("the screen input's nested view model");
+        let mut related = ptr::null_mut();
         let mut root = ptr::null_mut();
         assert_eq!(
-            nux_view_model_instance_new_authored(file, schema("Experience"), 0, &mut experience),
+            nux_view_model_instance_new_authored(file, related_schema, 0, &mut related),
             NuxStatus::Ok
         );
         assert_eq!(
-            nux_view_model_instance_new_authored(
-                file,
-                schema("Runtime input scr_screens_sinput"),
-                0,
-                &mut root
-            ),
+            nux_view_model_instance_new_authored(file, root_schema, 0, &mut root),
             NuxStatus::Ok
         );
         let mutation = NuxViewModelMutation {
             kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
             instance: root,
-            path: view("experience"),
-            related_instance: experience,
+            path: view(&related_path),
+            related_instance: related,
             ..Default::default()
         };
         let batch = NuxViewModelMutationBatch {
@@ -227,7 +248,7 @@ fn published_f3_field_read_uses_delivered_native_name() {
         assert_eq!(nux_player_free(player), NuxStatus::Ok);
         assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
         assert_eq!(nux_view_model_instance_free(root), NuxStatus::Ok);
-        assert_eq!(nux_view_model_instance_free(experience), NuxStatus::Ok);
+        assert_eq!(nux_view_model_instance_free(related), NuxStatus::Ok);
         assert_eq!(nux_view_model_catalog_free(catalog), NuxStatus::Ok);
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
     }

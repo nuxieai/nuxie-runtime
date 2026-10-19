@@ -1,4 +1,5 @@
-// Hand-authored focus and blur events with an optional FocusData child.
+//! Hand-authored focus and blur files, with an optional FocusData child,
+//! shared by the runtime's and the portable ABI's focus tests.
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     loop {
         let mut byte = (value & 0x7f) as u8;

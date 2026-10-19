@@ -134,7 +134,10 @@ The repository is not yet physically split at every ownership boundary, but
 protected baseline consumers have no grandfathered source-debt files.
 Synthetic record construction is available only through `nuxie-binary`'s
 non-default `test-support` feature, and shared binary assets live under the
-neutral root fixture corpus. The default shipping API remains byte-import
+neutral root fixture corpus. Scene builders that tests in more than one
+package share live behind `nuxie-runtime`'s own non-default `test-support`
+feature, which the guard keeps out of default features and lets only a
+dev-dependency enable, so no test reaches another package's sources. The default shipping API remains byte-import
 only. One compatibility module in `nuxie-binary` retains the former
 editor-facing names so already-pinned nuxie-dev builds do not break; the guard
 confines those names to that zero-shipping seam and prevents `test-support`

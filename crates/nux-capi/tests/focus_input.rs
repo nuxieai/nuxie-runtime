@@ -1,8 +1,7 @@
 use nux_capi::*;
 use std::{collections::BTreeMap, ptr};
 
-#[path = "../../nuxie-runtime/tests/support/focus_input.rs"]
-mod fixture;
+use nuxie_binary::focus_input_fixtures as fixture;
 
 fn view(text: &str) -> NuxStringView {
     NuxStringView {
@@ -28,14 +27,14 @@ fn asset(name: &str) -> Vec<u8> {
     )
     .unwrap()
 }
-struct Scene {
+struct Harness {
     file: *mut NuxFile,
     artboard: *mut NuxArtboardInstance,
     model: *mut NuxViewModelInstance,
     player: *mut NuxPlayer,
     properties: BTreeMap<usize, String>,
 }
-impl Scene {
+impl Harness {
     fn new(bytes: &[u8], name: Option<&str>, bind: bool) -> Self {
         unsafe {
             let mut file = ptr::null_mut();
@@ -153,7 +152,7 @@ impl Scene {
         state
     }
 }
-impl Drop for Scene {
+impl Drop for Harness {
     fn drop(&mut self) {
         unsafe {
             assert_eq!(nux_player_free(self.player), NuxStatus::Ok);
@@ -223,7 +222,7 @@ fn key(code: u32, modifiers: u32, pressed: u32, repeat: u32) -> NuxPlayerFocusIn
 
 #[test]
 fn keyboard_changes_are_captured_in_the_step() {
-    let scene = Scene::new(&asset("keyboard_listener.riv"), Some("KeyboardInput"), true);
+    let scene = Harness::new(&asset("keyboard_listener.riv"), Some("KeyboardInput"), true);
     scene.step(&[]);
     assert_eq!(scene.step(&[focus(NUX_PLAYER_FOCUS_KIND_NEXT)]).focus(0), 1);
     let mut values = BTreeMap::new();
@@ -262,7 +261,7 @@ fn keyboard_changes_are_captured_in_the_step() {
 
 #[test]
 fn text_and_key_listener_changes_share_the_step_result() {
-    let scene = Scene::new(&asset("text_input_event.riv"), None, true);
+    let scene = Harness::new(&asset("text_input_event.riv"), None, true);
     scene.step(&[]);
     let mut values = BTreeMap::new();
     for (input, expected) in [
@@ -298,7 +297,7 @@ fn text_and_key_listener_changes_share_the_step_result() {
 #[test]
 fn authored_focus_and_blur_require_focus_data() {
     for present in [true, false] {
-        let scene = Scene::new(&fixture::focus_events(present), None, false);
+        let scene = Harness::new(&fixture::focus_events(present), None, false);
         scene.step(&[]);
         assert_eq!(scene.focus().has_focus, 0);
         let result = scene.step(&[focus(NUX_PLAYER_FOCUS_KIND_NEXT)]);
@@ -329,7 +328,7 @@ fn authored_focus_and_blur_require_focus_data() {
 #[test]
 fn non_state_machine_players_reject_focus_inputs_and_state_queries() {
     for linear in [false, true] {
-        let mut scene = Scene::new(&asset("circle_clips.riv"), None, false);
+        let mut scene = Harness::new(&asset("circle_clips.riv"), None, false);
         unsafe {
             assert_eq!(nux_player_free(scene.player), NuxStatus::Ok);
             let status = if linear {
@@ -377,8 +376,8 @@ fn caller_ending_at_correlation_id_retains_pointer_results() {
         std::mem::size_of::<OlderStep>(),
         std::mem::offset_of!(NuxPlayerStep, focus_inputs)
     );
-    let old = Scene::new(&asset("click_event.riv"), Some("art-1"), false);
-    let full = Scene::new(&asset("click_event.riv"), Some("art-1"), false);
+    let old = Harness::new(&asset("click_event.riv"), Some("art-1"), false);
+    let full = Harness::new(&asset("click_event.riv"), Some("art-1"), false);
     let pointers = [NuxPlayerPointerEvent {
         kind: NUX_PLAYER_POINTER_KIND_DOWN,
         x: 50.0,
@@ -439,7 +438,7 @@ fn caller_ending_at_correlation_id_retains_pointer_results() {
 
 #[test]
 fn focus_state_and_result_accessors_validate_caller_arguments() {
-    let scene = Scene::new(&fixture::focus_events(true), None, false);
+    let scene = Harness::new(&fixture::focus_events(true), None, false);
     scene.step(&[]);
     let mut state = NuxPlayerFocusState {
         struct_size: 4,

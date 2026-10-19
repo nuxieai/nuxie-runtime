@@ -2859,6 +2859,16 @@ impl LayoutComponent {
         self.with_style(|style| if self.main_axis_is_row() { style.width_scale_type() } else { style.height_scale_type() } == LayoutScaleType::Hug).unwrap_or(false)
     }
     pub fn wraps_lines(&self) -> bool {
+        use crate::css_layout::keys;
+        // A CSS flex box wraps by its record: `flex-wrap: wrap` along a
+        // row or a column (Taffy's lines), never a block or grid box.
+        if let Some(wraps) = self.with_css(|css| {
+            css.choice(keys::DISPLAY) == 1
+                && css.choice(keys::FLEX_WRAP) == 1
+                && matches!(css.choice(keys::FLEX_DIRECTION), 0 | 2)
+        }) {
+            return wraps;
+        }
         self.with_style(|style| {
             !style.is_grid()
                 && style.flex_wrap() == crate::source::layout::layout_style_applier::YGWrap::Wrap
@@ -3065,6 +3075,12 @@ impl LayoutComponent {
         }
     }
     pub fn main_axis_is_column(&self) -> bool {
+        // A CSS box's axis is its record's, as `main_axis_is_row` reads it.
+        if let Some(column) =
+            self.with_css(|css| css.choice(crate::css_layout::keys::FLEX_DIRECTION) >= 2)
+        {
+            return column;
+        }
         self.with_style(|style| {
             matches!(
                 style.flex_direction(),

@@ -8256,6 +8256,25 @@ fn abstract_object_type_keys_import_as_null_slots_like_cpp_registry() {
 }
 
 #[test]
+fn bare_string_template_arguments_import_as_null_slots_like_cpp_registry() {
+    let file = read_runtime_file(&synthetic_runtime_file(4260, |bytes| {
+        // StringTemplateArgument (156) is abstract upstream: CoreRegistry's
+        // makeCoreInstance builds only its String (157) and Number (176)
+        // kinds, so a bare one is a null slot, its name skipped.
+        push_var_uint(bytes, 156);
+        push_var_uint(bytes, 481);
+        push_var_uint(bytes, 4);
+        bytes.extend_from_slice(b"bare");
+        push_var_uint(bytes, 0);
+    }))
+    .expect("a bare string template argument imports as a null slot");
+
+    assert_eq!(file.object_count(), 1);
+    assert_eq!(file.known_object_count(), 0);
+    assert!(file.objects[0].is_none());
+}
+
+#[test]
 fn unknown_object_bool_skip_matches_cpp_runtime() {
     let file = read_runtime_file(&synthetic_runtime_file(4245, |bytes| {
         push_var_uint(bytes, 70_000);

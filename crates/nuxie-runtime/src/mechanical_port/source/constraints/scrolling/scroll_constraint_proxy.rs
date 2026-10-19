@@ -94,6 +94,14 @@ impl DraggableProxy for ViewportDraggableProxy {
     fn hittable(&self) -> Option<RuntimeDrawableOccurrence> {
         Some(self.hittable.clone())
     }
+    fn claims_on_press(&self) -> bool {
+        false
+    }
+    fn takes_drag(&self) -> bool {
+        self.constraint
+            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::interactive)
+            .unwrap_or(false)
+    }
     fn wants_scroll(&mut self, event: &ScrollEvent) -> bool {
         self.constraint
             .with_downcast::<ScrollConstraint, _>(|c| {

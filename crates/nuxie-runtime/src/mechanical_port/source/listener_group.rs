@@ -48,6 +48,9 @@ impl PointerData {
 
 pub struct ListenerGroup {
     is_consumed: Cell<bool>,
+    /// The group listens on CSS content, where a pointer's drag goes to the
+    /// innermost drag handler (docs/CSS_LAYOUT.md, 4.5).
+    in_css: Cell<bool>,
     listener: Option<CoreHandle>,
     pointers: RefCell<HashMap<i32, Rc<PointerData>>>,
     pointers_pool: RefCell<Vec<Rc<PointerData>>>,
@@ -61,6 +64,7 @@ impl ListenerGroup {
     pub fn new_optional(listener: Option<CoreHandle>) -> Self {
         Self {
             is_consumed: Cell::new(false),
+            in_css: Cell::new(false),
             listener,
             pointers: RefCell::new(HashMap::new()),
             pointers_pool: RefCell::new(Vec::new()),
@@ -274,14 +278,22 @@ impl ListenerGroup {
         } else if is_group_hovered && has_button(hit_event, button) {
             should_perform_changes = true;
         }
+        // In CSS content a drag another handler owns is not this one's
+        // (docs/CSS_LAYOUT.md, 4.5).
+        let me = ListenerGroupBehavior::identity(self);
         if pointer.phase.get() == GestureClickPhase::Down
             && has_button(ListenerType::Drag, pointer.button.get())
             && hit_event == ListenerType::Move
+            && !(self.in_css.get()
+                && state_machine_instance.css_drag_owned_by_other(pointer_id, me))
         {
             should_perform_changes = true;
             listener_type_matched = ListenerType::Drag;
             button_matched = pointer.button.get();
             if !pointer.has_dragged.get() {
+                if self.in_css.get() {
+                    state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
+                }
                 state_machine_instance.drag_start(
                     position,
                     time_stamp,
@@ -378,6 +390,19 @@ pub trait ListenerGroupBehavior {
     fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn crate::mechanical_port::source::constraints::draggable_constraint::DraggableProxy>>>>{
         None
     }
+    /// This group's identity, as the owner of a pointer's drag.
+    fn identity(&self) -> usize {
+        self as *const Self as *const () as usize
+    }
+    /// The group listens on CSS content (docs/CSS_LAYOUT.md, 4.5).
+    fn mark_in_css(&self) {}
+    /// Whether the group handles a pointer's drag: a scroll's or a scroll
+    /// bar's, an authored drag listener, or a field's selection. In CSS
+    /// content the innermost drag handler under the pointer takes the drag
+    /// (docs/CSS_LAYOUT.md, 4.5).
+    fn takes_drag(&self) -> bool {
+        false
+    }
     fn tracked_pointer_ids(&self) -> Vec<i32>;
     fn cancel_pointer(&self, pointer_id: i32, position: Vec2D, timestamp: f32) -> bool;
     fn cancel_pointers(
@@ -433,11 +458,22 @@ impl RuntimeListenerGroupHandle {
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
+
+    /// The group's identity, as `ListenerGroupBehavior::identity` gives it.
+    pub fn identity(&self) -> usize {
+        self.0.identity()
+    }
 }
 
 impl ListenerGroupBehavior for ListenerGroup {
     fn listener_handle(&self) -> Option<CoreHandle> {
         self.listener.clone()
+    }
+    fn mark_in_css(&self) {
+        self.in_css.set(true);
+    }
+    fn takes_drag(&self) -> bool {
+        self.has_listener(ListenerType::Drag)
     }
     fn pointer_button(&self, id: i32) -> PointerButton {
         self.pointer_data(id).button.get()
@@ -504,6 +540,12 @@ impl ListenerGroupBehavior
     for crate::mechanical_port::source::constraints::draggable_constraint::DraggableConstraintListenerGroup
 {
     fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn crate::mechanical_port::source::constraints::draggable_constraint::DraggableProxy>>>> { Self::scroll_proxy(self) }
+    fn mark_in_css(&self) {
+        Self::mark_in_css(self);
+    }
+    fn takes_drag(&self) -> bool {
+        Self::takes_drag(self)
+    }
     fn tracked_pointer_ids(&self) -> Vec<i32> { Self::tracked_pointer_ids(self) }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
         Self::cancel_pointer(self, id, position, timestamp)

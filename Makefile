@@ -6,6 +6,9 @@
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 RIVE_RUNTIME_REF ?= 5551696a826ff546775fffe46ca78824b1f1dc51
+# Tests that check their C++ oracle's checkout read the pin from here
+# (tools/bazel/runtime.py forwards RIVE_* variables to Bazel tests).
+export RIVE_RUNTIME_REF
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 DEFS_DIR ?= $(CURDIR)/defs/upstream-runtime
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml

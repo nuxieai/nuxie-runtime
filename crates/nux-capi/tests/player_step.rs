@@ -1063,11 +1063,15 @@ fn linear_static_and_nested_steps_match_runtime_oracles() {
 
 #[test]
 fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
-    const PINNED_RIVE_RUNTIME_REVISION: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
     let Some(probe) = std::env::var_os("RIVE_CPP_PROBE").map(PathBuf::from) else {
         eprintln!("skipping live C++ player-step oracle; run `make capi-player-step-oracle`");
         return;
     };
+    // The repository's pin, the Makefile's RIVE_RUNTIME_REF, which make
+    // passes beside the probe: a copy here would go stale at each pin bump.
+    let pinned_revision = std::env::var("RIVE_RUNTIME_REF").expect(
+        "RIVE_RUNTIME_REF names the repository's upstream pin; run `make capi-player-step-oracle`",
+    );
     let runtime_dir = PathBuf::from(
         std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
@@ -1082,7 +1086,7 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
     );
     assert_eq!(
         String::from_utf8(revision.stdout).unwrap().trim(),
-        PINNED_RIVE_RUNTIME_REVISION,
+        pinned_revision,
         "the C++ oracle must come from the repository's provenance pin"
     );
     let fixture = runtime_dir.join("tests/unit_tests/assets/click_event.riv");

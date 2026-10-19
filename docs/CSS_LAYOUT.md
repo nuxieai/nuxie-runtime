@@ -29,7 +29,7 @@ Its presence is also the switch between CSS mode and translated mode (section 2)
 Allocation, in a block of its own that `defs/nuxie/README.md` reserves for CSS layout and box paint (types 61000 to 61099, properties 61000 to 61999), so other Nuxie definitions, which allocate one after another from 60000, never reach it:
 
 - **Type keys**: 61000 to 61004.
-- **Property keys**: 61000 to 61102.
+- **Property keys**: 61000 to 61103.
 
 The definition files live in `defs/nuxie/` beside `video.json`, and the README's allocation list names them.
 
@@ -285,6 +285,7 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 |---|---|---|---|
 | Percent radii | `LayoutCssStyle` 61079 to 61082 | CSS percentage per corner | The corner's horizontal radius is its point radius plus that percentage of the box width, and its vertical radius is the same with the height, so a non-square box gets elliptical corners, as CSS. Overlapping radii scale down by CSS's rule |
 | Per-side borders | `BoxBorder` 61083 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
+| Border styles | `BoxBorder` 61103 `style`, uint8: 0 solid, 1 dashed, 2 dotted; default 0 | | Applies to the record's sides, drawn as Chrome 155 draws them (Blink's border painter), inside the same ring and corner joins. On a box without radii each side is a line down its middle across its whole outer length: dashes two widths long with one-width gaps (three and two widths below 3 points), dots up to 3 points wide square and wider ones round, fitted to the side's length at every layout so a resize keeps them even: dashed gaps stretch to the dash count closest to the base gap, a dash at each end; thin dots keep whole dots at both ends; round dots are evenly spread end to end. A side too short for two dashes is solid. On a rounded box a side whose inner corners are rounded follows the whole centre line instead (the border box inset by half the widths, from the top side's left end, clockwise), with dashes or dots fitted to its length as Skia measures it, cut to the ring. A uniform dashed or dotted border is one `BoxBorder` with all four sides, since a plain inside `Stroke` cannot fit dashes per side. Rive's own `DashPath` is not used: its dashes are fixed lengths or fractions of the whole contour, with no per-side fit or round dots |
 | Box-relative gradients | `BoxGradient`, see the table below | | Recomputes its gradient's start and end (and, for an ellipse, the shader's scale) from the box's padding box at each layout, as CSS's background positioning area |
 | Shadow spread and CSS shadow clipping | `BoxShadow` 61096 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
 | Paint size | `BoxPaint` 61097 `width` and 61101 `widthPercent`, 61098 `height` and 61102 `heightPercent`, doubles; points default 0, percentages default 100; keyable and bindable | each axis a length-percentage of the border box: points plus that percentage of the border box's size on the axis. Mixed values are allowed, since BoxPaint never goes through Taffy | While a box (or CSS artboard) has a `BoxPaint`, its own paint uses a rectangle of that size, centred on its border box and recomputed at each layout, in place of the border box: its fills and strokes, `BoxBorder` rings, `BoxShadow` paths (spread grows from that rectangle), `BoxGradient` positioning area (that rectangle's padding box), and its corner radii, with percentages resolved against it. At rest (0 points, 100%) the paint is the border box and follows it through any resize. An animation interpolates the points and the percentage separately, so (0, 100%) to (120, 0%) moves smoothly from the box's size to 120 points, as CSS interpolates a mixed length-percentage. A negative or non-finite result counts as 0. Layout, the content clip (still the padding box), an artboard's own clip, the box's hit testing and its semantics ignore it, so animating it reflows nothing; the box's painted bounds are that rectangle. In translated mode it has no effect |
@@ -320,6 +321,11 @@ The runtime's box paint is compared with Chrome 155's pixels for the same CSS
   Chrome's on under a hundred edge pixels.
 - Gradients: an angle, a corner, a farthest-corner ellipse and a closest-side
   circle at a position, all within 2 levels.
+- Dashed and dotted borders (`fixtures/css_layout/chrome/border_dashed_*` and
+  `border_dotted_*`): thin and thick dashes, square and round dots, a rounded
+  box and two colours, each within a mean of half a level; straight dashes
+  and square dots are pixel-exact or within a few edge pixels, and round dots
+  and curves differ only in their anti-aliasing.
 - Per-side borders with two colours and a radius: a mean difference of 0.27
   levels; only pixels on the diagonal joins and curved edges differ.
 
@@ -336,7 +342,7 @@ Refused in step 1:
 - stop positions in lengths;
 - repeating gradients;
 - `background-size`, `background-position`, `background-repeat` and `background-clip` values other than their initial ones;
-- border styles other than solid;
+- border styles other than solid, dashed and dotted (double, groove, ridge, inset and outset);
 - `border-image`;
 - radii with the slash syntax (separate horizontal and vertical values).
 
@@ -359,7 +365,8 @@ Step 1 orders each box's own children: a child keeps its whole subtree together,
 A CSS box or CSS artboard whose own paints include a visible one is host geometry, as a painted shape is:
 
 - visible geometry: its painted area (the border box, or its `BoxPaint`'s rectangle) with its paints' outsets (strokes, feathers, shadow spread), clipped as it draws by its clipping shapes and its ancestors' clips within its artboard: their paths, rounded corners and a CSS artboard's padding-box clip included, but not its own content clip. A box clipped away is left out. A `BoxBorder` counts as visible whatever its `Stroke`'s thickness, as it draws, and a paint that does not draw (hidden, say) adds nothing. A CSS artboard's visible geometry is its painted area inside its own clip;
-- hit testing: its border box (an artboard's bounds), whatever its `BoxPaint`, in the painting order of 4.4, when its render opacity is above 0;
+- visible-geometry selection (the host's geometry hit query, which an editor selects with): a point selects the box only where one of its paints draws, inside its ancestors' clips, in the painting order of 4.4. A fill draws in its rounded border box (or its `BoxPaint` rectangle), a `BoxBorder` or a `Stroke` on its painted ring (a `BoxBorder` on its own sides, between the rounded border box and the padding box with its inner radii; a `Stroke` by its thickness and position), and a shadow is not selectable. So a box painted only by its top border is selected on that side and not in its unpainted middle, which matches the bounds it reports;
+- interaction hit testing (taps, listeners, scrolling, the state machine): the box itself is hit in its rounded border box (CSS radii, percentages included, elliptical where they are), whatever it paints and whatever its `BoxPaint`, as a browser hits it, when its render opacity is above 0. A child is hit only inside each clipping ancestor's padding box with its inner radii, read as the radii are at that frame, so a tap in a viewport's rounded-off corner reaches what is behind it, and an animated radius clips as it changes;
 - retained geometry: every CSS box with paints.
 
 Translated boxes keep today's catalogue, which counts painted shapes, text and text fields.

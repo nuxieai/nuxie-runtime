@@ -336,53 +336,732 @@ pub fn box_border(
     add_rounded_rect(&mut geometry.path.outline, border_box, radii);
     add_rounded_rect(&mut geometry.path.holes, padding, inner);
     if sides & 15 != 15 {
-        let outer = [
-            Vec2D::new(border_box.left(), border_box.top()),
-            Vec2D::new(border_box.right(), border_box.top()),
-            Vec2D::new(border_box.right(), border_box.bottom()),
-            Vec2D::new(border_box.left(), border_box.bottom()),
-        ];
-        let inner_corner = [
-            Vec2D::new(padding.left(), padding.top()),
-            Vec2D::new(padding.right(), padding.top()),
-            Vec2D::new(padding.right(), padding.bottom()),
-            Vec2D::new(padding.left(), padding.bottom()),
-        ];
-        // Where each corner's join line leaves the corner's region: its
-        // curve, and at least its border widths.
-        let join_end: [Vec2D; 4] = std::array::from_fn(|corner| {
-            let outer = outer[corner];
-            let step = inner_corner[corner] - outer;
-            let (width, height) = (step.x.abs(), step.y.abs());
-            let reach =
-                |extent: f32, border: f32| (border > 0.0).then(|| extent.max(border) / border);
-            let t = match (
-                reach(radii[corner].x, width),
-                reach(radii[corner].y, height),
-            ) {
-                (Some(x), Some(y)) => x.min(y),
-                (Some(t), None) | (None, Some(t)) => t,
-                (None, None) => 0.0,
-            };
-            Vec2D::new(outer.x + step.x * t, outer.y + step.y * t)
-        });
+        let wedges = side_wedges(border_box, radii, padding);
         let mut clip = Region::default();
-        // Side n runs from corner n to corner n + 1: top, right, bottom, left.
         // Each wedge winds clockwise, as the box does.
-        for side in 0..4 {
+        for (side, wedge) in wedges.iter().enumerate() {
             if sides & (1 << side) == 0 {
                 continue;
             }
-            let next = (side + 1) % 4;
-            clip.outline.move_to_point(outer[side]);
-            clip.outline.line_to_point(outer[next]);
-            clip.outline.line_to_point(join_end[next]);
-            clip.outline.line_to_point(join_end[side]);
+            clip.outline.move_to_point(wedge[0]);
+            for &point in &wedge[1..] {
+                clip.outline.line_to_point(point);
+            }
             clip.outline.close();
         }
         geometry.clip = Some(clip);
     }
     geometry
+}
+
+/// Each side's join wedge (top, right, bottom, left): from its two outer
+/// corners to where their join lines leave the corners' regions, along
+/// the line from each outer corner through its inner corner, continued to
+/// the end of the corner's curve and at least the border widths.
+fn side_wedges(border_box: Aabb, radii: Radii, padding: Aabb) -> [[Vec2D; 4]; 4] {
+    let outer = [
+        Vec2D::new(border_box.left(), border_box.top()),
+        Vec2D::new(border_box.right(), border_box.top()),
+        Vec2D::new(border_box.right(), border_box.bottom()),
+        Vec2D::new(border_box.left(), border_box.bottom()),
+    ];
+    let inner_corner = [
+        Vec2D::new(padding.left(), padding.top()),
+        Vec2D::new(padding.right(), padding.top()),
+        Vec2D::new(padding.right(), padding.bottom()),
+        Vec2D::new(padding.left(), padding.bottom()),
+    ];
+    let join_end: [Vec2D; 4] = std::array::from_fn(|corner| {
+        let outer = outer[corner];
+        let step = inner_corner[corner] - outer;
+        let (width, height) = (step.x.abs(), step.y.abs());
+        let reach = |extent: f32, border: f32| (border > 0.0).then(|| extent.max(border) / border);
+        let t = match (
+            reach(radii[corner].x, width),
+            reach(radii[corner].y, height),
+        ) {
+            (Some(x), Some(y)) => x.min(y),
+            (Some(t), None) | (None, Some(t)) => t,
+            (None, None) => 0.0,
+        };
+        Vec2D::new(outer.x + step.x * t, outer.y + step.y * t)
+    });
+    // Side n runs from corner n to corner n + 1.
+    std::array::from_fn(|side| {
+        let next = (side + 1) % 4;
+        [outer[side], outer[next], join_end[next], join_end[side]]
+    })
+}
+
+/// Whether `point` is in a polygon (even-odd).
+fn polygon_contains(polygon: &[Vec2D], point: Vec2D) -> bool {
+    let mut inside = false;
+    let mut previous = polygon[polygon.len() - 1];
+    for &current in polygon {
+        if (current.y > point.y) != (previous.y > point.y) {
+            let x = previous.x
+                + (point.y - previous.y) / (current.y - previous.y) * (current.x - previous.x);
+            if point.x < x {
+                inside = !inside;
+            }
+        }
+        previous = current;
+    }
+    inside
+}
+
+/// Whether `point` is on a border ring as it is painted (docs/CSS_LAYOUT.md,
+/// 4.5): between the rounded border box and the padding box with its inner
+/// radii, and on one of `sides` (their join wedges).
+pub fn border_ring_contains(
+    point: Vec2D,
+    border_box: Aabb,
+    radii: Radii,
+    padding: Aabb,
+    inner: Radii,
+    sides: u8,
+) -> bool {
+    overflow_clip_contains(point, border_box, radii, (true, true))
+        && !overflow_clip_contains(point, padding, inner, (true, true))
+        && (sides & 15 == 15
+            || side_wedges(border_box, radii, padding)
+                .iter()
+                .enumerate()
+                .any(|(side, wedge)| sides & (1 << side) != 0 && polygon_contains(wedge, point)))
+}
+
+/// A border's style (`BoxBorder.style`, docs/CSS_LAYOUT.md, 4.2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BorderStyle {
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+impl BorderStyle {
+    pub fn from_value(value: u8) -> Self {
+        match value {
+            1 => Self::Dashed,
+            2 => Self::Dotted,
+            _ => Self::Solid,
+        }
+    }
+}
+
+/// One group of a dashed or dotted border's marks, drawn inside the
+/// border's ring and the join wedges of `sides` (as [`box_border`] makes
+/// them), as Chrome clips each side of such a border.
+#[derive(Default, Debug)]
+pub struct BorderMarks {
+    pub sides: u8,
+    /// Open sub-paths stroked with butt caps, each list at its thickness:
+    /// one per side of a square box (top, right, bottom, left), one around
+    /// the centre line of a rounded one.
+    pub strokes: Vec<(RawPath, f32)>,
+    /// Filled marks: round dots, and the whole square dots at the ends of
+    /// a thin dotted side.
+    pub fills: RawPath,
+}
+
+/// Chrome's dash fit (Blink's StyledStrokeData): the gap that gives the
+/// number of dashes whose gaps are closest to `gap`.
+fn best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
+    let available = if closed { length } else { length + gap };
+    let fewer = (available / (dash + gap)).floor();
+    let more = fewer + 1.0;
+    let gaps = |dashes: f32| if closed { dashes } else { dashes - 1.0 };
+    let fewer_gap = (length - fewer * dash) / gaps(fewer);
+    let more_gap = (length - more * dash) / gaps(more);
+    if more_gap <= 0.0 || (fewer_gap - gap).abs() < (more_gap - gap).abs() {
+        fewer_gap
+    } else {
+        more_gap
+    }
+}
+
+/// Whether Chrome strokes a border of `width` in `style` as dashes (with
+/// butt ends): dashed, and dotted up to 3 points wide (square dots).
+fn draws_as_dashes(width: f32, style: BorderStyle) -> bool {
+    style == BorderStyle::Dashed || (style == BorderStyle::Dotted && width <= 3.0)
+}
+
+/// The dash and gap lengths Chrome strokes a `length`-long line or closed
+/// centre line of `width` with, or None for a solid line (no room for
+/// dashes).
+fn dash_pattern(length: f32, width: f32, style: BorderStyle, closed: bool) -> Option<(f32, f32)> {
+    let dashed = style == BorderStyle::Dashed;
+    // Thin dashes are longer, with longer gaps, so they read as dashes.
+    let (dash, gap) = if dashed {
+        if width >= 3.0 {
+            (width * 2.0, width)
+        } else {
+            (width * 3.0, width * 2.0)
+        }
+    } else {
+        (width, width)
+    };
+    if length <= dash * 2.0 {
+        return None;
+    }
+    let two_dashes = 2.0 * dash + gap + if closed { gap } else { 0.0 };
+    if length <= two_dashes {
+        let scale = length / two_dashes;
+        return Some((dash * scale, gap * scale));
+    }
+    Some((
+        dash,
+        if dashed {
+            best_dash_gap(length, dash, gap, closed)
+        } else {
+            gap
+        },
+    ))
+}
+
+/// Chrome draws round dots this far short of their period, so the last
+/// dot of a line is whole.
+const DOT_EPSILON: f32 = 1.0e-2;
+
+/// A polyline with its points' distances along it, and how far inward each
+/// point may be offset before the offset folds over (the radius of
+/// curvature there; unbounded on straight parts).
+struct Line {
+    points: Vec<Vec2D>,
+    distances: Vec<f32>,
+    limits: Vec<f32>,
+}
+
+impl Line {
+    fn new(points: Vec<Vec2D>) -> Self {
+        let limits = vec![f32::INFINITY; points.len()];
+        Self::with_limits(points, limits)
+    }
+    fn with_limits(points: Vec<Vec2D>, limits: Vec<f32>) -> Self {
+        let mut distances = vec![0.0];
+        for pair in points.windows(2) {
+            let step = pair[1] - pair[0];
+            distances.push(distances.last().unwrap() + (step.x * step.x + step.y * step.y).sqrt());
+        }
+        Self {
+            points,
+            distances,
+            limits,
+        }
+    }
+    fn length(&self) -> f32 {
+        *self.distances.last().unwrap_or(&0.0)
+    }
+    /// The point at `distance`, and the segment it lies on.
+    fn locate(&self, distance: f32) -> (Vec2D, usize) {
+        let distance = distance.clamp(0.0, self.length());
+        let index = self
+            .distances
+            .partition_point(|&d| d < distance)
+            .clamp(1, self.points.len() - 1);
+        let (from, to) = (self.distances[index - 1], self.distances[index]);
+        let t = if to > from {
+            (distance - from) / (to - from)
+        } else {
+            0.0
+        };
+        let (a, b) = (self.points[index - 1], self.points[index]);
+        (
+            Vec2D::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t),
+            index,
+        )
+    }
+    fn at(&self, distance: f32) -> Vec2D {
+        self.locate(distance).0
+    }
+    /// The stretch from `start` to `end`: its points, each with the normal
+    /// to its left (outward on a clockwise line, y down) and its limit.
+    fn stretch(&self, start: f32, end: f32) -> Vec<(Vec2D, Vec2D, f32)> {
+        let end = end.min(self.length());
+        if !(end > start) {
+            return Vec::new();
+        }
+        let normal = |segment: usize| {
+            let step = self.points[segment] - self.points[segment - 1];
+            let length = (step.x * step.x + step.y * step.y).sqrt();
+            if length > 0.0 {
+                Vec2D::new(step.y / length, -step.x / length)
+            } else {
+                Vec2D::default()
+            }
+        };
+        let (first, first_segment) = self.locate(start);
+        let (last, last_segment) = self.locate(end);
+        let limit = |segment: usize| self.limits[segment - 1].min(self.limits[segment]);
+        let mut points = vec![(first, normal(first_segment), limit(first_segment))];
+        for index in first_segment..last_segment {
+            if self.distances[index] > start && self.distances[index] < end {
+                let (a, b) = (normal(index), normal(index + 1));
+                let sum = Vec2D::new(a.x + b.x, a.y + b.y);
+                let length = (sum.x * sum.x + sum.y * sum.y).sqrt();
+                let normal = if length > 0.0 {
+                    Vec2D::new(sum.x / length, sum.y / length)
+                } else {
+                    a
+                };
+                points.push((self.points[index], normal, self.limits[index]));
+            }
+        }
+        points.push((last, normal(last_segment), limit(last_segment)));
+        points
+    }
+    /// The stretch from `start` to `end` as one open sub-path of `centres`,
+    /// and its outline `half` wide on either side as a filled shape (the
+    /// inward side no further than each point's limit), as a butt-ended
+    /// stroke covers it.
+    fn add_stretch(
+        &self,
+        centres: &mut RawPath,
+        fills: &mut RawPath,
+        half: f32,
+        start: f32,
+        end: f32,
+    ) {
+        let points = self.stretch(start, end);
+        if points.len() < 2 {
+            return;
+        }
+        centres.move_to_point(points[0].0);
+        for &(point, ..) in &points[1..] {
+            centres.line_to_point(point);
+        }
+        let out = |&(point, normal, _): &(Vec2D, Vec2D, f32)| {
+            Vec2D::new(point.x + normal.x * half, point.y + normal.y * half)
+        };
+        let inward = |&(point, normal, limit): &(Vec2D, Vec2D, f32)| {
+            let depth = half.min(limit);
+            Vec2D::new(point.x - normal.x * depth, point.y - normal.y * depth)
+        };
+        fills.move_to_point(out(&points[0]));
+        for point in &points[1..] {
+            fills.line_to_point(out(point));
+        }
+        for point in points.iter().rev() {
+            fills.line_to_point(inward(point));
+        }
+        fills.close();
+    }
+    /// Dashes along the line from its start, or the whole line when
+    /// `pattern` is None.
+    fn add_dashes(
+        &self,
+        centres: &mut RawPath,
+        fills: &mut RawPath,
+        half: f32,
+        pattern: Option<(f32, f32)>,
+    ) {
+        let Some((dash, gap)) = pattern else {
+            self.add_stretch(centres, fills, half, 0.0, self.length());
+            return;
+        };
+        let period = dash + gap;
+        if !(period > 0.0) {
+            return;
+        }
+        let mut start = 0.0;
+        while start < self.length() {
+            self.add_stretch(centres, fills, half, start, start + dash);
+            start += period;
+        }
+    }
+    /// Round dots of `diameter` every `period` from the line's start, up to
+    /// its end.
+    fn add_dots(&self, path: &mut RawPath, diameter: f32, period: f32) {
+        let mut at = 0.0;
+        loop {
+            add_circle(path, self.at(at), diameter / 2.0);
+            at += period;
+            if !(period > 0.0) || at > self.length() + 1.0e-4 {
+                break;
+            }
+        }
+    }
+}
+
+/// A round dot, clockwise from its top: a fine polygon of the circle's
+/// area, so a renderer's own curve tessellation does not shrink small dots.
+fn add_circle(path: &mut RawPath, center: Vec2D, radius: f32) {
+    const SIDES: usize = 48;
+    let step = std::f32::consts::TAU / SIDES as f32;
+    // A regular polygon of the circle's area.
+    let radius = radius * (std::f32::consts::TAU / (SIDES as f32 * step.sin())).sqrt();
+    for side in 0..SIDES {
+        let angle = side as f32 * step;
+        let point = Vec2D::new(
+            center.x + radius * angle.sin(),
+            center.y - radius * angle.cos(),
+        );
+        if side == 0 {
+            path.move_to_point(point);
+        } else {
+            path.line_to_point(point);
+        }
+    }
+    path.close();
+}
+
+fn add_rect(path: &mut RawPath, left: f32, top: f32, right: f32, bottom: f32) {
+    path.move_to_point(Vec2D::new(left, top));
+    path.line_to_point(Vec2D::new(right, top));
+    path.line_to_point(Vec2D::new(right, bottom));
+    path.line_to_point(Vec2D::new(left, bottom));
+    path.close();
+}
+
+/// Chrome's whole dots at the ends of a thin dotted line (Blink's
+/// EnforceDotsAtEndpoints): for whole widths 1 to 3, by the line's length
+/// in whole points, it draws a square dot at either end itself, growing it
+/// or moving the line's start and end, so the dots meet the corners.
+/// Returns the line's new ends.
+fn enforce_end_dots(
+    fills: &mut RawPath,
+    start: Vec2D,
+    end: Vec2D,
+    length: f32,
+    width: f32,
+) -> (Vec2D, Vec2D) {
+    let (width, length) = (width.round() as i32, length.round() as i32);
+    let (mod_4, mod_6) = (length % 4, length % 6);
+    let (mut start_dot, mut start_growth, mut start_offset) = (false, 0, 0);
+    let (mut end_dot, mut end_growth) = (false, 0);
+    if (width == 1 && length % 2 == 0) || (width == 3 && mod_6 == 0) {
+        start_dot = true;
+        start_growth = 1;
+        start_offset = 1;
+    }
+    if (width == 2 && (mod_4 == 0 || mod_4 == 1)) || (width == 3 && (mod_6 == 1 || mod_6 == 2)) {
+        start_dot = true;
+        start_offset = -1;
+    }
+    if (width == 2 && mod_4 == 0) || (width == 3 && mod_6 == 1) {
+        end_dot = true;
+    }
+    if (width == 2 && mod_4 == 3) || (width == 3 && (mod_6 == 4 || mod_6 == 5)) {
+        start_dot = true;
+        start_offset = 1;
+    }
+    if width == 3 && mod_6 == 5 {
+        end_dot = true;
+    } else if width == 3 && mod_6 == 0 {
+        end_dot = true;
+        end_growth = 1;
+    }
+    let vertical = start.x == end.x;
+    let w = width as f32;
+    let half = w / 2.0;
+    let (mut start, mut end) = (start, end);
+    if start_dot {
+        let grow = start_growth as f32;
+        if vertical {
+            add_rect(
+                fills,
+                start.x - half,
+                start.y,
+                start.x + half,
+                start.y + w + grow,
+            );
+            start.y += 2.0 * w + start_offset as f32;
+        } else {
+            add_rect(
+                fills,
+                start.x,
+                start.y - half,
+                start.x + w + grow,
+                start.y + half,
+            );
+            start.x += 2.0 * w + start_offset as f32;
+        }
+    }
+    if end_dot {
+        let grow = end_growth as f32;
+        if vertical {
+            add_rect(fills, end.x - half, end.y - w - grow, end.x + half, end.y);
+            end.y -= w + grow + 1.0;
+        } else {
+            add_rect(fills, end.x - w - grow, end.y - half, end.x, end.y + half);
+            end.x -= w + grow + 1.0;
+        }
+    }
+    (start, end)
+}
+
+/// One straight side's marks, as Chrome strokes a side of a square box: a
+/// line down the side's middle across its whole outer length, from its
+/// top or left end, `width` wide.
+fn add_side_line(
+    strokes: &mut RawPath,
+    fills: &mut RawPath,
+    start: Vec2D,
+    end: Vec2D,
+    width: f32,
+    style: BorderStyle,
+) {
+    let length = (end.x - start.x) + (end.y - start.y);
+    if length <= 0.0 || width <= 0.0 {
+        return;
+    }
+    if draws_as_dashes(width, style) {
+        let pattern = dash_pattern(length, width, style, false);
+        let (start, end) = if style == BorderStyle::Dotted && pattern.is_some() {
+            enforce_end_dots(fills, start, end, length, width)
+        } else {
+            (start, end)
+        };
+        Line::new(vec![start, end]).add_dashes(strokes, fills, width / 2.0, pattern);
+        return;
+    }
+    // Round dots: their caps reach past the ends, so the line starts and
+    // ends half a width in.
+    let along = Vec2D::new((end.x - start.x) / length, (end.y - start.y) / length);
+    let half = width / 2.0;
+    let line = Line::new(vec![
+        Vec2D::new(start.x + along.x * half, start.y + along.y * half),
+        Vec2D::new(end.x - along.x * half, end.y - along.y * half),
+    ]);
+    let period = if length < 2.0 * width {
+        2.0 * width
+    } else {
+        best_dash_gap(length, width, width, false) + width - DOT_EPSILON
+    };
+    line.add_dots(fills, width, period);
+}
+
+/// A rounded box's border centre line: the border box inset by half of
+/// each side's width, its radii reduced to match, as one closed polyline
+/// starting at the top side's left end and running clockwise, where
+/// Chrome's rounded border path starts.
+fn centre_line(border_box: Aabb, radii: Radii, border: [f32; 4]) -> Line {
+    let [top, right, bottom, left] = border;
+    let rect = Aabb::new(
+        border_box.left() + left / 2.0,
+        border_box.top() + top / 2.0,
+        border_box.right() - right / 2.0,
+        border_box.bottom() - bottom / 2.0,
+    );
+    let radii = inner_radii(radii, border.map(|width| width / 2.0));
+    // Each point, how far inward it may be offset (unbounded on the straight
+    // sides, the corner's least radius of curvature on its curve), and its
+    // distance along the line as Skia measures it: a curve by the chords
+    // Skia's path measure splits it into (halves until a chord's middle is
+    // within half a point of the curve's), which is what Chrome's dashes are
+    // fitted and placed by.
+    let mut points: Vec<(Vec2D, f32, f32)> = Vec::new();
+    let add_straight = |points: &mut Vec<(Vec2D, f32, f32)>, point: Vec2D| {
+        let distance = points
+            .last()
+            .map_or(0.0, |&(last, _, distance): &(Vec2D, f32, f32)| {
+                let step = point - last;
+                distance + (step.x * step.x + step.y * step.y).sqrt()
+            });
+        points.push((point, f32::INFINITY, distance));
+    };
+    // A quarter ellipse about `center` from angle `from` (radians, y down).
+    let arc = |points: &mut Vec<(Vec2D, f32, f32)>, center: Vec2D, radius: Vec2D, from: f32| {
+        let reach = radius.x.max(radius.y);
+        if !(reach > 0.0) {
+            return;
+        }
+        let limit = radius.x.min(radius.y).powi(2) / reach;
+        let on = |angle: f32| {
+            Vec2D::new(
+                center.x + radius.x * angle.cos(),
+                center.y + radius.y * angle.sin(),
+            )
+        };
+        let mut pieces = Vec::new();
+        let mut pending = vec![(from, from + std::f32::consts::FRAC_PI_2)];
+        while let Some((start, end)) = pending.pop() {
+            let (a, b, middle) = (on(start), on(end), on((start + end) / 2.0));
+            let deviation = (middle.x - (a.x + b.x) / 2.0)
+                .abs()
+                .max((middle.y - (a.y + b.y) / 2.0).abs());
+            if deviation > 0.5 && end - start > 1.0e-3 {
+                let half = (start + end) / 2.0;
+                pending.push((half, end));
+                pending.push((start, half));
+            } else {
+                pieces.push((start, end));
+            }
+        }
+        for (start, end) in pieces {
+            let (a, b) = (on(start), on(end));
+            let chord = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+            let base = points.last().map_or(0.0, |point| point.2);
+            let steps = ((chord / 0.25).ceil() as usize).max(2);
+            for step in 1..=steps {
+                let t = step as f32 / steps as f32;
+                points.push((on(start + (end - start) * t), limit, base + chord * t));
+            }
+        }
+    };
+    let pi = std::f32::consts::PI;
+    let [tl, tr, br, bl] = radii;
+    add_straight(&mut points, Vec2D::new(rect.left() + tl.x, rect.top()));
+    add_straight(&mut points, Vec2D::new(rect.right() - tr.x, rect.top()));
+    arc(
+        &mut points,
+        Vec2D::new(rect.right() - tr.x, rect.top() + tr.y),
+        tr,
+        1.5 * pi,
+    );
+    add_straight(&mut points, Vec2D::new(rect.right(), rect.bottom() - br.y));
+    arc(
+        &mut points,
+        Vec2D::new(rect.right() - br.x, rect.bottom() - br.y),
+        br,
+        0.0,
+    );
+    add_straight(&mut points, Vec2D::new(rect.left() + bl.x, rect.bottom()));
+    arc(
+        &mut points,
+        Vec2D::new(rect.left() + bl.x, rect.bottom() - bl.y),
+        bl,
+        0.5 * pi,
+    );
+    add_straight(&mut points, Vec2D::new(rect.left(), rect.top() + tl.y));
+    arc(
+        &mut points,
+        Vec2D::new(rect.left() + tl.x, rect.top() + tl.y),
+        tl,
+        pi,
+    );
+    points.dedup_by(|a, b| {
+        let same = (a.0.x - b.0.x).abs() < 1.0e-5 && (a.0.y - b.0.y).abs() < 1.0e-5;
+        if same {
+            b.1 = b.1.min(a.1);
+        }
+        same
+    });
+    let mut line = Line {
+        points: Vec::with_capacity(points.len()),
+        distances: Vec::with_capacity(points.len()),
+        limits: Vec::with_capacity(points.len()),
+    };
+    for (point, limit, distance) in points {
+        line.points.push(point);
+        line.limits.push(limit);
+        line.distances.push(distance);
+    }
+    line
+}
+
+/// A dashed or dotted border's marks over `sides` (docs/CSS_LAYOUT.md,
+/// 4.2), as Chrome 155 draws them. A side of a square box is a line down
+/// its middle across its outer length, with dashes or dots sized from its
+/// width and fitted to its length. On a rounded box, a side whose inner
+/// corners are rounded follows the whole centre line instead, fitted to
+/// its length, drawn thick and cut to the ring. Dashes are two widths long
+/// with one-width gaps (three and two below 3 points), dots up to 3 points
+/// wide are square and wider ones round. None for a solid border.
+pub fn border_marks(
+    border_box: Aabb,
+    radii: Radii,
+    border: [f32; 4],
+    sides: u8,
+    style: BorderStyle,
+) -> Vec<BorderMarks> {
+    if style == BorderStyle::Solid {
+        return Vec::new();
+    }
+    let rounded_corner = |radius: Vec2D| radius.x > 0.0 && radius.y > 0.0;
+    let rounded = radii.iter().any(|&radius| rounded_corner(radius));
+    let inner = inner_radii(radii, border);
+    let inner_rounded = inner.iter().any(|&radius| rounded_corner(radius));
+    let (left, top, right, bottom) = (
+        border_box.left(),
+        border_box.top(),
+        border_box.right(),
+        border_box.bottom(),
+    );
+    let [top_width, right_width, bottom_width, left_width] = border;
+    let mut straight = BorderMarks::default();
+    let mut curved: Vec<(f32, BorderMarks)> = Vec::new();
+    for side in 0..4 {
+        let width = border[side];
+        if sides & (1 << side) == 0 || !(width > 0.0) {
+            continue;
+        }
+        // Side n runs from corner n to corner n + 1.
+        let is_curved = rounded
+            && (!inner_rounded
+                || rounded_corner(inner[side])
+                || rounded_corner(inner[(side + 1) % 4]));
+        if !is_curved {
+            straight.sides |= 1 << side;
+            let (start, end) = match side {
+                0 => (
+                    Vec2D::new(left, top + top_width / 2.0),
+                    Vec2D::new(right, top + top_width / 2.0),
+                ),
+                1 => (
+                    Vec2D::new(right - right_width / 2.0, top),
+                    Vec2D::new(right - right_width / 2.0, bottom),
+                ),
+                2 => (
+                    Vec2D::new(left, bottom - bottom_width / 2.0),
+                    Vec2D::new(right, bottom - bottom_width / 2.0),
+                ),
+                _ => (
+                    Vec2D::new(left + left_width / 2.0, top),
+                    Vec2D::new(left + left_width / 2.0, bottom),
+                ),
+            };
+            let mut path = RawPath::default();
+            add_side_line(&mut path, &mut straight.fills, start, end, width, style);
+            straight.strokes.push((path, width));
+            continue;
+        }
+        // The thick stroke Chrome cuts to the ring: 2.2 times the widest of
+        // the side and its neighbours.
+        let thickness = 2.2
+            * width
+                .max(border[(side + 1) % 4])
+                .max(border[(side + 3) % 4]);
+        match curved.iter_mut().find(|(group, _)| *group == width) {
+            Some((_, marks)) => {
+                marks.sides |= 1 << side;
+                if let Some(stroke) = marks.strokes.first_mut() {
+                    stroke.1 = stroke.1.max(thickness);
+                }
+            }
+            None => {
+                let line = centre_line(border_box, radii, border);
+                let mut marks = BorderMarks {
+                    sides: 1 << side,
+                    ..BorderMarks::default()
+                };
+                let length = line.length().floor();
+                if draws_as_dashes(width, style) {
+                    let mut path = RawPath::default();
+                    line.add_dashes(
+                        &mut path,
+                        &mut marks.fills,
+                        thickness / 2.0,
+                        dash_pattern(length, width, style, true),
+                    );
+                    marks.strokes.push((path, thickness));
+                } else {
+                    let period = if length < 2.0 * width {
+                        2.0 * width
+                    } else {
+                        best_dash_gap(length, width, width, true) + width - DOT_EPSILON
+                    };
+                    line.add_dots(&mut marks.fills, width, period);
+                }
+                curved.push((width, marks));
+            }
+        }
+    }
+    let mut groups = Vec::new();
+    if straight.sides != 0 {
+        groups.push(straight);
+    }
+    groups.extend(curved.into_iter().map(|(_, marks)| marks));
+    groups
 }
 
 /// Where a gradient goes over a box (`BoxGradient`, docs/CSS_LAYOUT.md,
@@ -749,21 +1428,25 @@ mod tests {
             15,
             BorderStyle::Dotted,
         );
-        assert!(marks[0].strokes.iter().all(|(path, _)| path.is_empty()));
+        assert!(marks[0].strokes.iter().all(|(path, _)| path.empty()));
         // Every dot is a circle: count the top row's by their centres.
         let dots = runs(&marks[0].fills);
-        let top: Vec<f32> = dots
+        // The left and right sides' first dots sit on the top's end dots.
+        let mut top: Vec<f32> = dots
             .iter()
             .filter(|(start, _)| near(start.y, 0.0))
             .map(|(start, _)| start.x)
             .collect();
+        top.sort_by(f32::total_cmp);
+        top.dedup_by(|a, b| (*a - *b).abs() < 0.1);
         assert_eq!(top.len(), 8, "{dots:?}");
         assert!(near(top[0], 4.0) && (top[7] - 112.0).abs() < 0.1, "{top:?}");
     }
 
     /// `border: 4px dashed` with 20-point corners: 8-point dashes fitted
-    /// around the whole 305-point centre line (25 dashes, 4.2-point gaps),
-    /// from the left edge's lower end, clockwise.
+    /// around the whole centre line, 304 points as Skia measures it (25
+    /// dashes, 4.16-point gaps), from the top edge's left end, clockwise,
+    /// where Chrome starts.
     #[test]
     fn rounded_dashes_follow_the_whole_centre_line() {
         let bounds = Aabb::new(0.0, 0.0, 108.0, 68.0);
@@ -777,18 +1460,24 @@ mod tests {
         assert_eq!(marks.len(), 1);
         let (path, thickness) = &marks[0].strokes[0];
         assert!(near(*thickness, 4.0 * 2.2));
-        let dashes = runs(path);
+        // The fit uses the length in whole points, as Chrome's does, so a
+        // sliver of a 26th dash may close the line where the first starts.
+        let dashes: Vec<_> = runs(path)
+            .into_iter()
+            .filter(|(start, end)| (end.x - start.x).abs() + (end.y - start.y).abs() > 1.0)
+            .collect();
         assert_eq!(dashes.len(), 25);
         assert!(
-            near(dashes[0].0.x, 2.0) && near(dashes[0].0.y, 48.0),
+            near(dashes[0].0.x, 20.0) && near(dashes[0].0.y, 2.0),
             "{:?}",
             dashes[0]
         );
         assert!(
-            near(dashes[0].1.x, 2.0) && near(dashes[0].1.y, 40.0),
+            near(dashes[0].1.x, 28.0) && near(dashes[0].1.y, 2.0),
             "{:?}",
             dashes[0]
         );
+        assert!(near(dashes[1].0.x, 32.16), "{:?}", dashes[1]);
     }
 
     #[test]

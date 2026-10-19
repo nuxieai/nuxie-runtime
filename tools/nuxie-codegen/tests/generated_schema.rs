@@ -231,10 +231,12 @@ fn pinned_seed_runtime_type_surface_is_explicitly_tracked() {
     }
 
     // The 9b331962 seed adds ScriptModuleAsset (1071) and its uint language
-    // property (1087) to the 5892bb05 inventory. Folder remains in this raw
-    // historical seed; current-runtime reconciliation is tested separately.
+    // property (1087) to the 5892bb05 inventory, and the 7e450bdc wheel and
+    // trackpad scrolling sync adds ScrollConstraint's scrollFlags (466) and
+    // wheelInteractive (467). Folder remains in this raw historical seed;
+    // current-runtime reconciliation is tested separately.
     assert_eq!(runtime_definition_count, 352);
-    assert_eq!(runtime_property_count, 617);
+    assert_eq!(runtime_property_count, 619);
     assert_eq!(
         declared_types,
         [
@@ -258,8 +260,10 @@ fn pinned_seed_runtime_type_surface_is_explicitly_tracked() {
         "dev/defs runtime property type surface changed; audit FieldKind::from_property before refreshing this list"
     );
 
+    // ScrollConstraint's wheelInteractive (bool) and scrollFlags (uint8), from
+    // the 7e450bdc sync: existing field kinds, decoded as before.
     let expected_pairs = [
-        (("bool", None), 72usize),
+        (("bool", None), 73usize),
         (("bool", Some("bool")), 1),
         (("Bytes", None), 4),
         (("callback", None), 4),
@@ -274,7 +278,7 @@ fn pinned_seed_runtime_type_surface_is_explicitly_tracked() {
         (("uint", None), 116),
         (("uint", Some("uint")), 4),
         (("uint16", None), 3),
-        (("uint8", None), 58),
+        (("uint8", None), 59),
     ]
     .into_iter()
     .map(|((declared, runtime), count)| ((declared.to_owned(), runtime.map(str::to_owned)), count))
@@ -367,8 +371,10 @@ fn pinned_seed_runtime_type_surface_is_explicitly_tracked() {
 #[test]
 fn pinned_seed_runtime_property_metadata_surface_is_explicitly_tracked() {
     let properties = runtime_json_properties(&workspace_root().join("defs/upstream-runtime"));
-    // Includes ScriptModuleAsset.language (1087), added after 5892bb05.
-    assert_eq!(properties.len(), 617);
+    // Includes ScriptModuleAsset.language (1087), added after 5892bb05, and
+    // ScrollConstraint's scrollFlags (466) and wheelInteractive (467), from
+    // the 7e450bdc wheel and trackpad scrolling sync.
+    assert_eq!(properties.len(), 619);
     assert!(properties.iter().any(|entry| {
         entry.file == "assets/script_module_asset.json"
             && entry.name == "language"
@@ -595,6 +601,16 @@ fn pinned_seed_runtime_property_metadata_surface_is_explicitly_tracked() {
             "colorValue",
             24,
             8,
+        ),
+        // ScrollConstraint stores wheelInteractive in scrollFlags bit 0, as
+        // FocusData stores its flags (7e450bdc).
+        (
+            "constraints/scrolling/scroll_constraint.json",
+            "wheelInteractive",
+            467,
+            "scrollFlags",
+            0,
+            1,
         ),
         ("focus_data.json", "canFocus", 953, "focusFlags", 0, 1),
         ("focus_data.json", "canTouch", 954, "focusFlags", 1, 1),
@@ -944,7 +960,9 @@ fn pinned_seed_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        573, // ScriptModuleAsset.language has initialValue "0".
+        // ScriptModuleAsset.language has initialValue "0", and ScrollConstraint.scrollFlags
+        // "1" (7e450bdc), which the generated stored-field initializer sets.
+        574,
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 

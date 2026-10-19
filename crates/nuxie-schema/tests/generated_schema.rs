@@ -11,8 +11,10 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    // Reconciled upstream through cdeabe75; forward overlays remain.
-    assert_eq!(DEFINITIONS.len(), 358);
+    // Reconciled upstream through cdeabe75; forward overlays remain. Since
+    // then: AngularGradient, DataConverterStringTemplate, StringTemplateArgument
+    // with its Number and String kinds, and TextStyleDecoration.
+    assert_eq!(DEFINITIONS.len(), 364);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -35,14 +37,23 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .count();
     // cdeabe75 restores Stroke.position (470), an animatable uint8 property.
-    assert_eq!(runtime_property_count, 674);
+    // Since then: StringTemplateArgument's name and its String and Number
+    // kinds' propertyValue (481 to 483) and DataConverterStringTemplate's
+    // delimiters (485, 486), from upstream c63a5ba0; PaintImage's artboardId
+    // (487) from upstream's artboard paint sources; LinearGradient's
+    // transform (1103 to 1107) from upstream's angular gradients; Video's
+    // paused, position, duration, ended, state and drawnByScript (60016 to
+    // 60021); and TextStyleDecoration's line (60022).
+    assert_eq!(runtime_property_count, 692);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 234);
+    // Video's loop, muted, volume, playbackRate, loopStart, loopEnd, paused
+    // and position animate since its native property migration.
+    assert_eq!(animatable_property_count, 242);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -63,7 +74,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 468);
+    // Video's paused, position, duration, ended, state and drawnByScript and
+    // TextStyleDecoration's line are described.
+    assert_eq!(described_property_count, 475);
 }
 
 #[test]

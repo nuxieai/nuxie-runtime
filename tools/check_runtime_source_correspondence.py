@@ -53,6 +53,12 @@ EDITOR_ONLY_OWNERS = {
 PREPROCESSOR_ADAPTED_OWNERS = {
     "core/editor_hooks": OWNER_ROOT / "generated/component_base.rs",
 }
+# Upstream features removed by decision, so they have no Rust owner. Exact
+# names only: any other new upstream owner still fails. The watermark (its
+# manifest section, artboard pre-roll and draw/advance hooks) was removed on
+# 2026-10-14 as an intentional divergence; Nuxie never ships watermarked files
+# (docs/upstream-sync-map.md, the watermark SKIP note).
+REMOVED_OWNERS = {"watermark"}
 # User-deferred execution lane, UNIV-3728. Enumerate exact owners so new upstream
 # files still fail this check until their scope is examined.
 DEFERRED_OWNERS = {
@@ -78,7 +84,8 @@ def upstream_owners(paths: list[str]) -> set[str]:
 def missing_owners(repo: Path, owners: set[str]) -> list[str]:
     missing = []
     for owner in sorted(owners):
-        if owner in DEFERRED_OWNERS or owner in CXX_ONLY_OWNERS or owner in EDITOR_ONLY_OWNERS:
+        if (owner in DEFERRED_OWNERS or owner in CXX_ONLY_OWNERS or owner in EDITOR_ONLY_OWNERS
+                or owner in REMOVED_OWNERS):
             continue
         target = PREPROCESSOR_ADAPTED_OWNERS.get(owner) or ADAPTED_OWNERS.get(owner,
             OWNER_ROOT / (RENAMED_OWNERS.get(owner, owner) + ".rs"))
@@ -109,10 +116,12 @@ def main() -> int:
     cxx_only = owners & CXX_ONLY_OWNERS
     editor_only = owners & EDITOR_ONLY_OWNERS
     preprocessor = owners & PREPROCESSOR_ADAPTED_OWNERS.keys()
-    mirrored = len(owners) - len(adapted) - len(deferred) - len(cxx_only) - len(editor_only) - len(preprocessor)
+    removed = owners & REMOVED_OWNERS
+    mirrored = (len(owners) - len(adapted) - len(deferred) - len(cxx_only) - len(editor_only)
+                - len(preprocessor) - len(removed))
     print(f"Runtime source correspondence: {mirrored} mirrored, {len(adapted)} adapted, "
           f"{len(cxx_only)} C++-ABI-only, {len(preprocessor)} preprocessor-adapted, "
-          f"{len(editor_only)} editor-only, {len(deferred)} deferred "
+          f"{len(editor_only)} editor-only, {len(deferred)} deferred, {len(removed)} removed "
           "(structural coverage only; not proof of behavioral parity).")
     for owner in sorted(adapted):
         print(f"Adapted: {owner} -> {ADAPTED_OWNERS[owner]}")
@@ -124,6 +133,8 @@ def main() -> int:
         print(f"Editor-only (unsupported WITH_RIVE_EDITOR): {owner}")
     for owner in sorted(deferred):
         print(f"Deferred (UNIV-3728): {owner}")
+    for owner in sorted(removed):
+        print(f"Removed by decision (docs/upstream-sync-map.md): {owner}")
     return 0
 
 

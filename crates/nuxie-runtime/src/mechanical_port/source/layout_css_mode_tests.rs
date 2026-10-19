@@ -174,6 +174,8 @@ enum Paint {
     Fill(u32),
     /// A Stroke with a SolidColor and a BoxBorder over `sides`.
     Border(u32, u64),
+    /// As `Border`, with the BoxBorder's style (1 dashed, 2 dotted).
+    StyledBorder(u32, u64, u64),
     /// A shadow: a Fill with a SolidColor and a local Feather of
     /// `strength`, whose BoxShadow has `spread`.
     Shadow {
@@ -317,6 +319,18 @@ fn push_paints(paints: &[Paint], index: u64, entries: &mut Vec<Entry<'_>>) {
                 entries.push(Entry::Record(
                     BOX_BORDER,
                     vec![U(BORDER_SIDES, sides)],
+                    paint_index,
+                ));
+            }
+            Paint::StyledBorder(color, sides, style) => {
+                entries.push(Entry::Stroke(index));
+                entries.push(Entry::Solid(color, paint_index));
+                entries.push(Entry::Record(
+                    BOX_BORDER,
+                    vec![
+                        U(BORDER_SIDES, sides),
+                        U(crate::css_layout::keys::BORDER_STYLE, style),
+                    ],
                     paint_index,
                 ));
             }
@@ -5101,6 +5115,35 @@ fn css_patterned_border_selection_stays_in_its_visible_side() {
         assert!(selected(30.0, 33.0).is_empty(), "radius {radius}");
         assert!(tapped(&f, "Card", (30.0, 33.0)), "radius {radius}");
     }
+}
+
+/// A dashed border is selected only on its dashes, as it paints: the gap
+/// between the first two dashes of a 4-point dashed top (8-point dashes,
+/// fitted 3.5-point gaps) selects nothing, while a tap there still takes
+/// the box.
+#[test]
+fn css_dashed_border_selection_skips_its_gaps() {
+    let f = frame(vec![B {
+        paints: vec![Paint::StyledBorder(0xff00_0001, 1, 1)],
+        ..css(
+            "Card",
+            [
+                [U(BOX_SIZING, 1), F(BORDER_TOP, 4.0)].as_slice(),
+                &width(100.0),
+                &height(40.0),
+            ]
+            .concat(),
+            vec![],
+        )
+    }]);
+    let mut host = f.host();
+    let mut selected = |x: f32, y: f32| {
+        let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
+        f.geometry_names(&hits)
+    };
+    assert_eq!(selected(4.0, 2.0), ["Card"], "on a dash");
+    assert!(selected(10.0, 2.0).is_empty(), "in a gap");
+    assert!(tapped(&f, "Card", (10.0, 2.0)));
 }
 
 /// The front of two overlapping CSS viewports, its corners cut 14 points

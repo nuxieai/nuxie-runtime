@@ -175,6 +175,30 @@ class CargoGraphTest(unittest.TestCase):
                 else:
                     self.assertNotIn("env", test)
 
+    def test_renderer_unit_tests_run_on_one_thread(self):
+        # The renderer's unit tests read process-global Metal state its other
+        # tests write; every Bazel run gives them one test thread.
+        for name in ("nuxie-renderer", "ordinary"):
+            manifest = self.package(name, "")
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src/lib.rs").write_text("")
+            package = collect_packages([manifest])[name]
+            graph = resolve_features({name: package}, {name: []}, include_dev=True)
+            rendered = render_package(package, {"test": graph}, lambda name, _: "//root:" + name,
+                                      fixture_labels=["//:fixtures"])
+            tests = []
+            def ignore(*args, **kwargs):
+                pass
+            scope = {"load": ignore, "package": ignore, "exports_files": ignore,
+                     "filegroup": ignore, "glob": lambda *args, **kwargs: [],
+                     "source_path": lambda *args: "crates/" + name,
+                     "all_crate_deps": lambda **kwargs: [], "crate_deps": lambda *args, **kwargs: [],
+                     "rust_library": ignore, "rust_test": lambda **kwargs: tests.append(kwargs)}
+            exec(rendered, scope)
+            self.assertEqual(len(tests), 1)
+            self.assertEqual(tests[0].get("env", {}).get("RUST_TEST_THREADS"),
+                             "1" if name == "nuxie-renderer" else None)
+
     def test_renderer_compiles_no_other_package_source(self):
         # Shared scene builders arrive through dependencies' test-support
         # features, so no package names another package's test sources.

@@ -31,6 +31,9 @@ PROC_MACROS = {"luaur-rt-derive", "serde_derive", "thiserror-impl", "bytemuck_de
 # reject stale binaries, so editing the probe reruns these tests without
 # recompiling; a new package spawning the probe must be listed here.
 TEST_DATA = {name: ["//:cpp_probe_sources"] for name in ("nuxie", "nuxie-binary", "nuxie-runtime")}
+# Packages whose unit tests share process-global native state and run on one
+# thread in every Bazel run.
+SERIAL_UNIT_TEST_PACKAGES = {"nuxie-renderer"}
 
 
 def quoted(value):
@@ -275,20 +278,29 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
         # the script's output directory in their runfiles, named by OUT_DIR.
         if has_build:
             test_data.append(":" + target + "__build_script")
-        test_env = ('    env = ' + quoted({"OUT_DIR": "$(rootpath :" + target + "__build_script)"}) + ',',) if has_build else ()
+        integration_runtime_env = {"OUT_DIR": "$(rootpath :" + target + "__build_script)"} if has_build else {}
+        test_env = ('    env = ' + quoted(integration_runtime_env) + ',',) if integration_runtime_env else ()
+        # The renderer's unit tests read process-global Metal state (the
+        # system device's retain counts, the background compiler's owner
+        # streams) that its other Metal tests also write, so they run on one
+        # thread, as make renderer-native-metal-v3 runs them.
+        unit_runtime_env = dict(integration_runtime_env)
+        if package.name in SERIAL_UNIT_TEST_PACKAGES:
+            unit_runtime_env["RUST_TEST_THREADS"] = "1"
+        unit_env = ('    env = ' + quoted(unit_runtime_env) + ',',) if unit_runtime_env else ()
         unit_data = '_compile_data + ' + quoted(test_data) if test_data else '_compile_data'
         if unit_tests and has_lib:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
                 f'    crate_features = {compiler_features},',
-                f'    deps = {test_deps},', f'    data = {unit_data},', *test_env,
+                f'    deps = {test_deps},', f'    data = {unit_data},', *unit_env,
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         elif unit_tests and package.name in binaries:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
                 f'    crate_features = {compiler_features},',
-                f'    deps = {test_deps},', f'    data = {unit_data},', *test_env,
+                f'    deps = {test_deps},', f'    data = {unit_data},', *unit_env,
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         if integration_tests:

@@ -117,12 +117,15 @@ fn generated_schema_is_reproducible_from_cpp_defs() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let rustfmt = Command::new("rustfmt")
-        .arg("--edition")
-        .arg("2024")
-        .arg(&actual_path)
-        .output()
-        .unwrap_or_else(|err| panic!("failed to run rustfmt: {err}"));
+    // The rustfmt `make fmt-check` formats with: Bazel's test PATH does not
+    // reach it, so tools/bazel/runtime.py passes it as NUXIE_RUSTFMT.
+    let rustfmt =
+        Command::new(std::env::var_os("NUXIE_RUSTFMT").unwrap_or_else(|| "rustfmt".into()))
+            .arg("--edition")
+            .arg("2024")
+            .arg(&actual_path)
+            .output()
+            .unwrap_or_else(|err| panic!("failed to run rustfmt: {err}"));
     assert!(
         rustfmt.status.success(),
         "rustfmt failed\nstdout:\n{}\nstderr:\n{}",

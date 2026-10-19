@@ -297,6 +297,11 @@ def main():
                       if name.startswith(("NUXIE_", "RIVE_", "MTL_"))
                       and not name.startswith(("NUXIE_BAZEL_", "NUXIE_CI_"))
                       and name not in ("NUXIE_BUILDKITE_CACHE_ROOT", "NUXIE_NODE_OPTIONS", "NUXIE_GRADLE_MAX_WORKERS")]
+            # The host rustfmt, which `make fmt-check` formats with, for tests that
+            # format generated sources; Bazel's test PATH does not reach it.
+            rustfmt = shutil.which("rustfmt")
+            if rustfmt and "NUXIE_RUSTFMT" not in os.environ:
+                flags.append("--test_env=NUXIE_RUSTFMT=" + rustfmt)
         if options["command"] == "clippy":
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"

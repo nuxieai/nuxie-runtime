@@ -310,7 +310,9 @@ Stops keep Rive's `GradientStop` positions (0 to 1) and colours.
 
 The runtime's box paint is compared with Chrome 155's pixels for the same CSS
 (`crates/nuxie-renderer/src/deferred/gm/css_box_paint.rs`, references in
-`fixtures/css_layout/chrome/` from `tools/css-layout/chrome-references.sh`):
+`fixtures/css_layout/chrome/` from `tools/css-layout/chrome-references.sh`).
+Every check draws its scene in both native Metal modes, raster-ordering (which
+every iPhone uses) and clockwise-atomic, and each bound below holds in both:
 
 - Shadows: a blur alone, offsets with spread, outer-only clipping, an inset shadow
   inside a border, and a rounded box. With `strength` equal to the CSS blur

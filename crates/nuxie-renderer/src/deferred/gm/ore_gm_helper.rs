@@ -295,10 +295,13 @@ impl GmHost {
         Self::with_size(clear, open, SIZE, SIZE)
     }
     pub fn with_size(clear: u32, open: bool, width: u32, height: u32) -> Self {
+        Self::with_mode(clear, open, width, height, RenderMode::RasterOrdering)
+    }
+    pub fn with_mode(clear: u32, open: bool, width: u32, height: u32, mode: RenderMode) -> Self {
         let mut native_factory = NativeMetalFactory::new_with_mode_and_context_options(
             width,
             height,
-            RenderMode::RasterOrdering,
+            mode,
             NativeMetalContextOptions {
                 // gmmain.cpp and goldens.cpp choose this before the Metal
                 // window is created, so paired captures use the same shaders.

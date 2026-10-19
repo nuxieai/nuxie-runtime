@@ -1684,6 +1684,39 @@ pub unsafe fn make_path_draw_from_source(
     modulated_color: u32,
     precomputed_pixel_bounds: Option<IAABB>,
 ) -> Option<Box<PathDrawAllocation>> {
+    unsafe {
+        make_path_draw_from_source_with_clockwise_override(
+            context,
+            paint_matrix,
+            image_matrix,
+            path_ref,
+            initial_fill_rule,
+            paint,
+            modulated_opacity,
+            modulated_color,
+            precomputed_pixel_bounds,
+            false,
+        )
+    }
+}
+
+/// Nuxie addition (UNIV-5018): `PathDraw::Make` that can build one draw as a
+/// `clockwiseFillOverride` frame would, whatever the frame says.
+/// `RiveRenderer::drawPath` asks for it for feathered fills whose rule is not
+/// clockwise, which upstream drops outside clockwise-override frames.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn make_path_draw_from_source_with_clockwise_override(
+    context: &mut RenderContext,
+    paint_matrix: Mat2D,
+    image_matrix: Option<Mat2D>,
+    path_ref: rcp<RiveRenderPath>,
+    initial_fill_rule: FillRule,
+    paint: &dyn RiveRenderPaintContract,
+    modulated_opacity: f32,
+    modulated_color: u32,
+    precomputed_pixel_bounds: Option<IAABB>,
+    draw_clockwise_fill_override: bool,
+) -> Option<Box<PathDrawAllocation>> {
     let render_path = unsafe { &*path_ref.get() };
     let path = render_path.getRawPath();
     debug_assert!(!path.verbs().is_empty());
@@ -1706,7 +1739,8 @@ pub unsafe fn make_path_draw_from_source(
         return None;
     }
 
-    let clockwise_fill_override = context.frameDescriptor().clockwiseFillOverride;
+    let clockwise_fill_override =
+        context.frameDescriptor().clockwiseFillOverride || draw_clockwise_fill_override;
     let directions = contour_directions_for_path(
         path,
         paint_matrix,

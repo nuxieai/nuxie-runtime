@@ -1641,6 +1641,10 @@ impl Schema {
             "        group: {},\n",
             option_string(property.raw.group.as_deref())
         ));
+        out.push_str(&format!(
+            "        sidecar: {},\n",
+            option_string(property.raw.sidecar.as_deref())
+        ));
         out.push_str(&format!("        nullable: {},\n", property.raw.nullable));
         out.push_str(&format!(
             "        override_set: {},\n",
@@ -2095,6 +2099,8 @@ struct RawProperty {
     #[serde(rename = "initialValueRuntime")]
     initial_value_runtime: Option<String>,
     group: Option<String>,
+    /// Upstream's lazy sidecar group (rive-runtime 3fc5a3360).
+    sidecar: Option<String>,
     #[serde(default)]
     nullable: bool,
     #[serde(default, rename = "overrideSet")]

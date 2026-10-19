@@ -1584,6 +1584,27 @@ keep the difference. Its disposition belongs to the audit in
 [UNIV-3979](https://universe.basis.dev/issue/UNIV-3979). This branch does not
 change `Text::measure`.
 
+## Named renderer additions
+
+These add drawing where pinned upstream draws nothing. Every input upstream
+draws keeps its upstream path and pixels.
+
+- **feathered-fill-any-rule** (R1,
+  [UNIV-5018](https://universe.basis.dev/issue/UNIV-5018)): upstream
+  `RiveRenderer::drawPath` (`renderer/src/rive_renderer.cpp`, "Don't draw
+  feathered fills that aren't clockwise") returns for a feathered fill whose
+  fill rule is not clockwise unless the frame sets `clockwiseFillOverride`.
+  Clockwise-atomic frames set it; raster-ordering frames (every iOS device and
+  the Apple-silicon macOS default) and MSAA frames do not, so one fill drew in
+  one mode and vanished in the other. Nuxie draws such a fill as a
+  clockwise-override frame does:
+  `make_path_draw_from_source_with_clockwise_override` gives `PathDraw::Make`
+  that override for the one draw, which selects the clockwise rule and flips a
+  mostly counterclockwise path. Clockwise feathered fills, the only kind the
+  Rive editor writes (every feathered fill in the `.riv` render fixtures and
+  upstream GMs), are unchanged. `deferred::gm::feather_modes` pins this in both
+  native Metal modes.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++

@@ -143,6 +143,12 @@ struct B {
     listener: Option<&'static str>,
     /// A pointer drag listener on this box, firing an event of this name.
     drag_listener: Option<&'static str>,
+    /// A pointer enter listener on this box, firing an event of this name.
+    enter_listener: Option<&'static str>,
+    /// A nested artboard as this box's content, of the file's second
+    /// artboard: 200 by 40, a translated 180 by 40 box holding a field, with
+    /// a state machine.
+    nested_field: bool,
     /// A text input as this box's content, focusable through its FocusData.
     text_input: bool,
     /// The text input's text.
@@ -285,6 +291,9 @@ enum Entry<'a> {
     TextStyle(u64),
     /// An Event of a name, in the artboard.
     Event(&'static str),
+    /// A NestedArtboard of the second artboard, and its NestedStateMachine.
+    Nested(u64),
+    NestedMachine(u64),
 }
 
 /// A box's (or the artboard's) paints and their CSS records.
@@ -470,6 +479,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 entries.push(Entry::EmptyText(parent));
             }
         }
+        if node.nested_field {
+            entries.push(Entry::Nested(index));
+            entries.push(Entry::NestedMachine(slots(entries)));
+        }
         if node.text_input {
             entries.push(Entry::TextInput(index, node.text));
             let input = slots(entries);
@@ -515,6 +528,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             for (kind, event) in [
                 (ListenerType::Click, node.listener),
                 (ListenerType::Drag, node.drag_listener),
+                (ListenerType::Enter, node.enter_listener),
             ] {
                 if let Some(event) = event {
                     listened.push((index, kind, event));
@@ -576,9 +590,13 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     }
     // A text input shapes its text in the file's one font, after any image.
     let font_asset = u64::from(pictured);
-    if entries
+    let nested = entries
         .iter()
-        .any(|entry| matches!(entry, Entry::TextInput(..)))
+        .any(|entry| matches!(entry, Entry::Nested(..)));
+    if nested
+        || entries
+            .iter()
+            .any(|entry| matches!(entry, Entry::TextInput(..)))
     {
         use crate::source::generated::assets::{
             file_asset_base::FileAssetBase, file_asset_contents_base::FileAssetContentsBase,
@@ -790,6 +808,24 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0)
                     .end();
             }
+            Entry::Nested(parent) => {
+                use crate::source::generated::nested_artboard_base::NestedArtboardBase;
+                riv.object(NestedArtboardBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+                    .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+                    .end();
+            }
+            Entry::NestedMachine(parent) => {
+                use crate::source::generated::{
+                    animation::nested_state_machine_base::NestedStateMachineBase,
+                    nested_animation_base::NestedAnimationBase,
+                };
+                riv.object(NestedStateMachineBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
+                    .end();
+            }
             Entry::Event(name) => {
                 riv.object(crate::source::generated::event_base::EventBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
@@ -899,6 +935,59 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, event)
                 .end();
         }
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        for state in [
+            EntryStateBase::TYPE_KEY,
+            AnyStateBase::TYPE_KEY,
+            ExitStateBase::TYPE_KEY,
+        ] {
+            riv.object(state).end();
+        }
+    }
+    if nested {
+        // The nested artboard: 0 the artboard, 1 its box, 2 the field, 3 its
+        // FocusData, 4 its text style, 5 and 6 the two styles.
+        use crate::source::generated::{
+            animation::{
+                any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+                exit_state_base::ExitStateBase, state_machine_base::StateMachineBase,
+                state_machine_layer_base::StateMachineLayerBase,
+            },
+            focus_data_base::FocusDataBase,
+            text::{
+                text_input_base::TextInputBase, text_style_base::TextStyleBase,
+                text_style_paint_base::TextStylePaintBase,
+            },
+        };
+        riv.object(ArtboardBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5)
+            .end();
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Nested box")
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 180.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 6)
+            .end();
+        riv.object(TextInputBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Nested field")
+            .string(TextInputBase::TEXT_PROPERTY_KEY, "hello world")
+            .end();
+        riv.object(FocusDataBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .end();
+        riv.object(TextStylePaintBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, font_asset)
+            .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0)
+            .end();
+        style(&mut riv, 0, &[]);
+        style(&mut riv, 1, &[]);
+        riv.object(StateMachineBase::TYPE_KEY).end();
         riv.object(StateMachineLayerBase::TYPE_KEY).end();
         for state in [
             EntryStateBase::TYPE_KEY,
@@ -5444,6 +5533,14 @@ fn css_drag_on_an_unfocused_field_scrolls_its_scroll_box() {
     assert!(f.field_is_focused());
     machine.with_instance_mut(|machine| machine.clear_focus());
     assert_eq!(
+        press_and_drag(&machine, (90.0, 20.0), &[(90.0, 17.0), (90.0, 15.0)]),
+        ["field clicked", "viewport clicked"],
+        "a tap that moves 5 points"
+    );
+    assert!(f.field_is_focused());
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert_eq!(
         press_and_drag(
             &machine,
             (90.0, 35.0),
@@ -5739,4 +5836,101 @@ fn translated_scroll_view_keeps_rives_gestures() {
         "a button"
     );
     assert_eq!(f.scroll_offset("List"), (0.0, -15.0));
+}
+
+/// A drag a nested artboard's handler takes is not the host's: a field in
+/// one, which takes its press, keeps the drag from the CSS scroll box
+/// around the nested artboard, while a drag beside the field scrolls it.
+#[test]
+fn css_scroll_box_leaves_a_drag_a_nested_artboard_takes() {
+    let holder = || B {
+        nested_field: true,
+        ..css("Holder", [width(200.0), height(40.0)].concat(), vec![])
+    };
+    let f = css_scroll_view(Some("viewport clicked"), holder());
+    press_and_drag(
+        &f.machine(),
+        (90.0, 35.0),
+        &[(90.0, 25.0), (90.0, 15.0), (90.0, 5.0)],
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0), "on the nested field");
+    let f = css_scroll_view(Some("viewport clicked"), holder());
+    press_and_drag(
+        &f.machine(),
+        (190.0, 35.0),
+        &[(190.0, 25.0), (190.0, 15.0), (190.0, 5.0)],
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0), "beside it");
+}
+
+/// A CSS box is hovered and pressed through a child outside it, as a
+/// browser's ancestors are: a child that only clicks keeps its box's enter
+/// listener hovered as the pointer moves over it, and a child that answers
+/// no button still lets the box answer the host's button query.
+#[test]
+fn css_box_is_hovered_and_pressed_through_a_child_outside_it() {
+    let outside = |child: B| {
+        scene(
+            (400.0, 300.0),
+            B {
+                listener: Some("card clicked"),
+                enter_listener: Some("card entered"),
+                ..css(
+                    "Card",
+                    [[U(POSITION, 1)].as_slice(), &width(100.0), &height(40.0)].concat(),
+                    vec![child],
+                )
+            },
+        )
+    };
+    let placed = |name: &'static str| {
+        css(
+            name,
+            [
+                [
+                    U(POSITION, 2),
+                    U(INSET_LEFT_KIND, 1),
+                    F(INSET_LEFT, 120.0),
+                    U(INSET_TOP_KIND, 1),
+                    F(INSET_TOP, 0.0),
+                ]
+                .as_slice(),
+                &width(80.0),
+                &height(40.0),
+            ]
+            .concat(),
+            vec![],
+        )
+    };
+    let f = outside(B {
+        listener: Some("pop clicked"),
+        ..placed("Pop")
+    });
+    let machine = f.machine();
+    let moved = |x: f32| {
+        use crate::source::math::vec2d::Vec2D;
+        let before = machine.with_instance(|machine| machine.reported_event_count());
+        machine.with_instance_mut(|machine| machine.pointer_move(Vec2D::new(x, 20.0), 0.0, 0));
+        machine.with_instance(|machine| machine.reported_event_count()) - before
+    };
+    assert_eq!(moved(160.0), 1, "the card's enter");
+    assert_eq!(moved(165.0), 0, "still hovered");
+    assert_eq!(
+        click(&machine, 165.0, 20.0),
+        (
+            true,
+            vec!["pop clicked".to_owned(), "card clicked".to_owned()]
+        )
+    );
+    let f = outside(B {
+        enter_listener: Some("badge entered"),
+        ..placed("Badge")
+    });
+    let machine = f.machine();
+    assert!(machine.with_instance_mut(|machine| {
+        machine.listens_to_button_at(
+            crate::source::math::vec2d::Vec2D::new(160.0, 20.0),
+            crate::source::pointer_button::PointerButton::Primary,
+        )
+    }));
 }

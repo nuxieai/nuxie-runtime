@@ -227,7 +227,12 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             });
             ProcessEventResult::Scroll
         } else {
-            if previous == GestureClickPhase::Down && self.pending_tap.replace(false) {
+            // Only the press's end settles the tap: moves below the scroll
+            // threshold keep it.
+            if previous == GestureClickPhase::Down
+                && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
+                && self.pending_tap.replace(false)
+            {
                 if phase == GestureClickPhase::Clicked {
                     // The tap: focus the field with its caret where it was
                     // released.

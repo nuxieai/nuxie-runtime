@@ -5,19 +5,16 @@
 //! feathered fill whose strength is the CSS blur radius (both are two
 //! standard deviations of the Gaussian), offset by the CSS offsets, with
 //! BoxShadow's spread and CSS clipping: an outer shadow only outside the
-//! border box, an inset one only inside the padding box.
+//! border box, an inset one only inside the padding box. Every scene is
+//! checked in both native Metal modes.
 use super::ore_gm_helper::*;
-use crate::deferred::cmd::{
-    deferred_replayer::{snapshot_frame, DeferredReplayer},
-    deferred_session::DeferredSession,
-};
+use crate::RenderMode;
 use nuxie_runtime::{File, RuntimeFactoryHandle};
 use std::collections::BTreeMap;
 
 const SIZE: u32 = 200;
-/// Feathered fills are exact against C++ in clockwise-atomic mode
-/// (corpus-r.toml's gm-feather_* rows).
-const MODE: crate::RenderMode = crate::RenderMode::ClockwiseAtomic;
+/// Raster-ordering, which every iPhone uses, and clockwise-atomic.
+const MODES: [RenderMode; 2] = [RenderMode::RasterOrdering, RenderMode::ClockwiseAtomic];
 
 #[derive(Default)]
 struct Riv {
@@ -212,55 +209,25 @@ fn scene(shadow: Shadow, strength_scale: f32) -> Vec<u8> {
     riv.bytes()
 }
 
-fn render(bytes: &[u8]) -> Vec<u8> {
-    render_with(bytes, false)
-}
-
-/// The artboard drawn straight into the Metal screen, or through a deferred
-/// session and its replay.
-fn render_with(bytes: &[u8], deferred: bool) -> Vec<u8> {
-    if !deferred {
-        let mut host = GmHost::with_mode(0xffffffff, true, SIZE, SIZE, MODE);
-        let file = File::import(
-            bytes,
-            RuntimeFactoryHandle::from_factory(&mut host.factory).unwrap(),
-            None,
-            None,
-            None,
-        )
-        .expect("the shadow scene imports");
-        let artboard = file.with_file(File::artboard_default).expect("artboard");
-        for _ in 0..3 {
-            artboard.advance_default(1.0 / 60.0);
-        }
-        let screen = host.screen();
-        artboard.draw_internal(screen.borrow_mut().as_mut());
-        drop(screen);
-        return host.finish();
-    }
-    let mut host = GmHost::with_mode(0xffffffff, false, SIZE, SIZE, MODE);
-    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
-    session
-        .borrow_mut()
-        .bind_render_context(host.factory.persistent_context());
+/// The artboard drawn straight into the Metal screen in `mode`.
+fn render(bytes: &[u8], mode: RenderMode) -> Vec<u8> {
+    let mut host = GmHost::with_mode(0xffffffff, true, SIZE, SIZE, mode);
     let file = File::import(
         bytes,
-        RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+        RuntimeFactoryHandle::from_factory(&mut host.factory).unwrap(),
         None,
         None,
         None,
     )
-    .expect("the shadow scene imports");
+    .expect("the scene imports");
     let artboard = file.with_file(File::artboard_default).expect("artboard");
     for _ in 0..3 {
         artboard.advance_default(1.0 / 60.0);
     }
-    let screen = session.borrow().screen_renderer(0);
+    let screen = host.screen();
     artboard.draw_internal(screen.borrow_mut().as_mut());
-    let frame = snapshot_frame(&mut session.borrow_mut());
-    session.borrow_mut().reset_frame();
-    DeferredReplayer::default().replay_frame(&frame, &mut host);
-    host.finish_frame()
+    drop(screen);
+    host.finish()
 }
 
 /// Mean and largest per-pixel difference (the largest of the colour
@@ -276,6 +243,22 @@ fn difference(chrome: &[u8], ours: &[u8]) -> (f32, u8, usize) {
         outliers += usize::from(delta > 8);
     }
     (sum as f32 / (chrome.len() / 4) as f32, max, outliers)
+}
+
+/// `difference` against Chrome's `reference`, with our pixels written to
+/// the temp directory and the result printed.
+fn compare(name: &str, mode: RenderMode, reference: &[u8], ours: Vec<u8>) -> (f32, u8, usize) {
+    let (mean, max, outliers) = difference(reference, &ours);
+    let path = std::env::temp_dir().join(format!("nuxie-css-{name}-{mode:?}.png"));
+    pixel_compare::RgbaImage::new(SIZE, SIZE, ours)
+        .unwrap()
+        .write_png(&path)
+        .unwrap();
+    eprintln!(
+        "{name} {mode:?}: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
+        path.display()
+    );
+    (mean, max, outliers)
 }
 
 fn chrome(name: &str) -> Vec<u8> {
@@ -300,36 +283,29 @@ const STRAIGHT: Bound = Bound {
     outliers: 0,
 };
 
-/// The contract's mapping matches Chrome within `bound`, and better than
-/// half or double the strength would.
+/// In each mode the contract's mapping matches Chrome within `bound`, and
+/// better than half or double the strength would.
 fn check(name: &str, shadow: Shadow, bound: Bound) {
     let reference = chrome(name);
-    let ours = render(&scene(shadow, 1.0));
-    let (mean, max, outliers) = difference(&reference, &ours);
-    let path = std::env::temp_dir().join(format!("nuxie-css-{name}.png"));
-    pixel_compare::RgbaImage::new(SIZE, SIZE, ours.clone())
-        .unwrap()
-        .write_png(&path)
-        .unwrap();
-    eprintln!(
-        "{name}: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
-        path.display()
-    );
-    for scale in [0.5, 2.0] {
-        let (other, _, _) = difference(&reference, &render(&scene(shadow, scale)));
-        eprintln!("{name}: strength x{scale}: mean {other:.3}");
+    for mode in MODES {
+        let (mean, max, outliers) =
+            compare(name, mode, &reference, render(&scene(shadow, 1.0), mode));
+        for scale in [0.5, 2.0] {
+            let (other, _, _) = difference(&reference, &render(&scene(shadow, scale), mode));
+            eprintln!("{name} {mode:?}: strength x{scale}: mean {other:.3}");
+            assert!(
+                other > 2.0 * mean,
+                "{name} {mode:?}: strength x{scale} is not clearly worse ({other} against {mean})"
+            );
+        }
         assert!(
-            other > 2.0 * mean,
-            "{name}: strength x{scale} is not clearly worse ({other} against {mean})"
+            mean <= bound.mean && max <= bound.max && outliers <= bound.outliers,
+            "{name} {mode:?}: mean {mean} (at most {}), max {max} (at most {}), {outliers} outliers (at most {})",
+            bound.mean,
+            bound.max,
+            bound.outliers
         );
     }
-    assert!(
-        mean <= bound.mean && max <= bound.max && outliers <= bound.outliers,
-        "{name}: mean {mean} (at most {}), max {max} (at most {}), {outliers} outliers (at most {})",
-        bound.mean,
-        bound.max,
-        bound.outliers
-    );
 }
 
 const BOX: Shadow = Shadow {
@@ -460,22 +436,15 @@ fn css_border_sides_match_chrome() {
         .float(CORNER_RADIUS_TL, 12.0)
         .end();
     let reference = chrome("border_sides");
-    let ours = render(&riv.bytes());
-    let (mean, max, outliers) = difference(&reference, &ours);
-    let path = std::env::temp_dir().join("nuxie-css-border_sides.png");
-    pixel_compare::RgbaImage::new(SIZE, SIZE, ours)
-        .unwrap()
-        .write_png(&path)
-        .unwrap();
-    eprintln!(
-        "border_sides: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
-        path.display()
-    );
-    // Curved edges and the corner joins are anti-aliased differently.
-    assert!(
-        mean <= 1.0 && outliers <= 150,
-        "border_sides: mean {mean}, max {max}, {outliers} outliers"
-    );
+    for mode in MODES {
+        let (mean, max, outliers) =
+            compare("border_sides", mode, &reference, render(&riv.bytes(), mode));
+        // Curved edges and the corner joins are anti-aliased differently.
+        assert!(
+            mean <= 1.0 && outliers <= 150,
+            "border_sides {mode:?}: mean {mean}, max {max}, {outliers} outliers"
+        );
+    }
 }
 
 const SOLID: u64 = 0;
@@ -550,30 +519,23 @@ fn check_border_style(
     outliers_at_most: usize,
 ) {
     let reference = chrome(name);
-    let ours = render(&border_style_scene(width, style, radius, strokes));
-    let (mean, max, outliers) = difference(&reference, &ours);
-    let path = std::env::temp_dir().join(format!("nuxie-css-{name}.png"));
-    pixel_compare::RgbaImage::new(SIZE, SIZE, ours)
-        .unwrap()
-        .write_png(&path)
-        .unwrap();
-    eprintln!(
-        "{name}: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
-        path.display()
-    );
-    let (solid, _, _) = difference(
-        &reference,
-        &render(&border_style_scene(width, SOLID, radius, strokes)),
-    );
-    eprintln!("{name}: drawn solid: mean {solid:.3}");
-    assert!(
-        solid > 4.0 * mean,
-        "{name}: solid is not clearly worse ({solid} against {mean})"
-    );
-    assert!(
-        mean <= 0.5 && outliers <= outliers_at_most,
-        "{name}: mean {mean}, max {max}, {outliers} outliers (at most {outliers_at_most})"
-    );
+    for mode in MODES {
+        let ours = render(&border_style_scene(width, style, radius, strokes), mode);
+        let (mean, max, outliers) = compare(name, mode, &reference, ours);
+        let (solid, _, _) = difference(
+            &reference,
+            &render(&border_style_scene(width, SOLID, radius, strokes), mode),
+        );
+        eprintln!("{name} {mode:?}: drawn solid: mean {solid:.3}");
+        assert!(
+            solid > 4.0 * mean,
+            "{name} {mode:?}: solid is not clearly worse ({solid} against {mean})"
+        );
+        assert!(
+            mean <= 0.5 && outliers <= outliers_at_most,
+            "{name} {mode:?}: mean {mean}, max {max}, {outliers} outliers (at most {outliers_at_most})"
+        );
+    }
 }
 
 const ALL_BLACK: &[(u32, u64)] = &[(0xff000000, 15)];
@@ -685,22 +647,14 @@ fn gradient_scene(radial: bool, colors: [u32; 2], placement: &[(u16, f32)]) -> V
 
 fn check_gradient(name: &str, bytes: &[u8]) {
     let reference = chrome(name);
-    let ours = render(bytes);
-    let (mean, max, outliers) = difference(&reference, &ours);
-    let path = std::env::temp_dir().join(format!("nuxie-css-{name}.png"));
-    pixel_compare::RgbaImage::new(SIZE, SIZE, ours)
-        .unwrap()
-        .write_png(&path)
-        .unwrap();
-    eprintln!(
-        "{name}: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
-        path.display()
-    );
-    // Interpolation and dithering differ by a level or two.
-    assert!(
-        mean <= 1.0 && max <= 8,
-        "{name}: mean {mean}, max {max}, {outliers} outliers"
-    );
+    for mode in MODES {
+        let (mean, max, outliers) = compare(name, mode, &reference, render(bytes, mode));
+        // Interpolation and dithering differ by a level or two.
+        assert!(
+            mean <= 1.0 && max <= 8,
+            "{name} {mode:?}: mean {mean}, max {max}, {outliers} outliers"
+        );
+    }
 }
 
 /// `linear-gradient(135deg, red, blue)`: the line through the centre whose

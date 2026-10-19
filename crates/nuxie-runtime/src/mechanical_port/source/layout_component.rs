@@ -1717,6 +1717,11 @@ impl LayoutComponent {
         self.style = style;
         self.refresh_style_display_hidden();
     }
+    /// The proxy that draws this box's own paint, when the draw list has
+    /// made one; `proxy` makes it.
+    pub(crate) fn existing_proxy(&self) -> Option<&Rc<RefCell<DrawableProxy>>> {
+        self.proxy.as_ref()
+    }
     pub fn proxy(&mut self) -> Option<RuntimeDrawableOccurrence> {
         if self.proxy.is_none() {
             let owner = self.base.base.base.base.base.handle()?;

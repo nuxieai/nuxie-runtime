@@ -135,6 +135,9 @@ struct B {
     /// LayoutCssStyle properties keyed by the file's one animation, as
     /// `box_paint_keys`.
     css_keys: Vec<(u16, Vec<(u32, f32)>)>,
+    /// Children written after every other box, as runtime materialization
+    /// (a text input's hint and value) appends them.
+    late_children: Vec<B>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -358,7 +361,12 @@ struct ArtboardSpec {
 fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Option<Scene> {
     let artboard_css = spec.css.clone();
     let artboard_paints = spec.paints.as_slice();
-    fn walk<'a>(node: &'a B, parent: u64, entries: &mut Vec<Entry<'a>>) {
+    fn walk<'a>(
+        node: &'a B,
+        parent: u64,
+        entries: &mut Vec<Entry<'a>>,
+        late: &mut Vec<(&'a B, u64)>,
+    ) {
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(props) = &node.css {
@@ -420,8 +428,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             }
         }
         for child in &node.children {
-            walk(child, index, entries);
+            walk(child, index, entries, late);
         }
+        late.extend(node.late_children.iter().map(|child| (child, index)));
     }
     let mut entries = Vec::new();
     if let Some(props) = &artboard_css {
@@ -436,7 +445,13 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         entries.push(Entry::Path(rect, slots(&entries)));
     }
     if let Some(root) = &root {
-        walk(root, 0, &mut entries);
+        let mut late = Vec::new();
+        walk(root, 0, &mut entries, &mut late);
+        while !late.is_empty() {
+            for (child, parent) in std::mem::take(&mut late) {
+                walk(child, parent, &mut entries, &mut late);
+            }
+        }
     }
     // Styles follow every other object: the artboard's, then one per box.
     let first_style = slots(&entries) + 1;
@@ -3581,6 +3596,100 @@ fn css_hit_order_follows_the_paint_order() {
     let top_first = f.draw_names_top_first();
     let at = |name: &str| top_first.iter().position(|n| n == name).unwrap();
     assert!(at("B") < at("A"), "{top_first:?}");
+}
+
+/// A box's own paint stays at the bottom of its stack whatever order its
+/// drawables arrive in. A retained remount (a late font or catalog
+/// registration re-creating the text inside a box) appends the re-created
+/// children after the box's own drawable and proxy; the box's fills,
+/// strokes, borders and shadows must still paint below them, and its clip
+/// still close above them, as a cold load orders them.
+#[test]
+fn css_box_paint_stays_below_children_appended_after_it() {
+    use crate::css_layout::paint_order;
+    use crate::source::drawable::RuntimeDrawableOccurrence;
+    let f = frame(vec![B {
+        children: vec![painted("Phrase", 0xff00_0002, sized(&[]))],
+        ..painted("Detail", 0xff00_0001, sized(&[]))
+    }]);
+    let name = |item: &RuntimeDrawableOccurrence| {
+        let (owner, proxy) = match item {
+            RuntimeDrawableOccurrence::Authored(handle) => (handle.clone(), ""),
+            RuntimeDrawableOccurrence::RuntimeProxy(proxy) => {
+                (proxy.borrow().owner_handle(), " proxy")
+            }
+        };
+        let owner = owner
+            .with(|object| object.as_component().map(|c| c.name().to_owned()))
+            .flatten()
+            .unwrap_or_default();
+        format!("{owner}{proxy}")
+    };
+    let root = f.artboard.core_handle();
+    let (cold, file_order) = f.artboard.with_artboard(|artboard| {
+        let file_order = artboard
+            .objects()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, object)| object.clone().map(|object| (object, index)))
+            .collect::<std::collections::HashMap<_, _>>();
+        (artboard.drawables().to_vec(), file_order)
+    });
+    let names = |items: &[RuntimeDrawableOccurrence]| items.iter().map(name).collect::<Vec<_>>();
+    let cold_names = names(&cold);
+    let at = |names: &[String], wanted: &str| {
+        names
+            .iter()
+            .position(|name| name == wanted)
+            .unwrap_or_else(|| panic!("{wanted} in {names:?}"))
+    };
+    // The cold load: the box's clip closes above its child, its paint
+    // (the proxy) sits below it.
+    assert!(
+        at(&cold_names, "Detail") < at(&cold_names, "Phrase"),
+        "{cold_names:?}"
+    );
+    assert!(
+        at(&cold_names, "Phrase") < at(&cold_names, "Detail proxy"),
+        "{cold_names:?}"
+    );
+    // The remount: Phrase's drawables arrive last, after Detail's own.
+    let (phrase, mut remount): (Vec<_>, Vec<_>) = cold
+        .iter()
+        .cloned()
+        .partition(|item| name(item).starts_with("Phrase"));
+    remount.extend(phrase);
+    let ordered = paint_order::order(
+        &root,
+        paint_order::container_of(&root),
+        remount,
+        &file_order,
+    );
+    assert_eq!(names(&ordered), cold_names);
+}
+
+/// The same on a cold mount: a box whose children's objects come after
+/// another box's, as a text input's materialized hint and value do, reaches
+/// the draw list with its own drawable and proxy before its children. Its
+/// background still paints below their ink.
+#[test]
+fn css_box_paint_stays_below_children_mounted_after_it() {
+    let f = frame(vec![
+        B {
+            late_children: vec![painted("Phrase", 0xff00_0002, sized(&[]))],
+            ..painted("Detail", 0xff00_0001, sized(&[]))
+        },
+        painted("Other", 0xff00_0003, sized(&[])),
+    ]);
+    let top_first = f.draw_names_top_first();
+    let at = |name: &str| top_first.iter().position(|n| n == name).unwrap();
+    assert!(at("Detail") < at("Phrase"), "{top_first:?}");
+    let lines = f.draw_lines();
+    assert!(
+        draw_at(&lines, 0xff00_0001) < draw_at(&lines, 0xff00_0002),
+        "{}",
+        lines.join("\n")
+    );
 }
 
 impl Scene {

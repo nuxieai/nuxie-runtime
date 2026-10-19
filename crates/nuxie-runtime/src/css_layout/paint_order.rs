@@ -14,7 +14,7 @@ use crate::source::{
     core::CoreHandle, drawable::RuntimeDrawableOccurrence,
     generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 /// How a container orders its children.
 #[derive(Clone, Copy)]
@@ -32,6 +32,24 @@ fn owner_of(drawable: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
         RuntimeDrawableOccurrence::Authored(handle) => Some(handle.clone()),
         RuntimeDrawableOccurrence::RuntimeProxy(proxy) => Some(proxy.borrow().owner_handle()),
     }
+}
+
+/// Whether `item` is `container`'s own paint: a box's proxy, which draws
+/// its fills, strokes, borders, shadows and gradients and then opens its
+/// content clip. It paints below the box's children however the drawables
+/// arrive: a retained remount appends re-created children after it.
+fn is_own_paint(container: &CoreHandle, item: &RuntimeDrawableOccurrence) -> bool {
+    let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = item else {
+        return false;
+    };
+    container
+        .with(|object| {
+            object
+                .as_layout_component()
+                .and_then(|layout| layout.existing_proxy())
+                .is_some_and(|own| Rc::ptr_eq(own, proxy))
+        })
+        .unwrap_or(false)
 }
 
 /// The child of `container` that `component` is, or is inside. None for the
@@ -117,6 +135,10 @@ pub(crate) fn order(
     let mut groups: Vec<(CoreHandle, Vec<RuntimeDrawableOccurrence>)> = Vec::new();
     for item in items {
         match owner_of(&item).and_then(|owner| child_of(container, owner)) {
+            // The box's own paint is the bottom of its stack.
+            None if is_own_paint(container, &item) => suffix.push(item),
+            // Its own drawable closes the clip above its children, and
+            // foreground drawables draw over them.
             None if groups.is_empty() => prefix.push(item),
             None => suffix.push(item),
             Some(child) => match groups.iter_mut().find(|(key, _)| key == &child) {

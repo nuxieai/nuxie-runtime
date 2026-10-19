@@ -8,11 +8,14 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[dependencies]
+# Browser-only: the crate is empty off wasm32 (src/lib.rs), and its exact
+# WebGPU port cannot link natively, so a native workspace build or test must
+# not pull renderer-webgpu into the feature union.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
 wasm-bindgen = "0.2"
 
-[dependencies.nuxie-renderer]
+[target.'cfg(target_arch = "wasm32")'.dependencies.nuxie-renderer]
 path = "../../crates/nuxie-renderer"
 default-features = false
 features = ["renderer-webgpu", "rive-decoders"]

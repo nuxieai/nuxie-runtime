@@ -89,6 +89,17 @@ pub trait DraggableProxy {
         false
     }
     fn hittable(&self) -> Option<RuntimeDrawableOccurrence>;
+    /// Whether the proxy handles a drag: a scroll that is not interactive
+    /// does not (docs/CSS_LAYOUT.md, 4.5).
+    fn takes_drag(&self) -> bool {
+        true
+    }
+    /// Whether a press takes the drag at once, as a scroll bar's thumb and
+    /// track do. A scroll takes it only when it starts to scroll, so a
+    /// drag across an inner scroll goes to the one around it.
+    fn claims_on_press(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Default)]
@@ -183,6 +194,10 @@ pub struct DraggableConstraintListenerGroup {
     constraint: CoreHandle,
     draggable: Rc<RefCell<Box<dyn DraggableProxy>>>,
     scrolling_pointer_id: Cell<i32>,
+    /// The drag is CSS content's (docs/CSS_LAYOUT.md, 4.5): it goes to the
+    /// innermost drag handler, and once it starts, the press's taps and
+    /// clicks are cancelled.
+    in_css: Cell<bool>,
 }
 
 impl DraggableConstraintListenerGroup {
@@ -196,6 +211,7 @@ impl DraggableConstraintListenerGroup {
             constraint,
             draggable: Rc::new(RefCell::new(draggable)),
             scrolling_pointer_id: Cell::new(-1),
+            in_css: Cell::new(false),
         }
     }
 
@@ -236,6 +252,12 @@ impl DraggableConstraintListenerGroup {
     }
     pub fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn DraggableProxy>>>> {
         Some(self.draggable.clone())
+    }
+    pub fn mark_in_css(&self) {
+        self.in_css.set(true);
+    }
+    pub fn takes_drag(&self) -> bool {
+        self.draggable.borrow().takes_drag()
     }
     pub fn can_early_out(&self, _drawable: &Component) -> bool {
         false
@@ -293,16 +315,33 @@ impl DraggableConstraintListenerGroup {
                 return ProcessEventResult::Scroll;
             }
         } else if previous_phase != GestureClickPhase::Down && phase == GestureClickPhase::Down {
+            if self.in_css.get() && self.draggable.borrow().claims_on_press() {
+                use crate::mechanical_port::source::listener_group::ListenerGroupBehavior;
+                let me = ListenerGroupBehavior::identity(self);
+                state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
+            }
             self.draggable.borrow_mut().start_drag(position, time_stamp);
             self.scrolling_pointer_id.set(-1);
         } else if hit_event == ListenerType::Move && phase == GestureClickPhase::Down {
+            use crate::mechanical_port::source::listener_group::ListenerGroupBehavior;
+            let me = ListenerGroupBehavior::identity(self);
+            let in_css = self.in_css.get();
+            if in_css && state_machine_instance.css_drag_owned_by_other(pointer_id, me) {
+                return ProcessEventResult::None;
+            }
             let has_dragged = self.draggable.borrow_mut().drag(position, time_stamp);
             if has_dragged {
                 if self.scrolling_pointer_id.get() != pointer_id {
+                    // In CSS content the innermost drag handler to start
+                    // takes the drag, and the press stops being a tap
+                    // (docs/CSS_LAYOUT.md, 4.5).
+                    if in_css {
+                        state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
+                    }
                     state_machine_instance.drag_start(
                         position,
                         time_stamp,
-                        false,
+                        in_css,
                         pointer_id,
                         PointerButton::Primary,
                     );

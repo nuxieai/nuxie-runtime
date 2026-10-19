@@ -20,6 +20,12 @@ pub struct TextInputListenerGroup {
     click_count: Cell<i32>,
     last_click_time: Cell<i64>,
     last_click_position: Cell<Vec2D>,
+    /// The field is CSS content (docs/CSS_LAYOUT.md, 4.5): unfocused, a
+    /// press on it is a tap that focuses it on release, and its drag goes
+    /// to what is around it; focused, it takes the drag to select.
+    in_css: Cell<bool>,
+    /// A press on the unfocused CSS field, waiting to be a tap.
+    pending_tap: Cell<bool>,
 }
 
 impl TextInputListenerGroup {
@@ -31,6 +37,54 @@ impl TextInputListenerGroup {
             click_count: Cell::new(0),
             last_click_time: Cell::new(0),
             last_click_position: Cell::new(Vec2D::new(0.0, 0.0)),
+            in_css: Cell::new(false),
+            pending_tap: Cell::new(false),
+        }
+    }
+
+    fn is_focused(&self) -> bool {
+        self.text_input
+            .with(|input| input.as_text_input().map(|input| input.is_focused()))
+            .flatten()
+            .unwrap_or(false)
+    }
+
+    /// Counts a press toward a double or triple click.
+    fn count_click(&self, position: Vec2D, timestamp: f32) {
+        let now = Self::now_micros(timestamp);
+        let dt = now - self.last_click_time.get();
+        let distance = Vec2D::distance(position, self.last_click_position.get());
+        self.click_count
+            .set(if dt >= 0 && dt <= 500_000 && distance <= 16.0 {
+                if self.click_count.get() >= 3 {
+                    1
+                } else {
+                    self.click_count.get() + 1
+                }
+            } else {
+                1
+            });
+        self.last_click_time.set(now);
+        self.last_click_position.set(position);
+    }
+
+    fn focus(&self, machine: &StateMachineInstance) {
+        if let Some(manager) = machine.focus_manager() {
+            let children = self
+                .text_input
+                .with(|input| {
+                    input
+                        .as_container_component()
+                        .map(|container| container.children().to_vec())
+                })
+                .flatten()
+                .expect("TextInput retains its component children");
+            for child in children {
+                if let Some(node) = child.with_downcast_mut::<FocusData, _>(FocusData::focus_node) {
+                    manager.with_focus_manager_mut(|manager| manager.set_focus(node));
+                    break;
+                }
+            }
         }
     }
 
@@ -48,6 +102,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         self.base.tracked_pointer_ids()
     }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
+        self.pending_tap.set(false);
         let was_dragging = self.base.cancel_pointer(id, position, timestamp);
         if self.dragging_pointer_id.get() == id {
             self.text_input.with_mut(|input| {
@@ -73,6 +128,8 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         self.base.enable(id);
     }
     fn disable(&self, id: i32) {
+        // A scroll that starts under the press cancels its tap.
+        self.pending_tap.set(false);
         self.base.disable(id);
     }
     fn is_consumed(&self) -> bool {
@@ -80,6 +137,12 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
     }
     fn can_early_out(&self, _component: &Component) -> bool {
         false
+    }
+    fn mark_in_css(&self) {
+        self.in_css.set(true);
+    }
+    fn takes_drag(&self) -> bool {
+        !self.in_css.get() || self.is_focused()
     }
     fn needs_down_listener(&self, _component: &Component) -> bool {
         true
@@ -121,21 +184,13 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         }
         let phase = pointer.phase.get();
         if previous != GestureClickPhase::Down && phase == GestureClickPhase::Down {
-            let now = Self::now_micros(timestamp);
-            let dt = now - self.last_click_time.get();
-            let distance = Vec2D::distance(position, self.last_click_position.get());
-            self.click_count
-                .set(if dt >= 0 && dt <= 500_000 && distance <= 16.0 {
-                    if self.click_count.get() >= 3 {
-                        1
-                    } else {
-                        self.click_count.get() + 1
-                    }
-                } else {
-                    1
-                });
-            self.last_click_time.set(now);
-            self.last_click_position.set(position);
+            if self.in_css.get() && !self.is_focused() {
+                // A tap focuses the field on release; a drag scrolls what
+                // is around it (docs/CSS_LAYOUT.md, 4.5).
+                self.pending_tap.set(true);
+                return ProcessEventResult::None;
+            }
+            self.count_click(position, timestamp);
             self.text_input.with_mut(|input| {
                 input
                     .as_text_input_mut()
@@ -143,25 +198,12 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
                     .start_drag(position)
             });
             self.dragging_pointer_id.set(pointer_id);
-            if let Some(manager) = machine.focus_manager() {
-                let children = self
-                    .text_input
-                    .with(|input| {
-                        input
-                            .as_container_component()
-                            .map(|container| container.children().to_vec())
-                    })
-                    .flatten()
-                    .expect("TextInput retains its component children");
-                for child in children {
-                    if let Some(node) =
-                        child.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
-                    {
-                        manager.with_focus_manager_mut(|manager| manager.set_focus(node));
-                        break;
-                    }
-                }
+            if self.in_css.get() {
+                // A focused CSS field's drag selects: it is the innermost
+                // drag handler (docs/CSS_LAYOUT.md, 4.5).
+                machine.claim_css_drag(pointer_id, self.identity(), position, timestamp);
             }
+            self.focus(machine);
             self.text_input.with_mut(|input| {
                 let input = input
                     .as_text_input_mut()
@@ -185,6 +227,22 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             });
             ProcessEventResult::Scroll
         } else {
+            if previous == GestureClickPhase::Down && self.pending_tap.replace(false) {
+                if phase == GestureClickPhase::Clicked {
+                    // The tap: focus the field with its caret where it was
+                    // released.
+                    self.count_click(position, timestamp);
+                    self.text_input.with_mut(|input| {
+                        let input = input
+                            .as_text_input_mut()
+                            .expect("text hit owner remains TextInput");
+                        input.start_drag(position);
+                        input.end_drag(position);
+                    });
+                    self.focus(machine);
+                }
+                return ProcessEventResult::None;
+            }
             if previous == GestureClickPhase::Down
                 && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
                 && self.dragging_pointer_id.get() == pointer_id

@@ -4,6 +4,7 @@
 pub mod keys;
 pub mod paint;
 pub(crate) mod paint_order;
+pub(crate) mod pointer;
 pub mod record;
 pub mod style;
 

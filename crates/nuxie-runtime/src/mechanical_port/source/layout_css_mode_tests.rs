@@ -138,6 +138,21 @@ struct B {
     /// Children written after every other box, as runtime materialization
     /// (a text input's hint and value) appends them.
     late_children: Vec<B>,
+    /// A pointer click listener on this box, in the file's one state
+    /// machine, firing an event of this name.
+    listener: Option<&'static str>,
+    /// A pointer drag listener on this box, firing an event of this name.
+    drag_listener: Option<&'static str>,
+    /// A text input as this box's content, focusable through its FocusData.
+    text_input: bool,
+    /// The text input's text.
+    text: &'static str,
+    /// The ScrollConstraint's threshold, the distance a press moves before
+    /// it scrolls.
+    scroll_threshold: f32,
+    /// A ScrollBarConstraint on this box, the thumb, with its direction,
+    /// for the file's first ScrollConstraint; the box's parent is the track.
+    scroll_bar: Option<u64>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -254,12 +269,22 @@ enum Entry<'a> {
     Group(u64),
     Shape(&'a Rect, u64),
     Path(&'a Rect, u64),
-    Scroll(u64, u64),
+    /// A ScrollConstraint on a box: its direction and threshold.
+    Scroll(u64, u64, f32),
+    /// A ScrollBarConstraint on a box with its direction.
+    ScrollBar(u64, u64),
     Participant(u64),
     Track((u64, u64, f32), u64),
     Image(&'static str, u64),
     /// A Text with no runs.
     EmptyText(u64),
+    /// A TextInput named "Field" with its text, and the FocusData and text
+    /// style in it.
+    TextInput(u64, &'static str),
+    FocusData(u64),
+    TextStyle(u64),
+    /// An Event of a name, in the artboard.
+    Event(&'static str),
 }
 
 /// A box's (or the artboard's) paints and their CSS records.
@@ -406,7 +431,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         }
         push_paints(&node.paints, index, entries);
         if let Some(direction) = node.scroll {
-            entries.push(Entry::Scroll(index, direction));
+            entries.push(Entry::Scroll(index, direction, node.scroll_threshold));
+        }
+        if let Some(direction) = node.scroll_bar {
+            entries.push(Entry::ScrollBar(index, direction));
         }
         for track in &node.tracks {
             entries.push(Entry::Track(*track, index));
@@ -442,6 +470,12 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 entries.push(Entry::EmptyText(parent));
             }
         }
+        if node.text_input {
+            entries.push(Entry::TextInput(index, node.text));
+            let input = slots(entries);
+            entries.push(Entry::FocusData(input));
+            entries.push(Entry::TextStyle(input));
+        }
         for child in &node.children {
             walk(child, index, entries, late);
         }
@@ -468,6 +502,44 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             }
         }
     }
+    // Each listened box's object and its event's, which follows the boxes.
+    let mut listened = Vec::new();
+    let mut index = 0u64;
+    for entry in &entries {
+        if matches!(entry, Entry::Bind(..) | Entry::Keys(..)) {
+            continue;
+        }
+        index += 1;
+        if let Entry::Box(node, _) = entry {
+            use crate::source::listener_type::ListenerType;
+            for (kind, event) in [
+                (ListenerType::Click, node.listener),
+                (ListenerType::Drag, node.drag_listener),
+            ] {
+                if let Some(event) = event {
+                    listened.push((index, kind, event));
+                }
+            }
+        }
+    }
+    // The first ScrollConstraint's object, which a scroll bar refers to.
+    let mut first_scroll = 0u64;
+    let mut index = 0u64;
+    for entry in &entries {
+        if matches!(entry, Entry::Bind(..) | Entry::Keys(..)) {
+            continue;
+        }
+        index += 1;
+        if matches!(entry, Entry::Scroll(..)) {
+            first_scroll = index;
+            break;
+        }
+    }
+    let mut listeners = Vec::new();
+    for (target, kind, event) in listened {
+        entries.push(Entry::Event(event));
+        listeners.push((target, kind, slots(&entries)));
+    }
     // Styles follow every other object: the artboard's, then one per box.
     let first_style = slots(&entries) + 1;
     let mut riv = Riv::default();
@@ -486,10 +558,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "inset")
             .end();
     }
-    if entries
+    let pictured = entries
         .iter()
-        .any(|entry| matches!(entry, Entry::Image(..)))
-    {
+        .any(|entry| matches!(entry, Entry::Image(..)));
+    if pictured {
         // Its asset has no bytes; an image takes the asset's size.
         use crate::source::generated::assets::{
             drawable_asset_base::DrawableAssetBase, file_asset_base::FileAssetBase,
@@ -500,6 +572,27 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 1)
             .float(DrawableAssetBase::WIDTH_PROPERTY_KEY, 100.0)
             .float(DrawableAssetBase::HEIGHT_PROPERTY_KEY, 30.0)
+            .end();
+    }
+    // A text input shapes its text in the file's one font, after any image.
+    let font_asset = u64::from(pictured);
+    if entries
+        .iter()
+        .any(|entry| matches!(entry, Entry::TextInput(..)))
+    {
+        use crate::source::generated::assets::{
+            file_asset_base::FileAssetBase, file_asset_contents_base::FileAssetContentsBase,
+            font_asset_base::FontAssetBase,
+        };
+        riv.object(FontAssetBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "font")
+            .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 2)
+            .end();
+        riv.object(FileAssetContentsBase::TYPE_KEY)
+            .byte_field(
+                FileAssetContentsBase::BYTES_PROPERTY_KEY,
+                include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+            )
             .end();
     }
     riv.object(ArtboardBase::TYPE_KEY)
@@ -605,11 +698,38 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .float(GradientStopBase::POSITION_PROPERTY_KEY, *position)
                     .end();
             }
-            Entry::Scroll(parent, direction) => {
-                use crate::source::generated::constraints::draggable_constraint_base::DraggableConstraintBase;
-                riv.object(crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY)
+            Entry::Scroll(parent, direction, threshold) => {
+                use crate::source::generated::constraints::{
+                    draggable_constraint_base::DraggableConstraintBase,
+                    scrolling::scroll_constraint_base::ScrollConstraintBase,
+                };
+                riv.object(ScrollConstraintBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
-                    .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, *direction)
+                    .uint(
+                        DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY,
+                        *direction,
+                    );
+                if *threshold != 0.0 {
+                    riv.float(ScrollConstraintBase::THRESHOLD_PROPERTY_KEY, *threshold);
+                }
+                riv.end();
+            }
+            Entry::ScrollBar(parent, direction) => {
+                use crate::source::generated::constraints::{
+                    draggable_constraint_base::DraggableConstraintBase,
+                    scrolling::scroll_bar_constraint_base::ScrollBarConstraintBase,
+                };
+                riv.object(ScrollBarConstraintBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(
+                        DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY,
+                        *direction,
+                    )
+                    .uint(
+                        ScrollBarConstraintBase::SCROLL_CONSTRAINT_ID_PROPERTY_KEY,
+                        first_scroll,
+                    )
+                    .uint(ScrollBarConstraintBase::AUTO_SIZE_PROPERTY_KEY, 0)
                     .end();
             }
             Entry::Image(name, parent) => {
@@ -645,6 +765,35 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 riv.object(crate::source::generated::text::text_base::TextBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .string(ComponentBase::NAME_PROPERTY_KEY, "Note")
+                    .end();
+            }
+            Entry::TextInput(parent, text) => {
+                use crate::source::generated::text::text_input_base::TextInputBase;
+                riv.object(TextInputBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, "Field")
+                    .string(TextInputBase::TEXT_PROPERTY_KEY, text)
+                    .end();
+            }
+            Entry::FocusData(parent) => {
+                riv.object(crate::source::generated::focus_data_base::FocusDataBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .end();
+            }
+            Entry::TextStyle(parent) => {
+                use crate::source::generated::text::{
+                    text_style_base::TextStyleBase, text_style_paint_base::TextStylePaintBase,
+                };
+                riv.object(TextStylePaintBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, font_asset)
+                    .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0)
+                    .end();
+            }
+            Entry::Event(name) => {
+                riv.object(crate::source::generated::event_base::EventBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, name)
                     .end();
             }
             Entry::Shape(rect, parent) => {
@@ -724,6 +873,39 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     )
                     .end();
             }
+        }
+    }
+    // One state machine with each box's listeners, each firing its event.
+    if !listeners.is_empty() {
+        use crate::source::generated::animation::{
+            any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+            exit_state_base::ExitStateBase, listener_fire_event_base::ListenerFireEventBase,
+            listener_types::listener_input_type_base::ListenerInputTypeBase,
+            state_machine_base::StateMachineBase, state_machine_layer_base::StateMachineLayerBase,
+            state_machine_listener_base::StateMachineListenerBase,
+        };
+        riv.object(StateMachineBase::TYPE_KEY).end();
+        for (target, kind, event) in listeners {
+            riv.object(StateMachineListenerBase::TYPE_KEY)
+                .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, target)
+                .end();
+            riv.object(ListenerInputTypeBase::TYPE_KEY)
+                .uint(
+                    ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+                    kind as u64,
+                )
+                .end();
+            riv.object(ListenerFireEventBase::TYPE_KEY)
+                .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, event)
+                .end();
+        }
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        for state in [
+            EntryStateBase::TYPE_KEY,
+            AnyStateBase::TYPE_KEY,
+            ExitStateBase::TYPE_KEY,
+        ] {
+            riv.object(state).end();
         }
     }
     let mut factory = PersistentFactory::new(RecordingFactory::new());
@@ -867,6 +1049,38 @@ impl Scene {
         for _ in 0..frames {
             self.artboard.advance_default(FRAME);
         }
+    }
+    /// The file's one state machine, started.
+    fn machine(&self) -> crate::RuntimeStateMachineInstanceHandle {
+        let machine = self
+            .artboard
+            .state_machine_at(0)
+            .expect("the state machine");
+        machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+        self.advance(1);
+        machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+        machine
+    }
+    /// The file's one scroll constraint's vertical offset.
+    fn scroll_offset_y(&self) -> f32 {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        self.artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+            .into_iter()
+            .next()
+            .expect("a scroll constraint")
+            .with_downcast(ScrollConstraint::offset_y)
+            .expect("a live scroll constraint")
+    }
+    /// Whether the text input named "Field" has focus.
+    fn field_is_focused(&self) -> bool {
+        self.artboard
+            .with_artboard(|artboard| {
+                artboard.find_handle::<crate::source::text::text_input::TextInput>("Field")
+            })
+            .expect("the field")
+            .with_downcast(crate::source::text::text_input::TextInput::is_focused)
+            .expect("a live field")
     }
     /// A box's solved left, top, width and height, relative to its parent.
     fn bounds(&self, name: &str) -> [f32; 4] {
@@ -4878,4 +5092,651 @@ fn css_artboard_box_paint_selection_stays_in_its_rounded_clip() {
     };
     assert!(selected(5.0, 5.0).is_empty());
     assert_eq!(selected(50.0, 50.0), ["Artboard"]);
+}
+
+/// Clicks the primary button at a point: the names of the events the click
+/// fires, in the order its listeners fire them, and whether a listener under
+/// the point answers the button beforehand.
+fn click(
+    machine: &crate::RuntimeStateMachineInstanceHandle,
+    x: f32,
+    y: f32,
+) -> (bool, Vec<String>) {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let point = Vec2D::new(x, y);
+    let listens = machine
+        .with_instance_mut(|machine| machine.listens_to_button_at(point, PointerButton::Primary));
+    let before = machine.with_instance(|machine| machine.reported_event_count());
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(point, 0, PointerButton::Primary);
+        machine.pointer_up(point, 0, PointerButton::Primary);
+    });
+    let fired = machine.with_instance(|machine| {
+        (before..machine.reported_event_count())
+            .filter_map(|index| machine.reported_event_at(index).event)
+            .map(|event| {
+                event
+                    .with(|event| {
+                        event
+                            .as_component()
+                            .map(|event| event.base.name().to_owned())
+                    })
+                    .flatten()
+                    .expect("a named event")
+            })
+            .collect()
+    });
+    (listens, fired)
+}
+
+/// A pointer event bubbles from the topmost hit to its CSS ancestors, as a
+/// browser's does (docs/CSS_LAYOUT.md, 4.5). A text input is an opaque hit,
+/// and a click on it reaches the listeners of the boxes it is in, deepest
+/// first, and still focuses the field.
+#[test]
+fn css_box_listeners_hear_a_click_on_their_text_input() {
+    let f = scene(
+        (200.0, 200.0),
+        B {
+            listener: Some("outer clicked"),
+            ..css(
+                "Outer",
+                [width(200.0), height(100.0)].concat(),
+                vec![B {
+                    listener: Some("field clicked"),
+                    text_input: true,
+                    ..css("Input box", [width(180.0), height(40.0)].concat(), vec![])
+                }],
+            )
+        },
+    );
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 195.0, 80.0),
+        (true, vec!["outer clicked".to_owned()]),
+        "beside the field"
+    );
+    assert!(!f.field_is_focused());
+    assert_eq!(
+        click(&machine, 90.0, 20.0),
+        (
+            true,
+            vec!["field clicked".to_owned(), "outer clicked".to_owned()]
+        ),
+        "on the field"
+    );
+    assert!(f.field_is_focused());
+}
+
+/// An opaque hit still blocks what is behind it that it is not inside: the
+/// box under a text input's box, its sibling, hears nothing there, while the
+/// box both are in hears the click.
+#[test]
+fn css_text_input_blocks_a_sibling_box_behind_it() {
+    let f = scene(
+        (200.0, 200.0),
+        B {
+            listener: Some("row clicked"),
+            ..css(
+                "Row",
+                [[U(POSITION, 1)].as_slice(), &width(200.0), &height(100.0)].concat(),
+                vec![
+                    B {
+                        listener: Some("behind clicked"),
+                        ..css("Behind", [width(190.0), height(40.0)].concat(), vec![])
+                    },
+                    B {
+                        text_input: true,
+                        ..css(
+                            "Front",
+                            [
+                                [
+                                    U(POSITION, 2),
+                                    U(INSET_LEFT_KIND, 1),
+                                    F(INSET_LEFT, 0.0),
+                                    U(INSET_TOP_KIND, 1),
+                                    F(INSET_TOP, 0.0),
+                                ]
+                                .as_slice(),
+                                &width(180.0),
+                                &height(40.0),
+                            ]
+                            .concat(),
+                            vec![],
+                        )
+                    },
+                ],
+            )
+        },
+    );
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 185.0, 20.0),
+        (
+            true,
+            vec!["behind clicked".to_owned(), "row clicked".to_owned()]
+        ),
+        "beside the field"
+    );
+    assert_eq!(
+        click(&machine, 90.0, 20.0),
+        (true, vec!["row clicked".to_owned()]),
+        "on the field"
+    );
+    assert!(f.field_is_focused());
+}
+
+/// Translated (Rive) content keeps Rive's hit testing, as upstream has it:
+/// an opaque child blocks its parents' listeners.
+#[test]
+fn translated_text_input_blocks_its_parents_listeners() {
+    let sized = |width: f32, height: f32| {
+        vec![
+            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, width),
+            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, height),
+        ]
+    };
+    let f = scene(
+        (200.0, 200.0),
+        B {
+            name: "Outer",
+            component: sized(200.0, 100.0),
+            listener: Some("outer clicked"),
+            children: vec![B {
+                name: "Input box",
+                component: sized(180.0, 40.0),
+                listener: Some("field clicked"),
+                text_input: true,
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    );
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 195.0, 80.0),
+        (true, vec!["outer clicked".to_owned()]),
+        "beside the field"
+    );
+    assert_eq!(click(&machine, 90.0, 20.0), (false, vec![]), "on the field");
+    assert!(f.field_is_focused());
+}
+
+/// Presses at `from`, moves through `path` and releases at its end: the
+/// names of the events the gesture fires.
+fn press_and_drag(
+    machine: &crate::RuntimeStateMachineInstanceHandle,
+    from: (f32, f32),
+    path: &[(f32, f32)],
+) -> Vec<String> {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let before = machine.with_instance(|machine| machine.reported_event_count());
+    machine.with_instance_mut(|machine| {
+        let start = Vec2D::new(from.0, from.1);
+        machine.pointer_move(start, 0.0, 0);
+        machine.pointer_down(start, 0, PointerButton::Primary);
+        let mut last = start;
+        for (step, &(x, y)) in path.iter().enumerate() {
+            last = Vec2D::new(x, y);
+            machine.pointer_move(last, (step + 1) as f32 / 60.0, 0);
+        }
+        machine.pointer_up(last, 0, PointerButton::Primary);
+    });
+    machine.with_instance(|machine| {
+        (before..machine.reported_event_count())
+            .filter_map(|index| machine.reported_event_at(index).event)
+            .map(|event| {
+                event
+                    .with(|event| {
+                        event
+                            .as_component()
+                            .map(|event| event.base.name().to_owned())
+                    })
+                    .flatten()
+                    .expect("a named event")
+            })
+            .collect()
+    })
+}
+
+impl Scene {
+    /// The offset of the ScrollConstraint on the box named `content`.
+    fn scroll_offset(&self, content: &str) -> (f32, f32) {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        let content = self.named(content);
+        self.artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+            .into_iter()
+            .find(|scroll| {
+                scroll
+                    .with(|object| object.component_parent_handle())
+                    .flatten()
+                    .as_ref()
+                    == Some(&content)
+            })
+            .expect("a scroll constraint on the box")
+            .with_downcast(|scroll: &ScrollConstraint| (scroll.offset_x(), scroll.offset_y()))
+            .expect("a live scroll constraint")
+    }
+    /// The text input named "Field"'s selected text.
+    fn field_selection(&self) -> String {
+        self.artboard
+            .with_artboard(|artboard| {
+                artboard.find_handle::<crate::source::text::text_input::TextInput>("Field")
+            })
+            .expect("the field")
+            .with_downcast(crate::source::text::text_input::TextInput::selected_text)
+            .flatten()
+            .unwrap_or_default()
+    }
+}
+
+/// A CSS scroll box as the compiler writes one, with a 10 point threshold
+/// (docs/CSS_LAYOUT.md, 3): a 200 by 80 viewport scrolling a list
+/// vertically, whose first 40 point row holds `item`, above a tall tail.
+/// The row keeps the list from being a field's own scroller, which is its
+/// grandparent's (upstream 0dd067f1).
+fn css_scroll_view(listener: Option<&'static str>, item: B) -> Scene {
+    scene(
+        (400.0, 300.0),
+        B {
+            listener,
+            ..css(
+                "Viewport",
+                [
+                    [U(POSITION, 1), U(OVERFLOW_Y, 3)].as_slice(),
+                    &width(200.0),
+                    &height(80.0),
+                ]
+                .concat(),
+                vec![B {
+                    scroll: Some(1),
+                    scroll_threshold: 10.0,
+                    ..css(
+                        "List",
+                        [],
+                        vec![
+                            css("Row", height(40.0), vec![item]),
+                            css("Tail", height(200.0), vec![]),
+                        ],
+                    )
+                }],
+            )
+        },
+    )
+}
+
+/// The same scroll view translated from Rive boxes, whose ScrollConstraint
+/// keeps Rive's default threshold, 0.
+fn translated_scroll_view(item: B) -> Scene {
+    let sized = |width: f32, height: f32| {
+        vec![
+            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, width),
+            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, height),
+        ]
+    };
+    scene(
+        (400.0, 300.0),
+        B {
+            name: "Viewport",
+            component: sized(200.0, 80.0),
+            children: vec![B {
+                name: "List",
+                component: sized(200.0, 240.0),
+                scroll: Some(1),
+                children: vec![
+                    B {
+                        name: "Row",
+                        component: sized(200.0, 40.0),
+                        children: vec![item],
+                        ..B::default()
+                    },
+                    B {
+                        name: "Tail",
+                        component: sized(200.0, 200.0),
+                        ..B::default()
+                    },
+                ],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    )
+}
+
+/// A 180 by 40 box holding a field, CSS or translated.
+fn field_box(css_mode: bool, listener: Option<&'static str>, text: &'static str) -> B {
+    let mut field = if css_mode {
+        css("Input box", [width(180.0), height(40.0)].concat(), vec![])
+    } else {
+        B {
+            name: "Input box",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 180.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0),
+            ],
+            ..B::default()
+        }
+    };
+    field.listener = listener;
+    field.text_input = true;
+    field.text = text;
+    field
+}
+
+/// A drag goes to the innermost drag handler under the pointer
+/// (docs/CSS_LAYOUT.md, 4.5). An unfocused field is not one: a tap focuses
+/// it on release and fires the clicks around it, while a drag that starts on
+/// it scrolls the CSS scroll box around it, focuses nothing and fires no
+/// click.
+#[test]
+fn css_drag_on_an_unfocused_field_scrolls_its_scroll_box() {
+    let f = css_scroll_view(
+        Some("viewport clicked"),
+        field_box(true, Some("field clicked"), "hello world"),
+    );
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (90.0, 20.0), &[]),
+        ["field clicked", "viewport clicked"],
+        "a tap"
+    );
+    assert!(f.field_is_focused());
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert_eq!(
+        press_and_drag(
+            &machine,
+            (90.0, 35.0),
+            &[(90.0, 25.0), (90.0, 15.0), (90.0, 5.0)]
+        ),
+        Vec::<String>::new(),
+        "a drag"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0));
+    assert!(!f.field_is_focused());
+}
+
+/// A button is no drag handler: a drag that starts on it scrolls the box
+/// around it, and cancels its click once it does. Below the 10 point
+/// threshold the press stays a tap.
+#[test]
+fn css_drag_on_a_button_scrolls_and_cancels_its_click() {
+    let button = || B {
+        listener: Some("button clicked"),
+        ..css("Button", [width(180.0), height(40.0)].concat(), vec![])
+    };
+    let f = css_scroll_view(None, button());
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (90.0, 20.0), &[(90.0, 15.0)]),
+        ["button clicked"],
+        "a press that moves 5 points"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+    let f = css_scroll_view(None, button());
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (90.0, 30.0), &[(90.0, 15.0)]),
+        Vec::<String>::new(),
+        "a press that moves 15 points"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -15.0));
+}
+
+/// A focused field takes the drag to select, so the scroll box around it
+/// does not scroll.
+#[test]
+fn css_drag_in_a_focused_field_selects_and_does_not_scroll() {
+    let f = css_scroll_view(None, field_box(true, None, "hello world"));
+    let machine = f.machine();
+    press_and_drag(&machine, (90.0, 20.0), &[]);
+    assert!(f.field_is_focused());
+    assert_eq!(f.field_selection(), "");
+    press_and_drag(
+        &machine,
+        (1.0, 35.0),
+        &[(30.0, 25.0), (60.0, 15.0), (70.0, 5.0)],
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+    assert!(!f.field_selection().is_empty());
+}
+
+/// A scroll bar's thumb takes its own drag: dragging it 15 points down a
+/// 60 point track range scrolls the 160 point range by 40, and the content
+/// around it does not also drag.
+#[test]
+fn css_scroll_bar_thumb_drags_only_the_thumb() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [
+                [U(POSITION, 1), U(OVERFLOW_Y, 3)].as_slice(),
+                &width(200.0),
+                &height(80.0),
+            ]
+            .concat(),
+            vec![
+                B {
+                    scroll: Some(1),
+                    scroll_threshold: 10.0,
+                    ..css("List", [], vec![css("Tail", height(240.0), vec![])])
+                },
+                css(
+                    "Track",
+                    [
+                        [
+                            U(POSITION, 2),
+                            U(INSET_LEFT_KIND, 1),
+                            F(INSET_LEFT, 190.0),
+                            U(INSET_TOP_KIND, 1),
+                            F(INSET_TOP, 0.0),
+                        ]
+                        .as_slice(),
+                        &width(10.0),
+                        &height(80.0),
+                    ]
+                    .concat(),
+                    vec![B {
+                        scroll_bar: Some(1),
+                        ..css("Thumb", [width(10.0), height(20.0)].concat(), vec![])
+                    }],
+                ),
+            ],
+        ),
+    );
+    let machine = f.machine();
+    press_and_drag(&machine, (195.0, 5.0), &[(195.0, 20.0)]);
+    assert_eq!(f.scroll_offset("List"), (0.0, -40.0));
+}
+
+/// Nested scroll boxes: the inner one takes a drag along its axis before
+/// the outer one, and a drag across it goes to the outer one.
+#[test]
+fn css_inner_scroll_box_takes_its_drag_before_the_outer_one() {
+    let nested = |inner_direction: u64| {
+        let inner_list = if inner_direction == 0 {
+            [width(400.0), height(40.0)].concat()
+        } else {
+            [width(200.0), height(100.0)].concat()
+        };
+        scene(
+            (400.0, 300.0),
+            css(
+                "Viewport",
+                [[U(OVERFLOW_Y, 3)].as_slice(), &width(200.0), &height(80.0)].concat(),
+                vec![B {
+                    scroll: Some(1),
+                    scroll_threshold: 10.0,
+                    ..css(
+                        "List",
+                        [],
+                        vec![
+                            css(
+                                "Inner",
+                                [
+                                    [U(
+                                        if inner_direction == 0 {
+                                            OVERFLOW_X
+                                        } else {
+                                            OVERFLOW_Y
+                                        },
+                                        3,
+                                    )]
+                                    .as_slice(),
+                                    &width(200.0),
+                                    &height(40.0),
+                                ]
+                                .concat(),
+                                vec![B {
+                                    scroll: Some(inner_direction),
+                                    scroll_threshold: 10.0,
+                                    ..css("Inner list", inner_list, vec![])
+                                }],
+                            ),
+                            css("Tail", height(200.0), vec![]),
+                        ],
+                    )
+                }],
+            ),
+        )
+    };
+    let down = [(100.0, 25.0), (100.0, 15.0), (100.0, 5.0)];
+    let f = nested(1);
+    press_and_drag(&f.machine(), (100.0, 35.0), &down);
+    assert_eq!(f.scroll_offset("Inner list"), (0.0, -30.0), "the inner box");
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0), "the outer box");
+    let f = nested(0);
+    press_and_drag(&f.machine(), (100.0, 35.0), &down);
+    assert_eq!(
+        f.scroll_offset("Inner list"),
+        (0.0, 0.0),
+        "across the inner box"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0));
+    let f = nested(0);
+    press_and_drag(
+        &f.machine(),
+        (150.0, 20.0),
+        &[(140.0, 20.0), (130.0, 20.0), (120.0, 20.0)],
+    );
+    assert_eq!(
+        f.scroll_offset("Inner list"),
+        (-30.0, 0.0),
+        "along the inner box"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+}
+
+/// A box's drag listener is a drag handler too: a focused field inside it
+/// keeps its selecting drag, while a drag beside the field fires it.
+#[test]
+fn css_drag_listener_leaves_a_focused_fields_drag_alone() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            drag_listener: Some("card dragged"),
+            ..css(
+                "Card",
+                [width(200.0), height(40.0)].concat(),
+                vec![field_box(true, None, "hello world")],
+            )
+        },
+    );
+    let machine = f.machine();
+    press_and_drag(&machine, (90.0, 20.0), &[]);
+    assert!(f.field_is_focused());
+    assert_eq!(
+        press_and_drag(&machine, (1.0, 20.0), &[(30.0, 20.0), (60.0, 20.0)]),
+        Vec::<String>::new(),
+        "a drag in the field"
+    );
+    assert!(!f.field_selection().is_empty());
+    assert_eq!(
+        press_and_drag(&machine, (190.0, 20.0), &[(195.0, 20.0)]),
+        ["card dragged"],
+        "a drag beside the field"
+    );
+}
+
+/// An event bubbles to the CSS boxes a hit is in whatever their own
+/// geometry: a field placed outside its box still fires the box's click.
+#[test]
+fn css_box_hears_a_click_on_a_field_outside_it() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            listener: Some("card clicked"),
+            ..css(
+                "Card",
+                [[U(POSITION, 1)].as_slice(), &width(100.0), &height(40.0)].concat(),
+                vec![B {
+                    text_input: true,
+                    ..css(
+                        "Input box",
+                        [
+                            [
+                                U(POSITION, 2),
+                                U(INSET_LEFT_KIND, 1),
+                                F(INSET_LEFT, 120.0),
+                                U(INSET_TOP_KIND, 1),
+                                F(INSET_TOP, 0.0),
+                            ]
+                            .as_slice(),
+                            &width(80.0),
+                            &height(40.0),
+                        ]
+                        .concat(),
+                        vec![],
+                    )
+                }],
+            )
+        },
+    );
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 160.0, 20.0),
+        (true, vec!["card clicked".to_owned()])
+    );
+    assert!(f.field_is_focused());
+}
+
+/// Translated content keeps Rive's gestures, as runtime main has them for
+/// a scroll view: a drag on an unfocused field selects in it and focuses it
+/// without scrolling, a drag on a button scrolls and still clicks it on
+/// release, and a drag in a focused field selects without scrolling.
+#[test]
+fn translated_scroll_view_keeps_rives_gestures() {
+    let f = translated_scroll_view(field_box(false, None, "hello world"));
+    let machine = f.machine();
+    press_and_drag(
+        &machine,
+        (1.0, 35.0),
+        &[(30.0, 25.0), (60.0, 15.0), (70.0, 5.0)],
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0), "an unfocused field");
+    assert!(f.field_is_focused());
+    assert!(!f.field_selection().is_empty());
+    press_and_drag(
+        &machine,
+        (1.0, 35.0),
+        &[(30.0, 25.0), (60.0, 15.0), (70.0, 5.0)],
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0), "a focused field");
+    let f = translated_scroll_view(B {
+        name: "Button",
+        component: vec![
+            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 180.0),
+            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0),
+        ],
+        listener: Some("button clicked"),
+        ..B::default()
+    });
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (90.0, 30.0), &[(90.0, 15.0)]),
+        ["button clicked"],
+        "a button"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -15.0));
 }

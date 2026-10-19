@@ -1,8 +1,11 @@
 # Pinned upstream microbenchmark inventory
 
 The repository tracks the 20 benchmarks registered by pinned Rive runtime
-commit `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. Their names, upstream source
-hashes, fixture conversions, and provenance live in `microbenchmarks.toml`.
+commit `5551696a826ff546775fffe46ca78824b1f1dc51`, the runtime's pin. Their
+names, upstream source hashes, fixture conversions, and provenance live in
+`microbenchmarks.toml`. Upstream's per-frame artboard benchmarks
+(`tests/bench/artboard_frame_bench.cpp`, added before this pin) are not part
+of the mirror.
 
 This is an inventory and provenance gate, not an executable Rust/C++ ratio
 harness. The former Criterion target depended on the packed runtime facade and

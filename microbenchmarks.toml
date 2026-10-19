@@ -1,7 +1,7 @@
 schema = "nuxie-upstream-microbench-v1"
-upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+upstream_ref = "5551696a826ff546775fffe46ca78824b1f1dc51"
 draw_capability_source = "tests/common/render_context_null.cpp"
-draw_capability_source_sha256 = "b9c116b13f5fae974b77758885bc7128ef04c2402cca657ce65aca03587939ed"
+draw_capability_source_sha256 = "4154a579016e0875a2956aa74ca2e70fc8a53bbe1c8cdde58f8b5a48fa7ac616"
 
 [[dataset]]
 name = "paper_bboxes_6_copies"

@@ -28,7 +28,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream", "//crates/nuxie-renderer:nuxie-renderer"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -42,7 +42,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream", "//crates/nuxie-renderer:nuxie-renderer"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -56,7 +56,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__test", "//crates/nuxie-renderer:nuxie-renderer__test"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -70,7 +70,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__test", "//crates/nuxie-renderer:nuxie-renderer__test"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -93,7 +93,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__host", "//crates/nuxie-renderer:nuxie-renderer__host"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -107,7 +107,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__host", "//crates/nuxie-renderer:nuxie-renderer__host"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -121,7 +121,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__editor", "//crates/nuxie-renderer:nuxie-renderer__editor"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -135,7 +135,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__editor", "//crates/nuxie-renderer:nuxie-renderer__editor"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -149,7 +149,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__publisher", "//crates/nuxie-renderer:nuxie-renderer__publisher"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = select({"//bazel:wasm": ["//crates/nuxie-render-stream:nuxie-render-stream__publisher", "//crates/nuxie-renderer:nuxie-renderer__publisher"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -163,7 +163,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__publisher", "//crates/nuxie-renderer:nuxie-renderer__publisher"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = select({"//bazel:wasm": ["//crates/nuxie-render-stream:nuxie-render-stream__publisher", "//crates/nuxie-renderer:nuxie-renderer__publisher"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -177,7 +177,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgpu", "//crates/nuxie-renderer:nuxie-renderer__webgpu"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = select({"//bazel:wasm": ["//crates/nuxie-render-stream:nuxie-render-stream__webgpu", "//crates/nuxie-renderer:nuxie-renderer__webgpu"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -191,7 +191,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgpu", "//crates/nuxie-renderer:nuxie-renderer__webgpu"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = select({"//bazel:wasm": ["//crates/nuxie-render-stream:nuxie-render-stream__webgpu", "//crates/nuxie-renderer:nuxie-renderer__webgpu"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -205,7 +205,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgl2", "//crates/nuxie-renderer:nuxie-renderer__webgl2"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = select({"//bazel:wasm": ["//crates/nuxie-render-stream:nuxie-render-stream__webgl2", "//crates/nuxie-renderer:nuxie-renderer__webgl2"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -219,7 +219,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgl2", "//crates/nuxie-renderer:nuxie-renderer__webgl2"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = select({"//bazel:wasm": ["//crates/nuxie-render-stream:nuxie-render-stream__webgl2", "//crates/nuxie-renderer:nuxie-renderer__webgl2"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"), "//conditions:default": []}),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -233,7 +233,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__apple", "//crates/nuxie-renderer:nuxie-renderer__apple"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -247,7 +247,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__apple", "//crates/nuxie-renderer:nuxie-renderer__apple"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -261,7 +261,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__android", "//crates/nuxie-renderer:nuxie-renderer__android"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -275,7 +275,7 @@ rust_shared_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__android", "//crates/nuxie-renderer:nuxie-renderer__android"] + crate_deps(["wasm-bindgen"], package_name = "bazel/cargo/webgpu-renderer-replay"),
+    deps = [],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/webgpu-renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "webgpu-renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

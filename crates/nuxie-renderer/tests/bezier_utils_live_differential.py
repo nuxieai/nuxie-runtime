@@ -11,13 +11,20 @@ import subprocess
 import tempfile
 
 
-PIN = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 CASES = {
     "find_cubic_coeffs_tangents_glsl",
     "clamped_divide_glsl",
     "find_cubic_max_height_glsl",
     "measure_cubic_local_curvature_glsl",
 }
+
+
+def repository_pin(repo: Path) -> str:
+    """The upstream pin, the Makefile's RIVE_RUNTIME_REF."""
+    for line in (repo / "Makefile").read_text().splitlines():
+        if line.startswith("RIVE_RUNTIME_REF ?= "):
+            return line.split("?=", 1)[1].strip()
+    raise SystemExit("Makefile names no RIVE_RUNTIME_REF")
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> str:
@@ -43,8 +50,9 @@ def main() -> None:
     repo = Path(__file__).resolve().parents[3]
     upstream = args.upstream_root.resolve()
     actual_pin = run(["git", "rev-parse", "HEAD"], cwd=upstream).strip()
-    if actual_pin != PIN:
-        raise SystemExit(f"upstream checkout is {actual_pin}; expected {PIN}")
+    pin = repository_pin(repo)
+    if actual_pin != pin:
+        raise SystemExit(f"upstream checkout is {actual_pin}; expected {pin}")
 
     rust_shader = repo / (
         "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/"

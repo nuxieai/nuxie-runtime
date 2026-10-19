@@ -3908,7 +3908,7 @@ fn css_artboard_box_paint_keeps_semantic_visibility() {
 }
 
 /// A CSS artboard's visible geometry is its painted rectangle, and it is
-/// still hit anywhere in its bounds.
+/// selected there only.
 #[test]
 fn css_artboard_box_paint_is_its_visible_geometry() {
     let f = try_scene_spec(
@@ -3930,8 +3930,11 @@ fn css_artboard_box_paint_is_its_visible_geometry() {
         (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
         (150.0, 125.0, 250.0, 175.0)
     );
-    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(390.0, 290.0));
+    // Selected where it paints, not elsewhere in its bounds.
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(200.0, 150.0));
     assert_eq!(f.geometry_names(&hits), ["Artboard"]);
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(390.0, 290.0));
+    assert!(f.geometry_names(&hits).is_empty());
 }
 
 /// Painted boxes clipped away by a CSS artboard's padding-box clip, or
@@ -4460,8 +4463,13 @@ fn css_patterned_border_selection_stays_in_its_visible_side() {
         let mut host = f.host();
         let visible = host.visible_geometry_with_bounds();
         assert_eq!(f.geometry_names(&visible), ["Card"], "radius {radius}");
+        // The top side's ring: 4 deep, and down into its rounded corners.
         let bounds = visible[0].bounds;
-        assert!(bounds.max_y <= 4.0 + 1.0e-3, "radius {radius}: {bounds:?}");
+        assert_eq!((bounds.min_x, bounds.min_y, bounds.max_x), (0.0, 0.0, 68.0));
+        assert!(
+            bounds.max_y <= radius.max(4.0) + 1.0e-3,
+            "radius {radius}: {bounds:?}"
+        );
         let mut selected = |x: f32, y: f32| {
             let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
             f.geometry_names(&hits)

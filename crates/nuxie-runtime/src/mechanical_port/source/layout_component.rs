@@ -266,6 +266,16 @@ pub(crate) struct CssPaintPaths {
     pub fills_stroke: bool,
     /// A shadow's feather offset, and whether it is in world space.
     pub offset: Option<(Vec2D, bool)>,
+    /// A dashed or dotted BoxBorder's marks, drawn inside `path` (the
+    /// ring) in place of it (docs/CSS_LAYOUT.md, 4.2). Empty when solid.
+    pub marks: Vec<CssBorderMarks>,
+}
+
+/// One group of a dashed or dotted border's marks, as a filled shape, and
+/// the join wedges that clip it (None when it has all four sides).
+pub(crate) struct CssBorderMarks {
+    pub clip: Option<ShapePaintPath>,
+    pub fills: ShapePaintPath,
 }
 
 /// A CSS box's geometry in its own space (docs/CSS_LAYOUT.md, 4).
@@ -282,6 +292,7 @@ pub(crate) struct CssBoxGeometry {
 enum CssPaintKind {
     Border {
         sides: u8,
+        style: crate::css_layout::paint::BorderStyle,
     },
     Shadow {
         spread: f32,
@@ -322,12 +333,19 @@ fn css_paint_kind(paint: &CoreHandle) -> Option<CssPaintKind> {
         .flatten()?;
     for child in &children {
         if child.is_type_of(keys::BOX_BORDER) {
-            let sides = child
+            let (sides, style) = child
                 .with_downcast::<crate::css_layout::BoxBorder, _>(|record| {
-                    record.values().choice(keys::BORDER_SIDES)
+                    let values = record.values();
+                    (
+                        values.choice(keys::BORDER_SIDES),
+                        values.choice(keys::BORDER_STYLE),
+                    )
                 })
-                .unwrap_or(15);
-            return Some(CssPaintKind::Border { sides });
+                .unwrap_or((15, 0));
+            return Some(CssPaintKind::Border {
+                sides,
+                style: crate::css_layout::paint::BorderStyle::from_value(style),
+            });
         }
         let Some((feather, grandchildren)) = child
             .with(|object| {
@@ -655,6 +673,61 @@ impl LayoutComponent {
                 .css_paints
                 .iter()
                 .any(|special| &special.paint == paint)
+        })
+    }
+    /// Whether this box's own paint covers `point`, in its own space, as
+    /// visible-geometry selection asks (docs/CSS_LAYOUT.md, 4.5): a fill
+    /// where it fills (the rounded border box, or the BoxPaint rectangle),
+    /// a BoxBorder or a Stroke on its painted ring, and a shadow nowhere.
+    /// Interaction hit testing keeps the rounded border box instead.
+    pub(crate) fn css_paint_contains(&self, point: Vec2D) -> bool {
+        use crate::css_layout::paint;
+        use crate::mechanical_port::source::shapes::paint::stroke::Stroke;
+        let Some(CssBoxGeometry {
+            bounds,
+            radii,
+            padding,
+            inner,
+            ..
+        }) = self.css_paint_geometry()
+        else {
+            return false;
+        };
+        self.paints.shape_paints().iter().any(|handle| {
+            if !css_paint_draws(handle) {
+                return false;
+            }
+            match css_paint_kind(handle) {
+                Some(CssPaintKind::Border { sides, .. }) => {
+                    paint::border_ring_contains(point, bounds, radii, padding, inner, sides)
+                }
+                Some(CssPaintKind::Shadow { .. }) => false,
+                None => match handle.with_downcast::<Stroke, _>(|stroke| {
+                    (stroke.base.thickness(), stroke.base.position())
+                }) {
+                    // A Stroke rings the box's path: inside, centred on
+                    // it, or outside, by its position.
+                    Some((thickness, position)) => {
+                        let (outward, inward) = match position {
+                            0 => (0.0, thickness),
+                            2 => (thickness, 0.0),
+                            _ => (thickness / 2.0, thickness / 2.0),
+                        };
+                        paint::overflow_clip_contains(
+                            point,
+                            paint::outset(bounds, outward),
+                            paint::spread_radii(radii, outward),
+                            (true, true),
+                        ) && !paint::overflow_clip_contains(
+                            point,
+                            paint::outset(bounds, -inward),
+                            paint::spread_radii(radii, -inward),
+                            (true, true),
+                        )
+                    }
+                    None => paint::overflow_clip_contains(point, bounds, radii, (true, true)),
+                },
+            }
         })
     }
     /// A CSS box's own painted area (docs/CSS_LAYOUT.md, 4.5), mapped by
@@ -1813,7 +1886,8 @@ impl LayoutComponent {
             }
             // Through a CSS box's clip (a hit on a descendant), its clip as
             // its children draw: the padding box on the clipped axes, with
-            // inner radii when both clip. The box itself is its border box.
+            // inner radii when both clip. The box itself is its rounded
+            // border box, as a browser hits it (docs/CSS_LAYOUT.md, 4.5).
             let inside = match self.css_box_geometry() {
                 Some(geometry) if skip_on_unclipped && !primary => {
                     crate::css_layout::paint::overflow_clip_contains(
@@ -1829,7 +1903,13 @@ impl LayoutComponent {
                             (true, true),
                         ))
                 }
-                _ => self.local_bounds().contains(local),
+                Some(geometry) => crate::css_layout::paint::overflow_clip_contains(
+                    local,
+                    geometry.bounds,
+                    geometry.radii,
+                    (true, true),
+                ),
+                None => self.local_bounds().contains(local),
             };
             if !inside {
                 return false;
@@ -2240,6 +2320,27 @@ impl LayoutComponent {
         else {
             return true;
         };
+        if !special.marks.is_empty() {
+            // A dashed or dotted border: its marks filled inside the ring,
+            // each group inside its sides' join wedges.
+            renderer.save();
+            renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+            renderer.clip_path(special.path.render_path(&factory));
+            let mut render_paint = render_paint.borrow_mut();
+            render_paint.style(nuxie_render_api::RenderPaintStyle::Fill);
+            for group in special.marks.iter_mut() {
+                renderer.save();
+                if let Some(clip) = group.clip.as_mut() {
+                    renderer.clip_path(clip.render_path(&factory));
+                }
+                renderer.draw_path(group.fills.render_path(&factory), render_paint.as_ref());
+                renderer.restore();
+            }
+            render_paint.style(nuxie_render_api::RenderPaintStyle::Stroke);
+            drop(render_paint);
+            renderer.restore();
+            return true;
+        }
         renderer.save();
         if let Some((offset, true)) = special.offset {
             renderer.translate(offset.x, offset.y);
@@ -2425,16 +2526,42 @@ impl LayoutComponent {
             path.add_path_backwards(&region.holes, translation.as_ref());
             path
         };
+        let open_path = |raw: &RawPath| {
+            let mut path = ShapePaintPath::new(true);
+            path.rewind_as(true, nuxie_render_api::FillRule::NonZero);
+            path.add_path(raw, translation.as_ref());
+            path
+        };
+        // The border widths, as the padding box sits in the paint rectangle.
+        let widths = [
+            padding.top() - bounds.top(),
+            bounds.right() - padding.right(),
+            bounds.bottom() - padding.bottom(),
+            padding.left() - bounds.left(),
+        ];
         self.paints
             .shape_paints()
             .iter()
             .filter_map(|paint| {
+                let mut marks = Vec::new();
                 let (geometry, fills_stroke, offset) = match css_paint_kind(paint)? {
-                    CssPaintKind::Border { sides } => (
-                        paint::box_border(bounds, radii, padding, inner, sides),
-                        true,
-                        None,
-                    ),
+                    CssPaintKind::Border { sides, style } => {
+                        marks = paint::border_marks(bounds, radii, widths, sides, style)
+                            .into_iter()
+                            .map(|group| CssBorderMarks {
+                                clip: paint::box_border(bounds, radii, padding, inner, group.sides)
+                                    .clip
+                                    .as_ref()
+                                    .map(local_path),
+                                fills: open_path(&group.fills),
+                            })
+                            .collect();
+                        (
+                            paint::box_border(bounds, radii, padding, inner, sides),
+                            true,
+                            None,
+                        )
+                    }
                     CssPaintKind::Shadow {
                         spread,
                         inset,
@@ -2452,6 +2579,7 @@ impl LayoutComponent {
                     clip: geometry.clip.as_ref().map(local_path),
                     fills_stroke,
                     offset,
+                    marks,
                 })
             })
             .collect()

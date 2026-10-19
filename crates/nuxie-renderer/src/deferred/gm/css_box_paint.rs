@@ -537,9 +537,18 @@ fn border_style_scene(width: f32, style: u64, radius: f32, strokes: &[(u32, u64)
     riv.bytes()
 }
 
-/// A dashed or dotted border matches Chrome's pixels for the same CSS, and
-/// is clearly closer than the same border drawn solid.
-fn check_border_style(name: &str, width: f32, style: u64, radius: f32, strokes: &[(u32, u64)]) {
+/// A dashed or dotted border matches Chrome's pixels for the same CSS
+/// within a mean of half a level and `outliers` pixels over 8 levels (the
+/// anti-aliasing of curved and round edges), and is clearly closer than the
+/// same border drawn solid.
+fn check_border_style(
+    name: &str,
+    width: f32,
+    style: u64,
+    radius: f32,
+    strokes: &[(u32, u64)],
+    outliers_at_most: usize,
+) {
     let reference = chrome(name);
     let ours = render(&border_style_scene(width, style, radius, strokes));
     let (mean, max, outliers) = difference(&reference, &ours);
@@ -561,10 +570,9 @@ fn check_border_style(name: &str, width: f32, style: u64, radius: f32, strokes: 
         solid > 4.0 * mean,
         "{name}: solid is not clearly worse ({solid} against {mean})"
     );
-    // Dash and dot ends are anti-aliased a little differently.
     assert!(
-        mean <= 1.0 && outliers <= 120,
-        "{name}: mean {mean}, max {max}, {outliers} outliers"
+        mean <= 0.5 && outliers <= outliers_at_most,
+        "{name}: mean {mean}, max {max}, {outliers} outliers (at most {outliers_at_most})"
     );
 }
 
@@ -574,32 +582,34 @@ const ALL_BLACK: &[(u32, u64)] = &[(0xff000000, 15)];
 /// fitted to each side.
 #[test]
 fn css_border_dashed_thin_matches_chrome() {
-    check_border_style("border_dashed_thin", 2.0, DASHED, 0.0, ALL_BLACK);
+    check_border_style("border_dashed_thin", 2.0, DASHED, 0.0, ALL_BLACK, 40);
 }
 
 /// `border: 6px dashed`: dashes two widths long with one-width gaps.
 #[test]
 fn css_border_dashed_thick_matches_chrome() {
-    check_border_style("border_dashed_thick", 6.0, DASHED, 0.0, ALL_BLACK);
+    check_border_style("border_dashed_thick", 6.0, DASHED, 0.0, ALL_BLACK, 0);
 }
 
 /// `border: 2px dotted`: square dots, whole dots at each side's ends.
 #[test]
 fn css_border_dotted_thin_matches_chrome() {
-    check_border_style("border_dotted_thin", 2.0, DOTTED, 0.0, ALL_BLACK);
+    check_border_style("border_dotted_thin", 2.0, DOTTED, 0.0, ALL_BLACK, 0);
 }
 
 /// `border: 8px dotted`: round dots evenly spaced along each side.
 #[test]
 fn css_border_dotted_thick_matches_chrome() {
-    check_border_style("border_dotted_thick", 8.0, DOTTED, 0.0, ALL_BLACK);
+    // Round dots' edges: about a dozen pixels of each of 36 dots.
+    check_border_style("border_dotted_thick", 8.0, DOTTED, 0.0, ALL_BLACK, 450);
 }
 
 /// `border: 4px dashed` with 20-point corners: dashes fitted around the
 /// whole rounded centre line.
 #[test]
 fn css_border_dashed_rounded_matches_chrome() {
-    check_border_style("border_dashed_rounded", 4.0, DASHED, 20.0, ALL_BLACK);
+    // The curves' edges and the dash ends cut across them.
+    check_border_style("border_dashed_rounded", 4.0, DASHED, 20.0, ALL_BLACK, 300);
 }
 
 /// Dashed sides in two colours, black top and left, red right and bottom,
@@ -612,6 +622,7 @@ fn css_border_dashed_sides_match_chrome() {
         DASHED,
         0.0,
         &[(0xff000000, 9), (0xffff0000, 6)],
+        20,
     );
 }
 

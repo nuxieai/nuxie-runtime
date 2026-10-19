@@ -16,6 +16,16 @@
       "description": "Bit mask of painted sides: 1 top, 2 right, 4 bottom, 8 left.",
       "bindable": true,
       "animates": false
+    },
+    "style": {
+      "type": "uint8",
+      "key": {
+        "int": 61103
+      },
+      "initialValue": "0",
+      "description": "The border's style on its sides: 0 solid, 1 dashed, 2 dotted. Dashes and dots are sized from each side's border width and fitted to each side's length (to the whole centre line on a rounded box) as Chrome fits them.",
+      "bindable": true,
+      "animates": false
     }
   }
 }

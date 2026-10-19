@@ -2,14 +2,15 @@
 //! defs/nuxie/*.json allocate them (docs/CSS_LAYOUT.md, section 1).
 //!
 //! The five record types share one contiguous property band, 61000 to
-//! 61102, so a key alone names its owner type and its slot.
-//! `LayoutCssStyle`'s z-index keys (61099 and 61100) and `BoxPaint`'s
-//! percentages (61101 and 61102) came after the band filled; a type's slots
-//! span from its first key to its last, and only its own keys are its.
+//! 61103, so a key alone names its owner type and its slot.
+//! `LayoutCssStyle`'s z-index keys (61099 and 61100), `BoxPaint`'s
+//! percentages (61101 and 61102) and `BoxBorder`'s style (61103) came after
+//! the band filled; a type's slots span from its first key to its last, and
+//! only its own keys are its.
 
 /// The first and last property keys of the CSS record band.
 pub const FIRST_KEY: u16 = 61000;
-pub const LAST_KEY: u16 = 61102;
+pub const LAST_KEY: u16 = 61103;
 
 pub const LAYOUT_CSS_STYLE: u16 = 61000;
 pub const BOX_BORDER: u16 = 61001;
@@ -73,6 +74,7 @@ pub const Z_INDEX_KIND: u16 = 61099;
 pub const Z_INDEX: u16 = 61100;
 pub const PAINT_WIDTH_PERCENT: u16 = 61101;
 pub const PAINT_HEIGHT_PERCENT: u16 = 61102;
+pub const BORDER_STYLE: u16 = 61103;
 
 /// How one property is stored. Enums are `uint8` on the wire and their
 /// largest valid value is given; numbers are `double` (an f32 at run time).
@@ -198,13 +200,14 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     N,      // 61100 zIndex
     n(100.0), // 61101 BoxPaint widthPercent
     n(100.0), // 61102 heightPercent
+    e(2),   // 61103 BoxBorder style
 ];
 
 /// The type that owns `key`, and its first property key.
 pub fn owner(key: u16) -> Option<(u16, u16)> {
     match key {
         61000..=61082 => Some((LAYOUT_CSS_STYLE, 61000)),
-        BORDER_SIDES => Some((BOX_BORDER, BORDER_SIDES)),
+        BORDER_SIDES | BORDER_STYLE => Some((BOX_BORDER, BORDER_SIDES)),
         61084..=61095 => Some((BOX_GRADIENT, GRADIENT_ANGLE)),
         SHADOW_SPREAD => Some((BOX_SHADOW, SHADOW_SPREAD)),
         PAINT_WIDTH..=PAINT_HEIGHT | PAINT_WIDTH_PERCENT..=PAINT_HEIGHT_PERCENT => {
@@ -220,7 +223,8 @@ pub fn range(type_key: u16) -> Option<(u16, usize)> {
     match type_key {
         // Its slots span the band to its z-index keys.
         LAYOUT_CSS_STYLE => Some((61000, 101)),
-        BOX_BORDER => Some((BORDER_SIDES, 1)),
+        // Its slots span to its style.
+        BOX_BORDER => Some((BORDER_SIDES, 21)),
         BOX_GRADIENT => Some((GRADIENT_ANGLE, 12)),
         BOX_SHADOW => Some((SHADOW_SPREAD, 1)),
         // Its slots span to its percentages.

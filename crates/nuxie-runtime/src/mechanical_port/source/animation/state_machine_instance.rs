@@ -1924,11 +1924,9 @@ impl HitDrawable {
             if result == ProcessEventResult::Scroll {
                 blocking = true;
                 // A handler that takes the press's gesture holds its drag,
-                // for the CSS drag handlers around it, a host machine's
-                // included (docs/CSS_LAYOUT.md, 4.5).
-                if !machine.holds_css_drag(pointer_id) {
-                    machine.claim_css_drag(pointer_id, listener.identity(), position, timestamp);
-                }
+                // for a host machine's CSS drag handlers (docs/CSS_LAYOUT.md,
+                // 4.5). Translated content keeps upstream's gestures here.
+                machine.hold_drag(pointer_id);
             }
         }
         if !self.is_hovered.get() || !can_hit {
@@ -3394,6 +3392,10 @@ pub struct StateMachineInstance {
     /// The CSS boxes whose own hit hears the pointer move, enter or leave,
     /// which a hit inside them keeps hovered (docs/CSS_LAYOUT.md, 4.5).
     css_hover_boxes: Vec<CoreHandle>,
+    /// Whether any hit here is CSS content, whose drag rules apply.
+    css_hits: bool,
+    /// The pointers whose press gesture a handler here took.
+    drag_holders: Vec<i32>,
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
@@ -3496,6 +3498,8 @@ impl StateMachineInstance {
             scroll_latch: None,
             css_drag_owners: Vec::new(),
             css_hover_boxes: Vec::new(),
+            css_hits: false,
+            drag_holders: Vec::new(),
             listener_groups: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
@@ -4469,9 +4473,18 @@ impl StateMachineInstance {
     }
 
     /// Whether a drag handler holds `pointer_id`'s drag (docs/CSS_LAYOUT.md,
-    /// 4.5).
+    /// 4.5): a CSS one owns it, or a handler took the press's gesture.
     pub(crate) fn holds_css_drag(&self, pointer_id: i32) -> bool {
         self.css_drag_owners.iter().any(|&(id, _)| id == pointer_id)
+            || self.drag_holders.contains(&pointer_id)
+    }
+
+    /// A handler here took `pointer_id`'s press gesture (it answered
+    /// Scroll), which a host machine's CSS drag handlers leave alone.
+    fn hold_drag(&mut self, pointer_id: i32) {
+        if !self.drag_holders.contains(&pointer_id) {
+            self.drag_holders.push(pointer_id);
+        }
     }
 
     /// Whether a drag handler other than `owner` owns `pointer_id`'s drag in
@@ -4566,6 +4579,7 @@ impl StateMachineInstance {
         // A new press starts a new drag (docs/CSS_LAYOUT.md, 4.5).
         if hit_type == ListenerType::Down {
             self.css_drag_owners.retain(|&(id, _)| id != pointer_id);
+            self.drag_holders.retain(|&id| id != pointer_id);
         }
         // An event bubbles from a hit to the CSS boxes it is in, which hear
         // it whatever their own geometry, deepest first. An opaque hit blocks
@@ -4612,8 +4626,11 @@ impl StateMachineInstance {
                         button,
                     );
                     // A drag a nested machine's handler holds is the host's
-                    // drag handlers' to leave alone (4.5).
-                    if component.holds_drag(pointer_id) && !self.holds_css_drag(pointer_id) {
+                    // CSS drag handlers' to leave alone (4.5).
+                    if self.css_hits
+                        && component.holds_drag(pointer_id)
+                        && !self.holds_css_drag(pointer_id)
+                    {
                         let owner = Rc::as_ptr(component) as *const () as usize;
                         self.claim_css_drag(pointer_id, owner, position, timestamp);
                     }
@@ -4643,6 +4660,7 @@ impl StateMachineInstance {
         }
         if matches!(hit_type, ListenerType::Up | ListenerType::Exit) {
             self.css_drag_owners.retain(|&(id, _)| id != pointer_id);
+            self.drag_holders.retain(|&id| id != pointer_id);
         }
         for (ended_pointer_id, ended_button) in drag_ended {
             self.drag_end(position, timestamp, ended_pointer_id, ended_button);
@@ -4780,6 +4798,10 @@ impl StateMachineInstance {
                 .with(|drawable| drawable.next.as_ref().and_then(|next| next.upgrade()))
                 .flatten();
         }
+        self.css_hits = self
+            .hit_components
+            .iter()
+            .any(|component| component.as_hit_drawable().is_some_and(|hit| hit.in_css));
         self.css_hover_boxes = self
             .hit_components
             .iter()

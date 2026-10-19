@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tools.check_runtime_source_correspondence import (
     ADAPTED_OWNERS, EDITOR_ONLY_OWNERS, OWNER_ROOT,
-    PREPROCESSOR_ADAPTED_OWNERS, missing_owners, upstream_owners,
+    PREPROCESSOR_ADAPTED_OWNERS, REMOVED_OWNERS, missing_owners, upstream_owners,
 )
 
 
@@ -65,6 +65,12 @@ class RuntimeSourceCorrespondenceTests(unittest.TestCase):
             self.assertEqual([row.split(" -> ")[0] for row in missing], [
                 "core/field_types/core_id_type", "core/id", "editor/new_owner",
             ])
+
+    def test_removed_scope_is_exact(self):
+        self.assertEqual(REMOVED_OWNERS, {"watermark"})
+        with tempfile.TemporaryDirectory() as directory:
+            missing = missing_owners(Path(directory), {"watermark", "watermark_manifest"})
+            self.assertEqual([row.split(" -> ")[0] for row in missing], ["watermark_manifest"])
 
     def test_preprocessor_adaptation_requires_existing_callback_owner(self):
         with tempfile.TemporaryDirectory() as directory:

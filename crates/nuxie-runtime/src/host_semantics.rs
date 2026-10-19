@@ -957,11 +957,20 @@ fn collect_geometry(
             }
             let point = inverse * render_to_native_point(point);
             let frame = root.bounds();
-            (!root.clip() || frame.contains(point))
-                && layout.css_paint_contains(NativeVec2D::new(
-                    point.x - frame.left(),
-                    point.y - frame.top(),
-                ))
+            let local = NativeVec2D::new(point.x - frame.left(), point.y - frame.top());
+            // Its own clip is its rounded frame, whatever its BoxPaint.
+            let in_clip = !root.clip()
+                || layout
+                    .css_box_geometry()
+                    .map_or(frame.contains(point), |geometry| {
+                        crate::css_layout::paint::overflow_clip_contains(
+                            local,
+                            geometry.bounds,
+                            geometry.radii,
+                            (true, true),
+                        )
+                    });
+            in_clip && layout.css_paint_contains(local)
         });
         Some((
             crate::source::core::CoreObject::core(root).handle()?,

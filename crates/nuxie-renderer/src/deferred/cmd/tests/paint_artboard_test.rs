@@ -1,6 +1,4 @@
 //! Canvas cases from runtime/paint_artboard_test.cpp at fa2cd6e3.
-#[path = "../../../../../nuxie-runtime/tests/support/paint_artboard.rs"]
-mod support;
 use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::render_context_null::*;
 use super::*;
@@ -8,6 +6,7 @@ use nuxie_runtime::source::{
     generated::shapes::paint::paint_image_base::PaintImageBase,
     shapes::paint::paint_image::PaintImage,
 };
+use nuxie_runtime::test_support::paint_artboard as support;
 use nuxie_runtime::{RuntimeArtboardInstanceHandle, RuntimeFactoryHandle};
 use support::*;
 #[derive(Clone)]

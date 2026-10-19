@@ -6,6 +6,15 @@
 
 #[doc(hidden)]
 pub mod mechanical_port;
+/// Shared test-only scene builders, for this package's tests and the
+/// renderer's. The non-default `test-support` feature keeps them out of
+/// every shipping build.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod test_support;
+// Lets `test_support` name this crate as its integration tests do.
+#[cfg(feature = "test-support")]
+extern crate self as nuxie_runtime;
 
 pub mod text_decoration;
 pub mod utils;

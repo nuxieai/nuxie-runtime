@@ -48,7 +48,7 @@ path = "lib.rs"
 
 [dev-dependencies]
 "nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
-"nuxie-runtime" = { "path" = "../nuxie-runtime", "features" = ["testing", "tools"] }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "features" = ["testing", "test-support", "tools"] }
 "pixel-compare" = { "path" = "../pixel-compare" }
 
 [build-dependencies]

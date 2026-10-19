@@ -3336,6 +3336,117 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("outside the default shipping feature set", result.stderr)
 
+    def test_runtime_test_support_cannot_be_a_default_feature(self) -> None:
+        self.write_manifest(
+            """
+            [features]
+            default = ["fixtures"]
+            fixtures = ["test-support"]
+            test-support = []
+            """
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("outside the default shipping feature set", result.stderr)
+
+    def test_runtime_test_support_is_enabled_only_by_dev_dependencies(self) -> None:
+        self.write_manifest("[features]\ntest-support = []\n")
+        self.create_package(
+            "crates/nuxie-renderer",
+            "nuxie-renderer",
+            """
+            [dev-dependencies]
+            nuxie-runtime = { path = "../nuxie-runtime", features = ["test-support"] }
+            """,
+        )
+        self.assertEqual(self.run_check().returncode, 0, self.run_check().stderr)
+
+        for body in (
+            """
+            [dependencies]
+            nuxie-runtime = { path = "../nuxie-runtime", features = ["test-support"] }
+            """,
+            """
+            [target.'cfg(unix)'.dependencies]
+            runtime = { package = "nuxie-runtime", path = "../nuxie-runtime", features = ["test-support"] }
+            """,
+            """
+            [features]
+            fixtures = ["nuxie-runtime/test-support"]
+
+            [dependencies]
+            nuxie-runtime = { path = "../nuxie-runtime" }
+            """,
+        ):
+            with self.subTest(body=body):
+                (self.root / "crates/nuxie-renderer/Cargo.toml").write_text(
+                    textwrap.dedent(
+                        f"""\
+                        [package]
+                        name = "nuxie-renderer"
+                        version = "0.0.0"
+
+                        {textwrap.dedent(body)}
+                        """
+                    )
+                )
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("test-support", result.stderr)
+
+    def test_runtime_test_support_guard_reads_inherited_and_renamed_edges(self) -> None:
+        self.write_manifest("[features]\ntest-support = []\n")
+        self.create_package("crates/nuxie-renderer", "nuxie-renderer", "")
+        inherited = """
+            [workspace.dependencies]
+            nuxie-runtime = { path = "crates/nuxie-runtime", features = ["test-support"] }
+            """
+        renamed = """
+            [workspace.dependencies]
+            runtime = { package = "nuxie-runtime", path = "crates/nuxie-runtime" }
+            """
+        cases = (
+            (inherited, "[dev-dependencies]\nnuxie-runtime = { workspace = true }\n", True),
+            (inherited, "[dependencies]\nnuxie-runtime = { workspace = true }\n", False),
+            (
+                "",
+                """
+                [features]
+                fixtures = ["runtime/test-support"]
+
+                [dependencies]
+                runtime = { package = "nuxie-runtime", path = "../nuxie-runtime" }
+                """,
+                False,
+            ),
+            (
+                renamed,
+                """
+                [features]
+                fixtures = ["runtime?/test-support"]
+
+                [dependencies]
+                runtime = { workspace = true, optional = true }
+                """,
+                False,
+            ),
+        )
+        for workspace_dependencies, body, passes in cases:
+            with self.subTest(workspace=workspace_dependencies, body=body):
+                self.write_workspace(textwrap.dedent(workspace_dependencies))
+                (self.root / "crates/nuxie-renderer/Cargo.toml").write_text(
+                    "[package]\nname = \"nuxie-renderer\"\nversion = \"0.0.0\"\n\n"
+                    + textwrap.dedent(body)
+                )
+                result = self.run_check()
+                if passes:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("test-support", result.stderr)
+
     def test_rejects_editor_gpu_and_source_tooling_in_baseline_interfaces(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""

@@ -142,10 +142,12 @@ unsafe fn import(bytes: &[u8], schema: usize) -> (*mut NuxFile, *mut NuxViewMode
             NuxStatus::Ok
         );
         let schema = if schema == usize::MAX {
+            // The schema that owns the `goals` list the published cases read.
             (&(*f).view_model_catalog)
-                .schemas
+                .properties
                 .iter()
-                .position(|s| s.name.as_ref() == b"Experience")
+                .find(|property| property.name.as_ref() == b"goals")
+                .map(|property| property.schema_index)
                 .unwrap()
         } else {
             schema
@@ -585,7 +587,7 @@ fn list_acquire_guards_provenance_and_no_mutation() {
 fn list_acquire_exact_published_f5() {
     unsafe {
         let bytes = include_bytes!("../tests/fixtures/published-goals/screen.riv");
-        let (f, v) = import(bytes, usize::MAX); // Resolve delivered Experience by exact name.
+        let (f, v) = import(bytes, usize::MAX); // Resolve the delivered list's owner.
         let a = acquire(v, "goals", 0);
         let b = acquire(v, "goals", 1);
         assert_eq!(title(a), b"Read");

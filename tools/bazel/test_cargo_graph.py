@@ -136,9 +136,9 @@ class CargoGraphTest(unittest.TestCase):
                 for target in libraries + tests:
                     self.assertNotIn(label, target.get("compile_data", []))
 
-    def test_renderer_names_the_shared_scene_builder_from_the_runtime_root(self):
-        # nuxie-dev loads these BUILD files from third_party/nuxie-runtime, where
-        # an absolute //crates/... label would name its own root instead.
+    def test_renderer_compiles_no_other_package_source(self):
+        # Shared scene builders arrive through dependencies' test-support
+        # features, so no package names another package's test sources.
         manifest = self.package("nuxie-renderer", "")
         (manifest.parent / "src").mkdir()
         (manifest.parent / "src/lib.rs").write_text("")
@@ -147,28 +147,8 @@ class CargoGraphTest(unittest.TestCase):
         for owner in (None, "@source//crates/nuxie-renderer"):
             rendered = render_package(package, {"": graph}, lambda name, _: "//root:" + name,
                                       fixture_labels=["//:fixtures"], source_owner=owner)
-            loads, groups = [], {}
-            def ignore(*args, **kwargs):
-                pass
-            class StarlarkDict(dict):
-                def items(self):
-                    return list(super().items())
-            scope = {"load": lambda *args: loads.append(args), "package": ignore, "exports_files": ignore,
-                     "dict": StarlarkDict, "glob": lambda *args, **kwargs: [],
-                     "filegroup": lambda name, srcs: groups.__setitem__(name, srcs),
-                     "source_path": lambda *args: "third_party/nuxie-runtime/crates/nuxie-renderer",
-                     "runtime_label": lambda label: "//third_party/nuxie-runtime/" + label,
-                     "all_crate_deps": lambda **kwargs: [], "crate_deps": lambda *args, **kwargs: [],
-                     "rust_library": ignore, "rust_test": ignore, "rust_lint_config": ignore}
-            exec(rendered, scope)
-            self.assertFalse([label for label in groups.get("source_inputs", []) if label.startswith("//crates/")])
-            helpers = [name for args in loads if args[0].endswith("//bazel:source-path.bzl") for name in args[1:]]
-            if owner is None:
-                self.assertIn("//third_party/nuxie-runtime/crates/nuxie-runtime:tests/support/paint_artboard.rs",
-                              groups["source_inputs"])
-                self.assertIn("runtime_label", helpers)
-            else:
-                self.assertNotIn("runtime_label", helpers)
+            self.assertNotIn("tests/support", rendered)
+            self.assertNotIn("runtime_label", rendered)
 
     def test_target_features_do_not_cross_host_and_wasm(self):
         manifests = [

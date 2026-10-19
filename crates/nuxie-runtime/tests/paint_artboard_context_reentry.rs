@@ -1,5 +1,5 @@
 //! Supplemental Rust ownership regression; not an upstream test replacement.
-#[path = "support/paint_artboard.rs"]
+#[path = "../src/test_support/paint_artboard.rs"]
 mod support;
 use nuxie_runtime::source::{
     animation::scripted_listener_action::ScriptedListenerAction,

@@ -1,5 +1,5 @@
 //! All eight non-canvas paint_artboard_test.cpp cases at fa2cd6e3.
-#[path = "support/paint_artboard.rs"]
+#[path = "../src/test_support/paint_artboard.rs"]
 mod support;
 use nuxie_runtime::source::{
     advancing_component::QuietState,

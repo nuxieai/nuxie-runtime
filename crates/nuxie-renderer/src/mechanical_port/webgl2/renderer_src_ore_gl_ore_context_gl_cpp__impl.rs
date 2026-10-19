@@ -2812,9 +2812,11 @@ mod tests {
         use nuxie_ore_metal::types::UBOEntry;
         let (domain, _) = execution([701]);
         let mut context = context(&domain);
+        // Uniform offsets are multiples of 256, as upstream's ORE binding
+        // validation (1d33ee5d) requires; the buffer ends 20 bytes past 256.
         let buffer = makeBuffer(
             &mut context,
-            &BufferDesc::uninitialized(BufferUsage::uniform, 20),
+            &BufferDesc::uninitialized(BufferUsage::uniform, 276),
         )
         .expect("uniform buffer");
         let entries = [BindGroupLayoutEntry {
@@ -2833,12 +2835,12 @@ mod tests {
         )
         .expect("uniform layout");
         for (offset, size, rounded) in [
-            (0, 0, 32),
+            (0, 0, 288),
             (0, 4, 16),
             (0, 16, 16),
             (0, 20, 32),
-            (16, 0, 16),
-            (16, 4, 16),
+            (256, 0, 32),
+            (256, 4, 16),
         ] {
             let ubos = [UBOEntry {
                 slot: 0,
@@ -2868,7 +2870,7 @@ mod tests {
                 }]
             );
         }
-        assert_eq!(buffer.downcast_ref::<BufferGL>().unwrap().size(), 20);
+        assert_eq!(buffer.downcast_ref::<BufferGL>().unwrap().size(), 276);
         drop(layout);
         drop(buffer);
         drop(context);

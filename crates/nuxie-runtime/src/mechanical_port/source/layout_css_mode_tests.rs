@@ -367,6 +367,8 @@ struct ArtboardSpec {
     origin_x: f32,
     /// The artboard's BoxPaint and the values it writes.
     box_paint: Option<Vec<P>>,
+    /// The artboard does not clip its content.
+    unclipped: bool,
 }
 
 /// Imports one artboard of `size` described by `spec`, holding `root` when
@@ -507,6 +509,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style);
     if spec.origin_x != 0.0 {
         riv.float(ArtboardBase::ORIGIN_X_PROPERTY_KEY, spec.origin_x);
+    }
+    if spec.unclipped {
+        riv.uint(LayoutComponentBase::CLIP_PROPERTY_KEY, 0);
     }
     if binds {
         riv.uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0);
@@ -4791,6 +4796,64 @@ fn css_animated_radius_clips_child_hits_live() {
     animate(&f, 1.0);
     assert!(!tapped(&f, "Picture", (2.0, 2.0)));
     assert!(tapped(&f, "Picture", (50.0, 20.0)));
+}
+
+/// `display: none` hides a CSS artboard's own paint, as it hides a box's:
+/// no fill, border or shadow draws, whatever its BoxPaint's size and
+/// whether or not it clips, and it is no visible geometry. A hidden
+/// component (data-show hides with display: none) paints nothing.
+#[test]
+fn css_hidden_artboard_paints_none_of_its_own_paints() {
+    let paints = vec![
+        Paint::Shadow {
+            color: 0xff77_8899,
+            strength: 4.0,
+            spread: 2.0,
+        },
+        Paint::Fill(0xff11_2233),
+        Paint::Border(0xff44_5566, 15),
+    ];
+    let record = vec![
+        U(DISPLAY, 3),
+        F(BORDER_TOP, 4.0),
+        F(BORDER_RIGHT, 4.0),
+        F(BORDER_BOTTOM, 4.0),
+        F(BORDER_LEFT, 4.0),
+    ];
+    for unclipped in [false, true] {
+        let f = try_scene_spec(
+            (100.0, 100.0),
+            ArtboardSpec {
+                css: Some(record.clone()),
+                paints: paints.clone(),
+                box_paint: Some(paint_points(40.0, 40.0)),
+                unclipped,
+                ..ArtboardSpec::default()
+            },
+            Some(B {
+                paints: paints.clone(),
+                box_paint: Some(paint_points(40.0, 40.0)),
+                ..css("Hidden", record.clone(), vec![])
+            }),
+        )
+        .expect("the scene imports");
+        let lines = f.draw_lines();
+        for color in ["0xff778899", "0xff112233", "0xff445566"] {
+            assert!(
+                !lines
+                    .iter()
+                    .any(|line| line.starts_with("drawPath") && line.contains(color)),
+                "unclipped {unclipped}: a draw with {color}:\n{}",
+                lines.join("\n")
+            );
+        }
+        let visible = f.host().visible_geometry_with_bounds();
+        assert!(
+            f.geometry_names(&visible).is_empty(),
+            "unclipped {unclipped}: {:?}",
+            f.geometry_names(&visible)
+        );
+    }
 }
 
 /// A rounded CSS artboard's own clip bounds where its larger BoxPaint can

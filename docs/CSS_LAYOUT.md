@@ -266,7 +266,7 @@ It changes no part of the file format.
 
 ## 4. Box paint
 
-A box paints itself at the size layout gives it: its border box, a rounded rectangle, unless a `BoxPaint` gives its paint another size (4.2). Its paint never counts towards any size. An artboard with a record paints its own fills and strokes the same way (CSS radii, `BoxBorder`, `BoxShadow` and `BoxGradient`), in its own drawing space, which starts at its origin.
+A box paints itself at the size layout gives it: its border box, a rounded rectangle, unless a `BoxPaint` gives its paint another size (4.2). Its paint never counts towards any size. An artboard with a record paints its own fills and strokes the same way (CSS radii, `BoxBorder`, `BoxShadow` and `BoxGradient`), in its own drawing space, which starts at its origin. A box or artboard hidden by `display: none` paints none of its own paint, whatever its `BoxPaint`'s size and whether or not it clips, and is no visible geometry.
 
 ### 4.1 What the compiler writes on the box (Rive-native)
 

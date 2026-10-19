@@ -13,8 +13,10 @@ use std::path::{Path, PathBuf};
 fn generated_schema_exposes_current_runtime_definition_set() {
     // Reconciled upstream through cdeabe75; forward overlays remain. Since
     // then: AngularGradient, DataConverterStringTemplate, StringTemplateArgument
-    // with its Number and String kinds, and TextStyleDecoration.
-    assert_eq!(DEFINITIONS.len(), 364);
+    // with its Number and String kinds, and TextStyleDecoration. CSS layout
+    // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
+    // (61000 to 61004, docs/CSS_LAYOUT.md).
+    assert_eq!(DEFINITIONS.len(), 369);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -43,8 +45,10 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // (487) from upstream's artboard paint sources; LinearGradient's
     // transform (1103 to 1107) from upstream's angular gradients; Video's
     // paused, position, duration, ended, state and drawnByScript (60016 to
-    // 60021); and TextStyleDecoration's line (60022).
-    assert_eq!(runtime_property_count, 692);
+    // 60021); and TextStyleDecoration's line (60022). CSS layout adds 104
+    // (61000 to 61103): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
+    // BoxBorder's 2 and BoxShadow's 1.
+    assert_eq!(runtime_property_count, 796);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -52,8 +56,10 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .filter(|property| property.animates)
         .count();
     // Video's loop, muted, volume, playbackRate, loopStart, loopEnd, paused
-    // and position animate since its native property migration.
-    assert_eq!(animatable_property_count, 242);
+    // and position animate since its native property migration. Of CSS
+    // layout's, 68 animate: LayoutCssStyle's 54 (its numbers), BoxGradient's
+    // 9, BoxPaint's 4 and BoxShadow's spread.
+    assert_eq!(animatable_property_count, 310);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -75,8 +81,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .filter(|property| property.description.is_some())
         .count();
     // Video's paused, position, duration, ended, state and drawnByScript and
-    // TextStyleDecoration's line are described.
-    assert_eq!(described_property_count, 475);
+    // TextStyleDecoration's line are described, and so is each of CSS
+    // layout's 104.
+    assert_eq!(described_property_count, 579);
 }
 
 #[test]

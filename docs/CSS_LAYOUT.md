@@ -360,6 +360,8 @@ Rive draws a box's children in reverse file order, so its first child draws on t
 
 A flex or grid item's `z-index` applies when it is not positioned too, as CSS says. A participant (a shape, image or text hosting a `LayoutParticipant`) orders by its host's record, as a box does. A translated child of a CSS box is positioned, with `z-index` auto, when layout places it absolutely. The order is computed by the runtime when the draw order is sorted, and again when `position`, `z-index` or `display` change at run time (a binding, an animation, a script), so the compiler writes no order of its own. Hit testing follows the same order: the topmost painted box is hit first.
 
+The box's own paint stays at the bottom of its stack however its drawables arrive: children materialized after other objects (a text input's hint and value) or re-created by a retained remount reach the draw list after the box's own drawables.
+
 Step 1 orders each box's own children: a child keeps its whole subtree together, so a positioned descendant paints with its parent's child, not in its nearest stacking context as a browser would let it escape. Escaping, and opacity and transforms as stacking-context triggers, are a follow-up. Translated (Rive) boxes keep Rive's order, and an artboard with draw rules keeps Rive's order throughout.
 
 ### 4.5 Host geometry

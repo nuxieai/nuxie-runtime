@@ -4329,3 +4329,72 @@ fn css_hidden_shadow_adds_no_painted_bounds() {
     f.advance(2);
     assert_eq!(bounds(&f), (50.0, 50.0, 150.0, 100.0));
 }
+
+const RADIUS_PERCENTS: [u16; 4] = [61079, 61080, 61081, 61082];
+
+/// A painted CSS box of `width` by `height` with `percent` radii on every
+/// corner, and the names hit at `point`.
+fn rounded_hits(
+    width_value: f32,
+    height_value: f32,
+    percent: f32,
+    point: (f32, f32),
+) -> Vec<String> {
+    let f = frame(vec![painted(
+        "Round",
+        0xff00_0001,
+        [
+            RADIUS_PERCENTS.map(|key| F(key, percent)).as_slice(),
+            &width(width_value),
+            &height(height_value),
+        ]
+        .concat(),
+    )]);
+    let hits = f
+        .host()
+        .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.0, point.1));
+    f.geometry_names(&hits)
+}
+
+/// A rounded CSS box is hit in its rounded border box, as a browser hits
+/// it: a tap in a cut-off corner misses, one by an edge hits.
+#[test]
+fn css_rounded_box_is_hit_in_its_rounded_border_box() {
+    assert!(rounded_hits(100.0, 100.0, 50.0, (5.0, 5.0)).is_empty());
+    assert_eq!(rounded_hits(100.0, 100.0, 50.0, (50.0, 2.0)), ["Round"]);
+    assert_eq!(rounded_hits(100.0, 100.0, 50.0, (50.0, 50.0)), ["Round"]);
+}
+
+/// Percent radii on a box that is not square are elliptical for hits too:
+/// 50% of 200 by 100 misses a point a 50-point circle would take.
+#[test]
+fn css_elliptical_radii_shape_hits() {
+    assert!(rounded_hits(200.0, 100.0, 50.0, (30.0, 10.0)).is_empty());
+    assert_eq!(rounded_hits(200.0, 100.0, 50.0, (100.0, 3.0)), ["Round"]);
+    assert_eq!(rounded_hits(200.0, 100.0, 50.0, (3.0, 50.0)), ["Round"]);
+}
+
+/// A child passes hits through its parent's rounded clip as it is drawn:
+/// in the clipped-off corner it is not hit.
+#[test]
+fn css_children_are_hit_through_a_rounded_clip() {
+    let f = frame(vec![css(
+        "Clip",
+        [
+            [U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)].as_slice(),
+            RADIUS_PERCENTS.map(|key| F(key, 50.0)).as_slice(),
+            &width(100.0),
+            &height(100.0),
+        ]
+        .concat(),
+        vec![painted("Inside", 0xff00_0002, sized_to(100.0, 100.0))],
+    )]);
+    let names = |x: f32, y: f32| {
+        let hits = f
+            .host()
+            .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
+        f.geometry_names(&hits)
+    };
+    assert!(names(5.0, 5.0).is_empty(), "{:?}", names(5.0, 5.0));
+    assert_eq!(names(50.0, 50.0), ["Inside"]);
+}

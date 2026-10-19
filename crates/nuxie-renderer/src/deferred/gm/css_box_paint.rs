@@ -110,6 +110,7 @@ const GRADIENT_CENTER_X_PERCENT: u16 = 61088;
 const GRADIENT_CENTER_Y_PERCENT: u16 = 61090;
 const GRADIENT_TO_CORNER: u16 = 61095;
 const BORDER_SIDES: u16 = 61083;
+const BORDER_STYLE: u16 = 61103;
 const PARENT_ID: u16 = 5;
 const WIDTH: u16 = 7;
 const HEIGHT: u16 = 8;
@@ -474,6 +475,143 @@ fn css_border_sides_match_chrome() {
     assert!(
         mean <= 1.0 && outliers <= 150,
         "border_sides: mean {mean}, max {max}, {outliers} outliers"
+    );
+}
+
+const SOLID: u64 = 0;
+const DASHED: u64 = 1;
+const DOTTED: u64 = 2;
+
+/// A 100 by 60 CSS box at (50, 70) with a `width` border in `style` on
+/// every side and `radius` corners, drawn by one Stroke and BoxBorder per
+/// (colour, sides) in `strokes`.
+fn border_style_scene(width: f32, style: u64, radius: f32, strokes: &[(u32, u64)]) -> Vec<u8> {
+    let mut riv = Riv::default();
+    riv.object(BACKBOARD).end();
+    // 0 artboard, 1 box, 2 record, then a stroke, its colour and its
+    // BoxBorder per entry, then the two styles.
+    let styles = 3 + 3 * strokes.len() as u64;
+    riv.object(ARTBOARD)
+        .float(WIDTH, SIZE as f32)
+        .float(HEIGHT, SIZE as f32)
+        .uint(STYLE_ID, styles)
+        .end();
+    riv.object(LAYOUT_COMPONENT)
+        .uint(PARENT_ID, 0)
+        .uint(STYLE_ID, styles + 1)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(PARENT_ID, 1)
+        .uint(CSS_POSITION, 2)
+        .uint(CSS_INSET_LEFT_KIND, 1)
+        .float(CSS_INSET_LEFT, 50.0)
+        .uint(CSS_INSET_TOP_KIND, 1)
+        .float(CSS_INSET_TOP, 70.0)
+        .uint(CSS_WIDTH_KIND, 1)
+        .float(CSS_WIDTH, 100.0)
+        .uint(CSS_HEIGHT_KIND, 1)
+        .float(CSS_HEIGHT, 60.0);
+    for side in 0..4 {
+        riv.float(CSS_BORDER_TOP + side, width);
+    }
+    riv.end();
+    for (index, &(color, sides)) in strokes.iter().enumerate() {
+        let stroke = 3 + 3 * index as u64;
+        riv.object(STROKE).uint(PARENT_ID, 1).end();
+        riv.object(SOLID_COLOR)
+            .uint(PARENT_ID, stroke)
+            .color(COLOR_VALUE, color)
+            .end();
+        riv.object(BOX_BORDER)
+            .uint(PARENT_ID, stroke)
+            .uint(BORDER_SIDES, sides)
+            .uint(BORDER_STYLE, style)
+            .end();
+    }
+    riv.object(LAYOUT_COMPONENT_STYLE).uint(PARENT_ID, 0).end();
+    riv.object(LAYOUT_COMPONENT_STYLE)
+        .uint(PARENT_ID, 1)
+        .uint(LINK_CORNER_RADIUS, 1)
+        .float(CORNER_RADIUS_TL, radius)
+        .end();
+    riv.bytes()
+}
+
+/// A dashed or dotted border matches Chrome's pixels for the same CSS, and
+/// is clearly closer than the same border drawn solid.
+fn check_border_style(name: &str, width: f32, style: u64, radius: f32, strokes: &[(u32, u64)]) {
+    let reference = chrome(name);
+    let ours = render(&border_style_scene(width, style, radius, strokes));
+    let (mean, max, outliers) = difference(&reference, &ours);
+    let path = std::env::temp_dir().join(format!("nuxie-css-{name}.png"));
+    pixel_compare::RgbaImage::new(SIZE, SIZE, ours)
+        .unwrap()
+        .write_png(&path)
+        .unwrap();
+    eprintln!(
+        "{name}: mean {mean:.3}, max {max}, {outliers} pixels over 8 levels; ours {}",
+        path.display()
+    );
+    let (solid, _, _) = difference(
+        &reference,
+        &render(&border_style_scene(width, SOLID, radius, strokes)),
+    );
+    eprintln!("{name}: drawn solid: mean {solid:.3}");
+    assert!(
+        solid > 4.0 * mean,
+        "{name}: solid is not clearly worse ({solid} against {mean})"
+    );
+    // Dash and dot ends are anti-aliased a little differently.
+    assert!(
+        mean <= 1.0 && outliers <= 120,
+        "{name}: mean {mean}, max {max}, {outliers} outliers"
+    );
+}
+
+const ALL_BLACK: &[(u32, u64)] = &[(0xff000000, 15)];
+
+/// `border: 2px dashed`: thin dashes three widths long with two-width gaps,
+/// fitted to each side.
+#[test]
+fn css_border_dashed_thin_matches_chrome() {
+    check_border_style("border_dashed_thin", 2.0, DASHED, 0.0, ALL_BLACK);
+}
+
+/// `border: 6px dashed`: dashes two widths long with one-width gaps.
+#[test]
+fn css_border_dashed_thick_matches_chrome() {
+    check_border_style("border_dashed_thick", 6.0, DASHED, 0.0, ALL_BLACK);
+}
+
+/// `border: 2px dotted`: square dots, whole dots at each side's ends.
+#[test]
+fn css_border_dotted_thin_matches_chrome() {
+    check_border_style("border_dotted_thin", 2.0, DOTTED, 0.0, ALL_BLACK);
+}
+
+/// `border: 8px dotted`: round dots evenly spaced along each side.
+#[test]
+fn css_border_dotted_thick_matches_chrome() {
+    check_border_style("border_dotted_thick", 8.0, DOTTED, 0.0, ALL_BLACK);
+}
+
+/// `border: 4px dashed` with 20-point corners: dashes fitted around the
+/// whole rounded centre line.
+#[test]
+fn css_border_dashed_rounded_matches_chrome() {
+    check_border_style("border_dashed_rounded", 4.0, DASHED, 20.0, ALL_BLACK);
+}
+
+/// Dashed sides in two colours, black top and left, red right and bottom,
+/// split at the corners as Chrome splits them.
+#[test]
+fn css_border_dashed_sides_match_chrome() {
+    check_border_style(
+        "border_dashed_sides",
+        4.0,
+        DASHED,
+        0.0,
+        &[(0xff000000, 9), (0xffff0000, 6)],
     );
 }
 

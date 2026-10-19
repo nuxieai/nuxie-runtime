@@ -1189,6 +1189,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 };
 use crate::mechanical_port::source::renderer::src::draw_cpp::{
     make_clip_reset, make_image_mesh_draw, make_image_rect_draw, make_path_draw_from_source,
+    make_path_draw_from_source_with_clockwise_override,
 };
 use nuxie_render_api::{
     Aabb, BlendMode, FillRule, Mat2D, RawPath, RenderPaintStyle, RenderPath as ApiRenderPath,
@@ -2224,15 +2225,22 @@ impl RendererContract for RiveRenderer {
         }
         let image_matrix = (!q.getImageTexture().is_null())
             .then(|| mul(self.current_state().matrix, *q.getImageTransform()));
+        // Nuxie addition (UNIV-5018): upstream returns here for a feathered
+        // fill whose rule is not clockwise unless the frame overrides fills to
+        // clockwise, so raster-ordering and MSAA frames drew nothing where
+        // clockwise-atomic frames drew the fill. Such a fill instead draws as a
+        // clockwise-override frame draws it. Clockwise feathered fills, the
+        // only kind the Rive editor writes, keep the upstream path.
+        let clockwise_override_feather = q.getFeather() != 0.0
+            && !q.getIsStroked()
+            && p.getFillRule() != FillRule::Clockwise
+            && !frame.clockwiseFillOverride;
         if q.getFeather() != 0.0 && !q.getIsStroked() {
-            if p.getFillRule() != FillRule::Clockwise && !frame.clockwiseFillOverride {
-                return;
-            }
             let matrix_max_scale = max_scale(self.current_state().matrix);
             if q.getFeather() * matrix_max_scale > 1.0 {
                 let softened = p.makeSoftenedCopyForFeathering(q.getFeather(), matrix_max_scale);
                 let owner = unsafe {
-                    make_path_draw_from_source(
+                    make_path_draw_from_source_with_clockwise_override(
                         &mut *self.m_context,
                         self.current_state().matrix,
                         image_matrix,
@@ -2242,6 +2250,7 @@ impl RendererContract for RiveRenderer {
                         self.current_state().modulatedOpacity,
                         self.current_state().modulatedColor,
                         None,
+                        clockwise_override_feather,
                     )
                 };
                 if let Some(owner) = owner {
@@ -2252,7 +2261,7 @@ impl RendererContract for RiveRenderer {
         }
         let path_owner = unsafe { ref_rcp(path.cast::<RiveRenderPath>()) };
         let owner = unsafe {
-            make_path_draw_from_source(
+            make_path_draw_from_source_with_clockwise_override(
                 &mut *self.m_context,
                 self.current_state().matrix,
                 image_matrix,
@@ -2262,6 +2271,7 @@ impl RendererContract for RiveRenderer {
                 self.current_state().modulatedOpacity,
                 self.current_state().modulatedColor,
                 None,
+                clockwise_override_feather,
             )
         };
         if let Some(owner) = owner {

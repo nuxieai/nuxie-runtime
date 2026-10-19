@@ -4438,6 +4438,49 @@ fn css_translated_absolute_child_paints_above_static_siblings() {
     assert!(at("Red") < at("Blue"), "{names:?}");
 }
 
+/// The orientation helpers virtualized scrolling reads follow a CSS box's
+/// record, not its retained Rive style: its main axis from
+/// `flex-direction`, its wrapping from `flex-wrap`.
+#[test]
+fn css_virtualized_scroll_axis_follows_the_css_record() {
+    use crate::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase as Style;
+    let axis = |props: &[P], style: Vec<P>| {
+        let f = frame(vec![B {
+            style,
+            ..css(
+                "List",
+                [
+                    [U(DISPLAY, 1)].as_slice(),
+                    props,
+                    &width(200.0),
+                    &height(100.0),
+                ]
+                .concat(),
+                vec![],
+            )
+        }]);
+        f.named("List")
+            .with_downcast::<LayoutComponent, _>(|layout| {
+                (
+                    layout.main_axis_is_row(),
+                    layout.main_axis_is_column(),
+                    layout.wraps_lines(),
+                )
+            })
+            .unwrap()
+    };
+    // A CSS row, then a CSS column, beside the default Rive row.
+    assert_eq!(axis(&[], vec![]), (true, false, false));
+    assert_eq!(axis(&[U(61006, 2)], vec![]), (false, true, false));
+    // CSS wrap beside a Rive nowrap, and CSS nowrap beside a Rive row wrap.
+    assert_eq!(axis(&[U(61007, 1)], vec![]), (true, false, true));
+    let rive_row_wrap = vec![
+        U(Style::FLEX_DIRECTION_VALUE_PROPERTY_KEY, 2),
+        U(Style::FLEX_WRAP_VALUE_PROPERTY_KEY, 1),
+    ];
+    assert_eq!(axis(&[], rive_row_wrap), (true, false, false));
+}
+
 /// A box's painted bounds measure each of its paths with the paint that
 /// draws it. A blurred inset shadow, drawn only inside the padding box,
 /// grows neither its own bounds past the box nor the background's; a

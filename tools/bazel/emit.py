@@ -270,19 +270,25 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
             continue
         test_deps = dependency_expression(graph.dependencies(package.name, ("dev-dependencies",)), variant, label_for, registry_prefix, package.name, registry_repo, conditions_repo)
         test_data = [source_repo + label for label in TEST_DATA.get(package.name, [])]
+        # Cargo runs a package's tests with its build script's OUT_DIR set, as
+        # it compiles them; Bazel sets it only at compile time. Its tests get
+        # the script's output directory in their runfiles, named by OUT_DIR.
+        if has_build:
+            test_data.append(":" + target + "__build_script")
+        test_env = ('    env = ' + quoted({"OUT_DIR": "$(rootpath :" + target + "__build_script)"}) + ',',) if has_build else ()
         unit_data = '_compile_data + ' + quoted(test_data) if test_data else '_compile_data'
         if unit_tests and has_lib:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
                 f'    crate_features = {compiler_features},',
-                f'    deps = {test_deps},', f'    data = {unit_data},',
+                f'    deps = {test_deps},', f'    data = {unit_data},', *test_env,
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         elif unit_tests and package.name in binaries:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
                 f'    crate_features = {compiler_features},',
-                f'    deps = {test_deps},', f'    data = {unit_data},',
+                f'    deps = {test_deps},', f'    data = {unit_data},', *test_env,
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         if integration_tests:
@@ -308,7 +314,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                     f'    crate_name = {quoted(test_name.replace("-", "_"))},',
                     f'    crate_root = {quoted(source(file.relative_to(package.directory).as_posix()))},',
                     '    srcs = _test_sources,', f'    compile_data = {compile_inputs},',
-                    '    data = _compile_data + ' + quoted([*binary_products.values(), *test_data]) + ',',
+                    '    data = _compile_data + ' + quoted([*binary_products.values(), *test_data]) + ',', *test_env,
                     f'    edition = {quoted(package.edition)},', f'    version = {quoted(package.version)},',
                     f'    crate_features = {compiler_features},',
                     f'    deps = {integration_deps},',

@@ -151,7 +151,8 @@ rust_test(
     crate = ":nuxie-script-signature__test",
     crate_features = ["default"],
     deps = crate_deps(["serde_json"], package_name = "bazel/cargo/nuxie-script-signature"),
-    data = _compile_data,
+    data = _compile_data + [":nuxie-script-signature__test__build_script"],
+    env = {"OUT_DIR": "$(rootpath :nuxie-script-signature__test__build_script)"},
     proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = "bazel/cargo/nuxie-script-signature"),
     lint_config = ":cargo_lints",
 )

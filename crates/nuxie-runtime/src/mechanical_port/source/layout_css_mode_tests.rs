@@ -132,6 +132,9 @@ struct B {
     box_paint_keys: Vec<(u16, Vec<(u32, f32)>)>,
     /// An empty Text beside each grouped content rectangle, in its group.
     text_in_groups: bool,
+    /// LayoutCssStyle properties keyed by the file's one animation, as
+    /// `box_paint_keys`.
+    css_keys: Vec<(u16, Vec<(u32, f32)>)>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -359,9 +362,13 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(props) = &node.css {
+            let record = slots(entries) + 1;
             entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
             if let Some(key) = node.bind {
                 entries.push(Entry::Bind(key));
+            }
+            for (key, keys) in &node.css_keys {
+                entries.push(Entry::Keys(record, *key, keys));
             }
         }
         if let Some(props) = &node.box_paint {
@@ -3838,10 +3845,11 @@ fn css_positioned_participant_paints_above_static_siblings() {
     assert!(above(&f), "{:?}", f.draw_names_top_first());
 }
 
-/// A box is hit anywhere in its border box, outside a smaller BoxPaint,
-/// while its visible geometry is the painted rectangle.
+/// A box with a smaller BoxPaint is selected by visible geometry only where
+/// it paints, while a tap (interaction hit testing) takes its whole border
+/// box (docs/CSS_LAYOUT.md, 4.5).
 #[test]
-fn css_box_paint_leaves_hits_on_the_border_box() {
+fn css_box_paint_selects_its_rectangle_and_takes_taps_in_its_border_box() {
     let f = painted_row(Some(paint_points(100.0, 40.0)), |b| b);
     let mut host = f.host();
     let visible = host.visible_geometry_with_bounds();
@@ -3855,8 +3863,28 @@ fn css_box_paint_leaves_hits_on_the_border_box() {
         (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
         (50.0, 30.0, 150.0, 70.0)
     );
-    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(10.0, 10.0));
-    assert!(f.geometry_names(&hits).contains(&"Painted".to_owned()));
+    let mut selected = |x: f32, y: f32| {
+        let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
+        f.geometry_names(&hits).contains(&"Painted".to_owned())
+    };
+    assert!(!selected(10.0, 10.0));
+    assert!(selected(100.0, 50.0));
+    assert!(tapped(&f, "Painted", (10.0, 10.0)));
+}
+
+/// Whether a tap at `point` (in the artboard) hits `name` itself, as
+/// interaction hit testing asks.
+fn tapped(f: &Scene, name: &str, point: (f32, f32)) -> bool {
+    f.object(name)
+        .with_mut(|object| {
+            object.component_hit_test_point(
+                &crate::source::math::vec2d::Vec2D::new(point.0, point.1),
+                false,
+                true,
+            )
+        })
+        .flatten()
+        .unwrap_or(false)
 }
 
 /// A CSS artboard's BoxPaint leaves its own clip, so a child outside the
@@ -4397,4 +4425,111 @@ fn css_children_are_hit_through_a_rounded_clip() {
     };
     assert!(names(5.0, 5.0).is_empty(), "{:?}", names(5.0, 5.0));
     assert_eq!(names(50.0, 50.0), ["Inside"]);
+}
+
+/// A card with no background whose only paint is its top border is
+/// selected only on that side: a point in its unpainted middle selects
+/// nothing, square or rounded, while a tap there still takes the card.
+#[test]
+fn css_patterned_border_selection_stays_in_its_visible_side() {
+    for radius in [0.0, 10.0] {
+        let f = frame(vec![B {
+            paints: vec![Paint::Border(0xff00_0001, 1)],
+            style: vec![F(
+                LayoutComponentStyleBase::CORNER_RADIUS_TL_PROPERTY_KEY,
+                radius,
+            )],
+            ..css(
+                "Card",
+                [
+                    [
+                        U(BOX_SIZING, 1),
+                        F(BORDER_TOP, 4.0),
+                        F(BORDER_RIGHT, 6.0),
+                        F(BORDER_BOTTOM, 8.0),
+                        F(BORDER_LEFT, 2.0),
+                    ]
+                    .as_slice(),
+                    &width(68.0),
+                    &height(47.0),
+                ]
+                .concat(),
+                vec![],
+            )
+        }]);
+        let mut host = f.host();
+        let visible = host.visible_geometry_with_bounds();
+        assert_eq!(f.geometry_names(&visible), ["Card"], "radius {radius}");
+        let bounds = visible[0].bounds;
+        assert!(bounds.max_y <= 4.0 + 1.0e-3, "radius {radius}: {bounds:?}");
+        let mut selected = |x: f32, y: f32| {
+            let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
+            f.geometry_names(&hits)
+        };
+        assert_eq!(selected(34.0, 2.0), ["Card"], "radius {radius}");
+        assert!(selected(30.0, 33.0).is_empty(), "radius {radius}");
+        assert!(tapped(&f, "Card", (30.0, 33.0)), "radius {radius}");
+    }
+}
+
+/// The front of two overlapping CSS viewports, its corners cut 14 points
+/// round and holding only an image, takes no tap in a cut corner, and its
+/// image is not hit there through the rounded clip; both are hit inside.
+#[test]
+fn css_rounded_viewport_passes_corner_hits_through() {
+    let f = frame(vec![
+        painted(
+            "Back",
+            0xff00_0001,
+            [[U(POSITION, 2)].as_slice(), &width(100.0), &height(100.0)].concat(),
+        ),
+        B {
+            images: vec!["Picture"],
+            ..css(
+                "Front",
+                [
+                    [U(POSITION, 2), U(OVERFLOW_X, 3), U(OVERFLOW_Y, 3)].as_slice(),
+                    RADIUS_PERCENTS.map(|key| F(key, 14.0)).as_slice(),
+                    &width(100.0),
+                    &height(100.0),
+                ]
+                .concat(),
+                vec![],
+            )
+        },
+    ]);
+    assert!(!tapped(&f, "Front", (2.0, 2.0)));
+    assert!(!tapped(&f, "Picture", (2.0, 2.0)));
+    assert!(tapped(&f, "Front", (14.0, 2.0)));
+    assert!(tapped(&f, "Picture", (14.0, 2.0)));
+    assert!(tapped(&f, "Back", (2.0, 2.0)));
+}
+
+/// A viewport's radius animated from 0 to 40% clips its children's hits as
+/// it is at each frame: its image is hit in the corner at the start and
+/// not at the end.
+#[test]
+fn css_animated_radius_clips_child_hits_live() {
+    let f = frame(vec![B {
+        images: vec!["Picture"],
+        css_keys: RADIUS_PERCENTS
+            .iter()
+            .map(|&key| (key, vec![(0, 0.0), (60, 40.0)]))
+            .collect(),
+        ..css(
+            "Front",
+            [
+                [U(OVERFLOW_X, 3), U(OVERFLOW_Y, 3)].as_slice(),
+                &width(100.0),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![],
+        )
+    }]);
+    animate(&f, 0.0);
+    assert!(tapped(&f, "Picture", (2.0, 2.0)));
+    animate(&f, 1.0);
+    assert!(!tapped(&f, "Picture", (2.0, 2.0)));
+    assert!(tapped(&f, "Picture", (50.0, 20.0)));
 }

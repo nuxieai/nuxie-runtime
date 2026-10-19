@@ -10,6 +10,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
+/// The corpus-r binary, made absolute before a test runs it from another
+/// directory: Cargo names it absolutely, Bazel relative to the test's
+/// runfiles.
+fn corpus_r() -> std::path::PathBuf {
+    std::path::absolute(env!("CARGO_BIN_EXE_corpus-r")).expect("the corpus-r path")
+}
+
 #[test]
 fn same_runner_reference_replay_replaces_a_missing_committed_reference() {
     let root = temporary_directory("dynamic-reference");
@@ -36,7 +43,7 @@ mode = "clockwise-atomic"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_REPLAY_PNG", root.join("fixture.png"))
         .env("FAKE_REPLAY_LOG", root.join("replay-order.log"))
@@ -117,7 +124,7 @@ mode = "clockwise-atomic"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_REPLAY_PNG", root.join("fixture.png"))
         .env("FAKE_REFERENCE_ADAPTER", "Reference GPU")
@@ -171,7 +178,7 @@ mode = "clockwise-atomic"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_REPLAY_PNG", root.join("fixture.png"))
         .env("FAKE_OMIT_CANDIDATE_ADAPTER", "1")
@@ -226,7 +233,7 @@ mode = "clockwise-atomic"
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+    let output = Command::new(corpus_r())
         .current_dir(&root)
         .env("FAKE_REFERENCE_PNG", root.join("reference.png"))
         .env("FAKE_CANDIDATE_PNG", root.join("candidate.png"))

@@ -4541,3 +4541,27 @@ fn css_animated_radius_clips_child_hits_live() {
     assert!(!tapped(&f, "Picture", (2.0, 2.0)));
     assert!(tapped(&f, "Picture", (50.0, 20.0)));
 }
+
+/// A rounded CSS artboard's own clip bounds where its larger BoxPaint can
+/// be selected: not in a clipped-off corner, as it draws.
+#[test]
+fn css_artboard_box_paint_selection_stays_in_its_rounded_clip() {
+    let f = try_scene_spec(
+        (100.0, 100.0),
+        ArtboardSpec {
+            css: Some(RADIUS_PERCENTS.map(|key| F(key, 50.0)).to_vec()),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            box_paint: Some(paint_points(200.0, 200.0)),
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let mut host = f.host();
+    let mut selected = |x: f32, y: f32| {
+        let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
+        f.geometry_names(&hits)
+    };
+    assert!(selected(5.0, 5.0).is_empty());
+    assert_eq!(selected(50.0, 50.0), ["Artboard"]);
+}

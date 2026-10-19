@@ -344,7 +344,8 @@ impl Drawable {
     }
     pub fn set_needs_save_operation(&mut self, value: bool) {
         let flags = self.runtime_flags.get();
-        self.runtime_flags.set(if value { flags | 1 } else { flags & !1 });
+        self.runtime_flags
+            .set(if value { flags | 1 } else { flags & !1 });
     }
     pub fn needs_save_operation(&self) -> bool {
         self.runtime_flags.get() & 1 != 0
@@ -524,15 +525,18 @@ impl RuntimeDrawableOccurrence {
         has_pending_clips: bool,
     ) -> DrawRangePrelude {
         if let Self::Authored(handle) = self
-            && handle
-                .occupied_core_type()
-                .is_some_and(|key| crate::mechanical_port::source::type_tables::contains(&DRAWABLES, key))
+            && handle.occupied_core_type().is_some_and(|key| {
+                crate::mechanical_port::source::type_tables::contains(&DRAWABLES, key)
+            })
         {
             return self.draw_range_prelude(*empty_clips > 0, has_pending_clips);
         }
         let previous = *empty_clips;
         *empty_clips += self.empty_clip_count();
-        self.draw_range_prelude(*empty_clips != previous || *empty_clips > 0, has_pending_clips)
+        self.draw_range_prelude(
+            *empty_clips != previous || *empty_clips > 0,
+            has_pending_clips,
+        )
     }
 
     pub(crate) fn draw_range_prelude(
@@ -578,7 +582,9 @@ impl RuntimeDrawableOccurrence {
             .flatten()
     }
     /// The layer mask operation this occurrence marks, if it is a mask proxy.
-    pub(crate) fn layer_mask_op(&self) -> Option<crate::mechanical_port::source::layer_mask::LayerMaskOp> {
+    pub(crate) fn layer_mask_op(
+        &self,
+    ) -> Option<crate::mechanical_port::source::layer_mask::LayerMaskOp> {
         match self {
             Self::Authored(_) => None,
             Self::RuntimeProxy(_) => self.layer_mask_marker().map(|m| m.borrow().op),

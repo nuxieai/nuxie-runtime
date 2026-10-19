@@ -106,7 +106,8 @@ impl ShapeCells {
             return false;
         }
         // Shape::markWorldBoundsDirty: setDrawableFlags, then the world length.
-        let value = flags.get() & !crate::mechanical_port::source::drawable_flag::DrawableFlag::WORLD_BOUNDS_CLEAN.0;
+        let value = flags.get()
+            & !crate::mechanical_port::source::drawable_flag::DrawableFlag::WORLD_BOUNDS_CLEAN.0;
         if flags.get() != value {
             flags.set(value);
             shape.notify_property_changed(
@@ -151,7 +152,8 @@ impl ShapeCells {
     /// The composer of a drawing shape, which the shape keeps alive.
     fn drawing_composer(
         &self,
-    ) -> Rc<std::cell::RefCell<crate::mechanical_port::source::shapes::path_composer::PathComposer>> {
+    ) -> Rc<std::cell::RefCell<crate::mechanical_port::source::shapes::path_composer::PathComposer>>
+    {
         let ComponentOccurrenceHandle::PathComposer(composer) = &self.composer else {
             unreachable!("a shape's composer occurrence is a PathComposer");
         };
@@ -161,9 +163,13 @@ impl ShapeCells {
     }
 
     fn composer_path_mut<R>(
-        composer: &std::cell::RefCell<crate::mechanical_port::source::shapes::path_composer::PathComposer>,
+        composer: &std::cell::RefCell<
+            crate::mechanical_port::source::shapes::path_composer::PathComposer,
+        >,
         kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
-        use_path: impl FnOnce(&mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath) -> R,
+        use_path: impl FnOnce(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ) -> R,
     ) -> R {
         use crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind;
         let mut composer = composer.borrow_mut();
@@ -195,7 +201,9 @@ impl ShapeCells {
             let fill_rule = paint.cells.fill_rule();
             if paint.cells.is_plain() && paint.handle.is_occupied_settled() {
                 Self::composer_path_mut(&composer, kind, |path| {
-                    paint.cells.draw_plain(renderer, path, transform, needs_save, fill_rule, factory);
+                    paint
+                        .cells
+                        .draw_plain(renderer, path, transform, needs_save, fill_rule, factory);
                 });
                 continue;
             }
@@ -223,7 +231,9 @@ impl ShapeCells {
     /// Run `use_path` on the composer's world path, if the composer lives.
     pub(crate) fn with_world_path<R>(
         &self,
-        use_path: impl FnOnce(&mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath) -> R,
+        use_path: impl FnOnce(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ) -> R,
     ) -> Option<R> {
         let ComponentOccurrenceHandle::PathComposer(composer) = &self.composer else {
             unreachable!("a shape's composer occurrence is a PathComposer");
@@ -343,7 +353,8 @@ impl ShapeCells {
                 .with_downcast::<Shape, _>(|shape| shape.base.constraints().get(index).cloned())
                 .flatten()
             {
-                ComponentOccurrenceHandle::Authored(constraint).add_dirt(ComponentDirt::PATH, false);
+                ComponentOccurrenceHandle::Authored(constraint)
+                    .add_dirt(ComponentDirt::PATH, false);
                 index += 1;
             }
         }

@@ -1173,7 +1173,9 @@ impl<B: ExactSourceBackend> RenderCanvasFrame for ExactSourceRenderCanvasFrame<B
     }
 
     fn finish(self: Box<Self>) -> Result<(), RenderCanvasError> {
-        unsafe { self.finish_with_resources(nuxie_render_api::RenderCanvasFlushResources::default()) }
+        unsafe {
+            self.finish_with_resources(nuxie_render_api::RenderCanvasFlushResources::default())
+        }
     }
 
     unsafe fn finish_with_resources(

@@ -133,19 +133,31 @@ impl CubicWeightBase {
     ) -> bool {
         match property_key {
             Self::IN_VALUES_PROPERTY_KEY => {
-                self.base.base.cells().set_in_values(CoreUintType::deserialize(reader));
+                self.base
+                    .base
+                    .cells()
+                    .set_in_values(CoreUintType::deserialize(reader));
                 true
             }
             Self::IN_INDICES_PROPERTY_KEY => {
-                self.base.base.cells().set_in_indices(CoreUintType::deserialize(reader));
+                self.base
+                    .base
+                    .cells()
+                    .set_in_indices(CoreUintType::deserialize(reader));
                 true
             }
             Self::OUT_VALUES_PROPERTY_KEY => {
-                self.base.base.cells().set_out_values(CoreUintType::deserialize(reader));
+                self.base
+                    .base
+                    .cells()
+                    .set_out_values(CoreUintType::deserialize(reader));
                 true
             }
             Self::OUT_INDICES_PROPERTY_KEY => {
-                self.base.base.cells().set_out_indices(CoreUintType::deserialize(reader));
+                self.base
+                    .base
+                    .cells()
+                    .set_out_indices(CoreUintType::deserialize(reader));
                 true
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),

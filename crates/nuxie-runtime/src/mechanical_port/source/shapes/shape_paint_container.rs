@@ -84,7 +84,9 @@ impl ContainerCells {
             .paints
             .borrow()
             .iter()
-            .fold(PathFlags::NONE, |flags, paint| flags | paint.cells.path_flags());
+            .fold(PathFlags::NONE, |flags, paint| {
+                flags | paint.cells.path_flags()
+            });
         self.paint_flags.set(flags);
     }
 

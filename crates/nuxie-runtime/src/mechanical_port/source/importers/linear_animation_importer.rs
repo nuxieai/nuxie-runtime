@@ -34,7 +34,9 @@ impl LinearAnimationImporter {
     pub(crate) fn add_keyed_object_with_cells(
         &mut self,
         object: CoreHandle,
-        cells: std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells>,
+        cells: std::rc::Rc<
+            crate::mechanical_port::source::animation::keyframe_cells::KeyedObjectCells,
+        >,
     ) {
         self.animation
             .with_downcast_mut::<LinearAnimation, _>(|animation| {

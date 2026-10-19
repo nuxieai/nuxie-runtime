@@ -314,7 +314,13 @@ impl WorkPool {
     /// Some owner's work is undelivered: has_pending_work_for_owner holds for
     /// at least one owner.
     pub fn has_undelivered_work(&self) -> bool {
-        !self.state.queue.lock().unwrap().undelivered_by_owner.is_empty()
+        !self
+            .state
+            .queue
+            .lock()
+            .unwrap()
+            .undelivered_by_owner
+            .is_empty()
     }
 
     pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {

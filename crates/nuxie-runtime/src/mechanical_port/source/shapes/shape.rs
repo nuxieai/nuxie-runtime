@@ -126,7 +126,10 @@ impl Shape {
                 let has_skin = object
                     .as_points_path()
                     .is_some_and(|points| points.skin().is_some());
-                (has_skin, object.as_path().map(|path| Rc::clone(path.cells())))
+                (
+                    has_skin,
+                    object.as_path().map(|path| Rc::clone(path.cells())),
+                )
             })
             .expect("live Path");
         self.add_path_with_skin(path, has_skin, cells.expect("Shape paths are Paths"));
@@ -142,7 +145,12 @@ impl Shape {
     ) {
         assert!(!self.paths.contains(&path));
         self.cells.add_path(path.clone(), cells);
-        self.paths = self.paths.iter().cloned().chain(std::iter::once(path)).collect();
+        self.paths = self
+            .paths
+            .iter()
+            .cloned()
+            .chain(std::iter::once(path))
+            .collect();
         if has_skin {
             self.add_flags(PathFlags::NEVER_DEFER_UPDATE);
         }

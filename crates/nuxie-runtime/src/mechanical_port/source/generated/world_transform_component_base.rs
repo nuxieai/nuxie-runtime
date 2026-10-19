@@ -40,7 +40,8 @@ impl WorldTransformComponentBase {
     }
     pub(crate) fn cells(
         &self,
-    ) -> &std::rc::Rc<crate::mechanical_port::source::world_transform_component::TransformCells> {
+    ) -> &std::rc::Rc<crate::mechanical_port::source::world_transform_component::TransformCells>
+    {
         &self.cells
     }
     pub fn opacity(&self) -> f32 {

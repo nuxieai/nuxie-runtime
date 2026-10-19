@@ -17,10 +17,10 @@ use std::rc::Rc;
 
 use crate::mechanical_port::source::{
     artboard::RuntimeArtboardDirtyHandle,
+    bones::{bone::Bone, root_bone::RootBone, skin::Skin},
     component::ComponentOccurrenceHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
-    bones::{bone::Bone, root_bone::RootBone, skin::Skin},
     core::CoreObject,
     node::Node as NodeObject,
     shapes::{path_cells::PathCells, shape::Shape, shape_cells::ShapeCells},
@@ -249,11 +249,9 @@ impl ComponentGraph {
                     })
                     .unwrap_or((OnDirty::Outside, None)),
                 ComponentOccurrenceHandle::PathComposer(composer) => (
-                    composer
-                        .upgrade()
-                        .map_or(OnDirty::Helper, |composer| {
-                            OnDirty::Composer(Rc::clone(composer.borrow().cells_ref()))
-                        }),
+                    composer.upgrade().map_or(OnDirty::Helper, |composer| {
+                        OnDirty::Composer(Rc::clone(composer.borrow().cells_ref()))
+                    }),
                     None,
                 ),
                 ComponentOccurrenceHandle::TextVariationHelper(_) => (OnDirty::Helper, None),
@@ -272,8 +270,7 @@ impl ComponentGraph {
             let index = occurrence
                 .with_component(|component| component.graph_order())
                 .filter(|&value| value != u32::MAX)?;
-            (order.get(index as usize) == Some(occurrence)
-                && !is_outside[index as usize])
+            (order.get(index as usize) == Some(occurrence) && !is_outside[index as usize])
                 .then_some(index)
         };
         let mut nodes = Vec::with_capacity(order.len());
@@ -638,7 +635,10 @@ impl ComponentGraph {
 
     /// The generated getter of a property set_plain_transform_double sets,
     /// read from the member's cells; None where that returns None.
-    pub(crate) fn get_plain_transform_double(handle: &CoreHandle, property_key: i32) -> Option<f32> {
+    pub(crate) fn get_plain_transform_double(
+        handle: &CoreHandle,
+        property_key: i32,
+    ) -> Option<f32> {
         let input = TransformInput::from_key(property_key)?;
         if !kernel_candidate(handle) {
             return None;
@@ -763,7 +763,8 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
     let actual: &dyn Any = object;
     let mut after: Option<fn(&CoreHandle, ComponentDirt)> = None;
     let mut path = None;
-    let points_path = actual.is::<crate::mechanical_port::source::shapes::points_path::PointsPath>();
+    let points_path =
+        actual.is::<crate::mechanical_port::source::shapes::points_path::PointsPath>();
     let (translation, node) = if actual.is::<NodeObject>() {
         (Translation::Own, true)
     } else if actual.is::<RootBone>() {
@@ -788,7 +789,10 @@ fn plain_transform(object: &dyn CoreObject) -> Option<PlainTransform> {
     if transform.cells().has_constraints() {
         return None;
     }
-    let parent = match (transform.parent_transform_component(), transform.parent_cells()) {
+    let parent = match (
+        transform.parent_transform_component(),
+        transform.parent_cells(),
+    ) {
         (None, None) => None,
         (Some(handle), Some(cells)) => {
             let fits = handle
@@ -826,9 +830,9 @@ fn kernel_candidate(handle: &CoreHandle) -> bool {
         bones::{bone_base::BoneBase, root_bone_base::RootBoneBase},
         node_base::NodeBase,
         shapes::{
-            ellipse_base::EllipseBase, points_path_base::PointsPathBase,
-            polygon_base::PolygonBase, rectangle_base::RectangleBase, shape_base::ShapeBase,
-            star_base::StarBase, triangle_base::TriangleBase,
+            ellipse_base::EllipseBase, points_path_base::PointsPathBase, polygon_base::PolygonBase,
+            rectangle_base::RectangleBase, shape_base::ShapeBase, star_base::StarBase,
+            triangle_base::TriangleBase,
         },
     };
     matches!(
@@ -874,7 +878,6 @@ fn shape_after_transform(owner: &CoreHandle, dirt: ComponentDirt) {
 fn needs_update(dirt: ComponentDirt) -> bool {
     dirt != ComponentDirt::NONE && !dirt.contains(ComponentDirt::COLLAPSED)
 }
-
 
 /// One member's dirt in its graph's node array. The graph order doubles as the
 /// index; edges and order are fixed once the graph is built.

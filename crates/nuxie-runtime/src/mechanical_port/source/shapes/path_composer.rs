@@ -217,8 +217,7 @@ impl PathComposer {
         assert!(self.shape().is_occupied(), "live PathComposer Shape");
         let paths = self.cells.paths();
         let world = self.cells.world();
-        let local_flags =
-            self.cells.path_flags() & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE);
+        let local_flags = self.cells.path_flags() & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE);
         let inverse = world.invert_or_identity();
         const ULPS: f32 = 16.0 * f32::EPSILON;
         let inverse_linear = linear_magnitude(inverse);
@@ -314,10 +313,8 @@ impl PathComposer {
             for path in paths.iter() {
                 let cells = &path.cells;
                 if path.handle.is_occupied() && !cells.is_hidden() && !cells.is_collapsed() {
-                    self.local_path.add_path(
-                        &cells.raw_path(),
-                        Some(&(inverse * cells.path_transform())),
-                    );
+                    self.local_path
+                        .add_path(&cells.raw_path(), Some(&(inverse * cells.path_transform())));
                 }
             }
         }

@@ -3,7 +3,8 @@
 use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
-        keyed_callback_reporter::KeyedCallbackReporter, keyed_property::KeyedProperty,
+        keyed_callback_reporter::KeyedCallbackReporter,
+        keyed_property::KeyedProperty,
         keyframe_cells::{KeyedObjectCells, KeyedPropertyCells, PropertyEntry},
         keyframe_interpolator::KeyFrameInterpolator,
     },

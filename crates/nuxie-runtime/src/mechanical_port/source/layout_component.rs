@@ -234,7 +234,8 @@ impl LayoutDrawFlags {
     pub(crate) fn draw(&self, renderer: &mut Renderer) {
         let flags = self.0.get();
         if flags & LayoutComponentFlags::ClipSaved as u16 != 0 {
-            self.0.set(flags & !(LayoutComponentFlags::ClipSaved as u16));
+            self.0
+                .set(flags & !(LayoutComponentFlags::ClipSaved as u16));
             renderer.restore();
         }
     }
@@ -1772,18 +1773,22 @@ impl LayoutComponent {
                     continue;
                 };
                 let handle = &paint.handle;
-                paint.cells.draw_plain(renderer, &mut path, world, true, fill_rule, &|| {
-                    // The factory the paint's own draw would read.
-                    handle
-                        .with(|object| {
-                            object
-                                .as_component()
-                                .and_then(|component| component.with_artboard(|artboard| artboard.factory()))
-                                .flatten()
-                        })
-                        .flatten()
-                        .expect("a drawing ShapePaint has its imported Artboard factory")
-                });
+                paint
+                    .cells
+                    .draw_plain(renderer, &mut path, world, true, fill_rule, &|| {
+                        // The factory the paint's own draw would read.
+                        handle
+                            .with(|object| {
+                                object
+                                    .as_component()
+                                    .and_then(|component| {
+                                        component.with_artboard(|artboard| artboard.factory())
+                                    })
+                                    .flatten()
+                            })
+                            .flatten()
+                            .expect("a drawing ShapePaint has its imported Artboard factory")
+                    });
                 continue;
             }
             paint.handle.with_mut(|paint| {

@@ -77,7 +77,9 @@ impl BoneBase {
     ) -> bool {
         match property_key {
             Self::LENGTH_PROPERTY_KEY => {
-                self.base.cells().set_length(CoreDoubleType::deserialize(reader));
+                self.base
+                    .cells()
+                    .set_length(CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self

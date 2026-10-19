@@ -7,9 +7,14 @@ use crate::mechanical_port::source::{
     generated::shapes::path_base::PathBase,
     math::{aabb::Aabb, mat2d::Mat2D, math_types::PI, raw_path::RawPath, vec2d::Vec2D},
     shapes::{
-        cubic_detached_vertex::CubicDetachedVertex, cubic_vertex::CubicVertexBehavior,
-        path_cells::PathCells, path_flags::PathFlags, path_vertex::PathVertex, shape::Shape,
-        straight_vertex::StraightVertex, vertex::VertexBehavior,
+        cubic_detached_vertex::CubicDetachedVertex,
+        cubic_vertex::CubicVertexBehavior,
+        path_cells::PathCells,
+        path_flags::PathFlags,
+        path_vertex::PathVertex,
+        shape::Shape,
+        straight_vertex::StraightVertex,
+        vertex::VertexBehavior,
         vertex_cells::{VertexCells, VertexKind},
     },
     status_code::StatusCode,
@@ -92,7 +97,8 @@ fn read_vertex_cells(owner: &CoreHandle, cells: &VertexCells, read: VertexRead) 
     let mut out_point = Vec2D::default();
     // A weighted vertex reads its deformed points without computing any, so
     // one read of its weight answers all three.
-    if let Some((weighted_in, weighted_out, weighted_translation)) = cells.weighted_render_points() {
+    if let Some((weighted_in, weighted_out, weighted_translation)) = cells.weighted_render_points()
+    {
         match read {
             VertexRead::First => {
                 in_point = weighted_in;
@@ -370,7 +376,8 @@ impl Path {
     }
     pub fn add_vertex(&mut self, vertex: CoreHandle, cells: Rc<VertexCells>) {
         cells.set_kind(VertexKind::of(&vertex));
-        self.vertices.push(PathVertexOccurrence::Authored(vertex, cells));
+        self.vertices
+            .push(PathVertexOccurrence::Authored(vertex, cells));
     }
     pub fn add_runtime_straight_vertex(&mut self, vertex: Rc<RefCell<StraightVertex>>) {
         self.vertices
@@ -484,7 +491,10 @@ impl Path {
     }
 
     #[inline(never)]
-    fn read_vertex_borrowed(vertex: &PathVertexOccurrence, read: VertexRead) -> Option<RenderVertex> {
+    fn read_vertex_borrowed(
+        vertex: &PathVertexOccurrence,
+        read: VertexRead,
+    ) -> Option<RenderVertex> {
         match vertex {
             PathVertexOccurrence::Authored(vertex, cells) if cells.kind() != VertexKind::Other => {
                 Some(read_vertex_cells(vertex, cells, read))

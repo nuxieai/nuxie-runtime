@@ -17,10 +17,10 @@ use crate::mechanical_port::source::{
         paint::{
             effects_container,
             feather::FeatherCells,
-            shape_paint_path::ShapePaintPath,
-            stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
             shape_paint::{RuntimeRenderPaintHandle, ShapePaintPathKind, ShapePaintType},
             shape_paint_mutator::MutatorFlags,
+            shape_paint_path::ShapePaintPath,
+            stroke_effect::{EffectPaths, PathProvider, invalidate_effect_paths},
         },
         path_flags::PathFlags,
         shape_paint_container::ContainerCells,
@@ -192,7 +192,11 @@ impl PaintCells {
         let mut saved = !needs_save_operation;
         // An outer feather offsets the drawing: in artboard space before the
         // path's local transform, in local space after it.
-        let feather = if self.has_feather.get() { self.live_feather() } else { None };
+        let feather = if self.has_feather.get() {
+            self.live_feather()
+        } else {
+            None
+        };
         let offset = |world: bool| {
             feather
                 .as_ref()

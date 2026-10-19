@@ -111,7 +111,9 @@ impl InterpolatingKeyFrame {
             return value;
         }
         if let Some(value) = self.base.handle().and_then(|keyframe| {
-            context.and_then(|context| context.stateful_interpolator_transform(&keyframe, shared, factor))
+            context.and_then(|context| {
+                context.stateful_interpolator_transform(&keyframe, shared, factor)
+            })
         }) {
             return Some(value);
         }

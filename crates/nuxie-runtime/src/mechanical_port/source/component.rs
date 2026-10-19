@@ -276,9 +276,8 @@ impl ComponentOccurrenceHandle {
                 }
             }
             Self::PathComposer(_) | Self::TextVariationHelper(_) => {
-                if let Some((graph, index)) = self
-                    .with_component(Component::graph_binding)
-                    .flatten()
+                if let Some((graph, index)) =
+                    self.with_component(Component::graph_binding).flatten()
                 {
                     return graph.add_dirt(index, value, recurse);
                 }
@@ -963,7 +962,10 @@ impl SharedDirt {
     /// binding only changes when a graph is built, never during its cascades.
     pub(crate) fn with_graph<R>(
         &self,
-        use_graph: impl FnOnce(&crate::mechanical_port::source::component_graph::ComponentGraph, u32) -> R,
+        use_graph: impl FnOnce(
+            &crate::mechanical_port::source::component_graph::ComponentGraph,
+            u32,
+        ) -> R,
     ) -> Option<R> {
         self.graph
             .get()

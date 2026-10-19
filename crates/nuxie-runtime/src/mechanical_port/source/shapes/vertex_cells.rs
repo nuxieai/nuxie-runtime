@@ -31,8 +31,8 @@ impl VertexKind {
     pub(crate) fn of(vertex: &CoreHandle) -> Self {
         use crate::mechanical_port::source::shapes::{
             cubic_asymmetric_vertex::CubicAsymmetricVertex,
-            cubic_detached_vertex::CubicDetachedVertex,
-            cubic_mirrored_vertex::CubicMirroredVertex, straight_vertex::StraightVertex,
+            cubic_detached_vertex::CubicDetachedVertex, cubic_mirrored_vertex::CubicMirroredVertex,
+            straight_vertex::StraightVertex,
         };
         match vertex.occupied_core_type() {
             Some(StraightVertex::TYPE_KEY) => Self::Straight,
@@ -193,10 +193,13 @@ impl VertexCells {
     /// need computing.
     #[inline]
     pub(crate) fn weighted_render_points(&self) -> Option<(Vec2D, Vec2D, Vec2D)> {
-        self.weight
-            .borrow()
-            .as_ref()
-            .map(|weight| (weight.in_translation(), weight.out_translation(), weight.translation()))
+        self.weight.borrow().as_ref().map(|weight| {
+            (
+                weight.in_translation(),
+                weight.out_translation(),
+                weight.translation(),
+            )
+        })
     }
 
     pub(crate) fn render_translation(&self) -> Vec2D {
@@ -232,7 +235,11 @@ impl VertexCells {
                 let cubic = object
                     .as_cubic_vertex_behavior_mut()
                     .expect("cubic vertex cells belong to a cubic vertex");
-                if incoming { cubic.in_point() } else { cubic.out_point() }
+                if incoming {
+                    cubic.in_point()
+                } else {
+                    cubic.out_point()
+                }
             })
             .expect("live path vertex")
     }

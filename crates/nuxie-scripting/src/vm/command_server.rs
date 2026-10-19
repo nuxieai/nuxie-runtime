@@ -82,7 +82,10 @@ impl PersistentRenderContext {
 
     /// Run `f` on the installed factory; None, without building
     /// `with_factory`'s error, when no context is installed.
-    pub(crate) fn try_with_factory<R>(&self, f: impl FnOnce(&mut dyn RenderFactory) -> R) -> Option<R> {
+    pub(crate) fn try_with_factory<R>(
+        &self,
+        f: impl FnOnce(&mut dyn RenderFactory) -> R,
+    ) -> Option<R> {
         let mut context = self.context.borrow().clone()?;
         Some(f(&mut context))
     }

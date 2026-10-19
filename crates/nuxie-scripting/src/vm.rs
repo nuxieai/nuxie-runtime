@@ -1615,7 +1615,9 @@ impl LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };
-        let field: Value = table.get_field(method.as_str()).map_err(&conversion_error)?;
+        let field: Value = table
+            .get_field(method.as_str())
+            .map_err(&conversion_error)?;
         let Value::Function(function) = field else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };

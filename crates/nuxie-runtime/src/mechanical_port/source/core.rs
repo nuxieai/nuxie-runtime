@@ -806,7 +806,9 @@ impl CoreHandle {
     #[inline]
     pub(crate) fn with_data_bind_container<R>(
         &self,
-        read: impl FnOnce(&crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer) -> R,
+        read: impl FnOnce(
+            &crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer,
+        ) -> R,
     ) -> Option<R> {
         let slot = &self.identity.slot;
         if slot.generation.get() != slot.hot.identity_generation {

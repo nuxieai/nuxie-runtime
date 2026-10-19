@@ -111,9 +111,7 @@ impl PlainTransform {
                     return false;
                 }
                 if dirt.contains(ComponentDirt::PATH) {
-                    return self.points_path
-                        && !path.is_skinned()
-                        && path.can_defer_path_update();
+                    return self.points_path && !path.is_skinned() && path.can_defer_path_update();
                 }
                 !(dirt.contains(ComponentDirt::WORLD_TRANSFORM) && path.has_deformer())
             }

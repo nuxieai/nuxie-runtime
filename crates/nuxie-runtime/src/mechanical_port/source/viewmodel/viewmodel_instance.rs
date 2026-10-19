@@ -42,7 +42,8 @@ mod editor_clone_tests {
                 .set_view_model_property(metadata.clone());
         });
         let source = arena.insert(ViewModelInstance::default());
-        source.with_downcast_mut::<ViewModelInstance, _>(|source| source.append_value(value.clone()));
+        source
+            .with_downcast_mut::<ViewModelInstance, _>(|source| source.append_value(value.clone()));
         let cloned = ViewModelInstance::clone_instance(&source).unwrap();
         let cloned_value = cloned
             .with_downcast::<ViewModelInstance, _>(|cloned| cloned.property_values()[0].clone())
@@ -51,7 +52,10 @@ mod editor_clone_tests {
         assert_eq!(
             cloned_value
                 .with(|value| {
-                    value.as_view_model_instance_value().unwrap().view_model_property()
+                    value
+                        .as_view_model_instance_value()
+                        .unwrap()
+                        .view_model_property()
                 })
                 .flatten(),
             Some(metadata)
@@ -561,7 +565,9 @@ impl ViewModelInstance {
                 {
                     let metadata = property
                         .with(|property| {
-                            property.as_view_model_instance_value()?.view_model_property()
+                            property
+                                .as_view_model_instance_value()?
+                                .view_model_property()
                         })
                         .flatten();
                     cloned_property.with_mut(|property| {

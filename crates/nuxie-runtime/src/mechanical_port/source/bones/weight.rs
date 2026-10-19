@@ -47,7 +47,9 @@ impl Weight {
         }
     }
 
-    pub(crate) fn cells(&self) -> &std::rc::Rc<crate::mechanical_port::source::shapes::vertex_cells::WeightCells> {
+    pub(crate) fn cells(
+        &self,
+    ) -> &std::rc::Rc<crate::mechanical_port::source::shapes::vertex_cells::WeightCells> {
         self.base.cells()
     }
 

@@ -16,7 +16,9 @@ impl KeyedObjectImporter {
     pub fn add_keyed_property(
         &mut self,
         property: CoreHandle,
-        cells: std::rc::Rc<crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells>,
+        cells: std::rc::Rc<
+            crate::mechanical_port::source::animation::keyframe_cells::KeyedPropertyCells,
+        >,
     ) {
         self.keyed_object
             .with_downcast_mut::<KeyedObject, _>(|keyed_object| {

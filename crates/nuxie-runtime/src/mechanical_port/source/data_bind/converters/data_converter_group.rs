@@ -63,7 +63,11 @@ impl DataConverterGroup {
     }
 
     /// add_item for an item that is borrowed now, given its cells.
-    pub(crate) fn add_item_with_cells(&mut self, item: CoreHandle, cells: std::rc::Rc<GroupItemCells>) {
+    pub(crate) fn add_item_with_cells(
+        &mut self,
+        item: CoreHandle,
+        cells: std::rc::Rc<GroupItemCells>,
+    ) {
         self.items.push(item);
         self.item_cells.push(cells);
     }

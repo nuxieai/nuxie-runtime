@@ -156,6 +156,12 @@ enum Paint {
     },
     /// A Fill with a two-stop LinearGradient whose BoxGradient has `angle`.
     Gradient(f32),
+    /// An inset shadow: as `Shadow`, its Feather inner.
+    InsetShadow {
+        color: u32,
+        strength: f32,
+        spread: f32,
+    },
 }
 
 const BOX_BORDER: u16 = 61001;
@@ -236,7 +242,8 @@ enum Entry<'a> {
     Fill(u64),
     Stroke(u64),
     Solid(u32, u64),
-    Feather(f32, u64),
+    /// A Feather of a strength, inner when true, on a paint.
+    Feather(f32, bool, u64),
     LinearGradient(u64),
     Stop(u32, f32, u64),
     NamedShape(&'static str, u64),
@@ -277,10 +284,16 @@ fn push_paints(paints: &[Paint], index: u64, entries: &mut Vec<Entry<'_>>) {
                 color,
                 strength,
                 spread,
+            }
+            | Paint::InsetShadow {
+                color,
+                strength,
+                spread,
             } => {
+                let inner = matches!(paint, Paint::InsetShadow { .. });
                 entries.push(Entry::Fill(index));
                 entries.push(Entry::Solid(color, paint_index));
-                entries.push(Entry::Feather(strength, paint_index));
+                entries.push(Entry::Feather(strength, inner, paint_index));
                 entries.push(Entry::Record(
                     BOX_SHADOW,
                     vec![F(SHADOW_SPREAD, spread)],
@@ -565,12 +578,15 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, *color)
                     .end();
             }
-            Entry::Feather(strength, parent) => {
+            Entry::Feather(strength, inner, parent) => {
                 riv.object(FeatherBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .uint(FeatherBase::SPACE_VALUE_PROPERTY_KEY, 1)
-                    .float(FeatherBase::STRENGTH_PROPERTY_KEY, *strength)
-                    .end();
+                    .float(FeatherBase::STRENGTH_PROPERTY_KEY, *strength);
+                if *inner {
+                    riv.uint(FeatherBase::INNER_PROPERTY_KEY, 1);
+                }
+                riv.end();
             }
             Entry::LinearGradient(parent) => {
                 riv.object(LinearGradientBase::TYPE_KEY)
@@ -4420,6 +4436,51 @@ fn css_translated_absolute_child_paints_above_static_siblings() {
     let names = f.draw_names_top_first();
     let at = |name: &str| names.iter().position(|n| n == name).unwrap();
     assert!(at("Red") < at("Blue"), "{names:?}");
+}
+
+/// A box's painted bounds measure each of its paths with the paint that
+/// draws it. A blurred inset shadow, drawn only inside the padding box,
+/// grows neither its own bounds past the box nor the background's; a
+/// BoxBorder fills its ring, so its Stroke's thickness adds nothing.
+#[test]
+fn css_painted_bounds_measure_each_path_with_its_own_paint() {
+    const MARGIN_LEFT: u16 = 61049;
+    let at = |props: &[P]| {
+        [
+            [F(MARGIN_TOP, 50.0), F(MARGIN_LEFT, 50.0)].as_slice(),
+            props,
+        ]
+        .concat()
+    };
+    let bounds = |f: &Scene| {
+        let visible = f.host().visible_geometry_with_bounds();
+        let bounds = visible[0].bounds;
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
+    };
+    let inset = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![
+                Paint::Fill(0xff11_2233),
+                Paint::InsetShadow {
+                    color: 0x8000_0000,
+                    strength: 20.0,
+                    spread: 0.0,
+                },
+            ],
+            ..css("Card", at(&[width(100.0), height(50.0)].concat()), vec![])
+        },
+    );
+    assert_eq!(bounds(&inset), (50.0, 50.0, 150.0, 100.0));
+    // The border ring fills the border box; its Stroke is 4 points thick.
+    let border = scene(
+        (400.0, 300.0),
+        B {
+            paints: vec![Paint::Border(0xff44_5566, 15)],
+            ..css("Card", at(&border_box(&[])), vec![])
+        },
+    );
+    assert_eq!(bounds(&border), (50.0, 50.0, 150.0, 100.0));
 }
 
 /// A hidden shadow adds nothing to its box's painted bounds: the visible

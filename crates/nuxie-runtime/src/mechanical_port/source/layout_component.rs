@@ -745,7 +745,8 @@ impl LayoutComponent {
         use crate::mechanical_port::source::drawable::{BoundsFidelity, Drawable};
         // A special paint that does not draw (hidden, or fully transparent
         // as Rive decides) adds nothing.
-        let specials: Vec<(CoreHandle, Aabb, Option<Aabb>)> = self
+        use crate::mechanical_port::source::shapes::paint::paint_outset::shape_paint_handles_world_reach;
+        let specials: Vec<(CoreHandle, Aabb, Option<Aabb>, bool)> = self
             .render_paths
             .as_ref()
             .map(|paths| {
@@ -759,6 +760,7 @@ impl LayoutComponent {
                             special.paint.clone(),
                             special.path.raw_path().bounds(),
                             special.clip.as_ref().map(|clip| clip.raw_path().bounds()),
+                            special.fills_stroke,
                         )
                     })
                     .collect()
@@ -772,23 +774,40 @@ impl LayoutComponent {
                 .any(|paint| !self.special_paint(paint) && css_paint_draws(paint));
         let mut result: Option<Aabb> = None;
         let mut fidelity = BoundsFidelity::Exact;
-        let parts = plain
-            .then_some((painted, None))
-            .into_iter()
-            .chain(specials.iter().map(|(_, path, clip)| (*path, *clip)));
-        for (local, clip) in parts {
+        // Each path reaches as far as its own paint does: the plain paints
+        // for the box's own path, a special paint alone for its path.
+        let parts =
+            plain
+                .then_some((painted, None, None))
+                .into_iter()
+                .chain(specials.iter().map(|(paint, path, clip, fills_stroke)| {
+                    (*path, *clip, Some((paint, *fills_stroke)))
+                }));
+        for (local, clip, special) in parts {
+            let reach = match special {
+                Some(special) => shape_paint_handles_world_reach([special], transform),
+                None => shape_paint_handles_world_reach(
+                    self.paints
+                        .shape_paints()
+                        .iter()
+                        .filter(|paint| !self.special_paint(paint))
+                        .map(|paint| (paint, false)),
+                    transform,
+                ),
+            };
             let mut bounds = Aabb::default();
-            let part = Drawable::painted_bounds_from_local(
-                &local,
-                transform,
-                Some(&self.paints),
-                &mut bounds,
-            );
-            if part == BoundsFidelity::None {
+            if Drawable::painted_bounds_from_local(&local, transform, None, &mut bounds)
+                == BoundsFidelity::None
+            {
                 continue;
             }
-            if part == BoundsFidelity::Approximate {
-                fidelity = part;
+            if !bounds.is_empty_or_nan() {
+                if reach.world_outset > 0.0 {
+                    bounds = bounds.outset(reach.world_outset, reach.world_outset);
+                }
+                if !reach.trustworthy {
+                    fidelity = BoundsFidelity::Approximate;
+                }
             }
             if let Some(clip) = clip {
                 let clip = transform.map_bounding_box(clip);

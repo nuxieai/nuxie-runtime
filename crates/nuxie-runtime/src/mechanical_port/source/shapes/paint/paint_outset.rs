@@ -1,6 +1,6 @@
 //! Runtime half of upstream shapes/paint/paint_outset.{hpp,cpp}.
 use crate::mechanical_port::source::{
-    core::CoreObject,
+    core::{CoreHandle, CoreObject},
     math::{mat2d::Mat2D, vec2d::Vec2D},
     shapes::{
         paint::{feather::Feather, stroke::Stroke, stroke_cap::StrokeCap, stroke_join::StrokeJoin},
@@ -42,17 +42,33 @@ impl Default for PaintReach {
 }
 
 pub fn shape_paint_outset(paint: Option<&dyn CoreObject>) -> ShapePaintOutset {
+    shape_paint_outset_drawn(paint, false)
+}
+/// Nuxie addition: as [`shape_paint_outset`], for a Stroke a CSS BoxBorder
+/// draws as a filled ring when `stroke_fills` (docs/CSS_LAYOUT.md, 4.2):
+/// its thickness, and the visibility a thickness gives a Stroke, do not
+/// apply.
+pub fn shape_paint_outset_drawn(
+    paint: Option<&dyn CoreObject>,
+    stroke_fills: bool,
+) -> ShapePaintOutset {
     let mut out = ShapePaintOutset::default();
     let Some(paint) = paint else { return out };
     let Some(behavior) = paint.as_shape_paint_behavior() else {
         return out;
     };
-    if !behavior.should_draw() {
+    let draws = if stroke_fills {
+        behavior.shape_paint().base.is_visible() && behavior.shape_paint().mutator_is_visible()
+    } else {
+        behavior.should_draw()
+    };
+    if !draws {
         return out;
     }
     let stroke = paint
         .as_registry_any()
         .downcast_ref::<Stroke>()
+        .filter(|_| !stroke_fills)
         .map(|stroke| {
             out.path_is_local = stroke.base.transform_affects_stroke();
             nuxie_render_api::StrokeParams {
@@ -82,12 +98,27 @@ pub fn shape_paint_outset(paint: Option<&dyn CoreObject>) -> ShapePaintOutset {
     out
 }
 pub fn shape_paints_world_reach(paints: Option<&ShapePaintContainer>, world: &Mat2D) -> PaintReach {
+    let Some(paints) = paints else {
+        return PaintReach::default();
+    };
+    shape_paint_handles_world_reach(
+        paints.shape_paints().iter().map(|paint| (paint, false)),
+        world,
+    )
+}
+/// Nuxie addition: the reach of chosen paints, each with whether it is a
+/// Stroke drawn as a filled ring (see [`shape_paint_outset_drawn`]), as
+/// [`shape_paints_world_reach`] measures a whole container. A CSS box
+/// measures each of its paths with only the paint that draws it.
+pub fn shape_paint_handles_world_reach<'a>(
+    paints: impl IntoIterator<Item = (&'a CoreHandle, bool)>,
+    world: &Mat2D,
+) -> PaintReach {
     let mut reach = PaintReach::default();
-    let Some(paints) = paints else { return reach };
     let world_scale = world.find_max_scale();
-    for paint in paints.shape_paints() {
+    for (paint, stroke_fills) in paints {
         let po = paint
-            .with(|paint| shape_paint_outset(Some(paint)))
+            .with(|paint| shape_paint_outset_drawn(Some(paint), stroke_fills))
             .expect("live shape paint");
         reach.trustworthy &= po.trustworthy;
         let mut distance = if po.path_is_local {

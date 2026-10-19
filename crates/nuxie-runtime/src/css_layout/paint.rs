@@ -638,6 +638,159 @@ mod tests {
         );
     }
 
+    /// Each stroked sub-path of `path` as its first and last points.
+    fn runs(path: &RawPath) -> Vec<(Vec2D, Vec2D)> {
+        let mut runs = Vec::new();
+        let mut start: Option<Vec2D> = None;
+        let mut last = Vec2D::default();
+        for segment in path.segments() {
+            let point = segment.points.last().copied().unwrap_or_default();
+            if matches!(
+                segment.verb,
+                crate::source::math::path_types::PathVerb::Move
+            ) {
+                if let Some(start) = start {
+                    runs.push((start, last));
+                }
+                start = Some(point);
+            }
+            last = point;
+        }
+        if let Some(start) = start {
+            runs.push((start, last));
+        }
+        runs
+    }
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 0.02
+    }
+
+    /// `border: 6px dashed` on a 112 by 72 border box, as Chrome measures
+    /// it: 12-point dashes, seven along the top with 4.67-point gaps, four
+    /// down the left with 8-point gaps, each side from its outer corner.
+    #[test]
+    fn dashes_are_fitted_to_each_side_as_chrome_fits_them() {
+        let bounds = Aabb::new(0.0, 0.0, 112.0, 72.0);
+        let marks = border_marks(
+            bounds,
+            [Vec2D::default(); 4],
+            [6.0; 4],
+            15,
+            BorderStyle::Dashed,
+        );
+        let strokes = &marks[0].strokes;
+        assert_eq!(strokes.len(), 4);
+        let top = runs(&strokes[0].0);
+        assert_eq!(strokes[0].1, 6.0);
+        assert_eq!(top.len(), 7);
+        for (index, (start, end)) in top.iter().enumerate() {
+            let x = index as f32 * (12.0 + 28.0 / 6.0);
+            assert!(near(start.x, x) && near(end.x, x + 12.0), "{top:?}");
+            assert!(near(start.y, 3.0) && near(end.y, 3.0));
+        }
+        let left = runs(&strokes[3].0);
+        assert_eq!(left.len(), 4);
+        for (index, (start, end)) in left.iter().enumerate() {
+            let y = index as f32 * 20.0;
+            assert!(near(start.y, y) && near(end.y, y + 12.0), "{left:?}");
+            assert!(near(start.x, 3.0));
+        }
+    }
+
+    /// `border: 2px dashed`: dashes three widths long, two-width gaps
+    /// fitted (eleven 6-point dashes along a 104-point top).
+    #[test]
+    fn thin_dashes_are_longer_than_thick_ones() {
+        let bounds = Aabb::new(0.0, 0.0, 104.0, 64.0);
+        let marks = border_marks(
+            bounds,
+            [Vec2D::default(); 4],
+            [2.0; 4],
+            15,
+            BorderStyle::Dashed,
+        );
+        let top = runs(&marks[0].strokes[0].0);
+        assert_eq!(top.len(), 11);
+        assert!(near(top[1].0.x, 9.8) && near(top[10].1.x, 104.0), "{top:?}");
+    }
+
+    /// `border: 2px dotted`: square dots, the first and last drawn whole at
+    /// the ends (Chrome's endpoint rule for a 104-point line), the rest
+    /// two on, two off from x 3 to 101.
+    #[test]
+    fn thin_dots_keep_whole_dots_at_the_ends() {
+        let bounds = Aabb::new(0.0, 0.0, 104.0, 64.0);
+        let marks = border_marks(
+            bounds,
+            [Vec2D::default(); 4],
+            [2.0; 4],
+            15,
+            BorderStyle::Dotted,
+        );
+        let top = runs(&marks[0].strokes[0].0);
+        assert!(near(top[0].0.x, 3.0) && near(top[0].1.x, 5.0), "{top:?}");
+        assert!(near(top.last().unwrap().1.x, 101.0), "{top:?}");
+        let fills = marks[0].fills.bounds();
+        assert!(
+            near(fills.left(), 0.0) && near(fills.right(), 104.0),
+            "{fills:?}"
+        );
+    }
+
+    /// `border: 8px dotted`: round 8-point dots, eight along a 116-point
+    /// top, centred from x 4 to x 112.
+    #[test]
+    fn thick_dots_are_round_and_evenly_spaced() {
+        let bounds = Aabb::new(0.0, 0.0, 116.0, 76.0);
+        let marks = border_marks(
+            bounds,
+            [Vec2D::default(); 4],
+            [8.0; 4],
+            15,
+            BorderStyle::Dotted,
+        );
+        assert!(marks[0].strokes.iter().all(|(path, _)| path.is_empty()));
+        // Every dot is a circle: count the top row's by their centres.
+        let dots = runs(&marks[0].fills);
+        let top: Vec<f32> = dots
+            .iter()
+            .filter(|(start, _)| near(start.y, 0.0))
+            .map(|(start, _)| start.x)
+            .collect();
+        assert_eq!(top.len(), 8, "{dots:?}");
+        assert!(near(top[0], 4.0) && (top[7] - 112.0).abs() < 0.1, "{top:?}");
+    }
+
+    /// `border: 4px dashed` with 20-point corners: 8-point dashes fitted
+    /// around the whole 305-point centre line (25 dashes, 4.2-point gaps),
+    /// from the left edge's lower end, clockwise.
+    #[test]
+    fn rounded_dashes_follow_the_whole_centre_line() {
+        let bounds = Aabb::new(0.0, 0.0, 108.0, 68.0);
+        let marks = border_marks(
+            bounds,
+            [Vec2D::new(20.0, 20.0); 4],
+            [4.0; 4],
+            15,
+            BorderStyle::Dashed,
+        );
+        assert_eq!(marks.len(), 1);
+        let (path, thickness) = &marks[0].strokes[0];
+        assert!(near(*thickness, 4.0 * 2.2));
+        let dashes = runs(path);
+        assert_eq!(dashes.len(), 25);
+        assert!(
+            near(dashes[0].0.x, 2.0) && near(dashes[0].0.y, 48.0),
+            "{:?}",
+            dashes[0]
+        );
+        assert!(
+            near(dashes[0].1.x, 2.0) && near(dashes[0].1.y, 40.0),
+            "{:?}",
+            dashes[0]
+        );
+    }
+
     #[test]
     fn gradient_lines_reach_the_far_corners_as_css_does() {
         use crate::css_layout::{CssValues, keys};

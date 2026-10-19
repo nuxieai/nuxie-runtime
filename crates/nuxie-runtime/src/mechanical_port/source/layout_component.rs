@@ -255,6 +255,12 @@ pub(crate) struct LayoutRenderPaths {
     /// A CSS artboard with a BoxPaint: its own clip, its bounds, which its
     /// background no longer is (docs/CSS_LAYOUT.md, 4.2).
     pub frame_clip: Option<ShapePaintPath>,
+    /// CSS mode: the rectangle the box's BoxGradients are placed over (its
+    /// painted padding box), and whether it changed since they were last
+    /// refreshed. Layout interpolation resizes a box with only its world
+    /// transform dirty.
+    pub gradient_area: Option<Aabb>,
+    pub gradient_area_changed: bool,
 }
 
 /// One special paint of a CSS box and the paths it draws with.
@@ -594,18 +600,27 @@ impl LayoutComponent {
                 .expect("LayoutComponent receiver")
                 .update_after_transform_super(dirt, opacity);
         });
-        owner.with_downcast_mut::<T, _>(|object| {
-            if dirt.intersects(
-                ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::LAYOUT_STYLE,
-            ) {
-                render_path(object);
-            }
-            object
-                .as_layout_component_mut()
-                .expect("LayoutComponent receiver")
-                .reset_update_flags();
-        });
-        if dirt.intersects(ComponentDirt::PATH | ComponentDirt::LAYOUT_STYLE) {
+        let gradient_area_changed = owner
+            .with_downcast_mut::<T, _>(|object| {
+                if dirt.intersects(
+                    ComponentDirt::PATH
+                        | ComponentDirt::WORLD_TRANSFORM
+                        | ComponentDirt::LAYOUT_STYLE,
+                ) {
+                    render_path(object);
+                }
+                let layout = object
+                    .as_layout_component_mut()
+                    .expect("LayoutComponent receiver");
+                layout.reset_update_flags();
+                layout.render_paths.as_ref().is_some_and(|paths| {
+                    std::mem::take(&mut paths.borrow_mut().gradient_area_changed)
+                })
+            })
+            .unwrap_or(false);
+        if gradient_area_changed
+            || dirt.intersects(ComponentDirt::PATH | ComponentDirt::LAYOUT_STYLE)
+        {
             Self::refresh_box_gradients_occurrence(owner);
         }
     }
@@ -2629,6 +2644,10 @@ impl LayoutComponent {
         let world = self.base.base.base.base.world_transform();
         let mut paths_owner = self.mutable_render_paths();
         let paths = &mut *paths_owner;
+        if paths.gradient_area != Some(painted.padding) {
+            paths.gradient_area = Some(painted.padding);
+            paths.gradient_area_changed = true;
+        }
         paths.background.rewind();
         paint::add_rounded_rect(&mut paths.background, bounds, radii);
         paths.background.prune_empty_segments();

@@ -2898,6 +2898,44 @@ fn css_artboard_gradient_follows_its_origin() {
     );
 }
 
+/// A BoxGradient follows its box while layout interpolation resizes it:
+/// every frame of the resize places the gradient over that frame's box,
+/// though only the box's world transform is dirty between its ends.
+#[test]
+fn css_box_gradient_follows_an_interpolated_resize() {
+    use crate::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase as Style;
+    const CUSTOM: u64 = 2;
+    const LINEAR: u64 = 1;
+    let f = frame(vec![B {
+        paints: vec![Paint::Gradient(90.0)],
+        style: vec![
+            U(Style::ANIMATION_STYLE_TYPE_PROPERTY_KEY, CUSTOM),
+            U(Style::INTERPOLATION_TYPE_PROPERTY_KEY, LINEAR),
+            F(Style::INTERPOLATION_TIME_PROPERTY_KEY, 1.0),
+        ],
+        ..css("Card", sized(&[]), vec![])
+    }]);
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Card"),
+        WIDTH.into(),
+        200.0
+    ));
+    f.advance(30);
+    let width_now = f.bounds("Card")[2];
+    assert!(width_now > 110.0 && width_now < 190.0, "{width_now}");
+    f.draw_lines();
+    let lines = f.stream_lines();
+    let gradient = lines
+        .iter()
+        .rev()
+        .find(|line| line.starts_with("makeLinearGradient"))
+        .expect("a gradient");
+    // To the right across the box as it is now.
+    let ((start_x, _), (end_x, _)) = gradient_ends(gradient);
+    assert_eq!(start_x, 0.0, "{gradient}");
+    assert!((end_x - width_now).abs() < 0.01, "{width_now}: {gradient}");
+}
+
 /// A recorded gradient's start and end, to a hundredth.
 fn gradient_ends(gradient: &str) -> ((f32, f32), (f32, f32)) {
     let point = |label: &str| -> (f32, f32) {

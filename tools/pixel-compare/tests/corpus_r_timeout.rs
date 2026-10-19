@@ -69,15 +69,17 @@ mode = "clockwise-atomic"
         .args(["--reference-replay", replay.to_str().unwrap()])
         .args(["--reference-backend", "ffi-dawn"])
         .args(["--output-dir", "artifacts"])
-        .args(["--replay-timeout-seconds", "1"])
+        // Three seconds: the replay prints first, but under a loaded
+        // workspace test run its shell can take over a second to start.
+        .args(["--replay-timeout-seconds", "3"])
         .output()
         .unwrap();
     let elapsed = started.elapsed();
 
     assert!(!output.status.success());
     assert!(
-        elapsed < Duration::from_secs(3),
-        "a two-second replay should be stopped near the one-second deadline; elapsed={elapsed:?}"
+        elapsed < Duration::from_secs(6),
+        "a ten-second replay should be stopped near the three-second deadline; elapsed={elapsed:?}"
     );
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("sleeping replay stdout"),
@@ -91,7 +93,7 @@ mode = "clockwise-atomic"
     );
     assert!(
         stderr.contains(
-            "renderer replay timed out after 1 second for entry `sleeping-replay` with backend `ffi-dawn`"
+            "renderer replay timed out after 3 seconds for entry `sleeping-replay` with backend `ffi-dawn`"
         ),
         "stderr:\n{stderr}"
     );
@@ -175,7 +177,7 @@ fn install_sleeping_replay(root: &Path) -> PathBuf {
 printf '%s\n' "$$" > "$REPLAY_PID"
 printf 'sleeping replay stdout\n'
 printf 'sleeping replay stderr\n' >&2
-exec sleep 2
+exec sleep 10
 "#,
     )
     .unwrap();

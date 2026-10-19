@@ -1635,6 +1635,11 @@ pub trait HitComponent {
     fn occludes_pointer(&self, _position: Vec2D) -> bool {
         false
     }
+    /// Whether a drag handler inside this hit (a nested state machine's)
+    /// holds `pointer_id`'s drag (docs/CSS_LAYOUT.md, 4.5).
+    fn holds_drag(&self, _pointer_id: i32) -> bool {
+        false
+    }
     fn process_scroll(
         &self,
         _position: Vec2D,
@@ -1748,6 +1753,9 @@ pub struct HitDrawable {
     css_box: Option<CoreHandle>,
     css_boxes_around: Vec<CoreHandle>,
     in_css: bool,
+    /// A listener here hears the pointer move, enter or leave, not only
+    /// press: a CSS box with one is hovered from inside it (4.5).
+    hears_hover: Cell<bool>,
     #[cfg(any(test, feature = "tools"))]
     early_out_count: Cell<i32>,
 }
@@ -1804,6 +1812,7 @@ impl HitDrawable {
             css_box,
             css_boxes_around,
             in_css,
+            hears_hover: Cell::new(false),
             #[cfg(any(test, feature = "tools"))]
             early_out_count: Cell::new(0),
         }
@@ -1815,6 +1824,9 @@ impl HitDrawable {
                 group.with_group(|group| {
                     if !group.can_early_out(component) {
                         self.can_early_out.set(false);
+                        if group.scroll_proxy().is_none() {
+                            self.hears_hover.set(true);
+                        }
                     } else {
                         if group.needs_down_listener(component) {
                             self.has_down_listener.set(true);
@@ -1850,6 +1862,13 @@ impl HitDrawable {
         })
     }
 
+    /// Whether this hit skips `hit_type`: none of its listeners hears it.
+    fn early_outs(&self, hit_type: ListenerType) -> bool {
+        self.can_early_out.get()
+            && (hit_type != ListenerType::Down || !self.has_down_listener.get())
+            && (hit_type != ListenerType::Up || !self.has_up_listener.get())
+    }
+
     /// `bubbled`: the event reached this CSS box from a hit inside it, so it
     /// is hovered whatever its own geometry, as a browser's ancestors are
     /// (docs/CSS_LAYOUT.md, 4.5).
@@ -1865,10 +1884,7 @@ impl HitDrawable {
         pointer_id: i32,
         button: PointerButton,
     ) -> HitResult {
-        if self.can_early_out.get()
-            && (hit_type != ListenerType::Down || !self.has_down_listener.get())
-            && (hit_type != ListenerType::Up || !self.has_up_listener.get())
-        {
+        if self.early_outs(hit_type) {
             return HitResult::None;
         }
         if bubbled && can_hit && hit_type != ListenerType::Exit && !self.is_hovered.get() {
@@ -1904,6 +1920,12 @@ impl HitDrawable {
             });
             if result == ProcessEventResult::Scroll {
                 blocking = true;
+                // A handler that takes the press's gesture holds its drag,
+                // for the CSS drag handlers around it, a host machine's
+                // included (docs/CSS_LAYOUT.md, 4.5).
+                if !machine.holds_css_drag(pointer_id) {
+                    machine.claim_css_drag(pointer_id, listener.identity(), position, timestamp);
+                }
             }
         }
         if !self.is_hovered.get() || !can_hit {
@@ -2075,6 +2097,13 @@ struct HitNestedArtboard {
 }
 
 impl HitComponent for HitNestedArtboard {
+    fn holds_drag(&self, pointer_id: i32) -> bool {
+        nested_animations(&self.component)
+            .iter()
+            .filter(|animation| animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY))
+            .filter_map(nested_state_machine)
+            .any(|machine| machine.with_instance(|machine| machine.holds_css_drag(pointer_id)))
+    }
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
         if component_is_collapsed(&self.component)
             || component_is_hidden(&self.component)
@@ -2333,6 +2362,12 @@ struct HitComponentList {
 }
 
 impl HitComponent for HitComponentList {
+    fn holds_drag(&self, pointer_id: i32) -> bool {
+        component_list_indices(&self.component)
+            .into_iter()
+            .filter_map(|index| component_list_state_machine(&self.component, index))
+            .any(|machine| machine.with_instance(|machine| machine.holds_css_drag(pointer_id)))
+    }
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
         if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
             return false;
@@ -3328,6 +3363,9 @@ pub struct StateMachineInstance {
     scroll_latch: Option<Rc<dyn HitComponent>>,
     /// Each pointer's drag owner in CSS content (docs/CSS_LAYOUT.md, 4.5).
     css_drag_owners: Vec<(i32, usize)>,
+    /// The CSS boxes whose own hit hears the pointer move, enter or leave,
+    /// which a hit inside them keeps hovered (docs/CSS_LAYOUT.md, 4.5).
+    css_hover_boxes: Vec<CoreHandle>,
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
@@ -3429,6 +3467,7 @@ impl StateMachineInstance {
             hit_components: Vec::new(),
             scroll_latch: None,
             css_drag_owners: Vec::new(),
+            css_hover_boxes: Vec::new(),
             listener_groups: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
@@ -4342,29 +4381,47 @@ impl StateMachineInstance {
         if !self.map_to_content_space(&mut position, None) {
             return false;
         }
-        // As a press bubbles (update_listeners): past an occluding hit, only
-        // the CSS boxes it is in still answer.
-        let mut bubbles_to: Option<Vec<CoreHandle>> = None;
+        // As a press bubbles (update_listeners): the CSS boxes a hit is in
+        // answer whatever their own geometry, and past an occluding hit only
+        // the boxes it is in still answer.
+        let mut bubbled_to: Vec<CoreHandle> = Vec::new();
+        let mut opaque_in: Option<Vec<CoreHandle>> = None;
         for hit in &self.hit_components {
-            let listens = match &bubbles_to {
+            if let Some(boxes) = &opaque_in
+                && bubbled_hit(hit.as_ref(), boxes).is_none()
+            {
+                continue;
+            }
+            let bubbled = bubbled_hit(hit.as_ref(), &bubbled_to);
+            let listens = match bubbled {
+                Some(hit) => hit.listens_to_button(position, button, true),
                 None => hit.listens_to_button_at(position, button),
-                Some(boxes) => match bubbled_hit(hit.as_ref(), boxes) {
-                    Some(hit) => hit.listens_to_button(position, button, true),
-                    None => continue,
-                },
             };
             if listens {
                 return true;
             }
+            let around = css_boxes_around(hit.as_ref());
+            if !around.is_empty() && (bubbled.is_some() || hit.hit_test(position)) {
+                for container in &around {
+                    if !bubbled_to.contains(container) {
+                        bubbled_to.push(container.clone());
+                    }
+                }
+            }
             if hit.occludes_pointer(position) {
-                let boxes = css_boxes_around(hit.as_ref());
-                if boxes.is_empty() {
+                if around.is_empty() {
                     return false;
                 }
-                bubbles_to = Some(boxes);
+                opaque_in = Some(around);
             }
         }
         false
+    }
+
+    /// Whether a drag handler holds `pointer_id`'s drag (docs/CSS_LAYOUT.md,
+    /// 4.5).
+    pub(crate) fn holds_css_drag(&self, pointer_id: i32) -> bool {
+        self.css_drag_owners.iter().any(|&(id, _)| id == pointer_id)
     }
 
     /// Whether a drag handler other than `owner` owns `pointer_id`'s drag in
@@ -4462,32 +4519,55 @@ impl StateMachineInstance {
         let mut bubbled_to: Vec<CoreHandle> = Vec::new();
         let mut opaque_in: Vec<CoreHandle> = Vec::new();
         for component in &hit_components {
+            // A hit whose listeners skip this event still bubbles it to the
+            // CSS boxes around it that hear the pointer move.
+            let mut hovered_quietly = false;
             let result = match component.as_hit_drawable() {
                 Some(hit) => {
                     let bubbled = bubbled_hit(component.as_ref(), &bubbled_to).is_some();
                     let reached =
                         !hit_opaque || bubbled_hit(component.as_ref(), &opaque_in).is_some();
-                    hit.process_listeners(
+                    let can_hit = reached && !contents_collapsed;
+                    let result = hit.process_listeners(
+                        self, position, hit_type, can_hit, bubbled, timestamp, pointer_id, button,
+                    );
+                    hovered_quietly = result == HitResult::None
+                        && can_hit
+                        && hit_type != ListenerType::Exit
+                        && hit.early_outs(hit_type)
+                        && hit
+                            .css_boxes_around
+                            .iter()
+                            .any(|container| self.css_hover_boxes.contains(container))
+                        && hit.hit_test(position);
+                    result
+                }
+                None => {
+                    let result = component.process_event(
                         self,
                         position,
                         hit_type,
-                        reached && !contents_collapsed,
-                        bubbled,
+                        !hit_opaque && !contents_collapsed,
                         timestamp,
                         pointer_id,
                         button,
-                    )
+                    );
+                    // A drag a nested machine's handler holds is the host's
+                    // drag handlers' to leave alone (4.5).
+                    if component.holds_drag(pointer_id) && !self.holds_css_drag(pointer_id) {
+                        let owner = Rc::as_ptr(component) as *const () as usize;
+                        self.claim_css_drag(pointer_id, owner, position, timestamp);
+                    }
+                    result
                 }
-                None => component.process_event(
-                    self,
-                    position,
-                    hit_type,
-                    !hit_opaque && !contents_collapsed,
-                    timestamp,
-                    pointer_id,
-                    button,
-                ),
             };
+            if hovered_quietly {
+                for container in css_boxes_around(component.as_ref()) {
+                    if !bubbled_to.contains(&container) {
+                        bubbled_to.push(container);
+                    }
+                }
+            }
             if result != HitResult::None {
                 hit_something = true;
                 let around = css_boxes_around(component.as_ref());
@@ -4641,6 +4721,18 @@ impl StateMachineInstance {
                 .with(|drawable| drawable.next.as_ref().and_then(|next| next.upgrade()))
                 .flatten();
         }
+        self.css_hover_boxes = self
+            .hit_components
+            .iter()
+            .filter_map(|component| {
+                let hit = component.as_hit_drawable()?;
+                if hit.hears_hover.get() {
+                    hit.css_box.clone()
+                } else {
+                    None
+                }
+            })
+            .collect();
     }
 
     pub fn try_change_state(&mut self) -> bool {

@@ -10,7 +10,7 @@
 //! the two modes agree to within a level.
 use super::ore_gm_helper::GmHost;
 use crate::RenderMode;
-use nuxie_render_api::{Factory, FillRule, RawPath, Renderer};
+use nuxie_render_api::{Factory, FillRule, RawPath};
 use nuxie_runtime::{File, RuntimeFactoryHandle};
 use std::collections::BTreeMap;
 

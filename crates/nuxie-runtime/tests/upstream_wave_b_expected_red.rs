@@ -99,6 +99,37 @@ fn binding_text(run: &CoreHandle) -> String {
         .expect("TextValueRun")
 }
 
+/// Silver's closed review ledger entry for `id`: its reviewed first
+/// difference and its full Rust stream's SHA-256 (silver-corpus.toml's
+/// `reviewed_layout_divergences`).
+fn reviewed_layout_divergence(id: &str) -> Option<(String, String)> {
+    const LEDGER: &str = include_str!("../../../silver-corpus.toml");
+    fn quoted(line: &str, key: &str) -> Option<String> {
+        let rest = &line[line.find(&format!("{key} = \""))? + key.len() + 4..];
+        let mut value = String::new();
+        let mut chars = rest.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => return Some(value),
+                '\\' => value.push(chars.next()?),
+                c => value.push(c),
+            }
+        }
+        None
+    }
+    LEDGER
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("{ id = "))
+        .find(|line| quoted(line, "id").as_deref() == Some(id))
+        .map(|line| {
+            (
+                quoted(line, "first_difference").expect("a reviewed first difference"),
+                quoted(line, "rust_stream_sha256").expect("a reviewed stream hash"),
+            )
+        })
+}
+
 struct BindingSilver {
     machine: RuntimeStateMachineInstanceHandle,
     artboard: RuntimeArtboardInstanceHandle,
@@ -141,7 +172,14 @@ impl BindingSilver {
     fn advance(&self, elapsed: f32) {
         self.machine.advance_and_apply(elapsed);
     }
+    /// The pinned silver matches, unless Silver's closed review ledger
+    /// (silver-corpus.toml, docs/PORTING.md) records a reviewed CSS layout
+    /// difference for it: that difference must remain, with every byte of
+    /// the reviewed Rust stream, as the corpus's direct replays check it.
     fn matches(&self, name: &str) {
+        if let Some((difference, stream)) = reviewed_layout_divergence(name) {
+            return self.matches_reviewed_layout_divergence(name, &difference, &stream);
+        }
         let expected =
             std::fs::read(binding_path(&format!("silvers/{name}.sriv"))).expect("pinned silver");
         let actual = self.silver.borrow().bytes().to_vec();
@@ -149,6 +187,31 @@ impl BindingSilver {
         let actual_sriv = sriv::parse_sriv(&actual).expect("valid native SRIV");
         sriv::compare_sriv(&expected_sriv, &actual_sriv).expect("pinned converter silver");
         assert_eq!(actual.len(), expected.len(), "pinned SRIV byte length");
+    }
+
+    /// A reviewed CSS layout difference (docs/CSS_LAYOUT.md): the runtime lays
+    /// translated Rive layouts out by CSS rules where the C++ silver used
+    /// Yoga's. The silver keeps its first difference, and the Rust stream is
+    /// pinned whole by its SHA-256, so nothing else may change.
+    fn matches_reviewed_layout_divergence(&self, name: &str, expected: &str, stream: &str) {
+        use sha2::Digest;
+        let silver =
+            std::fs::read(binding_path(&format!("silvers/{name}.sriv"))).expect("pinned silver");
+        let silver = sriv::parse_sriv(&silver).expect("valid pinned SRIV");
+        let bytes = self.silver.borrow().bytes().to_vec();
+        let actual = sriv::parse_sriv(&bytes).expect("valid native SRIV");
+        let difference = sriv::compare_sriv(&silver, &actual)
+            .expect_err("the reviewed layout difference should remain present");
+        assert_eq!(
+            difference.to_string(),
+            expected,
+            "{name}: reviewed first difference"
+        );
+        let hash = sha2::Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(hash, stream, "{name}: reviewed Rust stream");
     }
 
     /// The pinned silver is a `--no_ffp_contract` producer. The contracted
@@ -1076,7 +1139,18 @@ fn wave_b_data_binding_images_test_010_direct_port_expected_red() {
     fixture.silver.borrow_mut().add_frame();
     fixture.advance(0.1);
     fixture.artboard.draw(&mut renderer);
-    fixture.matches("stateful_component_image_test");
+    // Reviewed layout difference: the bound image's new natural size is
+    // content the Comp nested artboard's box measures (UNIV-4844), so its
+    // layout runs again. That marks the hosting artboard's layout style
+    // dirty, as upstream's markHostingLayoutDirty does, and the host's
+    // background path is rebuilt with the same geometry. C++ does not
+    // measure the image, so it does not lay out again.
+    // Silver cannot replay this view-model mutation, so its review is here.
+    fixture.matches_reviewed_layout_divergence(
+        "stateful_component_image_test",
+        "frame 2, op 96 (drawPath): expected drawPath, got rewind",
+        "fdfd89f3940446be83b541bc90e83475eaf192293a6b2397087830f6353ddf98",
+    );
 }
 
 use nuxie_runtime::source::{
@@ -5665,6 +5739,11 @@ fn wave_b_focus_test_078_direct_port_expected_red() {
     });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
+    // Reviewed in Silver's ledger, as corpus.toml explains for this file:
+    // Fill is CSS flex: 1 1 0%, so once the script fills the list the three
+    // Fill rows of the 500-point column are 166.67 points each, where C++
+    // sizes them from their content first (137.20, 225.60 and 137.20). The
+    // last row starts at y 333.33 instead of 362.80.
     fixture.matches("list_focus_order");
 }
 
@@ -7634,6 +7713,11 @@ fn wave_b_hittest_test_008_direct_port_expected_red() {
 
 #[test]
 fn wave_b_hittest_test_009_direct_port_expected_red() {
+    // Reviewed in Silver's ledger: parent-clipper, a Fill row, holds a
+    // 238.65-point box and the 500-point ab-1 nested artboard layout. It
+    // keeps its CSS automatic minimum, their 738.65-point min-content width,
+    // so it is 738.65 points wide instead of the 572-point artboard it fills
+    // in C++.
     binding_hit_hover_silver(
         "ab1-parent",
         &[(370.0, 110.0), (370.0, 180.0)],
@@ -7643,6 +7727,11 @@ fn wave_b_hittest_test_009_direct_port_expected_red() {
 
 #[test]
 fn wave_b_hittest_test_010_direct_port_expected_red() {
+    // Reviewed in Silver's ledger: the 208.61-point grand-parent-clipper
+    // column holds a 100-point-high row and a Fill row hosting the ab1-parent
+    // nested artboard layout. The Fill row keeps its CSS automatic minimum,
+    // the nested artboard's 572-point height, and the fixed row shrinks to 0
+    // as a CSS flex item does, so the Fill row starts at y 0 instead of 100.
     binding_hit_hover_silver(
         "ab1-grand-parent",
         &[(370.0, 250.0), (370.0, 190.0), (510.0, 190.0)],
@@ -7736,6 +7825,11 @@ fn wave_b_hittest_test_013_direct_port_expected_red() {
         fixture.artboard.draw(&mut renderer);
         coord += 10.0;
     }
+    // Reviewed in Silver's ledger: in the hosted ab-text artboard, Fill is
+    // CSS flex: 1 1 0%, so its three Fill rows in the 500-point column are
+    // 166.67 points each, where C++ sizes them from their content first
+    // (141.82, 216.36 and 141.82). The last row starts at y 333.33 instead
+    // of 358.18.
     fixture.matches("hittest_ab_text_parent");
 }
 

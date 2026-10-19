@@ -795,7 +795,12 @@ decode queue. Bidi and audio retain their separately tracked status below.
     its first difference and match every stream byte before it receives floor
     credit. Actual C++ equality is reported separately. Missing, unlisted,
     duplicate, unsupported or moved replacements fail. Direct Silver assertions
-    read the same closed ledger and check the same complete stream. The scroll
+    read the same closed ledger and check the same complete stream. The
+    runtime's wave B direct ports (`upstream_wave_b_expected_red.rs`) read it too.
+    `stateful_component_image_test`, whose view-model mutation Silver cannot
+    replay, pins its reviewed difference and stream in that test: binding a new
+    image re-lays out the nested artboard whose box measures it, which
+    rebuilds the host artboard's background path with the same geometry. The scroll
     streams include all threshold-drag frames. No baseline or epsilon changes.
     Quoted Golden reason strings support commas, so prose needs no punctuation
     workaround. A later change after an unchanged first difference fails too.

@@ -121,6 +121,10 @@ pub struct Property {
     pub initial_value: Option<&'static str>,
     pub initial_value_runtime: Option<&'static str>,
     pub group: Option<&'static str>,
+    /// Upstream's lazy sidecar group (rive-runtime 3fc5a3360): in the C++
+    /// runtime build the property lives in `<Type><Group>Sidecar`, held as
+    /// `Sidecar<...> m_<group>` and allocated on its first write.
+    pub sidecar: Option<&'static str>,
     pub nullable: bool,
     pub override_set: bool,
     pub override_get: bool,

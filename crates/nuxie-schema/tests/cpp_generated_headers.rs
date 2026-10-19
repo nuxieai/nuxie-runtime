@@ -1,5 +1,5 @@
 use nuxie_schema::{
-    CoreRegistryFieldKind, FieldKind, Property, RuntimeMixin, StoredFieldInitializer,
+    CoreRegistryFieldKind, FieldKind, Property, RuntimeMixin, StoredFieldInitializer, UintStorage,
     core_registry_field_kind_by_property_key, core_registry_getter_field_kind_by_property_key,
     core_registry_setter_field_kind_by_property_key,
     generated::{DEFINITIONS, RUNTIME_MIXINS},
@@ -107,15 +107,182 @@ fn reference_runtime_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
 }
 
-fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, &'static [Property])> {
+/// The definitions upstream's generated C++ has: every one but Nuxie's own
+/// (defs/nuxie/), the same rule generated_schema.rs applies, which
+/// `nuxie_definitions_stay_out_of_the_cpp_registry` pins and checks.
+fn upstream_definitions() -> impl Iterator<Item = &'static nuxie_schema::Definition> {
     DEFINITIONS
         .iter()
+        .filter(|definition| is_upstream_definition(definition))
+}
+
+fn is_upstream_definition(definition: &nuxie_schema::Definition) -> bool {
+    !definition.file.starts_with("nuxie/")
+}
+
+/// Whether `property` is a member of its C++ class itself: a stored field
+/// outside upstream's lazy sidecars (rive-runtime 3fc5a3360), which the
+/// runtime build keeps in `<Type><Group>Sidecar`, held as
+/// `Sidecar<...> m_<group>` and allocated on its first write.
+fn stored_class_member(property: &Property) -> bool {
+    property.stores_field && property.sidecar.is_none()
+}
+
+/// A definition's sidecar groups and their properties, in file order.
+fn sidecar_groups(
+    definition: &nuxie_schema::Definition,
+) -> BTreeMap<&'static str, Vec<&'static Property>> {
+    let mut groups = BTreeMap::<&'static str, Vec<&'static Property>>::new();
+    for property in definition.properties {
+        if let Some(group) = property.sidecar {
+            groups.entry(group).or_default().push(property);
+        }
+    }
+    groups
+}
+
+/// The C++ sidecar struct of a definition's group: `cornerRadius` on
+/// Rectangle is `RectangleCornerRadiusSidecar`.
+fn sidecar_struct_name(definition_name: &str, group: &str) -> String {
+    let mut chars = group.chars();
+    let first = chars
+        .next()
+        .map(|c| c.to_ascii_uppercase())
+        .into_iter()
+        .collect::<String>();
+    format!("{definition_name}{first}{}Sidecar", chars.as_str())
+}
+
+/// A sidecar struct's members and their initializers, from the header's
+/// runtime branches.
+fn cpp_sidecar_members(header: &Path, struct_name: &str) -> BTreeMap<String, String> {
+    let source = read_cpp_runtime_source(header)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
+    let declaration = format!("struct {struct_name}\n");
+    let start = source
+        .find(&declaration)
+        .unwrap_or_else(|| panic!("missing {struct_name} in {}", header.display()));
+    let body = &source[start + declaration.len()..];
+    let open = body.find('{').expect("sidecar struct body");
+    let close = body.find("};").expect("terminated sidecar struct");
+    body[open + 1..close]
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let (declaration, value) = line
+                .strip_suffix(';')
+                .and_then(|line| line.split_once(" = "))
+                .unwrap_or_else(|| panic!("{struct_name} member without initializer: {line}"));
+            let name = declaration
+                .split_whitespace()
+                .last()
+                .expect("sidecar member name");
+            (name.to_owned(), value.to_owned())
+        })
+        .collect()
+}
+
+fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, &'static [Property])> {
+    upstream_definitions()
         .map(|definition| (definition.name, definition.file, definition.properties))
         .chain(
             RUNTIME_MIXINS
                 .iter()
                 .map(|mixin| (mixin.name, mixin.file, mixin.properties)),
         )
+}
+
+/// Nuxie's own definitions (defs/nuxie/) have no upstream C++, so the
+/// header comparison covers upstream definitions only. The Nuxie set is
+/// pinned here, and none of its type or property keys may appear in
+/// upstream's generated C++: an upstream addition on one of them fails here.
+#[test]
+fn nuxie_definitions_stay_out_of_the_cpp_registry() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let nuxie = DEFINITIONS
+        .iter()
+        .filter(|definition| !is_upstream_definition(definition))
+        .collect::<Vec<_>>();
+    let pinned = nuxie
+        .iter()
+        .map(|definition| (definition.name, definition.type_key.int))
+        .collect::<Vec<_>>();
+    eprintln!("Nuxie definitions outside the C++ header comparison: {pinned:?}");
+    assert_eq!(
+        pinned,
+        [
+            ("VideoAsset", 60000),
+            ("Video", 60001),
+            ("TextStyleDecoration", 60002),
+            ("LayoutCssStyle", 61000),
+            ("BoxBorder", 61001),
+            ("BoxGradient", 61002),
+            ("BoxShadow", 61003),
+            ("BoxPaint", 61004)
+        ]
+    );
+
+    let constants = parse_generated_class_constants(&runtime_dir);
+    let cpp_keys = |suffix: &str| {
+        constants
+            .iter()
+            .filter(|(name, _)| name.ends_with(suffix))
+            .map(|(_, key)| *key)
+            .collect::<BTreeSet<_>>()
+    };
+    let (type_keys, property_keys) = (cpp_keys("::typeKey"), cpp_keys("PropertyKey"));
+    for definition in nuxie {
+        assert!(
+            !type_keys.contains(&definition.type_key.int),
+            "{} type key {} is also upstream's",
+            definition.name,
+            definition.type_key.int
+        );
+        for property in definition.properties {
+            assert!(
+                !property_keys.contains(&property.key.int),
+                "{}.{} key {} is also upstream's",
+                definition.name,
+                property.name,
+                property.key.int
+            );
+        }
+    }
+}
+
+/// Upstream stores rarely-set properties in lazy sidecars (rive-runtime
+/// 3fc5a3360), and the defs carry each property's group. They are pinned
+/// so that a new or changed group is a reviewed change.
+#[test]
+fn upstream_sidecar_groups_are_pinned() {
+    let mut groups = upstream_definitions()
+        .flat_map(|definition| {
+            sidecar_groups(definition)
+                .into_iter()
+                .map(move |(group, properties)| (definition.name, group, properties.len()))
+        })
+        .collect::<Vec<_>>();
+    groups.sort();
+    eprintln!("upstream sidecar groups: {groups:?}");
+    assert_eq!(
+        groups,
+        [
+            ("Component", "name", 1),
+            ("LayoutComponentStyle", "absolutePosition", 8),
+            ("LayoutComponentStyle", "border", 8),
+            ("LayoutComponentStyle", "cornerRadius", 5),
+            ("LayoutSizingStyle", "minMaxSizing", 9),
+            ("Rectangle", "cornerRadius", 5),
+        ]
+    );
+    assert_eq!(groups.iter().map(|(_, _, count)| count).sum::<usize>(), 36);
 }
 
 #[test]
@@ -127,7 +294,7 @@ fn generated_rust_schema_matches_cpp_type_keys() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let constants = parse_u16_constants(&header);
 
@@ -182,8 +349,7 @@ fn generated_rust_runtime_mixins_match_cpp_interfaces_and_consumers() {
         }
 
         let cpp_consumers = parse_cpp_runtime_mixin_consumers(&runtime_dir, mixin, &constants);
-        let rust_consumers = DEFINITIONS
-            .iter()
+        let rust_consumers = upstream_definitions()
             .filter(|definition| {
                 definition
                     .runtime_mixins()
@@ -197,7 +363,7 @@ fn generated_rust_runtime_mixins_match_cpp_interfaces_and_consumers() {
             "{} exact from() consumers",
             mixin.name
         );
-        for definition in DEFINITIONS {
+        for definition in upstream_definitions() {
             let consumer_header = cpp_header_for(&runtime_dir, definition.file);
             let consumer_source = read_cpp_runtime_source(&consumer_header).unwrap_or_else(|err| {
                 panic!("failed to read {}: {err}", consumer_header.display())
@@ -265,7 +431,7 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let cpp_members = parse_cpp_member_initializers(&header)
             .keys()
@@ -274,7 +440,7 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
         let rust_members = definition
             .properties
             .iter()
-            .filter(|property| property.stores_field)
+            .filter(|property| stored_class_member(property))
             .map(|property| cpp_member_name(property.name))
             .collect::<BTreeSet<_>>();
 
@@ -289,10 +455,41 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
         for property in definition.properties {
             assert_eq!(
                 cpp_members.contains(&cpp_member_name(property.name)),
-                property.stores_field,
-                "{}.{} stores_field",
+                stored_class_member(property),
+                "{}.{} stores_field as a class member",
                 definition.name,
                 property.name
+            );
+        }
+
+        // Each sidecar group is one struct holding exactly its properties.
+        let source = read_cpp_runtime_source(&header)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
+        for (group, properties) in sidecar_groups(definition) {
+            let struct_name = sidecar_struct_name(definition.name, group);
+            assert!(
+                source.contains(&format!("Sidecar<{struct_name}> m_{group};")),
+                "{} holds no Sidecar<{struct_name}> m_{group} in {}",
+                definition.name,
+                header.display()
+            );
+            for property in &properties {
+                assert!(
+                    property.stores_field,
+                    "{}.{} is in sidecar {group} but stores no field",
+                    definition.name, property.name
+                );
+            }
+            assert_eq!(
+                properties
+                    .iter()
+                    .map(|property| property.name.to_owned())
+                    .collect::<BTreeSet<_>>(),
+                cpp_sidecar_members(&header, &struct_name)
+                    .into_keys()
+                    .collect::<BTreeSet<_>>(),
+                "{struct_name} members in {}",
+                header.display()
             );
         }
     }
@@ -307,7 +504,7 @@ fn generated_rust_schema_matches_cpp_stored_field_initializers() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let initializers = parse_cpp_member_initializers(&header);
 
@@ -315,6 +512,32 @@ fn generated_rust_schema_matches_cpp_stored_field_initializers() {
             let Some(rust_initializer) = property.stored_field_initializer() else {
                 continue;
             };
+
+            // A sidecar property's initializer is its sidecar struct member's.
+            if let Some(group) = property.sidecar {
+                let struct_name = sidecar_struct_name(definition.name, group);
+                let members = cpp_sidecar_members(&header, &struct_name);
+                let cpp_value = members.get(property.name).unwrap_or_else(|| {
+                    panic!(
+                        "{}.{} missing {struct_name} initializer in {}",
+                        definition.name,
+                        property.name,
+                        header.display()
+                    )
+                });
+                assert_eq!(
+                    rust_initializer,
+                    parse_cpp_stored_field_initializer(
+                        property.runtime_type,
+                        cpp_value,
+                        &format!("{}.{}", definition.name, property.name),
+                    ),
+                    "{}.{} sidecar initializer",
+                    definition.name,
+                    property.name
+                );
+                continue;
+            }
 
             let member = cpp_member_name(property.name);
             let cpp_value = initializers.get(&member).unwrap_or_else(|| {
@@ -351,7 +574,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let cpp_notified_properties = cpp_notified_property_names(&header);
         let rust_setter_properties = definition
@@ -386,7 +609,9 @@ fn generated_rust_schema_matches_cpp_value_setters() {
             let setter_body = cpp_property_setter_body(&header, property.name);
             assert_eq!(
                 setter_body.is_some(),
-                property.cpp_generates_value_setter_body() || cpp_has_stored_bool_bitmask(property),
+                property.cpp_generates_value_setter_body()
+                    || cpp_has_stored_bool_bitmask(property)
+                    || cpp_has_stored_field_bitmask(property),
                 "{}.{} generated setter body presence in {}",
                 definition.name,
                 property.name,
@@ -429,6 +654,38 @@ fn generated_rust_schema_matches_cpp_value_setters() {
                 continue;
             }
 
+            if cpp_has_stored_field_bitmask(property) {
+                let mask = property.bitmask_passthrough.unwrap();
+                let member = cpp_member_name(mask.target);
+                let field = cpp_bitmask_field_type(property);
+                let changed = if property_owners().any(|(_, _, properties)| {
+                    properties.iter().any(|target| {
+                        target.name == mask.target && target.cpp_generates_changed_hook()
+                    })
+                }) {
+                    format!("{}Changed();", mask.target)
+                } else {
+                    String::new()
+                };
+                let expected = format!(
+                    "const {field} prev = (m_{member} & {name}FieldMask) >> {name}BitOffset; \
+                     if (prev == value) {{ return; }} \
+                     m_{member} = (m_{member} & ~{name}FieldMask) | ((value << {name}BitOffset) & {name}FieldMask); \
+                     {changed} notifyPropertyChanged({target}PropertyKey);",
+                    name = property.name,
+                    target = mask.target,
+                );
+                assert_eq!(
+                    cpp_normalize_whitespace(&setter_body),
+                    cpp_normalize_whitespace(&expected),
+                    "{}.{} bitmask field setter in {}",
+                    definition.name,
+                    property.name,
+                    header.display()
+                );
+                continue;
+            }
+
             if property.cpp_setter_uses_passthrough() {
                 assert_cpp_passthrough_setter_body(
                     &actual,
@@ -445,14 +702,25 @@ fn generated_rust_schema_matches_cpp_value_setters() {
                     property.name,
                     header.display()
                 );
-                assert_cpp_stored_field_setter_body(
-                    &actual,
-                    property.name,
-                    &cpp_member_name(property.name),
-                    property.cpp_generates_changed_hook(),
-                    definition.name,
-                    &header,
-                );
+                if let Some(group) = property.sidecar {
+                    assert_cpp_sidecar_setter_body(
+                        &actual,
+                        property.name,
+                        group,
+                        property.cpp_generates_changed_hook(),
+                        definition.name,
+                        &header,
+                    );
+                } else {
+                    assert_cpp_stored_field_setter_body(
+                        &actual,
+                        property.name,
+                        &cpp_member_name(property.name),
+                        property.cpp_generates_changed_hook(),
+                        definition.name,
+                        &header,
+                    );
+                }
             }
         }
     }
@@ -467,7 +735,7 @@ fn generated_rust_schema_matches_cpp_value_getters() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
 
         for property in definition.properties {
@@ -476,7 +744,8 @@ fn generated_rust_schema_matches_cpp_value_getters() {
                 getter.is_some(),
                 property.cpp_generates_stored_field_getter_body()
                     || property.cpp_generates_passthrough_getter_declaration()
-                    || cpp_has_stored_bool_bitmask(property),
+                    || cpp_has_stored_bool_bitmask(property)
+                    || cpp_has_stored_field_bitmask(property),
                 "{}.{} generated getter presence in {}",
                 definition.name,
                 property.name,
@@ -506,6 +775,36 @@ fn generated_rust_schema_matches_cpp_value_getters() {
                 continue;
             }
 
+            if cpp_has_stored_field_bitmask(property) {
+                let CppGetter::Body { signature, body } = &getter else {
+                    panic!(
+                        "{}.{} bitmask field getter has no body",
+                        definition.name, property.name
+                    );
+                };
+                assert_eq!(
+                    signature,
+                    &format!(
+                        "inline {} {}() const",
+                        cpp_bitmask_field_type(property),
+                        property.name
+                    )
+                );
+                assert_eq!(
+                    cpp_normalize_whitespace(&body.join(" ")),
+                    cpp_normalize_whitespace(&format!(
+                        "return (m_{} & {name}FieldMask) >> {name}BitOffset;",
+                        cpp_member_name(property.bitmask_passthrough.unwrap().target),
+                        name = property.name
+                    )),
+                    "{}.{} bitmask field getter in {}",
+                    definition.name,
+                    property.name,
+                    header.display()
+                );
+                continue;
+            }
+
             if property.cpp_generates_passthrough_getter_declaration() {
                 assert_cpp_passthrough_getter_declaration(
                     &getter,
@@ -521,10 +820,38 @@ fn generated_rust_schema_matches_cpp_value_getters() {
                     property.name,
                     header.display()
                 );
+                let expected_body = match property.sidecar {
+                    Some(group) => {
+                        let struct_name = sidecar_struct_name(definition.name, group);
+                        let initial = cpp_sidecar_members(&header, &struct_name)
+                            .remove(property.name)
+                            .unwrap_or_else(|| panic!("{struct_name} lacks {}", property.name));
+                        let lookup = format!("auto* sidecar = m_{group}.get();");
+                        if matches!(property.runtime_type, FieldKind::String) {
+                            vec![
+                                format!("static const std::string defaultValue = {initial};"),
+                                lookup,
+                                format!(
+                                    "return sidecar != nullptr ? sidecar->{} : defaultValue;",
+                                    property.name
+                                ),
+                            ]
+                        } else {
+                            vec![
+                                lookup,
+                                format!(
+                                    "return sidecar != nullptr ? sidecar->{} : {initial};",
+                                    property.name
+                                ),
+                            ]
+                        }
+                    }
+                    None => vec![format!("return m_{};", cpp_member_name(property.name))],
+                };
                 assert_cpp_stored_field_getter_body(
                     &getter,
                     property.name,
-                    &cpp_member_name(property.name),
+                    &expected_body,
                     property.virtual_ || property.pure_virtual,
                     property.override_get
                         || definition.runtime_mixins().iter().any(|mixin| {
@@ -551,7 +878,7 @@ fn generated_rust_schema_matches_cpp_property_declarations() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let declarations = cpp_zero_declarations(&header);
 
@@ -917,7 +1244,7 @@ fn generated_rust_schema_matches_cpp_deserialize_switches() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let constants = parse_u16_constants(&header);
         let cpp_deserialized_keys = parse_cpp_deserialize_property_keys(&header, &constants);
@@ -966,7 +1293,7 @@ fn generated_rust_schema_matches_cpp_shared_type_tree() {
     );
 
     let parents = parse_cpp_parent_type_keys(&runtime_dir);
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let source = read_cpp_runtime_source(&header).unwrap();
         assert!(
@@ -1020,7 +1347,7 @@ fn generated_rust_schema_matches_cpp_make_core_instance_registry() {
     let constants = parse_generated_class_constants(&runtime_dir);
     let constructible_type_keys = parse_cpp_make_core_instance_type_keys(&runtime_dir, &constants);
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         assert_eq!(
             constructible_type_keys.contains(&definition.type_key.int),
             !definition.abstract_,
@@ -1053,7 +1380,7 @@ fn generated_rust_schema_matches_cpp_clone_declarations() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let cpp_cloneable = cpp_header_declares_clone(&header);
 
@@ -1076,7 +1403,7 @@ fn generated_rust_schema_matches_cpp_clone_implementations() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let source = cpp_generated_source_for(&runtime_dir, definition.file);
         if !source.exists() {
             assert!(
@@ -1142,13 +1469,15 @@ fn generated_rust_schema_matches_cpp_copy_methods() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
+    for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
+        // Class members copy one by one; a sidecar group copies whole.
         let rust_stored_members = definition
             .properties
             .iter()
-            .filter(|property| property.stores_field)
+            .filter(|property| stored_class_member(property))
             .map(|property| cpp_member_name(property.name))
+            .chain(sidecar_groups(definition).into_keys().map(str::to_owned))
             .collect::<BTreeSet<_>>();
         let rust_encoded_copy_hooks = definition
             .properties
@@ -1383,6 +1712,35 @@ fn assert_cpp_stored_field_setter_body(
     );
 }
 
+/// A sidecar setter compares through the getter and writes the sidecar,
+/// allocating it.
+fn assert_cpp_sidecar_setter_body(
+    actual: &[String],
+    property_name: &str,
+    group: &str,
+    changed_hook: bool,
+    definition_name: &str,
+    header: &Path,
+) {
+    let mut prefix = vec![
+        format!("if ({property_name}() == value)"),
+        "{".to_owned(),
+        "return;".to_owned(),
+        "}".to_owned(),
+        format!("m_{group}.ensureAllocated()->{property_name} = value;"),
+    ];
+    if changed_hook {
+        prefix.push(format!("{property_name}Changed();"));
+    }
+    assert_cpp_setter_body_with_optional_notify(
+        actual,
+        &prefix,
+        property_name,
+        definition_name,
+        header,
+    );
+}
+
 fn assert_cpp_passthrough_setter_body(
     actual: &[String],
     property_name: &str,
@@ -1509,7 +1867,7 @@ fn cpp_property_getter(header: &Path, property_name: &str) -> Option<CppGetter> 
 fn assert_cpp_stored_field_getter_body(
     actual: &CppGetter,
     property_name: &str,
-    member: &str,
+    expected_body: &[String],
     is_virtual: bool,
     is_override: bool,
     definition_name: &str,
@@ -1546,8 +1904,8 @@ fn assert_cpp_stored_field_getter_body(
         header.display()
     );
     assert_eq!(
-        body,
-        &vec![format!("return m_{member};")],
+        body.as_slice(),
+        expected_body,
         "{}.{} generated getter return member in {}",
         definition_name,
         property_name,
@@ -2608,6 +2966,28 @@ fn cpp_has_stored_bool_bitmask(property: &Property) -> bool {
             .is_some_and(|mask| !mask.host_provided)
 }
 
+/// A field of several bits inside a stored bitmask (`passthroughBitWidth`):
+/// Text's verticalTrimTopValue is the low byte of verticalTrimValue.
+fn cpp_has_stored_field_bitmask(property: &Property) -> bool {
+    property.runtime_type != FieldKind::Bool
+        && property
+            .bitmask_passthrough
+            .is_some_and(|mask| !mask.host_provided)
+}
+
+/// The C++ value type of an unsigned bitmask field.
+fn cpp_bitmask_field_type(property: &Property) -> &'static str {
+    match property.uint_storage() {
+        Some(UintStorage::Uint8) => "uint8_t",
+        Some(UintStorage::Uint16) => "uint16_t",
+        Some(UintStorage::Uint32) => "uint32_t",
+        other => panic!(
+            "{} is a bitmask field of unsupported storage {other:?}",
+            property.name
+        ),
+    }
+}
+
 fn parse_cpp_stored_field_initializer(
     kind: FieldKind,
     cpp_value: &str,
@@ -2666,6 +3046,10 @@ fn parse_string_initializer(value: &str, label: &str) -> &'static str {
     match value {
         "\"\"" => "",
         "\"https://public.rive.app/cdn/uuid\"" => "https://public.rive.app/cdn/uuid",
+        // DataConverterStringTemplate's delimiters (upstream c63a5ba0); the
+        // generator escapes the dollar sign.
+        "\"\\x24{\"" => "${",
+        "\"}\"" => "}",
         _ => panic!("{label} has unsupported string initializer {value:?}"),
     }
 }

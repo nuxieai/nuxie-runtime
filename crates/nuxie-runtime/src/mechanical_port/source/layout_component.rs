@@ -713,8 +713,12 @@ impl LayoutComponent {
                 return false;
             }
             match css_paint_kind(handle) {
-                Some(CssPaintKind::Border { sides, .. }) => {
-                    paint::border_ring_contains(point, bounds, radii, padding, inner, sides)
+                Some(CssPaintKind::Border {
+                    sides,
+                    style: paint::BorderStyle::Solid,
+                }) => paint::border_ring_contains(point, bounds, radii, padding, inner, sides),
+                Some(CssPaintKind::Border { sides, style }) => {
+                    paint::border_marks_contain(point, bounds, radii, padding, inner, sides, style)
                 }
                 Some(CssPaintKind::Shadow { .. }) => false,
                 None => match handle.with_downcast::<Stroke, _>(|stroke| {

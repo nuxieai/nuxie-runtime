@@ -529,6 +529,71 @@ fn dash_pattern(length: f32, width: f32, style: BorderStyle, closed: bool) -> Op
 /// dot of a line is whole.
 const DOT_EPSILON: f32 = 1.0e-2;
 
+/// The most dashes or dots a line draws: finer marks draw as one solid
+/// line, which they look like, and stay within memory.
+const MAX_MARKS: f32 = 65_536.0;
+
+/// Whether a dashed or dotted border's marks cover `point` within the
+/// ring of their sides (docs/CSS_LAYOUT.md, 4.5): selection skips the gaps
+/// between them, as they paint.
+pub fn border_marks_contain(
+    point: Vec2D,
+    border_box: Aabb,
+    radii: Radii,
+    padding: Aabb,
+    inner: Radii,
+    sides: u8,
+    style: BorderStyle,
+) -> bool {
+    let border = [
+        padding.top() - border_box.top(),
+        border_box.right() - padding.right(),
+        border_box.bottom() - padding.bottom(),
+        padding.left() - border_box.left(),
+    ];
+    border_marks(border_box, radii, border, sides, style)
+        .iter()
+        .any(|group| {
+            border_ring_contains(point, border_box, radii, padding, inner, group.sides)
+                && path_contains(&group.fills, point)
+        })
+}
+
+/// Whether any closed contour of `path` covers `point`.
+fn path_contains(path: &RawPath, point: Vec2D) -> bool {
+    use crate::source::math::path_types::PathVerb;
+    let covers = |contour: &[Vec2D]| contour.len() > 2 && polygon_contains(contour, point);
+    let points = path.points();
+    let mut contour: Vec<Vec2D> = Vec::new();
+    let mut index = 0;
+    for verb in path.verbs() {
+        match verb {
+            PathVerb::Move => {
+                if covers(&contour) {
+                    return true;
+                }
+                contour.clear();
+                contour.push(points[index]);
+                index += 1;
+            }
+            PathVerb::Line => {
+                contour.push(points[index]);
+                index += 1;
+            }
+            PathVerb::Quad => {
+                contour.push(points[index + 1]);
+                index += 2;
+            }
+            PathVerb::Cubic => {
+                contour.push(points[index + 2]);
+                index += 3;
+            }
+            PathVerb::Close => {}
+        }
+    }
+    covers(&contour)
+}
+
 /// A polyline with its points' distances along it, and how far inward each
 /// point may be offset before the offset folds over (the radius of
 /// curvature there; unbounded on straight parts).
@@ -669,22 +734,44 @@ impl Line {
         if !(period > 0.0) {
             return;
         }
-        let mut start = 0.0;
+        // Marks finer than a border can show draw as one solid line.
+        if self.length() / period > MAX_MARKS {
+            self.add_stretch(centres, fills, half, 0.0, self.length());
+            return;
+        }
+        let mut start: f32 = 0.0;
         while start < self.length() {
             self.add_stretch(centres, fills, half, start, start + dash);
-            start += period;
+            // An f32 sum that stops moving ends the marks.
+            let next = start + period;
+            if !(next > start) {
+                break;
+            }
+            start = next;
         }
     }
     /// Round dots of `diameter` every `period` from the line's start, up to
     /// its end.
     fn add_dots(&self, path: &mut RawPath, diameter: f32, period: f32) {
-        let mut at = 0.0;
+        // Dots finer than a border can show draw as one solid line.
+        if period > 0.0 && self.length() / period > MAX_MARKS {
+            self.add_stretch(
+                &mut RawPath::default(),
+                path,
+                diameter / 2.0,
+                0.0,
+                self.length(),
+            );
+            return;
+        }
+        let mut at: f32 = 0.0;
         loop {
             add_circle(path, self.at(at), diameter / 2.0);
-            at += period;
-            if !(period > 0.0) || at > self.length() + 1.0e-4 {
+            let next = at + period;
+            if !(next > at) || next > self.length() + 1.0e-4 {
                 break;
             }
+            at = next;
         }
     }
 }
@@ -1381,6 +1468,20 @@ mod tests {
             let y = index as f32 * 20.0;
             assert!(near(start.y, y) && near(end.y, y + 12.0), "{left:?}");
             assert!(near(start.x, 3.0));
+        }
+    }
+
+    /// Marks finer than a border can show draw as one solid line: a
+    /// 0.001-point dashed or dotted top on a 1000-point box would be
+    /// hundreds of thousands of marks, and an f32 sum of so short a period
+    /// may never reach the line's end.
+    #[test]
+    fn hairline_marks_draw_as_a_solid_line() {
+        let bounds = Aabb::new(0.0, 0.0, 1000.0, 1000.0);
+        for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
+            let marks = border_marks(bounds, [Vec2D::default(); 4], [0.001; 4], 1, style);
+            let top = runs(&marks[0].strokes[0].0);
+            assert_eq!(top.len(), 1, "{style:?}");
         }
     }
 

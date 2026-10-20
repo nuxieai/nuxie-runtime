@@ -8938,3 +8938,67 @@ fn known_non_stored_properties_preserve_skip_metadata_and_decode_value() {
         })
     );
 }
+
+fn artboard_slot_type_names(
+    file: &RuntimeFile,
+    artboard_index: usize,
+) -> Vec<Option<&'static str>> {
+    file.artboard_local_object_slots(artboard_index)
+        .expect("artboard exists")
+        .into_iter()
+        .map(|slot| slot.map(|object| object.type_name))
+        .collect()
+}
+
+/// Artboard::validateObjects drops a DrawTarget whose drawableId does not
+/// resolve to a Drawable (upstream 785bca185) and a PaintImage whose parent
+/// is not a ShapePaint (upstream d97479357). Checked against the C++ probe at
+/// 5551696a on these bytes.
+#[test]
+fn artboard_slots_drop_draw_targets_and_paint_images_that_fail_cpp_validate() {
+    let file = read_runtime_file(&synthetic_runtime_file(4370, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "DrawRules", |bytes| {
+            push_uint_property(bytes, "DrawRules", "parentId", 0);
+        });
+        for drawable_id in [Some(1), Some(2), Some(99), None] {
+            push_object_with_properties(bytes, "DrawTarget", |bytes| {
+                push_uint_property(bytes, "DrawTarget", "parentId", 2);
+                if let Some(drawable_id) = drawable_id {
+                    push_uint_property(bytes, "DrawTarget", "drawableId", drawable_id);
+                }
+            });
+        }
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Fill", "parentId", 1);
+        });
+        for parent_id in [7, 1] {
+            push_object_with_properties(bytes, "PaintImage", |bytes| {
+                push_uint_property(bytes, "PaintImage", "parentId", parent_id);
+            });
+        }
+    }))
+    .expect("validate stream imports");
+
+    assert_eq!(
+        artboard_slot_type_names(&file, 0),
+        vec![
+            Some("Artboard"),
+            Some("Shape"),
+            Some("DrawRules"),
+            Some("DrawTarget"),
+            None,
+            None,
+            None,
+            Some("Fill"),
+            Some("PaintImage"),
+            None,
+        ],
+        "a target naming the Shape stays; one naming DrawRules, a missing id or no id is dropped; \
+         a PaintImage stays under the Fill and is dropped under the Shape"
+    );
+}

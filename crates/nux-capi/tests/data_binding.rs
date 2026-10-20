@@ -2356,3 +2356,546 @@ fn frame_checkpoints_preserve_external_observer_commit_and_rollback() {
         Some(25.0)
     );
 }
+
+/// Output bindings on each component-list row. Every row's default machine
+/// runs a two-second 0 to 1000 timeline on its marker node.
+#[derive(Clone, Copy, Debug)]
+enum RowBindings {
+    /// No output bindings: the row's machine never writes a view model.
+    Quiet,
+    /// The row artboard's computed width reads back into `rowWidth`.
+    Readback,
+    /// The animated marker x writes into `probe` on every timed frame.
+    Marker,
+    /// Both outputs, into separate properties.
+    Active,
+}
+
+impl RowBindings {
+    const ALL: [Self; 4] = [Self::Quiet, Self::Readback, Self::Marker, Self::Active];
+
+    fn readback(self) -> bool {
+        matches!(self, Self::Readback | Self::Active)
+    }
+
+    fn marker(self) -> bool {
+        matches!(self, Self::Marker | Self::Active)
+    }
+
+    /// `probe` after `seconds` of the row's marker timeline (500 per second).
+    fn probe_after(self, seconds: f32) -> f32 {
+        if self.marker() { seconds * 500.0 } else { 0.0 }
+    }
+
+    /// `rowWidth` once the 100-wide row has mounted.
+    fn mounted_width(self) -> f32 {
+        if self.readback() { 100.0 } else { 0.0 }
+    }
+}
+
+/// Row artboards A and B (schemas RowA and RowB) hosted by LayerList's
+/// `screens` ArtboardComponentList, bound to the Host schema's `screens` list.
+/// Byte-identical to the iOS SDK's removal-probe-*.riv reproducers for
+/// UNIV-5186.
+fn component_list_rows_fixture(bindings: RowBindings) -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 1, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    let bind = |bytes: &mut Vec<u8>, target: u16, reverse: bool, source: [u8; 2]| {
+        object(bytes, "DataBindContext", |bytes| {
+            uint(bytes, "DataBindContext", "propertyKey", u64::from(target));
+            if reverse {
+                uint(bytes, "DataBindContext", "flags", 1);
+            }
+            push_var_uint(
+                bytes,
+                u64::from(property_key("DataBindContext", "sourcePathIds")),
+            );
+            push_var_uint(bytes, 2);
+            bytes.extend_from_slice(&source);
+        });
+    };
+    let states = |bytes: &mut Vec<u8>, layer: &str, animation: Option<u64>| {
+        object(bytes, "StateMachineLayer", |bytes| {
+            string(bytes, "StateMachineLayer", "name", layer)
+        });
+        object(bytes, "EntryState", |_| {});
+        if animation.is_some() {
+            object(bytes, "StateTransition", |bytes| {
+                uint(bytes, "StateTransition", "stateToId", 3)
+            });
+        }
+        object(bytes, "AnyState", |_| {});
+        object(bytes, "ExitState", |_| {});
+        if let Some(animation) = animation {
+            object(bytes, "AnimationState", |bytes| {
+                uint(bytes, "AnimationState", "animationId", animation)
+            });
+        }
+    };
+    object(&mut bytes, "Backboard", |_| {});
+    for schema in ["RowA", "RowB"] {
+        object(&mut bytes, "ViewModel", |bytes| {
+            string(bytes, "ViewModel", "name", schema)
+        });
+        for property in ["probe", "rowWidth"] {
+            object(&mut bytes, "ViewModelPropertyNumber", |bytes| {
+                string(bytes, "ViewModelPropertyNumber", "name", property)
+            });
+        }
+    }
+    object(&mut bytes, "ViewModel", |bytes| {
+        string(bytes, "ViewModel", "name", "Host")
+    });
+    object(&mut bytes, "ViewModelPropertyList", |bytes| {
+        string(bytes, "ViewModelPropertyList", "name", "screens")
+    });
+    object(&mut bytes, "ViewModelInstance", |bytes| {
+        string(bytes, "ViewModelInstance", "name", "host");
+        uint(bytes, "ViewModelInstance", "viewModelId", 2);
+    });
+    object(&mut bytes, "ViewModelInstanceList", |bytes| {
+        uint(bytes, "ViewModelInstanceList", "viewModelPropertyId", 0)
+    });
+    for (schema, name) in ["A", "B"].into_iter().enumerate() {
+        let schema = schema as u8;
+        object(&mut bytes, "Artboard", |bytes| {
+            string(bytes, "Artboard", "name", name);
+            f32_value(bytes, "Artboard", "width", 100.0);
+            f32_value(bytes, "Artboard", "height", 100.0);
+            uint(bytes, "Artboard", "viewModelId", u64::from(schema));
+            uint(bytes, "Artboard", "defaultStateMachineId", 0);
+        });
+        if bindings.readback() {
+            bind(
+                &mut bytes,
+                property_key("Node", "computedWidth"),
+                true,
+                [schema, 1],
+            );
+        }
+        object(&mut bytes, "Node", |bytes| {
+            string(bytes, "Node", "name", "Marker");
+            uint(bytes, "Node", "parentId", 0);
+        });
+        if bindings.marker() {
+            bind(&mut bytes, property_key("Node", "x"), true, [schema, 0]);
+        }
+        object(&mut bytes, "LinearAnimation", |bytes| {
+            string(bytes, "LinearAnimation", "name", "Marker");
+            uint(bytes, "LinearAnimation", "fps", 60);
+            uint(bytes, "LinearAnimation", "duration", 120);
+            uint(bytes, "LinearAnimation", "loopValue", 0);
+        });
+        object(&mut bytes, "KeyedObject", |bytes| {
+            uint(bytes, "KeyedObject", "objectId", 1)
+        });
+        object(&mut bytes, "KeyedProperty", |bytes| {
+            uint(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key("Node", "x")),
+            )
+        });
+        for (frame, value) in [(0, 0.0), (120, 1000.0)] {
+            object(&mut bytes, "KeyFrameDouble", |bytes| {
+                uint(bytes, "KeyFrameDouble", "frame", frame);
+                uint(bytes, "KeyFrameDouble", "interpolationType", 1);
+                f32_value(bytes, "KeyFrameDouble", "value", value);
+            });
+        }
+        object(&mut bytes, "StateMachine", |bytes| {
+            string(bytes, "StateMachine", "name", "Row")
+        });
+        states(&mut bytes, "Marker", Some(0));
+    }
+    object(&mut bytes, "Artboard", |bytes| {
+        string(bytes, "Artboard", "name", "LayerList");
+        f32_value(bytes, "Artboard", "width", 100.0);
+        f32_value(bytes, "Artboard", "height", 100.0);
+        uint(bytes, "Artboard", "viewModelId", 2);
+        uint(bytes, "Artboard", "defaultStateMachineId", 0);
+    });
+    object(&mut bytes, "Node", |bytes| {
+        uint(bytes, "Node", "parentId", 0)
+    });
+    object(&mut bytes, "ArtboardComponentList", |bytes| {
+        string(bytes, "ArtboardComponentList", "name", "screens");
+        uint(bytes, "ArtboardComponentList", "parentId", 1);
+    });
+    bind(
+        &mut bytes,
+        property_key("ArtboardComponentList", "listSource"),
+        false,
+        [2, 0],
+    );
+    object(&mut bytes, "StateMachine", |bytes| {
+        string(bytes, "StateMachine", "name", "Host")
+    });
+    states(&mut bytes, "Rows", None);
+    bytes
+}
+
+/// The host side of a component list: LayerList's Host machine bound to its
+/// default Host instance, plus the row instances the host keeps alive.
+struct RowHost {
+    file: *mut NuxFile,
+    artboard: *mut NuxArtboardInstance,
+    root: *mut NuxViewModelInstance,
+    player: *mut NuxPlayer,
+    rows: Vec<*mut NuxViewModelInstance>,
+}
+
+impl RowHost {
+    fn new(bindings: RowBindings) -> Self {
+        let file = import_bytes(&component_list_rows_fixture(bindings));
+        let mut artboard = std::ptr::null_mut();
+        let mut root = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        let name = "LayerList";
+        let machine = "Host";
+        unsafe {
+            assert_eq!(
+                nux_artboard_instance_new_named(
+                    file,
+                    NuxStringView {
+                        data: name.as_ptr().cast(),
+                        len: name.len(),
+                    },
+                    &mut artboard,
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_view_model_instance_new_default(artboard, &mut root),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_bind_view_model(artboard, root),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_new_state_machine_named(
+                    artboard,
+                    NuxStringView {
+                        data: machine.as_ptr().cast(),
+                        len: machine.len(),
+                    },
+                    &mut player,
+                ),
+                NuxStatus::Ok
+            );
+        }
+        Self {
+            file,
+            artboard,
+            root,
+            player,
+            rows: Vec::new(),
+        }
+    }
+
+    /// A schema-default row instance (0 is RowA, 1 is RowB) the host retains.
+    fn row(&mut self, schema: usize) -> *mut NuxViewModelInstance {
+        let mut row = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new_schema_default(self.file, schema, &mut row) },
+            NuxStatus::Ok
+        );
+        self.rows.push(row);
+        row
+    }
+
+    fn mutate(&self, mutations: &[NuxViewModelMutation]) {
+        let batch = NuxViewModelMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+            assert_eq!(nux_view_model_mutation_result_free(result), NuxStatus::Ok);
+        }
+    }
+
+    fn insert(&self, row: *mut NuxViewModelInstance, index: usize) -> NuxViewModelMutation {
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: self.root,
+            path: NuxStringView {
+                data: b"screens".as_ptr().cast(),
+                len: 7,
+            },
+            related_instance: row,
+            index,
+            ..NuxViewModelMutation::default()
+        }
+    }
+
+    fn remove(&self, index: usize) -> NuxViewModelMutation {
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: self.root,
+            path: NuxStringView {
+                data: b"screens".as_ptr().cast(),
+                len: 7,
+            },
+            index,
+            ..NuxViewModelMutation::default()
+        }
+    }
+
+    /// One player step. Returns the published owner identities of its
+    /// view-model changes, or the failure diagnostic.
+    fn step(&self, elapsed_seconds: f32) -> Result<Vec<u64>, String> {
+        let operation = NuxPlayerStep {
+            elapsed_seconds,
+            ..NuxPlayerStep::default()
+        };
+        let mut result = std::ptr::null_mut();
+        let status = unsafe { nux_player_step(self.player, &operation, &mut result) };
+        let outcome = if status == NuxStatus::Ok {
+            let mut info = NuxPlayerStepInfo::default();
+            assert_eq!(
+                unsafe { nux_player_step_result_info(result, &mut info) },
+                NuxStatus::Ok
+            );
+            Ok((0..info.view_model_change_count)
+                .map(|index| {
+                    let mut change = NuxViewModelChangeView::default();
+                    assert_eq!(
+                        unsafe {
+                            nux_player_step_result_view_model_change(result, index, &mut change)
+                        },
+                        NuxStatus::Ok
+                    );
+                    change.owner_instance_id
+                })
+                .collect())
+        } else {
+            let mut diagnostic = NuxCapiDiagnosticView::default();
+            assert_eq!(
+                unsafe { nux_player_step_result_diagnostic(result, &mut diagnostic) },
+                NuxStatus::Ok
+            );
+            Err(format!(
+                "{status:?} {}: {}",
+                owned_string(diagnostic.code),
+                owned_string(diagnostic.message)
+            ))
+        };
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        outcome
+    }
+
+    fn identity(row: *mut NuxViewModelInstance) -> u64 {
+        let mut identity = 0;
+        assert_eq!(
+            unsafe { nux_view_model_instance_identity(row, &mut identity) },
+            NuxStatus::Ok
+        );
+        identity
+    }
+
+    fn value(row: *mut NuxViewModelInstance, name: &str) -> f32 {
+        let values = snapshot(row);
+        let value = number(values, name);
+        unsafe {
+            nux_view_model_snapshot_free(values);
+        }
+        value
+    }
+}
+
+impl Drop for RowHost {
+    fn drop(&mut self) {
+        unsafe {
+            assert_eq!(nux_player_free(self.player), NuxStatus::Ok);
+            for row in self.rows.drain(..) {
+                assert_eq!(nux_view_model_instance_free(row), NuxStatus::Ok);
+            }
+            assert_eq!(nux_view_model_instance_free(self.root), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(self.artboard), NuxStatus::Ok);
+            assert_eq!(nux_file_free(self.file), NuxStatus::Ok);
+        }
+    }
+}
+
+#[test]
+fn component_list_rows_fixture_matches_the_sdk_reproducers() {
+    use sha2::Digest;
+    for (bindings, sha256) in [
+        (
+            RowBindings::Quiet,
+            "6657faf26a8b00660369a0b76024c049b108cd77669340f0fb1e6e6cbdec3c45",
+        ),
+        (
+            RowBindings::Readback,
+            "03b471786f99cdf2a9aee4a5299f583a2c55a93aeb3b1253a4d97d8860863d05",
+        ),
+        (
+            RowBindings::Marker,
+            "fb04c982a210723a2db32d16a70ca2e1d1d24c5e885335450940f124262240db",
+        ),
+        (
+            RowBindings::Active,
+            "c899e71efb8a615f125e9bd1c34b27bdb00aba112be6e1202375e04034670570",
+        ),
+    ] {
+        let digest = sha2::Sha256::digest(component_list_rows_fixture(bindings));
+        let hex = digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(hex, sha256, "{bindings:?}");
+    }
+}
+
+#[test]
+fn timed_step_after_removing_a_component_list_row_keeps_the_player_working() {
+    for bindings in RowBindings::ALL {
+        for settle_first in [false, true] {
+            let mut host = RowHost::new(bindings);
+            let a = host.row(0);
+            let a_id = RowHost::identity(a);
+            host.mutate(&[host.insert(a, 0)]);
+            host.step(0.0).unwrap();
+            let mounted = host.step(0.25).unwrap();
+            assert_eq!(
+                mounted.contains(&a_id),
+                bindings.marker(),
+                "{bindings:?}: a mounted row's changes reach the host"
+            );
+            assert_eq!(RowHost::value(a, "probe"), bindings.probe_after(0.25));
+            host.mutate(&[host.remove(0)]);
+            if settle_first {
+                host.step(0.0)
+                    .unwrap_or_else(|error| panic!("{bindings:?} zero-time: {error}"));
+            }
+            let removed = host
+                .step(0.5)
+                .unwrap_or_else(|error| panic!("{bindings:?} settle={settle_first}: {error}"));
+            assert!(
+                !removed.contains(&a_id),
+                "{bindings:?}: a departed row's changes stay out of the host's subscription"
+            );
+            // A timed step advances the outgoing row once more as it detaches,
+            // and the retained instance keeps that final write. A zero-time
+            // step detaches it first.
+            let detached = bindings.probe_after(if settle_first { 0.25 } else { 0.75 });
+            assert_eq!(RowHost::value(a, "probe"), detached, "{bindings:?}");
+            assert_eq!(RowHost::value(a, "rowWidth"), bindings.mounted_width());
+            host.step(0.5)
+                .unwrap_or_else(|error| panic!("{bindings:?} after removal: {error}"));
+            assert_eq!(
+                RowHost::value(a, "probe"),
+                detached,
+                "{bindings:?}: a detached row no longer advances"
+            );
+        }
+    }
+}
+
+#[test]
+fn removing_one_component_list_row_keeps_the_other_row_advancing() {
+    for bindings in RowBindings::ALL {
+        let mut host = RowHost::new(bindings);
+        let a = host.row(0);
+        let b = host.row(1);
+        let (a_id, b_id) = (RowHost::identity(a), RowHost::identity(b));
+        host.mutate(&[host.insert(a, 0), host.insert(b, 1)]);
+        host.step(0.0).unwrap();
+        host.mutate(&[host.remove(0)]);
+        let removed = host
+            .step(0.5)
+            .unwrap_or_else(|error| panic!("{bindings:?}: {error}"));
+        assert!(!removed.contains(&a_id), "{bindings:?}");
+        assert_eq!(removed.contains(&b_id), bindings.marker(), "{bindings:?}");
+        assert_eq!(RowHost::value(a, "probe"), bindings.probe_after(0.5));
+        assert_eq!(RowHost::value(b, "probe"), bindings.probe_after(0.5));
+        let next = host
+            .step(0.5)
+            .unwrap_or_else(|error| panic!("{bindings:?} next: {error}"));
+        assert_eq!(next.contains(&b_id), bindings.marker(), "{bindings:?}");
+        assert_eq!(RowHost::value(a, "probe"), bindings.probe_after(0.5));
+        assert_eq!(RowHost::value(b, "probe"), bindings.probe_after(1.0));
+    }
+}
+
+#[test]
+fn a_removed_component_list_row_keeps_its_values_and_remounts_on_reinsert() {
+    for bindings in RowBindings::ALL {
+        let mut host = RowHost::new(bindings);
+        let a = host.row(0);
+        let a_id = RowHost::identity(a);
+        for cycle in 0..2 {
+            host.mutate(&[host.insert(a, 0)]);
+            host.step(0.0)
+                .unwrap_or_else(|error| panic!("{bindings:?} cycle {cycle} mount: {error}"));
+            let mounted = host
+                .step(0.5)
+                .unwrap_or_else(|error| panic!("{bindings:?} cycle {cycle} advance: {error}"));
+            assert_eq!(mounted.contains(&a_id), bindings.marker(), "{bindings:?}");
+            // Each mount starts a fresh row machine, so the marker restarts.
+            assert_eq!(RowHost::value(a, "probe"), bindings.probe_after(0.5));
+            host.mutate(&[host.remove(0)]);
+            host.step(0.5)
+                .unwrap_or_else(|error| panic!("{bindings:?} cycle {cycle} remove: {error}"));
+            host.step(0.5)
+                .unwrap_or_else(|error| panic!("{bindings:?} cycle {cycle} detached: {error}"));
+            assert_eq!(RowHost::value(a, "probe"), bindings.probe_after(1.0));
+            assert_eq!(RowHost::value(a, "rowWidth"), bindings.mounted_width());
+        }
+    }
+}
+
+#[test]
+fn component_list_rows_mounted_and_removed_in_one_operation_keep_the_player_working() {
+    for bindings in RowBindings::ALL {
+        // Inserted and removed before the player ever mounts the row.
+        for one_batch in [true, false] {
+            let mut host = RowHost::new(bindings);
+            let a = host.row(0);
+            host.step(0.0).unwrap();
+            if one_batch {
+                host.mutate(&[host.insert(a, 0), host.remove(0)]);
+            } else {
+                host.mutate(&[host.insert(a, 0)]);
+                host.mutate(&[host.remove(0)]);
+            }
+            host.step(0.5)
+                .unwrap_or_else(|error| panic!("{bindings:?} one_batch={one_batch}: {error}"));
+            assert_eq!(RowHost::value(a, "probe"), 0.0, "{bindings:?}");
+            assert_eq!(RowHost::value(a, "rowWidth"), 0.0, "{bindings:?}");
+            host.step(0.5).unwrap();
+        }
+        // One advance detaches the outgoing row and mounts the incoming one.
+        let mut host = RowHost::new(bindings);
+        let a = host.row(0);
+        let b = host.row(1);
+        let (a_id, b_id) = (RowHost::identity(a), RowHost::identity(b));
+        host.mutate(&[host.insert(a, 0)]);
+        host.step(0.0).unwrap();
+        host.step(0.25).unwrap();
+        host.mutate(&[host.remove(0), host.insert(b, 0)]);
+        let swapped = host
+            .step(0.5)
+            .unwrap_or_else(|error| panic!("{bindings:?} swap: {error}"));
+        assert!(!swapped.contains(&a_id), "{bindings:?}");
+        // The incoming row's mount-time readback publishes in the same step.
+        assert_eq!(swapped.contains(&b_id), bindings.readback(), "{bindings:?}");
+        assert_eq!(RowHost::value(a, "probe"), bindings.probe_after(0.75));
+        assert_eq!(RowHost::value(b, "rowWidth"), bindings.mounted_width());
+        let next = host
+            .step(0.5)
+            .unwrap_or_else(|error| panic!("{bindings:?} after swap: {error}"));
+        assert_eq!(next.contains(&b_id), bindings.marker(), "{bindings:?}");
+        assert_eq!(RowHost::value(b, "probe"), bindings.probe_after(0.5));
+    }
+}

@@ -4802,9 +4802,18 @@ fn player_step_body(
                 roots.extend(operation.retained_roots());
                 rule_reports = operation.reports().to_vec();
             }
-            match RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
-                &roots, capture,
-            ) {
+            // The advance can detach an occurrence after it wrote a bound
+            // value, as a removed component-list row does. Resolve against the
+            // frame's checkpointed owners as well as the live graph.
+            let Some(transaction) = view_model_transaction.as_ref() else {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    "runtime view-model change capture has no frame checkpoint",
+                );
+            };
+            match transaction.resolve_change_capture_with_owners(&roots, capture) {
                 Some(changes) => changes,
                 None => {
                     player.artboard.poisoned.set(true);

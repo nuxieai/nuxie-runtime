@@ -299,7 +299,12 @@ impl Drop for Transaction {
     }
 }
 pub struct RuntimeOwnedViewModelTransaction(Transaction);
-pub struct RuntimeOwnedViewModelGraphTransaction(Transaction);
+pub struct RuntimeOwnedViewModelGraphTransaction {
+    transaction: Transaction,
+    /// The owner of every cell checkpointed at `begin`: the frame's initial
+    /// change scope.
+    owners: Vec<RuntimeOwnedViewModelHandle>,
+}
 impl std::fmt::Debug for RuntimeOwnedViewModelTransaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RuntimeOwnedViewModelTransaction")
@@ -310,7 +315,8 @@ impl std::fmt::Debug for RuntimeOwnedViewModelTransaction {
 impl std::fmt::Debug for RuntimeOwnedViewModelGraphTransaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RuntimeOwnedViewModelGraphTransaction")
-            .field("undo_entries", &self.0.snapshots.len())
+            .field("undo_entries", &self.transaction.snapshots.len())
+            .field("owners", &self.owners.len())
             .finish()
     }
 }
@@ -584,6 +590,7 @@ impl RuntimeOwnedViewModelGraphTransaction {
         // while the frame settles. External observers remain commit-gated.
         let mut transaction = Transaction::begin(RuntimeTransactionKind::PlayerFrame)?;
         let mut visited = BTreeSet::new();
+        let mut checkpointed = Vec::new();
         for root in roots {
             let owners = root
                 .reachable_change_owner_snapshot()
@@ -594,6 +601,9 @@ impl RuntimeOwnedViewModelGraphTransaction {
                     .native_handle()
                     .with_downcast::<ViewModelInstance, _>(|owner| owner.property_values().to_vec())
                     .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
+                // A cell has one owner, so an owner whose cells are already
+                // checkpointed was reached through another root.
+                let mut owns_new_cells = false;
                 for property in properties {
                     if !visited.insert(property.identity_key()) {
                         continue;
@@ -605,14 +615,51 @@ impl RuntimeOwnedViewModelGraphTransaction {
                         Snapshot::capture(property)
                             .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?,
                     );
+                    owns_new_cells = true;
+                }
+                if owns_new_cells {
+                    checkpointed.push(owner);
                 }
             }
         }
-        Ok(Self(transaction))
+        Ok(Self {
+            transaction,
+            owners: checkpointed,
+        })
+    }
+    /// Resolve a change capture taken inside this frame against the frame's
+    /// whole change scope: every owner checkpointed at `begin` plus every
+    /// owner reachable from `roots` now. The frame can detach an occurrence
+    /// after it wrote a bound value (a component-list row removed during the
+    /// advance), and can mount one that writes before the frame ends. Both
+    /// writes are valid. A change outside both scopes, or an overflowed
+    /// capture, still fails.
+    pub fn resolve_change_capture_with_owners(
+        &self,
+        roots: &[RuntimeOwnedViewModelHandle],
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<(RuntimeOwnedViewModelHandle, RuntimeViewModelChange)>> {
+        RuntimeOwnedViewModelHandle::resolve_captured_changes(
+            &self.owners,
+            roots,
+            published_changes(capture)?,
+        )
     }
     pub fn commit(mut self) {
-        self.0.commit();
+        self.transaction.commit();
     }
+}
+fn published_changes(
+    capture: RuntimeViewModelChangeCapture,
+) -> Option<Vec<crate::view_model_cell::RuntimeViewModelCapturedChange>> {
+    Some(
+        capture
+            .finish()
+            .ok()?
+            .into_iter()
+            .filter(|change| change.publish)
+            .collect(),
+    )
 }
 pub(crate) fn capture_unchanged_native_write(property: &CoreHandle) {
     if !crate::view_model_cell::is_capturing_view_model_changes() {
@@ -713,49 +760,57 @@ impl RuntimeOwnedViewModelHandle {
         roots: &[Self],
         capture: RuntimeViewModelChangeCapture,
     ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
-        Self::resolve_captured_changes(
-            roots,
-            capture
-                .finish()
-                .ok()?
-                .into_iter()
-                .filter(|change| change.publish)
-                .collect(),
-        )
+        Self::resolve_captured_changes(&[], roots, published_changes(capture)?)
     }
 
     pub(super) fn resolve_change_snapshot(
         roots: &[Self],
         capture: &RuntimeViewModelChangeCapture,
     ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
-        Self::resolve_captured_changes(roots, capture.snapshot().ok()?)
+        Self::resolve_captured_changes(&[], roots, capture.snapshot().ok()?)
     }
 
+    /// Map each captured cell to its owner among every owner reachable from
+    /// `roots`, which also validates that graph. Cells left unowned by it are
+    /// looked up among the `checkpointed` owners. A cell has one owner, so the
+    /// two scopes never disagree.
     fn resolve_captured_changes(
+        checkpointed: &[Self],
         roots: &[Self],
         captured: Vec<crate::view_model_cell::RuntimeViewModelCapturedChange>,
     ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
-        let mut owners = BTreeMap::new();
+        type Owners = BTreeMap<usize, (RuntimeOwnedViewModelHandle, usize)>;
+        fn add_owner(owners: &mut Owners, owner: &RuntimeOwnedViewModelHandle) -> Option<()> {
+            let properties = owner
+                .native_handle()
+                .with_downcast::<ViewModelInstance, _>(|owner| owner.property_values().to_vec())?;
+            for property in properties {
+                let index = property.with(|property| {
+                    property
+                        .as_view_model_instance_value()
+                        .unwrap()
+                        .base
+                        .view_model_property_id()
+                })? as usize;
+                owners.insert(
+                    instance::identity(&property) as usize,
+                    (owner.clone(), index),
+                );
+            }
+            Some(())
+        }
+        let mut owners = Owners::new();
         for root in roots {
             for owner in root.reachable_change_owner_snapshot()? {
-                let properties = owner
-                    .native_handle()
-                    .with_downcast::<ViewModelInstance, _>(|owner| {
-                        owner.property_values().to_vec()
-                    })?;
-                for property in properties {
-                    let index = property.with(|property| {
-                        property
-                            .as_view_model_instance_value()
-                            .unwrap()
-                            .base
-                            .view_model_property_id()
-                    })? as usize;
-                    owners.insert(
-                        instance::identity(&property) as usize,
-                        (owner.clone(), index),
-                    );
-                }
+                add_owner(&mut owners, &owner)?;
+            }
+        }
+        if captured
+            .iter()
+            .any(|change| !owners.contains_key(&change.cell_identity))
+        {
+            for owner in checkpointed {
+                add_owner(&mut owners, owner)?;
             }
         }
         captured
@@ -774,3 +829,7 @@ impl RuntimeOwnedViewModelHandle {
             .collect()
     }
 }
+
+#[cfg(test)]
+#[path = "graph_transaction_tests.rs"]
+mod graph_transaction_tests;

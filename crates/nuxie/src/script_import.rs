@@ -66,6 +66,74 @@ pub fn import_scripted(
         capability.authorizes(bytes),
         "script execution capability does not match the exact artifact bytes"
     );
+    let ScriptExecutionCapability {
+        extension,
+        native_shader_code,
+        program_adapter,
+        ..
+    } = capability;
+    let authority = ScriptImportAuthority {
+        extension,
+        native_shader_code,
+        program_adapter,
+    };
+    import_admitted(
+        bytes,
+        factory,
+        loader,
+        import_limits,
+        authority,
+        execution_limits,
+        log_sink,
+    )
+}
+
+/// Import exact bytes the caller has authenticated, under `authority`.
+///
+/// The authority is bound to `bytes` by this call itself, so they are never
+/// hashed. A [`ScriptExecutionCapability`] minted only to be checked against
+/// the same bytes a moment later hashes them twice, once when minted and
+/// once when [`import_scripted`] checks it, which on a large artifact costs
+/// more than the import.
+///
+/// # Safety
+///
+/// The caller must have authenticated `bytes` according to its product trust
+/// policy, as for [`ScriptExecutionCapability::for_verified_artifact_unchecked`],
+/// and `authority` must carry only the intended host extension.
+#[cfg(feature = "scripting")]
+#[doc(hidden)]
+pub unsafe fn import_verified_scripted_unchecked(
+    bytes: &[u8],
+    factory: &mut dyn Factory,
+    loader: Option<FileAssetLoaderRef>,
+    import_limits: FileImportLimits,
+    authority: ScriptImportAuthority,
+    execution_limits: ScriptExecutionLimits,
+    log_sink: Option<nuxie_scripting::vm::ScriptingLogSink>,
+) -> Result<ScriptedFile> {
+    import_limits.validate_input(bytes)?;
+    import_admitted(
+        bytes,
+        factory,
+        loader,
+        import_limits,
+        authority,
+        execution_limits,
+        log_sink,
+    )
+}
+
+/// The import of bytes already admitted under `authority`.
+fn import_admitted(
+    bytes: &[u8],
+    factory: &mut dyn Factory,
+    loader: Option<FileAssetLoaderRef>,
+    import_limits: FileImportLimits,
+    authority: ScriptImportAuthority,
+    execution_limits: ScriptExecutionLimits,
+    log_sink: Option<nuxie_scripting::vm::ScriptingLogSink>,
+) -> Result<ScriptedFile> {
     execution_limits
         .validate()
         .context("invalid trusted script execution limits")?;
@@ -89,17 +157,19 @@ pub fn import_scripted(
         }
     }
     let cycle = ImportCycle(vm.clone());
-    let host = capability.extension.install(&vm)?;
+    let host = authority.extension.install(&vm)?;
     let installed = Rc::new(InstalledScripts {
         host,
         shader_authorities: RefCell::new(Vec::new()),
         vm,
-        program_adapter: capability.program_adapter.clone(),
+        program_adapter: authority.program_adapter.clone(),
     });
     let loader = FileAssetLoaderRef::new(Box::new(AdmittedCodeAssetLoader {
         next: loader,
         installed: installed.clone(),
-        native_shaders_are_authorized: capability.authorizes_native_shader_code(),
+        // Native code requires the stronger, compiler-provenance-bearing
+        // authority. Generic script authority is intentionally inert.
+        native_shaders_are_authorized: authority.native_shader_code,
     }));
     let runtime_vm = RuntimeScriptingVmHandle::new(Box::new(installed.clone()));
     let imported = crate::native_file::import(
@@ -584,6 +654,65 @@ enum ScriptExecutionBinding {
     },
 }
 
+/// What an import grants the scripts it admits: the host extension they are
+/// given, a product program family, and whether native shader code may run.
+/// Inert by itself: only the unsafe [`import_verified_scripted_unchecked`]
+/// admits bytes under it.
+#[cfg(feature = "scripting")]
+#[derive(Clone)]
+pub struct ScriptImportAuthority {
+    extension: Arc<dyn ScriptHostExtension>,
+    native_shader_code: bool,
+    program_adapter: Option<Arc<dyn nuxie_runtime::ScriptProgramAdapter>>,
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for ScriptImportAuthority {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ScriptImportAuthority")
+            .field("extension", &self.extension)
+            .field("native_shader_code", &self.native_shader_code)
+            .finish()
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptImportAuthority {
+    /// Scripts run with `extension` as their host, and no native shader code.
+    pub fn new(extension: Arc<dyn ScriptHostExtension>) -> Self {
+        Self {
+            extension,
+            native_shader_code: false,
+            program_adapter: None,
+        }
+    }
+
+    /// Attach a product-owned program family. Unclaimed assets still use the
+    /// ordinary Luau backend.
+    pub fn with_program_adapter(
+        mut self,
+        adapter: Arc<dyn nuxie_runtime::ScriptProgramAdapter>,
+    ) -> Self {
+        self.program_adapter = Some(adapter);
+        self
+    }
+
+    /// Native shader code runs too.
+    ///
+    /// # Safety
+    ///
+    /// As for [`ScriptExecutionCapability::for_verified_native_shader_artifact_unchecked`]:
+    /// every native shader payload in the bytes imported under this authority
+    /// was produced by the product's trusted compiler or exporter and is valid
+    /// for unsafe native passthrough.
+    #[doc(hidden)]
+    pub unsafe fn with_native_shader_code(mut self) -> Self {
+        self.native_shader_code = true;
+        self
+    }
+}
+
 /// Opaque authority to execute imported scripts with an injected host.
 ///
 /// Safe baseline APIs can consume but cannot mint this value. Product policy
@@ -683,12 +812,6 @@ impl ScriptExecutionCapability {
         } = self.binding;
         u64::try_from(artifact_bytes.len()) == Ok(artifact_size)
             && <[u8; 32]>::from(Sha256::digest(artifact_bytes)) == artifact_sha256
-    }
-
-    /// Native code requires the stronger, compiler-provenance-bearing exact
-    /// artifact constructor. Generic script authority is intentionally inert.
-    fn authorizes_native_shader_code(&self) -> bool {
-        self.native_shader_code
     }
 }
 

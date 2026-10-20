@@ -1090,6 +1090,22 @@ fn cpp_probe_matches_rust_validate_objects_null_slots_for_synthetic_when_availab
         push_object_with_properties(bytes, "Feather", |bytes| {
             push_uint_property(bytes, "Feather", "parentId", 1);
         });
+        // DrawTarget::validate (upstream 785bca185) and PaintImage::validate
+        // (upstream d97479357): one of each passes, one of each is dropped.
+        push_object_with_properties(bytes, "DrawRules", |bytes| {
+            push_uint_property(bytes, "DrawRules", "parentId", 0);
+        });
+        for drawable_id in [1, 99] {
+            push_object_with_properties(bytes, "DrawTarget", |bytes| {
+                push_uint_property(bytes, "DrawTarget", "parentId", 9);
+                push_uint_property(bytes, "DrawTarget", "drawableId", drawable_id);
+            });
+        }
+        for parent_id in [2, 1] {
+            push_object_with_properties(bytes, "PaintImage", |bytes| {
+                push_uint_property(bytes, "PaintImage", "parentId", parent_id);
+            });
+        }
     });
 
     let path = std::env::temp_dir().join(format!(
@@ -11883,6 +11899,58 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "removeDataBind(dataBind);",
         ],
         "DataBindContainer::updateDataBinds queue drain order changed; audit RuntimeFile::data_bind_container_update_effect",
+    );
+}
+
+/// Artboard::validateObjects drops any object whose `validate` fails, so each
+/// override is an import rule. Nothing tracked this surface before the
+/// DrawTarget (785bca185) and PaintImage (d97479357) overrides arrived.
+#[test]
+fn cpp_validate_overrides_are_tracked_by_binary_import_model() {
+    let src_dir = reference_runtime_dir().join("src");
+    if !src_dir.exists() {
+        eprintln!(
+            "skipping C++ validate override audit; reference src not found at {}; set RIVE_RUNTIME_DIR",
+            src_dir.display()
+        );
+        return;
+    }
+
+    let mut cpp_files = Vec::new();
+    collect_cpp_paths(&src_dir, &mut cpp_files);
+
+    let mut actual = BTreeSet::new();
+    for path in cpp_files {
+        let contents = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+        let compact = compact_cpp_source(&contents);
+        for rest in compact.split("bool").skip(1) {
+            let Some((class_name, _)) = rest.split_once("::validate(CoreContext*") else {
+                continue;
+            };
+            if is_cpp_identifier(class_name) {
+                actual.insert(class_name.to_owned());
+            }
+        }
+    }
+
+    let expected = [
+        "Component",
+        "DrawTarget",
+        "Feather",
+        "NestedAnimation",
+        "PaintImage",
+        "ScrollBarConstraint",
+        "TargetedConstraint",
+        "TextStyle",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        actual, expected,
+        "C++ validate(CoreContext*) override surface changed; audit cpp_artboard_local_slot_is_valid and the probe-backed validateObjects stream, then refresh this list"
     );
 }
 

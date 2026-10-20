@@ -11176,6 +11176,19 @@ fn cpp_artboard_local_slot_is_valid(
         return artboard_list_map_rule::on_added_dirty_parent_is_valid(object, slots, objects);
     }
 
+    // Upstream 785bca185: DrawTarget::validate requires its drawableId to
+    // resolve to a Drawable, as Artboard::initialize dereferences it.
+    if definition.name == "DrawTarget" {
+        return local_object_reference(slots, objects, object.uint_property("drawableId"))
+            .is_some_and(runtime_object_is_cpp_drawable);
+    }
+
+    // Upstream d97479357: PaintImage::validate requires a ShapePaint parent.
+    if definition.name == "PaintImage" {
+        return local_object_reference(slots, objects, object.uint_property("parentId"))
+            .is_some_and(runtime_object_is_cpp_shape_paint);
+    }
+
     true
 }
 
@@ -11295,6 +11308,10 @@ fn runtime_object_is_cpp_nested_artboard(object: &RuntimeObject) -> bool {
 fn runtime_object_is_cpp_effects_container(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| definition.is_a("ShapePaint") || definition.name == "GroupEffect")
+}
+
+fn runtime_object_is_cpp_drawable(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("Drawable"))
 }
 
 fn runtime_object_is_cpp_shape_paint(object: &RuntimeObject) -> bool {

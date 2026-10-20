@@ -8816,6 +8816,9 @@ fn cpp_data_converter_direct_output_type(
         "DataConverterStringPad" => RuntimeDataType::String,
         "DataConverterStringRemoveZeros" => RuntimeDataType::String,
         "DataConverterStringTrim" => RuntimeDataType::String,
+        // Upstream c63a5ba04. Its convert stays unmodelled here; see
+        // UNIV-5176.
+        "DataConverterStringTemplate" => RuntimeDataType::String,
         "ScriptedDataConverter" => RuntimeDataType::Any,
         "DataConverterToNumber" => data_converter_to_number_output_type(),
         "DataConverterToString" => RuntimeDataType::String,
@@ -10207,9 +10210,12 @@ fn cpp_data_bind_artboard_owner(
         return None;
     };
 
+    // Upstream c63a5ba04: a StringTemplateArgument target owns its binds,
+    // like a converter or a formula token.
     if data_bind_target_is_cpp_state_machine_owned(Some(target.object))
         || definition.is_a("DataConverter")
         || definition.is_a("FormulaToken")
+        || definition.is_a("StringTemplateArgument")
         || definition.name.starts_with("ScriptInput")
     {
         return None;

@@ -33,6 +33,20 @@ pub(super) fn imports_successfully(
 pub(super) fn update_context(definition: &'static Definition, context: &mut ImportContext) {
     if definition.name == "Backboard" {
         context.make_latest(ImportStackKey::Backboard);
+        // A fresh BackboardImporter has no converters yet.
+        context.last_data_converter = None;
+    }
+}
+
+/// Pinned `BackboardImporter::addDataConverter`, which `DataConverter::import`
+/// calls once a BackboardImporter exists; `lastDataConverter()` reads the
+/// latest entry (upstream c63a5ba04).
+pub(super) fn dispatch_add_data_converter(
+    definition: &'static Definition,
+    context: &mut ImportContext,
+) {
+    if definition.is_a("DataConverter") {
+        context.last_data_converter = Some(definition.name);
     }
 }
 

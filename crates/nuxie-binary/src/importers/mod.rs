@@ -7,6 +7,9 @@ pub(crate) struct ImportContext {
     pub(crate) state_machine_inputs: Vec<Option<StateMachineInputKind>>,
     pub(crate) artboard_local_nested_inputs: Vec<Option<StateMachineInputKind>>,
     pub(crate) scripted_input_parent_id: Option<u64>,
+    /// Type of `BackboardImporter::lastDataConverter()`: the latest converter
+    /// the current BackboardImporter imported.
+    pub(crate) last_data_converter: Option<&'static str>,
 }
 
 #[derive(Default)]
@@ -131,6 +134,7 @@ mod state_machine_layer_component_importer;
 mod state_machine_layer_importer;
 mod state_machine_listener_importer;
 mod state_transition_importer;
+mod string_template_argument;
 pub(crate) mod text_asset_importer;
 pub(super) mod transition_viewmodel_condition_importer;
 mod viewmodel_importer;
@@ -442,6 +446,10 @@ fn object_imports_successfully(
         return decision;
     }
 
+    if let Some(decision) = string_template_argument::imports_successfully(definition, context) {
+        return decision;
+    }
+
     if definition.is_a("DataBind") || definition.is_a("DataConverter") {
         return backboard_importer::imports_successfully(object, definition, context)
             .expect("Backboard owns data-bind and converter objects");
@@ -471,6 +479,7 @@ pub(crate) fn update_import_context(
     context: &mut ImportContext,
     script_assets_create_importers: bool,
 ) {
+    backboard_importer::dispatch_add_data_converter(definition, context);
     match definition.name {
         "Backboard" => backboard_importer::update_context(definition, context),
         "KeyedProperty" => keyed_property_importer::update_context(definition, context),

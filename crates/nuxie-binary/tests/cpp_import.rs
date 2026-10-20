@@ -2761,6 +2761,8 @@ fn cpp_probe_matches_rust_data_converter_output_types_when_available() {
         ("DataConverterToNumber", RuntimeDataType::Number),
         ("DataConverterTrigger", RuntimeDataType::Trigger),
         ("ScriptedDataConverter", RuntimeDataType::Any),
+        // Upstream c63a5ba04.
+        ("DataConverterStringTemplate", RuntimeDataType::String),
     ];
     let group_last_string_index = direct_converters.len();
     let group_all_input_index = group_last_string_index + 1;

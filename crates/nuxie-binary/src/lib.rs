@@ -1298,12 +1298,10 @@ impl RuntimeFile {
         has_formula_source: bool,
     ) -> Option<RuntimeDataConverterUnbindEffect> {
         self.validate_data_converter(data_converter)?;
+        // Every DataConverter::unbind reaches the base unbindDataBinds; the
+        // Group and Formula overrides call it last since upstream 6951a4b3d.
         let owned_data_bind_unbind_effect =
-            if cpp_data_converter_unbinds_owned_data_binds(data_converter) {
-                Some(self.data_bind_container_unbind_effect(owned_data_bind_ids)?)
-            } else {
-                None
-            };
+            Some(self.data_bind_container_unbind_effect(owned_data_bind_ids)?);
 
         Some(cpp_data_converter_unbind_effect(
             data_converter,
@@ -8578,13 +8576,6 @@ fn cpp_data_converter_reset_effect(
         clears_interpolator_smoothing_animation: resets_interpolator,
         clears_interpolator_initialized: resets_interpolator,
     }
-}
-
-fn cpp_data_converter_unbinds_owned_data_binds(data_converter: &RuntimeObject) -> bool {
-    !matches!(
-        data_converter.type_name,
-        "DataConverterGroup" | "DataConverterFormula"
-    )
 }
 
 fn cpp_data_converter_updates_owned_data_binds(data_converter: &RuntimeObject) -> bool {

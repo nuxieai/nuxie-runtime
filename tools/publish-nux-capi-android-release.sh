@@ -7,7 +7,7 @@ expected_tag="$(python3 "${script_dir}/android_runtime_contract.py" release-tag)
 
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
-        '1. require clean source commit equal to origin/main' \
+        '1. require clean source commit landed on origin/main' \
         "2. require local and remote ${expected_tag} tags at that source commit" \
         '3. verify ABI4, ELF, provenance, checksums, and size evidence' \
         '4. create a GitHub draft with the immutable archive and three evidence assets' \
@@ -46,8 +46,9 @@ if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" ]];
     exit 4
 fi
 git -C "${repo_root}" fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
-if [[ "${source_revision}" != "$(git -C "${repo_root}" rev-parse refs/remotes/origin/main)" ]]; then
-    echo "release source must be exactly origin/main" >&2
+main_revision="$(git -C "${repo_root}" rev-parse refs/remotes/origin/main)"
+if ! git -C "${repo_root}" merge-base --is-ancestor "${source_revision}" "${main_revision}"; then
+    echo "release source must have landed on origin/main" >&2
     exit 4
 fi
 tagged_revision="$(git -C "${repo_root}" rev-list -n 1 "refs/tags/${release_tag}")"

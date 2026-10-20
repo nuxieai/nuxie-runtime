@@ -29,7 +29,11 @@ fi
 tagged_revision="$(git -C "${repo_root}" rev-list -n 1 "refs/tags/${release_tag}")"
 test "${tagged_revision}" = "${source_revision}"
 git -C "${repo_root}" fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
-test "${source_revision}" = "$(git -C "${repo_root}" rev-parse refs/remotes/origin/main)"
+main_revision="$(git -C "${repo_root}" rev-parse refs/remotes/origin/main)"
+if ! git -C "${repo_root}" merge-base --is-ancestor "${source_revision}" "${main_revision}"; then
+    echo "release source must have landed on origin/main" >&2
+    exit 4
+fi
 remote_tag_records="$(git -C "${repo_root}" ls-remote --exit-code origin \
     "refs/tags/${release_tag}" "refs/tags/${release_tag}^{}")"
 remote_tag_revision="$(awk '$2 ~ /\^\{\}$/ { print $1 }' <<< "${remote_tag_records}")"

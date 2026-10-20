@@ -9002,3 +9002,151 @@ fn artboard_slots_drop_draw_targets_and_paint_images_that_fail_cpp_validate() {
          a PaintImage stays under the Fill and is dropped under the Shape"
     );
 }
+
+/// A PaintImage is an artboard referencer whose nesting artboard is its own
+/// (upstream fa2cd6e38), so BackboardImporter's nested artboard cycle cut sees
+/// its edge. Here A nests B, B nests C and C paints B: the B and C references
+/// close a cycle and stay unresolved. A PaintImage dropped by validateObjects
+/// never reaches onAddedDirty, has no nesting artboard and adds no edge. The
+/// NestedArtboard results were checked against the C++ probe at 5551696a on
+/// these bytes.
+#[test]
+fn paint_image_artboard_references_join_the_cpp_nested_artboard_cycle_cut() {
+    let file = read_runtime_file(&synthetic_runtime_file(4371, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "NestedArtboard", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "NestedArtboard", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 2);
+        });
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Fill", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "PaintImage", |bytes| {
+            push_uint_property(bytes, "PaintImage", "parentId", 2);
+            push_uint_property(bytes, "PaintImage", "artboardId", 1);
+        });
+    }))
+    .expect("cycle stream imports");
+
+    assert_eq!(
+        file.resolved_artboard_for_referencer(2)
+            .map(|artboard| artboard.id),
+        Some(3),
+        "A's NestedArtboard is outside the cycle and resolves to B"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(4)
+            .map(|artboard| artboard.id),
+        None,
+        "B's NestedArtboard closes the cycle C's PaintImage opens"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(8)
+            .map(|artboard| artboard.id),
+        None,
+        "C's PaintImage closes the same cycle"
+    );
+
+    let file = read_runtime_file(&synthetic_runtime_file(4372, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "NestedArtboard", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Fill", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "PaintImage", |bytes| {
+            push_uint_property(bytes, "PaintImage", "parentId", 1);
+            push_uint_property(bytes, "PaintImage", "artboardId", 0);
+        });
+    }))
+    .expect("invalid paint stream imports");
+
+    assert_eq!(
+        artboard_slot_type_names(&file, 1),
+        vec![Some("Artboard"), Some("Shape"), Some("Fill"), None],
+        "the PaintImage under a Shape fails validate"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(2)
+            .map(|artboard| artboard.id),
+        Some(3),
+        "the invalid PaintImage adds no edge, so A's NestedArtboard still resolves to B"
+    );
+}
+
+/// PaintImage resolves its artboard and its image like the other referencers:
+/// `BackboardImporter::resolve` assigns `artboardId` through the artboard
+/// lookup and `imageAssetId` through the file assets, and
+/// `PaintImage::setAsset` keeps only an ImageAsset (upstream d97479357 and
+/// fa2cd6e38).
+#[test]
+fn paint_images_resolve_their_artboard_and_image_asset_like_cpp() {
+    let file = read_runtime_file(&synthetic_runtime_file(4373, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "ImageAsset");
+        push_empty_object(bytes, "FontAsset");
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Fill", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "PaintImage", |bytes| {
+            push_uint_property(bytes, "PaintImage", "parentId", 2);
+            push_uint_property(bytes, "PaintImage", "artboardId", 1);
+            push_uint_property(bytes, "PaintImage", "imageAssetId", 0);
+        });
+        push_object_with_properties(bytes, "PaintImage", |bytes| {
+            push_uint_property(bytes, "PaintImage", "parentId", 2);
+            push_uint_property(bytes, "PaintImage", "imageAssetId", 1);
+        });
+        push_empty_object(bytes, "Artboard");
+    }))
+    .expect("paint image stream imports");
+
+    assert_eq!(
+        file.import_statuses,
+        vec![RuntimeImportStatus::Imported; 9],
+        "every object imports"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(6)
+            .map(|artboard| artboard.id),
+        Some(8),
+        "artboardId 1 names the second Artboard"
+    );
+    assert_eq!(
+        file.resolved_file_asset_for_object(6).map(|asset| asset.id),
+        Some(1),
+        "imageAssetId 0 names the ImageAsset"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(7)
+            .map(|artboard| artboard.id),
+        None,
+        "a PaintImage without an artboardId references no artboard"
+    );
+    assert_eq!(
+        file.resolved_file_asset_for_object(7).map(|asset| asset.id),
+        None,
+        "setAsset ignores a FontAsset"
+    );
+}

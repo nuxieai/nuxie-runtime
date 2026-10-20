@@ -9984,6 +9984,9 @@ fn cpp_custom_import_methods_are_tracked_by_binary_import_model() {
         "ListenerInputType",
         "ListenerViewModelChange",
         "NestedArtboard",
+        // Upstream d97479357 and fa2cd6e38: best-effort asset and artboard
+        // referencer, ported in nuxie-binary.
+        "PaintImage",
         "ScriptInputArtboard",
         "ScriptInputBoolean",
         "ScriptInputColor",
@@ -10008,6 +10011,12 @@ fn cpp_custom_import_methods_are_tracked_by_binary_import_model() {
         "StateMachineListener",
         "StateMachineListenerSingle",
         "StateTransition",
+        // Upstream c63a5ba04, ported in importers/string_template_argument.rs.
+        "StringTemplateArgument",
+        // Upstream 4ca3b88a3 and 45d4d01df: Text::import only sets file
+        // features from the version and returns its Super import, so the
+        // import outcome is unchanged; nuxie-runtime owns the features.
+        "Text",
         "TextStyle",
         "TransitionComparator",
         "TransitionCondition",
@@ -12053,6 +12062,8 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "CubicInterpolator::onAddedDirty",
         "CubicInterpolatorComponent::onAddedDirty",
         "CubicValueInterpolator::onAddedDirty",
+        // Upstream df0cc777d: tags a Drawable; no import effect.
+        "CustomProperty::onAddedClean",
         "Dash::onAddedClean",
         "DashPath::onAddedClean",
         "DataBind::onAddedDirty",
@@ -12074,6 +12085,10 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "KeyedObject::onAddedDirty",
         "KeyedProperty::onAddedClean",
         "KeyedProperty::onAddedDirty",
+        // Upstream 8398db319: a mask resolves its source Node and registers
+        // its drawables; a missing source is MissingObject, never fatal.
+        "LayerMask::onAddedClean",
+        "LayerMask::onAddedDirty",
         "LayerState::onAddedClean",
         "LayerState::onAddedDirty",
         "LayoutComponent::onAddedClean",
@@ -12091,6 +12106,8 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "NestedAnimation::onAddedDirty",
         "NestedArtboard::onAddedClean",
         "NestedArtboardLayout::onAddedClean",
+        // Upstream fa2cd6e38: instances an artboard paint source; always Ok.
+        "PaintImage::onAddedClean",
         "Path::onAddedClean",
         "PathVertex::onAddedDirty",
         "RootBone::onAddedClean",
@@ -12104,6 +12121,8 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "ScriptedDrawable::onAddedDirty",
         "ScriptedPathEffect::onAddedClean",
         "ScriptedPathEffect::onAddedDirty",
+        // Upstream d97479357: picks the current child; returns its Super.
+        "ScriptedTransition::onAddedClean",
         "ScrollBarConstraint::onAddedDirty",
         "ScrollConstraint::onAddedDirty",
         "Shape::onAddedClean",

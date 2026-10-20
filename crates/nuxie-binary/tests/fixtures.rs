@@ -79,10 +79,20 @@ fn truncated_file_import_never_crashes_and_the_full_file_still_imports() {
     assert!(file.default_artboard().is_some());
 }
 
+/// `value` (under 128) as eleven LEB128 bytes, one more than a 64-bit value
+/// can need.
 fn push_overwide_noncanonical_var_uint(bytes: &mut Vec<u8>, value: u8) {
     bytes.push(value | 0x80);
     bytes.extend_from_slice(&[0x80; 9]);
     bytes.push(0);
+}
+
+/// `value` (under 128) as ten LEB128 bytes, the most a 64-bit value can
+/// take, its tenth group `last` (0 or 1 fit bit 63; more overflows).
+fn push_ten_byte_var_uint(bytes: &mut Vec<u8>, value: u8, last: u8) {
+    bytes.push(value | 0x80);
+    bytes.extend_from_slice(&[0x80; 8]);
+    bytes.push(last);
 }
 
 fn push_empty_object(bytes: &mut Vec<u8>, type_name: &str) {
@@ -1943,31 +1953,51 @@ fn truncated_varuints_are_malformed_like_cpp_runtime() {
     );
 }
 
+/// C++ rejects a LEB128 value longer than ten bytes, or whose tenth group
+/// carries bits past bit 63, since upstream 6cd5d108f hardened
+/// decode_uint_leb; ten noncanonical bytes still decode.
 #[test]
-fn overwide_noncanonical_varuints_decode_like_cpp_runtime() {
+fn overwide_varuints_are_malformed_like_cpp_runtime() {
     let mut overwide_header = Vec::new();
     overwide_header.extend_from_slice(b"RIVE");
     push_overwide_noncanonical_var_uint(&mut overwide_header, 7);
     push_var_uint(&mut overwide_header, 0);
     push_var_uint(&mut overwide_header, 0);
     push_overwide_noncanonical_var_uint(&mut overwide_header, 0);
+    assert!(
+        read_runtime_file(&overwide_header).is_err(),
+        "C++ reports a bad header for an eleven-byte major version"
+    );
 
-    let header =
-        read_runtime_file(&overwide_header).expect("C++ accepts overwide LEB128 header values");
-    assert_eq!(header.header.major_version, 7);
-
-    let file = read_runtime_file(&synthetic_runtime_file(4280, |bytes| {
-        push_overwide_noncanonical_var_uint(bytes, 2);
-        push_overwide_noncanonical_var_uint(bytes, 4);
-        push_overwide_noncanonical_var_uint(bytes, 2);
-        bytes.extend_from_slice(b"ok");
-        push_overwide_noncanonical_var_uint(bytes, 0);
-    }))
-    .expect("C++ accepts overwide LEB128 object-stream values");
-
+    let node_named = |push: fn(&mut Vec<u8>, u8)| {
+        read_runtime_file(&synthetic_runtime_file(4280, |bytes| {
+            push(bytes, 2);
+            push(bytes, 4);
+            push(bytes, 2);
+            bytes.extend_from_slice(b"ok");
+            push(bytes, 0);
+        }))
+    };
+    assert!(
+        node_named(push_overwide_noncanonical_var_uint).is_err(),
+        "C++ fails an object stream with eleven-byte values"
+    );
+    assert!(
+        node_named(|bytes, value| push_ten_byte_var_uint(bytes, value, 2)).is_err(),
+        "C++ fails a tenth group with bits past bit 63"
+    );
+    let file = node_named(|bytes, value| push_ten_byte_var_uint(bytes, value, 0))
+        .expect("C++ accepts ten-byte noncanonical values");
     let node = file.object(0).expect("Node object");
     assert_eq!(node.type_name, "Node");
     assert_eq!(node.string_property("name"), Some("ok"));
+    assert_eq!(
+        file.import_status(0),
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject
+        }),
+        "decoded, then dropped without an artboard, as C++ fails to import it"
+    );
 }
 
 #[test]
@@ -2393,10 +2423,10 @@ fn runtime_artboard_referencers_resolve_cpp_backboard_artboard_ids() {
         Some("First"),
         "C++ BackboardImporter resolves NestedArtboard.artboardId through File::artboard(index), not file object id"
     );
-    assert_eq!(
-        file.resolved_artboard_for_referencer(5)
-            .and_then(|artboard| artboard.string_property("name")),
-        Some("Second")
+    assert!(
+        file.resolved_artboard_for_referencer(5).is_none(),
+        "a NestedArtboardLeaf in Second that references Second closes a cycle, which C++ \
+         BackboardImporter leaves unresolved (upstream 6cd5d108f, closesNestedArtboardCycle)"
     );
     assert!(
         file.resolved_artboard_for_referencer(6).is_none(),
@@ -6151,11 +6181,16 @@ fn runtime_data_bind_path_referencers_follow_cpp_claiming() {
         "claimed path takes precedence over inline dataBindPathIds like C++ importDataBindPath"
     );
 
-    let script_input_claim = file
-        .data_bind_path_for_referencer(15)
-        .expect("ScriptInputViewModelProperty claims latest DataBindPath");
-    assert_eq!(script_input_claim.object.map(|object| object.id), Some(13));
-    assert_eq!(script_input_claim.path_ids, vec![8]);
+    // A ScriptedDrawable's inputs name its artboard slot (2) as their
+    // parent (upstream 439ffe0c1). This one names 0, so C++ drops it, after
+    // its importDataBindPath has claimed DataBindPath 13.
+    assert_eq!(
+        file.import_status(15),
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject
+        })
+    );
+    assert!(file.data_bind_path_for_referencer(15).is_none());
 
     let fire_trigger_claim = file
         .data_bind_path_for_referencer(21)
@@ -7002,8 +7037,11 @@ fn manifest_asset_contents_decode_names_and_paths_like_cpp_runtime() {
     assert_eq!(manifest.resolve_path(404), Some(&[][..]));
 }
 
+/// C++ ManifestAsset::decodePaths stops at the first truncated path id and
+/// stores no part of that path (upstream 6cd5d108f); the names decoded
+/// before it stay.
 #[test]
-fn malformed_manifest_asset_contents_keep_cpp_partial_decode_state() {
+fn malformed_manifest_asset_contents_drop_the_truncated_path_like_cpp() {
     fn push_manifest_string(bytes: &mut Vec<u8>, value: &[u8]) {
         push_var_uint(bytes, value.len() as u64);
         bytes.extend_from_slice(value);
@@ -7043,7 +7081,8 @@ fn malformed_manifest_asset_contents_keep_cpp_partial_decode_state() {
         .manifest()
         .expect("C++ keeps the manifest resolver after decode failure");
     assert_eq!(manifest.resolve_name(7), Some("position"));
-    assert_eq!(manifest.resolve_path(3), Some(&[7, 0][..]));
+    assert!(!manifest.paths.contains_key(&3));
+    assert_eq!(manifest.resolve_path(3), Some(&[][..]));
 }
 
 #[test]
@@ -7244,11 +7283,93 @@ fn runtime_import_status_tracks_scripted_object_input_contexts() {
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
-            RuntimeImportStatus::Imported,
-            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Dropped {
+                reason: RuntimeImportDropReason::MissingObject
+            },
+            RuntimeImportStatus::Dropped {
+                reason: RuntimeImportDropReason::MissingObject
+            },
         ],
-        "script inputs require the latest C++ ScriptedObjectImporter; ScriptInputArtboard also requires the backboard importer"
+        "script inputs require the latest C++ ScriptedObjectImporter, and a Component owner's \
+         inputs name its artboard slot as their parent (upstream 439ffe0c1): these name 0"
     );
+}
+
+/// A ScriptedDrawable's inputs import when they name its artboard slot as
+/// their parent (upstream 439ffe0c1), and a ScriptInputArtboard also needs
+/// the backboard importer.
+#[test]
+fn runtime_import_status_imports_script_inputs_that_name_their_owner_slot() {
+    let file = read_runtime_file(&synthetic_runtime_file(4305, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_empty_object(bytes, "ScriptedDrawable");
+        push_object_with_properties(bytes, "ScriptInputNumber", |bytes| {
+            push_uint_property(bytes, "ScriptInputNumber", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "ScriptInputArtboard", |bytes| {
+            push_uint_property(bytes, "ScriptInputArtboard", "parentId", 1);
+            push_uint_property(bytes, "ScriptInputArtboard", "artboardId", 0);
+        });
+    }))
+    .expect("scripted-object input stream decodes");
+
+    assert_eq!(
+        file.import_statuses,
+        vec![RuntimeImportStatus::Imported; 5],
+        "inputs naming the ScriptedDrawable's slot (1) import"
+    );
+}
+
+/// A ScriptInputViewModelProperty claims the latest DataBindPath before it
+/// checks its owner, as C++ importDataBindPath runs first: one that names the
+/// wrong parent is dropped but still consumes the path, and one that names
+/// its ScriptedDrawable's slot imports with the next path it claims
+/// (upstream 439ffe0c1).
+#[test]
+fn runtime_script_input_view_model_property_claims_before_its_owner_check() {
+    let mut first_path = Vec::new();
+    push_var_uint(&mut first_path, 8);
+    let mut second_path = Vec::new();
+    push_var_uint(&mut second_path, 9);
+    let file = read_runtime_file(&synthetic_runtime_file(4363, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_empty_object(bytes, "ScriptedDrawable");
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &first_path);
+        });
+        push_empty_object(bytes, "ScriptInputViewModelProperty");
+        push_object_with_properties(bytes, "ScriptInputViewModelProperty", |bytes| {
+            push_uint_property(bytes, "ScriptInputViewModelProperty", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &second_path);
+        });
+        push_object_with_properties(bytes, "ScriptInputViewModelProperty", |bytes| {
+            push_uint_property(bytes, "ScriptInputViewModelProperty", "parentId", 1);
+        });
+    }))
+    .expect("script input claimer stream imports");
+
+    assert_eq!(
+        file.import_status(4),
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject
+        }),
+        "an input naming parent 0 is not its ScriptedDrawable's"
+    );
+    assert_eq!(file.import_status(5), Some(RuntimeImportStatus::Imported));
+    assert!(
+        file.data_bind_path_for_referencer(5).is_none(),
+        "the dropped input consumed DataBindPath 3"
+    );
+    assert_eq!(file.import_status(7), Some(RuntimeImportStatus::Imported));
+    let claim = file
+        .data_bind_path_for_referencer(7)
+        .expect("the input claims DataBindPath 6");
+    assert_eq!(claim.object.map(|object| object.id), Some(6));
+    assert_eq!(claim.path_ids, vec![9]);
 }
 
 #[test]

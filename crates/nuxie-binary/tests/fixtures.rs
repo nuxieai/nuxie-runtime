@@ -9150,3 +9150,122 @@ fn paint_images_resolve_their_artboard_and_image_asset_like_cpp() {
         "setAsset ignores a FontAsset"
     );
 }
+
+/// StringTemplateArgument::import requires the BackboardImporter's last
+/// imported converter to be a DataConverterStringTemplate (upstream
+/// c63a5ba04). A new Backboard starts an importer with no converters. Checked
+/// against the C++ probe at 5551696a on these bytes.
+#[test]
+fn string_template_arguments_import_only_after_their_template_like_cpp() {
+    let after_template = read_runtime_file(&synthetic_runtime_file(4374, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "DataConverterStringTemplate");
+        push_object_with_properties(bytes, "StringTemplateArgumentString", |bytes| {
+            push_string_property(bytes, "StringTemplateArgumentString", "name", "a");
+        });
+        push_empty_object(bytes, "DataBind");
+        push_object_with_properties(bytes, "StringTemplateArgumentNumber", |bytes| {
+            push_string_property(bytes, "StringTemplateArgumentNumber", "name", "b");
+        });
+    }))
+    .expect("template stream imports");
+    assert_eq!(
+        after_template.import_statuses,
+        vec![RuntimeImportStatus::Imported; 5],
+        "arguments, and a bind between them, follow their template"
+    );
+
+    let missing = RuntimeImportStatus::Dropped {
+        reason: RuntimeImportDropReason::MissingObject,
+    };
+    let after_other_converter = read_runtime_file(&synthetic_runtime_file(4375, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "DataConverterStringTemplate");
+        push_empty_object(bytes, "DataConverterToString");
+        push_empty_object(bytes, "StringTemplateArgumentNumber");
+        push_empty_object(bytes, "StringTemplateArgumentString");
+    }))
+    .expect("other converter stream imports");
+    assert_eq!(
+        after_other_converter.import_statuses,
+        vec![
+            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Imported,
+            missing,
+            missing,
+        ],
+        "the last converter is a DataConverterToString"
+    );
+
+    let without_converter = read_runtime_file(&synthetic_runtime_file(4376, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "StringTemplateArgumentString");
+    }))
+    .expect("converterless stream imports");
+    assert_eq!(
+        without_converter.import_status(1),
+        Some(missing),
+        "no converter has been imported"
+    );
+
+    let after_new_backboard = read_runtime_file(&synthetic_runtime_file(4377, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "DataConverterStringTemplate");
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "StringTemplateArgumentString");
+    }))
+    .expect("second backboard stream imports");
+    assert_eq!(
+        after_new_backboard.import_status(3),
+        Some(missing),
+        "the second Backboard's importer has no converters"
+    );
+}
+
+/// DataBind::import gives a bind whose target is a StringTemplateArgument to
+/// that argument, not to the artboard (upstream c63a5ba04), as it does for a
+/// converter target. Checked against the C++ probe at 5551696a on these bytes:
+/// the artboard holds only the Shape's bind.
+#[test]
+fn string_template_argument_binds_belong_to_the_argument_like_cpp() {
+    let file = read_runtime_file(&synthetic_runtime_file(4378, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_empty_object(bytes, "DataBind");
+        push_empty_object(bytes, "DataConverterStringTemplate");
+        push_object_with_properties(bytes, "StringTemplateArgumentString", |bytes| {
+            push_string_property(bytes, "StringTemplateArgumentString", "name", "a");
+        });
+        push_empty_object(bytes, "DataBind");
+        push_empty_object(bytes, "DataConverterToString");
+        push_empty_object(bytes, "DataBind");
+    }))
+    .expect("argument bind stream imports");
+
+    let binds = file.artboard_data_binds(0);
+    assert_eq!(
+        binds.iter().map(|bind| bind.object.id).collect::<Vec<_>>(),
+        vec![3],
+        "only the Shape's bind belongs to the artboard"
+    );
+}
+
+/// DataConverterStringTemplate::outputType is string (upstream c63a5ba04).
+/// The C++ probe at 5551696a reports the same for a bind using it.
+#[test]
+fn data_converter_string_template_outputs_string_like_cpp() {
+    let file = read_runtime_file(&synthetic_runtime_file(4379, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "DataConverterStringTemplate");
+    }))
+    .expect("template stream imports");
+
+    assert_eq!(
+        file.data_converter_output_type(0),
+        Some(RuntimeDataType::String)
+    );
+}

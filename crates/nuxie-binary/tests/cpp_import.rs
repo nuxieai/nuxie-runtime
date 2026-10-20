@@ -12883,26 +12883,59 @@ fn cpp_file_read_loop_matches_import_stack_model() {
     let source = std::fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
     let compact = compact_cpp_source(&source);
-    let body = compact_cpp_function_body(
+    // Upstream 1e979c628 moves the object loop into File::readObjects, which
+    // File::read runs over the whole file. The capturedArtboard re-import of
+    // one artboard is a WITH_RIVE_TOOLS path the import model does not take.
+    let read = compact_cpp_function_body(
         &compact,
         "File::read(BinaryReader&reader,constRuntimeHeader&header)",
     )
     .unwrap_or_else(|| panic!("missing File::read in {}", path.display()));
+    assert_compact_contains_in_order(
+        &read,
+        &[
+            "ImportStackimportStack;",
+            "importStack.version(header.majorVersion(),header.minorVersion());",
+            "autoresult=readObjects(reader,header,importStack,nullptr);",
+            "if(result!=ImportResult::success){returnresult;}",
+            "registerScripts();",
+            "returnresult;",
+        ],
+        "File::read changed; audit Rust import-status and file-collection modeling",
+    );
+
+    let body = compact_cpp_function_body(
+        &compact,
+        "File::readObjects(BinaryReader&reader,constRuntimeHeader&header,ImportStack&importStack,Artboard**capturedArtboard)",
+    )
+    .unwrap_or_else(|| panic!("missing File::readObjects in {}", path.display()));
 
     assert_compact_contains_in_order(
         &body,
         &[
-            "ImportStackimportStack;",
+            "constboolwholeFile=capturedArtboard==nullptr;",
             "Core*lastBindableObject=nullptr;",
+            // Upstream bb2903faf keeps failed objects alive until the stack
+            // resolves; lifetime only.
+            "std::vector<std::unique_ptr<Core>>discarded;",
             "while(!reader.reachedEnd()){",
             "boolmalformed=false;",
             "autoobject=readRuntimeObject(reader,header,malformed);",
             "if(malformed){returnImportResult::malformed;}",
             "if(object==nullptr){importStack.readNullObject();continue;}",
             "if(!object->is<DataBind>()){lastBindableObject=object;}elseif(lastBindableObject!=nullptr){object->as<DataBind>()->target(lastBindableObject);}",
+            // Upstream 439ffe0c1: the slot is claimed before import and kept
+            // empty on failure, as ImportContext::claim_artboard_slot models.
+            "autoslotImporter=importStack.latest<ArtboardImporter>(ArtboardBase::typeKey);",
+            "if(slotImporter!=nullptr&&object->claimsArtboardSlot(importStack)){slot=slotImporter->addComponent(object);}else{slotImporter=nullptr;}",
             "if(object->import(importStack)==StatusCode::Ok){",
             "caseBackboard::typeKey:m_backboard=object->as<Backboard>();break;",
-            "caseArtboard::typeKey:{Artboard*ab=object->as<Artboard>();ab->m_Factory=m_factory;m_artboards.push_back(ab);}",
+            // Upstream d7d5fdd84: a file-level SelectionStyle catalog, which
+            // nuxie-runtime keeps; the import model has no consumer for it.
+            "caseSelectionStyle::typeKey:m_selectionStyles.emplace_back(object->as<SelectionStyle>());break;",
+            "caseArtboard::typeKey:{Artboard*ab=object->as<Artboard>();ab->m_Factory=m_factory;",
+            "if(wholeFile){",
+            "m_artboards.push_back(ab);}else{*capturedArtboard=ab;}}break;",
             "caseImageAsset::typeKey:caseFontAsset::typeKey:caseAudioAsset::typeKey:caseBlobAsset::typeKey:caseScriptAsset::typeKey:caseScriptModuleAsset::typeKey:caseShaderAsset::typeKey:",
             "m_fileAssets.push_back(rcp<FileAsset>(fa));",
             "if(object->coreType()==AudioAsset::typeKey){m_hasAudio=true;}",
@@ -12911,8 +12944,13 @@ fn cpp_file_read_loop_matches_import_stack_model() {
             "caseDataEnum::typeKey:caseDataEnumCustom::typeKey:",
             "m_Enums.push_back(de);",
             "caseViewModelPropertyEnumCustom::typeKey:",
-            "vme->dataEnum(m_Enums[vme->enumId()]);",
-            "else{if(lastBindableObject==object){lastBindableObject=nullptr;}fprintf(stderr,\"Failedtoimportobjectoftype%d\\n\",object->coreType());deleteobject;continue;}",
+            // Upstream 439ffe0c1 bounds the enum id, as
+            // data_enum_for_view_model_property_object already does.
+            "if(vme->enumId()<m_Enums.size()){vme->dataEnum(m_Enums[vme->enumId()]);}",
+            "else{if(lastBindableObject==object){lastBindableObject=nullptr;}fprintf(stderr,\"Failedtoimportobjectoftype%d\\n\",object->coreType());",
+            "if(slotImporter!=nullptr){",
+            "slotImporter->releaseSlot(slot);}",
+            "discarded.emplace_back(object);continue;}",
             "std::unique_ptr<ImportStackObject>stackObject=nullptr;",
             "autostackType=object->coreType();",
             "switch(stackType){",
@@ -12973,6 +13011,8 @@ fn cpp_file_read_loop_matches_import_stack_model() {
         "ScriptedLayout::typeKey",
         "ScriptedListenerAction::typeKey",
         "ScriptedPathEffect::typeKey",
+        // Upstream d97479357; already a scripted object importer here.
+        "ScriptedTransition::typeKey",
         "ScriptedTransitionCondition::typeKey",
         "ShaderAsset::typeKey",
         "StateMachine::typeKey",
@@ -13083,19 +13123,30 @@ fn cpp_file_facade_catalog_and_script_wiring_matches_runtime_model() {
         "File::assets changed; audit Rust dense asset catalog projection"
     );
 
+    // Upstream 6cd5d108f adds requireSignedScripts: a file that requires
+    // signed scripts resets every generator ref and builds no VM for an
+    // unsigned script. nuxie-runtime's File::register_scripts owns
+    // registration and ported it with that commit; nuxie-binary supplies only
+    // each script's verified flag. The WITH_RIVE_SCRIPTING_WASM module path
+    // stays parked with Wasm execution.
     let register = compact_cpp_function_body(&compact, "File::registerScripts()")
         .unwrap_or_else(|| panic!("missing File::registerScripts in {}", path.display()));
     assert_compact_contains_in_order(
         &register,
         &[
+            "if(m_requireSignedScripts){",
+            "if(asset->is<ScriptAsset>()){asset->as<ScriptAsset>()->generatorFunctionRef(0);}",
+            "#ifdefWITH_RIVE_SCRIPTING_LUAU",
             "std::vector<ScriptAsset*>scripts;",
             "for(autoasset:m_fileAssets){",
-            "if(asset->is<ScriptAsset>()){scripts.push_back(asset->as<ScriptAsset>());}",
+            "if(!asset->is<ScriptAsset>()){continue;}",
+            "if(m_requireSignedScripts&&!acceptsScript(scriptAsset->verified())){continue;}",
+            "scripts.push_back(scriptAsset);",
             "if(!scripts.empty()){",
             "if(m_scriptingVM==nullptr){makeScriptingVM();}",
             "initializeLuaData(vm->state(),m_ViewModels);",
             "for(autoscriptAsset:scripts){",
-            "if(scriptAsset->verified()){vm->addModule(scriptAsset);}",
+            "if(acceptsScript(scriptAsset->verified())){vm->addModule(scriptAsset);}",
             "vm->performRegistration();",
             "for(auto&interpolator:m_scriptedInterpolators){",
             "autoscriptAsset=interpolator->scriptAsset();",
@@ -13298,12 +13349,14 @@ fn cpp_file_asset_helpers_match_binary_asset_metadata_model() {
             "constexpruint8_tuuidSize=16;",
             "if(m_cdnUuid.size()!=uuidSize){return\"\";}",
             "indices{3,2,1,0,5,4,7,6,9,8,15,14,13,12,11,10};",
-            "ss<<std::hex<<std::setfill('0');",
+            // Upstream 7fb595be5 swaps the stringstream for a nibble table;
+            // the text is unchanged, two lowercase digits per byte.
+            "std::stringuuid;",
             "for(intidx:indices){",
-            "ss<<std::setw(2)",
-            "<<static_cast<unsignedint>(m_cdnUuid[idx]);",
-            "if(idx==0||idx==4||idx==6||idx==8)ss<<'-';",
-            "returnss.str();",
+            "uuid+=\"0123456789abcdef\"[m_cdnUuid[idx]>>4];",
+            "uuid+=\"0123456789abcdef\"[m_cdnUuid[idx]&0xF];",
+            "if(idx==0||idx==4||idx==6||idx==8)uuid+='-';",
+            "returnuuid;",
         ],
         "FileAsset::cdnUuidStr changed; audit format_cpp_file_asset_cdn_uuid",
     );

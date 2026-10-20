@@ -52,6 +52,10 @@ fn cpp_file_asset_referencer_index(object: &RuntimeObject) -> Option<u64> {
     }
     match definition.name {
         "Image" | "AudioEvent" => object.uint_property("assetId"),
+        // Upstream d97479357: PaintImage::assetId is imageAssetId. Its
+        // registration is best-effort, so it stays out of
+        // is_file_asset_referencer and never fails an import.
+        "PaintImage" => object.uint_property("imageAssetId"),
         _ if definition_is_cpp_scripted_object(definition) => object.uint_property("scriptAssetId"),
         _ => None,
     }
@@ -69,7 +73,8 @@ fn cpp_file_asset_matches_referencer(referencer: &RuntimeObject, asset: &Runtime
     }
 
     match definition.name {
-        "Image" => asset_definition.is_a("ImageAsset"),
+        // PaintImage::setAsset keeps only an ImageAsset.
+        "Image" | "PaintImage" => asset_definition.is_a("ImageAsset"),
         "AudioEvent" => asset_definition.is_a("AudioAsset"),
         _ if definition_is_cpp_scripted_object(definition) => asset_definition.is_a("ScriptAsset"),
         _ => false,

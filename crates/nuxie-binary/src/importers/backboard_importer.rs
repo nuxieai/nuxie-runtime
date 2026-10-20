@@ -206,7 +206,7 @@ impl RuntimeFile {
                 continue;
             };
             if !definition_by_type_key(object.type_key)
-                .is_some_and(|definition| definition.is_a("NestedArtboard"))
+                .is_some_and(cpp_artboard_referencer_has_nesting_artboard)
             {
                 continue;
             }
@@ -610,7 +610,17 @@ impl RuntimeFile {
 
 fn cpp_artboard_referencer_index(object: &RuntimeObject) -> Option<u64> {
     let definition = definition_by_type_key(object.type_key)?;
-    (definition.is_a("NestedArtboard") || definition.name == "ScriptInputArtboard")
+    (cpp_artboard_referencer_has_nesting_artboard(definition)
+        || definition.name == "ScriptInputArtboard")
         .then(|| object.uint_property("artboardId"))
         .flatten()
+}
+
+/// Referencers whose `nestingArtboard()` override returns their artboard, so
+/// `closesNestedArtboardCycle` sees their reference as an edge: NestedArtboard
+/// and, since upstream fa2cd6e38, PaintImage. A referencer that validation
+/// dropped never ran onAddedDirty, has no artboard and adds no edge;
+/// `cpp_artboard_local_context_for_object` finds no slot for it.
+fn cpp_artboard_referencer_has_nesting_artboard(definition: &'static Definition) -> bool {
+    definition.is_a("NestedArtboard") || definition.name == "PaintImage"
 }

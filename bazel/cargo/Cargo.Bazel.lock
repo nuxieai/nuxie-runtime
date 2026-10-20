@@ -1,5 +1,5 @@
 {
-  "checksum": "887cb77c7ec60e23298d105a8442383f59a1e2822d2253f30eb0a872d6b648ca",
+  "checksum": "b87f96db01f4e23036e07e8a28277869c3fd8db471cb79426d8f2b2702e5ab93",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5158,7 +5158,7 @@
       ],
       "version": "0.2.19"
     },
-    "nux-apple-product-extension 0.10.16": {
+    "nux-apple-product-extension 0.10.17": {
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
@@ -5187,9 +5187,9 @@
           }
         }
       ],
-      "version": "0.10.16"
+      "version": "0.10.17"
     },
-    "nux-capi 0.10.16": {
+    "nux-capi 0.10.17": {
       "build_script_attrs": {
         "deps": [
           {
@@ -5344,7 +5344,7 @@
           }
         }
       ],
-      "version": "0.10.16"
+      "version": "0.10.17"
     },
     "nuxie 0.1.0": {
       "common_attrs": {
@@ -6041,6 +6041,7 @@
           "default",
           "js-host-seed",
           "policy-pass-counter",
+          "test-support",
           "testing",
           "tools"
         ],
@@ -10530,12 +10531,17 @@
     },
     "webgpu-renderer-replay 0.1.0": {
       "common_attrs": {
-        "deps": [
-          {
-            "id": "wasm-bindgen 0.2.126",
-            "target": "wasm_bindgen"
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(target_arch = \"wasm32\")": [
+              {
+                "id": "wasm-bindgen 0.2.126",
+                "target": "wasm_bindgen"
+              }
+            ]
           }
-        ],
+        },
         "edition": "2024"
       },
       "library_target_name": "webgpu_renderer_replay",
@@ -12053,8 +12059,8 @@
     "luaur-rt 0.1.8": "bazel/cargo/luaur-rt",
     "luaur-rt-test-harness 0.1.0": "bazel/cargo/luaur-rt-test-harness",
     "luaur-vm 0.1.8": "bazel/cargo/luaur-vm",
-    "nux-apple-product-extension 0.10.16": "bazel/cargo/nux-apple-product-extension",
-    "nux-capi 0.10.16": "bazel/cargo/nux-capi",
+    "nux-apple-product-extension 0.10.17": "bazel/cargo/nux-apple-product-extension",
+    "nux-capi 0.10.17": "bazel/cargo/nux-capi",
     "nuxie 0.1.0": "bazel/cargo/nuxie",
     "nuxie-audio 0.1.0": "bazel/cargo/nuxie-audio",
     "nuxie-binary 0.1.0": "bazel/cargo/nuxie-binary",

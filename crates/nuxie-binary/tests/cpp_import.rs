@@ -10468,7 +10468,9 @@ fn cpp_data_converter_bind_context_methods_are_tracked_by_binary_import_model() 
             "virtualvoidupdate();",
             "virtualbooladvance(floatelapsedTime);",
             "virtualvoidreset(){};",
-            "DataBind*m_parentDataBind;",
+            // Upstream c63a5ba04 initializes the pointer; the Rust effect
+            // already treats an unbound converter as having no parent bind.
+            "DataBind*m_parentDataBind=nullptr;",
         ],
         "DataConverter live binding surface changed; audit RuntimeFile::data_converter_bind_context_effect",
     );
@@ -10518,7 +10520,9 @@ fn cpp_data_converter_bind_context_methods_are_tracked_by_binary_import_model() 
         &base_bind,
         &[
             "m_parentDataBind=dataBind;",
-            "bindDataBindsFromContext(dataContext);",
+            // Upstream 6951a4b3d: the converter now holds a reference to the
+            // context it binds its own binds to, released by unbind.
+            "bindDataBindsFromContext(rcp<DataContext>(safe_ref(dataContext)));",
         ],
         "DataConverter::bindFromContext changed; audit RuntimeFile::data_converter_bind_context_effect",
     );
@@ -10739,8 +10743,8 @@ fn cpp_data_converter_lifecycle_methods_are_tracked_by_binary_import_model() {
         "DataConverterGroup::unbind changed; audit RuntimeFile::data_converter_unbind_effect",
     );
     assert!(
-        !group_unbind.contains("DataConverter::unbind"),
-        "DataConverterGroup::unbind now calls the base unbind; audit owned data-bind cleanup modeling"
+        group_unbind.ends_with("DataConverter::unbind();"),
+        "DataConverterGroup::unbind no longer ends with the base unbind (upstream 6951a4b3d); audit owned data-bind cleanup modeling"
     );
 
     let group_update =
@@ -11024,8 +11028,8 @@ fn cpp_data_converter_lifecycle_methods_are_tracked_by_binary_import_model() {
         "DataConverterFormula::unbind changed; audit RuntimeFile::data_converter_unbind_effect",
     );
     assert!(
-        !formula_unbind.contains("DataConverter::unbind"),
-        "DataConverterFormula::unbind now calls the base unbind; audit owned data-bind cleanup modeling"
+        formula_unbind.ends_with("DataConverter::unbind();"),
+        "DataConverterFormula::unbind no longer ends with the base unbind (upstream 6951a4b3d); audit owned data-bind cleanup modeling"
     );
 
     let random_mode = std::fs::read_to_string(&random_mode_path)
@@ -11106,7 +11110,10 @@ fn cpp_data_bind_context_binding_methods_are_tracked_by_binary_import_model() {
         &[
             "if(dataContext!=nullptr){",
             "resolvePath();",
-            "autovmSource=isNameBased()&&file()?dataContext->getRelativeViewModelProperty(m_SourcePathIdsBuffer,file()->dataResolver()):dataContext->getViewModelProperty(m_SourcePathIdsBuffer);",
+            // Upstream 8f06a91c7 adds an editor-only source path ahead of the
+            // runtime lookup; WITH_RIVE_EDITOR builds only.
+            "autovmSource=#ifdefWITH_RIVE_EDITORm_hasEditorSourcePath?dataContext->getEditorViewModelProperty(m_editorSourcePath):#endif",
+            "isNameBased()&&file()?dataContext->getRelativeViewModelProperty(m_SourcePathIdsBuffer,file()->dataResolver()):dataContext->getViewModelProperty(m_SourcePathIdsBuffer);",
             "if(m_Source==nullptr||vmSource!=m_Source.get()){",
             "if(vmSource!=nullptr){",
             "clearSource();",
@@ -11586,7 +11593,9 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         &artboard_rebuild,
         &[
             "if(dataBind->is<DataBindContext>()){",
-            "dataBind->as<DataBindContext>()->bindFromContext(m_DataContext.get());",
+            // Upstream 6951a4b3d: the artboard's one context now lives in
+            // DataBindContainer; the same context, read through the base.
+            "dataBind->as<DataBindContext>()->bindFromContext(dataBindContext().get());",
         ],
         "Artboard::rebuildDataBind changed; audit RuntimeFile::data_bind_relink_effect",
     );
@@ -11613,7 +11622,8 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         &state_machine_rebuild,
         &[
             "if(dataBind->is<DataBindContext>()){",
-            "dataBind->as<DataBindContext>()->bindFromContext(m_DataContext.get());",
+            // Upstream 6951a4b3d: the same context, now held by the base.
+            "dataBind->as<DataBindContext>()->bindFromContext(dataBindContext().get());",
         ],
         "StateMachineInstance::rebuildDataBind changed; audit RuntimeFile::data_bind_relink_effect",
     );
@@ -11651,7 +11661,8 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "std::vector<DataBind*>m_dataBinds;",
             "std::vector<DataBind*>m_dirtyDataBinds;",
             "Sidecar<DataBindQueues>m_queues;",
-            "DataContext*m_dataContext=nullptr;",
+            // Upstream 6951a4b3d: the container owns its one data context.
+            "rcp<DataContext>m_dataContext;",
             "boolm_isProcessing=false;",
         ],
         "DataBindContainer queue members changed; audit RuntimeDataBindUpdateQueue and add/remove effect classification",
@@ -11675,13 +11686,20 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "for(auto&dataBind:m_dataBinds){",
             "dataBind->unbind();",
             "m_dataContext=nullptr;",
+            // Upstream 3330baec4 wakes an idle artboard or state machine
+            // here. The effect model has no idle state; nuxie-runtime owns it.
+            "dataContextChanged();",
         ],
         "DataBindContainer::unbindDataBinds changed; audit RuntimeFile::data_bind_container_unbind_effect",
     );
 
+    // Upstream 6951a4b3d stores the context before binding rather than
+    // after. RuntimeDataBindContainerBindContextEffect records which binds
+    // rebind and whether the context is kept, with no order, so it is
+    // unchanged.
     let bind_data_binds_from_context = compact_cpp_function_body(
         &compact_source,
-        "DataBindContainer::bindDataBindsFromContext(DataContext*dataContext)",
+        "DataBindContainer::bindDataBindsFromContext(rcp<DataContext>dataContext)",
     )
     .unwrap_or_else(|| {
         panic!(
@@ -11692,12 +11710,30 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
     assert_compact_contains_in_order(
         &bind_data_binds_from_context,
         &[
-            "for(auto&dataBind:m_dataBinds){",
-            "if(dataBind->is<DataBindContext>()){",
-            "dataBind->as<DataBindContext>()->bindFromContext(dataContext);",
-            "m_dataContext=dataContext;",
+            "m_dataContext=std::move(dataContext);",
+            "dataContextChanged();",
+            "bindDataBindsFromContext();",
         ],
         "DataBindContainer::bindDataBindsFromContext changed; audit RuntimeFile::data_bind_container_bind_context_effect",
+    );
+    let rebind_data_binds_from_context = compact_cpp_function_body(
+        &compact_source,
+        "DataBindContainer::bindDataBindsFromContext()",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing DataBindContainer::bindDataBindsFromContext() in {}",
+            source_path.display()
+        )
+    });
+    assert_compact_contains_in_order(
+        &rebind_data_binds_from_context,
+        &[
+            "for(auto&dataBind:m_dataBinds){",
+            "if(dataBind->is<DataBindContext>()){",
+            "dataBind->as<DataBindContext>()->bindFromContext(m_dataContext.get());",
+        ],
+        "DataBindContainer::bindDataBindsFromContext() changed; audit RuntimeFile::data_bind_container_bind_context_effect",
     );
 
     let advance_data_binds = compact_cpp_function_body(
@@ -11742,8 +11778,8 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "m_queues.ensureAllocated()->persisting.push_back(dataBind);",
             "dataBind->inPersistingList(true);",
             "dataBind->container(this);",
-            "if(m_dataContext&&dataBind->is<DataBindContext>()){",
-            "dataBind->as<DataBindContext>()->bindFromContext(m_dataContext);",
+            "if(m_dataContext!=nullptr&&dataBind->is<DataBindContext>()){",
+            "dataBind->as<DataBindContext>()->bindFromContext(m_dataContext.get());",
             "updateDataBind(dataBind,true);",
         ],
         "DataBindContainer::addDataBind changed; audit RuntimeFile::data_bind_add_effect, data_bind_uses_persisting_list, and data_bind_update_queue",

@@ -6234,6 +6234,43 @@ impl LayoutComponent {
     pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
         self.layout_data.add_applier(applier);
     }
+    /// The content box a translated `ScrollConstraint` moves gets an
+    /// automatic minimum of 0 on each axis the constraint scrolls and the box
+    /// Fills (docs/CSS_LAYOUT.md, section 2). A Rive author who Fills scroll
+    /// content means "as big as the viewport, the items scroll", which CSS
+    /// says with `min-height: 0` (or `min-width: 0`) there; the content's own
+    /// items set the scroll range. A Hug or Fixed content box keeps its
+    /// automatic minimum, so it is never shrunk below its content. An
+    /// authored minimum stays, and CSS-mode boxes keep `min-*: auto`. This
+    /// runs in the item pass, after the base pass writes the authored
+    /// minimums.
+    fn apply_scroll_content_minimum(&self, style: &mut Style, context: &LayoutSyncContext) {
+        use crate::source::constraints::{
+            draggable_constraint::DraggableConstraintDirection,
+            scrolling::scroll_constraint::ScrollConstraint,
+        };
+        if context.css {
+            return;
+        }
+        let zero = taffy::prelude::LengthPercentageAuto::length(0.0);
+        for direction in self.children().iter().filter_map(|child| {
+            child.with_downcast::<ScrollConstraint, _>(ScrollConstraint::direction)
+        }) {
+            if direction != DraggableConstraintDirection::Vertical
+                && self.effective_width_scale_type() == LayoutScaleType::Fill
+                && style.min_size.width.is_auto()
+            {
+                style.min_size.width = zero;
+            }
+            if direction != DraggableConstraintDirection::Horizontal
+                && self.effective_height_scale_type() == LayoutScaleType::Fill
+                && style.min_size.height.is_auto()
+            {
+                style.min_size.height = zero;
+            }
+        }
+    }
+
     pub fn apply_container_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         use crate::source::{
             constraints::{
@@ -6491,6 +6528,10 @@ impl LayoutStyleApplier for LayoutComponent {
 
     fn apply_container_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         LayoutComponent::apply_container_style(self, style, context);
+    }
+
+    fn apply_item_style(&self, style: &mut Style, context: &LayoutSyncContext) {
+        LayoutComponent::apply_scroll_content_minimum(self, style, context);
     }
 }
 

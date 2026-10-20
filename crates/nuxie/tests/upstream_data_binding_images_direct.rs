@@ -178,6 +178,28 @@ impl SilverFixture {
         compare_sriv(&expected, &actual)
             .unwrap_or_else(|difference| panic!("{name}: {difference}"));
     }
+
+    /// A reviewed layout difference (docs/CSS_LAYOUT.md): the stream still
+    /// differs from the pinned C++ silver exactly where the review recorded,
+    /// and the whole Rust stream is the one reviewed.
+    fn matches_reviewed_layout_divergence(&self, name: &str, expected: &str, stream: &str) {
+        use sha2::Digest;
+        let silver = parse_sriv(&pinned(&format!("silvers/{name}.sriv"))).expect("pinned SRIV");
+        let bytes = self.silver.borrow().bytes().to_vec();
+        let actual = parse_sriv(&bytes).expect("native SRIV");
+        let difference = compare_sriv(&silver, &actual)
+            .expect_err("the reviewed layout difference should remain present");
+        assert_eq!(
+            difference.to_string(),
+            expected,
+            "{name}: reviewed first difference"
+        );
+        let hash = sha2::Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(hash, stream, "{name}: reviewed Rust stream");
+    }
 }
 
 #[test]
@@ -525,5 +547,14 @@ fn stateful_component_image_bind() {
     fixture.silver.borrow_mut().add_frame();
     fixture.advance(0.1);
     fixture.artboard.draw(&mut renderer);
-    fixture.matches("stateful_component_image_test");
+    // The reviewed layout difference nuxie-runtime's wave B port of this
+    // test records: the bound image's new natural size is content the Comp
+    // nested artboard's box measures (UNIV-4844), so its layout runs again
+    // and the host's background path is rebuilt with the same geometry. C++
+    // does not measure the image, so it does not lay out again.
+    fixture.matches_reviewed_layout_divergence(
+        "stateful_component_image_test",
+        "frame 2, op 96 (drawPath): expected drawPath, got rewind",
+        "fdfd89f3940446be83b541bc90e83475eaf192293a6b2397087830f6353ddf98",
+    );
 }

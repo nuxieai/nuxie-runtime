@@ -39,6 +39,27 @@ fn compare_silver(name: &str, actual: &[u8]) {
         .unwrap_or_else(|difference| panic!("{name} differs: {difference}"));
 }
 
+/// A reviewed layout difference (docs/CSS_LAYOUT.md, recorded in corpus.toml):
+/// the stream still differs from the pinned C++ silver exactly where the
+/// review recorded, and the whole Rust stream is the one reviewed.
+fn compare_reviewed_silver(name: &str, actual: &[u8], first_difference: &str, stream: &str) {
+    use sha2::Digest;
+    let parsed = parse_sriv(actual).expect("valid Rust SRIV stream");
+    let expected = parse_sriv(&pinned_silver(name)).expect("valid pinned SRIV stream");
+    let difference = compare_sriv(&expected, &parsed)
+        .expect_err("the reviewed layout difference should remain present");
+    assert_eq!(
+        difference.to_string(),
+        first_difference,
+        "{name}: reviewed first difference"
+    );
+    let hash = sha2::Sha256::digest(actual)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(hash, stream, "{name}: reviewed Rust stream");
+}
+
 fn authored_or_fresh_view_model(
     file: &nuxie::RuntimeFileHandle,
     artboard: &RuntimeArtboardInstanceHandle,
@@ -121,7 +142,16 @@ fn script_has_access_to_user_created_view_models_via_data() {
         artboard.draw(&mut renderer);
     }
 
-    compare_silver("script_create_viewmodel_instance", &silver.borrow().bytes());
+    // Reviewed layout difference (corpus.toml): Fill is CSS flex: 1 1 0%, so
+    // the five Fill button artboards in the 749.90-point row are 140.38
+    // points wide each whatever their label, where C++ sizes each from its
+    // label first. The fifth button starts at x 601.52 instead of 609.84.
+    compare_reviewed_silver(
+        "script_create_viewmodel_instance",
+        &silver.borrow().bytes(),
+        "frame 0, op 126 (transform), field tx: expected 609.83514, got 601.51874",
+        "52b2e4340ef34ed2042e28176ce1f01304376280fba8a508467eef66c50434f6",
+    );
 }
 
 #[test]

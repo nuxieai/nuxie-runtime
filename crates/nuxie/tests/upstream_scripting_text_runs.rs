@@ -32,6 +32,27 @@ fn pinned_silver(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned silver {}: {error}", silver.display()))
 }
 
+/// A reviewed layout difference (docs/CSS_LAYOUT.md, recorded in corpus.toml):
+/// the stream still differs from the pinned C++ silver exactly where the
+/// review recorded, and the whole Rust stream is the one reviewed.
+fn compare_reviewed_silver(name: &str, actual: &[u8], first_difference: &str, stream: &str) {
+    use sha2::Digest;
+    let parsed = parse_sriv(actual).expect("valid Rust SRIV stream");
+    let expected = parse_sriv(&pinned_silver(name)).expect("valid pinned SRIV stream");
+    let difference = compare_sriv(&expected, &parsed)
+        .expect_err("the reviewed layout difference should remain present");
+    assert_eq!(
+        difference.to_string(),
+        first_difference,
+        "{name}: reviewed first difference"
+    );
+    let hash = sha2::Sha256::digest(actual)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(hash, stream, "{name}: reviewed Rust stream");
+}
+
 struct Fixture {
     _file: ScriptedFile,
     artboard: RuntimeArtboardInstanceHandle,
@@ -176,9 +197,14 @@ fn script_creates_view_models_that_map_to_text_runs() {
         fixture.draw();
     }
 
-    let actual = parse_sriv(&fixture.silver.borrow().bytes()).expect("valid Rust SRIV stream");
-    let expected = parse_sriv(&pinned_silver("script_create_text_runs.sriv"))
-        .expect("valid pinned SRIV stream");
-    compare_sriv(&expected, &actual)
-        .unwrap_or_else(|difference| panic!("script_create_text_runs differs: {difference}"));
+    // Reviewed layout difference (corpus.toml): Fill is CSS flex: 1 1 0%, so
+    // the five Fill button artboards in the 749.90-point row are 140.38
+    // points wide each whatever their label, where C++ sizes each from its
+    // label first. The fifth button starts at x 601.52 instead of 609.84.
+    compare_reviewed_silver(
+        "script_create_text_runs.sriv",
+        &fixture.silver.borrow().bytes(),
+        "frame 0, op 109 (transform), field tx: expected 609.83514, got 601.51874",
+        "2147653268787fc95d1cce0ef3e758a2956e722e383b4cd0c463069ee8437644",
+    );
 }

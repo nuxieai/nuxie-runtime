@@ -3339,15 +3339,22 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
         }),
         "C++ base DataConverter::unbind delegates to DataBindContainer::unbindDataBinds"
     );
+    // Upstream 6951a4b3d: DataConverterFormula::unbind and
+    // DataConverterGroup::unbind finish with the base DataConverter::unbind,
+    // which unbinds the converter's own binds and drops its data context.
+    let owned_unbind = Some(RuntimeDataBindContainerUnbindEffect {
+        unbinds_data_bind_ids: vec![3],
+        clears_data_context: true,
+    });
     assert_eq!(
         file.data_converter_unbind_effect(1, &[3], true),
         Some(RuntimeDataConverterUnbindEffect {
-            owned_data_bind_unbind_effect: None,
+            owned_data_bind_unbind_effect: owned_unbind.clone(),
             group_child_unbind_converter_ids: Vec::new(),
             formula_removes_source_dependent: true,
             formula_clears_source: true,
         }),
-        "C++ DataConverterFormula::unbind removes its bound source dependent but does not call base unbindDataBinds"
+        "C++ DataConverterFormula::unbind removes its bound source dependent, then calls base unbindDataBinds"
     );
     assert_eq!(
         file.data_converter_unbind_effect(1, &[3], false)
@@ -3358,18 +3365,18 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
                     effect.formula_clears_source,
                 )
             }),
-        Some((None, false, false)),
-        "C++ DataConverterFormula::unbind is a no-op when it has no bound source"
+        Some((owned_unbind.clone(), false, false)),
+        "C++ DataConverterFormula::unbind without a bound source still calls base unbindDataBinds"
     );
     assert_eq!(
         file.data_converter_unbind_effect(4, &[3], false),
         Some(RuntimeDataConverterUnbindEffect {
-            owned_data_bind_unbind_effect: None,
+            owned_data_bind_unbind_effect: owned_unbind,
             group_child_unbind_converter_ids: vec![6, 7],
             formula_removes_source_dependent: false,
             formula_clears_source: false,
         }),
-        "C++ DataConverterGroup::unbind forwards to non-null child converters without calling base unbindDataBinds"
+        "C++ DataConverterGroup::unbind forwards to non-null child converters, then calls base unbindDataBinds"
     );
 
     assert_eq!(

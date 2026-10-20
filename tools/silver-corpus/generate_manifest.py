@@ -207,6 +207,7 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
 # Previous review (d8217e4476) hittest_ab1_grand_parent: frame 0, op 149 (transform), field ty: expected 100, got 31.04248
 # Previous review (d8217e4476) hittest_ab1_parent: frame 0, op 141 (transform), field tx: expected 238.65234, got 184.80838
 # Previous review (d8217e4476) reset_phase_multi_main: frame 0, op 69 (addRawPath), field point: expected (62, -0.0 (0x80000000)), got (60, -0.0 (0x80000000))
+# Previous review (8d8025fd4a) component_list_child_origin: frame 1, op 546 (addRawPath), field point: expected (309.3333, 250), got (309.33334, 312); now exact with C++, since a translated ScrollConstraint's Fill content box has a zero automatic minimum on its scroll axis
 REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got '
                              '(273, 0)',
  'hittest_ab_text_parent': 'frame 0, op 189 (transform), field ty: expected 358.17838, got 333.33334',
@@ -216,8 +217,6 @@ REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'fram
  'artboard_list_overrides_vertical': 'frame 0, op 73 (addRawPath), field point: expected (500, 0), '
                                      'got (700, 0)',
  'bankcard': 'frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)',
- 'component_list_child_origin': 'frame 1, op 546 (addRawPath), field point: expected (309.3333, '
-                                '250), got (309.33334, 312)',
  'data_viz_demo': 'frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, '
                   '16.325203), got (268.33334, 16.325203)',
  'db_health_tracker': 'frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, '
@@ -240,7 +239,6 @@ REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e0
  'superbowl': '180ea9a1137368605e133d43ba8a23c744ebaeb3a6707cea7a88b24fa8986f52',
  'artboard_list_overrides_vertical': '3dd7323dcd6b9c4cdb6aedd64ba15f00465bd9e76310ddac90a42df3542b1631',
  'bankcard': '86f2d3515f0d1b4c094e35e9f88c1468ee2a92c54b544acda15e79845abe43fe',
- 'component_list_child_origin': '78c29b5c807a5731a1aff7e929895efe4c7cf099664ff9e3f15aeb5f5aff1c03',
  'data_viz_demo': 'f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b',
  'db_health_tracker': 'f384916c59fd4cad91674f5b8d3e212bbc2a99ae976c291bbbd4a36f4e6d78af',
  'global_view_models_scripting_test': '301407ac55b4ab537717af38f61d635780c075a3030d760f0d44e0c408311c44',
@@ -264,12 +262,6 @@ LAYOUT_DIVERGENCES.update({'hittest_ab_text_parent': 'Fill is CSS flex: 1 1 0%. 
              'box and the card root keep CSS automatic minima, so the root is 866.94 points wide '
              'instead of the 850-point artboard and its clip path runs to x 826.94 instead of 810. '
              'C++ keeps the number row at the 724-point content width.',
- 'component_list_child_origin': 'Every list artboard keeps its definite 58-point height as its '
-                                'automatic minimum, as in C++, so the first frame compares exact. '
-                                "In frame 1 the first column's Hug list holds four of them and "
-                                'three 10-point gaps, so its CSS automatic minimum is 262 points '
-                                'instead of the 200-point offer that C++ clamps to; its path runs '
-                                'to y 312 instead of 250.',
  'data_viz_demo': 'The two 50-percent chart cells in the 772-point row have 34-point padding edges '
                   'and a 20-point gap. Their 352-point bases shrink to (772 - 68 - 20)/2 = 342. '
                   'The LineBars gradient endpoint is five sixths of the cell width after 20 '

@@ -221,6 +221,7 @@ A box without a record gets this CSS. The runtime builds it in memory and runs t
 | `overflowValue` hidden, scroll | `overflow: hidden`, `scroll` |
 | visible with `LayoutComponent.clip` | `overflow: clip`; a clip is not a scroll container, so the content minimum stays |
 | a `ScrollConstraint` viewport | `overflow: scroll` on its axes (and visible becomes auto on the other axis, as CSS computes) |
+| a `ScrollConstraint`'s content box | on each scroll axis where the content box Fills, `min-height: 0` (or `min-width: 0`) in place of the automatic minimum; an authored minimum stays. A Rive author who Fills scroll content means "as big as the viewport, the items scroll", and a zero minimum is how CSS says that there: without it the content's own minimum grows the box past its viewport, as `min-height: auto` does to a flex item in a scroll container, and a virtualized list realizes more items than Rive does. A Hug or Fixed content box keeps its automatic minimum, so it is never shrunk below its content. CSS-mode boxes keep `min-*: auto` |
 | `LayoutComponent.clip` | the clip itself stays Rive's: the outer edge of the box |
 
 The box sizes used:

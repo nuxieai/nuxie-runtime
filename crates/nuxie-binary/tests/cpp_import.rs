@@ -12746,12 +12746,20 @@ fn cpp_runtime_header_read_matches_binary_header_model() {
     let compact_file = compact_cpp_source(&file);
     let import = compact_cpp_function_body(
         &compact_file,
-        "File::import(Span<constuint8_t>bytes,Factory*factory,ImportResult*result,rcp<FileAssetLoader>assetLoader,ScriptingVM*vm)",
+        // Upstream 6cd5d108f added requireSignedScripts, a scripting option
+        // the binary import model has no counterpart for.
+        "File::import(Span<constuint8_t>bytes,Factory*factory,ImportResult*result,rcp<FileAssetLoader>assetLoader,ScriptingVM*vm,boolrequireSignedScripts)",
     )
     .unwrap_or_else(|| panic!("missing File::import in {}", file_path.display()));
     assert_compact_contains_in_order(
         &import,
         &[
+            // A null factory is malformed (upstream 576282493). The binary
+            // import model takes no factory, and nuxie-runtime's File::import
+            // takes a RuntimeFactoryHandle, which cannot be null.
+            "if(factory==nullptr){",
+            "*result=ImportResult::malformed;",
+            "returnnullptr;",
             "BinaryReaderreader(bytes);",
             "RuntimeHeaderheader;",
             "if(!RuntimeHeader::read(reader,header)){",
@@ -13360,10 +13368,12 @@ fn cpp_binary_reader_methods_match_runtime_reader_model() {
                     source_path.display()
                 )
             });
+    // Upstream 6cd5d108f checks the length against what is left before
+    // allocating, as BinaryReader::read_bytes_exact does.
     for expected in [
-        "decode_string(length,m_Position,m_Bytes.end(),&rawValue[0]);",
-        "if(readBytes!=length){overflow();returnstd::string();}",
-        "m_Position+=readBytes;returnstd::string(rawValue.data(),(size_t)length);",
+        "if(length>static_cast<size_t>(m_Bytes.end()-m_Position)){overflow();returnstd::string();}",
+        "std::stringvalue(reinterpret_cast<constchar*>(m_Position),length);",
+        "m_Position+=length;returnvalue;",
     ] {
         assert!(
             read_string_len.contains(expected),
@@ -13379,10 +13389,29 @@ fn cpp_binary_reader_methods_match_runtime_reader_model() {
             )
         });
     assert_eq!(
-        read_string,
-        "uint64_tlength=readVarUint64();if(didOverflow()){returnstd::string();}returnreadString(length);",
+        read_string, "returnreadString(readLength());",
         "BinaryReader::readString changed; audit Rust length-prefixed string decoding"
     );
+
+    // Upstream 6cd5d108f: a length prefix is checked at full width against
+    // what is left, as BinaryReader::read_length does.
+    let read_length = compact_cpp_function_body(&compact_source, "BinaryReader::readLength()")
+        .unwrap_or_else(|| {
+            panic!(
+                "missing BinaryReader::readLength in {}",
+                source_path.display()
+            )
+        });
+    for expected in [
+        "uint64_tlength=readVarUint64();",
+        "if(length>static_cast<uint64_t>(m_Bytes.end()-m_Position)){overflow();return0;}",
+        "returnstatic_cast<size_t>(length);",
+    ] {
+        assert!(
+            read_length.contains(expected),
+            "BinaryReader::readLength changed; audit Rust length-prefix range handling"
+        );
+    }
 
     let read_bytes = compact_cpp_function_body(&compact_source, "BinaryReader::readBytes()")
         .unwrap_or_else(|| {
@@ -13392,8 +13421,7 @@ fn cpp_binary_reader_methods_match_runtime_reader_model() {
             )
         });
     assert_eq!(
-        read_bytes,
-        "uint64_tlength=readVarUint64();if(didOverflow()){returnSpan<constuint8_t>(m_Position,0);}returnreadBytes((size_t)length);",
+        read_bytes, "returnreadBytes(readLength());",
         "BinaryReader::readBytes changed; audit Rust length-prefixed bytes decoding"
     );
 
@@ -13504,8 +13532,11 @@ fn cpp_core_reader_decoders_match_binary_reader_model() {
             "uint64_tresult=0;",
             "uint8_tbyte;",
             "do{",
-            "if(p>=buf_end){return0;}",
+            // Upstream 6cd5d108f: no more than ten bytes, and no bits past
+            // bit 63 (BinaryReader::read_var_uint).
+            "if(p>=buf_end||shift>=64){return0;}",
             "byte=*p++;",
+            "if(shift==63&&(byte&0x7e)!=0){return0;}",
             "result|=((uint64_t)(byte&0x7f))<<shift;",
             "shift+=7;",
             "}while((byte&0x80)!=0);",
@@ -13526,8 +13557,11 @@ fn cpp_core_reader_decoders_match_binary_reader_model() {
             "constuint8_t*p=buf;",
             "uint8_tshift=0;",
             "uint32_tresult=0;",
-            "if(p>=buf_end){return0;}",
+            // Upstream 6cd5d108f: no more than five bytes, and no bits past
+            // bit 31 (BinaryDataReader::read_var_uint32).
+            "if(p>=buf_end||shift>=32){return0;}",
             "byte=*p++;",
+            "if(shift==28&&(byte&0x70)!=0){return0;}",
             "result|=((uint32_t)(byte&0x7f))<<shift;",
             "shift+=7;",
             "}while((byte&0x80)!=0);",
@@ -13545,9 +13579,10 @@ fn cpp_core_reader_decoders_match_binary_reader_model() {
     assert_compact_contains_in_order(
         &decode_string,
         &[
-            "if(buf_end<buf+str_len){return0;}",
-            "constuint8_t*p=buf;",
-            "for(inti=0;i<str_len;i++){char_buf[i]=*p++;}",
+            // Upstream 6cd5d108f compares lengths instead of forming
+            // buf + str_len, as BinaryReader::read_bytes_exact does.
+            "if(buf_end<buf||str_len>(uint64_t)(buf_end-buf)){return0;}",
+            "memcpy(char_buf,buf,(size_t)str_len);",
             "char_buf[str_len]='\\0';",
             "returnstr_len;",
         ],

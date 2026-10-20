@@ -10249,6 +10249,8 @@ fn cpp_data_converter_output_type_overrides_are_tracked_by_binary_import_model()
         ("DataConverterRounder", "number"),
         ("DataConverterStringPad", "string"),
         ("DataConverterStringRemoveZeros", "string"),
+        // Upstream c63a5ba04.
+        ("DataConverterStringTemplate", "string"),
         ("DataConverterStringTrim", "string"),
         ("DataConverterToNumber", "number"),
         ("DataConverterToString", "string"),
@@ -10335,6 +10337,9 @@ fn cpp_data_converter_behavior_overrides_are_tracked_by_binary_import_model() {
         ("DataConverterRounder", &["convert"]),
         ("DataConverterStringPad", &["convert"]),
         ("DataConverterStringRemoveZeros", &["convert"]),
+        // Upstream c63a5ba04. nuxie-binary's converter evaluator returns no
+        // value for it: that evaluator has no consumer, UNIV-5176.
+        ("DataConverterStringTemplate", &["convert"]),
         ("DataConverterStringTrim", &["convert"]),
         (
             "DataConverterSystemDegsToRads",

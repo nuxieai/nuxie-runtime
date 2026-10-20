@@ -12185,6 +12185,7 @@ fn cpp_n_slicer_resolution_methods_are_tracked_by_binary_import_model() {
         runtime_dir.join("src/layout/axis_x.cpp"),
         runtime_dir.join("src/layout/axis_y.cpp"),
         runtime_dir.join("src/layout/n_slicer_tile_mode.cpp"),
+        runtime_dir.join("src/shapes/mesh_host.cpp"),
     ];
     if !source_paths.iter().all(|path| path.exists()) {
         eprintln!(
@@ -12273,16 +12274,45 @@ fn cpp_n_slicer_resolution_methods_are_tracked_by_binary_import_model() {
             source_paths[1].display()
         )
     });
+    // Upstream 1b9b7381f lets an NSlicer slice any mesh host: an Image or a
+    // Node-mode NestedArtboard. A missing host is MissingObject, which
+    // Artboard::initialize does not treat as fatal, so the import model keeps
+    // the NSlicer either way and RuntimeNSlicerDetails holds no host state. The
+    // host attachment is nuxie-runtime's MeshHost::from_handle, ported with
+    // that commit. The WITH_RIVE_EDITOR guard (d4fe10229) is editor-only.
     assert_compact_contains_in_order(
         &n_slicer_dirty,
         &[
             "StatusCodecode=Super::onAddedDirty(context);",
             "if(code!=StatusCode::Ok){returncode;}",
-            "if(!parent()->is<Image>()){returnStatusCode::MissingObject;}",
-            "parent()->as<Image>()->setMesh(m_sliceMesh.get());",
+            "MeshHost*meshHost=host();",
+            "if(meshHost==nullptr){returnStatusCode::MissingObject;}",
+            "#ifndefWITH_RIVE_EDITOR",
+            "meshHost->setMesh(m_sliceMesh.get());",
+            "#endif",
             "returnStatusCode::Ok;",
         ],
-        "NSlicer::onAddedDirty changed; audit NSlicer parent validation",
+        "NSlicer::onAddedDirty changed; audit NSlicer parent validation and nuxie-runtime n_slicer.rs",
+    );
+    let n_slicer_host = compact_cpp_function_body(&compact_sources[1], "NSlicer::host()")
+        .unwrap_or_else(|| panic!("missing NSlicer::host in {}", source_paths[1].display()));
+    assert_eq!(
+        n_slicer_host, "returnMeshHost::from(parent());",
+        "NSlicer::host changed; audit nuxie-runtime NSlicer::host"
+    );
+    let mesh_host_from =
+        compact_cpp_function_body(&compact_sources[6], "MeshHost::from(Component*component)")
+            .unwrap_or_else(|| panic!("missing MeshHost::from in {}", source_paths[6].display()));
+    assert_compact_contains_in_order(
+        &mesh_host_from,
+        &[
+            "if(component==nullptr){returnnullptr;}",
+            "switch(component->coreType()){",
+            "caseImage::typeKey:returncomponent->as<Image>();",
+            "caseNestedArtboard::typeKey:returncomponent->as<NestedArtboard>()->meshHost();",
+            "returnnullptr;",
+        ],
+        "MeshHost::from changed; audit nuxie-runtime MeshHost::from_handle (Video is a Nuxie addition)",
     );
 
     let axis_dirty = compact_cpp_function_body(

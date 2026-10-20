@@ -4953,7 +4953,9 @@ fn cpp_probe_matches_rust_manifest_when_available() {
         .manifest()
         .expect("C++ keeps the manifest resolver after decode failure");
     assert_eq!(manifest.resolve_name(7), Some("position"));
-    assert_eq!(manifest.resolve_path(3), Some(&[7, 0][..]));
+    // Upstream 6cd5d108f: decodePaths stops at the first truncated path id
+    // and stores no part of that path.
+    assert_eq!(manifest.resolve_path(3), Some(&[][..]));
 }
 
 #[test]

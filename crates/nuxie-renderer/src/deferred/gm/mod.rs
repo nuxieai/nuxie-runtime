@@ -7,6 +7,7 @@ mod bitmap_cache_pixel;
 mod canvas_paint_image;
 mod clipstrokes;
 mod css_box_paint;
+mod css_paint_order;
 mod emptypath;
 mod feather_modes;
 mod gradients;

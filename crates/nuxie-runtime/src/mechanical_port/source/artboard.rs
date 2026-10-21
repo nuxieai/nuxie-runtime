@@ -154,6 +154,15 @@ impl RuntimeArtboardDirtyHandle {
         self.0.change_serial.get()
     }
 
+    /// Queue a CSS stacking change without borrowing an updating component.
+    pub(crate) fn mark_css_draw_order_dirty(&self) {
+        let dirt = self.component_dirt();
+        if !dirt.contains(ComponentDirt::DRAW_ORDER) {
+            self.set_component_dirt(dirt | ComponentDirt::DRAW_ORDER);
+            self.on_component_dirty_at(0);
+        }
+    }
+
     pub(crate) fn draw_order_change_counter(&self) -> u8 {
         self.0.draw_order_change_counter.get()
     }

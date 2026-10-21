@@ -100,6 +100,9 @@ struct B {
     css: Option<Vec<P>>,
     /// Translated mode: `LayoutComponent` keys (width, height, fractions).
     component: Vec<P>,
+    /// Transform and opacity properties on the box itself.
+    component_keys: Vec<(u16, Vec<(u32, f32)>)>,
+    component_bind: Option<u16>,
     /// Translated mode: `LayoutComponentStyle` keys.
     style: Vec<P>,
     children: Vec<B>,
@@ -451,6 +454,12 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     ) {
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
+        if let Some(key) = node.component_bind {
+            entries.push(Entry::Bind(key));
+        }
+        for (key, keys) in &node.component_keys {
+            entries.push(Entry::Keys(index, *key, keys));
+        }
         if let Some(props) = &node.css {
             let record = slots(entries) + 1;
             entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
@@ -4388,6 +4397,518 @@ fn css_hit_order_follows_the_paint_order() {
     let top_first = f.draw_names_top_first();
     let at = |name: &str| top_first.iter().position(|n| n == name).unwrap();
     assert!(at("B") < at("A"), "{top_first:?}");
+}
+
+/// Paint order and the proxy order used by state machine hits agree with
+/// host geometry hits at an overlap point. The expectation is bottom first.
+fn assert_stacking_order(f: &Scene, expected: &[(&str, u32)], point: (f32, f32)) {
+    let lines = f.draw_lines();
+    let painted_at = |(name, color): (&str, u32)| {
+        let opacity = f
+            .named(name)
+            .with(|object| object.world_transform_child_opacity())
+            .flatten()
+            .expect("the box's render opacity");
+        draw_at(
+            &lines,
+            crate::source::shapes::paint::color::color_modulate_opacity(color, opacity),
+        )
+    };
+    for pair in expected.windows(2) {
+        assert!(
+            painted_at(pair[0]) < painted_at(pair[1]),
+            "{} should paint below {}: {}",
+            pair[0].0,
+            pair[1].0,
+            lines.join("\n")
+        );
+    }
+    let top_first: Vec<_> = expected.iter().rev().map(|(name, _)| *name).collect();
+    let proxies = f.artboard.with_artboard(|artboard| {
+        artboard
+            .drawables()
+            .iter()
+            .filter_map(|item| {
+                let crate::source::drawable::RuntimeDrawableOccurrence::RuntimeProxy(proxy) = item
+                else {
+                    return None;
+                };
+                proxy
+                    .borrow()
+                    .owner_handle()
+                    .with(|owner| {
+                        owner
+                            .as_component()
+                            .map(|component| component.name().to_owned())
+                    })
+                    .flatten()
+            })
+            .filter(|name| top_first.contains(&name.as_str()))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(proxies, top_first, "state machine proxy order");
+    let hits = f
+        .host()
+        .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.0, point.1));
+    let hits: Vec<_> = f
+        .geometry_names(&hits)
+        .into_iter()
+        .filter(|name| top_first.contains(&name.as_str()))
+        .collect();
+    assert_eq!(hits, top_first, "host geometry hit order");
+}
+
+const CARD: (&str, u32) = ("Card", 0xffcc_3333);
+const LATER: (&str, u32) = ("Later", 0xff33_33cc);
+const BADGE: (&str, u32) = ("Badge", 0xff33_cc33);
+const FLOW: (&str, u32) = ("Flow", 0xff99_9999);
+const BOX_OPACITY: u16 = 18;
+const BOX_ROTATION: u16 = 15;
+const BOX_SCALE_X: u16 = 16;
+
+fn stacking_scene(children: Vec<B>, flex: bool) -> Scene {
+    try_scene(
+        (400.0, 300.0),
+        Some(vec![]),
+        css(
+            "Frame",
+            [
+                vec![U(POSITION, 1), U(DISPLAY, u64::from(flex)), U(61006, 2)],
+                width(200.0).to_vec(),
+                height(240.0).to_vec(),
+            ]
+            .concat(),
+            children,
+        ),
+    )
+    .expect("the scene imports")
+}
+
+fn stacking_box((name, color): (&'static str, u32), extra: &[P]) -> B {
+    painted(
+        name,
+        color,
+        [extra, &width(200.0), &height(100.0), &[F(FLEX_SHRINK, 0.0)]].concat(),
+    )
+}
+
+fn stacking_z(z: f32) -> [P; 2] {
+    [U(Z_INDEX_KIND, 1), F(Z_INDEX, z)]
+}
+
+/// Chrome's card and overlapping sibling, with the badge positioned against
+/// the frame when the card is static. Wrappers contribute no paint or clip.
+fn stacking_badge(card: B, later: &[P], badge_z: Option<f32>, wrappers: bool) -> Scene {
+    let mut badge = painted(
+        BADGE.0,
+        BADGE.1,
+        [
+            vec![
+                U(POSITION, 2),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 80.0),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 10.0),
+            ],
+            width(60.0).to_vec(),
+            height(40.0).to_vec(),
+            badge_z.map(|z| stacking_z(z).to_vec()).unwrap_or_default(),
+        ]
+        .concat(),
+    );
+    if wrappers {
+        badge = css("Outer", vec![], vec![css("Inner", vec![], vec![badge])]);
+    }
+    stacking_scene(
+        vec![
+            B {
+                children: vec![badge],
+                ..card
+            },
+            stacking_box(LATER, &[later, &[F(MARGIN_TOP, -30.0)]].concat()),
+        ],
+        false,
+    )
+}
+
+#[test]
+fn css_stacking_badge_escapes_static_card() {
+    let f = stacking_badge(stacking_box(CARD, &[]), &[], Some(10.0), false);
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_auto_badge_escapes_static_card() {
+    let f = stacking_badge(stacking_box(CARD, &[]), &[], None, false);
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_badge_escapes_above_positive_sibling() {
+    let f = stacking_badge(
+        stacking_box(CARD, &[]),
+        &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
+        Some(10.0),
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_badge_escapes_two_static_wrappers() {
+    let f = stacking_badge(
+        stacking_box(CARD, &[]),
+        &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
+        Some(10.0),
+        true,
+    );
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+}
+
+fn stacking_negative(card: B, flex_item: bool, flow: bool) -> Scene {
+    let negative = painted(
+        BADGE.0,
+        BADGE.1,
+        [
+            vec![
+                U(POSITION, 1),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 10.0),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 10.0),
+            ],
+            stacking_z(-1.0).to_vec(),
+            width(60.0).to_vec(),
+            height(40.0).to_vec(),
+        ]
+        .concat(),
+    );
+    let mut children = vec![negative];
+    if flow {
+        children.push(painted(
+            FLOW.0,
+            FLOW.1,
+            [
+                vec![F(MARGIN_TOP, -20.0), F(61049, 30.0)],
+                width(60.0).to_vec(),
+                height(40.0).to_vec(),
+            ]
+            .concat(),
+        ));
+    }
+    stacking_scene(vec![B { children, ..card }], flex_item)
+}
+
+#[test]
+fn css_stacking_negative_stays_above_context_background() {
+    let f = stacking_negative(
+        stacking_box(CARD, &[&[U(POSITION, 1)][..], &stacking_z(0.0)].concat()),
+        false,
+        true,
+    );
+    assert_stacking_order(&f, &[CARD, BADGE], (15.0, 25.0));
+    assert_stacking_order(&f, &[CARD, BADGE, FLOW], (50.0, 35.0));
+}
+
+#[test]
+fn css_stacking_negative_escapes_behind_static_background() {
+    let f = stacking_negative(stacking_box(CARD, &[]), false, false);
+    assert_stacking_order(&f, &[BADGE, CARD], (15.0, 25.0));
+}
+
+#[test]
+fn css_stacking_negative_escapes_behind_relative_auto_background() {
+    let f = stacking_negative(stacking_box(CARD, &[U(POSITION, 1)]), false, false);
+    assert_stacking_order(&f, &[BADGE, CARD], (15.0, 25.0));
+}
+
+#[test]
+fn css_stacking_negative_stays_in_opacity_context() {
+    let f = stacking_negative(
+        B {
+            component: vec![F(BOX_OPACITY, 0.99)],
+            ..stacking_box(CARD, &[])
+        },
+        false,
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, BADGE], (15.0, 25.0));
+}
+
+#[test]
+fn css_stacking_negative_stays_in_transform_context() {
+    let f = stacking_negative(
+        B {
+            component_keys: vec![(BOX_ROTATION, vec![(0, 0.0)])],
+            ..stacking_box(CARD, &[])
+        },
+        false,
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, BADGE], (15.0, 25.0));
+}
+
+#[test]
+fn css_stacking_negative_stays_in_flex_item_zero_context() {
+    let f = stacking_negative(stacking_box(CARD, &stacking_z(0.0)), true, false);
+    assert_stacking_order(&f, &[CARD, BADGE], (15.0, 25.0));
+}
+
+#[test]
+fn css_stacking_negative_flex_item_escapes_behind_absolute_parent() {
+    let child = painted(
+        BADGE.0,
+        BADGE.1,
+        [&stacking_z(-1.0)[..], &width(60.0), &height(40.0)].concat(),
+    );
+    let f = stacking_scene(
+        vec![B {
+            children: vec![child],
+            ..stacking_box(CARD, &[U(POSITION, 2), U(DISPLAY, 1)])
+        }],
+        false,
+    );
+    assert_stacking_order(&f, &[BADGE, CARD], (15.0, 25.0));
+}
+
+fn assert_badge_is_contained(card: B) {
+    let f = stacking_badge(
+        card,
+        &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
+        Some(10.0),
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, BADGE, LATER], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_opacity_contains_positive_badge() {
+    assert_badge_is_contained(B {
+        component: vec![F(BOX_OPACITY, 0.99)],
+        ..stacking_box(CARD, &[])
+    });
+}
+
+#[test]
+fn css_stacking_keyed_rotation_contains_positive_badge() {
+    assert_badge_is_contained(B {
+        component_keys: vec![(BOX_ROTATION, vec![(0, 0.0)])],
+        ..stacking_box(CARD, &[])
+    });
+}
+
+#[test]
+fn css_stacking_keyed_translation_contains_positive_badge() {
+    assert_badge_is_contained(B {
+        component_keys: vec![(NodeBase::X_PROPERTY_KEY, vec![(0, 0.0)])],
+        ..stacking_box(CARD, &[])
+    });
+}
+
+fn stacking_siblings(first: B, later: B, flex: bool) -> Scene {
+    let mut later = later;
+    later.css.as_mut().unwrap().push(F(MARGIN_TOP, -30.0));
+    stacking_scene(vec![first, later], flex)
+}
+
+#[test]
+fn css_stacking_later_opacity_paints_above_relative() {
+    let f = stacking_siblings(
+        stacking_box(CARD, &[U(POSITION, 1)]),
+        B {
+            component: vec![F(BOX_OPACITY, 0.99)],
+            ..stacking_box(LATER, &[])
+        },
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, LATER], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_relative_paints_above_later_plain_box() {
+    let f = stacking_siblings(
+        stacking_box(CARD, &[U(POSITION, 1)]),
+        stacking_box(LATER, &[]),
+        false,
+    );
+    assert_stacking_order(&f, &[LATER, CARD], (30.0, 90.0));
+}
+
+fn assert_keyed_transform_paints_above_relative(key: u16, identity: f32) {
+    let f = stacking_siblings(
+        stacking_box(CARD, &[U(POSITION, 1)]),
+        B {
+            component_keys: vec![(key, vec![(0, identity), (60, identity)])],
+            ..stacking_box(LATER, &[])
+        },
+        false,
+    );
+    // The track is enough to establish a context before it is played and
+    // after its end value holds at identity.
+    assert_stacking_order(&f, &[CARD, LATER], (30.0, 90.0));
+    animate(&f, 1.0);
+    assert_stacking_order(&f, &[CARD, LATER], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_later_keyed_rotation_paints_above_relative() {
+    assert_keyed_transform_paints_above_relative(BOX_ROTATION, 0.0);
+}
+
+#[test]
+fn css_stacking_later_keyed_translation_paints_above_relative() {
+    assert_keyed_transform_paints_above_relative(NodeBase::X_PROPERTY_KEY, 0.0);
+    assert_keyed_transform_paints_above_relative(NodeBase::Y_PROPERTY_KEY, 0.0);
+}
+
+#[test]
+fn css_stacking_later_keyed_scale_paints_above_relative() {
+    assert_keyed_transform_paints_above_relative(BOX_SCALE_X, 1.0);
+    assert_keyed_transform_paints_above_relative(17, 1.0);
+}
+
+#[test]
+fn css_stacking_bound_transform_paints_above_relative() {
+    let f = stacking_siblings(
+        stacking_box(CARD, &[U(POSITION, 1)]),
+        B {
+            component_bind: Some(BOX_ROTATION),
+            ..stacking_box(LATER, &[])
+        },
+        false,
+    );
+    set_bound(&f, 0.0);
+    assert_stacking_order(&f, &[CARD, LATER], (30.0, 90.0));
+    let counter = stacking_sort_count(&f);
+    set_bound(&f, 0.01);
+    set_bound(&f, 0.0);
+    assert_stacking_order(&f, &[CARD, LATER], (30.0, 90.0));
+    assert_eq!(stacking_sort_count(&f), counter);
+}
+
+#[test]
+fn css_stacking_earlier_opacity_paints_above_later_flow() {
+    let f = stacking_siblings(
+        B {
+            component: vec![F(BOX_OPACITY, 0.99)],
+            ..stacking_box(CARD, &[])
+        },
+        stacking_box(LATER, &[]),
+        false,
+    );
+    assert_stacking_order(&f, &[LATER, CARD], (30.0, 90.0));
+}
+
+#[test]
+fn css_stacking_earlier_opacity_flex_item_paints_above_later_flow() {
+    let f = stacking_siblings(
+        B {
+            component: vec![F(BOX_OPACITY, 0.99)],
+            ..stacking_box(CARD, &[])
+        },
+        stacking_box(LATER, &[]),
+        true,
+    );
+    assert_stacking_order(&f, &[LATER, CARD], (30.0, 90.0));
+}
+
+fn stacking_sort_count(f: &Scene) -> u8 {
+    f.artboard
+        .with_artboard(|artboard| artboard.dirty_handle().draw_order_change_counter())
+}
+
+#[test]
+fn css_stacking_opacity_resorts_only_when_crossing_one() {
+    let f = stacking_siblings(
+        stacking_box(CARD, &[U(POSITION, 1)]),
+        B {
+            component_keys: vec![(BOX_OPACITY, vec![(0, 1.0), (30, 0.5), (60, 1.0)])],
+            ..stacking_box(LATER, &[])
+        },
+        false,
+    );
+    assert_stacking_order(&f, &[LATER, CARD], (30.0, 90.0));
+    let start = stacking_sort_count(&f);
+    animate(&f, 0.25);
+    assert_stacking_order(&f, &[CARD, LATER], (30.0, 90.0));
+    assert_eq!(stacking_sort_count(&f), start.wrapping_add(1));
+    animate(&f, 0.5);
+    assert_eq!(stacking_sort_count(&f), start.wrapping_add(1));
+    animate(&f, 1.0);
+    assert_stacking_order(&f, &[LATER, CARD], (30.0, 90.0));
+    assert_eq!(stacking_sort_count(&f), start.wrapping_add(2));
+    animate(&f, 1.0);
+    assert_eq!(stacking_sort_count(&f), start.wrapping_add(2));
+}
+
+#[test]
+fn css_stacking_script_transform_resorts_only_at_identity() {
+    for (key, identity, changed) in [
+        (13, 0.0, 1.0),
+        (14, 0.0, 1.0),
+        (15, 0.0, 0.01),
+        (16, 1.0, 1.01),
+        (17, 1.0, 1.01),
+    ] {
+        let f = stacking_siblings(
+            stacking_box(CARD, &[U(POSITION, 1)]),
+            stacking_box(LATER, &[]),
+            false,
+        );
+        assert_stacking_order(&f, &[LATER, CARD], (30.0, 90.0));
+        let start = stacking_sort_count(&f);
+        for value in [changed, changed * 1.01, identity] {
+            assert!(CoreRegistry::set_double_handle(
+                &f.named(LATER.0),
+                key,
+                value
+            ));
+            f.advance(3);
+            let expected = if value == identity {
+                [LATER, CARD]
+            } else {
+                [CARD, LATER]
+            };
+            assert_stacking_order(&f, &expected, (30.0, 90.0));
+        }
+        assert_eq!(stacking_sort_count(&f), start.wrapping_add(2));
+    }
+}
+
+#[test]
+fn css_stacking_overflow_toggle_rebuilds_escape_boundary() {
+    let f = stacking_badge(
+        stacking_box(CARD, &[U(POSITION, 1)]),
+        &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
+        Some(10.0),
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+    let start = stacking_sort_count(&f);
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record(CARD.0),
+        OVERFLOW_X.into(),
+        2
+    ));
+    f.advance(3);
+    assert_stacking_order(&f, &[CARD, BADGE, LATER], (30.0, 90.0));
+    assert_eq!(stacking_sort_count(&f), start.wrapping_add(1));
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record(CARD.0),
+        OVERFLOW_X.into(),
+        0
+    ));
+    f.advance(3);
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+    assert_eq!(stacking_sort_count(&f), start.wrapping_add(2));
+}
+
+#[test]
+fn css_stacking_clipping_card_keeps_its_positive_badge_atomic() {
+    assert_badge_is_contained(stacking_box(
+        CARD,
+        &[U(POSITION, 1), U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+    ));
 }
 
 /// A box's own paint stays at the bottom of its stack whatever order its

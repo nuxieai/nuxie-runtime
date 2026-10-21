@@ -84,6 +84,15 @@ impl KeyedObject {
                     });
                 }
             }
+            if crate::css_layout::paint_order::is_transform_property(property_key) {
+                if let Some(object) = &core_object {
+                    object.with_mut(|object| {
+                        if let Some(layout) = object.as_layout_component_mut() {
+                            layout.mark_css_transform_authored();
+                        }
+                    });
+                }
+            }
             let code = self.keyed_properties.view()[index]
                 .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);

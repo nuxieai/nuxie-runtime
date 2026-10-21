@@ -3731,10 +3731,12 @@ fn css_artboard_ignores_legacy_limits() {
     assert_eq!(artboard.width(), 200.0);
 }
 
-/// A CSS root uses its artboard size even when the Rive style hugs and
-/// intrinsicallySized is set.
+/// A CSS artboard whose Rive style hugs (the runtime marks a hugging style
+/// intrinsically sized) takes its content's size when nothing bounds it.
+/// That is how a hosted content-height presentation, such as a sheet,
+/// measures itself.
 #[test]
-fn css_artboard_ignores_intrinsically_sized() {
+fn css_artboard_that_hugs_takes_its_content_size() {
     let f = try_scene_spec(
         (200.0, 100.0),
         ArtboardSpec {
@@ -3761,7 +3763,7 @@ fn css_artboard_ignores_intrinsically_sized() {
     let bounds = f
         .artboard
         .with_artboard(|artboard| artboard.layout_bounds());
-    assert_eq!((bounds.width(), bounds.height()), (200.0, 100.0));
+    assert_eq!((bounds.width(), bounds.height()), (10.0, 10.0));
 }
 
 /// A hosted CSS artboard keeps its stored Hug height without

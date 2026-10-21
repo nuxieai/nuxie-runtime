@@ -559,7 +559,11 @@ impl LayoutParticipant {
             .map_or_else(|| self.solved_layout(), |a| a.animated_layout);
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let height_scale = LayoutScaleType::from(self.base.layout_height_scale_type());
+        let css = self.css_record().is_some();
         self.with_host_mut(|host| {
+            if let Some(text) = host.as_text_mut() {
+                text.set_owned_by_css_layout(css);
+            }
             if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
                 sizeable.control_size(
                     Vec2D::new(resolved.width(), resolved.height()),
@@ -572,7 +576,7 @@ impl LayoutParticipant {
     }
 
     fn apply_resolved_layout_size_occurrence(owner: &CoreHandle) {
-        let (host, layout, resolved, width_scale, height_scale) = owner
+        let (host, layout, resolved, width_scale, height_scale, css) = owner
             .with_downcast::<Self, _>(|participant| {
                 (
                     participant.owner_handle(),
@@ -583,6 +587,7 @@ impl LayoutParticipant {
                     ),
                     LayoutScaleType::from(participant.layout_width_scale_type()),
                     LayoutScaleType::from(participant.layout_height_scale_type()),
+                    participant.css_record().is_some(),
                 )
             })
             .expect("live LayoutParticipant");
@@ -592,6 +597,11 @@ impl LayoutParticipant {
                 layout.with(|layout| layout.as_layout_component().unwrap().actual_direction())
             })
             .unwrap_or(LayoutDirection::Inherit);
+        host.with_mut(|object| {
+            if let Some(text) = object.as_text_mut() {
+                text.set_owned_by_css_layout(css);
+            }
+        });
         // Shape::controlSize reads and updates this participant's real bounds
         // and scale. End its arena borrow before the virtual host callback.
         crate::mechanical_port::source::intrinsically_sizeable::control_size_handle(

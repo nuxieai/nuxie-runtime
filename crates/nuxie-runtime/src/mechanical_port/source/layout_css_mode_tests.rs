@@ -103,6 +103,9 @@ struct B {
     /// Transform and opacity properties on the box itself.
     component_keys: Vec<(u16, Vec<(u32, f32)>)>,
     component_bind: Option<u16>,
+    component_bind_flags: u64,
+    /// A LayerMask on this box, referring to another box by name.
+    mask_source: Option<&'static str>,
     /// Translated mode: `LayoutComponentStyle` keys.
     style: Vec<P>,
     children: Vec<B>,
@@ -281,7 +284,7 @@ enum Entry<'a> {
     LinearGradient(u64),
     Stop(u32, f32, u64),
     NamedShape(&'static str, u64),
-    Bind(u16),
+    Bind(u16, u64),
     /// A record property keyed by the animation: the record's object index.
     Keys(u64, u16, &'a [(u32, f32)]),
     PathAt(f32, (f32, f32), u64),
@@ -455,7 +458,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(key) = node.component_bind {
-            entries.push(Entry::Bind(key));
+            entries.push(Entry::Bind(key, node.component_bind_flags));
         }
         for (key, keys) in &node.component_keys {
             entries.push(Entry::Keys(index, *key, keys));
@@ -464,7 +467,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             let record = slots(entries) + 1;
             entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
             if let Some(key) = node.bind {
-                entries.push(Entry::Bind(key));
+                entries.push(Entry::Bind(key, 0));
             }
             for (key, keys) in &node.css_keys {
                 entries.push(Entry::Keys(record, *key, keys));
@@ -474,7 +477,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             let record = slots(entries) + 1;
             entries.push(Entry::Record(BOX_PAINT, props.clone(), index));
             if let Some(key) = node.box_paint_bind {
-                entries.push(Entry::Bind(key));
+                entries.push(Entry::Bind(key, 0));
             }
             for (key, keys) in &node.box_paint_keys {
                 entries.push(Entry::Keys(record, *key, keys));
@@ -556,6 +559,36 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 walk(child, parent, &mut entries, &mut late);
             }
         }
+    }
+    // Resolve mask sources after every box has its object index, including
+    // sources written after their masked subtree.
+    let mut masks = Vec::new();
+    let mut box_ids = Vec::new();
+    let mut index = 0u64;
+    for entry in &entries {
+        if matches!(entry, Entry::Bind(..) | Entry::Keys(..)) {
+            continue;
+        }
+        index += 1;
+        if let Entry::Box(node, _) = entry {
+            box_ids.push((node.name, index));
+            if let Some(source) = node.mask_source {
+                masks.push((index, source));
+            }
+        }
+    }
+    for (parent, source) in masks {
+        use crate::source::generated::layer_mask_base::LayerMaskBase;
+        let source = box_ids
+            .iter()
+            .find(|(name, _)| *name == source)
+            .expect("the mask source box")
+            .1;
+        entries.push(Entry::Record(
+            LayerMaskBase::TYPE_KEY,
+            vec![U(LayerMaskBase::SOURCE_ID_PROPERTY_KEY, source)],
+            parent,
+        ));
     }
     // Each listened box's object and its event's, which follows the boxes.
     let mut listened = Vec::new();
@@ -696,13 +729,13 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 riv.end();
             }
             Entry::Keys(..) => {}
-            Entry::Bind(key) => {
+            Entry::Bind(key, flags) => {
                 use crate::source::generated::data_bind::{
                     data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase,
                 };
                 riv.object(DataBindContextBase::TYPE_KEY)
                     .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, u64::from(*key))
-                    .uint(DataBindBase::FLAGS_PROPERTY_KEY, 0)
+                    .uint(DataBindBase::FLAGS_PROPERTY_KEY, *flags)
                     .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
                     .end();
             }
@@ -4901,6 +4934,135 @@ fn css_stacking_overflow_toggle_rebuilds_escape_boundary() {
     f.advance(3);
     assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
     assert_eq!(stacking_sort_count(&f), start.wrapping_add(2));
+}
+
+#[test]
+fn css_stacking_masked_card_keeps_its_subtree_and_mask_bracket() {
+    use crate::source::{
+        drawable::{Drawable, RuntimeDrawableOccurrence},
+        layer_mask::LayerMask,
+    };
+    let badge = painted(
+        BADGE.0,
+        BADGE.1,
+        [
+            vec![
+                U(POSITION, 2),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 80.0),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 10.0),
+            ],
+            stacking_z(10.0).to_vec(),
+            width(60.0).to_vec(),
+            height(40.0).to_vec(),
+        ]
+        .concat(),
+    );
+    let f = stacking_scene(
+        vec![
+            B {
+                mask_source: Some("MaskSource"),
+                children: vec![badge],
+                ..stacking_box(CARD, &[])
+            },
+            stacking_box(LATER, &[F(MARGIN_TOP, -30.0)]),
+            painted(
+                "MaskSource",
+                0xffff_ffff,
+                [
+                    vec![U(POSITION, 2), U(INSET_LEFT_KIND, 1), F(INSET_LEFT, 300.0)],
+                    width(200.0).to_vec(),
+                    height(100.0).to_vec(),
+                ]
+                .concat(),
+            ),
+        ],
+        false,
+    );
+    assert!(
+        !f.named(CARD.0)
+            .with_downcast::<LayoutComponent, _>(LayoutComponent::clips)
+            .unwrap()
+    );
+    let (mask, items, mut current) = f.artboard.with_artboard(|artboard| {
+        (
+            artboard.all_layer_masks()[0].clone(),
+            artboard.drawables().to_vec(),
+            artboard.first_drawable(),
+        )
+    });
+    let members: Vec<_> = items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| item.layer_masks().contains(&mask))
+        .map(|(index, _)| index)
+        .collect();
+    // Both boxes' own drawables and paint proxies stay in one range, with
+    // the unrelated later sibling outside it.
+    assert_eq!(members.len(), 4);
+    assert_eq!(members.last().unwrap() - members[0] + 1, members.len());
+    let badge = RuntimeDrawableOccurrence::authored(f.named(BADGE.0));
+    let later = RuntimeDrawableOccurrence::authored(f.named(LATER.0));
+    assert!(
+        items.iter().position(|item| item == &later).unwrap()
+            < items.iter().position(|item| item == &badge).unwrap()
+    );
+    let mut chain = Vec::new();
+    while let Some(item) = current {
+        current = item.with(Drawable::prev_drawable).flatten();
+        chain.push(item);
+    }
+    let start = chain
+        .iter()
+        .position(|item| item.is_mask_start())
+        .expect("mask start spliced");
+    let end = chain
+        .iter()
+        .position(|item| item.is_mask_end())
+        .expect("mask end spliced");
+    assert_eq!(end - start - 1, members.len());
+    assert!(
+        chain[start + 1..end]
+            .iter()
+            .all(|item| item.layer_masks().contains(&mask))
+    );
+    let paired_end = chain[start]
+        .layer_mask_marker()
+        .unwrap()
+        .borrow()
+        .paired_end
+        .as_ref()
+        .and_then(|end| end.upgrade())
+        .expect("paired mask end");
+    assert!(paired_end == chain[end]);
+    assert!(
+        mask.with_downcast::<LayerMask, _>(LayerMask::source_start)
+            .flatten()
+            .is_some()
+    );
+}
+
+#[test]
+fn css_stacking_source_only_transform_binding_allows_badge_to_escape() {
+    let f = stacking_badge(
+        B {
+            component_bind: Some(BOX_ROTATION),
+            component_bind_flags: u64::from(crate::source::data_bind::data_bind::TO_SOURCE),
+            ..stacking_box(CARD, &[])
+        },
+        &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
+        Some(10.0),
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+    set_bound(&f, 0.5);
+    assert_eq!(
+        f.named(CARD.0)
+            .with_downcast::<LayoutComponent, _>(LayoutComponent::rotation),
+        Some(0.0)
+    );
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
 }
 
 #[test]

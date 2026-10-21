@@ -452,7 +452,7 @@ fn css_participant_text_wraps_at_its_css_width() {
     LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
     let solved = f.solve();
     // Two lines at 338, as the CSS box's title above.
-    assert_eq!((solved.width(), solved.height()), (338.0, 70.30176));
+    assert_eq!((solved.width(), solved.height()), (338.0, 72.0));
 }
 
 /// A CSS leaf's minimum is its contents' largest: text with hidden overflow
@@ -2135,15 +2135,56 @@ fn line_box_fixture(css: bool, runs: &[(&str, f32, f32)]) -> Fixture {
 }
 
 fn line_box_fixture_with_font(css: bool, runs: &[(&str, f32, f32)], bytes: &[u8]) -> Fixture {
+    line_box_fixture_with_host(css, runs, bytes, false)
+}
+
+fn line_box_participant_fixture(css: bool, runs: &[(&str, f32, f32)]) -> Fixture {
+    line_box_fixture_with_host(
+        css,
+        runs,
+        include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+        true,
+    )
+}
+
+fn line_box_fixture_with_host(
+    css: bool,
+    runs: &[(&str, f32, f32)],
+    bytes: &[u8],
+    participant: bool,
+) -> Fixture {
     use crate::source::text::text_style_paint::TextStylePaint;
     let arena = CoreArena::default();
     let root = layout(&arena, None, Some(400.0), false);
-    let label = layout(&arena, Some(&root), None, false);
     let asset = arena.insert(FontAsset::default());
     let font = HbFont::decode(bytes).unwrap();
     FontAsset::set_font_occurrence(&asset, Some(font));
     let text = arena.insert(Text::default());
-    attach(&arena, &label, &text);
+    let label = if participant {
+        attach(&arena, &root, &text);
+        let mut p = LayoutParticipant::default();
+        p.base
+            .set_layout_width_scale_type_value(LayoutScaleType::Hug as u8);
+        p.base
+            .set_layout_height_scale_type_value(LayoutScaleType::Hug as u8);
+        p.base.set_width_units_value_value(YGUnit::Auto as u8);
+        p.base.set_height_units_value_value(YGUnit::Auto as u8);
+        let p = arena.insert(p);
+        attach(&arena, &text, &p);
+        let mut context = ParentContext {
+            arena: &arena,
+            parent: text.clone(),
+        };
+        assert_eq!(
+            LayoutParticipant::on_added_clean_occurrence(&p, &mut context),
+            StatusCode::Ok
+        );
+        p
+    } else {
+        let label = layout(&arena, Some(&root), None, false);
+        attach(&arena, &label, &text);
+        label
+    };
     let mut first_run = None;
     for &(content, size, line_height) in runs {
         let style = arena.insert(TextStylePaint::default());
@@ -2164,15 +2205,26 @@ fn line_box_fixture_with_font(css: bool, runs: &[(&str, f32, f32)], bytes: &[u8]
     }
     if css {
         let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-        attach(&arena, &label, &record);
-        label.with_downcast_mut::<LayoutComponent, _>(|owner| {
-            owner.add_layout_style_applier(record);
-        });
+        if participant {
+            attach(&arena, &text, &record);
+            label.with_downcast_mut::<LayoutParticipant, _>(|owner| {
+                owner.add_layout_style_applier(record);
+            });
+        } else {
+            attach(&arena, &label, &record);
+            label.with_downcast_mut::<LayoutComponent, _>(|owner| {
+                owner.add_layout_style_applier(record);
+            });
+        }
     }
-    for owner in [&label, &root] {
-        LayoutComponent::sync_style_occurrence(owner);
-        LayoutComponent::sync_layout_children_occurrence(owner);
+    if participant {
+        LayoutParticipant::sync_style_changes_occurrence(&label, None);
+    } else {
+        LayoutComponent::sync_style_occurrence(&label);
+        LayoutComponent::sync_layout_children_occurrence(&label);
     }
+    LayoutComponent::sync_style_occurrence(&root);
+    LayoutComponent::sync_layout_children_occurrence(&root);
     Fixture {
         arena,
         root,
@@ -2250,6 +2302,105 @@ fn css_text_line_boxes_match_chrome() {
             height * 2.0,
             &[baseline, baseline + height],
         );
+    }
+}
+
+#[test]
+fn css_text_participants_match_leaf_line_boxes() {
+    for (size, line_height, height, baseline) in
+        [(16.0, 24.0, 24.0, 17.0), (28.0, 36.0, 36.0, 27.0)]
+    {
+        for (content, baselines) in [
+            ("Aa", vec![baseline]),
+            ("Aa\nAa", vec![baseline, baseline + line_height]),
+        ] {
+            let runs = [(content, size, line_height)];
+            let expected_height = height * baselines.len() as f32;
+            assert_line_box(&line_box_fixture(true, &runs), expected_height, &baselines);
+            assert_line_box(
+                &line_box_participant_fixture(true, &runs),
+                expected_height,
+                &baselines,
+            );
+        }
+    }
+}
+
+#[test]
+fn translated_text_participants_keep_rive_line_spacing() {
+    for (size, line_height, height, baseline) in [
+        (16.0, 24.0, 19.84375, 14.84375),
+        (28.0, 36.0, 33.4765625, 25.9765625),
+    ] {
+        for (content, baselines) in [
+            ("Aa", vec![baseline]),
+            ("Aa\nAa", vec![baseline, baseline + line_height]),
+        ] {
+            let runs = [(content, size, line_height)];
+            let expected_height = height + line_height * (baselines.len() - 1) as f32;
+            assert_line_box(&line_box_fixture(false, &runs), expected_height, &baselines);
+            for css_parent in [false, true] {
+                let f = line_box_participant_fixture(false, &runs);
+                if css_parent {
+                    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
+                    attach(&f.arena, &f.root, &record);
+                    f.root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                        root.add_layout_style_applier(record);
+                    });
+                    LayoutComponent::sync_style_occurrence(&f.root);
+                }
+                assert_line_box(&f, expected_height, &baselines);
+            }
+        }
+    }
+}
+
+#[test]
+fn css_text_participant_size_propagation_sets_ownership_without_measurement() {
+    use crate::source::component_dirt::ComponentDirt;
+    for css in [false, true] {
+        for occurrence in [false, true] {
+            let f = line_box_participant_fixture(css, &[("Aa", 16.0, 24.0)]);
+            // A translated participant must clear ownership from a former
+            // CSS owner, even when it receives exactly the same size.
+            f.text.with_downcast_mut::<Text, _>(|text| {
+                text.set_owned_by_css_layout(!css);
+                text.control_size(
+                    Vec2D::new(200.0, 100.0),
+                    LayoutScaleType::Hug,
+                    LayoutScaleType::Hug,
+                    LayoutDirection::Inherit,
+                );
+            });
+            let before = host_measure_count();
+            f.label
+                .with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                    let data = participant.native_layout_data_mut().unwrap();
+                    data.solved_layout = Layout::new(0.0, 0.0, 200.0, 100.0);
+                    data.has_new_layout = true;
+                });
+            if occurrence {
+                LayoutParticipant::update_layout_bounds_occurrence(&f.label, false);
+            } else {
+                f.label
+                    .with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                        participant.update_layout_bounds(false);
+                    });
+            }
+            assert_eq!(host_measure_count(), before);
+            f.text
+                .with_downcast_mut::<Text, _>(|text| {
+                    text.update_after_transform_super(ComponentDirt::PATH);
+                    let (height, baseline) = if css {
+                        (24.0, 17.0)
+                    } else {
+                        (19.84375, 14.84375)
+                    };
+                    assert!((text.first_baseline().unwrap() - baseline).abs() < 0.01);
+                    assert!((text.ordered_lines()[0].glyph_line().bottom - height).abs() < 0.01);
+                })
+                .unwrap();
+        }
     }
 }
 

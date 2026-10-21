@@ -4694,6 +4694,12 @@ impl LayoutComponent {
                     .is_some_and(LayoutComponent::is_css_mode)
             })
             .unwrap_or(false);
+        let css_text_owner = css_owner
+            || owner
+                .with_downcast::<LayoutParticipant, _>(|participant| {
+                    participant.css_record().is_some()
+                })
+                .unwrap_or(false);
         let measure_host = |host: &CoreHandle,
                             width: f32,
                             width_mode: LayoutMeasureMode,
@@ -4702,10 +4708,10 @@ impl LayoutComponent {
          -> Vec2D {
             #[cfg(test)]
             layout_fit_content_tests::note_host_measure();
-            // A CSS box owns its text's width (docs/CSS_LAYOUT.md, 5).
+            // A CSS box or participant owns its text's width and line boxes.
             host.with_mut(|object| {
                 if let Some(text) = object.as_text_mut() {
-                    text.set_owned_by_css_layout(css_owner);
+                    text.set_owned_by_css_layout(css_text_owner);
                 }
             });
             // Image already measures exact offers as exact sizes. Preserve that

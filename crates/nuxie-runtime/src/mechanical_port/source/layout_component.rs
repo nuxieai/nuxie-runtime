@@ -3776,10 +3776,9 @@ impl LayoutComponent {
         available_width: f32,
         available_height: f32,
     ) -> Vec2D {
-        let intrinsically_sized = !(self.is_css_mode() && self.is_artboard())
-            && self
-                .with_style(|style| style.intrinsically_sized())
-                .unwrap_or(false);
+        let intrinsically_sized = self
+            .with_style(|style| style.intrinsically_sized())
+            .unwrap_or(false);
         Vec2D::new(
             if available_width.is_nan() && intrinsically_sized {
                 available_width

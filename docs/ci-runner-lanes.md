@@ -1,13 +1,19 @@
 # Runtime runner policy and shared cache
 
-The repository keeps its six existing Linux and Apple confidence recipes. The
-default `.buildkite/pipeline.yml` uploads the owning JSON graph through
+The repository keeps its six existing Linux and Apple confidence recipes and
+adds a nightly macOS WebGPU content probe. The default
+`.buildkite/pipeline.yml` uploads the owning JSON graph through
 `tools/bazel/pipeline.py`; absent operator settings preserve the full legacy
 graph. `NUXIE_CI_RUNNER_POLICY_VERSION=2` selects `linux-14g-v2` and `mac-64g-v2`
 capabilities, requests `linux-native` or `macos-apple` admission, and uses the
 organization's physical-host concurrency groups with an eager limit of one.
 `NUXIE_SDK_SPLIT_LANES=1` requires policy v2 and additionally schedules the
 existing Android C ABI contract and distribution entrypoints on Linux.
+
+The scheduled `:mac: Nightly WebGPU content probe` lane runs
+`make fixtures webgpu-content-probe` to build the release Wasm replay and verify
+solid-fill pixels with the pinned Playwright's bundled Chromium on a real GPU;
+policy v2 uploads its `target/renderer-webgpu-content-probe/probe.log` evidence.
 
 Both Python Bazel frontends use `tools/bazel/bazel.sh` under policy v2. It verifies
 the fixed root-controlled installed policy, obtains ceilings from that helper,

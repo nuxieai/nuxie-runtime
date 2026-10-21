@@ -170,6 +170,23 @@
           }
         ]
       }
+    },
+    {
+      "label": ":mac: Nightly WebGPU content probe",
+      "if": "build.source == \"schedule\"",
+      "command": "set -euo pipefail\nsource tools/bazel/ci-cache.sh\ntools/bazel/install.sh\nexport RIVE_RUNTIME_DIR=\"$(pwd)/rive-runtime\"\ngit clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime\ngit -C rive-runtime checkout \"$RIVE_RUNTIME_REF\"\nrustup toolchain install stable --profile minimal --no-self-update\nrustup target add --toolchain stable wasm32-unknown-unknown\nexport RUSTUP_TOOLCHAIN=stable\nmake fixtures webgpu-content-probe\n",
+      "agents": {
+        "queue": "nuxie-pr",
+        "nuxie-platform": "macos"
+      },
+      "timeout_in_minutes": 60,
+      "retry": {
+        "automatic": [
+          {
+            "exit_status": -1
+          }
+        ]
+      }
     }
   ]
 }

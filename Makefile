@@ -3,6 +3,7 @@
 .PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe renderer-metal-cpp-parity renderer-metal-wgpu-diagnostic renderer-metal-wgpu-parity
 .PHONY: renderer-native-metal-replay
 .PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3
+.PHONY: webgpu-content-probe
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 RIVE_RUNTIME_REF ?= 5551696a826ff546775fffe46ca78824b1f1dc51
@@ -190,6 +191,14 @@ crate-seams-browser-check:
 		$(RUST_BUILD) check --locked \
 		-p webgpu-renderer-replay -p webgl2-renderer-replay \
 		--target wasm32-unknown-unknown --all-targets
+
+webgpu-content-probe:
+	npm ci --ignore-scripts --prefix tools/backend-port/browser-platform
+	npm exec --prefix tools/backend-port/browser-platform -- playwright install chromium
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/webgpu-renderer-replay/build.sh
+	@mkdir -p target/renderer-webgpu-content-probe
+	@probe_rc=0; BROWSER_PLATFORM_CHROMIUM_CHANNEL=bundled node tools/backend-port/webgpu-content-probe.cjs >target/renderer-webgpu-content-probe/probe.log 2>&1 || probe_rc=$$?; \
+	cat target/renderer-webgpu-content-probe/probe.log; exit "$$probe_rc"
 
 crate-seams-apple-check:
 	tools/check-nux-capi-apple.sh

@@ -3045,7 +3045,18 @@ impl Artboard {
             None => path.add_rect(bounds, PathDirection::Clockwise),
         };
         add(&mut paths.local, painted_bounds, painted_radii);
-        add(&mut paths.world, clip, clip_radii);
+        if css {
+            add(
+                &mut paths.world,
+                painted_bounds.offset(
+                    clip.left() - background.left(),
+                    clip.top() - background.top(),
+                ),
+                painted_radii,
+            );
+        } else {
+            add(&mut paths.world, clip, clip_radii);
+        }
         paths.frame_clip = has_box_paint.then(|| {
             let mut path = ShapePaintPath::default();
             add(&mut path, background, clip_radii);

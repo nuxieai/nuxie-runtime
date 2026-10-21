@@ -144,6 +144,7 @@ struct Shadow {
     radius: f32,
     // box-shadow: [inset] x y blur spread color.
     inset: bool,
+    world_space: bool,
     x: f32,
     y: f32,
     blur: f32,
@@ -189,8 +190,7 @@ fn scene(shadow: Shadow, strength_scale: f32) -> Vec<u8> {
         .end();
     riv.object(FEATHER)
         .uint(PARENT_ID, 3)
-        // Local space: a shadow moves with its box, as in CSS.
-        .uint(FEATHER_SPACE, 1)
+        .uint(FEATHER_SPACE, u64::from(!shadow.world_space))
         .float(FEATHER_STRENGTH, shadow.blur * strength_scale)
         .float(FEATHER_OFFSET_X, shadow.x)
         .float(FEATHER_OFFSET_Y, shadow.y)
@@ -286,11 +286,16 @@ const STRAIGHT: Bound = Bound {
 /// In each mode the contract's mapping matches Chrome within `bound`, and
 /// better than half or double the strength would.
 fn check(name: &str, shadow: Shadow, bound: Bound) {
+    check_with_strength_scales(name, shadow, bound, &[0.5, 2.0]);
+}
+
+/// Hard shadows have no feather strength to compare.
+fn check_with_strength_scales(name: &str, shadow: Shadow, bound: Bound, scales: &[f32]) {
     let reference = chrome(name);
     for mode in MODES {
         let (mean, max, outliers) =
             compare(name, mode, &reference, render(&scene(shadow, 1.0), mode));
-        for scale in [0.5, 2.0] {
+        for &scale in scales {
             let (other, _, _) = difference(&reference, &render(&scene(shadow, scale), mode));
             eprintln!("{name} {mode:?}: strength x{scale}: mean {other:.3}");
             assert!(
@@ -316,6 +321,7 @@ const BOX: Shadow = Shadow {
     border: 0.0,
     radius: 0.0,
     inset: false,
+    world_space: false,
     x: 0.0,
     y: 0.0,
     blur: 0.0,
@@ -340,6 +346,51 @@ fn css_shadow_outer_spread_matches_chrome() {
             ..BOX
         },
         STRAIGHT,
+    );
+}
+
+#[test]
+fn css_shadow_outer_spread_world_space_matches_chrome() {
+    check(
+        "shadow_outer_spread",
+        Shadow {
+            world_space: true,
+            x: 10.0,
+            y: 10.0,
+            blur: 20.0,
+            spread: 5.0,
+            ..BOX
+        },
+        STRAIGHT,
+    );
+}
+
+#[test]
+fn css_shadow_hard_offset_matches_chrome() {
+    check_with_strength_scales(
+        "shadow_hard_offset",
+        Shadow {
+            x: 10.0,
+            y: 10.0,
+            ..BOX
+        },
+        STRAIGHT,
+        &[],
+    );
+}
+
+#[test]
+fn css_shadow_hard_offset_world_space_matches_chrome() {
+    check_with_strength_scales(
+        "shadow_hard_offset",
+        Shadow {
+            world_space: true,
+            x: 10.0,
+            y: 10.0,
+            ..BOX
+        },
+        STRAIGHT,
+        &[],
     );
 }
 

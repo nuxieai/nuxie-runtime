@@ -34,6 +34,9 @@ what is idiomatic Rust.
   ownership, ordering, cloning, lifecycle, floating-point, or dispatch row is
   still uncertain. `// TODO(golden):` may mark an internal work-in-progress,
   but never substitutes for closure evidence for the family.
+- `nuxie-binary` decodes files and exposes their import model, including converter
+  metadata and output types. It keeps no converter evaluator; converter execution
+  belongs to `nuxie-runtime/src/mechanical_port/source/data_bind/converters/`.
 - `nuxie-schema` and `nuxie-binary` change only through an Upstream Sync
   cycle, which may regenerate schema artifacts and update the binary decoder when the
   upstream object model changes; those edits require the sync-map inventory,

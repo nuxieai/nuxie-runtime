@@ -2377,6 +2377,101 @@ fn css_world_shadow_offset_keeps_its_clip_at_the_box() {
     }
 }
 
+/// A world-space offset grows in box coordinates when the box shrinks.
+/// Its outer clip and inset outline must still cover the visible shadow.
+#[test]
+fn css_world_shadow_downscaled_offset_expands_its_regions_and_bounds() {
+    use crate::source::{
+        generated::transform_component_base::TransformComponentBase, math::mat2d::Mat2D,
+    };
+    for inset in [false, true] {
+        let shadow = if inset {
+            Paint::InsetShadow {
+                color: 0xff00_0000,
+                strength: 0.0,
+                spread: 5.0,
+            }
+        } else {
+            Paint::Shadow {
+                color: 0xff00_0000,
+                strength: 0.0,
+                spread: 5.0,
+            }
+        };
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                paints: vec![shadow],
+                ..css("Lifted", [width(100.0), height(60.0)].concat(), vec![])
+            },
+        );
+        let owner = f.named("Lifted");
+        let feather = f.paint_child("Lifted", FeatherBase::TYPE_KEY);
+        assert!(CoreRegistry::set_uint_handle(
+            &feather,
+            FeatherBase::SPACE_VALUE_PROPERTY_KEY.into(),
+            0
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &feather,
+            FeatherBase::OFFSET_X_PROPERTY_KEY.into(),
+            10.0
+        ));
+        for key in [
+            TransformComponentBase::SCALE_X_PROPERTY_KEY,
+            TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+        ] {
+            assert!(CoreRegistry::set_double_handle(&owner, key.into(), 0.1));
+        }
+        f.advance(2);
+        let lines = f
+            .draw_lines()
+            .into_iter()
+            .filter(|line| !line.starts_with("make"))
+            .collect::<Vec<_>>();
+        let draw = draw_at(&lines, 0xff00_0000);
+        let offset = lines[draw - 1]
+            .strip_prefix("transform matrix=[1,0,0,1,")
+            .and_then(|line| line.strip_suffix(",0]"))
+            .expect("the shadow's local translation")
+            .parse::<f32>()
+            .unwrap();
+        assert!((offset - 100.0).abs() < 0.001);
+        let clip = lines[..draw]
+            .iter()
+            .rposition(|line| line.starts_with("clipPath"))
+            .expect("the stationary shadow clip");
+        assert!(clip < draw - 1, "{lines:?}");
+        let (path, clip) = f.css_paints("Lifted")[0];
+        let world = Mat2D::from_scale(0.1, 0.1);
+        let drawn = world.map_bounding_box(path.offset(offset, 0.0));
+        let clip = world.map_bounding_box(clip.expect("the shadow clip"));
+        if inset {
+            // The translated outline must cover the entire padding box.
+            assert!(drawn.left() <= 0.0 && drawn.right() >= 10.0, "{drawn:?}");
+            assert_eq!(clip, aabb(0.0, 0.0, 10.0, 6.0));
+        } else {
+            // 0.1 * (100 + 5) + 10, measured in the parent's space.
+            assert!((drawn.right() - 20.5).abs() < 0.001, "{drawn:?}");
+            assert!(clip.right() >= drawn.right(), "{clip:?}");
+            let mut bounds = aabb(0.0, 0.0, 0.0, 0.0);
+            owner.with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.painted_world_bounds(&mut bounds)
+            });
+            assert!((bounds.right() - 20.5).abs() < 0.001, "{bounds:?}");
+            // Bounds can also be requested in unscaled box coordinates.
+            owner.with_downcast::<LayoutComponent, _>(|layout| {
+                layout.css_painted_bounds(
+                    aabb(0.0, 0.0, 100.0, 60.0),
+                    &Mat2D::identity(),
+                    &mut bounds,
+                )
+            });
+            assert!((bounds.right() - 205.0).abs() < 0.001, "{bounds:?}");
+        }
+    }
+}
+
 /// A shadow's Feather strength written at run time widens the region the
 /// shadow may draw in, which reaches 1.5 times the strength past the box.
 #[test]

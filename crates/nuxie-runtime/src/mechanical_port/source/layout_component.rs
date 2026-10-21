@@ -303,7 +303,7 @@ enum CssPaintKind {
     Shadow {
         spread: f32,
         inset: bool,
-        reach: f32,
+        blur_reach: f32,
         offset: (Vec2D, bool),
     },
 }
@@ -385,11 +385,25 @@ fn css_paint_kind(paint: &CoreHandle) -> Option<CssPaintKind> {
             inset,
             // A feather reaches 1.5 times its strength (three standard
             // deviations, the feather texture's extent).
-            reach: 1.5 * strength.abs() + offset.x.abs() + offset.y.abs(),
+            blur_reach: 1.5 * strength.abs(),
             offset: (offset, world),
         });
     }
     None
+}
+
+/// A world-space shadow offset in the box's coordinates. Its clip stays
+/// at the box, so both its finite regions and its draw use this vector.
+fn css_shadow_local_offset(offset: Vec2D, world_space: bool, world: &Mat2D) -> Option<Vec2D> {
+    if !world_space {
+        return Some(offset);
+    }
+    let linear = Mat2D::new(world[0], world[1], world[2], world[3], 0.0, 0.0);
+    let mut inverse = Mat2D::identity();
+    if !linear.invert(&mut inverse) || !inverse.values().iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    Some(Vec2D::transform_dir(offset, &inverse))
 }
 
 struct VirtualGrid {
@@ -764,8 +778,11 @@ impl LayoutComponent {
         use crate::mechanical_port::source::drawable::{BoundsFidelity, Drawable};
         // A special paint that does not draw (hidden, or fully transparent
         // as Rive decides) adds nothing.
-        use crate::mechanical_port::source::shapes::paint::paint_outset::shape_paint_handles_world_reach;
-        let specials: Vec<(CoreHandle, Aabb, Option<Aabb>, bool)> = self
+        use crate::mechanical_port::source::shapes::paint::paint_outset::{
+            PaintReach, shape_paint_handles_world_reach, shape_paint_outset_drawn,
+        };
+        let world = self.shape_world_transform();
+        let specials: Vec<(CoreHandle, Aabb, Option<Aabb>, bool, Option<Vec2D>)> = self
             .render_paths
             .as_ref()
             .map(|paths| {
@@ -774,13 +791,20 @@ impl LayoutComponent {
                     .css_paints
                     .iter()
                     .filter(|special| css_paint_draws(&special.paint))
-                    .map(|special| {
-                        (
+                    .filter_map(|special| {
+                        let offset = match special.offset {
+                            Some((offset, world_space)) => {
+                                Some(css_shadow_local_offset(offset, world_space, &world)?)
+                            }
+                            None => None,
+                        };
+                        Some((
                             special.paint.clone(),
                             special.path.raw_path().bounds(),
                             special.clip.as_ref().map(|clip| clip.raw_path().bounds()),
                             special.fills_stroke,
-                        )
+                            offset,
+                        ))
                     })
                     .collect()
             })
@@ -795,16 +819,34 @@ impl LayoutComponent {
         let mut fidelity = BoundsFidelity::Exact;
         // Each path reaches as far as its own paint does: the plain paints
         // for the box's own path, a special paint alone for its path.
-        let parts =
-            plain
-                .then_some((painted, None, None))
-                .into_iter()
-                .chain(specials.iter().map(|(paint, path, clip, fills_stroke)| {
-                    (*path, *clip, Some((paint, *fills_stroke)))
-                }));
+        let parts = plain
+            .then_some((painted, None, None))
+            .into_iter()
+            .chain(
+                specials
+                    .iter()
+                    .map(|(paint, path, clip, fills_stroke, offset)| {
+                        (*path, *clip, Some((paint, *fills_stroke, *offset)))
+                    }),
+            );
         for (local, clip, special) in parts {
             let reach = match special {
-                Some(special) => shape_paint_handles_world_reach([special], transform),
+                Some((paint, fills_stroke, Some(offset))) => {
+                    // Bounds may be requested in artboard or box space,
+                    // rather than world space. Map the same local offset
+                    // used to size the shadow regions and draw its path.
+                    let outset = paint
+                        .with(|paint| shape_paint_outset_drawn(Some(paint), fills_stroke))
+                        .expect("live shape paint");
+                    PaintReach {
+                        world_outset: outset.outset * transform.find_max_scale()
+                            + Vec2D::transform_dir(offset, transform).length(),
+                        trustworthy: outset.trustworthy,
+                    }
+                }
+                Some((paint, fills_stroke, None)) => {
+                    shape_paint_handles_world_reach([(paint, fills_stroke)], transform)
+                }
                 None => shape_paint_handles_world_reach(
                     self.paints
                         .shape_paints()
@@ -2385,19 +2427,12 @@ impl LayoutComponent {
             return true;
         }
         let offset = match special.offset {
-            Some((offset, true)) => {
-                // Keep the clip at the box and apply a world-space offset
-                // as a local vector after the world transform.
-                let linear = Mat2D::new(world[0], world[1], world[2], world[3], 0.0, 0.0);
-                let mut inverse = Mat2D::identity();
-                if !linear.invert(&mut inverse)
-                    || !inverse.values().iter().all(|value| value.is_finite())
-                {
+            Some((offset, world_space)) => {
+                let Some(offset) = css_shadow_local_offset(offset, world_space, &world) else {
                     return true;
-                }
-                Some(inverse * offset)
+                };
+                Some(offset)
             }
-            Some((offset, false)) => Some(offset),
             None => None,
         };
         renderer.save();
@@ -2595,6 +2630,7 @@ impl LayoutComponent {
             bounds.bottom() - padding.bottom(),
             padding.left() - bounds.left(),
         ];
+        let world = self.shape_world_transform();
         self.paints
             .shape_paints()
             .iter()
@@ -2621,13 +2657,18 @@ impl LayoutComponent {
                     CssPaintKind::Shadow {
                         spread,
                         inset,
-                        reach,
+                        blur_reach,
                         offset,
-                    } => (
-                        paint::box_shadow(bounds, radii, padding, inner, spread, inset, reach),
-                        false,
-                        Some(offset),
-                    ),
+                    } => {
+                        let local_offset =
+                            css_shadow_local_offset(offset.0, offset.1, &world).unwrap_or_default();
+                        let reach = blur_reach + local_offset.x.abs() + local_offset.y.abs();
+                        (
+                            paint::box_shadow(bounds, radii, padding, inner, spread, inset, reach),
+                            false,
+                            Some(offset),
+                        )
+                    }
                 };
                 Some(CssPaintPaths {
                     paint: paint.clone(),

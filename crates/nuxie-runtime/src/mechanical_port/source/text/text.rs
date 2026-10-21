@@ -273,6 +273,7 @@ fn draw_color_glyph_with_factory(
 pub struct StyledText {
     value: Vec<u32>,
     runs: Vec<TextRun>,
+    css_strut: Option<TextRun>,
 }
 impl StyledText {
     pub fn empty(&self) -> bool {
@@ -281,6 +282,7 @@ impl StyledText {
     pub fn clear(&mut self) {
         self.value.clear();
         self.runs.clear();
+        self.css_strut = None;
     }
     pub fn append(
         &mut self,
@@ -790,7 +792,7 @@ pub struct Text {
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
     /// Our layer: a CSS box lays this text out (docs/CSS_LAYOUT.md, 5), so
-    /// layout owns its width whatever the box's Rive sizing modes.
+    /// layout owns its width and uses CSS line boxes.
     css_owned: bool,
     file_features: u8,
     emoji_image_cache: ColorGlyphImageCache,
@@ -1105,7 +1107,10 @@ impl Text {
     }
     /// Marks this text as content a CSS box lays out, or not.
     pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
-        self.css_owned = owned;
+        if self.css_owned != owned {
+            self.css_owned = owned;
+            self.mark_shape_dirty_layout(false);
+        }
     }
     pub fn layout_owns_width(&self) -> bool {
         self.css_owned
@@ -1208,9 +1213,6 @@ impl Text {
             else {
                 continue;
             };
-            if text.is_empty() {
-                continue;
-            }
             // Preserve the negative font-metric sentinel; authored absolute
             // line height and letter spacing scale uniformly with the font.
             let line_height = if line_height >= 0.0 {
@@ -1218,6 +1220,23 @@ impl Text {
             } else {
                 line_height
             };
+            // The first authored style is the element's strut, even when
+            // it has no characters or shaping splits its font into fallbacks.
+            if self.css_owned && styled.css_strut.is_none() {
+                styled.css_strut = Some(TextRun {
+                    font: Some(font.clone()),
+                    size: font_size * font_scale,
+                    line_height,
+                    letter_spacing: 0.0,
+                    unichar_count: 0,
+                    script: 0,
+                    style_id: run_index as u16,
+                    level: 0,
+                });
+            }
+            if text.is_empty() {
+                continue;
+            }
             styled.append(
                 font,
                 font_size * font_scale,
@@ -1255,6 +1274,25 @@ impl Text {
         word_break: TextWordBreak,
         min_align_width: f32,
     ) -> Vec<Vec<GlyphLine>> {
+        Self::break_lines_with_strut(
+            paragraphs,
+            width,
+            align,
+            wrap,
+            word_break,
+            min_align_width,
+            None,
+        )
+    }
+    fn break_lines_with_strut(
+        paragraphs: &[Paragraph],
+        width: f32,
+        align: TextAlign,
+        wrap: TextWrap,
+        word_break: TextWordBreak,
+        min_align_width: f32,
+        css_strut: Option<&TextRun>,
+    ) -> Vec<Vec<GlyphLine>> {
         let auto_width = width == -1.0;
         let mut paragraph_width = width;
         let mut lines = Vec::with_capacity(paragraphs.len());
@@ -1278,13 +1316,23 @@ impl Text {
         }
         paragraph_width = paragraph_width.max(min_align_width);
         for (paragraph_index, paragraph) in paragraphs.iter().enumerate() {
-            GlyphLine::compute_line_spacing(
-                paragraph_index == 0,
-                &mut lines[paragraph_index],
-                &paragraph.runs,
-                paragraph_width,
-                align,
-            );
+            if let Some(strut) = css_strut {
+                GlyphLine::compute_css_line_spacing(
+                    &mut lines[paragraph_index],
+                    &paragraph.runs,
+                    paragraph_width,
+                    align,
+                    strut,
+                );
+            } else {
+                GlyphLine::compute_line_spacing(
+                    paragraph_index == 0,
+                    &mut lines[paragraph_index],
+                    &paragraph.runs,
+                    paragraph_width,
+                    align,
+                );
+            }
         }
         lines
     }
@@ -1323,7 +1371,7 @@ impl Text {
                         .as_ref()
                         .expect("shaped text retains its font")
                         .shape_text(styled.unichars(), runs, 0);
-                    self.modifier_lines = Self::break_lines(
+                    self.modifier_lines = Self::break_lines_with_strut(
                         &self.modifier_shape,
                         if self.effective_sizing() == TextSizing::AutoWidth
                             && !parent_is_layout_not_artboard
@@ -1335,6 +1383,8 @@ impl Text {
                         self.align(),
                         self.wrap(),
                         self.word_break(),
+                        0.0,
+                        styled.css_strut.as_ref(),
                     );
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
@@ -1372,7 +1422,7 @@ impl Text {
                             .shape_text(styled.unichars(), runs, 0)
                     }
                 };
-                self.lines = Self::break_lines(
+                self.lines = Self::break_lines_with_strut(
                     &self.shape,
                     if self.effective_sizing() == TextSizing::AutoWidth
                         && !parent_is_layout_not_artboard
@@ -1384,6 +1434,8 @@ impl Text {
                     self.align(),
                     self.wrap(),
                     self.word_break(),
+                    0.0,
+                    styled.css_strut.as_ref(),
                 );
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
@@ -1460,15 +1512,18 @@ impl Text {
                     end.xpos[line.end_glyph_index as usize]
                         - start.xpos[line.start_glyph_index as usize],
                 );
-                self.ordered_lines.push(OrderedLine::new(
-                    p,
-                    line,
-                    self.effective_width(),
-                    false,
-                    false,
-                    &mut self.ellipsis_run,
-                    y + line.baseline,
-                ));
+                self.ordered_lines.push(
+                    OrderedLine::new(
+                        p,
+                        line,
+                        self.effective_width(),
+                        false,
+                        false,
+                        &mut self.ellipsis_run,
+                        y + line.baseline,
+                    )
+                    .with_css_line_box(self.css_owned),
+                );
             }
             if let Some(last) = lines.last() {
                 y += last.bottom;
@@ -1654,12 +1709,14 @@ impl Text {
                 .as_ref()
                 .expect("shaped text retains its font")
                 .shape_text(styled.unichars(), runs, 0);
-            let lines = Text::break_lines(
+            let lines = Text::break_lines_with_strut(
                 &shape,
                 box_width,
                 this.align(),
                 this.wrap(),
                 this.word_break(),
+                0.0,
+                styled.css_strut.as_ref(),
             );
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
@@ -1849,15 +1906,18 @@ impl Text {
                     LineIter::DrawLine => {}
                 }
                 let render_y = current_y + line.baseline;
-                self.ordered_lines.push(OrderedLine::new(
-                    paragraph,
-                    line,
-                    self.effective_width(),
-                    info.ellipsis_line == line_index,
-                    info.is_ellipsis_line_last,
-                    &mut self.ellipsis_run,
-                    render_y,
-                ));
+                self.ordered_lines.push(
+                    OrderedLine::new(
+                        paragraph,
+                        line,
+                        self.effective_width(),
+                        info.ellipsis_line == line_index,
+                        info.is_ellipsis_line_last,
+                        &mut self.ellipsis_run,
+                        render_y,
+                    )
+                    .with_css_line_box(self.css_owned),
+                );
                 let ordered_line = self.ordered_lines.last().unwrap();
                 let mut current_x = line.start_x;
                 minimum_x = minimum_x.min(current_x);
@@ -2475,6 +2535,15 @@ impl Text {
             TextAlign::Unknown(value) => value as u8,
         };
         mix(bits(font_scale) | (u64::from(sizing) << 32) | (u64::from(align) << 40));
+        if self.css_owned {
+            mix(1);
+            if let Some(strut) = &styled.css_strut {
+                mix(strut.font.as_ref().map_or(0, |font| {
+                    std::sync::Arc::as_ptr(font) as *const () as usize as u64
+                }));
+                mix(bits(strut.size) | (bits(strut.line_height) << 32));
+            }
+        }
         for run in styled.runs() {
             // Arc's data pointer is the identity corresponding to Font*. The
             // trait-object vtable is not part of the C++ pointer word.
@@ -2572,12 +2641,14 @@ impl Text {
             } else {
                 self.wrap()
             };
-        let lines = Self::break_lines(
+        let lines = Self::break_lines_with_strut(
             shape,
             fit_width,
             self.align(),
             measuring_wrap,
             self.word_break(),
+            0.0,
+            styled.css_strut.as_ref(),
         );
         let mut y = 0.0f32;
         let mut computed_height = 0.0f32;

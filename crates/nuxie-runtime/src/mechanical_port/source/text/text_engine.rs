@@ -206,6 +206,14 @@ pub struct LineMetrics {
     pub x_height: f32,
 }
 
+/// Positive font ascent and descent, and line gap, for CSS line boxes.
+#[derive(Clone, Copy, Debug)]
+pub struct CssLineMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub line_gap: f32,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Axis {
     pub tag: u32,
@@ -367,6 +375,16 @@ pub trait Font: Any + Send + Sync {
 
     fn line_metrics(&self) -> &LineMetrics {
         self.base().line_metrics()
+    }
+
+    /// Nuxie addition: CSS extents at the used size, rounded to whole points.
+    fn css_line_metrics(&self, size: f32) -> CssLineMetrics {
+        let metrics = self.line_metrics();
+        CssLineMetrics {
+            ascent: (-metrics.ascent * size).round(),
+            descent: (metrics.descent * size).round(),
+            line_gap: 0.0,
+        }
     }
 
     /// Nuxie addition: the font's suggested decoration lines.
@@ -794,6 +812,7 @@ pub struct OrderedLine {
     runs: Vec<OrderedRun>,
     glyph_line: GlyphLine,
     y: f32,
+    css_line_box: bool,
 }
 
 #[derive(Clone)]
@@ -820,6 +839,7 @@ impl OrderedLine {
             runs: Vec::new(),
             glyph_line: line.clone(),
             y,
+            css_line_box: false,
         };
         let mut logical_runs = Vec::new();
 
@@ -911,6 +931,24 @@ impl OrderedLine {
 
     pub fn y(&self) -> f32 {
         self.y
+    }
+
+    pub(crate) fn with_css_line_box(mut self, enabled: bool) -> Self {
+        self.css_line_box = enabled;
+        self
+    }
+
+    pub(crate) fn run_vertical_bounds(&self, run: &GlyphRun) -> (f32, f32) {
+        if self.css_line_box {
+            let top = self.y - self.glyph_line.baseline + self.glyph_line.top;
+            (top, self.bottom())
+        } else {
+            let font = run.font.as_ref().expect("shaped text retains its font");
+            (
+                self.y + font.ascent(run.size),
+                self.y + font.descent(run.size),
+            )
+        }
     }
 
     pub fn bottom(&self) -> f32 {

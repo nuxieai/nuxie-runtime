@@ -3696,6 +3696,11 @@ impl LayoutComponent {
                 continue;
             }
             let propagate = if let Some((width, height, direction)) = style {
+                child.with_mut(|object| {
+                    if let Some(text) = object.as_text_mut() {
+                        text.set_owned_by_css_layout(css);
+                    }
+                });
                 let controlled =
                     crate::mechanical_port::source::intrinsically_sizeable::control_size_handle(
                         &child, size, width, height, direction,
@@ -4698,13 +4703,11 @@ impl LayoutComponent {
             #[cfg(test)]
             layout_fit_content_tests::note_host_measure();
             // A CSS box owns its text's width (docs/CSS_LAYOUT.md, 5).
-            if css_owner {
-                host.with_mut(|object| {
-                    if let Some(text) = object.as_text_mut() {
-                        text.set_owned_by_css_layout(true);
-                    }
-                });
-            }
+            host.with_mut(|object| {
+                if let Some(text) = object.as_text_mut() {
+                    text.set_owned_by_css_layout(css_owner);
+                }
+            });
             // Image already measures exact offers as exact sizes. Preserve that
             // protocol; controlled geometry and drawing groups use authored bounds.
             // In a CSS box an image is content and keeps its natural size.

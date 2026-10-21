@@ -134,12 +134,8 @@ impl CursorPosition {
                         self.code_point_index as i32,
                         run.dir() == TextDirection::Rtl,
                     );
-                let font = run.font.as_ref().expect("shaped text retains its font");
-                return CursorVisualPosition::new(
-                    x,
-                    line.y() + font.ascent(run.size),
-                    line.y() + font.descent(run.size),
-                );
+                let (top, bottom) = line.run_vertical_bounds(run);
+                return CursorVisualPosition::new(x, top, bottom);
             }
             if !have {
                 first = run.text_indices[i];
@@ -157,21 +153,8 @@ impl CursorPosition {
             } else {
                 x
             };
-        CursorVisualPosition::new(
-            final_x,
-            line.y()
-                + run
-                    .font
-                    .as_ref()
-                    .expect("shaped text retains its font")
-                    .ascent(run.size),
-            line.y()
-                + run
-                    .font
-                    .as_ref()
-                    .expect("shaped text retains its font")
-                    .descent(run.size),
-        )
+        let (top, bottom) = line.run_vertical_bounds(run);
+        CursorVisualPosition::new(final_x, top, bottom)
     }
     pub fn from_translation(p: Vec2D, shape: &TextLayoutView<'_>) -> Self {
         let lines = shape.ordered_lines();
@@ -388,22 +371,8 @@ impl Cursor {
                     if left > right {
                         std::mem::swap(&mut left, &mut right);
                     }
-                    rects.push(Aabb::new(
-                        left,
-                        line.y()
-                            + run
-                                .font
-                                .as_ref()
-                                .expect("shaped text retains its font")
-                                .ascent(run.size),
-                        right,
-                        line.y()
-                            + run
-                                .font
-                                .as_ref()
-                                .expect("shaped text retains its font")
-                                .descent(run.size),
-                    ));
+                    let (top, bottom) = line.run_vertical_bounds(run);
+                    rects.push(Aabb::new(left, top, right, bottom));
                 }
                 x += advance;
             }

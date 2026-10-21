@@ -1,7 +1,7 @@
 # Generated dependency metadata. Rust sources stay in their owning package.
 [package]
 name = "nux-apple-product-extension"
-version = "0.10.17"
+version = "1.0.0"
 edition = "2024"
 autobins = false
 autoexamples = false

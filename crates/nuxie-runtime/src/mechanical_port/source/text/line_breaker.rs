@@ -1,4 +1,6 @@
-use super::super::text_engine::{GlyphLine, GlyphRun, LineMetrics, TextAlign, TextWordBreak};
+use super::super::text_engine::{
+    CssLineMetrics, GlyphLine, GlyphRun, LineMetrics, TextAlign, TextRun, TextWordBreak,
+};
 
 fn auto_width(width: f32) -> bool {
     width < 0.0
@@ -8,7 +10,22 @@ fn compute_line_metrics(
     metrics: &LineMetrics,
     custom_line_height: f32,
     font_size: f32,
+    css: Option<CssLineMetrics>,
 ) -> LineMetrics {
+    if let Some(metrics) = css {
+        let height = if custom_line_height < 0.0 {
+            metrics.ascent + metrics.descent + metrics.line_gap
+        } else {
+            custom_line_height
+        };
+        let baseline = metrics.ascent + ((height - metrics.ascent - metrics.descent) / 2.0).floor();
+        return LineMetrics {
+            ascent: -baseline,
+            descent: height - baseline,
+            cap_height: 0.0,
+            x_height: 0.0,
+        };
+    }
     if custom_line_height < 0.0 {
         return LineMetrics {
             ascent: metrics.ascent * font_size,
@@ -61,6 +78,7 @@ impl GlyphLine {
                     run.font.as_ref().unwrap().line_metrics(),
                     run.line_height,
                     run.size,
+                    None,
                 );
                 real_ascent =
                     real_ascent.min(run.font.as_ref().unwrap().line_metrics().ascent * run.size);
@@ -92,6 +110,57 @@ impl GlyphLine {
                 TextAlign::Unknown(_) => {}
             }
             let _ = line_height;
+        }
+    }
+
+    pub(crate) fn compute_css_line_spacing(
+        lines: &mut [GlyphLine],
+        runs: &[GlyphRun],
+        width: f32,
+        align: TextAlign,
+        strut: &TextRun,
+    ) {
+        let font = strut.font.as_ref().expect("text strut retains its font");
+        let strut = compute_line_metrics(
+            font.line_metrics(),
+            strut.line_height,
+            strut.size,
+            Some(font.css_line_metrics(strut.size)),
+        );
+        let mut y = 0.0;
+        for line in lines {
+            let mut ascent = strut.ascent;
+            let mut descent = strut.descent;
+            for i in line.start_run_index..=line.end_run_index {
+                // The exclusive line end can be the beginning of another run.
+                if i == line.end_run_index && line.end_glyph_index == 0 && i != line.start_run_index
+                {
+                    continue;
+                }
+                let run = &runs[i as usize];
+                let font = run.font.as_ref().expect("shaped text retains its font");
+                let metrics = compute_line_metrics(
+                    font.line_metrics(),
+                    run.line_height,
+                    run.size,
+                    Some(font.css_line_metrics(run.size)),
+                );
+                ascent = ascent.min(metrics.ascent);
+                descent = descent.max(metrics.descent);
+            }
+            line.top = y;
+            line.baseline = y - ascent;
+            y += descent - ascent;
+            line.bottom = y;
+
+            let line_width = runs[line.end_run_index as usize].xpos[line.end_glyph_index as usize]
+                - runs[line.start_run_index as usize].xpos[line.start_glyph_index as usize];
+            match align {
+                TextAlign::Right => line.start_x = width - line_width,
+                TextAlign::Left => line.start_x = 0.0,
+                TextAlign::Center => line.start_x = width / 2.0 - line_width / 2.0,
+                TextAlign::Unknown(_) => {}
+            }
         }
     }
 

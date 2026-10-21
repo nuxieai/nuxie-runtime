@@ -128,13 +128,10 @@ fn line_bounds(line: &OrderedLine) -> Aabb {
     let mut x = line.glyph_line().start_x;
     let mut bounds = Aabb::for_expansion();
     for (run, index) in line {
-        let font = run.font.as_ref().expect("shaped text retains its font");
-        Aabb::expand_to_point(&mut bounds, Vec2D::new(x, line.y() + font.ascent(run.size)));
+        let (top, bottom) = line.run_vertical_bounds(run);
+        Aabb::expand_to_point(&mut bounds, Vec2D::new(x, top));
         x += run.advances[index as usize];
-        Aabb::expand_to_point(
-            &mut bounds,
-            Vec2D::new(x, line.y() + font.descent(run.size)),
-        );
+        Aabb::expand_to_point(&mut bounds, Vec2D::new(x, bottom));
     }
     bounds
 }

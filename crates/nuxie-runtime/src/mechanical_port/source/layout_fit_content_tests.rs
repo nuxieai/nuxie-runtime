@@ -2124,3 +2124,326 @@ fn css_grouped_shape_paths_keep_intermediate_transforms() {
     LayoutComponent::update_layout_bounds_occurrence(&root, false);
     assert_eq!(solved(&subject).width(), 160.0);
 }
+
+// Chrome's line boxes in the bundled Roboto font, through a real leaf owner.
+fn line_box_fixture(css: bool, runs: &[(&str, f32, f32)]) -> Fixture {
+    line_box_fixture_with_font(
+        css,
+        runs,
+        include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+    )
+}
+
+fn line_box_fixture_with_font(css: bool, runs: &[(&str, f32, f32)], bytes: &[u8]) -> Fixture {
+    use crate::source::text::text_style_paint::TextStylePaint;
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(400.0), false);
+    let label = layout(&arena, Some(&root), None, false);
+    let asset = arena.insert(FontAsset::default());
+    let font = HbFont::decode(bytes).unwrap();
+    FontAsset::set_font_occurrence(&asset, Some(font));
+    let text = arena.insert(Text::default());
+    attach(&arena, &label, &text);
+    let mut first_run = None;
+    for &(content, size, line_height) in runs {
+        let style = arena.insert(TextStylePaint::default());
+        style.with_mut(|object| {
+            let style = object.as_text_style_mut().unwrap();
+            style.base.set_font_size_value(size);
+            style.base.set_line_height_value(line_height);
+        });
+        TextStyle::set_asset_occurrence(&style, Some(asset.clone()));
+        attach(&arena, &text, &style);
+        let mut run = TextValueRun::default();
+        run.base.set_text_value(content.into());
+        run.set_style(style);
+        let run = arena.insert(run);
+        attach(&arena, &text, &run);
+        text.with_downcast_mut::<Text, _>(|text| text.add_run(run.clone()));
+        first_run.get_or_insert(run);
+    }
+    if css {
+        let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&arena, &label, &record);
+        label.with_downcast_mut::<LayoutComponent, _>(|owner| {
+            owner.add_layout_style_applier(record);
+        });
+    }
+    for owner in [&label, &root] {
+        LayoutComponent::sync_style_occurrence(owner);
+        LayoutComponent::sync_layout_children_occurrence(owner);
+    }
+    Fixture {
+        arena,
+        root,
+        label,
+        text,
+        run: first_run.unwrap(),
+    }
+}
+
+fn assert_line_box(f: &Fixture, height: f32, baselines: &[f32]) {
+    use crate::source::component_dirt::ComponentDirt;
+    let measured = f.solve();
+    assert!(
+        (measured.height() - height).abs() < 0.01,
+        "{measured:?} != {height}"
+    );
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+            assert!((text.local_bounds().height() - height).abs() < 0.01);
+            assert!((text.first_baseline().unwrap() - baselines[0]).abs() < 0.01);
+            let lines = text.ordered_lines();
+            assert_eq!(lines.len(), baselines.len());
+            let mut previous_bottom = 0.0;
+            for (line, expected) in lines.iter().zip(baselines) {
+                let geometry = line.glyph_line();
+                let top = line.y() - geometry.baseline + geometry.top;
+                assert!((top - previous_bottom).abs() < 0.01);
+                previous_bottom = line.bottom();
+                assert!(
+                    (line.y() - expected).abs() < 0.01,
+                    "{} != {expected}",
+                    line.y()
+                );
+            }
+            assert!((previous_bottom - height).abs() < 0.01);
+        })
+        .unwrap();
+}
+
+#[test]
+fn css_text_line_boxes_match_chrome() {
+    for (size, line_height, height, baseline) in [
+        (12.0, -1.0, 14.0, 11.0),
+        (14.0, -1.0, 16.0, 13.0),
+        (16.0, -1.0, 19.0, 15.0),
+        (17.0, -1.0, 20.0, 16.0),
+        (20.0, -1.0, 24.0, 19.0),
+        (24.0, -1.0, 28.0, 22.0),
+        (28.0, -1.0, 33.0, 26.0),
+        (32.0, -1.0, 38.0, 30.0),
+        (34.0, -1.0, 40.0, 32.0),
+        (12.0, 16.0, 16.0, 12.0),
+        (14.0, 20.0, 20.0, 15.0),
+        (16.0, 24.0, 24.0, 17.0),
+        (17.0, 22.0, 22.0, 17.0),
+        (20.0, 28.0, 28.0, 21.0),
+        (24.0, 32.0, 32.0, 24.0),
+        (28.0, 36.0, 36.0, 27.0),
+        (32.0, 40.0, 40.0, 31.0),
+        (34.0, 41.0, 41.0, 32.0),
+        (28.0, 28.0, 28.0, 23.0),
+        (16.0, 16.0, 16.0, 13.0),
+        // The compiler resolves a unitless 1.5 to 30 points at 20px.
+        (20.0, 30.0, 30.0, 22.0),
+    ] {
+        assert_line_box(
+            &line_box_fixture(true, &[("Aa", size, line_height)]),
+            height,
+            &[baseline],
+        );
+        assert_line_box(
+            &line_box_fixture(true, &[("Aa\nAa", size, line_height)]),
+            height * 2.0,
+            &[baseline, baseline + height],
+        );
+    }
+}
+
+#[test]
+fn css_text_mixed_runs_union_with_the_paragraph_strut() {
+    // The element's empty base run still supplies its strut. The large
+    // run alone has a 24-point box; its union with the strut is 28 tall.
+    assert_line_box(
+        &line_box_fixture(true, &[("", 16.0, 24.0), ("Aa", 28.0, 24.0)]),
+        28.0,
+        &[21.0],
+    );
+    for (line_height, baselines) in [(24.0, [21.0, 45.0]), (-1.0, [26.0, 48.0])] {
+        assert_line_box(
+            &line_box_fixture(
+                true,
+                &[
+                    ("Aa", 16.0, line_height),
+                    ("Aa", 28.0, line_height),
+                    ("\nAa", 16.0, line_height),
+                ],
+            ),
+            52.0,
+            &baselines,
+        );
+    }
+}
+
+#[test]
+fn translated_text_keeps_rive_line_spacing() {
+    // Rive starts at 1900/2048 * size, then adds the authored descent
+    // 500/2400 * line-height. Later baselines are one line-height apart.
+    for (size, line_height, height, baseline) in [
+        (16.0, 24.0, 19.84375, 14.84375),
+        (28.0, 36.0, 33.4765625, 25.9765625),
+        (16.0, -1.0, 18.75, 14.84375),
+    ] {
+        assert_line_box(
+            &line_box_fixture(false, &[("Aa", size, line_height)]),
+            height,
+            &[baseline],
+        );
+        let step = if line_height < 0.0 {
+            height
+        } else {
+            line_height
+        };
+        assert_line_box(
+            &line_box_fixture(false, &[("Aa\nAa", size, line_height)]),
+            height + step,
+            &[baseline, baseline + step],
+        );
+    }
+}
+
+#[test]
+fn css_text_drawn_glyph_baseline_matches_measurement() {
+    use crate::source::text::text_style_paint::TextStylePaint;
+    for (line_height, height, baseline) in [(24.0, 24.0, 17.0), (-1.0, 19.0, 15.0)] {
+        let f = line_box_fixture(true, &[("A", 16.0, line_height)]);
+        assert_line_box(&f, height, &[baseline]);
+        let style: CoreHandle = f
+            .run
+            .with_downcast::<TextValueRun, _>(|run| run.style())
+            .flatten()
+            .unwrap();
+        let glyph_top: f32 = f
+            .text
+            .with_downcast::<Text, _>(|text| {
+                let run = &text.shape()[0].runs[0];
+                let glyph = run.font.as_ref().unwrap().get_path(run.glyphs[0]);
+                glyph.bounds().min_y * run.size + run.offsets[0].y
+            })
+            .unwrap();
+        let drawn_top: f32 = style
+            .with_downcast_mut::<TextStylePaint, _>(|style| {
+                style.local_path().raw_path().bounds().min_y
+            })
+            .unwrap();
+        assert!((drawn_top - glyph_top - baseline).abs() < 0.01);
+    }
+}
+
+#[test]
+fn css_text_fixed_leaf_gets_line_boxes_without_measurement() {
+    use crate::source::component_dirt::ComponentDirt;
+    let f = line_box_fixture(true, &[("Aa", 16.0, 24.0)]);
+    let before = host_measure_count();
+    // A definite leaf can skip Taffy's measure callback entirely.
+    f.label.with_downcast_mut::<LayoutComponent, _>(|owner| {
+        owner.set_solved_layout(
+            Layout::new(0.0, 0.0, 200.0, 100.0),
+            LayoutPadding::default(),
+        );
+    });
+    LayoutComponent::update_layout_bounds_occurrence(&f.label, false);
+    assert_eq!(host_measure_count(), before);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+            assert_eq!(text.first_baseline(), Some(17.0));
+            assert_eq!(text.ordered_lines()[0].glyph_line().bottom, 24.0);
+            // Changing ownership at the same size must still invalidate shaping.
+            text.base.set_dirt(ComponentDirt::NONE);
+            text.set_owned_by_css_layout(false);
+            assert!(text.base.has_dirt(ComponentDirt::PATH));
+        })
+        .unwrap();
+}
+
+#[test]
+fn css_text_selection_and_carets_use_the_line_box() {
+    use crate::source::text::{
+        cursor::{Cursor, CursorPosition},
+        glyph_lookup::GlyphLookup,
+        text_layout_view::TextLayoutView,
+    };
+    for (css, height, baseline, selection_bottom) in
+        [(true, 24.0, 17.0, 24.0), (false, 19.84375, 14.84375, 18.75)]
+    {
+        let f = line_box_fixture(css, &[("Aa", 16.0, 24.0)]);
+        assert_line_box(&f, height, &[baseline]);
+        f.text
+            .with_downcast::<Text, _>(|text| {
+                let mut lookup = GlyphLookup::default();
+                lookup.compute(text.unichars(), text.shape());
+                let lines = vec![vec![text.ordered_lines()[0].glyph_line().clone()]];
+                let view =
+                    TextLayoutView::new(text.shape(), &lines, text.ordered_lines(), &lookup, 2);
+                for position in [CursorPosition::zero(), CursorPosition::new(0, 2)] {
+                    let caret = position.visual_position(&view);
+                    assert!(caret.found());
+                    assert!(caret.top().abs() < 0.01);
+                    assert!((caret.bottom() - selection_bottom).abs() < 0.01);
+                }
+                let mut rects = Vec::new();
+                Cursor::new(CursorPosition::zero(), CursorPosition::new(0, 2))
+                    .selection_rects(&mut rects, &view);
+                assert!(!rects.is_empty());
+                for rect in rects {
+                    assert!(rect.min_y.abs() < 0.01);
+                    assert!((rect.max_y - selection_bottom).abs() < 0.01);
+                }
+            })
+            .unwrap();
+    }
+}
+
+#[test]
+fn css_text_normal_uses_hhea_and_rounded_line_gap_despite_typo_flag() {
+    let mut bytes = include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf").to_vec();
+    let table_offset = |tag: &[u8]| {
+        let count = u16::from_be_bytes(bytes[4..6].try_into().unwrap()) as usize;
+        let record = bytes[12..]
+            .chunks_exact(16)
+            .take(count)
+            .find(|record| &record[..4] == tag)
+            .unwrap();
+        u32::from_be_bytes(record[8..12].try_into().unwrap()) as usize
+    };
+    let os2 = table_offset(b"OS/2");
+    let hhea = table_offset(b"hhea");
+    let selection = u16::from_be_bytes(bytes[os2 + 62..os2 + 64].try_into().unwrap());
+    bytes[os2 + 62..os2 + 64].copy_from_slice(&(selection | 0x80).to_be_bytes());
+    for (offset, value) in [(68, 1200i16), (70, -300), (72, 512)] {
+        bytes[os2 + offset..os2 + offset + 2].copy_from_slice(&value.to_be_bytes());
+    }
+    // At 16px, 320/2048 em rounds from 2.5 to 3 whole points.
+    bytes[hhea + 8..hhea + 10].copy_from_slice(&320i16.to_be_bytes());
+    assert_line_box(
+        &line_box_fixture_with_font(true, &[("Aa\nAa", 16.0, -1.0)], &bytes),
+        44.0,
+        &[16.0, 38.0],
+    );
+    // Upstream still reads the requested typo extents and ignores their gap.
+    assert_line_box(
+        &line_box_fixture_with_font(false, &[("Aa\nAa", 16.0, -1.0)], &bytes),
+        23.4375,
+        &[9.375, 21.09375],
+    );
+}
+
+#[test]
+fn css_text_wrapped_lines_keep_the_full_line_height() {
+    use crate::source::generated::core_registry::CoreRegistry;
+    for (line_height, height, baseline) in [(24.0, 24.0, 17.0), (-1.0, 19.0, 15.0)] {
+        let f = line_box_fixture(true, &[("Aa Aa", 16.0, line_height)]);
+        let record = f
+            .label
+            .with_downcast::<LayoutComponent, _>(|owner| owner.css_record().unwrap())
+            .unwrap();
+        assert!(CoreRegistry::set_uint_handle(&record, 61021, 1));
+        assert!(CoreRegistry::set_double_handle(&record, 61022, 30.0));
+        LayoutComponent::sync_style_occurrence(&f.label);
+        assert_line_box(&f, height * 2.0, &[baseline, baseline + height]);
+    }
+}

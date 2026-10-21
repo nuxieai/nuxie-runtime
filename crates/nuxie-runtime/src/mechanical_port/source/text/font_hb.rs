@@ -23,9 +23,10 @@ use crate::mechanical_port::source::math::{mat2d::Mat2D, raw_path::RawPath, vec2
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 pub use crate::mechanical_port::source::text_engine::HostPictureScope;
 use crate::mechanical_port::source::text_engine::{
-    Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, DecorationMetric, DecorationMetrics,
-    Feature, Font, FontBase, FontRef, GlyphId, GlyphRun, GradientStop, LineMetrics, Paragraph,
-    TextRun, Unichar, fallback_proc, fallback_proc_enabled, note_fallback_call,
+    Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, CssLineMetrics, DecorationMetric,
+    DecorationMetrics, Feature, Font, FontBase, FontRef, GlyphId, GlyphRun, GradientStop,
+    LineMetrics, Paragraph, TextRun, Unichar, fallback_proc, fallback_proc_enabled,
+    note_fallback_call,
 };
 
 // Test-only observation of real shaping, scoped to each test thread.
@@ -375,6 +376,7 @@ impl HostPictureCache {
 /// in this owner, and no legacy packed text implementation is consulted.
 pub struct HbFont {
     base: FontBase,
+    css_metrics: CssLineMetrics,
     host_outline: Option<HostGlyphOutline>,
     host_pictures: Option<HostGlyphPictures>,
     host_picture_scope: HostPictureScope,
@@ -654,6 +656,7 @@ impl HbFont {
                 &outline,
                 LocationRef::from(&location),
             )),
+            css_metrics: make_css_line_metrics(&outline, &line_metrics),
             host_outline: None,
             host_pictures: None,
             host_picture_scope: HostPictureScope::Glyph,
@@ -781,6 +784,13 @@ impl Font for HbFont {
     }
     fn base(&self) -> &FontBase {
         &self.base
+    }
+    fn css_line_metrics(&self, size: f32) -> CssLineMetrics {
+        CssLineMetrics {
+            ascent: (self.css_metrics.ascent * size).round(),
+            descent: (self.css_metrics.descent * size).round(),
+            line_gap: (self.css_metrics.line_gap * size).round(),
+        }
     }
     fn get_axis(&self, index: u16) -> Axis {
         let font = self.outline_font();
@@ -1295,6 +1305,26 @@ fn png_color_layer(font: &OutlineFont<'_>, glyph: GlyphId) -> Option<ColorGlyphL
         image_extent_y: -height as f32 * INVERSE_SCALE,
         ..ColorGlyphLayer::default()
     })
+}
+
+fn make_css_line_metrics(font: &OutlineFont<'_>, fallback: &LineMetrics) -> CssLineMetrics {
+    // CSS uses hhea even when OS/2 requests typo metrics. Keep these per em
+    // until the used font size is known, then round each extent in points.
+    if let (Ok(head), Ok(hhea)) = (font.head(), font.hhea()) {
+        let upem = f32::from(head.units_per_em());
+        if upem > 0.0 {
+            return CssLineMetrics {
+                ascent: f32::from(hhea.ascender().to_i16()) / upem,
+                descent: -f32::from(hhea.descender().to_i16()) / upem,
+                line_gap: f32::from(hhea.line_gap().to_i16()) / upem,
+            };
+        }
+    }
+    CssLineMetrics {
+        ascent: -fallback.ascent,
+        descent: fallback.descent,
+        line_gap: 0.0,
+    }
 }
 
 fn make_line_metrics(font: &OutlineFont<'_>, location: LocationRef<'_>) -> LineMetrics {

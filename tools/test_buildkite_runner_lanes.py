@@ -34,8 +34,8 @@ class LaneTests(unittest.TestCase):
     def test_activated_graph_retains_every_existing_recipe_and_adds_android(self):
         legacy = pipeline({})
         graph = pipeline({'NUXIE_CI_RUNNER_POLICY_VERSION': '2', 'NUXIE_SDK_SPLIT_LANES': '1'})
-        self.assertEqual(len(legacy['steps']), 6)
-        self.assertEqual(len(graph['steps']), 7)
+        self.assertEqual(len(legacy['steps']), 7)
+        self.assertEqual(len(graph['steps']), 8)
         for old, new in zip(legacy['steps'], graph['steps']):
             self.assertEqual(new['command'], old['command'])
             self.assertEqual(self.execute(new), self.execute(old))
@@ -64,9 +64,32 @@ class LaneTests(unittest.TestCase):
         self.assertIn('nux-capi-pr-gate', linux_make)
         self.assertNotIn('feature-compile-gate-apple', linux_make)
         self.assertNotIn('microbench-gate', linux_make)
+        self.assertNotIn('webgpu-content-probe', linux_make)
         self.assertIn('feature-compile-gate-apple', apple_make)
         self.assertIn('microbench-gate', apple_make)
         self.assertIn('crate-seams-browser-check', apple_make)
+        self.assertIn('webgpu-content-probe', apple_make)
+
+    def test_webgpu_content_probe_is_nightly_on_macos_with_uploaded_evidence(self):
+        for environment in ({}, {'NUXIE_CI_RUNNER_POLICY_VERSION': '2'}):
+            with self.subTest(environment=environment):
+                step = next(step for step in pipeline(environment)['steps']
+                            if step['label'] == ':mac: Nightly WebGPU content probe')
+                self.assertEqual(step['if'], 'build.source == "schedule"')
+                self.assertEqual(step['agents']['queue'], 'nuxie-pr')
+                self.assertEqual(step['agents']['nuxie-platform'], 'macos')
+                self.assertIn('export RUSTUP_TOOLCHAIN=stable', step['command'])
+                self.assertEqual(self.execute(step), [
+                    ['tools/bazel/install.sh'],
+                    ['git', 'clone', '--filter=blob:none',
+                     'https://github.com/rive-app/rive-runtime.git', 'rive-runtime'],
+                    ['git', '-C', 'rive-runtime', 'checkout', 'fixture-ref'],
+                    ['rustup', 'toolchain', 'install', 'stable', '--profile', 'minimal', '--no-self-update'],
+                    ['rustup', 'target', 'add', '--toolchain', 'stable', 'wasm32-unknown-unknown'],
+                    ['make', 'fixtures', 'webgpu-content-probe'],
+                ])
+                if environment:
+                    self.assertIn('target/renderer-*/**/*.log', step['artifact_paths'])
 
     def test_half_activation_and_unknown_settings_fail_before_dispatch(self):
         for environment in ({'NUXIE_SDK_SPLIT_LANES': '1'}, {'NUXIE_CI_RUNNER_POLICY_VERSION': '3'},

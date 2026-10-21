@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><style>
+html,body{margin:0;background:#fff}
+.panel{position:absolute;left:0;width:200px;height:100px}
+#top{top:0}#bottom{top:100px}
+.first{width:200px;height:60px;background:#c33}
+.later{width:200px;height:60px;margin-top:-20px;background:#33c}
+#top .first{position:relative}
+#top .later,#bottom .first{opacity:.99}
+</style></head><body><div class="panel" id="top"><div class="first"></div><div class="later"></div></div><div class="panel" id="bottom"><div class="first"></div><div class="later"></div></div></body></html>

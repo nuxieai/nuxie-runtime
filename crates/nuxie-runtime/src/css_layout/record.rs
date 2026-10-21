@@ -148,7 +148,12 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                 // participant (docs/CSS_LAYOUT.md, 4.4).
                 if matches!(
                     key,
-                    keys::DISPLAY | keys::POSITION | keys::Z_INDEX_KIND | keys::Z_INDEX
+                    keys::DISPLAY
+                        | keys::POSITION
+                        | keys::Z_INDEX_KIND
+                        | keys::Z_INDEX
+                        | keys::OVERFLOW_X
+                        | keys::OVERFLOW_Y
                 ) {
                     mark_draw_order_dirty(&parent);
                 }

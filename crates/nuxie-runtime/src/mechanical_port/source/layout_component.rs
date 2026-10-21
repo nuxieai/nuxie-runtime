@@ -465,6 +465,10 @@ pub struct LayoutComponent {
     /// CSS mode: the content box size last given to the content layout
     /// resizes, so a padding or border change alone resizes it again.
     propagated_content: Option<Vec2D>,
+    /// Authored transform tracks and bindings are fixed at load, even when
+    /// their current value is identity.
+    css_transform_authored: bool,
+    css_effect_state: (bool, bool),
     scroll_range: Vec2D,
     grid_column_lines: Vec<f32>,
     grid_row_lines: Vec<f32>,
@@ -515,6 +519,8 @@ impl Default for LayoutComponent {
             measured_natural: RefCell::new(Vec::new()),
             solved_border: [0.0; 4],
             propagated_content: None,
+            css_transform_authored: false,
+            css_effect_state: (false, false),
             scroll_range: Vec2D::default(),
             grid_column_lines: Vec::new(),
             grid_row_lines: Vec::new(),
@@ -989,6 +995,7 @@ impl LayoutComponent {
             LayoutComponentFlags::ForceDrawableProxy,
             self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy),
         );
+        twin.css_transform_authored = self.css_transform_authored;
         twin
     }
 
@@ -2014,6 +2021,27 @@ impl LayoutComponent {
             None => (self.base.clip(), self.base.clip()),
         }
     }
+    /// A transform track or binding keeps a CSS stacking context even at
+    /// identity. Import visits each keyed property and binding target once.
+    pub(crate) fn mark_css_transform_authored(&mut self) {
+        self.css_transform_authored = true;
+    }
+
+    fn css_effect_state(&self) -> (bool, bool) {
+        let transformed = self.css_transform_authored
+            || self.base.base.base.base.base.x() != 0.0
+            || self.base.base.base.base.base.y() != 0.0
+            || self.rotation() != 0.0
+            || self.scale_x() != 1.0
+            || self.scale_y() != 1.0;
+        (self.base.opacity() < 1.0, transformed)
+    }
+
+    pub(crate) fn css_effect_stacking_context(&self) -> bool {
+        let (opacity, transform) = self.css_effect_state();
+        opacity || transform
+    }
+
     /// Execute the local part of `LayoutComponent::update` after the complete
     /// TransformComponent super call. Returning true requests the pinned
     /// Layout-then-Transform constraint pass after this CoreHandle borrow ends.
@@ -2024,6 +2052,19 @@ impl LayoutComponent {
     ) {
         if value.contains(ComponentDirt::RENDER_OPACITY) {
             self.paints.propagate_opacity(child_opacity);
+        }
+        if self.is_css_mode() && !self.is_artboard() {
+            let state = self.css_effect_state();
+            if self.css_effect_state != state {
+                self.css_effect_state = state;
+                if let Some(dirty) = self
+                    .base
+                    .artboard_handle()
+                    .and_then(|artboard| artboard.artboard_dirty_handle())
+                {
+                    dirty.mark_css_draw_order_dirty();
+                }
+            }
         }
     }
 

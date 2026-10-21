@@ -696,7 +696,20 @@ impl DataBind {
                 });
             }
         }
+        self.mark_css_transform_target();
         self.subscribe_target();
+    }
+
+    fn mark_css_transform_target(&self) {
+        if crate::css_layout::paint_order::is_transform_property(self.property_key()) {
+            if let Some(target) = &self.target {
+                target.with_mut(|target| {
+                    if let Some(layout) = target.as_layout_component_mut() {
+                        layout.mark_css_transform_authored();
+                    }
+                });
+            }
+        }
     }
 
     fn subscribe_target(&mut self) {
@@ -735,6 +748,7 @@ impl DataBind {
         self.set_target(Some(target));
         let mut callbacks = DataBindInitializationCallbacks;
         self.base.set_property_key(property_key, &mut callbacks);
+        self.mark_css_transform_target();
     }
 
     pub fn on_target_destroyed(&mut self) {

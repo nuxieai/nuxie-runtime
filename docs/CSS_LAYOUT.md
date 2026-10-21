@@ -352,19 +352,19 @@ Refused in step 1:
 
 ### 4.4 Painting order
 
-Rive draws a box's children in reverse file order, so its first child draws on top. A CSS box (or CSS artboard) paints its children in CSS's order instead (CSS 2.1 Appendix E), bottom first:
+Rive draws a box's children in reverse file order, so its first child draws on top. A CSS stacking context paints its descendants in CSS's order instead (CSS 2.1 Appendix E), bottom first:
 
-1. the box's own paint (fills, strokes, shadows, borders), then its content clip;
-2. children positioned (`relative` or `absolute`) with a negative `z-index`, ascending;
-3. in-flow children, and the box's own drawing content, in tree order: a later sibling on top;
-4. positioned children with `z-index` auto or 0, in tree order;
-5. positioned children with a positive `z-index`, ascending.
+1. the context's own paint (fills, strokes, shadows, borders), then its content clip;
+2. descendant stacking contexts with a negative `z-index`, ascending, ties in tree order;
+3. in-flow descendants and drawing content in tree order, each non-context box's paint before its in-flow content; flex and grid items paint as units while their positioned descendants join the real context;
+4. positioned descendants with `z-index` auto and stacking contexts with `z-index` auto or 0, in tree order across the context; a positioned non-context box paints its own paint and in-flow content as a unit;
+5. descendant stacking contexts with a positive `z-index`, ascending, ties in tree order.
 
-A flex or grid item's `z-index` applies when it is not positioned too, as CSS says. A participant (a shape, image or text hosting a `LayoutParticipant`) orders by its host's record, as a box does. A translated child of a CSS box is positioned, with `z-index` auto, when layout places it absolutely. The order is computed by the runtime when the draw order is sorted, and again when `position`, `z-index` or `display` change at run time (a binding, an animation, a script), so the compiler writes no order of its own. Hit testing follows the same order: the topmost painted box is hit first, and the event then bubbles to the CSS boxes it is in (4.5).
+A flex or grid item's `z-index` applies when it is not positioned too, as CSS says. A participant (a shape, image or text hosting a `LayoutParticipant`) orders by its host's record, as a box does. A translated child of a CSS box is positioned, with `z-index` auto, when layout places it absolutely. The order is computed by the runtime when the draw order is sorted, and again when `position`, `z-index`, `display` or `overflow` change at run time (a binding, an animation, a script), so the compiler writes no order of its own. Hit testing follows the same order: the topmost painted box is hit first, and the event then bubbles to the CSS boxes it is in (4.5).
 
-The box's own paint stays at the bottom of its stack however its drawables arrive: children materialized after other objects (a text input's hint and value) or re-created by a retained remount reach the draw list after the box's own drawables.
+A context's own paint stays below its descendants, and a non-context box's paint stays below its in-flow content, however its drawables arrive: children materialized after other objects (a text input's hint and value) or re-created by a retained remount reach the draw list after the box's own drawables.
 
-Step 1 orders each box's own children: a child keeps its whole subtree together, so a positioned descendant paints with its parent's child, not in its nearest stacking context as a browser would let it escape. Escaping, and opacity and transforms as stacking-context triggers, are a follow-up. Translated (Rive) boxes keep Rive's order, and an artboard with draw rules keeps Rive's order throughout.
+Positioned descendants and descendant stacking contexts escape non-clipping CSS boxes to join their nearest stacking context. The CSS artboard is a context. A CSS box creates a context when it is positioned with an integer `z-index`, is a flex or grid item with an integer `z-index`, has its own opacity below 1, or has translation, rotation or scale authored by a timeline or binding, including a held identity transform. An unkeyed, unbound transform also creates a context while its current value is not identity. Authored transform targets are recorded once at load; opacity crossing 1 and unkeyed transforms reaching or leaving identity request a re-sort, without sorting on every animation frame. Descendant collection stops at nested contexts and atomic hosts. Translated (Rive) boxes, nested-artboard hosts, component lists and participant hosts stay atomic, and an artboard with draw rules keeps Rive's order throughout. A CSS box whose computed overflow clips its content also keeps its subtree together, including positioned descendants, until per-drawable clip state replaces the content clip's save and restore bracket.
 
 ### 4.5 Host geometry
 

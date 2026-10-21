@@ -1,20 +1,29 @@
-//! CSS painting order among a box's children (docs/CSS_LAYOUT.md, 4.4):
-//! our layer over Rive's draw order. Rive draws an artboard's drawables in
-//! reverse file order, so a box's first child draws on top. A CSS box paints
-//! as CSS 2.1 Appendix E does within one box: its own paint, then children
-//! positioned with a negative z-index, then in-flow children in tree order
-//! (later on top), then positioned children with z-index auto or 0 in tree
-//! order, then positive z-index ascending. Each child keeps its subtree
-//! together, so a positioned descendant does not leave its parent's box.
-//! A participant orders by its host's record, as a box does, and a
-//! translated child placed absolutely is positioned. Translated (Rive)
-//! boxes keep Rive's order among their own children.
+//! CSS painting order within stacking contexts (docs/CSS_LAYOUT.md, 4.4).
+//! Non-clipping CSS boxes let positioned descendants and nested contexts
+//! join their nearest context. Clips and non-CSS hosts stay atomic, keeping
+//! Rive's clip save and restore brackets and translated drawing order.
 use super::keys;
 use crate::source::{
     core::CoreHandle, drawable::RuntimeDrawableOccurrence,
     generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase,
 };
 use std::{collections::HashMap, rc::Rc};
+
+/// The Rive properties that author a CSS transform.
+pub(crate) fn is_transform_property(key: u32) -> bool {
+    use crate::source::generated::{
+        node_base::NodeBase, transform_component_base::TransformComponentBase,
+    };
+    [
+        NodeBase::X_PROPERTY_KEY,
+        NodeBase::Y_PROPERTY_KEY,
+        TransformComponentBase::ROTATION_PROPERTY_KEY,
+        TransformComponentBase::SCALE_X_PROPERTY_KEY,
+        TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+    ]
+    .into_iter()
+    .any(|property| u32::from(property) == key)
+}
 
 /// How a container orders its children.
 #[derive(Clone, Copy)]
@@ -89,89 +98,195 @@ pub(crate) fn container_of(component: &CoreHandle) -> Container {
         })
 }
 
-/// A child's paint layer, bottom first, and its z-index within the layer.
-/// A box reads its record; a participant's host reads the record among
-/// its children. A translated box is positioned when layout places it
-/// absolutely, with z-index auto.
-fn layer_of(child: &CoreHandle, parent: Container) -> (u8, i32) {
+/// A child's paint layer, bottom first, and whether descendants can escape.
+/// Participants order by their host's record. Translated absolute children
+/// remain positioned with z-index auto.
+fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
     use crate::source::layout::layout_style_applier::YGPositionType;
-    let read = |css: super::CssValues<'_>| (css.choice(keys::POSITION) != 0, css.z_index());
-    let css = child
-        .with(|object| match object.as_layout_component() {
-            Some(layout) if layout.is_css_mode() => layout.with_css(read),
-            Some(layout) => layout
-                .with_style(|style| style.position_type() == YGPositionType::Absolute)
-                .filter(|absolute| *absolute)
-                .map(|_| (true, None)),
-            None => object
-                .as_container_component()
-                .and_then(|container| super::record::find_in(container.children()))
-                .and_then(|record| super::record::with_values(&record, read)),
+    child
+        .with(|object| {
+            let read = |css: super::CssValues<'_>| (css.choice(keys::POSITION) != 0, css.z_index());
+            let layout = object.as_layout_component();
+            let css_box = layout.is_some_and(|layout| layout.is_css_mode());
+            let values = match layout {
+                Some(layout) if css_box => layout.with_css(read),
+                Some(layout) => layout
+                    .with_style(|style| style.position_type() == YGPositionType::Absolute)
+                    .filter(|absolute| *absolute)
+                    .map(|_| (true, None)),
+                None => object
+                    .as_container_component()
+                    .and_then(|container| super::record::find_in(container.children()))
+                    .and_then(|record| super::record::with_values(&record, read)),
+            };
+            let (positioned, z) = values.unwrap_or((false, None));
+            let z = z.filter(|_| positioned || parent.flex_or_grid);
+            let context = css_box
+                && (z.is_some()
+                    || layout.is_some_and(|layout| layout.css_effect_stacking_context()));
+            let layer = match z {
+                Some(z) if z < 0 => (0, z),
+                Some(z) if z > 0 => (3, z),
+                _ if positioned || context || z.is_some() => (2, 0),
+                _ => (1, 0),
+            };
+            // Only CSS layout boxes are transparent to this walk. In
+            // particular, participant hosts, lists and nested artboards keep
+            // their complete internal drawing order.
+            let atomic = !css_box || layout.is_some_and(|layout| layout.clips());
+            (layer, context || atomic)
         })
-        .flatten();
-    let Some((positioned, z)) = css else {
-        return (1, 0);
+        .unwrap_or(((1, 0), true))
+}
+
+struct Parts {
+    top: Vec<RuntimeDrawableOccurrence>,
+    paint: Vec<RuntimeDrawableOccurrence>,
+    children: Vec<(CoreHandle, Vec<RuntimeDrawableOccurrence>)>,
+}
+
+fn parts(
+    container: &CoreHandle,
+    items: Vec<RuntimeDrawableOccurrence>,
+    file_order: &HashMap<CoreHandle, usize>,
+) -> Parts {
+    let mut result = Parts {
+        top: Vec::new(),
+        paint: Vec::new(),
+        children: Vec::new(),
     };
-    // z-index applies to positioned boxes, and to flex and grid items.
-    let z = z.filter(|_| positioned || parent.flex_or_grid);
-    match z {
-        Some(z) if z < 0 => (0, z),
-        None if !positioned => (1, 0),
-        Some(z) if z > 0 => (3, z),
-        _ => (2, 0),
+    for item in items {
+        match owner_of(&item).and_then(|owner| child_of(container, owner)) {
+            // This container is CSS. Its proxy owns its paint, including
+            // when the artboard itself is borrowed by the sorter.
+            None if matches!(&item, RuntimeDrawableOccurrence::RuntimeProxy(proxy)
+                if &proxy.borrow().owner_handle() == container) =>
+            {
+                result.paint.push(item)
+            }
+            None => result.top.push(item),
+            Some(child) => match result.children.iter_mut().find(|(key, _)| key == &child) {
+                Some((_, group)) => group.push(item),
+                None => result.children.push((child, vec![item])),
+            },
+        }
+    }
+    result
+        .children
+        .sort_by_key(|(child, _)| file_order.get(child).copied().unwrap_or(usize::MAX));
+    result
+}
+
+/// Units are collected in tree preorder, including across static wrappers.
+/// Each unit holds draw-list order (top first); the context sorts units in
+/// paint order, then reverses them when flattening back into the draw list.
+#[derive(Default)]
+struct Context {
+    units: Vec<((u8, i32), Vec<RuntimeDrawableOccurrence>)>,
+}
+
+impl Context {
+    fn collect(
+        &mut self,
+        child: &CoreHandle,
+        parent: Container,
+        items: Vec<RuntimeDrawableOccurrence>,
+        file_order: &HashMap<CoreHandle, usize>,
+    ) -> Vec<RuntimeDrawableOccurrence> {
+        let (layer, atomic) = placement(child, parent);
+        if atomic {
+            let items = order(child, container_of(child), items, file_order);
+            if layer.0 == 1 {
+                return items;
+            }
+            self.units.push((layer, items));
+            return Vec::new();
+        }
+        let kind = container_of(child);
+        let Parts {
+            top,
+            paint,
+            children,
+        } = parts(child, items, file_order);
+        // Reserve the pseudo-context's tree position before collecting its
+        // descendants, which can join this same positioned phase.
+        let slot = (layer.0 != 1).then(|| {
+            let index = self.units.len();
+            self.units.push((layer, Vec::new()));
+            index
+        });
+        let mut flow = Vec::new();
+        for (descendant, items) in children {
+            flow.push(self.collect(&descendant, kind, items, file_order));
+        }
+        let items = top
+            .into_iter()
+            .chain(flow.into_iter().rev().flatten())
+            .chain(paint)
+            .collect();
+        if let Some(slot) = slot {
+            self.units[slot].1 = items;
+            Vec::new()
+        } else {
+            items
+        }
     }
 }
 
-/// `items`, the drawables of `container`'s subtree in draw-list order (the
-/// first is drawn last, on top), reordered for CSS containers.
+/// Reorder a subtree in draw-list order (the first drawable is on top).
+/// Non-CSS containers retain Rive's child order and form an escape boundary.
 pub(crate) fn order(
     container: &CoreHandle,
     kind: Container,
     items: Vec<RuntimeDrawableOccurrence>,
     file_order: &HashMap<CoreHandle, usize>,
 ) -> Vec<RuntimeDrawableOccurrence> {
-    let mut prefix = Vec::new();
-    let mut suffix = Vec::new();
-    let mut groups: Vec<(CoreHandle, Vec<RuntimeDrawableOccurrence>)> = Vec::new();
-    for item in items {
-        match owner_of(&item).and_then(|owner| child_of(container, owner)) {
-            // The box's own paint is the bottom of its stack.
-            None if is_own_paint(container, &item) => suffix.push(item),
-            // Its own drawable closes the clip above its children, and
-            // foreground drawables draw over them.
-            None if groups.is_empty() => prefix.push(item),
-            None => suffix.push(item),
-            Some(child) => match groups.iter_mut().find(|(key, _)| key == &child) {
-                Some((_, group)) => group.push(item),
-                None => groups.push((child, vec![item])),
-            },
+    if !kind.css {
+        // Keep the translated path's prefix and suffix behavior intact.
+        let mut prefix = Vec::new();
+        let mut suffix = Vec::new();
+        let mut groups: Vec<(CoreHandle, Vec<RuntimeDrawableOccurrence>)> = Vec::new();
+        for item in items {
+            match owner_of(&item).and_then(|owner| child_of(container, owner)) {
+                None if is_own_paint(container, &item) => suffix.push(item),
+                None if groups.is_empty() => prefix.push(item),
+                None => suffix.push(item),
+                Some(child) => match groups.iter_mut().find(|(key, _)| key == &child) {
+                    Some((_, group)) => group.push(item),
+                    None => groups.push((child, vec![item])),
+                },
+            }
         }
+        groups.sort_by_key(|(child, _)| file_order.get(child).copied().unwrap_or(usize::MAX));
+        return prefix
+            .into_iter()
+            .chain(groups.into_iter().flat_map(|(child, items)| {
+                if items.len() > 1 {
+                    order(&child, container_of(&child), items, file_order)
+                } else {
+                    items
+                }
+            }))
+            .chain(suffix)
+            .collect();
     }
-    for (child, group) in &mut groups {
-        if group.len() > 1 {
-            *group = order(
-                child,
-                container_of(child),
-                std::mem::take(group),
-                file_order,
-            );
-        }
+    let Parts {
+        top,
+        paint,
+        children,
+    } = parts(container, items, file_order);
+    let mut context = Context::default();
+    for (child, items) in children {
+        // Reserve the in-flow unit in tree order too. Flex and grid items
+        // paint as units here, while their positioned descendants escape.
+        let slot = context.units.len();
+        context.units.push(((1, 0), Vec::new()));
+        let flow = context.collect(&child, kind, items, file_order);
+        context.units[slot].1 = flow;
     }
-    let tree = |child: &CoreHandle| file_order.get(child).copied().unwrap_or(usize::MAX);
-    if kind.css {
-        // Paint order, bottom first; the draw list holds the top first.
-        groups.sort_by_cached_key(|(child, _)| {
-            let (layer, z) = layer_of(child, kind);
-            (layer, z, tree(child))
-        });
-        groups.reverse();
-    } else {
-        // Rive's order: file order, the first child on top.
-        groups.sort_by_cached_key(|(child, _)| tree(child));
-    }
-    prefix
-        .into_iter()
-        .chain(groups.into_iter().flat_map(|(_, group)| group))
-        .chain(suffix)
+    context.units.sort_by_key(|(layer, _)| *layer);
+    top.into_iter()
+        .chain(context.units.into_iter().rev().flat_map(|(_, items)| items))
+        .chain(paint)
         .collect()
 }

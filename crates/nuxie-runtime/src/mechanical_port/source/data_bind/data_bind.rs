@@ -701,7 +701,9 @@ impl DataBind {
     }
 
     fn mark_css_transform_target(&self) {
-        if crate::css_layout::paint_order::is_transform_property(self.property_key()) {
+        if self.to_target()
+            && crate::css_layout::paint_order::is_transform_property(self.property_key())
+        {
             if let Some(target) = &self.target {
                 target.with_mut(|target| {
                     if let Some(layout) = target.as_layout_component_mut() {

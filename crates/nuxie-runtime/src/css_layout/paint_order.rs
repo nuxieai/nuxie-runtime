@@ -133,7 +133,11 @@ fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
             // Only CSS layout boxes are transparent to this walk. In
             // particular, participant hosts, lists and nested artboards keep
             // their complete internal drawing order.
-            let atomic = !css_box || layout.is_some_and(|layout| layout.clips());
+            // Mask and mask-source brackets also require contiguous subtrees.
+            let masked = object.as_drawable().is_some_and(|drawable| {
+                !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty()
+            });
+            let atomic = !css_box || masked || layout.is_some_and(|layout| layout.clips());
             (layer, context || atomic)
         })
         .unwrap_or(((1, 0), true))

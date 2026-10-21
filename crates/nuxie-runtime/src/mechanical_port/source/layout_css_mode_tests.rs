@@ -172,6 +172,8 @@ struct B {
 enum Paint {
     /// A Fill with a SolidColor.
     Fill(u32),
+    /// A Stroke with a SolidColor, unaffected by the world transform.
+    WorldStroke(u32),
     /// A Stroke with a SolidColor and a BoxBorder over `sides`.
     Border(u32, u64),
     /// As `Border`, with the BoxBorder's style (1 dashed, 2 dotted).
@@ -309,6 +311,17 @@ fn push_paints(paints: &[Paint], index: u64, entries: &mut Vec<Entry<'_>>) {
     for paint in paints {
         let paint_index = slots(entries) + 1;
         match *paint {
+            Paint::WorldStroke(color) => {
+                entries.push(Entry::Record(
+                    StrokeBase::TYPE_KEY,
+                    vec![
+                        F(StrokeBase::THICKNESS_PROPERTY_KEY, 4.0),
+                        U(StrokeBase::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY, 0),
+                    ],
+                    index,
+                ));
+                entries.push(Entry::Solid(color, paint_index));
+            }
             Paint::Fill(color) => {
                 entries.push(Entry::Fill(index));
                 entries.push(Entry::Solid(color, paint_index));
@@ -2282,6 +2295,88 @@ fn css_shadow_spread_written_at_run_time_regrows_the_shadow() {
     assert_eq!(f.css_paints("Lifted")[0].0, aabb(-20.0, -20.0, 120.0, 70.0));
 }
 
+/// World-space offsets leave outer and inset clips at the box, including
+/// under rotation and scale. A singular transform paints nothing.
+#[test]
+fn css_world_shadow_offset_keeps_its_clip_at_the_box() {
+    use crate::source::math::mat2d::Mat2D;
+    for inset in [false, true] {
+        let shadow = if inset {
+            Paint::InsetShadow {
+                color: 0xff00_0000,
+                strength: 0.0,
+                spread: 0.0,
+            }
+        } else {
+            Paint::Shadow {
+                color: 0xff00_0000,
+                strength: 0.0,
+                spread: 0.0,
+            }
+        };
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                paints: vec![shadow],
+                ..css("Lifted", border_box(&[]), vec![])
+            },
+        );
+        let feather = f.paint_child("Lifted", FeatherBase::TYPE_KEY);
+        assert!(CoreRegistry::set_uint_handle(
+            &feather,
+            FeatherBase::SPACE_VALUE_PROPERTY_KEY.into(),
+            0
+        ));
+        for (key, value) in [
+            (FeatherBase::OFFSET_X_PROPERTY_KEY, 10.0),
+            (FeatherBase::OFFSET_Y_PROPERTY_KEY, 12.0),
+        ] {
+            assert!(CoreRegistry::set_double_handle(&feather, key.into(), value));
+        }
+        f.advance(2);
+        let owner = f.named("Lifted");
+        let paint = owner
+            .with_downcast::<LayoutComponent, _>(|layout| layout.paints.shape_paints()[0].clone())
+            .unwrap();
+        let draw = |world| {
+            let before = f.factory.borrow().stream().lines().count();
+            let mut renderer = f.factory.borrow().make_renderer();
+            assert_eq!(
+                owner.with_downcast_mut::<LayoutComponent, _>(|layout| {
+                    layout.draw_css_paint_with(&mut renderer, &paint, world, None)
+                }),
+                Some(true)
+            );
+            f.stream_lines()
+                .into_iter()
+                .skip(before)
+                .filter(|line| {
+                    matches!(line.as_str(), "save" | "restore")
+                        || line.starts_with("transform ")
+                        || line.starts_with("clipPath")
+                        || line.starts_with("drawPath")
+                })
+                .collect::<Vec<_>>()
+        };
+        let lines = draw(Mat2D::new(0.0, 2.0, -4.0, 0.0, 50.0, 70.0));
+        assert_eq!(lines[0], "save");
+        assert_eq!(lines[1], "transform matrix=[0,2,-4,0,50,70]");
+        assert!(lines[2].starts_with("clipPath"), "{lines:?}");
+        let corners = if inset {
+            ["(4,4)", "(96,4)", "(96,46)", "(4,46)"]
+        } else {
+            ["(0,0)", "(100,0)", "(100,50)", "(0,50)"]
+        };
+        for corner in corners {
+            assert!(lines[2].contains(corner), "{lines:?}");
+        }
+        assert_eq!(lines[3], "transform matrix=[1,0,0,1,6,-2.5]");
+        assert!(lines[4].starts_with("drawPath"), "{lines:?}");
+        assert_eq!(lines[5], "restore");
+        assert!(draw(Mat2D::from_scale(0.0, 2.0)).is_empty());
+    }
+}
+
 /// A shadow's Feather strength written at run time widens the region the
 /// shadow may draw in, which reaches 1.5 times the strength past the box.
 #[test]
@@ -3499,6 +3594,132 @@ fn css_artboard_ignores_legacy_limits() {
     assert_eq!(artboard.width(), 200.0);
 }
 
+/// A CSS root uses its artboard size even when the Rive style hugs and
+/// intrinsicallySized is set.
+#[test]
+fn css_artboard_ignores_intrinsically_sized() {
+    let f = try_scene_spec(
+        (200.0, 100.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            style: vec![
+                U(
+                    LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                    LayoutScaleType::Hug as u64,
+                ),
+                U(
+                    LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+                    LayoutScaleType::Hug as u64,
+                ),
+                U(
+                    LayoutComponentStyleBase::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY,
+                    1,
+                ),
+            ],
+            ..ArtboardSpec::default()
+        },
+        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+    )
+    .expect("the scene imports");
+    let bounds = f
+        .artboard
+        .with_artboard(|artboard| artboard.layout_bounds());
+    assert_eq!((bounds.width(), bounds.height()), (200.0, 100.0));
+}
+
+/// A hosted CSS artboard keeps its stored Hug height without
+/// intrinsicallySized, as component artboards are authored.
+#[test]
+fn css_hosted_artboard_keeps_its_stored_hug_height() {
+    use crate::source::{
+        generated::{
+            nested_artboard_base::NestedArtboardBase,
+            nested_artboard_layout_base::NestedArtboardLayoutBase,
+        },
+        nested_artboard_layout::NestedArtboardLayout,
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // 0 outer artboard, 1 its CSS record, 2 the host, 3 its style.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 3)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .float(NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY, 200.0)
+        .uint(
+            NestedArtboardLayoutBase::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+            LayoutScaleType::Hug as u64,
+        )
+        .end();
+    riv.object(LayoutComponentStyleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    // 0 component artboard, 1 its record, 2 child, 3 child's record,
+    // 4 and 5 their styles.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 10.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 10.0)
+        .end();
+    riv.object(LayoutComponentStyleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+            LayoutScaleType::Hug as u64,
+        )
+        .bool(
+            LayoutComponentStyleBase::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY,
+            false,
+        )
+        .end();
+    riv.object(LayoutComponentStyleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .end();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("outer artboard");
+    for _ in 0..3 {
+        artboard.advance_default(FRAME);
+    }
+    let hosts =
+        artboard.with_artboard(|artboard| artboard.find_all_handles::<NestedArtboardLayout>());
+    assert_eq!(hosts.len(), 1);
+    let bounds = hosts[0]
+        .with_downcast::<NestedArtboardLayout, _>(NestedArtboardLayout::layout_bounds)
+        .expect("hosted artboard");
+    assert_eq!((bounds.width(), bounds.height()), (200.0, 10.0));
+}
+
 /// A CSS artboard keeps its own clip for hits: content past the artboard
 /// is not hit though the record's overflow is visible.
 #[test]
@@ -3891,6 +4112,42 @@ fn css_artboard_box_paint_keeps_its_clip() {
         background.contains("(150,125),(250,125),(250,175),(150,175)"),
         "{background}"
     );
+}
+
+/// World-space strokes use the same painted rectangle as fills. Without
+/// a BoxPaint both still use the frame rectangle.
+#[test]
+fn css_artboard_world_stroke_uses_its_box_paint_rectangle() {
+    for box_paint in [None, Some(paint_points(100.0, 50.0))] {
+        let painted = box_paint.is_some();
+        let f = try_scene_spec(
+            (400.0, 300.0),
+            ArtboardSpec {
+                css: Some(vec![]),
+                paints: vec![Paint::Fill(0xff11_2233), Paint::WorldStroke(0xff44_5566)],
+                box_paint,
+                ..ArtboardSpec::default()
+            },
+            Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+        )
+        .expect("the scene imports");
+        let lines = f.draw_lines();
+        let fill = &lines[draw_at(&lines, 0xff11_2233)];
+        let stroke = &lines[draw_at(&lines, 0xff44_5566)];
+        let corners = if painted {
+            ["(150,125)", "(250,125)", "(250,175)", "(150,175)"]
+        } else {
+            ["(400,0)", "(400,300)", "(0,300)", "(0,0)"]
+        };
+        // The fill may retain negative zero at the artboard's origin.
+        for line in [fill, stroke] {
+            let normalized = line.replace("-0", "0");
+            for corner in corners {
+                assert!(normalized.contains(corner), "{line}");
+            }
+        }
+        assert!(stroke.contains("style=stroke"), "{stroke}");
+    }
 }
 
 const Z_INDEX_KIND: u16 = 61099;

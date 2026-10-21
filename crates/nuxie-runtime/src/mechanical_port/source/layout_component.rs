@@ -2384,15 +2384,28 @@ impl LayoutComponent {
             renderer.restore();
             return true;
         }
+        let offset = match special.offset {
+            Some((offset, true)) => {
+                // Keep the clip at the box and apply a world-space offset
+                // as a local vector after the world transform.
+                let linear = Mat2D::new(world[0], world[1], world[2], world[3], 0.0, 0.0);
+                let mut inverse = Mat2D::identity();
+                if !linear.invert(&mut inverse)
+                    || !inverse.values().iter().all(|value| value.is_finite())
+                {
+                    return true;
+                }
+                Some(inverse * offset)
+            }
+            Some((offset, false)) => Some(offset),
+            None => None,
+        };
         renderer.save();
-        if let Some((offset, true)) = special.offset {
-            renderer.translate(offset.x, offset.y);
-        }
         renderer.transform(nuxie_render_api::Mat2D(*world.values()));
         if let Some(clip) = special.clip.as_mut() {
             renderer.clip_path(clip.render_path(&factory));
         }
-        if let Some((offset, false)) = special.offset {
+        if let Some(offset) = offset {
             renderer.translate(offset.x, offset.y);
         }
         let mut render_paint = render_paint.borrow_mut();
@@ -3681,9 +3694,10 @@ impl LayoutComponent {
         available_width: f32,
         available_height: f32,
     ) -> Vec2D {
-        let intrinsically_sized = self
-            .with_style(|style| style.intrinsically_sized())
-            .unwrap_or(false);
+        let intrinsically_sized = !(self.is_css_mode() && self.is_artboard())
+            && self
+                .with_style(|style| style.intrinsically_sized())
+                .unwrap_or(false);
         Vec2D::new(
             if available_width.is_nan() && intrinsically_sized {
                 available_width
@@ -6365,7 +6379,8 @@ impl LayoutComponent {
         )) = component_style.with_downcast::<LayoutComponentStyle, _>(|component_style| {
             (
                 component_style.position_type() == YGPositionType::Absolute,
-                component_style.width_scale_type() == LayoutScaleType::Fixed
+                !context.css
+                    && component_style.width_scale_type() == LayoutScaleType::Fixed
                     && component_style.height_scale_type() == LayoutScaleType::Fixed
                     && component_style.intrinsically_sized()
                     && self.is_leaf(),

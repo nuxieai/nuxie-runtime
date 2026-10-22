@@ -104,6 +104,9 @@ impl ActiveLayoutOwner<'_> {
             ),
         };
         for child in children {
+            if child.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE) {
+                continue;
+            }
             let child = ComponentOccurrenceHandle::Authored(child);
             if let Some(handle) = handle.as_ref() {
                 child.collapse_from_layout(collapsed, self, handle);
@@ -574,6 +577,10 @@ impl ComponentOccurrenceHandle {
         mut active_layout: Option<(&mut ActiveLayoutOwner<'_>, &CoreHandle)>,
     ) -> bool {
         if let Self::Authored(handle) = self {
+            // CSS records keep applying bindings while their box or host is hidden.
+            if handle.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE) {
+                return false;
+            }
             let action = handle
                 .with_mut(|object| {
                     let dirt = object.as_component_mut()?.collapse_state(value)?;

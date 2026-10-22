@@ -52,6 +52,7 @@ const HEIGHT_KIND: u16 = 61024;
 const HEIGHT: u16 = 61025;
 const MARGIN_TOP: u16 = 61040;
 const MARGIN_BOTTOM: u16 = 61046;
+const MARGIN_LEFT: u16 = 61049;
 const INSET_TOP_KIND: u16 = 61051;
 const INSET_TOP: u16 = 61052;
 const INSET_LEFT_KIND: u16 = 61060;
@@ -126,9 +127,10 @@ struct B {
     /// Shapes of several rectangle paths: the shape's name and each path's
     /// x position and size.
     multi_path: Vec<(&'static str, Vec<(f32, (f32, f32))>)>,
-    /// A data binding from the file's one view model number to this record
-    /// property.
+    /// A data binding from a view model number to this record property.
     bind: Option<u16>,
+    /// The view model number's index for `bind`.
+    bind_source: u8,
     /// A BoxPaint record and the values it writes.
     box_paint: Option<Vec<P>>,
     /// A data binding from the view model number to a BoxPaint property.
@@ -284,7 +286,7 @@ enum Entry<'a> {
     LinearGradient(u64),
     Stop(u32, f32, u64),
     NamedShape(&'static str, u64),
-    Bind(u16, u64),
+    Bind(u16, u64, u8),
     /// A record property keyed by the animation: the record's object index.
     Keys(u64, u16, &'a [(u32, f32)]),
     PathAt(f32, (f32, f32), u64),
@@ -458,7 +460,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(key) = node.component_bind {
-            entries.push(Entry::Bind(key, node.component_bind_flags));
+            entries.push(Entry::Bind(key, node.component_bind_flags, 0));
         }
         for (key, keys) in &node.component_keys {
             entries.push(Entry::Keys(index, *key, keys));
@@ -467,7 +469,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             let record = slots(entries) + 1;
             entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
             if let Some(key) = node.bind {
-                entries.push(Entry::Bind(key, 0));
+                entries.push(Entry::Bind(key, 0, node.bind_source));
             }
             for (key, keys) in &node.css_keys {
                 entries.push(Entry::Keys(record, *key, keys));
@@ -477,7 +479,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             let record = slots(entries) + 1;
             entries.push(Entry::Record(BOX_PAINT, props.clone(), index));
             if let Some(key) = node.box_paint_bind {
-                entries.push(Entry::Bind(key, 0));
+                entries.push(Entry::Bind(key, 0, 0));
             }
             for (key, keys) in &node.box_paint_keys {
                 entries.push(Entry::Keys(record, *key, keys));
@@ -636,7 +638,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     riv.object(BackboardBase::TYPE_KEY).end();
     let binds = entries.iter().any(|entry| matches!(entry, Entry::Bind(..)));
     if binds {
-        // One view model with one number property: path [0, 0].
+        // One view model with number properties: paths [0, index].
         use crate::source::generated::viewmodel::{
             viewmodel_base::ViewModelBase, viewmodel_component_base::ViewModelComponentBase,
             viewmodel_property_number_base::ViewModelPropertyNumberBase,
@@ -644,9 +646,22 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         riv.object(ViewModelBase::TYPE_KEY)
             .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "Model")
             .end();
-        riv.object(ViewModelPropertyNumberBase::TYPE_KEY)
-            .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "inset")
-            .end();
+        let last_source = entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Bind(_, _, source) => Some(*source),
+                _ => None,
+            })
+            .max()
+            .unwrap();
+        for source in 0..=last_source {
+            riv.object(ViewModelPropertyNumberBase::TYPE_KEY)
+                .string(
+                    ViewModelComponentBase::NAME_PROPERTY_KEY,
+                    if source == 0 { "inset" } else { "display" },
+                )
+                .end();
+        }
     }
     let pictured = entries
         .iter()
@@ -729,14 +744,17 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 riv.end();
             }
             Entry::Keys(..) => {}
-            Entry::Bind(key, flags) => {
+            Entry::Bind(key, flags, source) => {
                 use crate::source::generated::data_bind::{
                     data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase,
                 };
                 riv.object(DataBindContextBase::TYPE_KEY)
                     .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, u64::from(*key))
                     .uint(DataBindBase::FLAGS_PROPERTY_KEY, *flags)
-                    .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+                    .byte_field(
+                        DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY,
+                        &[0, *source],
+                    )
                     .end();
             }
             Entry::NamedShape(name, parent) => {
@@ -1185,6 +1203,10 @@ impl Scene {
     }
     /// Binds a new instance of the file's view model and returns its number.
     fn bind_number(&self) -> CoreHandle {
+        self.bind_numbers().remove(0)
+    }
+    /// Binds a new instance and returns all of its numbers.
+    fn bind_numbers(&self) -> Vec<CoreHandle> {
         let artboard = self.artboard.core_handle();
         let instance = self
             ._file
@@ -1195,10 +1217,10 @@ impl Scene {
         instance
             .with_downcast::<crate::source::viewmodel::viewmodel_instance::ViewModelInstance, _>(
                 |instance: &crate::source::viewmodel::viewmodel_instance::ViewModelInstance| {
-                    instance.property_values()[0].clone()
+                    instance.property_values().to_vec()
                 },
             )
-            .expect("the number")
+            .expect("the numbers")
     }
     /// The stream lines one draw of the artboard records.
     fn draw_lines(&self) -> Vec<String> {
@@ -1571,6 +1593,198 @@ fn css_display_none_hides_the_box() {
         .with_downcast::<LayoutComponent, _>(LayoutComponent::is_collapsed)
         .unwrap();
     assert!(hidden);
+}
+
+fn bound_records_under_hidden_box(nested: bool, cloned: bool) {
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    let set_number = |number: &CoreHandle, value: f32| {
+        assert!(CoreRegistry::set_double_handle(
+            number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            value
+        ));
+    };
+    for display in [NONE, FLEX] {
+        let children = vec![
+            B {
+                bind: Some(MARGIN_LEFT),
+                ..css(
+                    "Child",
+                    [
+                        [F(MARGIN_LEFT, 30.0)].as_slice(),
+                        &width(50.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                    vec![],
+                )
+            },
+            B {
+                name: "Ordinary",
+                component_bind: Some(BOX_ROTATION),
+                component: vec![
+                    F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 10.0),
+                    F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 10.0),
+                ],
+                ..B::default()
+            },
+        ];
+        let children = if nested {
+            vec![css(
+                "Middle",
+                [[U(DISPLAY, 1)].as_slice(), &width(260.0), &height(50.0)].concat(),
+                children,
+            )]
+        } else {
+            children
+        };
+        let mut f = scene(
+            (300.0, 100.0),
+            B {
+                bind: Some(DISPLAY),
+                bind_source: 1,
+                ..css(
+                    "Parent",
+                    [
+                        [U(DISPLAY, display as u64)].as_slice(),
+                        &width(260.0),
+                        &height(50.0),
+                    ]
+                    .concat(),
+                    children,
+                )
+            },
+        );
+        if cloned {
+            f.artboard = f.artboard.instance().expect("an artboard instance");
+            f.advance(3);
+        }
+        let numbers = f.bind_numbers();
+        set_number(&numbers[0], 30.0);
+        set_number(&numbers[1], display);
+        f.advance(3);
+        let ordinary = f.named("Ordinary");
+        let rotation = || CoreRegistry::get_double_handle(&ordinary, BOX_ROTATION.into()).unwrap();
+        if display == FLEX {
+            assert_eq!(f.bounds("Child")[0], 30.0);
+            assert_eq!(rotation(), 30.0);
+        }
+        // Change the margin while hidden, then repeat after showing once.
+        for margin in [10.0, 20.0] {
+            set_number(&numbers[1], NONE);
+            f.advance(3);
+            assert!(
+                ordinary
+                    .with(|object| object.component_is_collapsed())
+                    .unwrap()
+            );
+            let parked = rotation();
+            set_number(&numbers[0], margin);
+            f.advance(3);
+            assert_eq!(
+                CoreRegistry::get_double_handle(&f.record("Child"), MARGIN_LEFT.into()),
+                Some(margin)
+            );
+            assert_eq!(rotation(), parked);
+            for name in ["Parent", "Child"] {
+                assert!(
+                    !f.record(name)
+                        .with(|object| object.component_is_collapsed())
+                        .unwrap()
+                );
+            }
+            set_number(&numbers[1], FLEX);
+            f.advance(3);
+            assert_eq!(f.bounds("Child")[0], margin);
+            assert_eq!(rotation(), margin);
+            assert!(
+                !ordinary
+                    .with(|object| object.component_is_collapsed())
+                    .unwrap()
+            );
+        }
+    }
+}
+
+/// CSS bindings keep applying while hidden; ordinary bindings wait for expansion.
+#[test]
+fn css_bound_records_survive_parent_collapse() {
+    bound_records_under_hidden_box(false, false);
+}
+
+#[test]
+fn css_bound_records_survive_grandparent_collapse() {
+    bound_records_under_hidden_box(true, false);
+}
+
+#[test]
+fn css_bound_records_survive_instance_initialization() {
+    bound_records_under_hidden_box(true, true);
+}
+
+#[test]
+fn css_participant_records_survive_host_collapse() {
+    let f = scene(
+        (300.0, 100.0),
+        B {
+            participants: vec![(
+                Rect {
+                    name: "Item",
+                    size: (50.0, 20.0),
+                    grouped: false,
+                    path_scale_x: 1.0,
+                },
+                Some(
+                    [
+                        [U(DISPLAY, NONE as u64)].as_slice(),
+                        &width(50.0),
+                        &height(20.0),
+                    ]
+                    .concat(),
+                ),
+            )],
+            ..css(
+                "Parent",
+                [[U(DISPLAY, FLEX as u64)].as_slice(), &height(50.0)].concat(),
+                vec![],
+            )
+        },
+    );
+    let host = f
+        .artboard
+        .with_artboard(|artboard| {
+            artboard.find_handle::<crate::source::shapes::shape::Shape>("Item")
+        })
+        .expect("a participant host");
+    let record = host
+        .with(|object| {
+            object
+                .as_container_component()
+                .unwrap()
+                .children()
+                .iter()
+                .find(|child| child.is_type_of(LAYOUT_CSS_STYLE))
+                .cloned()
+        })
+        .flatten()
+        .expect("a CSS record");
+    let collapsed = |owner: &CoreHandle| {
+        owner
+            .with(|object| object.component_is_collapsed())
+            .unwrap()
+    };
+    assert!(collapsed(&host));
+    assert!(!collapsed(&record));
+    for display in [FLEX, NONE, FLEX] {
+        assert!(CoreRegistry::set_uint_handle(
+            &record,
+            DISPLAY.into(),
+            display as u32
+        ));
+        f.advance(3);
+        assert_eq!(collapsed(&host), display == NONE);
+        assert!(!collapsed(&record));
+    }
 }
 
 /// A record on the artboard sets its container properties; the artboard

@@ -168,7 +168,7 @@ fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
 
 fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
     let mut region = SemanticClipRegion::from_polygon(&polygon);
-    let complete = walk_rendered_clips(component, true, |artboard, _frame_offset, clip| {
+    let complete = walk_rendered_clips(component, true, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
             let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
                 clip.mapped(|point| artboard.semantic_root_transform(point))
@@ -225,12 +225,12 @@ fn walk_painted_clips(
     spaces: &[(CoreHandle, Mat2D)],
     mut visit: impl FnMut(RenderedClip) -> bool,
 ) -> bool {
-    walk_rendered_clips(component, false, |artboard, frame_offset, clip| {
+    walk_rendered_clips(component, false, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
             let Some((_, transform)) = spaces.iter().find(|(owner, _)| owner == artboard) else {
                 return false;
             };
-            clip.mapped(|point| *transform * (point + frame_offset))
+            clip.mapped(|point| *transform * point)
         } else {
             clip
         };
@@ -267,7 +267,7 @@ pub(crate) fn painted_box_contains_point(
 fn walk_rendered_clips(
     component: &CoreHandle,
     own_clip: bool,
-    mut visit: impl FnMut(Option<&CoreHandle>, Vec2D, RenderedClip) -> bool,
+    mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip) -> bool,
 ) -> bool {
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
@@ -277,21 +277,8 @@ fn walk_rendered_clips(
             return false;
         }
         let skip_own = !own_clip && &owner == component;
-        let Some((clip, parent, css_artboard_clip, frame_offset)) = owner.with_mut(|object| {
+        let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
-            // Artboard render paths precede the frame-origin translation.
-            // The host catalogue uses frame space; semantic projection
-            // applies this translation in semantic_root_transform itself.
-            let frame_offset = object.as_artboard().map_or(Vec2D::default(), |artboard| {
-                if artboard.frame_origin() {
-                    Vec2D::new(
-                        artboard.layout_width() * artboard.origin_x(),
-                        artboard.layout_height() * artboard.origin_y(),
-                    )
-                } else {
-                    Vec2D::default()
-                }
-            });
             // A CSS artboard's record clips its content at its padding box,
             // inside its own clip (docs/CSS_LAYOUT.md, 4.2).
             let css_artboard_clip = object
@@ -306,9 +293,15 @@ fn walk_rendered_clips(
                 .component_parent_handle()
                 .or_else(|| object.as_artboard().and_then(Artboard::host));
             let fallback = if let Some(artboard) = object.as_artboard() {
-                artboard
-                    .clip()
-                    .then(|| (bounds_corners(artboard.bounds()), Some(owner.clone())))
+                artboard.clip().then(|| {
+                    let bounds = Aabb::from_ltwh(
+                        -artboard.layout_width() * artboard.origin_x(),
+                        -artboard.layout_height() * artboard.origin_y(),
+                        artboard.layout_width(),
+                        artboard.layout_height(),
+                    );
+                    (bounds_corners(bounds), Some(owner.clone()))
+                })
             } else if skip_own {
                 None
             } else {
@@ -335,17 +328,22 @@ fn walk_rendered_clips(
                 let path = path.map(|path| (path.raw_path().clone(), path.fill_rule()));
                 (corners, artboard, path)
             });
-            (clip, parent, css_artboard_clip, frame_offset)
+            (clip, parent, css_artboard_clip)
         }) else {
             return false;
         };
         if let Some((path, rule)) = css_artboard_clip.filter(|_| !skip_own) {
-            if !visit(Some(&owner), frame_offset, RenderedClip::Path(path, rule)) {
+            if !visit(Some(&owner), RenderedClip::Path(path, rule)) {
                 return false;
             }
         }
         let shapes = owner
             .with(|object| {
+                // Artboard own paint precedes the drawable list's shape
+                // clips. They still cover content and nested hosts.
+                if skip_own && object.as_artboard().is_some() {
+                    return None;
+                }
                 object
                     .as_drawable()
                     .map(|drawable| drawable.clipping_shapes().to_vec())
@@ -375,20 +373,16 @@ fn walk_rendered_clips(
             let Some((path, rule)) = path else {
                 return false;
             };
-            if !visit(
-                artboard.as_ref(),
-                Vec2D::default(),
-                RenderedClip::Path(path, rule),
-            ) {
+            if !visit(artboard.as_ref(), RenderedClip::Path(path, rule)) {
                 return false;
             }
         }
         if let Some((corners, artboard, path)) = clip {
-            let (clip, offset) = path.map_or_else(
-                || (RenderedClip::Polygon(corners), Vec2D::default()),
-                |(path, rule)| (RenderedClip::Path(path, rule), frame_offset),
+            let clip = path.map_or_else(
+                || RenderedClip::Polygon(corners),
+                |(path, rule)| RenderedClip::Path(path, rule),
             );
-            if !visit(artboard.as_ref(), offset, clip) {
+            if !visit(artboard.as_ref(), clip) {
                 return false;
             }
         }

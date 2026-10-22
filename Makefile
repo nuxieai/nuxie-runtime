@@ -207,8 +207,14 @@ crate-seams-apple-check:
 crate-seams-full-check:
 	$(RUST_BUILD) check --workspace
 
-test: fixtures
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) test --workspace
+# The C++ comparison tests fail without the pinned oracle, so the suite builds
+# it and hands it to them. TEST_ARGS narrows the selection, as Nightly does.
+# Upstream's unit tests also build WITH_RIVE_SCRIPTNET, a native-tools cut
+# here, so its tests run in their own configuration.
+TEST_ARGS ?=
+test: fixtures cpp-probe
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_CPP_PROBE="$(CPP_PROBE)" $(RUST_BUILD) test --workspace $(TEST_ARGS)
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" $(RUST_BUILD) test -p nuxie-runtime --features scriptnet --lib --test upstream_scriptnet_net_policy
 
 # --- Tool-check gates: the tool's unit tests and the check it performs are
 # independent verdicts, so neither is allowed to hide the other -------------

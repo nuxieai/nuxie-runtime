@@ -405,6 +405,8 @@ impl DataBindContainer {
     pub fn bind_data_binds_from_current_context(&self) {
         let binds = self.data_binds().to_vec();
         for bind in binds {
+            // Imported targets gain their CSS ancestry during initialization.
+            self.persist_computed_target(&bind);
             DataBindContext::bind_from_context_handle(&bind, self.data_bind_context());
         }
     }
@@ -503,12 +505,25 @@ impl DataBindContainer {
             state.data_binds.push(bind.clone());
             state.advance_cells.push(cells);
         }
+        self.persist_computed_target(&bind);
+        let owner = self.0.borrow().owner.clone();
+        bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_container(owner));
+        let context = self.0.borrow().data_context.clone();
+        if let Some(context) = context {
+            if bind.with_downcast::<DataBindContext, _>(|_| ()).is_some() {
+                DataBindContext::bind_from_context_handle(&bind, Some(context));
+                DataBind::update_data_bind_handle(&bind, true);
+            }
+        }
+    }
+
+    fn persist_computed_target(&self, bind: &CoreHandle) {
         let persist = bind
             .with(|object| {
                 let bind = object
                     .as_data_bind()
                     .expect("container owns DataBind occurrences");
-                bind.to_source() && !bind.target_supports_push()
+                bind.to_source() && !bind.target_supports_push() && !bind.in_persisting_list()
             })
             .unwrap_or(false);
         if persist {
@@ -523,15 +538,6 @@ impl DataBindContainer {
                     .unwrap()
                     .set_in_persisting_list(true)
             });
-        }
-        let owner = self.0.borrow().owner.clone();
-        bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_container(owner));
-        let context = self.0.borrow().data_context.clone();
-        if let Some(context) = context {
-            if bind.with_downcast::<DataBindContext, _>(|_| ()).is_some() {
-                DataBindContext::bind_from_context_handle(&bind, Some(context));
-                DataBind::update_data_bind_handle(&bind, true);
-            }
         }
     }
 

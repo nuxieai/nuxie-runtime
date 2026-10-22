@@ -2136,20 +2136,29 @@ impl ScrollConstraint {
             } else {
                 position.y
             });
-            if position < axis.snap_position(first) {
-                return first_index as f32;
+            let mut nearest = (first_index, axis.snap_position(first));
+            for &(index, bounds) in items.iter().skip(1) {
+                let start = axis.snap_position(bounds);
+                if (position - start).abs() <= (position - nearest.1).abs() {
+                    nearest = (index, start);
+                }
+            }
+            // Coincident snap positions keep the last original item index.
+            if position == nearest.1 {
+                return nearest.0 as f32;
             }
             for pair in items.windows(2) {
                 let (index, bounds) = pair[0];
                 let (next_index, next) = pair[1];
                 let start = axis.snap_position(bounds);
                 let end = axis.snap_position(next);
-                if position < end {
+                // Invert the setter's interval even when CSS reverses its direction.
+                if position > start.min(end) && position < start.max(end) {
                     return index as f32
                         + (next_index - index) as f32 * (position - start) / (end - start);
                 }
             }
-            return items.last().unwrap().0 as f32;
+            return nearest.0 as f32;
         }
         if self
             .with_content(|content| content.children().is_empty())

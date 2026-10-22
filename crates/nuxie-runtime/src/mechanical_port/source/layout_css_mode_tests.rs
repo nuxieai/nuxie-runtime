@@ -6629,6 +6629,95 @@ fn css_axis_row(
 }
 
 #[test]
+fn css_scroll_index_round_trips_normal_and_reversed_axes() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for reverse in [false, true] {
+                let f = scene(
+                    (400.0, 400.0),
+                    css(
+                        "Viewport",
+                        [
+                            vec![
+                                U(DISPLAY, 1),
+                                U(DIRECTION, if rtl { 2 } else { 1 }),
+                                U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                            ],
+                            width(100.0).to_vec(),
+                            height(100.0).to_vec(),
+                        ]
+                        .concat(),
+                        vec![B {
+                            scroll: Some(if horizontal { 0 } else { 1 }),
+                            ..css(
+                                "Content",
+                                [
+                                    vec![
+                                        U(DISPLAY, 1),
+                                        F(FLEX_SHRINK, 0.0),
+                                        U(
+                                            61006,
+                                            if horizontal {
+                                                u64::from(reverse)
+                                            } else {
+                                                2 + u64::from(reverse)
+                                            },
+                                        ),
+                                    ],
+                                    width(if horizontal { 300.0 } else { 100.0 }).to_vec(),
+                                    height(if horizontal { 100.0 } else { 300.0 }).to_vec(),
+                                ]
+                                .concat(),
+                                ["A", "B", "C"]
+                                    .into_iter()
+                                    .map(|name| {
+                                        css(
+                                            name,
+                                            [
+                                                vec![F(FLEX_SHRINK, 0.0)],
+                                                width(100.0).to_vec(),
+                                                height(100.0).to_vec(),
+                                            ]
+                                            .concat(),
+                                            vec![],
+                                        )
+                                    })
+                                    .collect(),
+                            )
+                        }],
+                    ),
+                );
+                let scroll = css_axis_scroll(&f);
+                for index in [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0] {
+                    scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                        scroll.set_scroll_index(index)
+                    });
+                    f.advance(2);
+                    let expected = -100.0 * if reverse { 2.0 - index } else { index };
+                    assert_eq!(
+                        scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                            if horizontal {
+                                scroll.offset_x()
+                            } else {
+                                scroll.offset_y()
+                            },
+                            scroll.scroll_index(),
+                        )),
+                        Some((expected, index)),
+                        "horizontal={horizontal}, rtl={rtl}, reverse={reverse}, index={index}"
+                    );
+                    if index.fract() == 0.0 {
+                        let origin = f.world_origin(["A", "B", "C"][index as usize]);
+                        assert_eq!(if horizontal { origin.0 } else { origin.1 }, 0.0);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn css_scroll_index_round_trips_every_collapsed_item_gap_pattern() {
     use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
     for rtl in [false, true] {
@@ -7463,6 +7552,111 @@ fn css_focus_reveals_items_inside_the_bordered_padding_box() {
                 }),
                 Some(-320.0)
             );
+        }
+    }
+}
+
+#[test]
+fn css_bound_offsets_refresh_after_layout_changes() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        data_bind::data_bind::{TO_SOURCE, TWO_WAY},
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for flags in [TO_SOURCE, TWO_WAY] {
+                for shrink_content in [false, true] {
+                    let offset_key = if horizontal { 759 } else { 760 };
+                    let size_key = if horizontal { WIDTH } else { HEIGHT };
+                    let f = scene(
+                        (800.0, 800.0),
+                        css(
+                            "Viewport",
+                            [
+                                vec![
+                                    U(DISPLAY, 1),
+                                    U(DIRECTION, if rtl { 2 } else { 1 }),
+                                    U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                                ],
+                                width(100.0).to_vec(),
+                                height(100.0).to_vec(),
+                            ]
+                            .concat(),
+                            vec![B {
+                                scroll: Some(if horizontal { 0 } else { 1 }),
+                                scroll_properties: vec![F(offset_key, -400.0)],
+                                scroll_bind: Some((offset_key, u64::from(flags))),
+                                ..css(
+                                    "Content",
+                                    [
+                                        vec![F(FLEX_SHRINK, 0.0)],
+                                        width(if horizontal { 600.0 } else { 100.0 }).to_vec(),
+                                        height(if horizontal { 100.0 } else { 600.0 }).to_vec(),
+                                    ]
+                                    .concat(),
+                                    vec![],
+                                )
+                            }],
+                        ),
+                    );
+                    let scroll = css_axis_scroll(&f);
+                    let number = f.bind_number();
+                    let browser = |value: f32| if horizontal && rtl { -value } else { value };
+                    let read_source = || {
+                        CoreRegistry::get_double_handle(
+                            &number,
+                            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                        )
+                    };
+                    f.advance(4);
+                    assert_eq!(read_source(), Some(browser(400.0)));
+                    let record = f.record(if shrink_content {
+                        "Content"
+                    } else {
+                        "Viewport"
+                    });
+                    // No offset writes accompany these range changes.
+                    let changes = if shrink_content {
+                        [(200.0, 100.0), (100.0, 0.0), (600.0, 500.0)]
+                    } else {
+                        [(500.0, 100.0), (600.0, 0.0), (100.0, 500.0)]
+                    };
+                    for (size, range) in changes {
+                        assert!(CoreRegistry::set_double_handle(
+                            &record,
+                            size_key.into(),
+                            size
+                        ));
+                        f.advance(4);
+                        let expected = browser(400.0_f32.min(range));
+                        assert_eq!(
+                            scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                                if horizontal {
+                                    scroll.max_offset_x()
+                                } else {
+                                    scroll.max_offset_y()
+                                },
+                                if horizontal {
+                                    scroll.bound_scroll_offset_x()
+                                } else {
+                                    scroll.bound_scroll_offset_y()
+                                },
+                            )),
+                            Some((-range, expected))
+                        );
+                        assert_eq!(
+                            read_source(),
+                            Some(expected),
+                            "horizontal={horizontal}, rtl={rtl}, flags={flags}, shrink_content={shrink_content}, size={size}"
+                        );
+                        assert_eq!(
+                            CoreRegistry::get_double_handle(&scroll, offset_key.into()),
+                            Some(-400.0)
+                        );
+                    }
+                }
+            }
         }
     }
 }

@@ -35,7 +35,7 @@ The definition files live in `defs/nuxie/` beside `video.json`, and the README's
 
 | Type | Key | Extends | Parent | Rive-native or ours |
 |---|---|---|---|---|
-| `LayoutCssStyle` | 61000 | `component.json` | a box, or a participant's host; at most one per parent | ours |
+| `LayoutCssStyle` | 61000 | `component.json` | a box, a `NestedArtboardLayout`, or a participant's host; at most one per parent | ours |
 | `BoxBorder` | 61001 | `component.json` | a `Stroke` painted by a box | ours |
 | `BoxGradient` | 61002 | `component.json` | a `LinearGradient` or `RadialGradient` painted by a box | ours |
 | `BoxShadow` | 61003 | `component.json` | a `Feather` on a `Fill` painted by a box | ours |
@@ -184,7 +184,16 @@ In CSS mode the runtime builds the node's whole Taffy style from the record (fie
 - its layout animation settings (animation style, interpolation, interpolator and time);
 - `GridTrack` and `GridItemPlacement`.
 
-On an `Artboard` the artboard's own width and height define the root box. A record there contributes only container properties: display, padding, border, gap, direction, alignment, wrap and overflow.
+On a top-level `Artboard`, its own width and height define the root box, with its existing intrinsic sizing behaviour. Its record contributes container properties: display, padding, border, gap, direction, container alignment, wrap, overflow and grid flow. Its item sizes, limits, margins, insets and aspect ratio do not apply.
+
+A hosted artboard with a record can instead be a CSS box in its host's layout:
+
+- An `ArtboardComponentList` row takes both container and item properties from its own artboard's record.
+- A `NestedArtboardLayout` with a child `LayoutCssStyle`, hosting an artboard with its own record, takes container properties from the artboard's record and item properties from the host's child record. Each occurrence has its own item record. Display comes from the artboard's record.
+
+Item properties are box-sizing, position, insets, size kinds, minimum and maximum sizes, margins, flex-grow, flex-shrink, flex-basis, align-self, justify-self and aspect-ratio. Omitted fields take their CSS initial values, including on a nested copy's item record. These hosted roots size from CSS and their content, ignoring stored artboard width and height and Rive instance widths, heights, units and scale types. Grid placement records still apply. Lists estimate rows not yet built from stored artboard sizes.
+
+A hosted artboard without its own record, or a `NestedArtboardLayout` without a child record, keeps its existing sizing. A CSS artboard hosted by a `NestedArtboardLayout` without that child record still contributes only container properties.
 
 On a participant the record contributes only item properties: display none, position, insets, size, minimum, maximum, aspect ratio, margins, flex-grow, flex-shrink, flex-basis, align-self and justify-self. Participants have no children to lay out.
 
@@ -403,7 +412,7 @@ Flex, grid and block alignment apply to that item, including block `align-conten
 | Shape resized by layout (translated mode: a box's direct shape child, which Rive resizes to the box) | the box's paint: it gives a size only to a box that hugs it, through Rive's own measure (the path's authored size), and adds nothing to any other box's automatic minimum | Yes, as Rive does |
 | Drawing group | the union of its content, each child placed by its local transform (a path's transform composed through any nodes inside its shape; images and joysticks about their origin, joysticks at their position). A child without a natural size of its own (a text inside the group) adds nothing | No |
 | N-slice, joystick | its authored width and height | As today |
-| Mounted artboard (a component-list item) or nested artboard | its artboard's own size, like an image: a box hugs to it, and on an axis where it has a definite size that size is its automatic minimum. That minimum is clamped by a length maximum or by a percentage of a parent's definite length. It gives no minimum on a scroll-container axis | As today |
+| Mounted artboard (a component-list item) or nested artboard | A list row with an artboard record, or a `NestedArtboardLayout` with both an artboard record and a host child record, is a CSS layout box: its content supplies its natural size and its item record supplies sizes, limits and margins (2.1). Other mounted or nested artboards use their artboard's own size, like an image: a box hugs to it, and on an axis where it has a definite size that size is its automatic minimum, clamped by a length maximum or by a percentage of a parent's definite length, with no minimum on a scroll-container axis | CSS hosted roots reflow to their CSS item size. A `NestedArtboardLeaf` keeps its fit and alignment; in a CSS sizing box it fits to a rectangle the size of the content box, at local (0, 0), because the content origin is already applied. A translated sizing box fits the leaf to its whole local bounds. Other cases keep existing sizing |
 | Text input, scripted layout, artboard without an instance | zero | |
 
 A CSS box's automatic minimum is the largest of its contents' own: content with a zero minimum (the rows above that say so) adds nothing, and the rest still count. A translated box keeps a zero automatic minimum when any of its measured content has none, as today.

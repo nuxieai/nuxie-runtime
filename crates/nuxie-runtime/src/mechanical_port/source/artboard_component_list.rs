@@ -2183,8 +2183,14 @@ impl ArtboardComponentList {
             .expect("live ArtboardComponentList");
         Artboard::set_host_occurrence(&artboard.core_handle(), Some(owner.clone()), parent);
         artboard.with_artboard_mut(|artboard| artboard.set_frame_origin(false));
+        let css_item = artboard.with_artboard(|artboard| artboard.css_record());
         owner
             .with_downcast_mut::<Self, _>(|owner| {
+                LayoutComponent::set_hosted_css_item_occurrence(
+                    &artboard.core_handle(),
+                    css_item,
+                    Some(owner),
+                );
                 let parent_is_row = owner.main_axis_is_row();
                 let parent_is_stack = owner.is_stack();
                 LayoutComponent::set_parent_is_row_with_host_occurrence(

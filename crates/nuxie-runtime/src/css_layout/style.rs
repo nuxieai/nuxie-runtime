@@ -14,8 +14,8 @@ pub enum CssRole {
     /// A `LayoutComponent`: every property.
     #[default]
     Box,
-    /// An `Artboard`: its own width and height define the root box, so only
-    /// container properties apply.
+    /// An artboard without a hosted CSS item carrier: its own width and
+    /// height define the root box, so only container properties apply.
     Artboard,
     /// A `LayoutParticipant`'s host: only item properties apply.
     Participant,
@@ -366,6 +366,16 @@ fn apply_container(values: CssValues<'_>, style: &mut Style, ltr: bool) {
         width: gap(keys::COLUMN_GAP),
         height: gap(keys::ROW_GAP),
     };
+}
+
+/// A hosted occurrence supplies item properties without replacing the
+/// artboard's container properties, including its display type.
+pub(crate) fn apply_hosted_item(values: CssValues<'_>, style: &mut Style) {
+    style.box_sizing = match values.choice(keys::BOX_SIZING) {
+        1 => BoxSizing::BorderBox,
+        _ => BoxSizing::ContentBox,
+    };
+    apply_item(values, style);
 }
 
 fn apply_item(values: CssValues<'_>, style: &mut Style) {

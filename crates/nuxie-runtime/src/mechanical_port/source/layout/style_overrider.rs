@@ -1,6 +1,7 @@
 use crate::mechanical_port::source::{
     artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
     artboard_host::ArtboardHost,
+    core::CoreHandle,
     layout_component::LayoutComponent,
 };
 
@@ -13,6 +14,10 @@ pub trait StyleOverrideProvider {
     fn instance_width_units_value(&self) -> u32;
     fn instance_height(&self) -> f32;
     fn instance_width(&self) -> f32;
+    /// List overrides use the row's record. Nested copies supply their own.
+    fn css_item_record(&self, artboard: &RuntimeArtboardInstanceHandle) -> Option<CoreHandle> {
+        artboard.with_artboard(|artboard| artboard.css_record())
+    }
     fn mark_hosting_layout_dirty(&mut self, artboard: &RuntimeArtboardInstanceHandle);
     /// The provider can be the currently borrowed host of the sized Artboard.
     fn borrowed_artboard_host(&mut self) -> Option<&mut dyn ArtboardHost>;
@@ -28,7 +33,26 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
     }
     pub fn attach(&mut self, _provider: &mut T) {}
 
+    fn update_css_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) -> bool {
+        let record = artboard
+            .with_artboard(|artboard| artboard.css_record())
+            .and_then(|_| provider.css_item_record(artboard));
+        let css = record.is_some();
+        LayoutComponent::set_hosted_css_item_occurrence(
+            &artboard.core_handle(),
+            record,
+            provider.borrowed_artboard_host(),
+        );
+        if css {
+            provider.mark_hosting_layout_dirty(artboard);
+        }
+        css
+    }
+
     pub fn update_height_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
+        if Self::update_css_override(provider, artboard) {
+            return;
+        }
         let is_row = provider.is_row();
         LayoutComponent::set_parent_is_stack_with_host_occurrence(
             &artboard.core_handle(),
@@ -77,6 +101,9 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
         provider.mark_hosting_layout_dirty(artboard);
     }
     pub fn update_width_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
+        if Self::update_css_override(provider, artboard) {
+            return;
+        }
         let is_row = provider.is_row();
         LayoutComponent::set_parent_is_stack_with_host_occurrence(
             &artboard.core_handle(),

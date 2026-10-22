@@ -267,6 +267,33 @@ impl api::Renderer for MaskRenderer {
     }
     fn modulate_opacity(&mut self, _: f32) {}
 }
+
+/// Exercise the real mask raster and coverage application for a scene.
+pub(crate) fn assert_mask_draws(
+    root: &CoreHandle,
+    start: &RuntimeDrawableOccurrence,
+    end: &RuntimeDrawableOccurrence,
+) {
+    let mask = start.layer_mask_marker().unwrap().borrow().mask.clone();
+    let modes = Rc::new(RefCell::new(Vec::new()));
+    let host: api::DeferredCanvasHostHandle = Rc::new(RefCell::new(MaskHost {
+        mask,
+        modes: modes.clone(),
+        image: Rc::new(Image(Rc::new(()))),
+    }));
+    let mut factory = api::PersistentFactory::new(CanvasFactory(host));
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    root.with_downcast_mut::<Artboard, _>(|artboard| artboard.set_factory(factory))
+        .unwrap();
+    assert!(Artboard::draw_masked_handle(
+        root,
+        &mut api::NullRenderer,
+        start,
+        end
+    ));
+    assert_eq!(&*modes.borrow(), &[api::LayerMaskMode::InvertedAlpha]);
+}
+
 #[test]
 fn mask_reads_mode_after_the_host_returns_coverage_image() {
     use crate::source::layer_mask::{LayerMask, LayerMaskOp};

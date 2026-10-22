@@ -1840,7 +1840,38 @@ impl Artboard {
             }
         }
 
-        self.first_drawable = last_drawable;
+        let mut drawables = Vec::new();
+        let mut current = last_drawable;
+        while let Some(drawable) = current {
+            current = drawable.with(Drawable::prev_drawable).flatten();
+            drawables.push(drawable);
+        }
+        self.interleave_clipping_shapes(&drawables, false);
+        if !self.interleave_layer_masks() {
+            // Keep masks when an escape cannot form a balanced range.
+            self.interleave_clipping_shapes(&drawables, true);
+            let balanced = self.interleave_layer_masks();
+            debug_assert!(balanced, "nonempty layer mask ranges must be balanced");
+        }
+        self.clear_redundant_operations();
+    }
+
+    fn interleave_clipping_shapes(
+        &mut self,
+        drawables: &[RuntimeDrawableOccurrence],
+        full_mask_clips: bool,
+    ) {
+        self.first_drawable = drawables.first().cloned();
+        for (index, drawable) in drawables.iter().enumerate() {
+            drawable.with_mut(|drawable| {
+                drawable.next = index
+                    .checked_sub(1)
+                    .map(|index| drawables[index].downgrade());
+                drawable.prev = drawables
+                    .get(index + 1)
+                    .map(RuntimeDrawableOccurrence::downgrade);
+            });
+        }
         for clipping_shape in &self.clipping_shapes {
             clipping_shape.with_downcast_mut::<ClippingShape, _>(ClippingShape::reset_drawables);
         }
@@ -1884,7 +1915,6 @@ impl Artboard {
             proxy
         };
 
-        let mut current_drawable = self.first_drawable.clone();
         let mut next_drawable = None::<RuntimeDrawableOccurrence>;
         let mut clipping_stack = Vec::<DrawClip>::new();
         let root = crate::source::core::CoreObject::core(self)
@@ -1892,9 +1922,22 @@ impl Artboard {
             .expect("artboard owner");
         let root_overflow = self.css_clips();
         let root_shapes = self.base.base.clipping_shapes().to_vec();
-        while let Some(current) = current_drawable {
+        let chains = drawables
+            .iter()
+            .map(|drawable| {
+                let (chain, css_scope) = clip::draw_chain(
+                    drawable,
+                    &root,
+                    root_overflow,
+                    &root_shapes,
+                    full_mask_clips,
+                );
+                (drawable.clone(), chain, css_scope)
+            })
+            .collect::<Vec<_>>();
+        let boundaries = clip::mask_boundaries(&chains, &self.layer_masks);
+        for (current, chain, css_scope) in chains {
             current.with_mut(|current| current.set_needs_save_operation(true));
-            let (chain, css_scope) = clip::draw_chain(&current, &root, root_overflow, &root_shapes);
             let css_chain = chain
                 .iter()
                 .chain(&clipping_stack)
@@ -1913,6 +1956,9 @@ impl Artboard {
                     .position(|clip| !chain.contains(clip))
                     .unwrap_or(clipping_stack.len())
             };
+            let removing_index = boundaries
+                .get(&current)
+                .map_or(removing_index, |limit| removing_index.min(*limit));
             if !clipping_stack.is_empty() && removing_index < clipping_stack.len() {
                 let mut i = clipping_stack.len() - 1;
                 loop {
@@ -1971,7 +2017,6 @@ impl Artboard {
                 }
             }
             next_drawable = Some(current.clone());
-            current_drawable = current.with(Drawable::prev_drawable).flatten();
         }
         if !clipping_stack.is_empty() {
             for i in (0..clipping_stack.len()).rev() {
@@ -1991,8 +2036,6 @@ impl Artboard {
             }
         }
         self.css_clip_operations = css_operations;
-        self.interleave_layer_masks();
-        self.clear_redundant_operations();
     }
 
     pub fn all_layer_masks(&self) -> &[CoreHandle] {
@@ -2145,7 +2188,8 @@ impl Artboard {
         Some(start)
     }
 
-    fn interleave_layer_masks(&mut self) {
+    #[must_use]
+    fn interleave_layer_masks(&mut self) -> bool {
         let _relinking = self.draw_links.relinking();
         use crate::mechanical_port::source::layer_mask::{LayerMask, LayerMaskOp};
         for mask in &self.layer_masks {
@@ -2166,6 +2210,9 @@ impl Artboard {
                     members.push(current);
                 }
             }
+            if members.is_empty() {
+                continue;
+            }
             if self
                 .splice_layer_mask_bracket(
                     &mask,
@@ -2175,9 +2222,9 @@ impl Artboard {
                 )
                 .is_none()
             {
-                continue;
+                return false;
             }
-            let source = mask
+            let mut source = mask
                 .with_downcast::<LayerMask, _>(|m| {
                     m.source_drawables()
                         .iter()
@@ -2186,6 +2233,31 @@ impl Artboard {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            let mut linked = HashSet::new();
+            let mut d = self.first_drawable.clone();
+            while let Some(current) = d {
+                d = current.with(Drawable::prev_drawable).flatten();
+                linked.insert(current.clone());
+                // CSS sources paint through their layout proxies too.
+                if current.source_of_layer_masks().contains(&mask)
+                    && current
+                        .with_proxy(|proxy| {
+                            proxy.hittable_component().is_some_and(|owner| {
+                                owner
+                                    .with(|object| {
+                                        object
+                                            .as_layout_component()
+                                            .is_some_and(LayoutComponent::is_css_mode)
+                                    })
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(false)
+                {
+                    source.push(current);
+                }
+            }
+            source.retain(|drawable| linked.contains(drawable));
             if let Some(start) = self.splice_layer_mask_bracket(
                 &mask,
                 &source,
@@ -2201,8 +2273,11 @@ impl Artboard {
                     .and_then(|p| p.upgrade())
                     .unwrap();
                 mask.with_downcast_mut::<LayerMask, _>(|m| m.source_bracket(start, end));
+            } else if !source.is_empty() {
+                return false;
             }
         }
+        true
     }
 
     fn clear_redundant_operations(&mut self) {
@@ -8401,7 +8476,7 @@ mod artboard_init_contract_tests;
 
 #[cfg(test)]
 #[path = "artboard_draw_contract_tests.rs"]
-mod artboard_draw_contract_tests;
+pub(super) mod artboard_draw_contract_tests;
 
 #[cfg(test)]
 #[path = "artboard_animation_context_tests.rs"]

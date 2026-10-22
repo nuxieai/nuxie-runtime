@@ -6616,6 +6616,267 @@ fn css_axis_row(
 }
 
 #[test]
+fn css_scroll_index_round_trips_every_collapsed_item_gap_pattern() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for rtl in [false, true] {
+        for collapsed in 0u32..16 {
+            let f = css_axis_row(rtl, 100.0, &[100.0; 4], 0.0, 0.0, false, false, None);
+            for (index, name) in ["A", "B", "C", "D"].into_iter().enumerate() {
+                if collapsed & (1 << index) != 0 {
+                    assert!(CoreRegistry::set_uint_handle(
+                        &f.record(name),
+                        DISPLAY.into(),
+                        3
+                    ));
+                }
+            }
+            f.advance(3);
+            let scroll = css_axis_scroll(&f);
+            let visible = (0..4)
+                .filter(|index| collapsed & (1 << index) == 0)
+                .collect::<Vec<_>>();
+            if visible.is_empty() {
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                    Some(0.0)
+                );
+                scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(0.0));
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                    Some(0.0)
+                );
+                continue;
+            }
+            let mut samples = vec![
+                (50.0, visible[0] as f32),
+                (
+                    -100.0 * visible.len() as f32,
+                    *visible.last().unwrap() as f32,
+                ),
+            ];
+            for (slot, index) in visible.iter().enumerate() {
+                samples.push((-100.0 * slot as f32, *index as f32));
+                if let Some(next) = visible.get(slot + 1) {
+                    for fraction in [0.25, 0.5, 0.75] {
+                        samples.push((
+                            -100.0 * (slot as f32 + fraction),
+                            *index as f32 + (*next - *index) as f32 * fraction,
+                        ));
+                    }
+                }
+            }
+            for (offset, expected) in samples {
+                scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                    s.set_authored_scroll_offset_x(offset)
+                });
+                let read = scroll
+                    .with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index)
+                    .unwrap();
+                assert_eq!(
+                    read, expected,
+                    "rtl={rtl}, collapsed={collapsed:04b}, offset={offset}"
+                );
+                scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                    s.set_authored_scroll_offset_x(if read == visible[0] as f32 {
+                        -100.0 * visible.len() as f32
+                    } else {
+                        0.0
+                    });
+                });
+                assert!(CoreRegistry::set_double_handle(&scroll, 763, read));
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                    Some(read),
+                    "rtl={rtl}, collapsed={collapsed:04b}, index={read}"
+                );
+                // Exercise the setter even when the registry skips an equal write.
+                scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(read));
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                    Some(read),
+                    "rtl={rtl}, collapsed={collapsed:04b}, index={read}"
+                );
+            }
+        }
+    }
+}
+
+fn css_padded_auto_thumb_scene(
+    horizontal: bool,
+    rtl: bool,
+    border_box: bool,
+    percent_padding: bool,
+) -> Scene {
+    let thumb_padding = if percent_padding {
+        vec![
+            F(PADDING_LEFT + 1, 5.0),
+            F(PADDING_RIGHT + 1, 5.0),
+            F(PADDING_TOP + 1, 5.0),
+            F(PADDING_BOTTOM + 1, 5.0),
+        ]
+    } else {
+        vec![
+            F(PADDING_LEFT, 10.0),
+            F(PADDING_RIGHT, 10.0),
+            F(PADDING_TOP, 4.0),
+            F(PADDING_BOTTOM, 6.0),
+        ]
+    };
+    let f = scene(
+        (1000.0, 1000.0),
+        css(
+            "Viewport",
+            [
+                vec![
+                    U(DISPLAY, 1),
+                    U(POSITION, 1),
+                    U(DIRECTION, if rtl { 2 } else { 1 }),
+                    U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                ],
+                width(300.0).to_vec(),
+                height(300.0).to_vec(),
+            ]
+            .concat(),
+            vec![
+                B {
+                    scroll: Some(if horizontal { 0 } else { 1 }),
+                    ..css(
+                        "Content",
+                        [
+                            vec![F(FLEX_SHRINK, 0.0)],
+                            width(900.0).to_vec(),
+                            height(900.0).to_vec(),
+                        ]
+                        .concat(),
+                        vec![],
+                    )
+                },
+                css(
+                    "Track",
+                    [
+                        vec![
+                            U(POSITION, 2),
+                            U(INSET_LEFT_KIND, 1),
+                            F(INSET_LEFT, 0.0),
+                            U(INSET_TOP_KIND, 1),
+                            F(INSET_TOP, 0.0),
+                        ],
+                        width(if horizontal { 300.0 } else { 60.0 }).to_vec(),
+                        height(if horizontal { 60.0 } else { 300.0 }).to_vec(),
+                    ]
+                    .concat(),
+                    vec![B {
+                        scroll_bar: Some(if horizontal { 0 } else { 1 }),
+                        ..css(
+                            "Thumb",
+                            [
+                                vec![
+                                    U(BOX_SIZING, u64::from(border_box)),
+                                    F(BORDER_LEFT, 3.0),
+                                    F(BORDER_RIGHT, 7.0),
+                                    F(BORDER_TOP, 2.0),
+                                    F(BORDER_BOTTOM, 3.0),
+                                ],
+                                thumb_padding,
+                                width(80.0).to_vec(),
+                                height(80.0).to_vec(),
+                            ]
+                            .concat(),
+                            vec![],
+                        )
+                    }],
+                ),
+            ],
+        ),
+    );
+    use crate::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint;
+    let bar = f
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<ScrollBarConstraint>())[0]
+        .clone();
+    bar.with_downcast_mut::<ScrollBarConstraint, _>(|bar| bar.base.set_auto_size_value(true));
+    f.advance(4);
+    f
+}
+
+#[test]
+fn css_auto_thumb_forces_only_the_scrolling_axis_outer_size() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for border_box in [false, true] {
+                let f = css_padded_auto_thumb_scene(horizontal, rtl, border_box, false);
+                let bounds = f.bounds("Thumb");
+                assert_eq!(
+                    if horizontal { bounds[2] } else { bounds[3] },
+                    100.0,
+                    "horizontal={horizontal}, rtl={rtl}, border_box={border_box}"
+                );
+                let authored_other = if border_box {
+                    80.0
+                } else if horizontal {
+                    95.0
+                } else {
+                    110.0
+                };
+                assert_eq!(
+                    if horizontal { bounds[3] } else { bounds[2] },
+                    authored_other
+                );
+                let origin = f.world_origin("Thumb");
+                assert_eq!(
+                    if horizontal { origin.0 } else { origin.1 },
+                    if horizontal && rtl { 200.0 } else { 0.0 }
+                );
+                css_axis_scroll(&f).with_downcast_mut::<ScrollConstraint, _>(|s| {
+                    if horizontal {
+                        s.set_authored_scroll_offset_x(-300.0);
+                    } else {
+                        s.set_authored_scroll_offset_y(-300.0);
+                    }
+                });
+                f.advance(4);
+                let origin = f.world_origin("Thumb");
+                assert_eq!(if horizontal { origin.0 } else { origin.1 }, 100.0);
+                let bounds = f.bounds("Thumb");
+                assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
+            }
+        }
+    }
+}
+
+#[test]
+fn css_auto_thumb_outer_size_resolves_percentage_padding_after_track_resize() {
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for border_box in [false, true] {
+                let f = css_padded_auto_thumb_scene(horizontal, rtl, border_box, true);
+                let bounds = f.bounds("Thumb");
+                assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
+                assert!(CoreRegistry::set_double_handle(
+                    &f.record("Track"),
+                    WIDTH.into(),
+                    if horizontal { 450.0 } else { 90.0 }
+                ));
+                f.advance(6);
+                let expected = if horizontal { 150.0 } else { 100.0 };
+                let bounds = f.bounds("Thumb");
+                assert_eq!(
+                    if horizontal { bounds[2] } else { bounds[3] },
+                    expected,
+                    "horizontal={horizontal}, rtl={rtl}, border_box={border_box}"
+                );
+                let origin = f.world_origin("Thumb");
+                assert_eq!(
+                    if horizontal { origin.0 } else { origin.1 },
+                    if horizontal && rtl { 300.0 } else { 0.0 }
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn css_fractional_index_uses_solved_item_steps_and_css_gaps() {
     use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
     for rtl in [false, true] {

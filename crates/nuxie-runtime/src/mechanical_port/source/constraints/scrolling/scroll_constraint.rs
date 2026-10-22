@@ -1974,8 +1974,8 @@ impl ScrollConstraint {
             };
             let selected = items
                 .iter()
-                .position(|(item, _)| *item as f32 >= index.floor())
-                .unwrap_or(items.len() - 1);
+                .rposition(|(item, _)| *item as f32 <= index)
+                .unwrap_or(0);
             let (item_index, bounds) = items[selected];
             let next = items.get(selected + 1).copied();
             let fraction = next.map_or(0.0, |(next_index, _)| {

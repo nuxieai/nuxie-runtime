@@ -2232,6 +2232,15 @@ impl LayoutComponent {
             self.mark_layout_style_dirty();
         }
         self.set_forced_width(value);
+        // Percentage padding can change while the forced outer size stays fixed.
+        if self.css_scroll_thumb_size
+            && self.is_css_mode()
+            && self.layout_style().size.width
+                != self.css_scroll_thumb_dimension(self.layout_style(), value, true)
+        {
+            self.mark_layout_style_dirty();
+            self.mark_layout_node_dirty(false);
+        }
     }
     pub(crate) fn set_scroll_thumb_height(&mut self, value: f32, css_viewport: bool) {
         if self.css_scroll_thumb_size != css_viewport {
@@ -2239,16 +2248,42 @@ impl LayoutComponent {
             self.mark_layout_style_dirty();
         }
         self.set_forced_height(value);
+        if self.css_scroll_thumb_size
+            && self.is_css_mode()
+            && self.layout_style().size.height
+                != self.css_scroll_thumb_dimension(self.layout_style(), value, false)
+        {
+            self.mark_layout_style_dirty();
+            self.mark_layout_node_dirty(false);
+        }
+    }
+    fn css_scroll_thumb_dimension(
+        &self,
+        style: &Style,
+        outer_size: f32,
+        horizontal: bool,
+    ) -> taffy::style::Dimension {
+        let edges = if style.box_sizing == taffy::BoxSizing::ContentBox {
+            let [top, right, bottom, left] = self.solved_border;
+            if horizontal {
+                self.solved_padding.left() + self.solved_padding.right() + left + right
+            } else {
+                self.solved_padding.top() + self.solved_padding.bottom() + top + bottom
+            }
+        } else {
+            0.0
+        };
+        taffy::style::Dimension::length((outer_size - edges).max(0.0))
     }
     fn apply_css_scroll_thumb_size(&self, style: &mut Style) {
         if !self.css_scroll_thumb_size || !self.is_css_mode() {
             return;
         }
         if self.forced_width.is_finite() {
-            style.size.width = taffy::style::Dimension::length(self.forced_width.max(0.0));
+            style.size.width = self.css_scroll_thumb_dimension(style, self.forced_width, true);
         }
         if self.forced_height.is_finite() {
-            style.size.height = taffy::style::Dimension::length(self.forced_height.max(0.0));
+            style.size.height = self.css_scroll_thumb_dimension(style, self.forced_height, false);
         }
     }
     pub fn set_forced_width(&mut self, value: f32) {

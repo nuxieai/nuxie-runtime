@@ -281,6 +281,62 @@ fn css_text_lowercase_and_capitalize_cross_run_boundaries() {
 }
 
 #[test]
+fn css_text_capitalize_uses_full_unicode_titlecase() {
+    for (source, expected) in [
+        ("ǳuro", "ǲuro"),
+        ("ßeta", "Sseta"),
+        ("ﬀoo", "Ffoo"),
+        ("ǆuro", "ǅuro"),
+    ] {
+        let scene = Scene::new(&[(source, Some((3, 0)))], true, 300.0, true, false, false);
+        assert_eq!(scene.display(), expected, "capitalize {source}");
+    }
+}
+
+#[test]
+fn css_text_capitalize_preserves_uppercase_and_titlecase_initials() {
+    let source = "Ǳuro ǲuro Ǆuro ǅuro";
+    let scene = Scene::new(&[(source, Some((3, 0)))], true, 300.0, true, false, false);
+    assert_eq!(scene.display(), source);
+}
+
+#[test]
+fn css_text_capitalize_expansion_keeps_following_modifier_range_in_display_indices() {
+    let scene = Scene::new(
+        &[("ß", Some((3, 0))), ("eta", Some((3, 0)))],
+        true,
+        300.0,
+        true,
+        false,
+        true,
+    );
+    assert_eq!(scene.display(), "Sseta");
+    let runs = scene.handles::<TextValueRun>();
+    assert_eq!(
+        runs[0].with_downcast_mut::<TextValueRun, _>(|run| run.length()),
+        Some(2)
+    );
+    assert_eq!(
+        runs[1].with_downcast_mut::<TextValueRun, _>(|run| (run.offset(), run.length())),
+        Some((2, 3))
+    );
+    let coverage = scene.handles::<TextModifierGroup>()[0]
+        .with_downcast::<TextModifierGroup, _>(|group| {
+            (0..5)
+                .map(|index| group.glyph_coverage(index, 1))
+                .collect::<Vec<_>>()
+        })
+        .unwrap();
+    assert_eq!(coverage, vec![0.0, 0.0, 1.0, 1.0, 1.0]);
+    scene.text().with_downcast::<Text, _>(|text| {
+        let styled = text.styled_text();
+        assert_eq!(styled.source_to_display(1), 2);
+        assert_eq!(styled.display_to_source(2), 1);
+        assert_eq!(styled.source_to_display(4), 5);
+    });
+}
+
+#[test]
 fn css_text_sharp_s_expansion_keeps_modifier_run_coverage_in_display_indices() {
     let scene = Scene::new(
         &[("ß", Some((1, 0))), ("ab", Some((1, 0)))],

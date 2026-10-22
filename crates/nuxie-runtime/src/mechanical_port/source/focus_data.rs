@@ -835,8 +835,9 @@ impl FocusData {
         else {
             return;
         };
-        let viewport_world_x = viewport_transform[4];
-        let viewport_world_y = viewport_transform[5];
+        let scrollport = constraint.css_scrollport();
+        let viewport_world_x = viewport_transform[4] + scrollport.map_or(0.0, |port| port.left());
+        let viewport_world_y = viewport_transform[5] + scrollport.map_or(0.0, |port| port.top());
         let viewport_width = constraint.viewport_width();
         let viewport_height = constraint.viewport_height();
         let viewport_left = element_bounds.left() - viewport_world_x;

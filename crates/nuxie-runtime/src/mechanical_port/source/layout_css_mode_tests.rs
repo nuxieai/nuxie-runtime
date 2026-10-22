@@ -171,6 +171,7 @@ struct B {
     /// it scrolls.
     scroll_threshold: f32,
     scroll_properties: Vec<P>,
+    scroll_keys: Vec<(u16, Vec<(u32, f32)>)>,
     scroll_bind: Option<(u16, u64)>,
     /// A ScrollBarConstraint on this box, the thumb, with its direction,
     /// for the file's first ScrollConstraint; the box's parent is the track.
@@ -491,6 +492,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         push_paints(&node.paints, index, entries);
         if let Some(direction) = node.scroll {
             entries.push(Entry::Scroll(index, direction, node));
+            let scroll = slots(entries);
+            for (key, keys) in &node.scroll_keys {
+                entries.push(Entry::Keys(scroll, *key, keys));
+            }
             if let Some((key, flags)) = node.scroll_bind {
                 entries.push(Entry::Bind(key, flags, 0));
             }
@@ -7196,6 +7201,273 @@ fn css_scroll_index_interpolates_clamped_snap_positions_and_writes_back() {
 }
 
 #[test]
+fn css_scroll_offset_keyframes_and_native_properties_keep_authored_coordinates() {
+    use crate::source::{
+        animation::keyframe_double::KeyFrameDouble,
+        constraints::scrolling::scroll_constraint::ScrollConstraint, data_bind::data_bind::TWO_WAY,
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            let key = if horizontal { 759 } else { 760 };
+            let f = scene(
+                (1000.0, 1000.0),
+                css(
+                    "Viewport",
+                    [
+                        vec![
+                            U(DISPLAY, 1),
+                            U(DIRECTION, if rtl { 2 } else { 1 }),
+                            U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                        ],
+                        width(100.0).to_vec(),
+                        height(100.0).to_vec(),
+                    ]
+                    .concat(),
+                    vec![B {
+                        scroll: Some(if horizontal { 0 } else { 1 }),
+                        scroll_properties: vec![F(key, -25.0)],
+                        scroll_keys: vec![(key, vec![(0, 0.0), (60, -100.0)])],
+                        scroll_bind: Some((key, u64::from(TWO_WAY))),
+                        ..css(
+                            "Content",
+                            [
+                                vec![
+                                    U(DISPLAY, if horizontal { 1 } else { 0 }),
+                                    F(FLEX_SHRINK, 0.0),
+                                ],
+                                width(if horizontal { 1000.0 } else { 100.0 }).to_vec(),
+                                height(if horizontal { 100.0 } else { 1000.0 }).to_vec(),
+                            ]
+                            .concat(),
+                            ["First", "Second", "Tail"]
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, name)| {
+                                    css(
+                                        name,
+                                        [
+                                            vec![F(FLEX_SHRINK, 0.0)],
+                                            width(if horizontal && i == 2 { 800.0 } else { 100.0 })
+                                                .to_vec(),
+                                            height(if !horizontal && i == 2 {
+                                                800.0
+                                            } else {
+                                                100.0
+                                            })
+                                            .to_vec(),
+                                        ]
+                                        .concat(),
+                                        vec![],
+                                    )
+                                })
+                                .collect(),
+                        )
+                    }],
+                ),
+            );
+            let scroll = css_axis_scroll(&f);
+            assert_eq!(
+                CoreRegistry::get_double_handle(&scroll, key.into()),
+                Some(-25.0)
+            );
+            let number = f.bind_number();
+            f.advance(3);
+            assert_eq!(
+                CoreRegistry::get_double_handle(
+                    &number,
+                    ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+                ),
+                Some(if horizontal && rtl { -25.0 } else { 25.0 })
+            );
+            animate(&f, 1.0);
+            assert_eq!(
+                CoreRegistry::get_double_handle(&scroll, key.into()),
+                Some(-100.0)
+            );
+            let origin = f.world_origin("Second");
+            assert_eq!(if horizontal { origin.0 } else { origin.1 }, 0.0);
+            assert_eq!(
+                CoreRegistry::get_double_handle(
+                    &number,
+                    ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+                ),
+                Some(if horizontal && rtl { -100.0 } else { 100.0 })
+            );
+            let mut frame = KeyFrameDouble::default();
+            frame.base.set_value_value(-200.0);
+            assert!(frame.apply(&scroll, key.into(), 0.5, None));
+            assert_eq!(
+                CoreRegistry::get_double_handle(&scroll, key.into()),
+                Some(-150.0)
+            );
+            // Native and script property access share the raw registry path.
+            assert!(CoreRegistry::set_double_handle(&scroll, key.into(), -100.0));
+            assert_eq!(
+                CoreRegistry::get_double_handle(&scroll, key.into()),
+                Some(-100.0)
+            );
+            f.advance(3);
+            for browser in [0.0, if horizontal && rtl { -100.0 } else { 100.0 }] {
+                assert!(CoreRegistry::set_double_handle(
+                    &number,
+                    ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                    browser
+                ));
+                f.advance(3);
+                let internal = if browser == 0.0 { 0.0 } else { -100.0 };
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                        scroll.offset_x()
+                    } else {
+                        scroll.offset_y()
+                    }),
+                    Some(internal)
+                );
+                assert_eq!(
+                    CoreRegistry::get_double_handle(&scroll, key.into()),
+                    Some(internal)
+                );
+                assert_eq!(
+                    CoreRegistry::get_double_handle(
+                        &number,
+                        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+                    ),
+                    Some(browser)
+                );
+            }
+            let origin = f.world_origin("Second");
+            assert_eq!(if horizontal { origin.0 } else { origin.1 }, 0.0);
+        }
+    }
+}
+
+#[test]
+fn css_focus_reveals_items_inside_the_bordered_padding_box() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint, focus_data::FocusData,
+    };
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            let f = scene(
+                (400.0, 400.0),
+                css(
+                    "Viewport",
+                    [
+                        vec![
+                            U(DISPLAY, 1),
+                            U(BOX_SIZING, 1),
+                            U(DIRECTION, if rtl { 2 } else { 1 }),
+                            U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                            F(BORDER_LEFT, 10.0),
+                            F(BORDER_RIGHT, 10.0),
+                            F(BORDER_TOP, 10.0),
+                            F(BORDER_BOTTOM, 10.0),
+                        ],
+                        width(100.0).to_vec(),
+                        height(100.0).to_vec(),
+                    ]
+                    .concat(),
+                    vec![B {
+                        scroll: Some(if horizontal { 0 } else { 1 }),
+                        ..css(
+                            "Content",
+                            [
+                                vec![
+                                    U(DISPLAY, if horizontal { 1 } else { 0 }),
+                                    F(FLEX_SHRINK, 0.0),
+                                ],
+                                width(if horizontal { 400.0 } else { 80.0 }).to_vec(),
+                                height(if horizontal { 80.0 } else { 400.0 }).to_vec(),
+                            ]
+                            .concat(),
+                            vec![
+                                css(
+                                    "First",
+                                    [
+                                        vec![F(FLEX_SHRINK, 0.0)],
+                                        width(80.0).to_vec(),
+                                        height(80.0).to_vec(),
+                                    ]
+                                    .concat(),
+                                    vec![],
+                                ),
+                                B {
+                                    text_input: true,
+                                    text: "focus",
+                                    ..css(
+                                        "Target",
+                                        [
+                                            vec![F(FLEX_SHRINK, 0.0)],
+                                            width(80.0).to_vec(),
+                                            height(80.0).to_vec(),
+                                        ]
+                                        .concat(),
+                                        vec![],
+                                    )
+                                },
+                                css(
+                                    "Tail",
+                                    [
+                                        vec![F(FLEX_SHRINK, 0.0)],
+                                        width(if horizontal { 240.0 } else { 80.0 }).to_vec(),
+                                        height(if horizontal { 80.0 } else { 240.0 }).to_vec(),
+                                    ]
+                                    .concat(),
+                                    vec![],
+                                ),
+                            ],
+                        )
+                    }],
+                ),
+            );
+            let scroll = css_axis_scroll(&f);
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                    scroll.viewport_width(),
+                    scroll.viewport_height()
+                )),
+                Some((80.0, 80.0))
+            );
+            let before = f.world_origin("Target");
+            let before = if horizontal { before.0 } else { before.1 };
+            assert_eq!(before, if horizontal && rtl { -70.0 } else { 90.0 });
+            let focus = f
+                .artboard
+                .with_artboard(|a| a.find_all_handles::<FocusData>())[0]
+                .clone();
+            let machine = f.machine();
+            machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+            f.advance(3);
+            assert!(f.field_is_focused());
+            let after = f.world_origin("Target");
+            let after = if horizontal { after.0 } else { after.1 };
+            assert_eq!(after, 10.0);
+            assert_eq!((after - before).abs(), 80.0);
+            let bounds = f.bounds("Target");
+            assert_eq!(after + if horizontal { bounds[2] } else { bounds[3] }, 90.0);
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                    scroll.offset_x()
+                } else {
+                    scroll.offset_y()
+                }),
+                Some(-80.0)
+            );
+            // Native property access and bindings use the same padding-box range.
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                    scroll.max_offset_x()
+                } else {
+                    scroll.max_offset_y()
+                }),
+                Some(-320.0)
+            );
+        }
+    }
+}
+
+#[test]
 fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
     use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
     use crate::source::data_bind::data_bind::TWO_WAY;
@@ -7226,9 +7498,9 @@ fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
             ),
         );
         let scroll = css_axis_scroll(&f);
-        assert!(CoreRegistry::set_double_handle(&scroll, 760, target));
+        assert!(CoreRegistry::set_double_handle(&scroll, 760, -target));
         f.advance(2);
-        assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(target));
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(-target));
         if row_height == 100.0 {
             assert_eq!(f.world_origin("Stripe7").1, 0.0);
         }
@@ -7249,7 +7521,7 @@ fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
             target
         ));
         f.advance(2);
-        assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(target));
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(-target));
         assert_eq!(
             CoreRegistry::get_double_handle(
                 &number,
@@ -7267,22 +7539,68 @@ fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
         scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(5.0));
         assert_eq!(
             CoreRegistry::get_double_handle(&scroll, 760),
+            Some(-row_height * 5.0)
+        );
+        f.advance(3);
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
             Some(row_height * 5.0)
         );
-        CoreRegistry::set_double_handle(&scroll, 760, 10000.0);
+        assert!(CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            10000.0
+        ));
+        f.advance(3);
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::bound_scroll_offset_y),
+            Some(row_height * 20.0 - 100.0)
+        );
         assert_eq!(
             CoreRegistry::get_double_handle(&scroll, 760),
-            Some(row_height * 20.0 - 100.0)
+            Some(-(row_height * 20.0 - 100.0))
         );
     }
     for rtl in [false, true] {
-        let f = css_axis_row(rtl, 100.0, &[100.0; 3], 0.0, 0.0, false, false, None);
+        let f = css_axis_row(
+            rtl,
+            100.0,
+            &[100.0; 3],
+            0.0,
+            0.0,
+            false,
+            false,
+            Some((759, u64::from(TWO_WAY))),
+        );
         let scroll = css_axis_scroll(&f);
         assert_eq!(CoreRegistry::get_double_handle(&scroll, 759), Some(0.0));
         let target = if rtl { -100.0 } else { 100.0 };
-        CoreRegistry::set_double_handle(&scroll, 759, target);
-        f.advance(2);
-        assert_eq!(CoreRegistry::get_double_handle(&scroll, 759), Some(target));
+        let number = f.bind_number();
+        f.advance(3);
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
+            Some(0.0)
+        );
+        assert!(CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            target
+        ));
+        f.advance(3);
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 759), Some(-100.0));
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
+            Some(target)
+        );
         assert_eq!(f.world_origin("B").0, 0.0);
     }
 }

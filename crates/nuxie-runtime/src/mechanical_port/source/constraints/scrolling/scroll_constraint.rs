@@ -353,10 +353,27 @@ impl ScrollConstraint {
             .expect("ScrollConstraint content remains LayoutComponent")
     }
 
+    /// The CSS padding-box clip in viewport-local coordinates.
+    pub(crate) fn css_scrollport(&self) -> Option<Aabb> {
+        self.with_viewport(|viewport| {
+            viewport.is_css_mode().then(|| {
+                let [top, right, bottom, left] = viewport.solved_border();
+                Aabb::from_ltwh(
+                    left,
+                    top,
+                    (viewport.layout_width() - left - right).max(0.0),
+                    (viewport.layout_height() - top - bottom).max(0.0),
+                )
+            })
+        })
+        .flatten()
+    }
+
     pub fn viewport_width(&self) -> f32 {
-        if self.css_scroll_range().is_some()
-            || self.direction() == DraggableConstraintDirection::Vertical
-        {
+        if let Some(scrollport) = self.css_scrollport() {
+            return scrollport.width();
+        }
+        if self.direction() == DraggableConstraintDirection::Vertical {
             self.with_viewport(LayoutComponent::layout_width)
                 .expect("ScrollConstraint viewport remains LayoutComponent")
         } else {
@@ -370,9 +387,10 @@ impl ScrollConstraint {
         }
     }
     pub fn viewport_height(&self) -> f32 {
-        if self.css_scroll_range().is_some()
-            || self.direction() == DraggableConstraintDirection::Horizontal
-        {
+        if let Some(scrollport) = self.css_scrollport() {
+            return scrollport.height();
+        }
+        if self.direction() == DraggableConstraintDirection::Horizontal {
             self.with_viewport(LayoutComponent::layout_height)
                 .expect("ScrollConstraint viewport remains LayoutComponent")
         } else {
@@ -410,16 +428,12 @@ impl ScrollConstraint {
     /// browser sizes its scroll bar's thumb.
     fn css_visible_ratio(&self, horizontal: bool) -> Option<f32> {
         let range = self.css_scroll_range()?;
-        let visible = self
-            .with_viewport(|viewport| {
-                let [top, right, bottom, left] = viewport.solved_border();
-                if horizontal {
-                    viewport.layout_width() - left - right
-                } else {
-                    viewport.layout_height() - top - bottom
-                }
-            })?
-            .max(0.0);
+        let scrollport = self.css_scrollport()?;
+        let visible = if horizontal {
+            scrollport.width()
+        } else {
+            scrollport.height()
+        };
         let range = if horizontal { range.x } else { range.y };
         let extent = visible + range.max(0.0);
         Some(if extent > 0.0 {
@@ -2409,7 +2423,22 @@ impl ScrollConstraint {
             |axis| axis.browser_offset(self.offset_y),
         )
     }
-    pub(crate) fn set_bound_scroll_offset_with_completion(
+    pub(crate) fn set_bound_scroll_offset_occurrence(
+        owner: &CoreHandle,
+        value: f32,
+        horizontal: bool,
+    ) -> bool {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let written = owner
+            .with_downcast_mut::<Self, _>(|scroll| {
+                scroll.set_bound_scroll_offset_with_completion(value, horizontal, &mut completion);
+            })
+            .is_some();
+        completion.finish();
+        written
+    }
+
+    fn set_bound_scroll_offset_with_completion(
         &mut self,
         value: f32,
         horizontal: bool,

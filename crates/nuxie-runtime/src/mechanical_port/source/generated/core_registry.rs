@@ -19041,10 +19041,16 @@ impl CoreRegistryObject
                 }
             },
             CoreField::ScrollConstraintScrollOffsetX => {
-                self.set_bound_scroll_offset_with_completion(value, true, completion);
+                if self.base.set_scroll_offset_x_value(value) {
+                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_offset_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
+                }
             },
             CoreField::ScrollConstraintScrollOffsetY => {
-                self.set_bound_scroll_offset_with_completion(value, false, completion);
+                if self.base.set_scroll_offset_y_value(value) {
+                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_offset_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
+                }
             },
             CoreField::ScrollConstraintScrollPercentX => {
                 if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_percent_x(self) != value {
@@ -19152,8 +19158,8 @@ impl CoreRegistryObject
     fn get_double(&mut self, field: CoreField) -> f32 {
         match field {
             CoreField::ConstraintStrength => self.base.base.base.base.base.strength(),
-            CoreField::ScrollConstraintScrollOffsetX => self.bound_scroll_offset_x(),
-            CoreField::ScrollConstraintScrollOffsetY => self.bound_scroll_offset_y(),
+            CoreField::ScrollConstraintScrollOffsetX => self.base.scroll_offset_x(),
+            CoreField::ScrollConstraintScrollOffsetY => self.base.scroll_offset_y(),
             CoreField::ScrollConstraintScrollPercentX => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::scroll_percent_x(self),
             CoreField::ScrollConstraintScrollPercentY => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::scroll_percent_y(self),
             CoreField::ScrollConstraintScrollIndex => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::scroll_index(self),

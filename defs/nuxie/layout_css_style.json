@@ -5,7 +5,7 @@
     "string": "layoutcssstyle"
   },
   "extends": "component.json",
-  "description": "The CSS layout of one box or participant, as authored. A child of a LayoutComponent, an Artboard, or the Node that hosts a LayoutParticipant; at most one per parent. Its presence puts that node in CSS mode (docs/CSS_LAYOUT.md). Registers as a LayoutStyleApplier.",
+  "description": "The CSS layout of one box, hosted copy or participant, as authored. A child of a LayoutComponent, an Artboard, a NestedArtboardLayout, or the Node that hosts a LayoutParticipant; at most one per parent. Its presence puts that node in CSS mode (docs/CSS_LAYOUT.md). Registers as a LayoutStyleApplier.",
   "properties": {
     "display": {
       "type": "uint8",

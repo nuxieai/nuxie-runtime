@@ -493,6 +493,9 @@ pub struct LayoutComponent {
     width_unit_value_override: i8,
     height_override: f32,
     height_unit_value_override: i8,
+    /// Item properties supplied by this hosted occurrence's CSS carrier.
+    /// Container properties still come from the artboard's own record.
+    hosted_css_item: Option<CoreHandle>,
     forced_width: f32,
     css_scroll_thumb_size: bool,
     forced_height: f32,
@@ -558,6 +561,7 @@ impl Default for LayoutComponent {
             width_unit_value_override: -1,
             height_override: f32::NAN,
             height_unit_value_override: -1,
+            hosted_css_item: None,
             forced_width: f32::NAN,
             css_scroll_thumb_size: false,
             forced_height: f32::NAN,
@@ -1536,6 +1540,7 @@ impl LayoutComponent {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
             layout.apply_css_scroll_thumb_size(&mut style);
+            layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
             layout.layout_data.set_style(style);
         });
@@ -2198,6 +2203,39 @@ impl LayoutComponent {
         self.height_unit_value_override = unit as i8;
         self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         self.mark_layout_node_dirty(false);
+    }
+
+    pub(crate) fn set_hosted_css_item_occurrence(
+        owner: &CoreHandle,
+        record: Option<CoreHandle>,
+        host: Option<&mut dyn crate::source::artboard_host::ArtboardHost>,
+    ) {
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object
+                    .as_layout_component_mut()
+                    .expect("hosted layout root");
+                if layout.hosted_css_item == record {
+                    // The carrier's values may have changed in place.
+                    return record.is_some();
+                }
+                layout.hosted_css_item = record;
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
+    }
+
+    fn apply_hosted_css_item(&self, style: &mut Style) {
+        if self.is_css_mode() {
+            if let Some(record) = &self.hosted_css_item {
+                crate::css_layout::record::with_values(record, |values| {
+                    crate::css_layout::style::apply_hosted_item(values, style);
+                });
+            }
+        }
     }
     pub fn set_parent_is_row(&mut self, row: bool) {
         self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
@@ -3442,7 +3480,10 @@ impl LayoutComponent {
             },
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
-            css_role: crate::css_layout::record::role(self.is_artboard(), false),
+            css_role: crate::css_layout::record::role(
+                self.is_artboard() && self.hosted_css_item.is_none(),
+                false,
+            ),
             css: self.is_css_mode(),
         })
     }
@@ -3480,6 +3521,7 @@ impl LayoutComponent {
             }
         }
         self.apply_css_scroll_thumb_size(&mut taffy_style);
+        self.apply_hosted_css_item(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);
         self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
@@ -3808,7 +3850,7 @@ impl LayoutComponent {
     /// The size this box gives the content layout resizes: its border box
     /// in translated mode, or its anonymous item in CSS mode. Before a
     /// solve, a CSS box falls back to its content box.
-    fn propagated_size(&self) -> Vec2D {
+    pub(crate) fn propagated_size(&self) -> Vec2D {
         let (width, height) = (self.layout.width(), self.layout.height());
         if !self.is_css_mode() {
             return Vec2D::new(width, height);
@@ -4733,8 +4775,9 @@ impl LayoutComponent {
         })
     }
 
-    /// A mounted artboard is an opaque host. On an axis where it has a
-    /// definite size, that size is its specified size suggestion, so a flex
+    /// A mounted artboard without a CSS item carrier is an opaque host.
+    /// On an axis where it has a definite size, that size is its specified
+    /// size suggestion, so a flex
     /// container never squeezes it below its authored size. A CSS automatic
     /// minimum is clamped by a definite maximum, while an explicit minimum
     /// would override it, so the synthesized minimum takes the smaller of the
@@ -4751,7 +4794,12 @@ impl LayoutComponent {
         use taffy::style::CompactLength;
         if is_root
             || !owner
-                .with(|object| object.as_artboard().is_some())
+                .with(|object| {
+                    object.as_artboard().is_some()
+                        && !object.as_layout_component().is_some_and(|layout| {
+                            layout.is_css_mode() && layout.hosted_css_item.is_some()
+                        })
+                })
                 .unwrap_or(false)
         {
             return;
@@ -7192,3 +7240,7 @@ mod layout_measured_content_tests;
 #[cfg(test)]
 #[path = "layout_css_mode_tests.rs"]
 mod layout_css_mode_tests;
+
+#[cfg(test)]
+#[path = "layout_hosted_css_tests.rs"]
+mod layout_hosted_css_tests;

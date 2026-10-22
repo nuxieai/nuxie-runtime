@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
     },
     layout::{Alignment, Fit},
     layout_component::content_sizing_layout,
+    math::aabb::Aabb,
     renderer::compute_alignment,
 };
 
@@ -75,9 +76,15 @@ impl NestedArtboardLeaf {
             .and_then(|parent| {
                 parent
                     .with(|parent| {
-                        parent
-                            .as_layout_component()
-                            .map(|layout| layout.local_bounds())
+                        parent.as_layout_component().map(|layout| {
+                            if layout.is_css_mode() {
+                                // CSS already moves content by border and padding.
+                                let size = layout.propagated_size();
+                                Aabb::from_ltwh(0.0, 0.0, size.x, size.y)
+                            } else {
+                                layout.local_bounds()
+                            }
+                        })
                     })
                     .flatten()
             })

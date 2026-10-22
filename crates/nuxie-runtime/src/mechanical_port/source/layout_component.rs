@@ -1975,7 +1975,7 @@ impl LayoutComponent {
     pub fn can_have_overrides(&self) -> bool {
         self.is_artboard()
     }
-    fn is_artboard(&self) -> bool {
+    pub(crate) fn is_artboard(&self) -> bool {
         self.base.handle().and_then(|handle| handle.core_type())
             == Some(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -2042,13 +2042,55 @@ impl LayoutComponent {
         primary: bool,
         root_origin: Option<Vec2D>,
     ) -> bool {
+        self.hit_test_point_filtered(position, skip_on_unclipped, primary, root_origin, true)
+    }
+    pub(crate) fn hit_test_point_filtered(
+        &mut self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        primary: bool,
+        root_origin: Option<Vec2D>,
+        apply_overflow: bool,
+    ) -> bool {
+        if !self.hit_test_contains(
+            position,
+            skip_on_unclipped,
+            primary,
+            root_origin,
+            apply_overflow,
+        ) {
+            return false;
+        }
+        if self.is_css_mode() {
+            if self.base.is_hidden() {
+                return false;
+            }
+            return crate::css_layout::clip::hit_test_ancestors(
+                self.parent_handle(),
+                position,
+                crate::css_layout::clip::OverflowFilter::for_position(
+                    crate::css_layout::clip::position(self),
+                ),
+            );
+        }
+        self.base.base.hit_test_point(position, true, primary)
+    }
+    pub(crate) fn hit_test_contains(
+        &self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        primary: bool,
+        root_origin: Option<Vec2D>,
+        apply_overflow: bool,
+    ) -> bool {
         let mut inverse = Mat2D::default();
         if !self.base.world_transform().invert(&mut inverse) {
             return false;
         }
         // A CSS artboard keeps its own clip around its record's.
         let artboard_clip = self.is_css_mode() && self.is_artboard() && self.base.clip();
-        if !(skip_on_unclipped && !self.clips() && !artboard_clip) {
+        let overflow = self.clips() && (!self.is_css_mode() || apply_overflow);
+        if !(skip_on_unclipped && !overflow && !artboard_clip) {
             let mut local = inverse * *position;
             if let Some(origin) = root_origin {
                 local += origin;
@@ -2063,7 +2105,11 @@ impl LayoutComponent {
                         local,
                         geometry.padding,
                         geometry.inner,
-                        self.clipped_axes(),
+                        if apply_overflow {
+                            self.clipped_axes()
+                        } else {
+                            (false, false)
+                        },
                     ) && (!artboard_clip
                         || crate::css_layout::paint::overflow_clip_contains(
                             local,
@@ -2084,7 +2130,7 @@ impl LayoutComponent {
                 return false;
             }
         }
-        self.base.base.hit_test_point(position, true, primary)
+        true
     }
     /// The axes this box clips its children on: both in translated mode
     /// when it clips, and in CSS mode each axis whose overflow is not
@@ -2466,18 +2512,11 @@ impl LayoutComponent {
         StatusCode::Ok
     }
     pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
-        let save_for_clip = self.clips();
-        // Rive clips the box's own paints with its children. CSS's overflow
-        // clips only the content: the box paints first (docs/CSS_LAYOUT.md,
-        // 4.2).
-        let css = self.is_css_mode();
-        if save_for_clip && !css {
+        let save_for_clip = self.clips() && !self.is_css_mode();
+        if save_for_clip {
             self.save_clip(renderer);
         }
         self.draw_own_paints(renderer);
-        if save_for_clip && css {
-            self.save_clip(renderer);
-        }
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
     }
     /// Save the renderer and clip to this box's clip path, which `draw`

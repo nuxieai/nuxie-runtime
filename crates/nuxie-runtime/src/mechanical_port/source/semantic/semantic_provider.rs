@@ -448,6 +448,8 @@ fn walk_rendered_clips(
     own_clip: bool,
     mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip) -> bool,
 ) -> bool {
+    let paint_owner = crate::css_layout::clip::paint_owner(component);
+    let mut filter = crate::css_layout::clip::OverflowFilter::default();
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     let mut applied_shapes = std::collections::HashSet::new();
@@ -455,14 +457,23 @@ fn walk_rendered_clips(
         if !visited.insert(owner.clone()) {
             return false;
         }
-        let skip_own = !own_clip && &owner == component;
+        let skip_own = !own_clip && (&owner == component || owner == paint_owner);
         let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
+            let position = object
+                .as_layout_component()
+                .map(crate::css_layout::clip::position)
+                .unwrap_or(0);
+            let include_overflow = filter.enter(position, is_artboard);
+            filter.leave(position);
+            if is_artboard {
+                filter = crate::css_layout::clip::OverflowFilter::default();
+            }
             // A CSS artboard's record clips its content at its padding box,
             // inside its own clip (docs/CSS_LAYOUT.md, 4.2).
             let css_artboard_clip = object
                 .as_artboard()
-                .filter(|artboard| artboard.css_clips())
+                .filter(|artboard| include_overflow && artboard.css_clips())
                 .and_then(|artboard| artboard.base.base.render_paths_handle())
                 .map(|paths| {
                     let paths = paths.borrow();
@@ -491,7 +502,7 @@ fn walk_rendered_clips(
                 // box (docs/CSS_LAYOUT.md, 4.2).
                 object
                     .as_layout_component()
-                    .filter(|layout| layout.clips())
+                    .filter(|layout| layout.clips() && (!layout.is_css_mode() || include_overflow))
                     .map(|layout| {
                         (
                             bounds_corners(layout.clip_local_bounds())

@@ -378,6 +378,7 @@ pub struct Artboard {
     dispose_source_for_replacement: bool,
     drawables: Vec<RuntimeDrawableOccurrence>,
     clipping_shapes: Vec<CoreHandle>,
+    css_clip_operations: HashSet<RuntimeDrawableOccurrence>,
     layer_masks: Vec<CoreHandle>,
     draw_targets: Vec<CoreHandle>,
     nested_artboards: Vec<CoreHandle>,
@@ -483,6 +484,7 @@ impl Default for Artboard {
             dispose_source_for_replacement: false,
             drawables: Vec::new(),
             clipping_shapes: Vec::new(),
+            css_clip_operations: HashSet::new(),
             layer_masks: Vec::new(),
             draw_targets: Vec::new(),
             nested_artboards: Vec::new(),
@@ -1843,7 +1845,23 @@ impl Artboard {
             clipping_shape.with_downcast_mut::<ClippingShape, _>(ClippingShape::reset_drawables);
         }
 
-        let create_clipping_proxy = |clipping_shape: &CoreHandle, is_start: bool| {
+        use crate::css_layout::clip::{self, DrawClip};
+        self.css_clip_operations.clear();
+        let mut css_operations = HashSet::new();
+        let clip_factory = self.factory();
+        let mut create_clipping_proxy = |clip: &DrawClip, is_start: bool, css_scope: bool| {
+            let clipping_shape = match clip {
+                DrawClip::Overflow(owner) => {
+                    let operation = clip::operation(
+                        owner.clone(),
+                        is_start,
+                        clip_factory.clone().expect("Artboard renderer factory"),
+                    );
+                    css_operations.insert(operation.clone());
+                    return Some(operation);
+                }
+                DrawClip::Shape(shape) => shape,
+            };
             let mut operation: Box<
                 dyn crate::mechanical_port::source::shapes::clipping_shape::ClippingShapeOperation,
             > = if is_start {
@@ -1852,66 +1870,54 @@ impl Artboard {
                 Box::new(crate::mechanical_port::source::shapes::clipping_shape::ClippingShapeEnd::default())
             };
             operation.set_clipping_shape(clipping_shape.clone());
-            clipping_shape
+            let proxy = clipping_shape
                 .with_downcast_mut::<ClippingShape, _>(|shape| {
                     shape.create_proxy_drawable(operation)
                 })
-                .flatten()
+                .flatten();
+            if css_scope
+                && is_start
+                && let Some(proxy) = &proxy
+            {
+                css_operations.insert(proxy.clone());
+            }
+            proxy
         };
 
         let mut current_drawable = self.first_drawable.clone();
         let mut next_drawable = None::<RuntimeDrawableOccurrence>;
-        let mut clipping_stack = Vec::<CoreHandle>::new();
-        let mut css_clip_scopes = Vec::<(CoreHandle, Vec<CoreHandle>)>::new();
-        // Owners whose layout drawable this backward walk has passed. A draw
-        // rule can move it past its proxy, and a scope opened then would
-        // never close.
-        let mut passed_owners = HashSet::<CoreHandle>::new();
+        let mut clipping_stack = Vec::<DrawClip>::new();
+        let root = crate::source::core::CoreObject::core(self)
+            .handle()
+            .expect("artboard owner");
+        let root_overflow = self.css_clips();
+        let root_shapes = self.base.base.clipping_shapes().to_vec();
         while let Some(current) = current_drawable {
             current.with_mut(|current| current.set_needs_save_operation(true));
-            // A CSS proxy's shape clips open before its overflow save. Keep
-            // them outside that save until the matching layout draw restores
-            // it, even when a translated descendant's proxy has no clips.
-            if let Some(owner) = current.with_proxy(|proxy| proxy.owner_handle())
-                && owner
-                    .with(|object| {
-                        object
-                            .as_layout_component()
-                            .is_some_and(|layout| layout.is_css_mode() && layout.clips())
-                    })
-                    .unwrap_or(false)
-            {
-                let shapes = current
-                    .with(|drawable| drawable.clipping_shapes().to_vec())
-                    .unwrap_or_default();
-                if !shapes.is_empty() && !passed_owners.contains(&owner) {
-                    css_clip_scopes.push((owner, shapes));
-                }
-            }
-            let mut scope_shapes = Vec::new();
-            for (_, shapes) in &css_clip_scopes {
-                for shape in shapes {
-                    if !scope_shapes.contains(shape) {
-                        scope_shapes.push(shape.clone());
-                    }
-                }
-            }
-            let mut removing_index = clipping_stack.len();
-            for (i, clipping) in clipping_stack.iter().enumerate() {
-                if !scope_shapes.contains(clipping)
-                    && !current
-                        .with(|current| current.clipping_shapes().contains(clipping))
-                        .unwrap_or(false)
-                {
-                    removing_index = i;
-                    break;
-                }
-            }
+            let (chain, css_scope) = clip::draw_chain(&current, &root, root_overflow, &root_shapes);
+            let css_chain = chain
+                .iter()
+                .chain(&clipping_stack)
+                .any(|clip| matches!(clip, DrawClip::Overflow(_)));
+            // Preserve Rive's membership walk when no CSS content clips are
+            // involved. CSS chains use a common prefix so clips stay nested.
+            let removing_index = if css_chain {
+                clipping_stack
+                    .iter()
+                    .zip(&chain)
+                    .take_while(|(a, b)| a == b)
+                    .count()
+            } else {
+                clipping_stack
+                    .iter()
+                    .position(|clip| !chain.contains(clip))
+                    .unwrap_or(clipping_stack.len())
+            };
             if !clipping_stack.is_empty() && removing_index < clipping_stack.len() {
                 let mut i = clipping_stack.len() - 1;
                 loop {
                     let clipping_shape = &clipping_stack[i];
-                    let Some(proxy) = create_clipping_proxy(clipping_shape, false) else {
+                    let Some(proxy) = create_clipping_proxy(clipping_shape, false, false) else {
                         break;
                     };
                     if let Some(next) = next_drawable.as_ref() {
@@ -1938,23 +1944,10 @@ impl Artboard {
                 }
                 clipping_stack.truncate(removing_index);
             }
-            // Borrow the source collection instead of copying it. Release each
-            // borrow before mutating drawable links through the same arena slot.
-            let clipping_count = current
-                .with(|current| current.clipping_shapes().len())
-                .unwrap_or(0);
-            for index in 0..scope_shapes.len() + clipping_count {
-                let clipping_shape = if let Some(shape) = scope_shapes.get(index) {
-                    shape.clone()
-                } else {
-                    current
-                        .with(|current| {
-                            current.clipping_shapes()[index - scope_shapes.len()].clone()
-                        })
-                        .expect("live drawable")
-                };
+            for clipping_shape in chain {
                 if !clipping_stack.contains(&clipping_shape) {
-                    let Some(proxy) = create_clipping_proxy(&clipping_shape, true) else {
+                    let Some(proxy) = create_clipping_proxy(&clipping_shape, true, css_scope)
+                    else {
                         continue;
                     };
                     if let Some(next) = next_drawable.as_ref() {
@@ -1977,32 +1970,12 @@ impl Artboard {
                     clipping_stack.push(clipping_shape);
                 }
             }
-            // Close the owner's scope wherever it is, so one moved by a draw
-            // rule cannot keep its shapes open for later drawables.
-            if let Some(owner) = current.authored_handle() {
-                if let Some(index) = css_clip_scopes
-                    .iter()
-                    .rposition(|(layout, _)| layout == &owner)
-                {
-                    css_clip_scopes.remove(index);
-                    passed_owners.insert(owner);
-                } else if owner
-                    .with(|object| {
-                        object
-                            .as_layout_component()
-                            .is_some_and(|layout| layout.is_css_mode() && layout.clips())
-                    })
-                    .unwrap_or(false)
-                {
-                    passed_owners.insert(owner);
-                }
-            }
             next_drawable = Some(current.clone());
             current_drawable = current.with(Drawable::prev_drawable).flatten();
         }
         if !clipping_stack.is_empty() {
             for i in (0..clipping_stack.len()).rev() {
-                let Some(proxy) = create_clipping_proxy(&clipping_stack[i], false) else {
+                let Some(proxy) = create_clipping_proxy(&clipping_stack[i], false, false) else {
                     continue;
                 };
                 if let Some(next) = next_drawable.as_ref() {
@@ -2017,6 +1990,7 @@ impl Artboard {
                 next_drawable = Some(proxy);
             }
         }
+        self.css_clip_operations = css_operations;
         self.interleave_layer_masks();
         self.clear_redundant_operations();
     }
@@ -2237,6 +2211,14 @@ impl Artboard {
         let mut applied_clipping_save_operations = Vec::<bool>::new();
         while let Some(current) = current_drawable {
             current.with_mut(|drawable| drawable.set_needs_save_operation(true));
+            // CSS can end an inner clip while retaining an outer one.
+            // Keep a separate save for its markers and for the next start.
+            if self.css_clip_operations.contains(&current) && current.is_clip_start() {
+                applied_clipping_save_operations.push(true);
+                previous_applied_save = false;
+                current_drawable = current.with(Drawable::prev_drawable).flatten();
+                continue;
+            }
             if previous_applied_save {
                 if current.is_clip_start() {
                     applied_clipping_save_operations.push(false);
@@ -3846,6 +3828,15 @@ impl Artboard {
         skip_on_unclipped: bool,
         is_primary_hit: bool,
     ) -> bool {
+        self.hit_test_point_filtered(position, skip_on_unclipped, is_primary_hit, true)
+    }
+    pub(crate) fn hit_test_point_filtered(
+        &mut self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+        apply_overflow: bool,
+    ) -> bool {
         if self.host().is_some() && self.is_instance {
             let host = self.host().unwrap();
             let runtime = self.runtime_self.clone();
@@ -3876,11 +3867,12 @@ impl Artboard {
             self.origin_x() * self.layout_width(),
             self.origin_y() * self.layout_height(),
         );
-        self.base.base.hit_test_point_with_origin(
+        self.base.base.hit_test_point_filtered(
             position,
             skip_on_unclipped,
             is_primary_hit,
             Some(origin),
+            apply_overflow,
         )
     }
 
@@ -4175,21 +4167,6 @@ impl Artboard {
                     None,
                 );
             });
-        }
-        // The artboard's paints draw first; its record's overflow clips the
-        // content after them, as a CSS box's does.
-        let css_clip = Self::with_root_mut(root, receiver, |artboard| {
-            if !artboard.css_clips() {
-                return None;
-            }
-            Some((
-                artboard.base.base.render_paths_handle()?,
-                artboard.factory().expect("Artboard renderer factory"),
-            ))
-        })
-        .flatten();
-        if let Some((paths, factory)) = css_clip {
-            renderer.clip_path(paths.borrow_mut().clip.render_path(&factory));
         }
         let (first_drawable, links) = Self::with_root(root, receiver, |artboard| {
             (artboard.first_drawable(), Rc::clone(&artboard.draw_links))

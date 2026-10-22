@@ -5690,8 +5690,8 @@ fn css_box_own_paint_keeps_ancestor_clipping_shape() {
     assert!(!card_draw_has_shape_clip(&shape_clipped_box(false, 0.0)));
 }
 
-/// Shape clips that surround a CSS overflow save stay outside it until
-/// the layout restores it, including across translated child proxies.
+/// Shape clips surround each CSS overflow save, including across
+/// translated child proxies.
 #[test]
 fn css_shape_clips_stay_outside_overflow_saves_with_translated_children() {
     for nested in [false, true] {
@@ -6499,7 +6499,7 @@ fn css_stacking_script_transform_resorts_only_at_identity() {
 }
 
 #[test]
-fn css_stacking_overflow_toggle_rebuilds_escape_boundary() {
+fn css_stacking_overflow_toggle_rebuilds_clip_chain() {
     let f = stacking_badge(
         stacking_box(CARD, &[U(POSITION, 1)]),
         &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
@@ -6514,7 +6514,8 @@ fn css_stacking_overflow_toggle_rebuilds_escape_boundary() {
         2
     ));
     f.advance(3);
-    assert_stacking_order(&f, &[CARD, BADGE, LATER], (30.0, 90.0));
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+    assert!(badge_draw_has_card_clip(&f));
     assert_eq!(stacking_sort_count(&f), start.wrapping_add(1));
     assert!(CoreRegistry::set_uint_handle(
         &f.record(CARD.0),
@@ -6523,6 +6524,7 @@ fn css_stacking_overflow_toggle_rebuilds_escape_boundary() {
     ));
     f.advance(3);
     assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
+    assert!(!badge_draw_has_card_clip(&f));
     assert_eq!(stacking_sort_count(&f), start.wrapping_add(2));
 }
 
@@ -6655,12 +6657,269 @@ fn css_stacking_source_only_transform_binding_allows_badge_to_escape() {
     assert_stacking_order(&f, &[CARD, LATER, BADGE], (30.0, 90.0));
 }
 
+/// Active clips at a paint, tracking each renderer save independently.
+fn active_clips_at_draw(lines: &[String], color: u32) -> Vec<String> {
+    let at = draw_at(lines, color);
+    let mut clips = Vec::new();
+    let mut stack = Vec::new();
+    let mut at_draw = None;
+    for (index, line) in lines.iter().enumerate() {
+        match line.as_str() {
+            "save" => stack.push(clips.clone()),
+            "restore" => clips = stack.pop().expect("each restore has a save"),
+            _ if line.starts_with("clipPath") => clips.push(line.replace("-0", "0")),
+            _ => {}
+        }
+        if index == at {
+            at_draw = Some(clips.clone());
+        }
+    }
+    assert!(stack.is_empty(), "{}", lines.join("\n"));
+    at_draw.expect("the paint draws")
+}
+
+fn badge_draw_has_card_clip(f: &Scene) -> bool {
+    active_clips_at_draw(&f.draw_lines(), BADGE.1)
+        .iter()
+        .any(|line| line.contains("(200,0),(200,100),(0,100)"))
+}
+
+fn assert_badge_clip_case(f: &Scene, clipped: bool) {
+    assert_stacking_order(f, &[CARD, LATER, BADGE], (30.0, 90.0));
+    assert_eq!(badge_draw_has_card_clip(f), clipped);
+    let lines = f.draw_lines();
+    assert!(
+        !active_clips_at_draw(&lines, LATER.1)
+            .iter()
+            .any(|line| line.contains("(200,0),(200,100),(0,100)"))
+    );
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    let box_names = |geometry: &[crate::RuntimeGeometryHit]| {
+        f.geometry_names(geometry)
+            .into_iter()
+            .filter(|name| [CARD.0, LATER.0, BADGE.0].contains(&name.as_str()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        box_names(&visible),
+        [CARD.0, LATER.0, BADGE.0],
+        "visible boxes in paint order"
+    );
+    let retained = host.retained_geometry_with_bounds();
+    let retained_names = box_names(&retained);
+    for name in [CARD.0, LATER.0, BADGE.0] {
+        assert_eq!(
+            retained_names
+                .iter()
+                .filter(|got| got.as_str() == name)
+                .count(),
+            1,
+            "retained box {name} appears once"
+        );
+    }
+    let badge = visible
+        .iter()
+        .zip(f.geometry_names(&visible))
+        .find(|(_, name)| name == BADGE.0)
+        .expect("visible badge")
+        .0;
+    assert!((badge.bounds.min_y - 80.0).abs() < 0.01, "{badge:?}");
+    assert!(
+        (badge.bounds.max_y - if clipped { 100.0 } else { 120.0 }).abs() < 0.01,
+        "{badge:?}"
+    );
+    for (y, expected) in [
+        (90.0, vec![BADGE.0, LATER.0, CARD.0]),
+        (
+            110.0,
+            if clipped {
+                vec![LATER.0]
+            } else {
+                vec![BADGE.0, LATER.0]
+            },
+        ),
+    ] {
+        let point = crate::source::math::vec2d::Vec2D::new(30.0, y);
+        // StateMachineInstance sorts its hits by this proxy order, then
+        // tests each target and its interaction parent chain.
+        let proxies = f
+            .artboard
+            .with_artboard(|artboard| artboard.drawables().to_vec());
+        let hits = proxies
+            .iter()
+            .filter_map(|item| {
+                let crate::source::drawable::RuntimeDrawableOccurrence::RuntimeProxy(proxy) = item
+                else {
+                    return None;
+                };
+                let name = proxy
+                    .borrow()
+                    .owner_handle()
+                    .with(|object| {
+                        object
+                            .as_component()
+                            .map(|component| component.name().to_owned())
+                    })
+                    .flatten()?;
+                ([CARD.0, LATER.0, BADGE.0].contains(&name.as_str())
+                    && item.hit_test_point(&point, false, true))
+                .then_some(name)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(hits, expected, "tap at {point:?}");
+        let geometry = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(30.0, y));
+        let names = f
+            .geometry_names(&geometry)
+            .into_iter()
+            .filter(|name| [CARD.0, LATER.0, BADGE.0].contains(&name.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(names, expected, "selection at {point:?}");
+    }
+}
+
+fn clipping_badge_scene(card_position: u64, badge_position: u64) -> Scene {
+    let f = stacking_badge(
+        stacking_box(
+            CARD,
+            &[
+                U(POSITION, card_position),
+                U(OVERFLOW_X, 2),
+                U(OVERFLOW_Y, 2),
+            ],
+        ),
+        &[&[U(POSITION, 1)][..], &stacking_z(5.0)].concat(),
+        Some(10.0),
+        false,
+    );
+    if badge_position != 2 {
+        assert!(CoreRegistry::set_uint_handle(
+            &f.record(BADGE.0),
+            POSITION.into(),
+            badge_position as u32
+        ));
+        f.advance(3);
+    }
+    f
+}
+
+/// A positioned card clips the escaped badge inside its own z-order slot.
 #[test]
-fn css_stacking_clipping_card_keeps_its_positive_badge_atomic() {
-    assert_badge_is_contained(stacking_box(
-        CARD,
-        &[U(POSITION, 1), U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
-    ));
+fn css_stacking_absolute_badge_escapes_positioned_clipping_card() {
+    assert_badge_clip_case(&clipping_badge_scene(1, 2), true);
+}
+
+/// A static clipping card lies between the badge and its containing block.
+#[test]
+fn css_stacking_absolute_badge_skips_static_card_clip() {
+    assert_badge_clip_case(&clipping_badge_scene(0, 2), false);
+}
+
+/// A relative badge escapes in paint order but keeps its static card's clip.
+#[test]
+fn css_stacking_relative_badge_escapes_static_clipping_card() {
+    assert_badge_clip_case(&clipping_badge_scene(0, 1), true);
+}
+
+/// An escaped badge reopens its card's overflow inside its shape clip.
+/// The translated child retains its own save and restore inside both.
+#[test]
+fn css_stacking_escaped_badge_clips_nest_with_shapes_and_translated_child() {
+    let translated = B {
+        name: "Rive",
+        component: vec![
+            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0),
+            U(LayoutComponentBase::CLIP_PROPERTY_KEY, 1),
+        ],
+        paints: vec![Paint::Fill(0xff11_2233)],
+        ..B::default()
+    };
+    let badge = painted(
+        BADGE.0,
+        BADGE.1,
+        [
+            vec![
+                U(POSITION, 2),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 80.0),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 10.0),
+            ],
+            width(60.0).to_vec(),
+            height(40.0).to_vec(),
+            stacking_z(10.0).to_vec(),
+        ]
+        .concat(),
+    );
+    let f = stacking_scene(
+        vec![
+            B {
+                clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 50.0, 150.0)]),
+                children: vec![translated, badge],
+                ..stacking_box(CARD, &[U(POSITION, 1), U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)])
+            },
+            stacking_box(
+                LATER,
+                &[
+                    vec![U(POSITION, 1), F(MARGIN_TOP, -30.0)],
+                    stacking_z(5.0).to_vec(),
+                ]
+                .concat(),
+            ),
+        ],
+        false,
+    );
+    assert_badge_clip_case(&f, true);
+    let lines = f.draw_lines();
+    let shape = |line: &String| line.contains("(50,0),(50,150),(0,150)");
+    let overflow = |line: &String| line.contains("(200,0),(200,100),(0,100)");
+    for (color, card_clip) in [(CARD.1, false), (BADGE.1, true), (0xff11_2233, true)] {
+        let clips = active_clips_at_draw(&lines, color);
+        let shape_at = clips.iter().position(shape).expect("ancestor shape clip");
+        assert_eq!(clips.iter().any(overflow), card_clip);
+        if card_clip {
+            assert!(shape_at < clips.iter().position(overflow).unwrap());
+        }
+    }
+    assert!(!active_clips_at_draw(&lines, LATER.1).iter().any(shape));
+}
+
+/// Equivalent translated scenes, with CSS on the surrounding host or no
+/// CSS at all, keep the same upstream clip bracket and draw lines.
+#[test]
+fn translated_clipping_layout_keeps_upstream_draw_lines() {
+    let make = |css_host: bool| {
+        let child = B {
+            name: "Rive",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 50.0),
+                U(LayoutComponentBase::CLIP_PROPERTY_KEY, 1),
+            ],
+            paints: vec![Paint::Fill(0xff11_2233)],
+            ..B::default()
+        };
+        let root = B {
+            name: "Frame",
+            children: vec![child],
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0),
+            ],
+            css: css_host.then(|| sized_to(200.0, 100.0)),
+            ..B::default()
+        };
+        scene((400.0, 300.0), root)
+    };
+    let upstream = make(false).draw_lines();
+    assert_eq!(make(true).draw_lines(), upstream);
+    let clips = active_clips_at_draw(&upstream, 0xff11_2233);
+    assert!(
+        clips
+            .iter()
+            .any(|line| line.contains("(100,0),(100,50),(0,50)"))
+    );
 }
 
 /// A box's own paint stays at the bottom of its stack whatever order its

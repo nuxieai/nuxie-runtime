@@ -1,6 +1,7 @@
 //! CSS layout records: our layer over Rive's layout, specified in
 //! docs/CSS_LAYOUT.md. A `LayoutCssStyle` puts its box or participant in CSS
 //! mode; Taffy then lays it out with its own CSS algorithms.
+pub(crate) mod clip;
 pub mod keys;
 pub mod paint;
 pub(crate) mod paint_order;

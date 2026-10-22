@@ -4,7 +4,7 @@
 //! the exact occurrence handles owned by the translated runtime, and every
 //! write goes through the generated property callback path of that owner.
 
-use std::{collections::HashSet, ops::Range};
+use std::{collections::HashSet, ops::Range, rc::Rc};
 
 use nuxie_render_api::{Aabb, Mat2D, Vec2D};
 
@@ -1110,8 +1110,16 @@ fn collect_geometry(
                     continue;
                 };
                 let owner = proxy.borrow().owner_handle();
+                // Clip markers share the box's owner but draw no paint.
+                // Only its own paint proxy contributes geometry and order.
                 if !owner
-                    .with(|object| css_box_paints(object, visibility))
+                    .with(|object| {
+                        object
+                            .as_layout_component()
+                            .and_then(|layout| layout.existing_proxy())
+                            .is_some_and(|paint| Rc::ptr_eq(paint, proxy))
+                            && css_box_paints(object, visibility)
+                    })
                     .unwrap_or(false)
                 {
                     continue;

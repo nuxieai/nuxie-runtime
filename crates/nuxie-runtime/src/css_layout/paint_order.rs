@@ -1,6 +1,6 @@
 //! CSS painting order within stacking contexts (docs/CSS_LAYOUT.md, 4.4).
-//! Non-clipping CSS boxes let positioned descendants and nested contexts
-//! join their nearest context. Clips and non-CSS hosts stay atomic, keeping
+//! CSS boxes let positioned descendants and nested contexts join their
+//! nearest context, carrying their clips. Non-CSS hosts stay atomic, keeping
 //! Rive's clip save and restore brackets and translated drawing order.
 use super::keys;
 use crate::source::{
@@ -44,8 +44,7 @@ fn owner_of(drawable: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
 }
 
 /// Whether `item` is `container`'s own paint: a box's proxy, which draws
-/// its fills, strokes, borders, shadows and gradients and then opens its
-/// content clip. It paints below the box's children however the drawables
+/// its fills, strokes, borders, shadows and gradients. It paints below the box's children however the drawables
 /// arrive: a retained remount appends re-created children after it.
 fn is_own_paint(container: &CoreHandle, item: &RuntimeDrawableOccurrence) -> bool {
     let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = item else {
@@ -137,7 +136,7 @@ fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
             let masked = object.as_drawable().is_some_and(|drawable| {
                 !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty()
             });
-            let atomic = !css_box || masked || layout.is_some_and(|layout| layout.clips());
+            let atomic = !css_box || masked;
             (layer, context || atomic)
         })
         .unwrap_or(((1, 0), true))

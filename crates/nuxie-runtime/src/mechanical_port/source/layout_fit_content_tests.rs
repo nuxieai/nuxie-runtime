@@ -205,6 +205,121 @@ impl Fixture {
             .unwrap()
     }
 }
+/// A CSS text leaf using the font shared by the CSS rendering fixtures.
+pub(super) struct CssTextLeaf {
+    _arena: CoreArena,
+    pub root: CoreHandle,
+    pub label: CoreHandle,
+    pub text: CoreHandle,
+    pub record: CoreHandle,
+    pub root_record: CoreHandle,
+}
+impl CssTextLeaf {
+    pub fn new(content: &str, enums: &[(u16, u32)], numbers: &[(u16, f32)]) -> Self {
+        let Fixture {
+            arena,
+            root,
+            label,
+            text,
+            ..
+        } = line_box_fixture(true, &[(content, 28.0, 36.0)]);
+        root.with_downcast_mut::<LayoutComponent, _>(|root| {
+            root.with_style_mut(|style| style.base.set_intrinsically_sized_value_value(true));
+        })
+        .unwrap();
+        let record = label
+            .with_downcast::<LayoutComponent, _>(|label| label.css_record().unwrap())
+            .unwrap();
+        let root_record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&arena, &root, &root_record);
+        root.with_downcast_mut::<LayoutComponent, _>(|root| {
+            root.add_layout_style_applier(root_record.clone());
+        })
+        .unwrap();
+        Self::write(&root_record, &[(61021, 1)], &[(61022, 600.0)]);
+        Self::write(&record, enums, numbers);
+        Self {
+            _arena: arena,
+            root,
+            label,
+            text,
+            record,
+            root_record,
+        }
+    }
+    pub fn write(record: &CoreHandle, enums: &[(u16, u32)], numbers: &[(u16, f32)]) {
+        use crate::source::generated::core_registry::CoreRegistry;
+        for &(key, value) in enums {
+            assert!(CoreRegistry::set_uint_handle(record, key.into(), value));
+        }
+        for &(key, value) in numbers {
+            assert!(CoreRegistry::set_double_handle(record, key.into(), value));
+        }
+    }
+    pub fn solve(&self) -> Layout {
+        LayoutComponent::sync_style_occurrence(&self.label);
+        LayoutComponent::sync_style_occurrence(&self.root);
+        LayoutComponent::calculate_layout_occurrence(&self.root, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&self.root, false);
+        self.label
+            .with_downcast::<LayoutComponent, _>(|layout| layout.layout_data.solved_layout)
+            .unwrap()
+    }
+    pub fn measure(&self, width: Option<f32>) -> Vec2D {
+        self.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.set_owned_by_css_layout(true);
+                text.measure_layout(
+                    width.unwrap_or(f32::NAN),
+                    if width.is_some() {
+                        LayoutMeasureMode::Exactly
+                    } else {
+                        LayoutMeasureMode::Undefined
+                    },
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                )
+            })
+            .unwrap()
+    }
+    pub fn offset(&self) -> Vec2D {
+        self.text
+            .with(|object| {
+                object
+                    .as_transform_component()
+                    .unwrap()
+                    .layout_content_offset()
+            })
+            .unwrap()
+    }
+    pub fn first_line_position(&self) -> Vec2D {
+        let local = self
+            .text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.update_after_transform_super(ComponentDirt::PATH);
+                let line = &text.ordered_lines()[0];
+                let geometry = line.glyph_line();
+                Vec2D::new(
+                    geometry.start_x,
+                    line.y() - geometry.baseline + geometry.top,
+                )
+            })
+            .unwrap();
+        let offset = self.offset();
+        Vec2D::new(offset.x + local.x, offset.y + local.y)
+    }
+    pub fn text_size(&self) -> Vec2D {
+        self.text
+            .with_downcast::<Text, _>(|text| {
+                Vec2D::new(text.effective_width(), text.effective_height())
+            })
+            .unwrap()
+    }
+}
+pub(super) fn near(actual: f32, expected: f32) {
+    assert!((actual - expected).abs() < 0.01, "{actual} != {expected}");
+}
+
 fn assert_width(f: &Fixture, expected: f32) {
     let bounds = f.solve();
     assert!(
@@ -455,9 +570,8 @@ fn css_participant_text_wraps_at_its_css_width() {
     assert_eq!((solved.width(), solved.height()), (338.0, 72.0));
 }
 
-/// A CSS leaf's minimum is its contents' largest: text with hidden overflow
-/// adds nothing, and the other text still holds the box at its longest
-/// word in a narrow offer.
+/// A CSS leaf's minimum is its contents' largest, including clipped text.
+/// The longer word in the second text still holds the box in a narrow offer.
 #[test]
 fn css_leaf_minimum_skips_only_the_contents_without_one() {
     let f = Fixture::new("Unlock premium", 40.0, false);
@@ -477,36 +591,173 @@ fn css_leaf_minimum_skips_only_the_contents_without_one() {
     LayoutComponent::sync_style_occurrence(&f.label);
     assert_width(&f, 145.4414);
 }
-/// Text with hidden overflow adds nothing to a CSS box's minimum height
-/// either: in a 50-point column the box shrinks past its wrapped title.
+/// Text overflow keeps its content minimum. The CSS box must itself have
+/// hidden overflow to shrink below that minimum in a column.
 #[test]
-fn css_leaf_minimum_height_skips_hidden_text() {
-    use crate::source::generated::core_registry::CoreRegistry;
-    let f = Fixture::new(TITLE, 338.0, false);
+fn css_leaf_minimum_height_uses_css_overflow() {
+    let f = CssTextLeaf::new("Hello wonderful\nworld", &[], &[]);
     f.text
         .with_downcast_mut::<Text, _>(|text| {
             text.base.set_overflow_value_value(1);
         })
         .unwrap();
-    // The root: a CSS column 50 points tall; the label: a CSS box.
-    let column = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&f.arena, &f.root, &column);
-    assert!(CoreRegistry::set_uint_handle(&column, 61000, 1));
-    assert!(CoreRegistry::set_uint_handle(&column, 61006, 2));
-    assert!(CoreRegistry::set_uint_handle(&column, 61024, 1));
-    assert!(CoreRegistry::set_double_handle(&column, 61025, 50.0));
-    f.root
-        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(column.clone()))
-        .unwrap();
-    let record = f.arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&f.arena, &f.label, &record);
-    f.label
-        .with_downcast_mut::<LayoutComponent, _>(|o| o.add_layout_style_applier(record.clone()))
-        .unwrap();
-    LayoutComponent::sync_style_occurrence(&f.root);
-    LayoutComponent::sync_style_occurrence(&f.label);
-    assert_eq!(f.solve().height(), 50.0);
+    CssTextLeaf::write(
+        &f.root_record,
+        &[(61000, 1), (61006, 2), (61024, 1)],
+        &[(61022, 338.0), (61025, 50.0)],
+    );
+    let height = f.measure(Some(338.0)).y;
+    near(f.solve().height(), height);
+    CssTextLeaf::write(&f.record, &[(61003, 2), (61004, 2)], &[]);
+    near(f.solve().height(), 50.0);
 }
+
+/// Text clipping does not change an explicit min-content size.
+#[test]
+fn css_clipped_text_min_content_keeps_words_and_nowrap_lines() {
+    for nowrap in [false, true] {
+        for overflow in [1, 2, 3, 4, 5] {
+            let f = CssTextLeaf::new(
+                "Hello wonderful world",
+                &[(61021, 2), (61003, 2), (61004, 2)],
+                &[],
+            );
+            f.text
+                .with_downcast_mut::<Text, _>(|text| {
+                    text.base.set_overflow_value_value(overflow);
+                    text.base.set_wrap_value_value(u8::from(nowrap));
+                })
+                .unwrap();
+            let expected = if nowrap {
+                f.measure(None).x
+            } else {
+                CssTextLeaf::new("wonderful", &[], &[]).measure(None).x
+            };
+            near(f.solve().width(), expected);
+        }
+    }
+}
+
+#[test]
+fn css_clipped_text_participant_keeps_its_min_content() {
+    let f = line_box_participant_fixture(true, &[("Hello wonderful world", 28.0, 36.0)]);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_overflow_value_value(3);
+        })
+        .unwrap();
+    let record = f
+        .label
+        .with_downcast::<LayoutParticipant, _>(|participant| participant.css_record().unwrap())
+        .unwrap();
+    CssTextLeaf::write(&record, &[(61021, 2)], &[]);
+    LayoutParticipant::sync_style_changes_occurrence(&f.label, None);
+    let word = CssTextLeaf::new("wonderful", &[], &[]).measure(None).x;
+    near(f.solve().width(), word);
+}
+
+/// Block and flex intrinsic sizes include clipped content. Grid's minimum
+/// contribution is zero for an item whose CSS overflow is hidden.
+#[test]
+fn css_clipped_text_min_content_parent_follows_its_display() {
+    let word = CssTextLeaf::new("wonderful", &[], &[]).measure(None).x;
+    for display in [0, 1, 2] {
+        let f = CssTextLeaf::new("Hello wonderful world", &[(61003, 2), (61004, 2)], &[]);
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_overflow_value_value(3);
+            })
+            .unwrap();
+        CssTextLeaf::write(&f.root_record, &[(61000, display), (61021, 2)], &[]);
+        // Taffy resolves sizing keywords on items through their containing
+        // block. Its solve root keeps the supplied available space, so the
+        // min-content parent must be an item under an outer box.
+        let outer = layout(&f._arena, None, Some(600.0), false);
+        attach(&f._arena, &outer, &f.root);
+        let outer_record = f
+            ._arena
+            .insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&f._arena, &outer, &outer_record);
+        CssTextLeaf::write(&outer_record, &[(61021, 1)], &[(61022, 600.0)]);
+        outer
+            .with_downcast_mut::<LayoutComponent, _>(|outer| {
+                outer.add_layout_style_applier(outer_record);
+            })
+            .unwrap();
+        for owner in [&f.label, &f.root, &outer] {
+            LayoutComponent::sync_style_occurrence(owner);
+            LayoutComponent::sync_layout_children_occurrence(owner);
+        }
+        LayoutComponent::calculate_layout_occurrence(&outer, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&outer, false);
+        let parent_width = f
+            .root
+            .with_downcast::<LayoutComponent, _>(|layout| layout.layout_data.solved_layout.width())
+            .unwrap();
+        near(parent_width, if display == 2 { 0.0 } else { word });
+    }
+}
+
+/// The CSS overflow on the box, rather than Text's paint overflow, controls
+/// whether a nowrap flex item can shrink below its content width.
+#[test]
+fn css_nowrap_text_flex_shrink_uses_the_box_overflow() {
+    for hidden in [false, true] {
+        let f = CssTextLeaf::new("Hello wonderful world", &[], &[]);
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_overflow_value_value(3);
+                text.base.set_wrap_value_value(1);
+            })
+            .unwrap();
+        let line = f.measure(None).x;
+        let offer = line / 2.0;
+        CssTextLeaf::write(&f.root_record, &[(61000, 1)], &[(61022, offer)]);
+        if hidden {
+            CssTextLeaf::write(&f.record, &[(61003, 2), (61004, 2)], &[]);
+        }
+        near(f.solve().width(), if hidden { offer } else { line });
+    }
+}
+
+#[test]
+fn translated_clipped_text_keeps_its_zero_min_content() {
+    for participant in [false, true] {
+        let f = if participant {
+            line_box_participant_fixture(false, &[("Hello wonderful world", 28.0, 36.0)])
+        } else {
+            line_box_fixture(false, &[("Hello wonderful world", 28.0, 36.0)])
+        };
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_overflow_value_value(3);
+                text.base.set_wrap_value_value(1);
+            })
+            .unwrap();
+        // Ask the translated protocol directly, without a CSS box.
+        let measured = LayoutComponent::measure_layout_node(
+            &f.label,
+            if participant {
+                LayoutNodeKind::Participant
+            } else {
+                LayoutNodeKind::Layout
+            },
+            taffy::Size {
+                width: None,
+                height: None,
+            },
+            taffy::Size {
+                width: taffy::AvailableSpace::MinContent,
+                height: taffy::AvailableSpace::MaxContent,
+            },
+            true,
+            (None, None),
+            (None, None),
+        );
+        assert_eq!(measured.width, 0.0);
+    }
+}
+
 #[test]
 fn css_fit_content_only_child_uses_the_row_offer() {
     assert_width(&Fixture::new(TITLE, 338.0, true), 338.0);

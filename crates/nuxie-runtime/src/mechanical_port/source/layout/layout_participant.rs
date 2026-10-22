@@ -22,12 +22,16 @@ use crate::mechanical_port::source::{
 use taffy::prelude::{Dimension, Style};
 
 /// Check capability without invoking a measurer, especially scripted hosts.
-pub(crate) fn host_supports_min_content_width(host: &CoreHandle) -> bool {
+/// CSS text keeps its intrinsic minimum regardless of its paint overflow.
+pub(crate) fn host_supports_min_content_width(host: &CoreHandle, css: bool) -> bool {
     use crate::mechanical_port::source::{
         shapes::image::Image,
         text_engine::{TextOverflow, TextSizing},
     };
     host.with_mut(|object| {
+        if css && object.as_text_mut().is_some() {
+            return true;
+        }
         object.as_intrinsically_sizeable_mut().is_none()
             || object.as_any().is::<Image>()
             || object

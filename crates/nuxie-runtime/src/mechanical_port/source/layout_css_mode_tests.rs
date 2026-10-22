@@ -3262,6 +3262,157 @@ fn css_leaf_places_its_content_at_the_content_box() {
     }
 }
 
+/// One anonymous item lets each display apply its own alignment to text.
+#[test]
+fn css_leaf_text_alignment_uses_its_display() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    // display, align-items, flex-direction, justify-content, align-content,
+    // padding and the fraction of the free block space before the text.
+    for (display, align, direction, justify, content, padded, fraction) in [
+        (0, 0, 0, 0, 0, false, 0.0),
+        (1, 4, 0, 0, 0, false, 0.0),
+        (1, 8, 0, 0, 0, false, 0.5),
+        (1, 5, 0, 0, 0, false, 1.0),
+        (1, 0, 2, 5, 0, false, 0.5),
+        (0, 0, 0, 0, 5, false, 0.5),
+        (2, 8, 0, 0, 0, false, 0.5),
+        (2, 0, 0, 0, 5, false, 0.5),
+        (1, 8, 0, 0, 0, true, 0.5),
+    ] {
+        let f = CssTextLeaf::new(
+            "Hello wonderful\nworld",
+            &[
+                (DISPLAY, display),
+                (61013, align),
+                (61006, direction),
+                (61018, justify),
+                (61017, content),
+                (WIDTH_KIND, 1),
+                (HEIGHT_KIND, 1),
+            ],
+            &[(WIDTH, 338.0), (HEIGHT, 120.0)],
+        );
+        if padded {
+            CssTextLeaf::write(
+                &f.record,
+                &[],
+                &[
+                    (PADDING_TOP, 10.0),
+                    (PADDING_BOTTOM, 10.0),
+                    (PADDING_LEFT, 12.0),
+                    (PADDING_RIGHT, 12.0),
+                ],
+            );
+        }
+        let measured = f.measure(Some(338.0));
+        assert!(measured.y > 36.0 && measured.y < 120.0);
+        f.solve();
+        near(
+            f.first_line_position().y,
+            (if padded { 10.0 } else { 0.0 }) + (120.0 - measured.y) * fraction,
+        );
+        if fraction != 0.0 {
+            near(f.text_size().y, measured.y);
+        }
+        // The retained child must be invalidated when alignment changes.
+        CssTextLeaf::write(&f.record, &[(61013, 4), (61018, 0), (61017, 0)], &[]);
+        f.solve();
+        near(f.offset().y, if padded { 10.0 } else { 0.0 });
+    }
+}
+
+#[test]
+fn css_leaf_row_text_keeps_its_intrinsic_width_before_text_align() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    use crate::source::text::text::Text;
+    for (display, direction, justify, fraction, stretched) in [
+        (1, 0, 0, 0.0, false),
+        (1, 0, 5, 0.5, false),
+        (0, 0, 0, 0.5, true),
+        (1, 2, 0, 0.5, true),
+        (2, 0, 0, 0.5, true),
+    ] {
+        let f = CssTextLeaf::new(
+            "Short label",
+            &[
+                (DISPLAY, display),
+                (61006, direction),
+                (61018, justify),
+                (WIDTH_KIND, 1),
+            ],
+            &[(WIDTH, 338.0)],
+        );
+        f.text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.base.set_align_value_value(2);
+            })
+            .unwrap();
+        let line = f.measure(None).x;
+        assert!(line < 338.0);
+        f.solve();
+        let size = f.text_size();
+        near(size.x, if stretched { 338.0 } else { line });
+        near(f.first_line_position().x, (338.0 - line) * fraction);
+    }
+}
+
+#[test]
+fn translated_leaf_text_keeps_its_authored_position_and_box_size() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    use crate::source::layout::layout_measure_mode::LayoutMeasureMode;
+    use crate::source::text::text::Text;
+    let f = CssTextLeaf::new(
+        "Short label",
+        &[(WIDTH_KIND, 1), (HEIGHT_KIND, 1)],
+        &[(WIDTH, 338.0), (HEIGHT, 120.0)],
+    );
+    // Remove only the CSS applier to exercise the translated leaf path.
+    f.label
+        .with_downcast_mut::<LayoutComponent, _>(|layout| {
+            layout
+                .layout_data
+                .appliers
+                .as_mut()
+                .unwrap()
+                .retain(|applier| applier != &f.record);
+            layout.with_style_mut(|style| {
+                style.base.set_intrinsically_sized_value_value(false);
+                style
+                    .base
+                    .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                style
+                    .base
+                    .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                style.base.set_width_units_value_value(YGUnit::Point as u8);
+                style.base.set_height_units_value_value(YGUnit::Point as u8);
+            });
+            layout.base.set_width_value(338.0);
+            layout.base.set_height_value(120.0);
+        })
+        .unwrap();
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.base.set_align_value_value(2);
+        })
+        .unwrap();
+    f.solve();
+    near(f.offset().x, 0.0);
+    near(f.offset().y, 0.0);
+    near(f.text_size().x, 338.0);
+    let measured = f
+        .text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.measure_layout(
+                338.0,
+                LayoutMeasureMode::Exactly,
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+            )
+        })
+        .unwrap();
+    assert!(measured.y > 0.0);
+}
+
 /// Padding and border written at run time move the content with them.
 #[test]
 fn css_leaf_content_follows_padding_written_at_run_time() {

@@ -253,9 +253,38 @@ def executable_product(path):
     return os.access(path, os.X_OK) and path.suffix not in (".a", ".so", ".dylib", ".rlib")
 
 
+def upstream_pin():
+    """The upstream commit whose fixtures the tests read, as the Makefile pins it."""
+    if os.environ.get("RIVE_RUNTIME_REF"):
+        return os.environ["RIVE_RUNTIME_REF"]
+    match = re.search(r"^RIVE_RUNTIME_REF \?= ([0-9a-f]{40})$", (ROOT / "Makefile").read_text(), re.MULTILINE)
+    if not match:
+        raise ValueError("The Makefile pins no RIVE_RUNTIME_REF")
+    return match.group(1)
+
+
+def check_upstream_checkout():
+    """Tests read upstream fixtures from RIVE_RUNTIME_DIR. Another revision fails
+    them as missing or changed files, so refuse it before building anything."""
+    checkout = os.environ.get("RIVE_RUNTIME_DIR")
+    if not checkout:
+        return
+    expected = upstream_pin()
+    head = subprocess.run(["git", "-C", checkout, "rev-parse", "HEAD"], capture_output=True, text=True)
+    actual = head.stdout.strip() if head.returncode == 0 else "not a Git checkout"
+    if actual != expected:
+        raise ValueError(f"RIVE_RUNTIME_DIR {checkout} is at {actual}, but the tests read upstream fixtures "
+                         f"at the pinned {expected}; point RIVE_RUNTIME_DIR at a checkout of that commit")
+    for staged in ([], ["--cached"]):
+        if subprocess.run(["git", "-C", checkout, "diff", "--quiet", *staged, "--ignore-submodules", "--"]).returncode:
+            raise ValueError(f"RIVE_RUNTIME_DIR {checkout} has tracked changes; the tests need the pinned upstream as committed")
+
+
 def main():
     try:
         options = command_options(sys.argv[1:])
+        if options["command"] == "test" and not options["no_run"]:
+            check_upstream_checkout()
         labels = materialize(options, packages_from_workspace())
         bazel = bazel_command()
         flags = ["--config=release"] if options["profile"] != "debug" else []

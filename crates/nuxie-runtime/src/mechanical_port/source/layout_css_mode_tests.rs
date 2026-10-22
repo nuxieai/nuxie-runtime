@@ -170,6 +170,8 @@ struct B {
     /// The ScrollConstraint's threshold, the distance a press moves before
     /// it scrolls.
     scroll_threshold: f32,
+    scroll_properties: Vec<P>,
+    scroll_bind: Option<(u16, u64)>,
     /// A ScrollBarConstraint on this box, the thumb, with its direction,
     /// for the file's first ScrollConstraint; the box's parent is the track.
     scroll_bar: Option<u64>,
@@ -294,7 +296,7 @@ enum Entry<'a> {
     Shape(&'a Rect, u64),
     Path(&'a Rect, u64),
     /// A ScrollConstraint on a box: its direction and threshold.
-    Scroll(u64, u64, f32),
+    Scroll(u64, u64, &'a B),
     /// A ScrollBarConstraint on a box with its direction.
     ScrollBar(u64, u64),
     Participant(u64),
@@ -487,7 +489,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         }
         push_paints(&node.paints, index, entries);
         if let Some(direction) = node.scroll {
-            entries.push(Entry::Scroll(index, direction, node.scroll_threshold));
+            entries.push(Entry::Scroll(index, direction, node));
+            if let Some((key, flags)) = node.scroll_bind {
+                entries.push(Entry::Bind(key, flags, 0));
+            }
         }
         if let Some(direction) = node.scroll_bar {
             entries.push(Entry::ScrollBar(index, direction));
@@ -813,7 +818,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .float(GradientStopBase::POSITION_PROPERTY_KEY, *position)
                     .end();
             }
-            Entry::Scroll(parent, direction, threshold) => {
+            Entry::Scroll(parent, direction, node) => {
                 use crate::source::generated::constraints::{
                     draggable_constraint_base::DraggableConstraintBase,
                     scrolling::scroll_constraint_base::ScrollConstraintBase,
@@ -824,8 +829,21 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                         DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY,
                         *direction,
                     );
-                if *threshold != 0.0 {
-                    riv.float(ScrollConstraintBase::THRESHOLD_PROPERTY_KEY, *threshold);
+                if node.scroll_threshold != 0.0 {
+                    riv.float(
+                        ScrollConstraintBase::THRESHOLD_PROPERTY_KEY,
+                        node.scroll_threshold,
+                    );
+                }
+                for property in &node.scroll_properties {
+                    match *property {
+                        U(key, value) => {
+                            riv.uint(key, value);
+                        }
+                        F(key, value) => {
+                            riv.float(key, value);
+                        }
+                    }
                 }
                 riv.end();
             }
@@ -6518,6 +6536,606 @@ fn css_rtl_index_scrolling_counts_from_the_start() {
         .with_downcast::<ScrollConstraint, _>(|scroll| (scroll.offset_x(), scroll.scroll_index()))
         .unwrap();
     assert_eq!(index, (-200.0, 2.0));
+}
+
+fn css_axis_scroll(f: &Scene) -> CoreHandle {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    f.artboard
+        .with_artboard(|a| a.find_all_handles::<ScrollConstraint>())[0]
+        .clone()
+}
+
+fn css_axis_row(
+    rtl: bool,
+    viewport: f32,
+    widths: &[f32],
+    gap: f32,
+    pad: f32,
+    viewport_padding: bool,
+    snap: bool,
+    bind: Option<(u16, u64)>,
+) -> Scene {
+    let names = ["A", "B", "C", "D"];
+    let items = widths
+        .iter()
+        .enumerate()
+        .map(|(i, w)| {
+            css(
+                names[i],
+                [[F(FLEX_SHRINK, 0.0)].as_slice(), &width(*w), &height(20.0)].concat(),
+                vec![],
+            )
+        })
+        .collect();
+    let padding = [F(PADDING_LEFT, pad), F(PADDING_RIGHT, pad)];
+    scene(
+        (1000.0, 300.0),
+        css(
+            "Viewport",
+            [
+                vec![
+                    U(DISPLAY, 1),
+                    U(DIRECTION, if rtl { 2 } else { 1 }),
+                    U(OVERFLOW_X, 3),
+                ],
+                width(viewport).to_vec(),
+                height(20.0).to_vec(),
+                if viewport_padding {
+                    padding.to_vec()
+                } else {
+                    vec![]
+                },
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(0),
+                scroll_properties: vec![U(724, u64::from(snap))],
+                scroll_bind: bind,
+                ..css(
+                    "Content",
+                    [
+                        vec![
+                            U(DISPLAY, 1),
+                            U(WIDTH_KIND, 3),
+                            F(FLEX_SHRINK, 0.0),
+                            F(COLUMN_GAP, gap),
+                        ],
+                        height(20.0).to_vec(),
+                        if viewport_padding {
+                            vec![]
+                        } else {
+                            padding.to_vec()
+                        },
+                    ]
+                    .concat(),
+                    items,
+                )
+            }],
+        ),
+    )
+}
+
+#[test]
+fn css_fractional_index_uses_solved_item_steps_and_css_gaps() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for rtl in [false, true] {
+        let f = css_axis_row(rtl, 60.0, &[60.0; 4], 20.0, 0.0, false, false, None);
+        let scroll = css_axis_scroll(&f);
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(0.5));
+        f.advance(2);
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+            Some((-40.0, 0.5))
+        );
+    }
+}
+
+#[test]
+fn css_rtl_snap_uses_logical_starts_for_mixed_width_items() {
+    use crate::source::constraints::scrolling::{
+        elastic_scroll_physics::ElasticScrollPhysics, scroll_constraint::ScrollConstraint,
+    };
+    for rtl in [false, true] {
+        let f = css_axis_row(
+            rtl,
+            60.0,
+            &[60.0, 140.0, 60.0, 60.0],
+            20.0,
+            0.0,
+            false,
+            true,
+            None,
+        );
+        let scroll = css_axis_scroll(&f);
+        let physics = scroll
+            .insert_sibling(ElasticScrollPhysics::default())
+            .unwrap();
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_physics(physics));
+        for (release, expected) in [(-50.0, -80.0), (-200.0, -240.0)] {
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                s.stop_physics();
+                s.set_authored_scroll_offset_x(release);
+                s.prime_physics();
+                s.run_physics();
+            });
+            f.advance(240);
+            let offset = scroll
+                .with_downcast::<ScrollConstraint, _>(ScrollConstraint::offset_x)
+                .unwrap();
+            assert!((offset - expected).abs() < 0.01, "rtl={rtl}: {offset}");
+        }
+    }
+}
+
+#[test]
+fn css_mandatory_snap_settles_at_load_from_the_scroll_origin() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for rtl in [false, true] {
+        for viewport_padding in [false, true] {
+            let f = css_axis_row(
+                rtl,
+                100.0,
+                &[100.0; 3],
+                0.0,
+                24.0,
+                viewport_padding,
+                true,
+                None,
+            );
+            assert_eq!(
+                css_axis_scroll(&f)
+                    .with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+                Some((-24.0, 0.0))
+            );
+        }
+    }
+}
+
+#[test]
+fn css_scroll_index_interpolates_clamped_snap_positions_and_writes_back() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    use crate::source::data_bind::data_bind::TWO_WAY;
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    for rtl in [false, true] {
+        let f = css_axis_row(
+            rtl,
+            402.0,
+            &[300.0; 3],
+            12.0,
+            0.0,
+            false,
+            true,
+            Some((763, u64::from(TWO_WAY))),
+        );
+        let scroll = css_axis_scroll(&f);
+        for (offset, index) in [(0.0, 0.0), (-312.0, 1.0), (-522.0, 2.0), (-417.0, 1.5)] {
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                s.set_authored_scroll_offset_x(offset)
+            });
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                Some(index)
+            );
+        }
+        assert!(CoreRegistry::set_double_handle(&scroll, 763, 2.0));
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+            Some((-522.0, 2.0))
+        );
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_authored_scroll_offset_x(-417.0));
+        let number = f.bind_number();
+        // A new two-way binding first publishes the current target value.
+        f.advance(3);
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
+            Some(1.5)
+        );
+        CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            2.0,
+        );
+        f.advance(3);
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+            Some((-522.0, 2.0))
+        );
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
+            Some(2.0)
+        );
+    }
+}
+
+#[test]
+fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    use crate::source::data_bind::data_bind::TWO_WAY;
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    for (row_height, target, index) in [(100.0, 700.0, 7.0), (32.0, 160.0, 5.0)] {
+        let f = scene(
+            (400.0, 300.0),
+            css(
+                "Viewport",
+                [[U(OVERFLOW_Y, 3)].as_slice(), &width(100.0), &height(100.0)].concat(),
+                vec![B {
+                    scroll: Some(1),
+                    scroll_bind: Some((760, u64::from(TWO_WAY))),
+                    ..css(
+                        "Content",
+                        [],
+                        (0..20)
+                            .map(|i| {
+                                css(
+                                    if i == 7 { "Stripe7" } else { "Stripe" },
+                                    height(row_height),
+                                    vec![],
+                                )
+                            })
+                            .collect(),
+                    )
+                }],
+            ),
+        );
+        let scroll = css_axis_scroll(&f);
+        assert!(CoreRegistry::set_double_handle(&scroll, 760, target));
+        f.advance(2);
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(target));
+        if row_height == 100.0 {
+            assert_eq!(f.world_origin("Stripe7").1, 0.0);
+        }
+        assert!(CoreRegistry::set_double_handle(&scroll, 760, 0.0));
+        let number = f.bind_number();
+        // Finish the initial target-to-source synchronization before writing.
+        f.advance(3);
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
+            Some(0.0)
+        );
+        assert!(CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            target
+        ));
+        f.advance(2);
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(target));
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+            ),
+            Some(target)
+        );
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|s| (s.offset_y(), s.scroll_index())),
+            Some((-target, index))
+        );
+        if row_height == 100.0 {
+            assert_eq!(f.world_origin("Stripe7").1, 0.0);
+        }
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(5.0));
+        assert_eq!(
+            CoreRegistry::get_double_handle(&scroll, 760),
+            Some(row_height * 5.0)
+        );
+        CoreRegistry::set_double_handle(&scroll, 760, 10000.0);
+        assert_eq!(
+            CoreRegistry::get_double_handle(&scroll, 760),
+            Some(row_height * 20.0 - 100.0)
+        );
+    }
+    for rtl in [false, true] {
+        let f = css_axis_row(rtl, 100.0, &[100.0; 3], 0.0, 0.0, false, false, None);
+        let scroll = css_axis_scroll(&f);
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 759), Some(0.0));
+        let target = if rtl { -100.0 } else { 100.0 };
+        CoreRegistry::set_double_handle(&scroll, 759, target);
+        f.advance(2);
+        assert_eq!(CoreRegistry::get_double_handle(&scroll, 759), Some(target));
+        assert_eq!(f.world_origin("B").0, 0.0);
+    }
+}
+
+#[test]
+fn translated_bound_offsets_keep_rive_sign() {
+    let f = translated_scroll_view(B::default());
+    let scroll = css_axis_scroll(&f);
+    CoreRegistry::set_double_handle(&scroll, 760, -40.0);
+    f.advance(2);
+    assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(-40.0));
+    assert_eq!(f.scroll_offset_y(), -40.0);
+}
+
+fn css_rtl_thumb_scene(track_rtl: bool) -> Scene {
+    scene(
+        (1000.0, 300.0),
+        css(
+            "Viewport",
+            [
+                vec![
+                    U(DISPLAY, 1),
+                    U(POSITION, 1),
+                    U(DIRECTION, 2),
+                    U(OVERFLOW_X, 3),
+                ],
+                width(300.0).to_vec(),
+                height(40.0).to_vec(),
+            ]
+            .concat(),
+            vec![
+                B {
+                    scroll: Some(0),
+                    ..css(
+                        "Content",
+                        [
+                            vec![U(DISPLAY, 1), F(FLEX_SHRINK, 0.0)],
+                            width(900.0).to_vec(),
+                            height(20.0).to_vec(),
+                        ]
+                        .concat(),
+                        vec![css("Item", [width(900.0), height(20.0)].concat(), vec![])],
+                    )
+                },
+                css(
+                    "Track",
+                    [
+                        vec![
+                            U(POSITION, 2),
+                            U(DIRECTION, if track_rtl { 0 } else { 1 }),
+                            U(INSET_LEFT_KIND, 1),
+                            F(INSET_LEFT, 0.0),
+                            U(INSET_TOP_KIND, 1),
+                            F(INSET_TOP, 30.0),
+                        ],
+                        width(300.0).to_vec(),
+                        height(10.0).to_vec(),
+                    ]
+                    .concat(),
+                    vec![B {
+                        scroll_bar: Some(0),
+                        ..css("Thumb", [width(100.0), height(10.0)].concat(), vec![])
+                    }],
+                ),
+            ],
+        ),
+    )
+}
+
+#[test]
+fn css_rtl_thumb_mirrors_progress_against_its_solved_position() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for track_rtl in [false, true] {
+        let f = css_rtl_thumb_scene(track_rtl);
+        assert_eq!(f.world_origin("Thumb"), (200.0, 30.0));
+        assert_eq!(f.bounds("Thumb")[2], 100.0);
+        css_axis_scroll(&f)
+            .with_downcast_mut::<ScrollConstraint, _>(|s| s.set_authored_scroll_offset_x(-300.0));
+        f.advance(2);
+        assert_eq!(f.world_origin("Thumb"), (100.0, 30.0));
+    }
+}
+
+#[test]
+fn css_rtl_thumb_track_click_and_drag_follow_the_mirrored_axis() {
+    use crate::source::constraints::scrolling::{
+        scroll_bar_constraint::ScrollBarConstraint, scroll_constraint::ScrollConstraint,
+    };
+    use crate::source::math::vec2d::Vec2D;
+    for track_rtl in [false, true] {
+        let f = css_rtl_thumb_scene(track_rtl);
+        let bar = f
+            .artboard
+            .with_artboard(|a| a.find_all_handles::<ScrollBarConstraint>())[0]
+            .clone();
+        ScrollBarConstraint::hit_track(&bar, Vec2D::new(150.0, 35.0));
+        f.advance(2);
+        assert_eq!(
+            css_axis_scroll(&f).with_downcast::<ScrollConstraint, _>(ScrollConstraint::offset_x),
+            Some(-450.0)
+        );
+        ScrollBarConstraint::drag_thumb(&bar, Vec2D::new(50.0, 0.0), 0.1);
+        f.advance(2);
+        assert_eq!(
+            css_axis_scroll(&f).with_downcast::<ScrollConstraint, _>(ScrollConstraint::offset_x),
+            Some(-300.0)
+        );
+        assert_eq!(f.world_origin("Thumb").0, 100.0);
+        ScrollBarConstraint::drag_thumb(&bar, Vec2D::new(-50.0, 0.0), 0.2);
+        assert_eq!(
+            css_axis_scroll(&f).with_downcast::<ScrollConstraint, _>(ScrollConstraint::offset_x),
+            Some(-450.0)
+        );
+    }
+}
+
+#[test]
+fn css_rtl_focus_scrolls_offscreen_items_in_logical_offsets() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint, focus_data::FocusData,
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Viewport",
+            [
+                vec![U(DISPLAY, 1), U(DIRECTION, 2), U(OVERFLOW_X, 3)],
+                width(100.0).to_vec(),
+                height(40.0).to_vec(),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(0),
+                ..css(
+                    "Content",
+                    [
+                        vec![U(DISPLAY, 1), F(FLEX_SHRINK, 0.0)],
+                        width(300.0).to_vec(),
+                        height(40.0).to_vec(),
+                    ]
+                    .concat(),
+                    vec![
+                        css(
+                            "A",
+                            [
+                                vec![F(FLEX_SHRINK, 0.0)],
+                                width(100.0).to_vec(),
+                                height(40.0).to_vec(),
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                        css(
+                            "B",
+                            [
+                                vec![F(FLEX_SHRINK, 0.0)],
+                                width(100.0).to_vec(),
+                                height(40.0).to_vec(),
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                        B {
+                            text_input: true,
+                            text: "focus",
+                            ..css(
+                                "C",
+                                [
+                                    vec![F(FLEX_SHRINK, 0.0)],
+                                    width(100.0).to_vec(),
+                                    height(40.0).to_vec(),
+                                ]
+                                .concat(),
+                                vec![],
+                            )
+                        },
+                    ],
+                )
+            }],
+        ),
+    );
+    let scroll = css_axis_scroll(&f);
+    assert_eq!(
+        scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::viewport_width),
+        Some(100.0)
+    );
+    assert_eq!(f.world_origin("C").0, -200.0);
+    let focus = f
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<FocusData>())[0]
+        .clone();
+    let machine = f.machine();
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    f.advance(2);
+    assert!(f.field_is_focused());
+    assert_eq!(
+        scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::offset_x),
+        Some(-200.0)
+    );
+    assert_eq!(f.world_origin("C").0, 0.0);
+}
+
+#[test]
+fn css_fractional_index_resolves_percentage_gaps_against_the_content_box() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for rtl in [false, true] {
+        let f = scene(
+            (1000.0, 300.0),
+            css(
+                "Viewport",
+                [
+                    vec![
+                        U(DISPLAY, 1),
+                        U(DIRECTION, if rtl { 2 } else { 1 }),
+                        U(OVERFLOW_X, 3),
+                    ],
+                    width(100.0).to_vec(),
+                    height(20.0).to_vec(),
+                ]
+                .concat(),
+                vec![B {
+                    scroll: Some(0),
+                    ..css(
+                        "Content",
+                        [
+                            vec![U(DISPLAY, 1), F(FLEX_SHRINK, 0.0), F(COLUMN_GAP + 1, 10.0)],
+                            width(400.0).to_vec(),
+                            height(20.0).to_vec(),
+                        ]
+                        .concat(),
+                        ["A", "B", "C", "D"]
+                            .into_iter()
+                            .map(|name| {
+                                css(
+                                    name,
+                                    [
+                                        vec![F(FLEX_SHRINK, 0.0)],
+                                        width(60.0).to_vec(),
+                                        height(20.0).to_vec(),
+                                    ]
+                                    .concat(),
+                                    vec![],
+                                )
+                            })
+                            .collect(),
+                    )
+                }],
+            ),
+        );
+        let scroll = css_axis_scroll(&f);
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(0.5));
+        f.advance(2);
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+            Some((-50.0, 0.5))
+        );
+    }
+}
+
+#[test]
+fn css_rtl_thumb_overscroll_shrink_stays_at_the_mirrored_edge() {
+    use crate::source::constraints::scrolling::{
+        elastic_scroll_physics::ElasticScrollPhysics, scroll_bar_constraint::ScrollBarConstraint,
+        scroll_constraint::ScrollConstraint,
+    };
+    for track_rtl in [false, true] {
+        let f = css_rtl_thumb_scene(track_rtl);
+        let bar = f
+            .artboard
+            .with_artboard(|a| a.find_all_handles::<ScrollBarConstraint>())[0]
+            .clone();
+        bar.with_downcast_mut::<ScrollBarConstraint, _>(|bar| bar.base.set_auto_size_value(true));
+        let scroll = css_axis_scroll(&f);
+        let physics = scroll
+            .insert_sibling(ElasticScrollPhysics::default())
+            .unwrap();
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+            s.set_physics(physics);
+            s.prime_physics();
+        });
+        for offset in [60.0, -660.0] {
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                s.set_authored_scroll_offset_x(offset)
+            });
+            f.advance(4);
+            let left = f.world_origin("Thumb").0;
+            let width = f.bounds("Thumb")[2];
+            assert!(width < 100.0 && width > 0.0, "{width}");
+            if offset > 0.0 {
+                assert!((left + width - 300.0).abs() < 0.01, "{left}, {width}");
+            } else {
+                assert!(left.abs() < 0.01, "{left}");
+            }
+        }
+    }
 }
 
 /// A CSS viewport's scroll bar thumb shows its visible share of the

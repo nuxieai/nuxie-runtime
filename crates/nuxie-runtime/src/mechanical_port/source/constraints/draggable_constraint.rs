@@ -321,6 +321,19 @@ impl DraggableConstraintListenerGroup {
                 state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
             }
             self.draggable.borrow_mut().start_drag(position, time_stamp);
+            self.constraint.with_downcast_mut::<
+                crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint,
+                _,
+            >(|constraint| {
+                if let Some(physics) = constraint.physics() {
+                    physics.with_mut(|object| {
+                        crate::mechanical_port::source::constraints::scrolling::scroll_physics::from_core_mut(object)
+                            .expect("ScrollPhysics-derived occurrence")
+                            .physics_mut()
+                            .set_pointer_time(state_machine_instance.pointer_scroll_clock().then_some(time_stamp));
+                    });
+                }
+            });
             self.scrolling_pointer_id.set(-1);
         } else if hit_event == ListenerType::Move && phase == GestureClickPhase::Down {
             use crate::mechanical_port::source::listener_group::ListenerGroupBehavior;

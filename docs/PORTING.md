@@ -1760,6 +1760,28 @@ refusal, readmission, accepted queued messages, opacity refusal, and unchanged
 raw dispatch on the same disabled file node. Tracking:
 [UNIV-3928](https://universe.basis.dev/issue/UNIV-3928).
 
+### Pointer-clock scroll velocity (X5)
+
+`StateMachineInstance::set_pointer_scroll_clock(true)` is an opt-in, per
+instance, that makes a ScrollConstraint's physics measure a drag's speed from
+the time stamps the host passes with its pointer events, instead of the wall
+clock at which the events arrive. It is for hosts that replay a drag on their
+own clock, such as the editor's screenshot tool, which draws frames faster or
+slower than real time and must settle a flick where a phone would. The
+timestamped `pointer_down_at` and `pointer_up_at` carry the same clock as
+`pointer_move`, and a nested artboard's or component list item's machine takes
+its host's setting when a press reaches it.
+
+Off by default, so every other host keeps upstream's clock: at recorded pin
+`5551696a`, `src/constraints/scrolling/scroll_physics.cpp:8-33` reads
+`std::chrono::high_resolution_clock` unless the global deterministic mode is
+on, and then truncates the stamp into its integer `m_lastTime`. The opt-in
+keeps a separate floating baseline per drag and leaves that path unchanged.
+`clock_contract_tests` in `scroll_physics.rs` and
+`pointer_clock_drag_settles_identically_despite_dispatch_delays` in
+`tests/upstream_scroll_input.rs` pin it. Tracking:
+[UNIV-4773](https://universe.basis.dev/issue/UNIV-4773).
+
 ### Atomic checked host replacements
 
 `runtime_checked_value_write_batch` is an additive host API for one atomic

@@ -24,6 +24,9 @@ class LaneTests(unittest.TestCase):
             for tool in ('make', 'rustup', 'git', 'sudo', 'python3', 'tools/bazel/install.sh',
                          'tools/bazel/runtime.py', 'build/build_rive.sh'):
                 functions += 'function ' + tool + ' { record ' + tool + ' "$@"; }\n'
+            # Record the group, then run each of its checks through the same recorders.
+            functions += ('function tools/report-all.sh { record tools/report-all.sh "$@"; shift; '
+                          'while [ "$#" -gt 0 ]; do eval "$2"; shift 2; done; }\n')
             subprocess.run(['/bin/bash', '-c', functions + step['command']], cwd=root,
                            env={**os.environ, 'REAL_PYTHON': sys.executable, 'RECORDER': str(recorder),
                                 'CALLS': str(calls), 'CARGO_INCREMENTAL': '0', 'RIVE_PREMAKE_TAG': 'fixture-tag', 'RIVE_RUNTIME_REF': 'fixture-ref'},
@@ -90,6 +93,23 @@ class LaneTests(unittest.TestCase):
                 ])
                 if environment:
                     self.assertIn('target/renderer-*/**/*.log', step['artifact_paths'])
+
+    def test_nightly_runs_each_check_and_the_workspace_suite_with_the_oracle(self):
+        for environment in ({}, {'NUXIE_CI_RUNNER_POLICY_VERSION': '2'}):
+            with self.subTest(environment=environment):
+                step = next(step for step in pipeline(environment)['steps']
+                            if step['label'] == ':linux: Nightly full runtime confidence')
+                calls = self.execute(step)
+                group = next(call for call in calls if call[0] == 'tools/report-all.sh')
+                checks = dict(zip(group[2::2], group[3::2]))
+                self.assertEqual(checks['workspace tests with the C++ oracle'],
+                                 "make test TEST_ARGS='--exclude nuxie-renderer'")
+                self.assertEqual(checks['format and check'], 'make fmt-check check')
+                # Only setup precedes the group, so no cheap check can stop the suite.
+                before = calls[:calls.index(group)]
+                self.assertEqual([call for call in before if call[0] == 'make'], [['make', 'fixtures']])
+                self.assertIn(['make', 'test', 'TEST_ARGS=--exclude nuxie-renderer'], calls)
+                self.assertNotIn('tools/bazel/runtime.py', [call[0] for call in calls])
 
     def test_half_activation_and_unknown_settings_fail_before_dispatch(self):
         for environment in ({'NUXIE_SDK_SPLIT_LANES': '1'}, {'NUXIE_CI_RUNNER_POLICY_VERSION': '3'},

@@ -23,7 +23,11 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 
 ## Development
 
-The compatibility oracle uses a separate checkout of the upstream C++ runtime:
+The compatibility oracle uses a separate checkout of the upstream C++ runtime,
+at the commit the Makefile pins as `RIVE_RUNTIME_REF`. Tests read upstream
+fixtures from it, so `tools/bazel/runtime.py test` refuses any other commit.
+`make test` also builds the pinned C++ probe (`make cpp-probe`) and passes it
+as `RIVE_CPP_PROBE`; a comparison test fails, never passes, without it:
 
 ```sh
 tools/bazel/install.sh

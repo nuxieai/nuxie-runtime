@@ -593,3 +593,148 @@ fn moved_vm_survives_removing_its_original_row() {
     assert_eq!(vm(&child(&s.d).unwrap()), model);
     close(val(&count, 575), 8.0);
 }
+
+#[test]
+fn semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() {
+    use source::{
+        focus_data::FocusData, semantic::semantic_data::SemanticData, text::text_input::TextInput,
+    };
+    use std::collections::HashSet;
+    for focused in [false, true] {
+        let mut s = Scene::from_bytes(&fixture::semantic_fixture());
+        s.machine.with_instance_mut(|m| m.enable_semantics());
+        let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+        let unit = child(&s.s).unwrap();
+        let boundary = unit.with_artboard(|b| b.semantic_boundary_node()).unwrap();
+        let nodes = unit.with_artboard(|b| b.find_all_handles::<SemanticData>());
+        let ids: HashSet<_> = nodes
+            .iter()
+            .map(|h| {
+                h.with_downcast::<SemanticData, _>(|d| {
+                    d.existing_semantic_node().unwrap().borrow().id()
+                })
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(ids.len(), 3);
+        let field = nodes
+            .iter()
+            .find_map(|h| {
+                h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
+                    .flatten()
+                    .filter(|n| n.borrow().role == 6)
+            })
+            .unwrap();
+        let group_id = nodes
+            .iter()
+            .find_map(|h| {
+                h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
+                    .flatten()
+                    .filter(|n| n.borrow().role == 9)
+            })
+            .unwrap()
+            .borrow()
+            .id();
+        let field_id = field.borrow().id();
+        let text = unit
+            .with_artboard(|b| b.find_handle::<TextInput>("edit"))
+            .unwrap();
+        text.with_downcast_mut::<TextInput, _>(|t| t.text_input("hello mascot"));
+        let focus_node = unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+            .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+            .flatten()
+            .unwrap();
+        let focus_manager = unit.with_artboard(|b| b.focus_manager()).unwrap();
+        if focused {
+            focus_manager.with_focus_manager_mut(|m| m.set_focus(focus_node.clone()));
+        }
+        let check = |host: &CoreHandle| {
+            let snapshot = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+            let unique: HashSet<_> = snapshot.iter().map(|n| n.id).collect();
+            assert_eq!(
+                unique.len(),
+                snapshot.len(),
+                "duplicate semantic ids: {snapshot:?}"
+            );
+            let parent =
+                SemanticData::find_closest_semantic_node_handle(Some(host.clone())).unwrap();
+            assert_eq!(
+                boundary.borrow().parent().unwrap().borrow().id(),
+                parent.borrow().id()
+            );
+            for id in &ids {
+                assert_eq!(snapshot.iter().filter(|n| n.id == *id).count(), 1);
+            }
+            assert_eq!(
+                snapshot
+                    .iter()
+                    .find(|n| n.id == group_id)
+                    .unwrap()
+                    .parent_id,
+                parent.borrow().id() as i32
+            );
+            let mut descendants = HashSet::from([group_id]);
+            loop {
+                let old_len = descendants.len();
+                for node in &snapshot {
+                    if descendants.contains(&(node.parent_id as u32)) {
+                        descendants.insert(node.id);
+                    }
+                }
+                if descendants.len() == old_len {
+                    break;
+                }
+            }
+            assert_eq!(descendants, ids);
+            assert_eq!(field.borrow().id(), field_id);
+            assert_eq!(
+                snapshot
+                    .iter()
+                    .find(|n| n.id == field_id)
+                    .unwrap()
+                    .state_flags
+                    & (1 << 7)
+                    != 0,
+                focused
+            );
+            assert_eq!(
+                snapshot.iter().find(|n| n.id == field_id).unwrap().label,
+                "mascot field"
+            );
+            assert_eq!(
+                text.with_downcast::<TextInput, _>(|t| t.text().to_owned())
+                    .unwrap(),
+                "hello mascot"
+            );
+            assert_eq!(
+                text.with_downcast::<TextInput, _>(|t| t.is_focused())
+                    .unwrap(),
+                focused
+            );
+            assert_eq!(
+                focus_manager.with_focus_manager(|m| m.has_primary_focus(&focus_node)),
+                focused
+            );
+        };
+        check(&s.s);
+        s.begin();
+        check(&s.f);
+        s.advance(0.1);
+        check(&s.f);
+        s.end();
+        check(&s.d);
+        s.moves.step_begin(&s.root, "A", None).unwrap();
+        check(&s.s);
+        s.moves.step_end(&s.root, "A", None).unwrap();
+        check(&s.s);
+        // Repeat with a return flight to catch links retained across several moves.
+        s.begin();
+        check(&s.f);
+        s.end();
+        check(&s.d);
+        s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
+        check(&s.f);
+        s.moves.step_end(&s.root, "A", Some("back")).unwrap();
+        check(&s.s);
+    }
+}

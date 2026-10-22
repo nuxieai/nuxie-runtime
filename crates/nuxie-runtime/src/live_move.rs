@@ -493,13 +493,32 @@ pub fn move_instance(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
             });
         }
     }
-    // Reuse the semantic rehome machinery without the stateful swap path.
     if let Some(manager) = parent_board
         .with_downcast::<Artboard, _>(Artboard::semantic_manager_handle)
         .flatten()
     {
         let parent_node = SemanticData::find_closest_semantic_node_handle(Some(to.clone()));
-        instance.build_semantic_tree(Some(manager), parent_node);
+        let (previous_manager, boundary) =
+            instance.with_artboard(|b| (b.semantic_manager(), b.semantic_boundary_node()));
+        if let Some(boundary) = boundary.filter(|_| {
+            previous_manager
+                .as_ref()
+                .is_some_and(|previous| previous.ptr_eq(&manager))
+        }) {
+            // A live move within one player keeps the whole semantic subtree.
+            // Building it again appends the same nodes to both hosts and to
+            // their existing parents. Detach only the boundary, then attach
+            // it once. Descendant registrations and SDK field ids stay intact.
+            manager.remove_child(&boundary);
+            manager.add_child(parent_node, boundary);
+            instance.with_artboard_mut(|b| b.mark_semantic_boundary_transform_dirty());
+        } else {
+            // First semantic mount, or a separately enabled nested manager.
+            // Use the ordinary cleanup/build path when registrations cannot
+            // stay in the destination manager.
+            instance.cleanup_semantic_tree();
+            instance.build_semantic_tree(Some(manager), parent_node);
+        }
     }
     adopt_props(to, &instance);
     // add_data_bind binds only the newly adopted prop templates. Do not

@@ -110,3 +110,30 @@ Round 2 restores nux-capi's existing `runtime-test-support` dev dependency. Its 
 | `test -p nuxie-runtime --test source_registry_layout_callbacks` | 6 passed, 0 failed, 0 ignored. | `round2layout1` |
 
 All four requests return exit code 0. The generated-file check, surface guard, and diff whitespace check also pass. No Cargo or Bazel command was invoked directly. No commit was made.
+
+
+Round 3 fixes the duplicate semantic identities seen on the Bat Phone after the first takeoff. The device evidence is `live-moves-device-check/data/iphone-20261022T014507Z-97384/checks.log` in the handoff repository. It reports `duplicateIdentity(4)` immediately after `step_begin`. The new C API regression reproduced the same failure before the fix. Its first flight snapshot contained 27 entries but only 10 unique IDs. The moved group appeared under both the source and flight slots. Rebuilding also appended its existing children again. The failing runner IDs are `round3capired1` and `round3red2`.
+
+The fix is in `crates/nuxie-runtime/src/live_move.rs`. When the source and destination share a semantic manager, the move removes the existing boundary from its old parent and attaches it once under the destination. It preserves the boundary, all descendants, their registrations, and their IDs. It marks the boundary transform dirty so semantic bounds follow the current host. It does not rebuild the live subtree. The ordinary cleanup and build path handles first semantic mounts or a different nested manager. No ported upstream files changed.
+
+`live_move_fixture::semantic_fixture` adds explicit semantic nodes for each slot and for the unit's group, TextInput, and button. The runtime regression checks the manager snapshot and internal boundary parent. The C API regression calls `nux_player_semantic_snapshot`, `nux_semantic_snapshot_info`, and `nux_semantic_snapshot_node`, which are the SDK snapshot path. It acknowledges the current render revision at each boundary without advancing between the move and snapshot. It also reads the live field text through `nux_player_field_string_copy` using the original semantic ID.
+
+Each regression checks 10 snapshots in each of two cases, focused and unfocused. Each case performs seven moves. It covers first takeoff, a frame in flight, landing, a direct return home, another outward flight, and a return flight. Every snapshot has unique IDs. The unit has exactly three exported semantic nodes, each present once under its current slot. The internal boundary is omitted from exported snapshots and is checked separately by the runtime test. The C API snapshot has 10 nodes before and during the first flight, then 7 after discarding the destination's fresh instance. The original TextInput ID remains stable across all seven moves. Its text stays `hello mascot`, or 12 UTF-8 bytes. Its focused bit stays 128 in the focused case and 0 in the unfocused case. The same focus leaf and focused TextInput survive every boundary.
+
+| Round 3 command | Result | Runner ID |
+| --- | --- | --- |
+| `test -p nuxie-runtime --test live_moves` | 13 passed, 0 failed, 0 ignored. | `round3moves2` |
+| `test -p nux-capi --lib live_moves` | 3 passed, 0 failed, 0 ignored. | `round3capi3` |
+| `test -p nux-capi` | 212 passed, 0 failed, 0 ignored. All 20 targets passed. | `round3capifull1` |
+| `check -p nux-capi --all-targets` | All 24 targets built. | `round3check1` |
+| `test -p nuxie-runtime --test upstream_semantic_artboard_swap` | 8 passed, 0 failed, 0 ignored. | `round3semantics1` |
+| `test -p nuxie-runtime --test upstream_semantic_data_lifecycle` | 13 passed, 0 failed, 0 ignored. | `round3semantics2` |
+| `test -p nuxie-runtime --test semantic_focus_runtime` | 10 passed, 0 failed, 0 ignored. | `round3semantics3` |
+
+All seven final runner requests return exit code 0. The runtime row timing check measured 47.85 ms for 100 advances with 40 active rows, 2.07 ms with 39 collapsed, and 1.84 ms for the one-row baseline. Advance counts remain 81 versus 3. Geometry draw counts remain 40 versus 1.
+
+The surface guard, Rust formatting check, and diff whitespace check pass. The generated-file check reports one stale file, `crates/nuxie-runtime/BUILD.bazel`. Comparing its generated content shows only the missing target for the pre-existing untracked `tests/live_moves_device_fixture.rs`. That throwaway device fixture and the tracked BUILD file are untouched. This fix adds no manifests, dependencies, exports, headers, or target declarations.
+
+The first attempt used the wrong fixture property name, `roleValue`, and failed before reaching a move. It was corrected to `role`. The first fix build also caught an ArtboardInstance closure signature mismatch. Both are resolved in the final runs above. The two red regression runs listed above show the actual duplicate snapshot failure before the semantic rehome fix. No final test failure remains.
+
+The iOS device harness has not been rerun here. Repeat the Bat Phone check and the Android harness with the fixed library. Verify that the native text editor, IME composition, and accessibility elements stay attached to the stable semantic IDs through every boundary. The snapshot tests prove the runtime and C API contract. They do not prove platform reconciliation. Typed-text writeback from the device finding remains a separate open question. No Cargo or Bazel command was invoked directly. No commit was made.

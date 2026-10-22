@@ -173,12 +173,16 @@ fn slot(
 }
 
 pub fn fixture(rows: usize) -> Vec<u8> {
-    build(rows, false)
+    build(rows, false, false)
 }
 pub fn control_fixture() -> Vec<u8> {
-    build(2, true)
+    build(2, true, false)
 }
-fn build(rows: usize, controls: bool) -> Vec<u8> {
+/// Slots and unit nodes have explicit semantics for snapshot identity tests.
+pub fn semantic_fixture() -> Vec<u8> {
+    build(2, false, true)
+}
+fn build(rows: usize, controls: bool, semantics: bool) -> Vec<u8> {
     use V::*;
     assert!(rows >= 2);
     let mut b = b"RIVE".to_vec();
@@ -360,6 +364,15 @@ fn build(rows: usize, controls: bool) -> Vec<u8> {
                 ],
             );
         }
+        if semantics {
+            for (parent, label) in [(host_id, "slot"), (layer_id + 1, "flight slot")] {
+                obj(
+                    &mut b,
+                    "SemanticData",
+                    &[("parentId", U(parent)), ("role", U(9)), ("label", S(label))],
+                );
+            }
+        }
         if i == 1 {
             timeline(&mut b, "entrance", 1, 13, 200.0, 300.0);
         }
@@ -431,6 +444,23 @@ fn build(rows: usize, controls: bool) -> Vec<u8> {
         &[("parentId", U(10)), ("layoutWidthScaleType", U(1))],
     ); // 11
 
+    if semantics {
+        for (parent, role, label) in [
+            (0, 9, "mascot unit"),
+            (2, 6, "mascot field"),
+            (3, 1, "mascot button"),
+        ] {
+            obj(
+                &mut b,
+                "SemanticData",
+                &[
+                    ("parentId", U(parent)),
+                    ("role", U(role)),
+                    ("label", S(label)),
+                ],
+            );
+        }
+    }
     timeline(&mut b, "walk", 1, 13, 0.0, 100.0);
     timeline(&mut b, "bob", 1, 14, 0.0, 100.0);
     machine(&mut b, true);

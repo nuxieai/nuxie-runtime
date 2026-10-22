@@ -465,6 +465,8 @@ pub struct LayoutComponent {
     /// CSS mode: the content box size last given to the content layout
     /// resizes, so a padding or border change alone resizes it again.
     propagated_content: Option<Vec2D>,
+    /// The anonymous CSS item's bounds, relative to this box's border box.
+    css_content_layout: Option<Layout>,
     /// Authored transform tracks and bindings are fixed at load, even when
     /// their current value is identity.
     css_transform_authored: bool,
@@ -519,6 +521,7 @@ impl Default for LayoutComponent {
             measured_natural: RefCell::new(Vec::new()),
             solved_border: [0.0; 4],
             propagated_content: None,
+            css_content_layout: None,
             css_transform_authored: false,
             css_effect_state: (false, false),
             scroll_range: Vec2D::default(),
@@ -3090,9 +3093,9 @@ impl LayoutComponent {
         }
     }
     /// A CSS leaf box places its content (text, images, shapes, groups,
-    /// nested artboards) at its content box's origin, its border and
-    /// padding, as a browser does, at each layout: bound, animated and
-    /// breakpoint padding all follow. The content is authored at (0, 0).
+    /// nested artboards) at its anonymous item's solved position. Taffy's
+    /// position includes border, padding and container alignment. The
+    /// content is authored at (0, 0).
     /// Translated boxes leave content where it was authored, as Rive does,
     /// and so does a box with layout children (docs/CSS_LAYOUT.md, 5).
     fn place_css_content_occurrence(owner: &CoreHandle) {
@@ -3112,9 +3115,10 @@ impl LayoutComponent {
                 let offset = if layout.is_leaf() {
                     let [top, _, _, left] = layout.solved_border;
                     let padding = layout.solved_padding;
+                    let item = layout.css_content_layout;
                     Vec2D::new(
-                        start.x + left + padding.left(),
-                        start.y + top + padding.top(),
+                        start.x + item.map_or(left + padding.left(), |item| item.left()),
+                        start.y + item.map_or(top + padding.top(), |item| item.top()),
                     )
                 } else {
                     Vec2D::default()
@@ -3357,6 +3361,19 @@ impl LayoutComponent {
             || (!self.is_artboard()
                 && (0..2).any(|axis| !self.natural_content_hosts(axis).is_empty())))
             && self.is_leaf()
+    }
+    /// Only content with a measurable size needs an anonymous CSS item.
+    /// Empty boxes keep Taffy's empty-container behavior.
+    fn has_css_content_item(&self) -> bool {
+        self.is_css_mode()
+            && self.is_leaf()
+            && self.measured_hosts()[0].iter().any(|host| {
+                host.with_mut(|object| object.as_text_mut().is_some())
+                    .unwrap_or(false)
+                    || self
+                        .natural_of(host)
+                        .is_some_and(|size| size.x != 0.0 || size.y != 0.0)
+            })
     }
     /// Records the natural size this box measured for `host`.
     fn note_measured_natural(&self, host: &CoreHandle, natural: Option<Vec2D>) {
@@ -3641,13 +3658,16 @@ impl LayoutComponent {
             self.is_css_mode(),
         );
     }
-    /// The size this box gives the content layout resizes: its border box,
-    /// as Rive gives it, or in CSS mode its content box, where Taffy
-    /// measured that content (docs/CSS_LAYOUT.md, 5).
+    /// The size this box gives the content layout resizes: its border box
+    /// in translated mode, or its anonymous item in CSS mode. Before a
+    /// solve, a CSS box falls back to its content box.
     fn propagated_size(&self) -> Vec2D {
         let (width, height) = (self.layout.width(), self.layout.height());
         if !self.is_css_mode() {
             return Vec2D::new(width, height);
+        }
+        if let Some(item) = self.css_content_layout {
+            return Vec2D::new(item.width(), item.height());
         }
         let [top, right, bottom, left] = self.solved_border;
         let padding = self.layout_padding;
@@ -3931,7 +3951,7 @@ impl LayoutComponent {
     #[cfg(debug_assertions)]
     fn verify_layout_against_fresh_solve(owner: &CoreHandle, available: (f32, f32)) {
         use crate::mechanical_port::source::layout::layout_tree::{
-            root_style, virtual_item_styles,
+            content_item_style, root_style, virtual_item_styles,
         };
         use taffy::prelude::{NodeId, Size, TaffyTree};
         type Context = (CoreHandle, LayoutNodeKind, bool, [bool; 2]);
@@ -3992,6 +4012,23 @@ impl LayoutComponent {
                 &mut style,
                 supported.map(|known| !known && parent_is_flex),
             );
+            let anonymous = owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .is_some_and(LayoutComponent::has_css_content_item)
+                })
+                .unwrap_or(false);
+            if anonymous {
+                ids.push(
+                    taffy
+                        .new_leaf_with_context(
+                            content_item_style(&style),
+                            (owner.clone(), LayoutNodeKind::Content, true, [true; 2]),
+                        )
+                        .ok()?,
+                );
+            }
             let id = taffy
                 .new_leaf_with_context(style, (owner.clone(), kind, measured, supported))
                 .ok()?;
@@ -4217,6 +4254,7 @@ impl LayoutComponent {
             }
         }
         ids.extend(tree.sync_virtual_items(id, virtual_rows, virtual_columns));
+        ids.extend(Self::sync_css_content_item(tree, id, touched));
         let old = tree.taffy.child_ids(id).collect::<Vec<_>>();
         if old != ids {
             let kept = ids
@@ -4227,6 +4265,31 @@ impl LayoutComponent {
             tree.taffy.set_children(id, &ids).expect("live layout node");
             touched.push(id);
         }
+    }
+
+    fn sync_css_content_item(
+        tree: &mut LayoutTree,
+        id: taffy::prelude::NodeId,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+    ) -> Option<taffy::prelude::NodeId> {
+        let context = tree.taffy.get_node_context(id)?;
+        if context.kind != LayoutNodeKind::Layout {
+            return None;
+        }
+        let enabled = context
+            .owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .is_some_and(Self::has_css_content_item)
+            })
+            .unwrap_or(false);
+        let previous = context.content_item;
+        let item = tree.sync_content_item(id, enabled);
+        if item != previous {
+            touched.push(id);
+        }
+        item
     }
 
     /// Apply child-list changes below `id`, descending only along the marked
@@ -4340,6 +4403,13 @@ impl LayoutComponent {
                 }
                 if invalidate {
                     tree.taffy.mark_dirty(id).expect("live layout node");
+                    if let Some(item) = tree
+                        .taffy
+                        .get_node_context(id)
+                        .and_then(|context| context.content_item)
+                    {
+                        tree.taffy.mark_dirty(item).expect("live content item");
+                    }
                 }
                 touched.push(id);
                 virtual_tracks
@@ -4347,6 +4417,7 @@ impl LayoutComponent {
             if let Some(Some((rows, columns))) = virtual_tracks {
                 Self::sync_layout_virtual_items(tree, id, &rows, &columns, touched);
             }
+            Self::sync_css_content_item(tree, id, touched);
         }
     }
 
@@ -4382,7 +4453,7 @@ impl LayoutComponent {
                         .and_then(LayoutParticipant::measurement_host_handle)
                         .into_iter()
                         .collect(),
-                    LayoutNodeKind::Layout => {
+                    LayoutNodeKind::Layout | LayoutNodeKind::Content => {
                         let [width, height] = object
                             .as_layout_component()
                             .expect("layout measurement owner")
@@ -4398,15 +4469,21 @@ impl LayoutComponent {
             .flatten();
         // A CSS box's contents without a minimum add nothing to it, and the
         // rest still count (docs/CSS_LAYOUT.md, 5).
-        let css = kind == LayoutNodeKind::Layout
-            && owner
-                .with(|object| {
-                    object
-                        .as_layout_component()
-                        .is_some_and(LayoutComponent::is_css_mode)
-                })
-                .unwrap_or(false);
-        hosts.map(|hosts| [css || hosts.iter().all(host_supports_min_content_width); 2])
+        let css = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .is_some_and(LayoutComponent::is_css_mode)
+            })
+            .unwrap_or(false);
+        let css_participant = owner
+            .with_downcast::<LayoutParticipant, _>(|participant| participant.css_record().is_some())
+            .unwrap_or(false);
+        hosts.map(|hosts| {
+            [css || hosts
+                .iter()
+                .all(|host| host_supports_min_content_width(host, css_participant)); 2]
+        })
     }
 
     /// A mounted artboard is an opaque host. On an axis where it has a
@@ -4539,6 +4616,9 @@ impl LayoutComponent {
             let Some(context) = tree.taffy.get_node_context(id) else {
                 return;
             };
+            if context.kind == LayoutNodeKind::Content {
+                return;
+            }
             let (owner, kind, measured, old_supported, old_zero) = (
                 context.owner.clone(),
                 context.kind,
@@ -4874,7 +4954,7 @@ impl LayoutComponent {
                     return taffy::prelude::Size::ZERO;
                 };
                 host.map(|host| {
-                    let supports = host_supports_min_content_width(&host);
+                    let supports = host_supports_min_content_width(&host, css_text_owner);
                     minimum_contract(
                         measure_fit_content(
                             (offer(width, width_mode), width_mode),
@@ -4899,7 +4979,7 @@ impl LayoutComponent {
                 })
                 .unwrap_or_default()
             }
-            LayoutNodeKind::Layout => {
+            LayoutNodeKind::Layout | LayoutNodeKind::Content => {
                 let Some((hosts, (width_mode, height_mode), hugs)) = owner.with(|object| {
                     let layout = object
                         .as_layout_component()
@@ -4928,8 +5008,10 @@ impl LayoutComponent {
                 let measure_children = |children: &[CoreHandle]| {
                     // In a CSS box a content without a minimum adds nothing,
                     // and the rest still count.
-                    let supports =
-                        css_owner || children.iter().all(host_supports_min_content_width);
+                    let supports = css_owner
+                        || children
+                            .iter()
+                            .all(|host| host_supports_min_content_width(host, false));
                     minimum_contract(
                         measure_fit_content(
                             (width, width_mode),
@@ -4939,7 +5021,7 @@ impl LayoutComponent {
                             (intrinsic_width || min_content) && supports,
                             || {
                                 children.iter().try_fold(0.0f32, |minimum, child| {
-                                    if css_owner && !host_supports_min_content_width(child) {
+                                    if css_owner && !host_supports_min_content_width(child, true) {
                                         return Some(minimum);
                                     }
                                     host_min_content_width(
@@ -4961,7 +5043,7 @@ impl LayoutComponent {
                                     // minimum adds no minimum height either.
                                     if !(css_owner
                                         && min_content_height
-                                        && !host_supports_min_content_width(child))
+                                        && !host_supports_min_content_width(child, true))
                                     {
                                         measured.y = measured.y.max(next.y);
                                     }
@@ -5054,6 +5136,18 @@ impl LayoutComponent {
             let Some(context) = tree.taffy.get_node_context(id) else {
                 continue;
             };
+            if context.kind == LayoutNodeKind::Content {
+                continue;
+            }
+            let content_layout = context.content_item.map(|item| {
+                let output = tree.taffy.layout(item).expect("solved content item");
+                Layout::new(
+                    output.location.x,
+                    output.location.y,
+                    output.size.width,
+                    output.size.height,
+                )
+            });
             let output = tree.taffy.layout(id).expect("solved layout node");
             let hoisted = Self::hoisted_offset(tree, id);
             let next = Layout::new(
@@ -5111,9 +5205,11 @@ impl LayoutComponent {
                                 layout.grid_row_gap,
                             ) = grid;
                         }
-                        let padding_changed = layout.solved_padding != padding
+                        let padding_changed = layout.css_content_layout != content_layout
+                            || layout.solved_padding != padding
                             || layout.solved_border != border
                             || layout.scroll_range != scroll_range;
+                        layout.css_content_layout = content_layout;
                         layout.solved_padding = padding;
                         layout.solved_border = border;
                         layout.scroll_range = scroll_range;

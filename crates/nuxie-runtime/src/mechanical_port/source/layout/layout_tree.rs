@@ -53,6 +53,8 @@ impl LayoutNodeLink {
 pub(crate) enum LayoutNodeKind {
     Layout,
     Participant,
+    /// The measured content of a CSS leaf, with no corresponding provider.
+    Content,
 }
 
 pub(crate) struct LayoutNodeContext {
@@ -68,6 +70,7 @@ pub(crate) struct LayoutNodeContext {
     /// Taffy-only grid items standing in for a virtualized grid's
     /// unrealized items; appended after the realized children.
     pub(crate) virtual_items: Vec<NodeId>,
+    pub(crate) content_item: Option<NodeId>,
 }
 
 pub(crate) struct LayoutTree {
@@ -92,6 +95,7 @@ impl LayoutTree {
                     minimum_supported: [true; 2],
                     zero_auto_minimums: [false; 2],
                     virtual_items: Vec::new(),
+                    content_item: None,
                 },
             )
             .expect("new layout root");
@@ -130,6 +134,7 @@ impl LayoutTree {
                     minimum_supported: [true; 2],
                     zero_auto_minimums: [false; 2],
                     virtual_items: Vec::new(),
+                    content_item: None,
                 },
             )
             .expect("new layout node")
@@ -162,13 +167,52 @@ impl LayoutTree {
                 continue;
             }
             pending.extend(self.taffy.child_ids(node).collect::<Vec<_>>());
-            if let Some(context) = self.taffy.get_node_context(node) {
+            if let Some(context) = self.taffy.get_node_context(node)
+                && context.kind != LayoutNodeKind::Content
+            {
                 dropped.push((context.owner.clone(), self.link(node)));
             }
             self.taffy.remove(node).expect("live layout node");
             removed.insert(node);
         }
         dropped
+    }
+
+    /// Keep one measured anonymous item under a CSS leaf. It has CSS's
+    /// initial item properties; its owner supplies only the measure function.
+    pub(crate) fn sync_content_item(&mut self, container: NodeId, enabled: bool) -> Option<NodeId> {
+        let context = self
+            .taffy
+            .get_node_context(container)
+            .expect("live layout node");
+        let previous = context.content_item;
+        let item = if enabled {
+            if let Some(item) = previous {
+                Some(item)
+            } else {
+                let owner = context.owner.clone();
+                let item = self.new_node(owner, LayoutNodeKind::Content);
+                self.taffy.get_node_context_mut(item).unwrap().measured = true;
+                self.taffy
+                    .add_child(container, item)
+                    .expect("live content container");
+                Some(item)
+            }
+        } else {
+            if let Some(item) = previous {
+                self.taffy.remove(item).expect("live content item");
+            }
+            None
+        };
+        if let Some(item) = item {
+            let style = content_item_style(self.taffy.style(container).expect("live layout node"));
+            self.sync_style(item, &style);
+        }
+        self.taffy
+            .get_node_context_mut(container)
+            .unwrap()
+            .content_item = item;
+        item
     }
 
     /// Rebuild a grid container's stand-ins for unrealized items (see
@@ -202,6 +246,17 @@ impl LayoutTree {
             .expect("live grid container")
             .virtual_items = items.clone();
         items
+    }
+}
+
+/// An anonymous item establishes a block formatting context for its content.
+/// With no children, its display only selects the measured leaf path.
+pub(crate) fn content_item_style(container: &Style) -> Style {
+    Style {
+        display: Display::Block,
+        box_sizing: taffy::BoxSizing::ContentBox,
+        direction: container.direction,
+        ..Style::default()
     }
 }
 

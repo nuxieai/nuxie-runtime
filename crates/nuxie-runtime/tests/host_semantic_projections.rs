@@ -563,6 +563,10 @@ fn shape_catalog_with_null_record_fixture() -> Vec<u8> {
 }
 
 fn nested_artboard_layout_fixture() -> Vec<u8> {
+    nested_artboard_layout_fixture_with_paths(true)
+}
+
+fn nested_artboard_layout_fixture_with_paths(has_path: bool) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     push_var_uint(&mut bytes, 7);
     push_var_uint(&mut bytes, 0);
@@ -577,16 +581,18 @@ fn nested_artboard_layout_fixture() -> Vec<u8> {
     push_object(&mut bytes, "Shape", |bytes| {
         push_uint(bytes, "Node", "parentId", 0);
     });
-    push_object(&mut bytes, "Rectangle", |bytes| {
-        push_uint(bytes, "Node", "parentId", 1);
-        push_f32(bytes, "ParametricPath", "width", 20.0);
-        push_f32(bytes, "ParametricPath", "height", 10.0);
-    });
+    if has_path {
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+    }
     push_object(&mut bytes, "Fill", |bytes| {
         push_uint(bytes, "Node", "parentId", 1);
     });
     push_object(&mut bytes, "SolidColor", |bytes| {
-        push_uint(bytes, "Node", "parentId", 3);
+        push_uint(bytes, "Node", "parentId", if has_path { 3 } else { 2 });
         push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
     });
     push_object(&mut bytes, "Artboard", |bytes| {
@@ -714,6 +720,43 @@ fn empty_shape_and_path_bounds_follow_upstream_empty_or_nan_rejection() {
         }),
         "empty drawable bounds must not leak the finite [-f32::MAX, +f32::MAX] expansion sentinel: {retained:#?}"
     );
+}
+
+#[test]
+fn empty_shape_in_nested_layout_is_absent_from_geometry() {
+    let bytes = nested_artboard_layout_fixture_with_paths(false);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 1).expect("root artboard instance");
+    artboard.advance(0.0).expect("initial layout settles");
+
+    let child = artboard
+        .native_handle()
+        .with_artboard(|artboard| artboard.base.resolve_handle(1))
+        .and_then(|host| host.with(|object| object.nested_artboard_instance_handle()))
+        .flatten()
+        .expect("nested layout child");
+    let local = child
+        .with_artboard(|artboard| artboard.base.resolve_handle(1))
+        .and_then(|shape| shape.with(|object| object.semantic_provider_local_bounds()))
+        .flatten()
+        .expect("empty shape local bounds");
+    // A shape without paths keeps the inverted expansion sentinel. An
+    // empty PointsPath instead supplies zero bounds, so it misses this case.
+    assert_eq!(
+        local,
+        nuxie_runtime::source::math::aabb::Aabb::for_expansion()
+    );
+    for (catalogue, geometry) in [
+        ("visible", artboard.visible_geometry_with_bounds()),
+        ("retained", artboard.retained_geometry_with_bounds()),
+    ] {
+        assert!(
+            geometry.is_empty(),
+            "{catalogue} geometry must reject empty local bounds before transforming them: {geometry:#?}"
+        );
+    }
 }
 
 #[test]
@@ -928,6 +971,50 @@ fn nested_layout_geometry_preserves_the_child_occurrence_path() {
             child.path[0].artboard_global_id,
             child.path[1].artboard_global_id
         );
+    }
+}
+
+#[test]
+fn nested_layout_geometry_clips_at_the_host_without_losing_the_child() {
+    let bytes = nested_artboard_layout_fixture();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 1).expect("root artboard instance");
+    artboard.advance(0.0).expect("initial layout settles");
+    let host = artboard
+        .native_handle()
+        .with_artboard(|artboard| artboard.base.resolve_handle(1))
+        .expect("nested layout host");
+    assert!(CoreRegistry::set_double_handle(
+        &host,
+        i32::from(schema_property_key("Node", "x")),
+        95.0,
+    ));
+    artboard.advance(0.0).expect("host movement settles");
+
+    for (catalogue, geometry, right) in [
+        ("visible", artboard.visible_geometry_with_bounds(), 100.0),
+        ("retained", artboard.retained_geometry_with_bounds(), 105.0),
+    ] {
+        let child = geometry
+            .iter()
+            .find(|hit| hit.path.len() == 2 && hit.path[1].local_id == 1)
+            .unwrap_or_else(|| panic!("{catalogue} nested layout child is absent: {geometry:#?}"));
+        assert!(child.occurrence.is_empty());
+        assert_eq!(child.path[0].local_id, 1);
+        assert_ne!(
+            child.path[0].artboard_global_id,
+            child.path[1].artboard_global_id
+        );
+        for (got, expected) in [
+            (child.bounds.min_x, 85.0),
+            (child.bounds.min_y, 3.0),
+            (child.bounds.max_x, right),
+            (child.bounds.max_y, 13.0),
+        ] {
+            assert!((got - expected).abs() < 0.01, "{catalogue}: {child:#?}");
+        }
     }
 }
 

@@ -805,29 +805,27 @@ fn css_box_paints(
             .any(crate::mechanical_port::source::layout_component::css_paint_draws)
 }
 
-/// A painted CSS box's visible bounds in its artboard: its painted area
-/// with paint outsets, clipped as it draws by its ancestors' clips (their
-/// paths, rounded corners included). None when clipped away.
-fn css_box_visible_bounds(handle: &CoreHandle, clip: bool) -> Option<NativeAabb> {
-    let bounds = handle
-        .with_mut(|object| {
-            let layout = object.as_layout_component_mut()?;
-            let mut bounds = NativeAabb::default();
-            layout.painted_world_bounds(&mut bounds);
-            Some(bounds)
-        })
-        .flatten()?;
+/// Painted bounds in root space, clipped by the same paths selection uses.
+fn painted_visible_bounds(
+    handle: &CoreHandle,
+    bounds: NativeAabb,
+    artboard_to_root: NativeMat2D,
+    clip: bool,
+    spaces: &[(CoreHandle, NativeMat2D)],
+) -> Option<NativeAabb> {
     if !clip {
-        return Some(bounds);
+        return Some(artboard_to_root.map_bounding_box(bounds));
     }
     let corners = [
         NativeVec2D::new(bounds.left(), bounds.top()),
         NativeVec2D::new(bounds.right(), bounds.top()),
         NativeVec2D::new(bounds.right(), bounds.bottom()),
         NativeVec2D::new(bounds.left(), bounds.bottom()),
-    ];
-    let visible =
-        crate::source::semantic::semantic_provider::painted_box_visible_bounds(handle, corners)?;
+    ]
+    .map(|point| artboard_to_root * point);
+    let visible = crate::source::semantic::semantic_provider::painted_box_visible_bounds(
+        handle, corners, spaces,
+    )?;
     Some(NativeAabb::new(
         visible.min_x,
         visible.min_y,
@@ -836,10 +834,27 @@ fn css_box_visible_bounds(handle: &CoreHandle, clip: bool) -> Option<NativeAabb>
     ))
 }
 
+fn css_box_visible_bounds(
+    handle: &CoreHandle,
+    artboard_to_root: NativeMat2D,
+    clip: bool,
+    spaces: &[(CoreHandle, NativeMat2D)],
+) -> Option<NativeAabb> {
+    let bounds = handle
+        .with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let mut bounds = NativeAabb::default();
+            layout.painted_world_bounds(&mut bounds);
+            Some(bounds)
+        })
+        .flatten()?;
+    painted_visible_bounds(handle, bounds, artboard_to_root, clip, spaces)
+}
+
 /// Whether a painted CSS box's own paint covers `point` (in its artboard),
-/// inside every ancestor's clip, as visible-geometry selection asks.
+/// before ancestor clipping in the shared rendered clip walker.
 fn css_box_paints_at(handle: &CoreHandle, point: NativeVec2D) -> bool {
-    let painted = handle
+    handle
         .with(|object| {
             let layout = object.as_layout_component()?;
             let mut inverse = NativeMat2D::identity();
@@ -856,17 +871,7 @@ fn css_box_paints_at(handle: &CoreHandle, point: NativeVec2D) -> bool {
             Some(layout.css_paint_contains(inverse * point))
         })
         .flatten()
-        .unwrap_or(false);
-    painted
-        && handle
-            .with(|object| object.component_parent_handle())
-            .flatten()
-            .is_none_or(|parent| {
-                parent
-                    .with_mut(|object| object.component_hit_test_point(&point, true, false))
-                    .flatten()
-                    .unwrap_or(false)
-            })
+        .unwrap_or(false)
 }
 
 fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisibility) -> bool {
@@ -922,6 +927,7 @@ fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisi
 fn collect_geometry(
     artboard: &RuntimeArtboardInstanceHandle,
     artboard_to_root: NativeMat2D,
+    parent_spaces: &[(CoreHandle, NativeMat2D)],
     path_prefix: &[RuntimeGeometryHitPathSegment],
     occurrence: &[RuntimeGeometryHitOccurrence],
     visibility: GeometryVisibility,
@@ -931,6 +937,8 @@ fn collect_geometry(
     let Some(artboard_global_id) = source_artboard_global_id(artboard) else {
         return;
     };
+    let mut spaces = parent_spaces.to_vec();
+    spaces.push((artboard.core_handle(), artboard_to_root));
     // Our layer: a CSS artboard that paints itself is the bottom geometry.
     // It is seen, and selected, where it paints (docs/CSS_LAYOUT.md, 4.5).
     if let Some((handle, painted, covers)) = artboard.with_artboard(|instance| {
@@ -951,8 +959,8 @@ fn collect_geometry(
         if !visible {
             return None;
         }
-        // Whether its paint covers the query point, from the frame's space
-        // to its layout's, inside its own clip.
+        // Test its own paint in layout space. The shared walker below
+        // applies its frame clip and every clip through its hosts.
         let covers = query.map(|point| {
             let mut inverse = NativeMat2D::identity();
             if !artboard_to_root.invert(&mut inverse) {
@@ -961,19 +969,7 @@ fn collect_geometry(
             let point = inverse * render_to_native_point(point);
             let frame = root.bounds();
             let local = NativeVec2D::new(point.x - frame.left(), point.y - frame.top());
-            // Its own clip is its rounded frame, whatever its BoxPaint.
-            let in_clip = !root.clip()
-                || layout
-                    .css_box_geometry()
-                    .map_or(frame.contains(point), |geometry| {
-                        crate::css_layout::paint::overflow_clip_contains(
-                            local,
-                            geometry.bounds,
-                            geometry.radii,
-                            (true, true),
-                        )
-                    });
-            in_clip && layout.css_paint_contains(local)
+            layout.css_paint_contains(local)
         });
         Some((
             crate::source::core::CoreObject::core(root).handle()?,
@@ -981,8 +977,26 @@ fn collect_geometry(
             covers,
         ))
     }) && covers.is_none_or(|covers| covers)
+        && query.is_none_or(|point| {
+            crate::source::semantic::semantic_provider::painted_box_contains_point(
+                &handle,
+                render_to_native_point(point),
+                &spaces,
+            )
+        })
         && let Some(local_id) = local_id_for_handle(artboard, &handle)
-        && let Some(bounds) = painted.and_then(|painted| semantic_bounds(painted, artboard_to_root))
+        && let Some(bounds) = painted
+            .and_then(|painted| {
+                painted_visible_bounds(
+                    &handle,
+                    painted,
+                    artboard_to_root,
+                    visibility == GeometryVisibility::Visible,
+                    &spaces,
+                )
+            })
+            .filter(|bounds| !bounds.is_empty_or_nan())
+            .map(native_to_render_bounds)
     {
         let mut path = path_prefix.to_vec();
         path.push(RuntimeGeometryHitPathSegment {
@@ -1030,14 +1044,18 @@ fn collect_geometry(
         });
 
         if painted_box {
-            let to_root = |bounds: NativeAabb| {
-                Some(artboard_to_root.map_bounding_box(bounds))
+            let render_bounds = |bounds: NativeAabb| {
+                Some(bounds)
                     .filter(|bounds| !bounds.is_empty_or_nan())
                     .map(native_to_render_bounds)
             };
-            let visible =
-                css_box_visible_bounds(&handle, visibility == GeometryVisibility::Visible)
-                    .and_then(to_root);
+            let visible = css_box_visible_bounds(
+                &handle,
+                artboard_to_root,
+                visibility == GeometryVisibility::Visible,
+                &spaces,
+            )
+            .and_then(render_bounds);
             // Visible-geometry selection: where the box paints, inside its
             // ancestors' clips (docs/CSS_LAYOUT.md, 4.5). Taps keep the
             // rounded border box through interaction hit testing.
@@ -1053,7 +1071,13 @@ fn collect_geometry(
                     continue;
                 }
                 let artboard_point = inverse * render_to_native_point(point);
-                if !css_box_paints_at(&handle, artboard_point) {
+                if !css_box_paints_at(&handle, artboard_point)
+                    || !crate::source::semantic::semantic_provider::painted_box_contains_point(
+                        &handle,
+                        render_to_native_point(point),
+                        &spaces,
+                    )
+                {
                     continue;
                 }
             }
@@ -1080,6 +1104,7 @@ fn collect_geometry(
             collect_geometry(
                 &child,
                 artboard_to_root * host_transform,
+                &spaces,
                 &path,
                 occurrence,
                 visibility,
@@ -1127,6 +1152,7 @@ fn collect_geometry(
                 collect_geometry(
                     &child,
                     artboard_to_root * child_transform,
+                    &spaces,
                     &path,
                     &child_occurrence,
                     visibility,
@@ -1199,6 +1225,7 @@ impl ArtboardInstance {
         collect_geometry(
             &self.native_handle(),
             NativeMat2D::identity(),
+            &[],
             &[],
             &[],
             visibility,

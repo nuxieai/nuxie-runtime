@@ -107,6 +107,9 @@ struct B {
     component_bind_flags: u64,
     /// A LayerMask on this box, referring to another box by name.
     mask_source: Option<&'static str>,
+    /// An ancestor ClippingShape sourced from these rectangle paths.
+    clip_paths: Option<Vec<Vec<P>>>,
+    clip_fill_rule: u64,
     /// Translated mode: `LayoutComponentStyle` keys.
     style: Vec<P>,
     children: Vec<B>,
@@ -540,6 +543,29 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             if rect.grouped && node.text_in_groups {
                 entries.push(Entry::EmptyText(parent));
             }
+        }
+        if let Some(paths) = &node.clip_paths {
+            use crate::source::generated::shapes::clipping_shape_base::ClippingShapeBase;
+            entries.push(Entry::NamedShape("Clip source", index));
+            let source = slots(entries);
+            for props in paths {
+                entries.push(Entry::Record(
+                    RectangleBase::TYPE_KEY,
+                    props.clone(),
+                    source,
+                ));
+            }
+            entries.push(Entry::Record(
+                ClippingShapeBase::TYPE_KEY,
+                vec![
+                    U(ClippingShapeBase::SOURCE_ID_PROPERTY_KEY, source),
+                    U(
+                        ClippingShapeBase::FILL_RULE_PROPERTY_KEY,
+                        node.clip_fill_rule,
+                    ),
+                ],
+                index,
+            ));
         }
         if node.nested_field || node.nested_scroller {
             entries.push(Entry::Nested(index));
@@ -5526,6 +5552,74 @@ fn css_box_paint_carries_its_shadow_and_gradient() {
     );
 }
 
+fn clip_rectangle(x: f32, y: f32, width: f32, height: f32) -> Vec<P> {
+    vec![
+        F(NodeBase::X_PROPERTY_KEY, x + width / 2.0),
+        F(NodeBase::Y_PROPERTY_KEY, y + height / 2.0),
+        F(ParametricPathBase::WIDTH_PROPERTY_KEY, width),
+        F(ParametricPathBase::HEIGHT_PROPERTY_KEY, height),
+    ]
+}
+
+fn shape_clipped_box(css_mode: bool, radius: f32) -> Scene {
+    let card = if css_mode {
+        painted("Card", 0xff11_2233, sized_to(100.0, 50.0))
+    } else {
+        B {
+            name: "Card",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 50.0),
+            ],
+            paints: vec![Paint::Fill(0xff11_2233)],
+            ..B::default()
+        }
+    };
+    scene(
+        (400.0, 300.0),
+        B {
+            clip_paths: Some(vec![
+                [
+                    clip_rectangle(0.0, 0.0, 50.0, 50.0),
+                    vec![F(RectangleBase::CORNER_RADIUS_TL_PROPERTY_KEY, radius)],
+                ]
+                .concat(),
+            ]),
+            ..css("Clip", sized_to(100.0, 50.0), vec![card])
+        },
+    )
+}
+
+/// Whether the half-width shape clip is active when the card paints.
+fn card_draw_has_shape_clip(f: &Scene) -> bool {
+    let lines = f.draw_lines();
+    let draw = draw_at(&lines, 0xff11_2233);
+    let mut clipped = false;
+    let mut stack = Vec::new();
+    for line in &lines[..draw] {
+        match line.as_str() {
+            "save" => stack.push(clipped),
+            "restore" => clipped = stack.pop().expect("balanced renderer saves"),
+            _ if line.starts_with("clipPath") => {
+                let line = line.replace("-0", "0");
+                if line.contains("(50,0),(50,50),(0,50)") {
+                    clipped = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    clipped
+}
+
+/// CSS own paint is clipped by an ancestor's shape, while a translated
+/// proxy keeps the upstream draw stream without that clip.
+#[test]
+fn css_box_own_paint_keeps_ancestor_clipping_shape() {
+    assert!(card_draw_has_shape_clip(&shape_clipped_box(true, 0.0)));
+    assert!(!card_draw_has_shape_clip(&shape_clipped_box(false, 0.0)));
+}
+
 /// A CSS artboard's BoxPaint moves its background, not its own clip.
 #[test]
 fn css_artboard_box_paint_keeps_its_clip() {
@@ -6618,6 +6712,295 @@ fn css_painted_artboard_is_catalogued_geometry() {
         (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
         (0.0, 0.0, 400.0, 300.0)
     );
+}
+
+/// Bounds and selection share shape clips, while taps keep the upstream
+/// interaction chain, which does not test ClippingShape paths.
+#[test]
+fn css_box_shape_clip_agrees_for_selection_and_visible_bounds() {
+    let f = shape_clipped_box(true, 20.0);
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Card"]);
+    let bounds = visible[0].bounds;
+    assert_eq!(
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+        (0.0, 0.0, 50.0, 50.0)
+    );
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(25.0, 25.0));
+    assert_eq!(f.geometry_names(&hits), ["Card"]);
+    let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(75.0, 25.0));
+    assert!(hits.is_empty());
+    // This point is inside the visible bounds but outside the rounded
+    // source path, so the bounds prefilter cannot hide a wrong point test.
+    assert!(
+        host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(2.0, 2.0))
+            .is_empty()
+    );
+    assert!(tapped(&f, "Card", (2.0, 2.0)));
+    assert!(tapped(&f, "Card", (25.0, 25.0)));
+    assert!(tapped(&f, "Card", (75.0, 25.0)));
+}
+
+/// A hole in a shape clip must reject selection even inside its bounds.
+#[test]
+fn css_box_shape_clip_selection_preserves_even_odd_holes() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            clip_paths: Some(vec![
+                clip_rectangle(0.0, 0.0, 100.0, 50.0),
+                clip_rectangle(25.0, 10.0, 50.0, 30.0),
+            ]),
+            clip_fill_rule: 1,
+            ..css(
+                "Clip",
+                sized_to(100.0, 50.0),
+                vec![painted("Card", 0xff11_2233, sized_to(100.0, 50.0))],
+            )
+        },
+    );
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Card"]);
+    let bounds = visible[0].bounds;
+    assert_eq!(
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+        (0.0, 0.0, 100.0, 50.0)
+    );
+    assert_eq!(
+        f.geometry_names(
+            &host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(10.0, 25.0))
+        ),
+        ["Card"]
+    );
+    assert!(
+        host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(50.0, 25.0))
+            .is_empty()
+    );
+    assert!(tapped(&f, "Card", (50.0, 25.0)));
+}
+
+/// A painted nested CSS artboard and its painted child under a 50-point
+/// host clip, with the host optionally rotated around its top-left corner.
+fn clipped_painted_nested_scene(rotation: f32) -> Scene {
+    use crate::source::generated::{
+        nested_artboard_base::NestedArtboardBase, transform_component_base::TransformComponentBase,
+    };
+    let style = |riv: &mut Riv, parent: u64, props: &[P]| {
+        riv.object(LayoutComponentStyleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent);
+        write(riv, &point_units());
+        write(riv, props);
+        riv.end();
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // 0 artboard, 1 CSS record, 2 clipping box, 3 its CSS record,
+    // 4 nested host, 5 and 6 layout styles.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Outer")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Clip")
+        .float(NodeBase::X_PROPERTY_KEY, 100.0)
+        .float(NodeBase::Y_PROPERTY_KEY, 80.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 6)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2);
+    write(
+        &mut riv,
+        &[
+            sized_to(50.0, 50.0),
+            vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+        ]
+        .concat(),
+    );
+    riv.end();
+    riv.object(NestedArtboardBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Host")
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .float(TransformComponentBase::ROTATION_PROPERTY_KEY, rotation)
+        .end();
+    style(&mut riv, 0, &[]);
+    style(&mut riv, 2, &[]);
+    // 0 artboard, 1 CSS record, 2 fill, 3 color, 4 artboard style,
+    // 5 painted child, 6 CSS record, 7 fill, 8 color, 9 child style.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Painted nested")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 50.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(OVERFLOW_X, 2)
+        .uint(OVERFLOW_Y, 2)
+        .float(BORDER_LEFT, 10.0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff11_2233)
+        .end();
+    style(&mut riv, 0, &[]);
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Nested card")
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 9)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 5);
+    write(&mut riv, &sized_to(100.0, 50.0));
+    riv.end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 5)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 7)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff44_5566)
+        .end();
+    style(&mut riv, 5, &[]);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the nested scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("the outer artboard");
+    let scene = Scene {
+        _file: file,
+        artboard,
+        factory,
+    };
+    scene.advance(3);
+    scene
+}
+
+fn assert_nested_paint_clipped_by_host(rotation: f32) {
+    let f = clipped_painted_nested_scene(rotation);
+    let lines = f.draw_lines();
+    assert!(
+        lines.iter().any(|line| line.starts_with("clipPath")
+            && line.contains("(100,80),(150,80),(150,130),(100,130)")),
+        "{}",
+        lines.join("\n")
+    );
+    draw_at(&lines, 0xff11_2233);
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    let nested = visible
+        .iter()
+        .find(|hit| hit.path.len() == 2 && hit.path.last().unwrap().local_id == 0)
+        .expect("nested own paint");
+    let bounds = nested.bounds;
+    for (got, want) in [
+        (bounds.min_x, 100.0),
+        (bounds.min_y, 80.0),
+        (bounds.max_x, 150.0),
+        (bounds.max_y, 130.0),
+    ] {
+        assert!((got - want).abs() < 1.0e-3, "{bounds:?}");
+    }
+    let card = visible
+        .iter()
+        .find(|hit| hit.path.len() == 2 && hit.path.last().unwrap().local_id == 5)
+        .expect("nested child paint");
+    assert!(card.bounds.min_x >= 100.0 - 1.0e-3 && card.bounds.min_y >= 80.0 - 1.0e-3);
+    assert!(card.bounds.max_x <= 150.0 + 1.0e-3 && card.bounds.max_y <= 130.0 + 1.0e-3);
+    let path = nested.path.clone();
+    let selects = |hits: Vec<crate::RuntimeGeometryHit>| hits.iter().any(|hit| hit.path == path);
+    assert!(
+        selects(host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(102.0, 85.0))),
+        "own paint precedes the nested artboard's 10-point content clip"
+    );
+    let hidden = if rotation == 0.0 {
+        (175.0, 105.0)
+    } else {
+        (140.0, 145.0)
+    };
+    assert!(
+        !selects(
+            host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(hidden.0, hidden.1))
+        ),
+        "the host clips this painted point"
+    );
+    let retained = host.retained_geometry_with_bounds();
+    assert!(
+        retained
+            .iter()
+            .any(|hit| hit.path == path && (hit.bounds.max_x > 150.0 || hit.bounds.max_y > 130.0))
+    );
+}
+
+#[test]
+fn css_nested_artboard_paint_selection_and_bounds_cross_host_clips() {
+    assert_nested_paint_clipped_by_host(0.0);
+}
+
+#[test]
+fn css_rotated_nested_artboard_paint_selection_and_bounds_cross_host_clips() {
+    assert_nested_paint_clipped_by_host(std::f32::consts::FRAC_PI_4);
+}
+
+/// Top-level own paint stays within the frame and ignores its content
+/// overflow, with zero or centered origins and a larger BoxPaint too.
+#[test]
+fn css_top_level_artboard_paint_keeps_frame_geometry() {
+    for origin_x in [0.0, 0.5] {
+        for box_paint in [None, Some(paint_points(200.0, 100.0))] {
+            let f = try_scene_spec(
+                (100.0, 50.0),
+                ArtboardSpec {
+                    css: Some(vec![
+                        U(OVERFLOW_X, 2),
+                        U(OVERFLOW_Y, 2),
+                        F(BORDER_LEFT, 10.0),
+                    ]),
+                    paints: vec![Paint::Fill(0xff11_2233)],
+                    origin_x,
+                    box_paint,
+                    ..ArtboardSpec::default()
+                },
+                None,
+            )
+            .expect("the top-level artboard imports");
+            let mut host = f.host();
+            let visible = host.visible_geometry_with_bounds();
+            assert_eq!(f.geometry_names(&visible), ["Artboard"]);
+            let bounds = visible[0].bounds;
+            assert_eq!(
+                (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+                (0.0, 0.0, 100.0, 50.0)
+            );
+            assert_eq!(
+                f.geometry_names(
+                    &host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(2.0, 5.0))
+                ),
+                ["Artboard"]
+            );
+            assert!(
+                host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(110.0, 25.0))
+                    .is_empty()
+            );
+        }
+    }
 }
 
 impl Scene {

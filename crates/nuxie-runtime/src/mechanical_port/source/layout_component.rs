@@ -1873,6 +1873,16 @@ impl LayoutComponent {
                 LayoutProxy { owner },
             )))));
         }
+        // CSS own paint is covered by the same clipping shapes as its
+        // owner. Translated proxies keep Rive's empty clipping list.
+        let shapes = if self.is_css_mode() {
+            self.base.clipping_shapes()
+        } else {
+            &[]
+        };
+        if let Some(proxy) = &self.proxy {
+            proxy.borrow_mut().base.set_clipping_shapes(shapes);
+        }
         self.proxy
             .as_ref()
             .cloned()

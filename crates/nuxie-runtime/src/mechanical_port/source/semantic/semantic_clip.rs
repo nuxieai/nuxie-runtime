@@ -86,6 +86,62 @@ impl SemanticClipRegion {
     }
 }
 
+/// Point containment uses the same flattened contours as bounds clipping.
+pub(super) fn path_contains(
+    path: &RawPath,
+    rule: nuxie_render_api::FillRule,
+    point: Vec2D,
+) -> bool {
+    flatten_path(path).is_ok_and(|contours| contours_contain(&contours, rule, point))
+}
+
+pub(super) fn polygon_contains(polygon: &[Vec2D], point: Vec2D) -> bool {
+    let contour = polygon
+        .iter()
+        .map(|p| [f64::from(p.x), f64::from(p.y)])
+        .collect();
+    contours_contain(&[contour], nuxie_render_api::FillRule::NonZero, point)
+}
+
+fn contours_contain(
+    contours: &[Vec<Point>],
+    rule: nuxie_render_api::FillRule,
+    point: Vec2D,
+) -> bool {
+    if !point.x.is_finite() || !point.y.is_finite() {
+        return false;
+    }
+    let p = [f64::from(point.x), f64::from(point.y)];
+    let mut winding = 0i32;
+    for contour in contours {
+        for (a, b) in contour
+            .iter()
+            .zip(contour.iter().cycle().skip(1))
+            .take(contour.len())
+        {
+            let cross = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
+            if cross == 0.0
+                && a != b
+                && p[0] >= a[0].min(b[0])
+                && p[0] <= a[0].max(b[0])
+                && p[1] >= a[1].min(b[1])
+                && p[1] <= a[1].max(b[1])
+            {
+                return true;
+            }
+            if a[1] <= p[1] && b[1] > p[1] && cross > 0.0 {
+                winding += 1;
+            } else if b[1] <= p[1] && a[1] > p[1] && cross < 0.0 {
+                winding -= 1;
+            }
+        }
+    }
+    match rule {
+        nuxie_render_api::FillRule::EvenOdd => winding % 2 != 0,
+        _ => winding != 0,
+    }
+}
+
 fn flatten_path(path: &RawPath) -> Result<Vec<Vec<Point>>, SemanticGeometryError> {
     if path.points().len() > MAX_POINTS {
         return Err(SemanticGeometryError::LimitExceeded);
@@ -291,7 +347,24 @@ mod tests {
             let mut region = SemanticClipRegion::from_polygon(&target);
             region.intersect_path(&path, rule);
             assert_eq!(region.is_empty(), empty);
+            assert_eq!(path_contains(&path, rule, Vec2D::new(2.0, 2.0)), !empty);
+            assert!(path_contains(&path, rule, Vec2D::new(0.5, 0.5)));
+            assert!(!path_contains(&path, rule, Vec2D::new(5.0, 2.0)));
         }
+    }
+
+    #[test]
+    fn curved_clip_point_containment_uses_its_contour() {
+        let mut path = RawPath::default();
+        path.add_oval(Aabb::new(0.0, 0.0, 100.0, 100.0), PathDirection::Clockwise);
+        let rule = nuxie_render_api::FillRule::NonZero;
+        assert!(path_contains(&path, rule, Vec2D::new(50.0, 2.0)));
+        assert!(!path_contains(&path, rule, Vec2D::new(2.0, 2.0)));
+        assert!(!path_contains(
+            &RawPath::default(),
+            rule,
+            Vec2D::new(0.0, 0.0)
+        ));
     }
 
     #[test]

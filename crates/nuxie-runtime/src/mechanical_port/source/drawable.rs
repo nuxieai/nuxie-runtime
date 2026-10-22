@@ -260,6 +260,11 @@ impl Drawable {
         self.clipping_shapes.push(shape);
     }
 
+    pub(crate) fn set_clipping_shapes(&mut self, shapes: &[CoreHandle]) {
+        self.clipping_shapes.clear();
+        self.clipping_shapes.extend_from_slice(shapes);
+    }
+
     pub fn clipping_shapes(&self) -> &[CoreHandle] {
         &self.clipping_shapes
     }

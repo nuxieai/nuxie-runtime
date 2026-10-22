@@ -565,7 +565,7 @@ fn compare_native_machine_actions(
     bytes: &[u8],
     actions: &[MachineAction],
 ) -> Vec<CppRuntimeStateMachineAdvance> {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
     let mut args = Vec::new();
     for action in actions {
         match action {
@@ -662,7 +662,7 @@ fn state_machine_entry_timed_transition_starts_destination_at_zero_mix() {
 
 #[test]
 fn state_machine_input_transitions_match_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     for (file_id, kind, label) in [
         (
@@ -770,7 +770,7 @@ fn state_machine_input_transitions_match_cpp_probe() {
 
 #[test]
 fn state_machine_timed_transition_mixing_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     for (file_id, label, post_transition_advances) in [
         (
@@ -867,7 +867,7 @@ fn state_machine_exit_time_transition_matches_cpp_probe() {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
     const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
 
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     for (label, bytes, post_set_advances) in [
         (
@@ -980,7 +980,7 @@ fn state_machine_transition_handoff_matches_cpp_probe() {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
     const PAUSE_ON_EXIT: u64 = 1 << 4;
 
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     for (label, bytes, post_set_advances) in [
         (
@@ -1075,7 +1075,7 @@ fn state_machine_percentage_timing_matches_cpp_probe() {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
     const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
 
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     for (label, bytes, post_set_advances) in [
         (
@@ -1167,7 +1167,7 @@ fn state_machine_percentage_timing_matches_cpp_probe() {
 
 #[test]
 fn state_machine_cubic_transition_interpolator_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     let label = "synthetic/runtime_state_machine_cubic_transition_interpolator_cpp.riv";
     let bytes = synthetic_state_machine_input_transition_with_options(
@@ -1241,7 +1241,7 @@ fn state_machine_cubic_transition_interpolator_matches_cpp_probe() {
 
 #[test]
 fn state_machine_elastic_transition_interpolator_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     let label = "synthetic/runtime_state_machine_elastic_transition_interpolator_cpp.riv";
     let bytes = synthetic_state_machine_input_transition_with_options(
@@ -1315,7 +1315,7 @@ fn state_machine_elastic_transition_interpolator_matches_cpp_probe() {
 
 #[test]
 fn state_machine_early_exit_transition_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     let label = "synthetic/runtime_state_machine_early_exit_transition_cpp.riv";
     let bytes = synthetic_state_machine_early_exit_transition(8249);
@@ -1386,7 +1386,7 @@ fn state_machine_early_exit_transition_matches_cpp_probe() {
 
 #[test]
 fn state_machine_blend_state_early_exit_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     let label = "synthetic/runtime_state_machine_blend_state_early_exit_cpp.riv";
     let bytes = synthetic_state_machine_blend_state_early_exit(8264);
@@ -1462,7 +1462,7 @@ fn state_machine_blend_state_early_exit_matches_cpp_probe() {
 
 #[test]
 fn state_machine_random_transition_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     let label = "synthetic/runtime_state_machine_random_transition_cpp.riv";
     let bytes = synthetic_state_machine_random_transition(8250);
@@ -1520,7 +1520,7 @@ fn state_machine_random_transition_matches_cpp_probe() {
 
 #[test]
 fn state_machine_blend_state_random_transition_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     for (label, bytes, number_value) in [
         (
@@ -2133,7 +2133,7 @@ fn counted_runtime_random_probe_args(values: &[f32], extra_args: &[String]) -> V
 
 #[test]
 fn fl_c5_random_transition_edges_weighted_boundaries_and_wraparound_match_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
     for (label, bytes, draw, expected_animation, expected_calls) in [
         (
             "synthetic/runtime_state_machine_weighted_random_zero_draw_cpp.riv",
@@ -2242,7 +2242,7 @@ fn fl_c5_random_transition_edges_weighted_boundaries_and_wraparound_match_cpp_pr
 
 #[test]
 fn state_machine_weighted_random_wait_then_selected_transition_matches_cpp_probe() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_weighted_random_wait_then_select_cpp.riv";
     let bytes = synthetic_state_machine_weighted_random_wait_then_select(8284);
     let args = counted_runtime_random_probe_args(

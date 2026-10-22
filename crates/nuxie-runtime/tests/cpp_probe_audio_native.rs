@@ -14,28 +14,12 @@ use nuxie_runtime::{
     CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
 };
 use serde::Deserialize;
-use std::{path::PathBuf, process::Command, sync::Arc};
+use std::{process::Command, sync::Arc};
 
 type CppProbeFile = serde_json::Value;
 #[allow(dead_code)]
 mod cpp_probe_support;
 use cpp_probe_support::*;
-
-fn build_and_require_probe(test: &str) -> PathBuf {
-    if let Some(path) = probe_path() {
-        return path;
-    }
-    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
-        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    let status = Command::new("make")
-        .arg("cpp-probe")
-        .current_dir(repo_root())
-        .env("RIVE_RUNTIME_DIR", runtime_root)
-        .status()
-        .unwrap_or_else(|error| panic!("{test}: failed to build the pinned C++ probe: {error}"));
-    assert!(status.success(), "{test}: pinned C++ probe build failed");
-    probe_path().unwrap_or_else(|| panic!("{test}: cpp-probe build produced no executable"))
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,8 +92,7 @@ struct CppAudioRivOracle {
 
 #[test]
 fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
-    let probe =
-        build_and_require_probe("audio_source_reader_and_headless_schedule_match_pinned_cpp");
+    let probe = probe_path();
     let fixture = cpp_runtime_fixture("audio/what.wav");
     let mp3_fixture = cpp_runtime_fixture("audio/song.mp3");
     let output = Command::new(probe)
@@ -379,8 +362,7 @@ fn first_nested_audio_artboard(
 #[cfg(feature = "tools")]
 #[test]
 fn audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp() {
-    let probe =
-        build_and_require_probe("audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp");
+    let probe = probe_path();
     let sound_fixture = cpp_runtime_fixture("sound.riv");
     let sound2_fixture = cpp_runtime_fixture("sound2.riv");
     let output = Command::new(probe)

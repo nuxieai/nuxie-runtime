@@ -299,10 +299,7 @@ fn compare_native_component(
 
 #[test]
 fn runtime_update_matches_cpp_for_transform_hierarchy() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_transform_hierarchy.riv";
     let bytes = synthetic_transform_hierarchy();
@@ -362,10 +359,7 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
 
 #[test]
 fn image_mesh_and_in_band_asset_fixtures_match_pinned_cpp_update() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ image/mesh comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     for relative in ["tape.riv", "in_band_asset.riv"] {
         let cpp = read_cpp_probe_fixture_with_args(&probe, relative, &[]);
@@ -381,10 +375,7 @@ fn image_mesh_and_in_band_asset_fixtures_match_pinned_cpp_update() {
 
 #[test]
 fn translation_constraint_bone_virtual_offsets_match_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_translation_constraint_bone_offset.riv";
     let bytes = synthetic_runtime_file(8222, |bytes| {
@@ -440,10 +431,7 @@ fn translation_constraint_bone_virtual_offsets_match_cpp_probe() {
 
 #[test]
 fn transform_constraint_reads_retained_layout_target_bounds_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_transform_constraint_layout_target.riv";
     let bytes = synthetic_runtime_file(8234, |bytes| {
@@ -501,10 +489,7 @@ fn transform_constraint_reads_retained_layout_target_bounds_like_cpp_probe() {
 
 #[test]
 fn styleless_artboard_settles_top_level_children_as_column_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/univ_1276_styleless_artboard_root_flow.riv";
     let bytes = synthetic_runtime_file(9871, |bytes| {
@@ -574,10 +559,7 @@ fn styleless_artboard_settles_top_level_children_as_column_like_cpp_probe() {
 
 #[test]
 fn artboard_own_column_style_drives_root_flow_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/univ_1276_artboard_column_style_root_flow.riv";
     let bytes = synthetic_runtime_file(9872, |bytes| {
@@ -651,10 +633,7 @@ fn artboard_own_column_style_drives_root_flow_like_cpp_probe() {
 
 #[test]
 fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_follow_path_retained_measure.riv";
     let bytes = synthetic_runtime_file(8235, |bytes| {
@@ -875,10 +854,7 @@ fn upstream_follow_path_with_zero_opacity_path_updates_world_transform() {
 
 #[test]
 fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_list_follow_path_registration.riv";
     let bytes = synthetic_runtime_file(8236, |bytes| {
@@ -927,10 +903,7 @@ fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
 
 #[test]
 fn mutated_instance_transform_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_mutated_transform_hierarchy.riv";
     let bytes = synthetic_transform_hierarchy();
@@ -1177,10 +1150,7 @@ fn linear_animation_apply_does_not_mutate_source_object() {
 
 #[test]
 fn linear_animation_apply_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let cases = [
         (
@@ -1249,10 +1219,7 @@ fn linear_animation_apply_matches_cpp_probe() {
 
 #[test]
 fn invalid_keyframe_interpolator_erases_entire_keyed_object_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_linear_animation_wrong_type_interpolator_cpp.riv";
     let bytes = synthetic_linear_animation_wrong_type_interpolator(8218);
@@ -1280,10 +1247,7 @@ fn invalid_keyframe_interpolator_erases_entire_keyed_object_like_cpp_probe() {
 
 #[test]
 fn state_machine_added_phases_match_cpp() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
@@ -1377,10 +1341,7 @@ fn state_machine_added_phases_match_cpp() {
 
 #[test]
 fn state_machine_only_requires_entry_state_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     for (index, missing) in ["AnyState", "EntryState", "ExitState"]
         .into_iter()
@@ -1406,10 +1367,7 @@ fn state_machine_only_requires_entry_state_like_cpp_probe() {
 
 #[test]
 fn state_machine_bad_transition_targets_reject_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     for (index, state_to_id) in [u64::MAX, 99].into_iter().enumerate() {
         let label = format!("synthetic/runtime_state_machine_bad_target_{state_to_id}_cpp.riv");

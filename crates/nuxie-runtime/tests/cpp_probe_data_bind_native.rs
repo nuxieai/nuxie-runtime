@@ -932,7 +932,7 @@ fn assert_random_formula(label: &str, bytes: Vec<u8>, args: &[String], source_ch
     let _guard = RANDOM_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let board = cpp.artboards.first().expect("C++ artboard");
     let values = (0..if source_change {
@@ -1820,10 +1820,7 @@ fn assert_default_scalar_to_number_converter(probe: &std::path::Path, label: &st
 
 #[test]
 fn state_machine_default_viewmodel_number_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_bind_cpp.riv";
     let bytes = fixture_bytes(8370);
     let args = [
@@ -1876,10 +1873,7 @@ fn state_machine_default_viewmodel_number_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_external_viewmodel_number_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_external_viewmodel_number_bind_cpp.riv";
     let bytes = fixture_bytes(8387);
     let args = [
@@ -1945,10 +1939,7 @@ fn state_machine_external_viewmodel_number_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_number_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_bind_cpp.riv";
     let bytes = fixture_bytes(8395);
     let value = 0.25_f32;
@@ -2029,10 +2020,7 @@ fn state_machine_owned_viewmodel_number_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_number_source_handle_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_source_handle_bind_cpp.riv";
     let bytes = fixture_bytes(8762);
     let value = 0.25_f32;
@@ -2108,10 +2096,7 @@ fn state_machine_owned_viewmodel_number_source_handle_bind_source_matches_cpp_pr
 
 #[test]
 fn state_machine_imported_viewmodel_number_public_update_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_imported_number_public_update_target_to_source_cpp.riv";
     let bytes = number_two_way_fixture_bytes(10033);
@@ -2220,10 +2205,7 @@ fn state_machine_imported_viewmodel_number_public_update_target_to_source_matche
 
 #[test]
 fn state_machine_default_viewmodel_boolean_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_boolean_bind_cpp.riv";
     let bytes = boolean_fixture_bytes(8371);
     let args = [
@@ -2290,10 +2272,7 @@ fn state_machine_default_viewmodel_boolean_bind_source_matches_cpp_probe() {
 
 #[test]
 fn boolean_public_update_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_boolean_public_update_cpp.riv";
     let bytes = boolean_fixture_bytes_with_flags(8644, 1 << 1);
     let forced_value = false;
@@ -2397,9 +2376,7 @@ fn boolean_public_update_target_to_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_number_name_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_name_bind_cpp.riv";
     let value = 0.25_f32;
     let args = [
@@ -2420,9 +2397,7 @@ fn state_machine_owned_viewmodel_number_name_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_nested_number_name_path_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_nested_number_name_path_bind_cpp.riv";
     let value = 0.25_f32;
@@ -2450,9 +2425,7 @@ fn state_machine_owned_viewmodel_nested_number_name_path_bind_source_matches_cpp
 
 #[test]
 fn state_machine_owned_viewmodel_nested_number_source_handle_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_nested_number_source_handle_bind_cpp.riv";
     let value = 0.25_f32;
@@ -2480,10 +2453,7 @@ fn state_machine_owned_viewmodel_nested_number_source_handle_bind_source_matches
 
 #[test]
 fn state_machine_owned_viewmodel_imported_intermediate_number_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_imported_intermediate_number_source_cpp.riv";
     let bytes = imported_intermediate_number_fixture_bytes(8588);
     let args = [
@@ -2524,10 +2494,7 @@ fn state_machine_owned_viewmodel_imported_intermediate_number_source_matches_cpp
 
 #[test]
 fn state_machine_owned_viewmodel_imported_intermediate_boolean_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_imported_intermediate_boolean_source_cpp.riv";
     let bytes = imported_intermediate_boolean_fixture_bytes(8589);
     let args = [
@@ -2596,10 +2563,7 @@ fn state_machine_owned_viewmodel_imported_intermediate_boolean_source_matches_cp
 
 #[test]
 fn state_machine_default_viewmodel_nested_number_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_nested_number_bind_cpp.riv";
     let bytes = nested_number_fixture_bytes_with_value(8582, 0.25);
     let args = [
@@ -2632,10 +2596,7 @@ fn state_machine_default_viewmodel_nested_number_bind_source_matches_cpp_probe()
 
 #[test]
 fn state_machine_default_viewmodel_nested_boolean_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_nested_boolean_bind_cpp.riv";
     let bytes = nested_boolean_fixture_bytes(8583, true);
     let args = [
@@ -2668,10 +2629,7 @@ fn state_machine_default_viewmodel_nested_boolean_bind_source_matches_cpp_probe(
 
 #[test]
 fn state_machine_owned_viewmodel_nested_boolean_name_path_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_nested_boolean_name_path_bind_cpp.riv";
     let bytes = nested_boolean_fixture_bytes(8579, false);
@@ -2696,10 +2654,7 @@ fn state_machine_owned_viewmodel_nested_boolean_name_path_bind_source_matches_cp
 
 #[test]
 fn state_machine_owned_viewmodel_nested_boolean_source_handle_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_nested_boolean_source_handle_bind_cpp.riv";
     let bytes = nested_boolean_fixture_bytes(8785, false);
@@ -2724,7 +2679,7 @@ fn state_machine_owned_viewmodel_nested_boolean_source_handle_bind_source_matche
 
 #[test]
 fn state_machine_default_viewmodel_boolean_to_number_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     assert_default_scalar_to_number_converter(
         &probe,
         "synthetic/runtime_state_machine_default_viewmodel_boolean_to_number_converter_cpp.riv",
@@ -2734,7 +2689,7 @@ fn state_machine_default_viewmodel_boolean_to_number_converter_matches_cpp_probe
 
 #[test]
 fn state_machine_default_viewmodel_enum_to_number_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     assert_default_scalar_to_number_converter(
         &probe,
         "synthetic/runtime_state_machine_default_viewmodel_enum_to_number_converter_cpp.riv",
@@ -2744,7 +2699,7 @@ fn state_machine_default_viewmodel_enum_to_number_converter_matches_cpp_probe() 
 
 #[test]
 fn state_machine_default_viewmodel_color_to_number_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     assert_default_scalar_to_number_converter(
         &probe,
         "synthetic/runtime_state_machine_default_viewmodel_color_to_number_converter_cpp.riv",
@@ -2754,7 +2709,7 @@ fn state_machine_default_viewmodel_color_to_number_converter_matches_cpp_probe()
 
 #[test]
 fn state_machine_default_viewmodel_string_to_number_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     assert_default_scalar_to_number_converter(
         &probe,
         "synthetic/runtime_state_machine_default_viewmodel_string_to_number_converter_cpp.riv",
@@ -2764,7 +2719,7 @@ fn state_machine_default_viewmodel_string_to_number_converter_matches_cpp_probe(
 
 #[test]
 fn state_machine_default_viewmodel_symbol_list_index_to_number_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     assert_default_scalar_to_number_converter(
         &probe,
         "synthetic/runtime_state_machine_default_viewmodel_symbol_list_index_to_number_converter_cpp.riv",
@@ -2776,7 +2731,7 @@ fn state_machine_default_viewmodel_symbol_list_index_to_number_converter_matches
 
 #[test]
 fn state_machine_default_viewmodel_symbol_list_index_operation_value_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     assert_default_scalar_to_number_converter(
         &probe,
         "synthetic/runtime_state_machine_default_viewmodel_symbol_list_index_operation_value_converter_cpp.riv",
@@ -2789,7 +2744,7 @@ fn state_machine_default_viewmodel_symbol_list_index_operation_value_converter_m
 #[test]
 fn state_machine_default_viewmodel_number_operation_value_converter_cases_0_through_3_match_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cases = [(0, 0.4, 0.2), (1, 0.8, 0.3), (2, 0.4, 2.0), (3, 0.8, 2.0)];
     for (case_index, (operation_type, source_value, operation_value)) in
         cases.into_iter().enumerate()
@@ -2813,7 +2768,7 @@ fn state_machine_default_viewmodel_number_operation_value_converter_cases_0_thro
 #[test]
 fn state_machine_default_viewmodel_number_operation_value_converter_cases_4_through_7_match_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cases = [(4, 1.3, 1.0), (5, 0.25, 1.0), (6, 0.5, 2.0), (7, 0.0, 1.0)];
     for (case_offset, (operation_type, source_value, operation_value)) in
         cases.into_iter().enumerate()
@@ -2837,7 +2792,7 @@ fn state_machine_default_viewmodel_number_operation_value_converter_cases_4_thro
 #[test]
 fn state_machine_default_viewmodel_number_operation_value_converter_cases_8_through_11_match_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cases = [(8, 1.0, 1.0), (9, 0.0, 1.0), (10, 0.0, 1.0), (11, 0.0, 1.0)];
     for (case_offset, (operation_type, source_value, operation_value)) in
         cases.into_iter().enumerate()
@@ -2861,7 +2816,7 @@ fn state_machine_default_viewmodel_number_operation_value_converter_cases_8_thro
 #[test]
 fn state_machine_default_viewmodel_number_operation_value_converter_cases_12_through_15_match_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cases = [
         (12, 1.0, 1.0),
         (13, 0.0, 1.0),
@@ -2890,7 +2845,7 @@ fn state_machine_default_viewmodel_number_operation_value_converter_cases_12_thr
 #[test]
 fn state_machine_default_viewmodel_number_operation_value_converter_cases_16_through_18_match_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cases = [(16, 0.6, 1.0), (17, 0.6, 1.0), (18, 0.4, 1.0)];
     for (case_offset, (operation_type, source_value, operation_value)) in
         cases.into_iter().enumerate()
@@ -2913,7 +2868,7 @@ fn state_machine_default_viewmodel_number_operation_value_converter_cases_16_thr
 
 #[test]
 fn state_machine_default_viewmodel_number_formula_converter_matrix_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let cases = [
         (0, 0.4, 0.2),
         (1, 0.8, 0.3),
@@ -3063,7 +3018,7 @@ fn assert_formula_reverse_flow(
 
 #[test]
 fn state_machine_imported_viewmodel_number_formula_context_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_imported_viewmodel_number_formula_context_cpp.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
         8732, 1.0, 2, 0.5, 0, true,
@@ -3100,7 +3055,7 @@ fn state_machine_imported_viewmodel_number_formula_context_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_number_formula_context_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_formula_context_cpp.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
         8733, 1.0, 2, 0.5, 0, true,
@@ -3133,7 +3088,7 @@ fn state_machine_owned_viewmodel_number_formula_context_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_number_formula_source_mutation_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_number_formula_source_mutation_cpp.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
@@ -3195,7 +3150,7 @@ fn state_machine_owned_viewmodel_number_formula_source_mutation_matches_cpp_prob
 
 #[test]
 fn state_machine_default_viewmodel_number_formula_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_number_formula_target_to_source_cpp.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
@@ -3226,7 +3181,7 @@ fn state_machine_default_viewmodel_number_formula_target_to_source_matches_cpp_p
 #[test]
 fn state_machine_default_viewmodel_number_formula_main_to_target_two_way_target_to_source_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_main_to_target_two_way_target_to_source_cpp.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
         8495, 1.5, 2, 2.0, 2, false,
@@ -3257,7 +3212,7 @@ fn state_machine_default_viewmodel_number_formula_main_to_target_two_way_target_
 #[test]
 fn state_machine_default_viewmodel_number_formula_public_update_target_to_source_matches_cpp_probe()
 {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_public_update_target_to_source_cpp.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
         8531, 1.5, 2, 2.0, 2, false,
@@ -3288,7 +3243,7 @@ fn state_machine_default_viewmodel_number_formula_public_update_target_to_source
 #[test]
 fn state_machine_default_viewmodel_number_formula_group_public_update_target_to_source_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_group_public_update_target_to_source_cpp.riv";
     let bytes =
         synthetic_state_machine_default_viewmodel_number_formula_group_blend_state_with_flags(
@@ -3333,7 +3288,7 @@ fn formula_function_fixture(file_id: u64, flags: u64, observer: bool) -> Vec<u8>
 
 #[test]
 fn state_machine_default_viewmodel_number_formula_function_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_function_target_to_source_cpp.riv";
     let args = [
         "--runtime-bind-default-view-model-state-machine-context",
@@ -3368,7 +3323,7 @@ fn state_machine_default_viewmodel_number_formula_function_target_to_source_matc
 #[test]
 fn state_machine_default_viewmodel_number_formula_function_public_update_target_to_source_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_function_public_update_target_to_source_cpp.riv";
     let args = [
         "--runtime-bind-default-view-model-state-machine-context",
@@ -3404,7 +3359,7 @@ fn state_machine_default_viewmodel_number_formula_function_public_update_target_
 #[test]
 fn state_machine_default_viewmodel_number_formula_function_main_to_target_two_way_target_dirty_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else { return };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_function_main_to_target_two_way_target_dirty_cpp.riv";
     let args = [
         "--runtime-bind-default-view-model-state-machine-context",
@@ -3489,7 +3444,7 @@ fn assert_random_reverse(label: &str, bytes: Vec<u8>, values: &[f32], public: bo
         ]
     };
     let cpp = read_cpp_probe_bytes_with_args(
-        &probe_path().expect("C++ probe"),
+        &probe_path(),
         label,
         &bytes,
         &counted_random_args(values, &actions),
@@ -3650,7 +3605,7 @@ fn assert_random_group_forward(label: &str, bytes: Vec<u8>, values: &[f32]) {
         "1",
     ];
     let cpp = read_cpp_probe_bytes_with_args(
-        &probe_path().expect("C++ probe"),
+        &probe_path(),
         label,
         &bytes,
         &counted_random_args(values, &actions),

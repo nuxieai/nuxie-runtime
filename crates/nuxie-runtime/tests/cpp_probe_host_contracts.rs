@@ -61,9 +61,17 @@ fn probe_fingerprint_guard_flags_stale_binaries() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+// A comparison whose oracle is absent fails; it never returns early as a pass.
+#[test]
+#[should_panic(expected = "the pinned C++ oracle is missing")]
+fn a_missing_oracle_fails_the_comparison() {
+    let absent = std::env::temp_dir().join(format!("nuxie-absent-probe-{}", std::process::id()));
+    require_probe(Some(absent.into_os_string()));
+}
+
 #[test]
 fn built_probe_reports_current_source_fingerprint() {
-    let probe = probe_path().expect("fingerprinted C++ oracle required; run make cpp-probe");
+    let probe = probe_path();
 
     let output = Command::new(&probe)
         .arg("--fingerprint")

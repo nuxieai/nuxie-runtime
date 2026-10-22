@@ -1,11 +1,16 @@
+use nuxie_render_api::Mat2D;
 use nuxie_runtime::{
     ListenerPerformChangeRecord, ProfileCapture, ProfileCaptureEvent, ProfileCaptureFrame,
     ProfileCaptureMetadata, ProfileCaptureTimer, ProfilePathSegment, RiveProfile, TransitionRecord,
 };
 use serde::Deserialize;
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+
+type CppProbeFile = serde_json::Value;
+#[allow(dead_code)]
+mod cpp_probe_support;
+use cpp_probe_support::probe_path;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,10 +116,7 @@ impl ProfileCapture for OracleCapture {
 
 #[test]
 fn profiler_wire_bytes_and_record_layout_match_pinned_cpp_source_oracle() {
-    let Some(probe) = std::env::var_os("RIVE_CPP_PROBE").map(PathBuf::from) else {
-        eprintln!("skipping F12 profiler C++ source oracle; set RIVE_CPP_PROBE");
-        return;
-    };
+    let probe = probe_path();
     let output = Command::new(&probe)
         .arg("--f12-profiler-oracle")
         .output()

@@ -1446,10 +1446,7 @@ fn run_bound_two_advance_case(
 
 #[test]
 fn state_machine_default_viewmodel_enum_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_bind_cpp.riv";
     let bytes = fixture_bytes(8374);
     let args = [
@@ -1475,10 +1472,7 @@ fn state_machine_default_viewmodel_enum_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_external_viewmodel_enum_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_external_viewmodel_enum_bind_cpp.riv";
     let bytes = fixture_bytes(8391);
     let forced_value = 1_u64;
@@ -1519,10 +1513,7 @@ fn state_machine_external_viewmodel_enum_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_enum_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_enum_bind_cpp.riv";
     let bytes = fixture_bytes(8399);
     let value = 1_u64;
@@ -1559,10 +1550,7 @@ fn state_machine_owned_viewmodel_enum_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_enum_source_handle_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_enum_source_handle_bind_cpp.riv";
     let bytes = fixture_bytes(8766);
     let value = 1_u64;
@@ -1605,10 +1593,7 @@ fn state_machine_owned_viewmodel_enum_source_handle_bind_source_matches_cpp_prob
 
 #[test]
 fn state_machine_default_viewmodel_enum_source_handle_mutation_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_enum_source_handle_mutation_cpp.riv";
     let bytes = fixture_bytes(8745);
@@ -1647,10 +1632,7 @@ fn state_machine_default_viewmodel_enum_source_handle_mutation_matches_cpp_probe
 
 #[test]
 fn state_machine_default_viewmodel_nested_enum_source_handle_mutation_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_nested_enum_source_handle_cpp.riv";
     let bytes = nested_fixture_bytes(8777, 1, 1);
@@ -1731,10 +1713,7 @@ fn create_owned_enum_context(rust: &NativeFixture, value: u64) -> (CoreHandle, C
 
 #[test]
 fn state_machine_imported_viewmodel_enum_formula_context_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_imported_viewmodel_enum_formula_context_cpp.riv";
     let bytes = formula_enum_fixture_bytes(8738);
     let args = [
@@ -1772,10 +1751,7 @@ fn state_machine_imported_viewmodel_enum_formula_context_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_enum_formula_context_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_enum_formula_context_cpp.riv";
     let bytes = formula_enum_fixture_bytes(8739);
     let args = [
@@ -1799,10 +1775,7 @@ fn state_machine_owned_viewmodel_enum_formula_context_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_enum_formula_source_mutation_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_enum_formula_source_mutation_cpp.riv";
     let bytes = formula_enum_fixture_bytes(9310);
@@ -1864,10 +1837,7 @@ fn state_machine_owned_viewmodel_enum_formula_source_mutation_matches_cpp_probe(
 
 #[test]
 fn state_machine_owned_viewmodel_nested_enum_source_handle_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_nested_enum_source_handle_bind_cpp.riv";
     let bytes = nested_fixture_bytes(8788, 0, 1);
@@ -1954,10 +1924,7 @@ fn run_imported_shared_source_handle_case(
 #[test]
 fn state_machine_imported_viewmodel_enum_source_handle_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_imported_viewmodel_enum_source_handle_mutation_shared_cpp.riv";
     let bytes = fixture_bytes_with_state_machines(8711, 2);
     let args = [
@@ -1989,10 +1956,7 @@ fn state_machine_imported_viewmodel_enum_source_handle_mutation_is_shared_across
 #[test]
 fn state_machine_imported_viewmodel_nested_enum_source_handle_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_imported_viewmodel_nested_enum_source_handle_mutation_shared_cpp.riv";
     let bytes = nested_fixture_bytes(8712, 1, 2);
     let args = [
@@ -2023,10 +1987,7 @@ fn state_machine_imported_viewmodel_nested_enum_source_handle_mutation_is_shared
 
 #[test]
 fn state_machine_default_viewmodel_enum_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_target_to_source_cpp.riv";
@@ -2200,10 +2161,7 @@ fn run_enum_public_update_target_to_source_case(
 
 #[test]
 fn enum_public_update_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_public_update_target_to_source_cpp.riv";
     let bytes = target_to_source_fixture_bytes(8655, 1, &[DATA_BIND_TWO_WAY]);
@@ -2212,10 +2170,7 @@ fn enum_public_update_target_to_source_matches_cpp_probe() {
 
 #[test]
 fn enum_public_update_observer_preserves_target_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_public_update_observer_preserves_target_cpp.riv";
     let bytes = target_to_source_fixture_bytes(8656, 1, &[DATA_BIND_TWO_WAY, 0]);
@@ -2281,10 +2236,7 @@ fn run_default_enum_source_mutation_case(
 
 #[test]
 fn state_machine_default_viewmodel_enum_source_mutation_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_source_mutation_cpp.riv";
     let bytes = fixture_bytes(8383);
     let args = [
@@ -2311,10 +2263,7 @@ fn state_machine_default_viewmodel_enum_source_mutation_matches_cpp_probe() {
 
 #[test]
 fn state_machine_default_viewmodel_enum_source_mutation_observer_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_enum_source_mutation_observer_cpp.riv";
@@ -2343,10 +2292,7 @@ fn state_machine_default_viewmodel_enum_source_mutation_observer_matches_cpp_pro
 
 #[test]
 fn state_machine_default_viewmodel_enum_source_name_mutation_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_enum_source_name_mutation_cpp.riv";
     let bytes = fixture_bytes(8627);
@@ -2375,10 +2321,7 @@ fn state_machine_default_viewmodel_enum_source_name_mutation_matches_cpp_probe()
 #[test]
 fn state_machine_imported_viewmodel_enum_source_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_imported_viewmodel_enum_source_mutation_shared_cpp.riv";
     let bytes = fixture_bytes_with_state_machines(8605, 2);
@@ -2491,10 +2434,7 @@ fn run_imported_shared_source_name_case(
 #[test]
 fn state_machine_imported_viewmodel_enum_source_name_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_imported_viewmodel_enum_source_name_mutation_shared_cpp.riv";
     let bytes = fixture_bytes_with_state_machines(8616, 2);
     let args = [
@@ -2526,10 +2466,7 @@ fn state_machine_imported_viewmodel_enum_source_name_mutation_is_shared_across_s
 #[test]
 fn state_machine_imported_viewmodel_nested_enum_source_name_path_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_imported_viewmodel_nested_enum_source_name_path_mutation_shared_cpp.riv";
     let bytes = nested_fixture_bytes(8692, 1, 2);
     let args = [
@@ -2560,10 +2497,7 @@ fn state_machine_imported_viewmodel_nested_enum_source_name_path_mutation_is_sha
 
 #[test]
 fn state_machine_default_viewmodel_nested_enum_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_default_viewmodel_nested_enum_bind_cpp.riv";
     let bytes = nested_fixture_bytes(8586, 1, 1);
     let args = [
@@ -2587,10 +2521,7 @@ fn state_machine_default_viewmodel_nested_enum_bind_source_matches_cpp_probe() {
 
 #[test]
 fn state_machine_owned_viewmodel_nested_enum_name_path_bind_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_nested_enum_name_path_bind_cpp.riv";
     let bytes = nested_fixture_bytes(8582, 0, 1);
@@ -2633,10 +2564,7 @@ fn state_machine_owned_viewmodel_nested_enum_name_path_bind_source_matches_cpp_p
 
 #[test]
 fn state_machine_owned_viewmodel_imported_intermediate_enum_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_imported_intermediate_enum_source_cpp.riv";
     let bytes = nested_fixture_bytes(8592, 1, 1);
@@ -2793,10 +2721,7 @@ fn run_enum_to_number_target_dirty_case(
 
 #[test]
 fn to_number_enum_public_update_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_enum_to_number_public_update_cpp.riv";
@@ -2806,10 +2731,7 @@ fn to_number_enum_public_update_target_to_source_matches_cpp_probe() {
 
 #[test]
 fn to_number_enum_main_to_target_two_way_target_dirty_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_to_number_main_to_target_two_way_target_dirty_cpp.riv";
     let bytes = enum_to_number_fixture_bytes(8506, DATA_BIND_TWO_WAY);
@@ -2894,10 +2816,7 @@ fn run_owned_enum_operation_case(
 
 #[test]
 fn operation_viewmodel_owned_enum_source_mutation_fallback_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_enum_source_mutation_cpp.riv";
     let bytes = enum_operation_fixture_bytes(9321, false);
     run_owned_enum_operation_case(&probe, label, &bytes, false);
@@ -2905,10 +2824,7 @@ fn operation_viewmodel_owned_enum_source_mutation_fallback_matches_cpp_probe() {
 
 #[test]
 fn operation_viewmodel_group_owned_enum_source_mutation_fallback_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_group_enum_source_mutation_cpp.riv";
     let bytes = enum_operation_fixture_bytes(9322, true);
     run_owned_enum_operation_case(&probe, label, &bytes, true);
@@ -3043,10 +2959,7 @@ fn run_enum_to_string_target_case(
 
 #[test]
 fn enum_to_string_public_update_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_to_string_public_update_target_to_source_cpp.riv";
     let bytes = enum_to_string_fixture_bytes(8548, DATA_BIND_TWO_WAY);
@@ -3055,10 +2968,7 @@ fn enum_to_string_public_update_target_to_source_matches_cpp_probe() {
 
 #[test]
 fn enum_to_string_main_to_source_two_way_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_to_string_main_to_source_two_way_target_to_source_cpp.riv";
@@ -3068,10 +2978,7 @@ fn enum_to_string_main_to_source_two_way_target_to_source_matches_cpp_probe() {
 
 #[test]
 fn enum_to_string_main_to_target_two_way_target_dirty_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
     let label = "synthetic/runtime_state_machine_default_viewmodel_enum_to_string_main_to_target_two_way_target_dirty_cpp.riv";
     let bytes = enum_to_string_fixture_bytes(8517, DATA_BIND_TWO_WAY);
@@ -3080,10 +2987,7 @@ fn enum_to_string_main_to_target_two_way_target_dirty_matches_cpp_probe() {
 
 #[test]
 fn state_machine_default_viewmodel_enum_to_string_converter_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let label =
         "synthetic/runtime_state_machine_default_viewmodel_enum_to_string_converter_cpp.riv";
     let bytes = enum_to_string_fixture_bytes(8418, 0);

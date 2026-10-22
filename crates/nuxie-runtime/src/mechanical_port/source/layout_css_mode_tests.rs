@@ -397,6 +397,27 @@ fn push_paints(paints: &[Paint], index: u64, entries: &mut Vec<Entry<'_>>) {
     }
 }
 
+fn push_clipping_shape(paths: &[Vec<P>], rule: u64, parent: u64, entries: &mut Vec<Entry<'_>>) {
+    use crate::source::generated::shapes::clipping_shape_base::ClippingShapeBase;
+    entries.push(Entry::NamedShape("Clip source", parent));
+    let source = slots(entries);
+    for props in paths {
+        entries.push(Entry::Record(
+            RectangleBase::TYPE_KEY,
+            props.clone(),
+            source,
+        ));
+    }
+    entries.push(Entry::Record(
+        ClippingShapeBase::TYPE_KEY,
+        vec![
+            U(ClippingShapeBase::SOURCE_ID_PROPERTY_KEY, source),
+            U(ClippingShapeBase::FILL_RULE_PROPERTY_KEY, rule),
+        ],
+        parent,
+    ));
+}
+
 /// The artboard object slots `entries` take: a data binding takes none.
 fn slots(entries: &[Entry]) -> u64 {
     entries
@@ -446,6 +467,8 @@ struct ArtboardSpec {
     style: Vec<P>,
     paints: Vec<Paint>,
     content: Vec<Rect>,
+    /// A ClippingShape attached to the artboard, covering its content.
+    clip_paths: Option<Vec<Vec<P>>>,
     origin_x: f32,
     /// The artboard's BoxPaint and the values it writes.
     box_paint: Option<Vec<P>>,
@@ -545,27 +568,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             }
         }
         if let Some(paths) = &node.clip_paths {
-            use crate::source::generated::shapes::clipping_shape_base::ClippingShapeBase;
-            entries.push(Entry::NamedShape("Clip source", index));
-            let source = slots(entries);
-            for props in paths {
-                entries.push(Entry::Record(
-                    RectangleBase::TYPE_KEY,
-                    props.clone(),
-                    source,
-                ));
-            }
-            entries.push(Entry::Record(
-                ClippingShapeBase::TYPE_KEY,
-                vec![
-                    U(ClippingShapeBase::SOURCE_ID_PROPERTY_KEY, source),
-                    U(
-                        ClippingShapeBase::FILL_RULE_PROPERTY_KEY,
-                        node.clip_fill_rule,
-                    ),
-                ],
-                index,
-            ));
+            push_clipping_shape(paths, node.clip_fill_rule, index, entries);
         }
         if node.nested_field || node.nested_scroller {
             entries.push(Entry::Nested(index));
@@ -593,6 +596,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     for rect in &spec.content {
         entries.push(Entry::Shape(rect, 0));
         entries.push(Entry::Path(rect, slots(&entries)));
+    }
+    if let Some(paths) = &spec.clip_paths {
+        push_clipping_shape(paths, 0, 0, &mut entries);
     }
     if let Some(root) = &root {
         let mut late = Vec::new();
@@ -5592,8 +5598,11 @@ fn shape_clipped_box(css_mode: bool, radius: f32) -> Scene {
 
 /// Whether the half-width shape clip is active when the card paints.
 fn card_draw_has_shape_clip(f: &Scene) -> bool {
-    let lines = f.draw_lines();
-    let draw = draw_at(&lines, 0xff11_2233);
+    draw_has_shape_clip(&f.draw_lines(), 0xff11_2233)
+}
+
+fn draw_has_shape_clip(lines: &[String], color: u32) -> bool {
+    let draw = draw_at(lines, color);
     let mut clipped = false;
     let mut stack = Vec::new();
     for line in &lines[..draw] {
@@ -6711,6 +6720,137 @@ fn css_painted_artboard_is_catalogued_geometry() {
     assert_eq!(
         (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
         (0.0, 0.0, 400.0, 300.0)
+    );
+}
+
+/// Child bounds and every clip use the same drawing-to-root transform,
+/// including the artboard frame, overflow, layout clips and shape clips.
+#[test]
+fn css_centered_origin_child_geometry_uses_the_drawing_transform() {
+    for frame_origin in [true, false] {
+        for child_clips in [false, true] {
+            let card = painted("Card", 0xff11_2233, sized_to(10.0, 10.0));
+            let root = if child_clips {
+                B {
+                    clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 5.0, 10.0)]),
+                    ..css(
+                        "Clip",
+                        [
+                            sized_to(10.0, 10.0),
+                            vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                        ]
+                        .concat(),
+                        vec![card],
+                    )
+                }
+            } else {
+                card
+            };
+            let f = try_scene_spec(
+                (100.0, 50.0),
+                ArtboardSpec {
+                    css: Some(vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)]),
+                    origin_x: 0.5,
+                    ..ArtboardSpec::default()
+                },
+                Some(root),
+            )
+            .expect("the centered-origin scene imports");
+            f.artboard
+                .with_artboard_mut(|instance| instance.base.set_frame_origin(frame_origin));
+            f.advance(2);
+            assert_eq!(f.world_origin("Card"), (-50.0, 0.0));
+            let left = if frame_origin { 0.0 } else { -50.0 };
+            let width = if child_clips { 5.0 } else { 10.0 };
+            let mut host = f.host();
+            let visible = host.visible_geometry_with_bounds();
+            assert_eq!(f.geometry_names(&visible), ["Card"]);
+            let bounds = visible[0].bounds;
+            assert_eq!(
+                (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+                (left, 0.0, left + width, 10.0)
+            );
+            assert_eq!(
+                f.geometry_names(
+                    &host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(
+                        left + 2.0,
+                        5.0
+                    ))
+                ),
+                ["Card"]
+            );
+            let far_half =
+                host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(left + 7.0, 5.0));
+            assert_eq!(far_half.is_empty(), child_clips);
+            let retained = host.retained_geometry_with_bounds();
+            // Retained geometry includes unpainted authored shapes too.
+            let expected = if child_clips {
+                vec!["Clip source", "Card"]
+            } else {
+                vec!["Card"]
+            };
+            assert_eq!(f.geometry_names(&retained), expected);
+            let card_id = f.local_id("Card");
+            let bounds = retained
+                .iter()
+                .find(|hit| {
+                    hit.path
+                        .last()
+                        .is_some_and(|segment| segment.local_id == card_id)
+                })
+                .expect("the retained card")
+                .bounds;
+            assert_eq!(
+                (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+                (left, 0.0, left + 10.0, 10.0)
+            );
+        }
+    }
+}
+
+/// Artboard backgrounds paint before drawable-list shape clips. Content
+/// remains clipped, while the background keeps its frame and selection.
+#[test]
+fn css_artboard_own_paint_precedes_content_clipping_shapes() {
+    let f = try_scene_spec(
+        (100.0, 50.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            paints: vec![Paint::Fill(0xff11_2233)],
+            clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 50.0, 50.0)]),
+            ..ArtboardSpec::default()
+        },
+        Some(painted("Card", 0xff44_5566, sized_to(100.0, 50.0))),
+    )
+    .expect("the shape-clipped artboard imports");
+    let lines = f.draw_lines();
+    assert!(!draw_has_shape_clip(&lines, 0xff11_2233));
+    assert!(draw_has_shape_clip(&lines, 0xff44_5566));
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    assert_eq!(f.geometry_names(&visible), ["Artboard", "Card"]);
+    for (hit, right) in visible.iter().zip([100.0, 50.0]) {
+        let bounds = hit.bounds;
+        assert_eq!(
+            (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+            (0.0, 0.0, right, 50.0)
+        );
+    }
+    assert_eq!(
+        f.geometry_names(
+            &host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(25.0, 25.0))
+        ),
+        ["Card", "Artboard"]
+    );
+    assert_eq!(
+        f.geometry_names(
+            &host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(75.0, 25.0))
+        ),
+        ["Artboard"]
+    );
+    assert!(
+        host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(110.0, 25.0))
+            .is_empty()
     );
 }
 

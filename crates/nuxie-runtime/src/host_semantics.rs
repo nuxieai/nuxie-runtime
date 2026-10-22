@@ -937,8 +937,26 @@ fn collect_geometry(
     let Some(artboard_global_id) = source_artboard_global_id(artboard) else {
         return;
     };
+    // Match drawing's frame-origin translation and artboard rotation and
+    // scale. Paths, child bounds and host transforms all start in the
+    // artboard's drawing space.
+    let (drawing_to_root, frame_offset) = artboard.with_artboard(|instance| {
+        let root = &instance.base;
+        let frame_offset = if root.frame_origin() {
+            NativeVec2D::new(
+                root.layout_width() * root.origin_x(),
+                root.layout_height() * root.origin_y(),
+            )
+        } else {
+            NativeVec2D::default()
+        };
+        (
+            artboard_to_root * NativeMat2D::from_translation(frame_offset) * root.self_transform(),
+            frame_offset,
+        )
+    });
     let mut spaces = parent_spaces.to_vec();
-    spaces.push((artboard.core_handle(), artboard_to_root));
+    spaces.push((artboard.core_handle(), drawing_to_root));
     // Our layer: a CSS artboard that paints itself is the bottom geometry.
     // It is seen, and selected, where it paints (docs/CSS_LAYOUT.md, 4.5).
     if let Some((handle, painted, covers)) = artboard.with_artboard(|instance| {
@@ -963,17 +981,21 @@ fn collect_geometry(
         // applies its frame clip and every clip through its hosts.
         let covers = query.map(|point| {
             let mut inverse = NativeMat2D::identity();
-            if !artboard_to_root.invert(&mut inverse) {
+            if !drawing_to_root.invert(&mut inverse) {
                 return false;
             }
             let point = inverse * render_to_native_point(point);
-            let frame = root.bounds();
-            let local = NativeVec2D::new(point.x - frame.left(), point.y - frame.top());
+            let local = point
+                + NativeVec2D::new(
+                    root.layout_width() * root.origin_x(),
+                    root.layout_height() * root.origin_y(),
+                );
             layout.css_paint_contains(local)
         });
         Some((
             crate::source::core::CoreObject::core(root).handle()?,
-            root.css_painted_bounds(),
+            root.css_painted_bounds()
+                .map(|bounds| bounds.offset(-frame_offset.x, -frame_offset.y)),
             covers,
         ))
     }) && covers.is_none_or(|covers| covers)
@@ -990,7 +1012,7 @@ fn collect_geometry(
                 painted_visible_bounds(
                     &handle,
                     painted,
-                    artboard_to_root,
+                    drawing_to_root,
                     visibility == GeometryVisibility::Visible,
                     &spaces,
                 )
@@ -1051,7 +1073,7 @@ fn collect_geometry(
             };
             let visible = css_box_visible_bounds(
                 &handle,
-                artboard_to_root,
+                drawing_to_root,
                 visibility == GeometryVisibility::Visible,
                 &spaces,
             )
@@ -1067,7 +1089,7 @@ fn collect_geometry(
                     continue;
                 }
                 let mut inverse = NativeMat2D::identity();
-                if !artboard_to_root.invert(&mut inverse) {
+                if !drawing_to_root.invert(&mut inverse) {
                     continue;
                 }
                 let artboard_point = inverse * render_to_native_point(point);
@@ -1103,7 +1125,7 @@ fn collect_geometry(
         {
             collect_geometry(
                 &child,
-                artboard_to_root * host_transform,
+                drawing_to_root * host_transform,
                 &spaces,
                 &path,
                 occurrence,
@@ -1151,7 +1173,7 @@ fn collect_geometry(
                 });
                 collect_geometry(
                     &child,
-                    artboard_to_root * child_transform,
+                    drawing_to_root * child_transform,
                     &spaces,
                     &path,
                     &child_occurrence,
@@ -1178,7 +1200,7 @@ fn collect_geometry(
         else {
             continue;
         };
-        let root_transform = artboard_to_root * world;
+        let root_transform = drawing_to_root * world;
         let Some(bounds) = semantic_bounds(local_bounds, root_transform) else {
             continue;
         };
@@ -1193,7 +1215,7 @@ fn collect_geometry(
                 continue;
             }
             let mut inverse = NativeMat2D::identity();
-            if !artboard_to_root.invert(&mut inverse) {
+            if !drawing_to_root.invert(&mut inverse) {
                 continue;
             }
             let local_point = inverse * render_to_native_point(point);

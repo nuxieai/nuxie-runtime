@@ -19041,10 +19041,16 @@ impl CoreRegistryObject
                 }
             },
             CoreField::ScrollConstraintScrollOffsetX => {
-                self.set_authored_scroll_offset_x_with_completion(value, completion);
+                if self.base.set_scroll_offset_x_value(value) {
+                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_offset_x_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
+                }
             },
             CoreField::ScrollConstraintScrollOffsetY => {
-                self.set_authored_scroll_offset_y_with_completion(value, completion);
+                if self.base.set_scroll_offset_y_value(value) {
+                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_offset_y_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
+                }
             },
             CoreField::ScrollConstraintScrollPercentX => {
                 if <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_percent_x(self) != value {

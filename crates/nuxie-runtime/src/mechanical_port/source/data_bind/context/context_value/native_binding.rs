@@ -3,7 +3,6 @@
 use super::{ContextApplyBinding, ContextBinding};
 use crate::mechanical_port::source::{
     assets::{blob_asset::BlobAsset, font_asset::FontAsset, image_asset::ImageAsset},
-    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::CoreHandle,
     data_bind::{
         bindable_property_asset::BindablePropertyAsset,
@@ -30,7 +29,6 @@ use crate::mechanical_port::source::{
         },
     },
     generated::{
-        constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
         core_registry::{CoreRegistry, data_bind_update_view_model_handle},
         data_bind::bindable_property_id_base::BindablePropertyIdBase,
         solo_base::SoloBase,
@@ -97,18 +95,6 @@ impl CoreBinding {
             .expect("retained DataBind");
         Self::new(bind, target, property_key)
     }
-    // Browser scroll coordinates belong to bindings, not native properties or keyframes.
-    fn scroll_offset_target(&self, key: u32) -> Option<&CoreHandle> {
-        if key != u32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY)
-            && key != u32::from(ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY)
-        {
-            return None;
-        }
-        self.target
-            .as_ref()
-            .filter(|target| target.is_type_of(ScrollConstraintBase::TYPE_KEY))
-    }
-
     fn source(&self) -> Option<CoreHandle> {
         self.bind
             .with(|owner| owner.as_data_bind().expect("DataBind occurrence").source())
@@ -483,19 +469,6 @@ impl TargetBinding for CoreBinding {
         .expect("retained target")
     }
     fn double_value(&self) -> f32 {
-        if let Some(target) = self.scroll_offset_target(self.property_key) {
-            return target
-                .with_downcast::<ScrollConstraint, _>(|scroll| {
-                    if self.property_key
-                        == u32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY)
-                    {
-                        scroll.bound_scroll_offset_x()
-                    } else {
-                        scroll.bound_scroll_offset_y()
-                    }
-                })
-                .expect("retained scroll target");
-        }
         CoreRegistry::get_double_handle(
             self.target.as_ref().expect("binding target"),
             self.property_key as i32,
@@ -596,15 +569,7 @@ impl ContextApplyBinding for CoreBinding {
         }
     }
     fn set_double(&mut self, key: u32, value: f32) {
-        if let Some(target) = self.scroll_offset_target(key) {
-            mutate(|| {
-                ScrollConstraint::set_bound_scroll_offset_occurrence(
-                    target,
-                    value,
-                    key == u32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
-                )
-            });
-        } else if let Some(target) = &self.target {
+        if let Some(target) = &self.target {
             mutate(|| CoreRegistry::set_double_handle(target, key as i32, value));
         }
     }

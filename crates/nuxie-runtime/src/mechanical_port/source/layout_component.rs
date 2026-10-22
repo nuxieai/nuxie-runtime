@@ -174,18 +174,10 @@ pub struct LayoutAnimationData {
     pub elapsed_seconds: f32,
     pub from: Layout,
     pub to: Layout,
-    /// Anonymous CSS item endpoints travel with the box through smoothing.
-    pub content_from: Option<Layout>,
-    pub content_to: Option<Layout>,
 }
 impl LayoutAnimationData {
     pub fn interpolate(&self, factor: f32) -> Layout {
         Layout::lerp(self.from, self.to, factor)
-    }
-    fn interpolate_content(&self, factor: f32) -> Option<Layout> {
-        self.content_from
-            .zip(self.content_to)
-            .map(|(from, to)| Layout::lerp(from, to, factor))
     }
     pub fn copy(&mut self, source: &Self) {
         *self = *source;
@@ -195,11 +187,53 @@ impl LayoutAnimationData {
     }
 }
 
+/// Box and anonymous item endpoints are one frame. Retargeting, smoothing
+/// and sampling always operate on the whole frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct LayoutAnimationFrame {
+    layout: Layout,
+    content: Option<Layout>,
+}
+impl LayoutAnimationFrame {
+    fn lerp(from: Self, to: Self, factor: f32) -> Self {
+        Self {
+            layout: Layout::lerp(from.layout, to.layout, factor),
+            content: from
+                .content
+                .zip(to.content)
+                .map(|(from, to)| Layout::lerp(from, to, factor)),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BoxLayoutAnimationData {
+    elapsed_seconds: f32,
+    /// The factor last applied to the box, before advancing its clock.
+    factor: f32,
+    from: LayoutAnimationFrame,
+    to: LayoutAnimationFrame,
+}
+impl BoxLayoutAnimationData {
+    fn interpolate(&self, factor: f32) -> LayoutAnimationFrame {
+        LayoutAnimationFrame::lerp(self.from, self.to, factor)
+    }
+    fn snapped(frame: LayoutAnimationFrame) -> Self {
+        Self {
+            elapsed_seconds: 0.0,
+            factor: 1.0,
+            from: frame,
+            to: frame,
+        }
+    }
+}
+
 /// Allocated on the first retarget or non-default inherited style and retained
 /// until destruction. Presence does not mean an animation is in flight.
 struct LayoutAnimation {
-    a: LayoutAnimationData,
-    b: LayoutAnimationData,
+    a: BoxLayoutAnimationData,
+    b: BoxLayoutAnimationData,
+    in_flight: bool,
     inherited_interpolator: Option<CoreHandle>,
     inherited_interpolation: LayoutStyleInterpolation,
     inherited_interpolation_time: f32,
@@ -473,8 +507,6 @@ pub struct LayoutComponent {
     propagated_content: Option<Vec2D>,
     /// The anonymous CSS item's solved bounds, relative to the border box.
     css_content_layout: Option<Layout>,
-    /// The item's current geometry, including layout interpolation.
-    css_content_current: Option<Layout>,
     /// An artboard's drawing origin, captured without borrowing its base.
     css_content_origin: Vec2D,
     /// Authored transform tracks and bindings are fixed at load, even when
@@ -532,7 +564,6 @@ impl Default for LayoutComponent {
             solved_border: [0.0; 4],
             propagated_content: None,
             css_content_layout: None,
-            css_content_current: None,
             css_content_origin: Vec2D::default(),
             css_transform_authored: false,
             css_effect_state: (false, false),
@@ -3713,11 +3744,98 @@ impl LayoutComponent {
         self.is_css_mode() && self.propagated_content != Some(self.propagated_size())
     }
     fn current_css_content_layout(&self) -> Option<Layout> {
-        if !self.animates() {
-            return self.css_content_layout;
+        let solved = self.css_content_layout?;
+        if self.animates()
+            && self
+                .animation
+                .as_ref()
+                .is_some_and(|animation| animation.in_flight)
+        {
+            let data = self.current_animation_data_ref()?;
+            return data.interpolate(data.factor).content.or(Some(solved));
         }
-        self.css_content_layout
-            .and(self.css_content_current.or(self.css_content_layout))
+        Some(solved)
+    }
+
+    fn current_layout_frame(&self) -> LayoutAnimationFrame {
+        LayoutAnimationFrame {
+            layout: self.layout,
+            content: self.current_css_content_layout(),
+        }
+    }
+
+    /// Commit a solved item and its box together. This is the only writer of
+    /// the committed item: snapping replaces both animation frames, while a
+    /// retarget starts from the frame currently being displayed.
+    fn set_css_content_layout(
+        &mut self,
+        next: Layout,
+        content: Option<Layout>,
+        animate: bool,
+    ) -> (bool, bool) {
+        let old = self.current_layout_frame();
+        let next = LayoutAnimationFrame {
+            layout: next,
+            content,
+        };
+        let css = self.is_css_mode();
+        self.css_content_layout = content;
+        let just_added = self.has_layout_flag(LayoutComponentFlags::JustAddedToHost);
+        let force = self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds);
+        if just_added {
+            self.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
+        }
+        if !just_added && animate && self.animates() {
+            let target = self
+                .current_animation_data_ref()
+                .map_or(old, |data| data.to);
+            if next != target || force {
+                self.ensure_animation();
+                if self.current_animation_data_ref().unwrap().elapsed_seconds != 0.0 {
+                    if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
+                        self.animation.as_mut().unwrap().a = self.animation.as_ref().unwrap().b;
+                    }
+                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
+                } else {
+                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
+                }
+                *self.current_animation_data().unwrap() = BoxLayoutAnimationData {
+                    elapsed_seconds: 0.0,
+                    factor: 0.0,
+                    from: old,
+                    to: next,
+                };
+                self.animation.as_mut().unwrap().in_flight = true;
+                return (true, false);
+            }
+            return (false, false);
+        }
+        self.layout = next.layout;
+        let changed = just_added || old.layout != next.layout || force;
+        if css {
+            // This also runs for item-only changes and for an existing
+            // animation record whose outer box has already reached its target.
+            if let Some(animation) = self.animation.as_mut() {
+                let data = BoxLayoutAnimationData::snapped(next);
+                animation.a = data;
+                animation.b = data;
+                animation.in_flight = false;
+            }
+            self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
+        } else if just_added {
+            if let Some(data) = self.current_animation_data() {
+                *data = BoxLayoutAnimationData::snapped(next);
+            }
+        } else if changed {
+            // Preserve translated boxes' existing animation protocol.
+            if let Some(animation) = self.animation.as_mut() {
+                animation.a.to = next;
+            }
+        }
+        let resized = !just_added
+            && (old.layout.width() != next.layout.width()
+                || old.layout.height() != next.layout.height());
+        (changed, resized)
     }
 
     // Plain groups contain free content; Solo children still receive the
@@ -5249,11 +5367,12 @@ impl LayoutComponent {
                                 layout.grid_row_gap,
                             ) = grid;
                         }
-                        let padding_changed = layout.css_content_layout != content_layout
+                        let padding_changed = layout.layout_data.solved_content_layout
+                            != content_layout
                             || layout.solved_padding != padding
                             || layout.solved_border != border
                             || layout.scroll_range != scroll_range;
-                        layout.css_content_layout = content_layout;
+                        layout.layout_data.solved_content_layout = content_layout;
                         layout.solved_padding = padding;
                         layout.solved_border = border;
                         layout.scroll_range = scroll_range;
@@ -5371,73 +5490,20 @@ impl LayoutComponent {
         for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
             Self::update_provider_layout_bounds(&provider, animate);
         }
-        let next = self.layout_data.solved_layout;
-        let content_from = self.current_css_content_layout();
-        let content_to = self.css_content_layout;
-        if !animate || !self.animates() {
-            self.css_content_current = content_to;
-        }
         self.layout_padding = self.solved_padding;
-        if self.has_layout_flag(LayoutComponentFlags::JustAddedToHost) {
-            self.css_content_current = content_to;
-            self.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
-            self.layout = next;
-            if let Some(data) = self.current_animation_data() {
-                data.from = next;
-                data.to = next;
-                data.content_from = content_to;
-                data.content_to = content_to;
-                data.elapsed_seconds = 0.0;
-            }
-            self.propagate_size();
-            self.place_css_content();
-            CoreCapabilities::world_transform_mark_dirty(self);
-            self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
-            return;
+        let (changed, resized) = self.set_css_content_layout(
+            self.layout_data.solved_layout,
+            self.layout_data.solved_content_layout,
+            animate,
+        );
+        if resized {
+            CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
         }
-        if animate && self.animates() {
-            let force = self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds);
-            let current = self.current_animation_data().copied();
-            let target = current.map(|data| data.to).unwrap_or(self.layout);
-            let content_target = current.map_or(content_from, |data| data.content_to);
-            if next != target || content_to != content_target || force {
-                self.ensure_animation();
-                let data = self.current_animation_data().unwrap();
-                if data.elapsed_seconds != 0.0 {
-                    if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-                        self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
-                    }
-                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
-                } else {
-                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                }
-                let from = self.layout;
-                let data = self.current_animation_data().unwrap();
-                data.from = from;
-                data.to = next;
-                data.content_from = content_from;
-                data.content_to = content_to;
-                data.elapsed_seconds = 0.0;
-                self.propagate_size();
-                CoreCapabilities::world_transform_mark_dirty(self);
-            }
-        } else if next != self.layout
-            || self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds)
-        {
-            if self.layout.width() != next.width() || self.layout.height() != next.height() {
-                CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
-            }
-            self.layout = next;
-            self.css_content_current = content_to;
-            if let Some(animation) = self.animation.as_mut() {
-                animation.a.to = next;
-                animation.a.content_to = content_to;
-            }
+        if changed || self.css_content_size_changed() {
             self.propagate_size();
-            CoreCapabilities::world_transform_mark_dirty(self);
         }
-        if self.css_content_size_changed() {
-            self.propagate_size();
+        if changed {
+            CoreCapabilities::world_transform_mark_dirty(self);
         }
         self.place_css_content();
         self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
@@ -5503,84 +5569,19 @@ impl LayoutComponent {
         for (_, provider) in Self::layout_providers_occurrence(owner) {
             Self::update_provider_layout_bounds(&provider, animate);
         }
-        let (next, old, content_from, content_to, just_added, animates, force, current) = owner
+        let (changed, resized) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                if !animate || !layout.animates() {
-                    layout.css_content_current = layout.css_content_layout;
-                }
                 layout.layout_padding = layout.solved_padding;
-                (
+                layout.set_css_content_layout(
                     layout.layout_data.solved_layout,
-                    layout.layout,
-                    layout.current_css_content_layout(),
-                    layout.css_content_layout,
-                    layout.has_layout_flag(LayoutComponentFlags::JustAddedToHost),
-                    layout.animates(),
-                    layout.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds),
-                    layout.current_animation_data().copied(),
+                    layout.layout_data.solved_content_layout,
+                    animate,
                 )
             })
             .unwrap();
-        let mut changed = false;
-        if just_added {
-            owner.with_mut(|object| {
-                let layout = object.as_layout_component_mut().unwrap();
-                layout.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
-                layout.layout = next;
-                layout.css_content_current = content_to;
-                if let Some(data) = layout.current_animation_data() {
-                    *data = LayoutAnimationData {
-                        from: next,
-                        to: next,
-                        content_from: content_to,
-                        content_to,
-                        elapsed_seconds: 0.0,
-                    };
-                }
-            });
-            changed = true;
-        } else if animate && animates {
-            if next != current.map(|data| data.to).unwrap_or(old)
-                || content_to != current.map_or(content_from, |data| data.content_to)
-                || force
-            {
-                owner.with_mut(|object| {
-                    let layout = object.as_layout_component_mut().unwrap();
-                    layout.ensure_animation();
-                    if layout.current_animation_data().unwrap().elapsed_seconds != 0.0 {
-                        if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-                            layout.animation.as_mut().unwrap().a =
-                                layout.animation.as_mut().unwrap().b;
-                        }
-                        layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
-                    } else {
-                        layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                    }
-                    *layout.current_animation_data().unwrap() = LayoutAnimationData {
-                        from: old,
-                        to: next,
-                        content_from,
-                        content_to,
-                        elapsed_seconds: 0.0,
-                    };
-                });
-                changed = true;
-            }
-        } else if next != old || force {
-            if next.width() != old.width() || next.height() != old.height() {
-                owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
-            }
-            owner.with_mut(|object| {
-                let layout = object.as_layout_component_mut().unwrap();
-                layout.layout = next;
-                layout.css_content_current = content_to;
-                if let Some(animation) = layout.animation.as_mut() {
-                    animation.a.to = next;
-                    animation.a.content_to = content_to;
-                }
-            });
-            changed = true;
+        if resized {
+            owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
         }
         let content_size_changed = owner
             .with(|object| {
@@ -5712,14 +5713,13 @@ impl LayoutComponent {
     /// applyInterpolation's opening test: an animating layout whose current
     /// animation has not reached its layout.
     fn interpolation_pending(layout: &mut Self, animate: bool) -> bool {
-        let target = layout.layout;
-        let Some(data) = layout.current_animation_data().copied() else {
+        let Some(data) = layout.current_animation_data_ref() else {
             return false;
         };
         animate
             && layout.animates()
             && layout.style.is_some()
-            && (data.to != target || data.content_to != layout.current_css_content_layout())
+            && data.to != layout.current_layout_frame()
     }
 
     pub fn apply_interpolation_occurrence(owner: &CoreHandle, elapsed: f32, animate: bool) -> bool {
@@ -5728,12 +5728,15 @@ impl LayoutComponent {
         }) else {
             return false;
         };
-        let (smoothing, data_a) = owner
+        let (smoothing, data_a, data, time, old) = owner
             .with(|object| {
                 let layout = object.as_layout_component().unwrap();
                 (
                     layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation),
                     layout.animation.as_ref().unwrap().a,
+                    *layout.current_animation_data_ref().unwrap(),
+                    layout.interpolation_time(),
+                    layout.current_layout_frame(),
                 )
             })
             .unwrap();
@@ -5759,105 +5762,46 @@ impl LayoutComponent {
                 })
                 .unwrap_or(factor)
         };
-        if smoothing {
-            let f = factor(data_a.elapsed_seconds);
-            owner.with_mut(|object| {
-                let layout = object.as_layout_component_mut().unwrap();
-                layout.animation.as_mut().unwrap().b.from =
-                    layout.animation.as_mut().unwrap().a.interpolate(f);
-                layout.animation.as_mut().unwrap().b.content_from =
-                    layout.animation.as_ref().unwrap().a.interpolate_content(f);
-                if f == 1.0 {
-                    layout.animation.as_mut().unwrap().a = layout.animation.as_mut().unwrap().b;
-                    layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                } else {
-                    layout.animation.as_mut().unwrap().a.elapsed_seconds += elapsed;
-                }
-            });
-        }
-        let (data, old) = owner
+        // Resolve callbacks before changing either animation frame. Smoothing
+        // and sampling then publish one coherent box and item state.
+        let smoothing_factor = smoothing.then(|| factor(data_a.elapsed_seconds));
+        let f = if data.elapsed_seconds >= time {
+            None
+        } else {
+            Some(factor(data.elapsed_seconds))
+        };
+        let (changed, resized, content_size_changed) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                (*layout.current_animation_data().unwrap(), layout.layout)
+                let (changed, resized) =
+                    layout.apply_layout_animation_step(elapsed, smoothing_factor, f, old);
+                (changed, resized, layout.css_content_size_changed())
             })
             .unwrap();
-        if data.elapsed_seconds
-            >= owner
-                .with(|object| object.as_layout_component().unwrap().interpolation_time())
-                .unwrap()
-        {
-            if old.width() != data.to.width() || old.height() != data.to.height() {
-                owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
-            }
-            owner.with_mut(|object| {
-                let layout = object.as_layout_component_mut().unwrap();
-                layout.layout = data.to;
-                layout.css_content_current = data.content_to;
-                if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-                    layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                    layout.animation.as_mut().unwrap().a = layout.animation.as_mut().unwrap().b;
-                    layout.animation.as_mut().unwrap().b.elapsed_seconds = 0.0;
-                }
-                layout.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
-            });
-            Self::propagate_size_occurrence(owner);
-            Self::place_css_content_occurrence(owner);
-            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-                owner.clone(),
-            )
-            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
-            return false;
+        if f.is_none() && resized {
+            owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
         }
-        let f = factor(data.elapsed_seconds);
-        let current = data.interpolate(f);
-        let content = data.interpolate_content(f);
-        let content_changed = owner
-            .with(|object| {
-                object
-                    .as_layout_component()
-                    .unwrap()
-                    .current_css_content_layout()
-                    != content
-            })
-            .unwrap_or(false);
-        let resized = old.width() != current.width() || old.height() != current.height();
-        let changed = current != old || content_changed;
-        if changed {
-            owner.with_mut(|object| {
-                let layout = object.as_layout_component_mut().unwrap();
-                layout.layout = current;
-                layout.css_content_current = content;
-            });
-        }
-        let content_size_changed = owner
-            .with(|object| {
-                object
-                    .as_layout_component()
-                    .is_some_and(Self::css_content_size_changed)
-            })
-            .unwrap_or(false);
-        if resized || content_size_changed {
+        if f.is_none() || resized || content_size_changed {
             Self::propagate_size_occurrence(owner);
         }
         if changed {
-            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-                owner.clone(),
-            )
-            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+            ComponentOccurrenceHandle::Authored(owner.clone())
+                .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
         }
         Self::place_css_content_occurrence(owner);
+        let Some(f) = f else {
+            return false;
+        };
         owner.with_mut(|object| {
             object
                 .as_layout_component_mut()
                 .unwrap()
                 .current_animation_data()
                 .unwrap()
-                .elapsed_seconds += elapsed
+                .elapsed_seconds += elapsed;
         });
         if f != 1.0 {
-            if owner.is_type_of(
-                crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
-            ) {
+            if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
                 Self::mark_layout_node_dirty_occurrence(owner, false);
             }
             true
@@ -5873,9 +5817,8 @@ impl LayoutComponent {
                 if !layout.animates() {
                     return false;
                 }
-                if let Some(data) = layout.current_animation_data().copied() {
-                    layout.layout = data.to;
-                    layout.css_content_current = data.content_to;
+                if layout.current_animation_data_ref().is_some() {
+                    layout.finish_layout_animation(false);
                 }
                 true
             })
@@ -5979,7 +5922,17 @@ impl LayoutComponent {
         })
         .unwrap_or(0.0)
     }
-    fn current_animation_data(&mut self) -> Option<&mut LayoutAnimationData> {
+    fn current_animation_data_ref(&self) -> Option<&BoxLayoutAnimationData> {
+        let animation = self.animation.as_ref()?;
+        Some(
+            if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
+                &animation.b
+            } else {
+                &animation.a
+            },
+        )
+    }
+    fn current_animation_data(&mut self) -> Option<&mut BoxLayoutAnimationData> {
         let smoothing = self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation);
         let animation = self.animation.as_mut()?;
         Some(if smoothing {
@@ -5989,38 +5942,87 @@ impl LayoutComponent {
         })
     }
     fn ensure_animation(&mut self) -> &mut LayoutAnimation {
-        let content = self
-            .css_content_layout
-            .and(self.css_content_current.or(self.css_content_layout));
+        let frame = LayoutAnimationFrame {
+            layout: self.layout,
+            content: self.css_content_layout,
+        };
         self.animation.get_or_insert_with(|| {
-            let data = LayoutAnimationData {
-                from: self.layout,
-                to: self.layout,
-                content_from: content,
-                content_to: content,
-                elapsed_seconds: 0.0,
-            };
+            let data = BoxLayoutAnimationData::snapped(frame);
             Box::new(LayoutAnimation {
                 a: data,
                 b: data,
+                in_flight: false,
                 inherited_interpolator: None,
                 inherited_interpolation: LayoutStyleInterpolation::Hold,
                 inherited_interpolation_time: 0.0,
             })
         })
     }
+
+    fn smooth_layout_animation(&mut self, elapsed: f32, factor: f32) {
+        let animation = self.animation.as_mut().unwrap();
+        animation.b.from = animation.a.interpolate(factor);
+        if factor == 1.0 {
+            animation.a = animation.b;
+            self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
+        } else {
+            animation.a.elapsed_seconds += elapsed;
+        }
+    }
+
+    fn sample_layout_animation(&mut self, factor: f32, old: LayoutAnimationFrame) -> (bool, bool) {
+        let data = self.current_animation_data().unwrap();
+        data.factor = factor;
+        let current = data.interpolate(factor);
+        self.layout = current.layout;
+        if factor == 1.0 {
+            self.animation.as_mut().unwrap().in_flight = false;
+        }
+        let resized = old.layout.width() != current.layout.width()
+            || old.layout.height() != current.layout.height();
+        (old != current, resized)
+    }
+
+    fn finish_layout_animation(&mut self, reset_clock: bool) -> bool {
+        let target = self.current_animation_data_ref().unwrap().to;
+        let resized = self.layout.width() != target.layout.width()
+            || self.layout.height() != target.layout.height();
+        if self.is_css_mode() {
+            self.set_css_content_layout(target.layout, target.content, false);
+        } else {
+            self.layout = target.layout;
+            if reset_clock {
+                if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
+                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
+                    self.animation.as_mut().unwrap().a = self.animation.as_ref().unwrap().b;
+                    self.animation.as_mut().unwrap().b.elapsed_seconds = 0.0;
+                }
+                self.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
+            }
+        }
+        resized
+    }
+    fn apply_layout_animation_step(
+        &mut self,
+        elapsed: f32,
+        smoothing_factor: Option<f32>,
+        factor: Option<f32>,
+        old: LayoutAnimationFrame,
+    ) -> (bool, bool) {
+        if let Some(factor) = smoothing_factor {
+            self.smooth_layout_animation(elapsed, factor);
+        }
+        match factor {
+            Some(factor) => self.sample_layout_animation(factor, old),
+            None => (true, self.finish_layout_animation(true)),
+        }
+    }
+
     pub fn apply_interpolation(&mut self, elapsed: f32, animate: bool) -> bool {
-        let target = self.layout;
-        let Some(data) = self.current_animation_data().copied() else {
-            return false;
-        };
-        if !animate
-            || !self.animates()
-            || self.style.is_none()
-            || (data.to == target && data.content_to == self.current_css_content_layout())
-        {
+        if !Self::interpolation_pending(self, animate) {
             return false;
         }
+        let old = self.current_layout_frame();
         let transform_factor = |layout: &Self, seconds: f32| {
             let time = layout.interpolation_time();
             let factor = 1.0_f32.min(if time > 0.0 { seconds / time } else { 1.0 });
@@ -6039,59 +6041,30 @@ impl LayoutComponent {
                 })
                 .unwrap_or(factor)
         };
-        if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-            let factor = transform_factor(self, self.animation.as_ref().unwrap().a.elapsed_seconds);
-            self.animation.as_mut().unwrap().b.from =
-                self.animation.as_mut().unwrap().a.interpolate(factor);
-            self.animation.as_mut().unwrap().b.content_from = self
-                .animation
-                .as_ref()
-                .unwrap()
-                .a
-                .interpolate_content(factor);
-            if factor == 1.0 {
-                self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
-                self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-            } else {
-                self.animation.as_mut().unwrap().a.elapsed_seconds += elapsed;
-            }
+        let smoothing_factor = self
+            .has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation)
+            .then(|| transform_factor(self, self.animation.as_ref().unwrap().a.elapsed_seconds));
+        let data = *self.current_animation_data_ref().unwrap();
+        let factor = if data.elapsed_seconds >= self.interpolation_time() {
+            None
+        } else {
+            Some(transform_factor(self, data.elapsed_seconds))
+        };
+        let (changed, resized) =
+            self.apply_layout_animation_step(elapsed, smoothing_factor, factor, old);
+        if factor.is_none() && resized {
+            CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
         }
-        let data = *self.current_animation_data().unwrap();
-        if data.elapsed_seconds >= self.interpolation_time() {
-            if self.layout.width() != data.to.width() || self.layout.height() != data.to.height() {
-                CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
-            }
-            self.layout = data.to;
-            self.css_content_current = data.content_to;
-            if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-                self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
-                self.animation.as_mut().unwrap().b.elapsed_seconds = 0.0;
-            }
-            self.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
-            self.propagate_size();
-            self.place_css_content();
-            CoreCapabilities::world_transform_mark_dirty(self);
-            return false;
-        }
-        let factor = transform_factor(self, data.elapsed_seconds);
-        let current = data.interpolate(factor);
-        let content = data.interpolate_content(factor);
-        let content_changed = self.current_css_content_layout() != content;
-        let resized =
-            self.layout.width() != current.width() || self.layout.height() != current.height();
-        let changed = self.layout != current || content_changed;
-        if changed {
-            self.layout = current;
-            self.css_content_current = content;
-        }
-        if resized || self.css_content_size_changed() {
+        if factor.is_none() || resized || self.css_content_size_changed() {
             self.propagate_size();
         }
         if changed {
             CoreCapabilities::world_transform_mark_dirty(self);
         }
         self.place_css_content();
+        let Some(factor) = factor else {
+            return false;
+        };
         self.current_animation_data().unwrap().elapsed_seconds += elapsed;
         if factor != 1.0 {
             if self.is_artboard() {
@@ -6104,18 +6077,12 @@ impl LayoutComponent {
     }
     pub fn quiet_state(&self) -> crate::source::advancing_component::QuietState {
         use crate::source::advancing_component::QuietState;
-        let Some(animation) = &self.animation else {
-            return QuietState::Quiet;
-        };
-        let data = if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-            &animation.b
-        } else {
-            &animation.a
-        };
         if self.is_collapsed()
             || !self.animates()
             || self.style.is_none()
-            || (data.to == self.layout && data.content_to == self.current_css_content_layout())
+            || self
+                .current_animation_data_ref()
+                .is_none_or(|data| data.to == self.current_layout_frame())
         {
             QuietState::Quiet
         } else {
@@ -6134,9 +6101,8 @@ impl LayoutComponent {
     }
     pub fn interrupt_animation(&mut self) {
         if self.animates() {
-            if let Some(data) = self.current_animation_data().copied() {
-                self.layout = data.to;
-                self.css_content_current = data.content_to;
+            if self.current_animation_data_ref().is_some() {
+                self.finish_layout_animation(false);
             }
             self.propagate_size();
             self.place_css_content();

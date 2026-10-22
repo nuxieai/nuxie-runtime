@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path, PureWindowsPath
+import subprocess
 from dataclasses import replace
 import sys
 import tempfile
@@ -225,14 +226,53 @@ class RuntimeBuildTest(unittest.TestCase):
              patch.object(runtime, "packages_from_workspace", return_value={}), \
              patch.object(runtime, "materialize", return_value=["//core:core"]), \
              patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+             patch.object(runtime, "check_upstream_checkout") as checked, \
              patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
              patch("sys.argv", ["runtime.py", "test", "-p", "core"]):
             self.assertEqual(runtime.main(), 0)
+        checked.assert_called_once_with()
         arguments = run.call_args.args[0]
         self.assertIn("--define=NUX_RUNTIME_SOURCE_REVISION=revision with spaces=one", arguments)
         self.assertNotIn("--action_env=NUX_RUNTIME_SOURCE_REVISION", arguments)
         self.assertIn("--action_env=NUX_RUNTIME_RIVE_ORACLE", arguments)
         self.assertIn("--action_env=RIVE_RUNTIME_DIR", arguments)
+
+    def upstream_checkout(self):
+        checkout = self.root / "rive-runtime"
+        checkout.mkdir()
+        def git(*args):
+            return subprocess.run(["git", "-C", str(checkout), *args], check=True, capture_output=True, text=True).stdout.strip()
+        git("init", "-q")
+        (checkout / "asset.riv").write_text("pinned")
+        git("add", "asset.riv")
+        git("-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "-q", "-m", "pin")
+        return checkout, git("rev-parse", "HEAD")
+
+    def test_tests_refuse_an_upstream_checkout_other_than_the_pin(self):
+        checkout, head = self.upstream_checkout()
+        environment = {"PATH": os.environ["PATH"], "RIVE_RUNTIME_DIR": str(checkout)}
+        other = "0" * 40
+        (self.root / "Makefile").write_text(f"RIVE_RUNTIME_REF ?= {other}\n")
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(ValueError, f"is at {head}, but the tests read upstream fixtures at the pinned {other}"):
+                runtime.check_upstream_checkout()
+            with patch.object(runtime, "materialize") as materialize, \
+                 patch("sys.argv", ["runtime.py", "test", "-p", "core"]):
+                self.assertEqual(runtime.main(), 2)
+                materialize.assert_not_called()
+        (self.root / "Makefile").write_text(f"RIVE_RUNTIME_REF ?= {head}\n")
+        with patch.dict(os.environ, environment, clear=True):
+            runtime.check_upstream_checkout()
+            (checkout / "asset.riv").write_text("edited")
+            with self.assertRaisesRegex(ValueError, "has tracked changes"):
+                runtime.check_upstream_checkout()
+        with patch.dict(os.environ, {**environment, "RIVE_RUNTIME_REF": other}, clear=True):
+            with self.assertRaisesRegex(ValueError, f"at the pinned {other}"):
+                runtime.check_upstream_checkout()
+        with patch.dict(os.environ, {"PATH": os.environ["PATH"], "RIVE_RUNTIME_DIR": ""}, clear=True), \
+             patch.object(runtime.subprocess, "run") as run:
+            runtime.check_upstream_checkout()
+            run.assert_not_called()
 
     def test_apple_deployment_targets_reach_toolchain_and_rust_invocations(self):
         package = self.package("core")

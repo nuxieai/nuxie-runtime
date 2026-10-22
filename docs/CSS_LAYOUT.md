@@ -267,7 +267,7 @@ It changes no part of the file format.
 - Focus scroll-into-view converts physical movement into logical offsets in RTL. It reveals items inside the viewport's padding-box clip, using its border inset and its width and height, independent of the content box's solved position.
 - The compiler writes `threshold` 10 on every CSS viewport's `ScrollConstraint`, the CSS default: a press moves 10 points before it becomes a scroll, about the slop a browser and iOS give a touch, so a tap that moves a little stays a tap. A scroll that starts cancels the press's clicks (4.5). A translated viewport keeps its authored threshold.
 - A translated viewport keeps today's range, snap, index, thumb, focus and bound offset behavior.
-- Virtualised and looping lists keep their own extents (Rive-native).
+- Virtualised and looping lists keep their native viewport metrics, content-origin adjustment, extents and scroll coordinates, including inside a CSS viewport. The CSS scroll axis and its metric shortcuts apply only to non-virtualised, finite scrollers.
 
 **Grid.** `display: grid` in CSS mode selects Taffy's grid, with the box's `GridTrack` and `GridItemPlacement` records, `gridAutoFlow`, the gaps and the alignment from the record. `layoutTypeValue` is ignored in CSS mode: a style left as a Rive stack does not make a CSS box a stack.
 

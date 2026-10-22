@@ -8026,6 +8026,128 @@ fn css_translated_absolute_child_paints_above_static_siblings() {
     assert!(at("Red") < at("Blue"), "{names:?}");
 }
 
+#[test]
+fn css_virtualized_scroll_keeps_native_metrics_and_content_origin() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+        math::vec2d::Vec2D,
+    };
+    const MARGIN_LEFT: u16 = 61049;
+    for horizontal in [false, true] {
+        let f = scene(
+            (500.0, 500.0),
+            css(
+                "Viewport",
+                [
+                    vec![
+                        U(DISPLAY, 1),
+                        U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                    ],
+                    width(100.0).to_vec(),
+                    height(100.0).to_vec(),
+                ]
+                .concat(),
+                vec![B {
+                    scroll: Some(if horizontal { 0 } else { 1 }),
+                    scroll_properties: vec![U(ScrollConstraintBase::VIRTUALIZE_PROPERTY_KEY, 1)],
+                    ..css(
+                        "Content",
+                        [
+                            vec![
+                                U(DISPLAY, 1),
+                                U(61006, if horizontal { 0 } else { 2 }),
+                                F(FLEX_SHRINK, 0.0),
+                                F(if horizontal { MARGIN_LEFT } else { MARGIN_TOP }, 20.0),
+                            ],
+                            width(if horizontal { 400.0 } else { 100.0 }).to_vec(),
+                            height(if horizontal { 100.0 } else { 400.0 }).to_vec(),
+                        ]
+                        .concat(),
+                        (0..4)
+                            .map(|index| {
+                                css(
+                                    if index == 3 { "Last" } else { "Row" },
+                                    [
+                                        vec![F(FLEX_SHRINK, 0.0)],
+                                        width(100.0).to_vec(),
+                                        height(100.0).to_vec(),
+                                    ]
+                                    .concat(),
+                                    vec![],
+                                )
+                            })
+                            .collect(),
+                    )
+                }],
+            ),
+        );
+        let scroll = css_axis_scroll(&f);
+        let content = f.bounds("Content");
+        assert_eq!(if horizontal { content[0] } else { content[1] }, 20.0);
+        let last = f.world_origin("Last");
+        assert_eq!(if horizontal { last.0 } else { last.1 }, 320.0);
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                scroll.virtualize(),
+                if horizontal {
+                    scroll.content_width()
+                } else {
+                    scroll.content_height()
+                },
+            )),
+            Some((true, 400.0)),
+        );
+        // Scrolling to the end must include the content's 20-point inset.
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+            scroll.scroll_by(if horizontal {
+                Vec2D::new(-1000.0, 0.0)
+            } else {
+                Vec2D::new(0.0, -1000.0)
+            })
+        });
+        f.advance(3);
+        let last = f.world_origin("Last");
+        let size = f.bounds("Last");
+        assert_eq!(
+            if horizontal {
+                last.0 + size[2]
+            } else {
+                last.1 + size[3]
+            },
+            100.0,
+            "horizontal={horizontal}",
+        );
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                if horizontal {
+                    scroll.viewport_width()
+                } else {
+                    scroll.viewport_height()
+                },
+                if horizontal {
+                    scroll.max_offset_x()
+                } else {
+                    scroll.max_offset_y()
+                },
+                if horizontal {
+                    scroll.offset_x()
+                } else {
+                    scroll.offset_y()
+                },
+            )),
+            Some((80.0, -320.0, -320.0)),
+        );
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                scroll.has_css_scroll_axis(),
+                scroll.css_scrollport(),
+            )),
+            Some((false, None))
+        );
+    }
+}
+
 /// The orientation helpers virtualized scrolling reads follow a CSS box's
 /// record, not its retained Rive style: its main axis from
 /// `flex-direction`, its wrapping from `flex-wrap`.

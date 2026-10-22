@@ -3356,6 +3356,58 @@ fn css_leaf_row_text_keeps_its_intrinsic_width_before_text_align() {
     }
 }
 
+#[test]
+fn css_leaf_grid_item_size_changes_propagate_without_a_box_resize() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    const JUSTIFY_ITEMS: u16 = 61015;
+    for borrowed in [false, true] {
+        let f = CssTextLeaf::new(
+            "Hello",
+            &[
+                (DISPLAY, 2),
+                (JUSTIFY_ITEMS, 10),
+                (WIDTH_KIND, 1),
+                (HEIGHT_KIND, 1),
+            ],
+            &[(WIDTH, 300.0), (HEIGHT, 100.0)],
+        );
+        let line = f.measure(None).x;
+        assert!(line > 0.0 && line < 300.0);
+        let outer = f.solve();
+        near(f.text_size().x, 300.0);
+        for justify in [8, 10, 8] {
+            CssTextLeaf::write(&f.record, &[(JUSTIFY_ITEMS, justify)], &[]);
+            LayoutComponent::sync_style_occurrence(&f.label);
+            LayoutComponent::calculate_layout_occurrence(&f.root, f32::NAN, f32::NAN);
+            if borrowed {
+                f.label
+                    .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                        assert!(!layout.animates());
+                        layout.update_layout_bounds(false);
+                        assert!(!layout.layout_data.has_new_layout);
+                    })
+                    .unwrap();
+            } else {
+                LayoutComponent::update_layout_bounds_occurrence(&f.label, false);
+            }
+            let next = f
+                .label
+                .with_downcast::<LayoutComponent, _>(|layout| layout.layout_data.solved_layout)
+                .unwrap();
+            assert_eq!(next, outer);
+            near(f.text_size().x, if justify == 8 { line } else { 300.0 });
+            near(
+                f.offset().x,
+                if justify == 8 {
+                    (300.0 - line) / 2.0
+                } else {
+                    0.0
+                },
+            );
+        }
+    }
+}
+
 fn enable_leaf_layout_interpolation(owner: &CoreHandle) {
     use crate::source::layout::layout_enums::{LayoutAnimationStyle, LayoutStyleInterpolation};
     owner

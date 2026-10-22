@@ -74,13 +74,33 @@ impl ScrollBarConstraint {
             .with_downcast_mut::<ScrollConstraint, _>(use_scroll)
     }
 
+    /// The track's content origin and size in its own border box.
+    /// A CSS leaf's anonymous item does not define the thumb's travel.
+    fn track_geometry(&self) -> (Vec2D, Vec2D) {
+        let css_viewport = self
+            .with_scroll(ScrollConstraint::has_css_scroll_axis)
+            .unwrap_or(false);
+        self.with_track(|track| {
+            let [top, right, bottom, left] = if css_viewport && track.is_css_mode() {
+                track.solved_border()
+            } else {
+                [0.0; 4]
+            };
+            (
+                Vec2D::new(track.padding_left() + left, track.padding_top() + top),
+                Vec2D::new(
+                    track.inner_width() - left - right,
+                    track.inner_height() - top - bottom,
+                ),
+            )
+        })
+        .expect("ScrollBarConstraint track")
+    }
+
     pub fn computed_thumb_width(&self) -> f32 {
         if self.base.auto_size() {
             if let Some(ratio) = self.with_scroll(ScrollConstraint::visible_width_ratio) {
-                return self
-                    .with_track(LayoutComponent::inner_width)
-                    .expect("ScrollBarConstraint track")
-                    * ratio;
+                return self.track_geometry().1.x * ratio;
             }
         }
         self.with_thumb(LayoutComponent::layout_width)
@@ -89,10 +109,7 @@ impl ScrollBarConstraint {
     pub fn computed_thumb_height(&self) -> f32 {
         if self.base.auto_size() {
             if let Some(ratio) = self.with_scroll(ScrollConstraint::visible_height_ratio) {
-                return self
-                    .with_track(LayoutComponent::inner_height)
-                    .expect("ScrollBarConstraint track")
-                    * ratio;
+                return self.track_geometry().1.y * ratio;
             }
         }
         self.with_thumb(LayoutComponent::layout_height)
@@ -159,9 +176,7 @@ impl ScrollBarConstraint {
         let mut thumb_offset_x = 0.0;
         let mut thumb_offset_y = 0.0;
         if self.base.constrains_horizontal() {
-            let inner_width = self
-                .with_track(LayoutComponent::inner_width)
-                .expect("validated ScrollBarConstraint track");
+            let inner_width = self.track_geometry().1.x;
             let mut thumb_width = self.computed_thumb_width();
             let max_thumb_offset = inner_width - thumb_width;
             thumb_offset_x = if max_offset_x == 0.0 {
@@ -182,9 +197,8 @@ impl ScrollBarConstraint {
             }
             if self.with_scroll(ScrollConstraint::css_rtl).unwrap_or(false) {
                 let solved_x = self.with_thumb(LayoutComponent::layout_x).unwrap();
-                let padding_left = self.with_track(LayoutComponent::padding_left).unwrap();
-                thumb_offset_x =
-                    padding_left + inner_width - thumb_width - thumb_offset_x - solved_x;
+                let start = self.track_geometry().0.x;
+                thumb_offset_x = start + inner_width - thumb_width - thumb_offset_x - solved_x;
             }
             if self.base.auto_size() {
                 self.with_thumb_mut(|thumb| {
@@ -194,9 +208,7 @@ impl ScrollBarConstraint {
             }
         }
         if self.base.constrains_vertical() {
-            let inner_height = self
-                .with_track(LayoutComponent::inner_height)
-                .expect("validated ScrollBarConstraint track");
+            let inner_height = self.track_geometry().1.y;
             let mut thumb_height = self.computed_thumb_height();
             let max_thumb_offset = inner_height - thumb_height;
             thumb_offset_y = if max_offset_y == 0.0 {
@@ -334,12 +346,8 @@ impl ScrollBarConstraint {
         };
         let mut local_position = inverse_world * world_position;
         if Self::with_owner(owner, |bar| bar.base.constrains_horizontal()) {
-            local_position.x -= track
-                .with(|track| track.as_layout_component().unwrap().padding_left())
-                .expect("validated scrollbar track");
-            let inner_width = track
-                .with(|track| track.as_layout_component().unwrap().inner_width())
-                .expect("validated scrollbar track");
+            local_position.x -= Self::with_owner(owner, |bar| bar.track_geometry().0.x);
+            let inner_width = Self::with_owner(owner, |bar| bar.track_geometry().1.x);
             let thumb_width = Self::with_owner(owner, Self::computed_thumb_width);
             let track_range = inner_width - thumb_width;
             scroll
@@ -359,12 +367,8 @@ impl ScrollBarConstraint {
                 .expect("resolved ScrollConstraint occurrence");
         }
         if Self::with_owner(owner, |bar| bar.base.constrains_vertical()) {
-            local_position.y -= track
-                .with(|track| track.as_layout_component().unwrap().padding_top())
-                .expect("validated scrollbar track");
-            let inner_height = track
-                .with(|track| track.as_layout_component().unwrap().inner_height())
-                .expect("validated scrollbar track");
+            local_position.y -= Self::with_owner(owner, |bar| bar.track_geometry().0.y);
+            let inner_height = Self::with_owner(owner, |bar| bar.track_geometry().1.y);
             let thumb_height = Self::with_owner(owner, Self::computed_thumb_height);
             let track_range = inner_height - thumb_height;
             scroll
@@ -381,12 +385,8 @@ impl ScrollBarConstraint {
     }
 
     pub fn drag_thumb(owner: &CoreHandle, delta: Vec2D, time_stamp: f32) {
-        let Some((scroll, thumb, track)) = Self::with_owner(owner, |bar| {
-            Some((
-                bar.scroll_constraint.clone()?,
-                bar.thumb_handle()?,
-                bar.track_handle()?,
-            ))
+        let Some((scroll, thumb)) = Self::with_owner(owner, |bar| {
+            Some((bar.scroll_constraint.clone()?, bar.thumb_handle()?))
         }) else {
             return;
         };
@@ -397,9 +397,7 @@ impl ScrollBarConstraint {
             .with_downcast::<ScrollConstraint, _>(|scroll| (scroll.offset_x(), scroll.offset_y()))
             .expect("resolved ScrollConstraint occurrence");
         if Self::with_owner(owner, |bar| bar.base.constrains_horizontal()) {
-            let inner_width = track
-                .with(|track| track.as_layout_component().unwrap().inner_width())
-                .expect("validated scrollbar track");
+            let inner_width = Self::with_owner(owner, |bar| bar.track_geometry().1.x);
             let thumb_width = Self::with_owner(owner, Self::computed_thumb_width);
             if Self::with_owner(owner, |bar| bar.base.auto_size()) {
                 thumb
@@ -426,9 +424,7 @@ impl ScrollBarConstraint {
                 .expect("resolved ScrollConstraint occurrence");
         }
         if Self::with_owner(owner, |bar| bar.base.constrains_vertical()) {
-            let inner_height = track
-                .with(|track| track.as_layout_component().unwrap().inner_height())
-                .expect("validated scrollbar track");
+            let inner_height = Self::with_owner(owner, |bar| bar.track_geometry().1.y);
             let thumb_height = Self::with_owner(owner, Self::computed_thumb_height);
             if Self::with_owner(owner, |bar| bar.base.auto_size()) {
                 thumb

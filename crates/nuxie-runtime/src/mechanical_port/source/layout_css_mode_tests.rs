@@ -175,6 +175,7 @@ struct B {
     /// A ScrollBarConstraint on this box, the thumb, with its direction,
     /// for the file's first ScrollConstraint; the box's parent is the track.
     scroll_bar: Option<u64>,
+    scroll_bar_auto_size: bool,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -298,7 +299,7 @@ enum Entry<'a> {
     /// A ScrollConstraint on a box: its direction and threshold.
     Scroll(u64, u64, &'a B),
     /// A ScrollBarConstraint on a box with its direction.
-    ScrollBar(u64, u64),
+    ScrollBar(u64, u64, bool),
     Participant(u64),
     Track((u64, u64, f32), u64),
     Image(&'static str, u64),
@@ -495,7 +496,11 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             }
         }
         if let Some(direction) = node.scroll_bar {
-            entries.push(Entry::ScrollBar(index, direction));
+            entries.push(Entry::ScrollBar(
+                index,
+                direction,
+                node.scroll_bar_auto_size,
+            ));
         }
         for track in &node.tracks {
             entries.push(Entry::Track(*track, index));
@@ -847,7 +852,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 }
                 riv.end();
             }
-            Entry::ScrollBar(parent, direction) => {
+            Entry::ScrollBar(parent, direction, auto_size) => {
                 use crate::source::generated::constraints::{
                     draggable_constraint_base::DraggableConstraintBase,
                     scrolling::scroll_bar_constraint_base::ScrollBarConstraintBase,
@@ -862,7 +867,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                         ScrollBarConstraintBase::SCROLL_CONSTRAINT_ID_PROPERTY_KEY,
                         first_scroll,
                     )
-                    .uint(ScrollBarConstraintBase::AUTO_SIZE_PROPERTY_KEY, 0)
+                    .uint(
+                        ScrollBarConstraintBase::AUTO_SIZE_PROPERTY_KEY,
+                        u64::from(*auto_size),
+                    )
                     .end();
             }
             Entry::Image(name, parent) => {
@@ -6706,6 +6714,7 @@ fn css_padded_auto_thumb_scene(
     rtl: bool,
     border_box: bool,
     percent_padding: bool,
+    with_content: bool,
 ) -> Scene {
     let thumb_padding = if percent_padding {
         vec![
@@ -6767,6 +6776,17 @@ fn css_padded_auto_thumb_scene(
                     .concat(),
                     vec![B {
                         scroll_bar: Some(if horizontal { 0 } else { 1 }),
+                        scroll_bar_auto_size: true,
+                        content: if with_content {
+                            vec![Rect {
+                                name: "Thumb content",
+                                size: (10.0, 10.0),
+                                grouped: false,
+                                path_scale_x: 1.0,
+                            }]
+                        } else {
+                            vec![]
+                        },
                         ..css(
                             "Thumb",
                             [
@@ -6789,12 +6809,6 @@ fn css_padded_auto_thumb_scene(
             ],
         ),
     );
-    use crate::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint;
-    let bar = f
-        .artboard
-        .with_artboard(|a| a.find_all_handles::<ScrollBarConstraint>())[0]
-        .clone();
-    bar.with_downcast_mut::<ScrollBarConstraint, _>(|bar| bar.base.set_auto_size_value(true));
     f.advance(4);
     f
 }
@@ -6805,41 +6819,49 @@ fn css_auto_thumb_forces_only_the_scrolling_axis_outer_size() {
     for horizontal in [false, true] {
         for rtl in [false, true] {
             for border_box in [false, true] {
-                let f = css_padded_auto_thumb_scene(horizontal, rtl, border_box, false);
-                let bounds = f.bounds("Thumb");
-                assert_eq!(
-                    if horizontal { bounds[2] } else { bounds[3] },
-                    100.0,
-                    "horizontal={horizontal}, rtl={rtl}, border_box={border_box}"
-                );
-                let authored_other = if border_box {
-                    80.0
-                } else if horizontal {
-                    95.0
-                } else {
-                    110.0
-                };
-                assert_eq!(
-                    if horizontal { bounds[3] } else { bounds[2] },
-                    authored_other
-                );
-                let origin = f.world_origin("Thumb");
-                assert_eq!(
-                    if horizontal { origin.0 } else { origin.1 },
-                    if horizontal && rtl { 200.0 } else { 0.0 }
-                );
-                css_axis_scroll(&f).with_downcast_mut::<ScrollConstraint, _>(|s| {
-                    if horizontal {
-                        s.set_authored_scroll_offset_x(-300.0);
+                for with_content in [false, true] {
+                    let f = css_padded_auto_thumb_scene(
+                        horizontal,
+                        rtl,
+                        border_box,
+                        false,
+                        with_content,
+                    );
+                    let bounds = f.bounds("Thumb");
+                    assert_eq!(
+                        if horizontal { bounds[2] } else { bounds[3] },
+                        100.0,
+                        "horizontal={horizontal}, rtl={rtl}, border_box={border_box}"
+                    );
+                    let authored_other = if border_box {
+                        80.0
+                    } else if horizontal {
+                        95.0
                     } else {
-                        s.set_authored_scroll_offset_y(-300.0);
-                    }
-                });
-                f.advance(4);
-                let origin = f.world_origin("Thumb");
-                assert_eq!(if horizontal { origin.0 } else { origin.1 }, 100.0);
-                let bounds = f.bounds("Thumb");
-                assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
+                        110.0
+                    };
+                    assert_eq!(
+                        if horizontal { bounds[3] } else { bounds[2] },
+                        authored_other
+                    );
+                    let origin = f.world_origin("Thumb");
+                    assert_eq!(
+                        if horizontal { origin.0 } else { origin.1 },
+                        if horizontal && rtl { 200.0 } else { 0.0 }
+                    );
+                    css_axis_scroll(&f).with_downcast_mut::<ScrollConstraint, _>(|s| {
+                        if horizontal {
+                            s.set_authored_scroll_offset_x(-300.0);
+                        } else {
+                            s.set_authored_scroll_offset_y(-300.0);
+                        }
+                    });
+                    f.advance(4);
+                    let origin = f.world_origin("Thumb");
+                    assert_eq!(if horizontal { origin.0 } else { origin.1 }, 100.0);
+                    let bounds = f.bounds("Thumb");
+                    assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
+                }
             }
         }
     }
@@ -6850,28 +6872,187 @@ fn css_auto_thumb_outer_size_resolves_percentage_padding_after_track_resize() {
     for horizontal in [false, true] {
         for rtl in [false, true] {
             for border_box in [false, true] {
-                let f = css_padded_auto_thumb_scene(horizontal, rtl, border_box, true);
-                let bounds = f.bounds("Thumb");
-                assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
-                assert!(CoreRegistry::set_double_handle(
-                    &f.record("Track"),
-                    WIDTH.into(),
-                    if horizontal { 450.0 } else { 90.0 }
-                ));
-                f.advance(6);
-                let expected = if horizontal { 150.0 } else { 100.0 };
-                let bounds = f.bounds("Thumb");
-                assert_eq!(
-                    if horizontal { bounds[2] } else { bounds[3] },
-                    expected,
-                    "horizontal={horizontal}, rtl={rtl}, border_box={border_box}"
-                );
-                let origin = f.world_origin("Thumb");
-                assert_eq!(
-                    if horizontal { origin.0 } else { origin.1 },
-                    if horizontal && rtl { 300.0 } else { 0.0 }
-                );
+                for with_content in [false, true] {
+                    let f = css_padded_auto_thumb_scene(
+                        horizontal,
+                        rtl,
+                        border_box,
+                        true,
+                        with_content,
+                    );
+                    let bounds = f.bounds("Thumb");
+                    assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
+                    assert!(CoreRegistry::set_double_handle(
+                        &f.record("Track"),
+                        WIDTH.into(),
+                        if horizontal { 450.0 } else { 90.0 }
+                    ));
+                    f.advance(6);
+                    let expected = if horizontal { 150.0 } else { 100.0 };
+                    let bounds = f.bounds("Thumb");
+                    assert_eq!(
+                        if horizontal { bounds[2] } else { bounds[3] },
+                        expected,
+                        "horizontal={horizontal}, rtl={rtl}, border_box={border_box}"
+                    );
+                    let origin = f.world_origin("Thumb");
+                    assert_eq!(
+                        if horizontal { origin.0 } else { origin.1 },
+                        if horizontal && rtl { 300.0 } else { 0.0 }
+                    );
+                }
             }
+        }
+    }
+}
+
+#[test]
+fn css_auto_thumb_border_box_stays_forced_during_leaf_interpolation() {
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for border_box in [false, true] {
+                for borrowed in [false, true] {
+                    let f = css_padded_auto_thumb_scene(horizontal, rtl, border_box, true, true);
+                    let thumb = f.named("Thumb");
+                    // Stretch the anonymous item along the scrolling axis.
+                    assert!(CoreRegistry::set_uint_handle(
+                        &f.record("Thumb"),
+                        DISPLAY.into(),
+                        1
+                    ));
+                    assert!(CoreRegistry::set_uint_handle(
+                        &f.record("Thumb"),
+                        61006,
+                        if horizontal { 2 } else { 0 }
+                    ));
+                    f.advance(4);
+                    enable_leaf_layout_interpolation(&thumb);
+                    assert!(CoreRegistry::set_double_handle(
+                        &f.record("Track"),
+                        if horizontal {
+                            WIDTH.into()
+                        } else {
+                            HEIGHT.into()
+                        },
+                        450.0
+                    ));
+                    if !horizontal {
+                        assert!(CoreRegistry::set_double_handle(
+                            &f.record("Track"),
+                            WIDTH.into(),
+                            90.0
+                        ));
+                    }
+                    f.advance(4);
+                    for elapsed in [0.0, 0.25, 0.0, 0.25, 0.0, 0.5, 0.0] {
+                        advance_leaf_layout(&thumb, elapsed, borrowed);
+                        let bounds = f.bounds("Thumb");
+                        assert_eq!(
+                            if horizontal { bounds[2] } else { bounds[3] },
+                            150.0,
+                            "horizontal={horizontal}, rtl={rtl}, border_box={border_box}, borrowed={borrowed}"
+                        );
+                        let forced = thumb
+                            .with_downcast::<LayoutComponent, _>(|thumb| {
+                                if horizontal {
+                                    thumb.forced_width()
+                                } else {
+                                    thumb.forced_height()
+                                }
+                            })
+                            .unwrap();
+                        assert_eq!(forced, 150.0);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn css_scroll_bar_uses_track_content_box_for_thumb_size_and_input() {
+    use crate::source::constraints::scrolling::{
+        scroll_bar_constraint::ScrollBarConstraint, scroll_constraint::ScrollConstraint,
+    };
+    use crate::source::math::vec2d::Vec2D;
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            let f = css_padded_auto_thumb_scene(horizontal, rtl, false, false, true);
+            let record = f.record("Track");
+            for (key, value) in [
+                (PADDING_LEFT, 10.0),
+                (PADDING_RIGHT, 14.0),
+                (PADDING_TOP, 4.0),
+                (PADDING_BOTTOM, 6.0),
+                (BORDER_LEFT, 3.0),
+                (BORDER_RIGHT, 9.0),
+                (BORDER_TOP, 2.0),
+                (BORDER_BOTTOM, 3.0),
+            ] {
+                assert!(CoreRegistry::set_double_handle(&record, key.into(), value));
+            }
+            f.advance(6);
+            let bar = f
+                .artboard
+                .with_artboard(|a| a.find_all_handles::<ScrollBarConstraint>())[0]
+                .clone();
+            let scroll = css_axis_scroll(&f);
+            let bounds = f.bounds("Thumb");
+            assert_eq!(if horizontal { bounds[2] } else { bounds[3] }, 100.0);
+            let start = if horizontal { 13.0 } else { 6.0 };
+            let origin = f.world_origin("Thumb");
+            assert_eq!(
+                if horizontal { origin.0 } else { origin.1 },
+                start + if horizontal && rtl { 200.0 } else { 0.0 }
+            );
+            let click = start + if horizontal && rtl { 225.0 } else { 75.0 };
+            ScrollBarConstraint::hit_track(
+                &bar,
+                if horizontal {
+                    Vec2D::new(click, 30.0)
+                } else {
+                    Vec2D::new(30.0, click)
+                },
+            );
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                    scroll.offset_x()
+                } else {
+                    scroll.offset_y()
+                }),
+                Some(-225.0)
+            );
+            ScrollBarConstraint::drag_thumb(
+                &bar,
+                if horizontal {
+                    Vec2D::new(if rtl { -25.0 } else { 25.0 }, 0.0)
+                } else {
+                    Vec2D::new(0.0, 25.0)
+                },
+                0.1,
+            );
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                    scroll.offset_x()
+                } else {
+                    scroll.offset_y()
+                }),
+                Some(-300.0)
+            );
+            f.advance(4);
+            let origin = f.world_origin("Thumb");
+            assert_eq!(if horizontal { origin.0 } else { origin.1 }, start + 100.0);
+            assert!(CoreRegistry::set_bool_handle(&bar, 734, false));
+            assert_eq!(
+                bar.with_downcast::<ScrollBarConstraint, _>(|bar| {
+                    if horizontal {
+                        bar.computed_thumb_width()
+                    } else {
+                        bar.computed_thumb_height()
+                    }
+                }),
+                Some(100.0)
+            );
         }
     }
 }

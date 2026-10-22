@@ -1,5 +1,4 @@
 use crate::mechanical_port::source::{
-    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::{CoreArena, CoreHandle},
     data_bind::data_bind_container::DataBindContainerOwner,
     data_bind::data_values::data_type::DataType,
@@ -776,17 +775,6 @@ impl DataBind {
         let key = self.base.property_key() as u16;
         if matches!(
             key,
-            ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY
-                | ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY
-        ) && target
-            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::has_css_scroll_axis)
-            .unwrap_or(false)
-        {
-            // CSS offsets also change when layout changes their clamped range.
-            return false;
-        }
-        if matches!(
-            key,
             SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY
                 | NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY
                 | NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY
@@ -797,6 +785,8 @@ impl DataBind {
                 | NodeBase::COMPUTED_WIDTH_PROPERTY_KEY
                 | NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY
                 | ShapeBase::LENGTH_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY
                 | ScrollConstraintBase::SCROLL_INDEX_PROPERTY_KEY
                 | ScrollConstraintBase::SCROLL_PERCENT_X_PROPERTY_KEY
                 | ScrollConstraintBase::SCROLL_PERCENT_Y_PROPERTY_KEY
@@ -1161,7 +1151,7 @@ impl DataBind {
         self.container = value;
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(any(test, feature = "tools"))]
     pub fn set_changed_callback(&mut self, callback: fn()) {
         self.changed_callback = Some(callback);
     }
@@ -1506,14 +1496,14 @@ mod observer_tests {
         scroll.base.set_scroll_offset_x_value(10.0);
         scroll.base.set_scroll_offset_y_value(20.0);
         let target = arena.insert(scroll);
-        let _y = observe_read(
+        let y = observe_read(
             &arena,
             &target,
             ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY,
             || {},
         );
         let read_target = target.clone();
-        let _x = observe_read(
+        let x = observe_read(
             &arena,
             &target,
             ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY,
@@ -1545,6 +1535,17 @@ mod observer_tests {
                 });
             },
         );
+        // These observers test raw property publication, not binding polling.
+        let observers = target.ensure_property_observers().unwrap();
+        for observer in [&y, &x] {
+            observer.with_mut(|owner| {
+                let bind = owner.as_data_bind_mut().unwrap();
+                if !bind.has_flag(OBSERVING) {
+                    observers.add(bind);
+                    bind.set_flag(OBSERVING, true);
+                }
+            });
+        }
         // The upstream NaN index branch resolves to zero before consulting layout.
         assert!(CoreRegistry::set_double_handle(
             &target,

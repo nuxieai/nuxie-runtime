@@ -18,6 +18,9 @@ use crate::source::{
 };
 use std::any::Any;
 
+#[path = "css_titlecase_data.rs"]
+mod titlecase_data;
+
 pub const TEXT_TRANSFORM_PROPERTY_KEY: u16 = 61104;
 pub const WHITE_SPACE_PROPERTY_KEY: u16 = 61105;
 
@@ -327,6 +330,14 @@ impl TextIndexMap {
     }
 }
 
+fn titlecase(ch: char) -> Vec<char> {
+    let exceptions = titlecase_data::TITLECASE_EXCEPTIONS;
+    match exceptions.binary_search_by_key(&ch, |&(source, _)| source) {
+        Ok(index) => exceptions[index].1.chars().collect(),
+        Err(_) => ch.to_uppercase().collect(),
+    }
+}
+
 /// Process the complete source so collapse and word state cross style runs.
 pub(crate) fn display_text(
     source: &[u32],
@@ -404,7 +415,7 @@ pub(crate) fn display_text(
             let mapped: Vec<char> = match transform {
                 1 => ch.to_uppercase().collect(),
                 2 => lowercase.to_vec(),
-                3 if first => ch.to_uppercase().collect(),
+                3 if first && ch.is_lowercase() => titlecase(ch),
                 _ => vec![ch],
             };
             pieces.extend(mapped.into_iter().map(|ch| (i, ch as u32, false)));

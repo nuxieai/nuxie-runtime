@@ -7,8 +7,6 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_completion`, `set_double_with_completion`, `get_bool`, `get_double`, `property_field_id` and `object_supports_property` route keys 60004 through 60020 to Video.
 
-Keep the CSS scroll offset hooks in `core_registry.rs` too: `ScrollConstraint`'s `scrollOffsetX` and `scrollOffsetY` arms in `set_double_with_completion` and `get_double` go through `set_bound_scroll_offset_with_completion`, `bound_scroll_offset_x` and `bound_scroll_offset_y`, which read and write a CSS viewport's offset as the browser's `scrollLeft` and `scrollTop` and leave translated viewports on upstream's raw offset (`docs/CSS_LAYOUT.md` section 3).
-
 ## Known Apple font boundary gap
 
 The host outline addition mirrors the first `CoreTextHBFont::getPath`

@@ -141,7 +141,7 @@ print("release 9.3.0" if query == "release" else str(Path.cwd() / ("stub-only-" 
 
     def test_each_buildkite_lane_exports_cache_environment_before_installing(self):
         commands = pipeline_commands()
-        self.assertEqual(len(commands), 6, "all active runtime Buildkite lanes must be exercised")
+        self.assertEqual(len(commands), 7, "all active runtime Buildkite lanes must be exercised")
         for label, command in commands.items():
             with self.subTest(lane=label), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary).resolve()

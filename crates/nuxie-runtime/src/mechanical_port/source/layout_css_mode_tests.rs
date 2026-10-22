@@ -5629,6 +5629,126 @@ fn css_box_own_paint_keeps_ancestor_clipping_shape() {
     assert!(!card_draw_has_shape_clip(&shape_clipped_box(false, 0.0)));
 }
 
+/// Shape clips that surround a CSS overflow save stay outside it until
+/// the layout restores it, including across translated child proxies.
+#[test]
+fn css_shape_clips_stay_outside_overflow_saves_with_translated_children() {
+    for nested in [false, true] {
+        let child = B {
+            name: "Rive",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0),
+            ],
+            paints: vec![Paint::Fill(0xff11_2233)],
+            ..B::default()
+        };
+        let content = if nested {
+            css(
+                "Inner",
+                [
+                    sized_to(45.0, 20.0),
+                    vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                ]
+                .concat(),
+                vec![child],
+            )
+        } else {
+            child
+        };
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 40.0, 50.0)]),
+                ..css(
+                    "Clip",
+                    sized_to(100.0, 100.0),
+                    vec![
+                        B {
+                            paints: vec![Paint::Fill(0xff77_8899)],
+                            ..css(
+                                "Viewport",
+                                [
+                                    sized_to(50.0, 30.0),
+                                    vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                                ]
+                                .concat(),
+                                vec![content],
+                            )
+                        },
+                        painted("After", 0xff44_5566, sized_to(10.0, 10.0)),
+                    ],
+                )
+            },
+        );
+        assert_eq!(f.bounds("Rive"), [0.0, 0.0, 100.0, 60.0]);
+        let proxy = f
+            .named("Rive")
+            .with_downcast::<LayoutComponent, _>(|layout| {
+                layout
+                    .existing_proxy()
+                    .cloned()
+                    .expect("the translated paint proxy")
+            })
+            .unwrap();
+        assert!(proxy.borrow().base.clipping_shapes().is_empty());
+        let lines = f.draw_lines();
+        let own = draw_at(&lines, 0xff77_8899);
+        let child = draw_at(&lines, 0xff11_2233);
+        let after = draw_at(&lines, 0xff44_5566);
+        assert!(own < child && child < after, "{}", lines.join("\n"));
+        // Each frame records the clips it opened, separately from the
+        // active set inherited from its enclosing save.
+        let mut frames = Vec::<(u8, u8)>::new();
+        let mut active = 0u8;
+        for (index, line) in lines.iter().enumerate() {
+            match line.as_str() {
+                "save" => frames.push((active, 0)),
+                "restore" => active = frames.pop().expect("a matching save").0,
+                _ if line.starts_with("clipPath") => {
+                    let line = line.replace("-0", "0");
+                    let clip = if line.contains("(40,0),(40,50),(0,50)") {
+                        1
+                    } else if line.contains("(50,0),(50,30),(0,30)") {
+                        2
+                    } else if line.contains("(45,0),(45,20),(0,20)") {
+                        4
+                    } else {
+                        0
+                    };
+                    active |= clip;
+                    frames.last_mut().expect("a clip inside a save").1 |= clip;
+                }
+                _ => {}
+            }
+            if index == own || index == child || index == after {
+                let opened = frames
+                    .iter()
+                    .map(|frame| frame.1)
+                    .filter(|clips| *clips != 0)
+                    .collect::<Vec<_>>();
+                let expected: Vec<u8> = if index == child {
+                    if nested { vec![1, 2, 4] } else { vec![1, 2] }
+                } else {
+                    vec![1]
+                };
+                assert_eq!(
+                    opened,
+                    expected,
+                    "nested {nested}, at {line}\n{}",
+                    lines.join("\n")
+                );
+                assert_eq!(
+                    active,
+                    expected.iter().copied().fold(0u8, |all, clips| all | clips)
+                );
+            }
+        }
+        assert!(frames.is_empty(), "{}", lines.join("\n"));
+        assert_eq!(active, 0);
+    }
+}
+
 /// A CSS artboard's BoxPaint moves its background, not its own clip.
 #[test]
 fn css_artboard_box_paint_keeps_its_clip() {

@@ -44,6 +44,13 @@ enum ScrollSpace {
     Index,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScrollMode {
+    Translated,
+    Css,
+    CssNative,
+}
+
 impl LayoutConstraint for ScrollConstraint {
     fn constraint_handle(&self) -> CoreHandle {
         self.handle().expect("arena-owned ScrollConstraint")
@@ -132,6 +139,7 @@ impl CssScrollAxis {
 
 pub struct ScrollConstraint {
     pub base: ScrollConstraintBase,
+    scroll_mode: Option<ScrollMode>,
     physics: Option<CoreHandle>,
     virtualizer: Option<Rc<RefCell<ScrollVirtualizer>>>,
     virtual_layout: Option<Rc<RefCell<VirtualLayout>>>,
@@ -180,6 +188,7 @@ impl Default for ScrollConstraint {
     fn default() -> Self {
         Self {
             base: ScrollConstraintBase::default(),
+            scroll_mode: None,
             physics: None,
             virtualizer: None,
             virtual_layout: None,
@@ -457,14 +466,57 @@ impl ScrollConstraint {
         }
         self.with_viewport(LayoutComponent::scroll_range)
     }
-    /// Virtualized and looping scrollers keep native metrics and coordinates.
+    /// The mounted viewport decides its scroll mode once, independently of size.
     pub(crate) fn has_css_scroll_axis(&self) -> bool {
-        !self.base.virtualize()
-            && !self.infinite()
-            && self
-                .with_viewport(LayoutComponent::is_css_mode)
-                .unwrap_or(false)
+        self.scroll_mode == Some(ScrollMode::Css)
     }
+
+    fn decide_scroll_mode(&mut self) {
+        if self.scroll_mode.is_some() {
+            return;
+        }
+        let Some(css) = self.with_viewport(|viewport| {
+            // All children are mounted before clean, even when the record is later.
+            crate::css_layout::record::find_in(viewport.children()).is_some()
+        }) else {
+            return;
+        };
+        self.scroll_mode = Some(if !css {
+            ScrollMode::Translated
+        } else if self.base.virtualize() || self.base.infinite() {
+            ScrollMode::CssNative
+        } else {
+            ScrollMode::Css
+        });
+    }
+
+    fn ignore_css_scroll_flag_change(&self, _property: &str, current: bool, value: bool) -> bool {
+        let ignored = current != value
+            && matches!(
+                self.scroll_mode,
+                Some(ScrollMode::Css | ScrollMode::CssNative)
+            );
+        if ignored {
+            #[cfg(debug_assertions)]
+            eprintln!("ScrollConstraint: ignoring {_property} change after loading a CSS viewport");
+        }
+        ignored
+    }
+
+    pub(crate) fn set_virtualize_value(&mut self, value: bool) -> bool {
+        if self.ignore_css_scroll_flag_change("virtualize", self.base.virtualize(), value) {
+            return false;
+        }
+        self.base.set_virtualize_value(value)
+    }
+
+    pub(crate) fn set_infinite_value(&mut self, value: bool) -> bool {
+        if self.ignore_css_scroll_flag_change("infinite", self.base.infinite(), value) {
+            return false;
+        }
+        self.base.set_infinite_value(value)
+    }
+
     fn css_scroll_axis(&self, horizontal: bool) -> Option<CssScrollAxis> {
         let range = self.css_scroll_range()?;
         let (origin, rtl) = self.with_viewport(|viewport| {
@@ -1502,6 +1554,7 @@ impl ScrollConstraint {
     }
 
     pub fn build_dependencies(&mut self) {
+        self.decide_scroll_mode();
         self.base.build_dependencies();
         if let Some(viewport) = self.viewport_handle() {
             viewport.with_mut(|viewport| {
@@ -1557,6 +1610,14 @@ impl ScrollConstraint {
         self.set_offset_y(self.authored_scroll_offset_y());
         if result == StatusCode::Ok {
             self.mark_viewport_layout_style_dirty();
+        }
+        result
+    }
+
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        let result = Core::on_added_clean(self, context);
+        if result == StatusCode::Ok {
+            self.decide_scroll_mode();
         }
         result
     }

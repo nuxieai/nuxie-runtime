@@ -47,6 +47,7 @@ path = "lib.rs"
 "i_overlay" = { "version" = "=8.1.1", "default-features" = false }
 
 [dev-dependencies]
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false, "features" = ["test-support", "tools"] }
 "nuxie-scripting" = { "path" = "../nuxie-scripting" }
 "nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
 "nuxie-sriv" = { "path" = "../nuxie-sriv" }

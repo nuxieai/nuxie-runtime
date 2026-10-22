@@ -58,6 +58,12 @@ unicode-script = "0.5.8"
 i_overlay = { version = "=8.1.1", default-features = false }
 
 [dev-dependencies]
+# Upstream's unit tests build with TESTING and WITH_RIVE_TOOLS, so this
+# package's own tests always compile with both, whatever else is selected.
+# Without it `-p nuxie-runtime` silently compiles the gated suites out.
+# WITH_RIVE_SCRIPTNET stays a native-tools cut (`make test` runs it apart):
+# enabling it here would put its dependencies in the shipping registry.
+nuxie-runtime = { path = ".", default-features = false, features = ["test-support", "tools"] }
 nuxie-scripting = { path = "../nuxie-scripting" }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-sriv = { path = "../nuxie-sriv" }

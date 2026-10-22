@@ -13,6 +13,10 @@ pub mod mechanical_port;
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
 pub mod test_support;
+/// Literal Rive fixtures shared by the runtime and C API tests.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod live_move_fixture;
 // Lets `test_support` name this crate as its integration tests do.
 #[cfg(feature = "test-support")]
 extern crate self as nuxie_runtime;
@@ -20,6 +24,7 @@ extern crate self as nuxie_runtime;
 pub mod text_decoration;
 pub mod utils;
 pub mod video;
+pub mod live_move;
 
 /// Makes a Nuxie-owned type (keys 60000 and up) or, for any other key, the
 /// upstream type. Nuxie types share the Rive record grammar and ordinary

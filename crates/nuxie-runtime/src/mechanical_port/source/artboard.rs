@@ -3614,6 +3614,8 @@ impl Artboard {
         elapsed_seconds: f32,
         flags: AdvanceFlags,
     ) -> bool {
+        // Nuxie spike observation; disabled unless the host requests counters.
+        crate::live_move::count_advance(flags);
         // The advancing component array is fixed once the artboard
         // initializes, so one snapshot serves the whole pass.
         let advancing = root

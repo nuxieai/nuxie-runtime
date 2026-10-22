@@ -44,7 +44,7 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
-    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::live_move::compose_slot_transform::<Self>,
     |owner| {
         let Some((layout,transforms)) = owner.with_downcast::<Self,_>(|object| {
             (object.layout_constraint_handles(),
@@ -66,7 +66,7 @@ impl NestedArtboardLayout {
         &self,
         _index: i32,
     ) -> Option<crate::mechanical_port::source::layout::layout_node_provider::LayoutNodeKey> {
-        let artboard = self.base.base.artboard_instance_handle(0)?;
+        let artboard = self.base.base.live_move_layout_instance()?;
         artboard.with_artboard_mut(|artboard| {
             artboard.take_layout_data();
             artboard.layout_node_key(0)
@@ -95,7 +95,7 @@ impl NestedArtboardLayout {
     // replace the composed translation. Rotate/scale placement in the parent's
     // frame without adding its translation a second time.
     pub(crate) fn apply_layout_placement(&mut self) {
-        let Some(instance) = self.base.base.artboard_instance_handle(0) else {
+        let Some(instance) = self.base.base.live_move_layout_instance() else {
             return;
         };
         let mut base = instance.with_artboard(|instance| {
@@ -155,12 +155,12 @@ impl NestedArtboardLayout {
     pub fn sync_style_changes(&mut self) -> bool {
         self.base
             .base
-            .artboard_instance_handle(0)
+            .live_move_layout_instance()
             .is_some_and(|instance| instance.sync_style_changes())
     }
 
     pub fn update_layout_bounds(&mut self, animate: bool) {
-        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
+        if let Some(instance) = self.base.base.live_move_layout_instance() {
             instance.with_artboard_mut(|instance| instance.update_layout_bounds(animate));
         }
     }
@@ -172,7 +172,7 @@ impl NestedArtboardLayout {
         inherited_interpolation_time: f32,
         direction: LayoutDirection,
     ) -> bool {
-        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
+        if let Some(instance) = self.base.base.live_move_layout_instance() {
             crate::source::layout_component::LayoutComponent::cascade_layout_style_occurrence(
                 &instance.core_handle(),
                 inherited_interpolation,
@@ -187,7 +187,7 @@ impl NestedArtboardLayout {
     pub fn layout_bounds(&self) -> Aabb {
         self.base
             .base
-            .artboard_instance_handle(0)
+            .live_move_layout_instance()
             .map_or_else(Aabb::default, |instance| {
                 instance.with_artboard(|instance| instance.layout_bounds())
             })
@@ -253,13 +253,13 @@ impl NestedArtboardLayout {
     }
 
     fn update_width_override(&mut self) {
-        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
+        if let Some(instance) = self.base.base.live_move_layout_instance() {
             StyleOverrider::<NestedArtboardLayout>::update_width_override(self, &instance);
         }
     }
 
     fn update_height_override(&mut self) {
-        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
+        if let Some(instance) = self.base.base.live_move_layout_instance() {
             StyleOverrider::<NestedArtboardLayout>::update_height_override(self, &instance);
         }
     }
@@ -414,7 +414,7 @@ impl ArtboardHost for NestedArtboardLayout {
     }
 
     fn mark_hosting_layout_dirty(&mut self, _artboard_instance: RuntimeArtboardInstanceWeakHandle) {
-        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
+        if let Some(instance) = self.base.base.live_move_layout_instance() {
             self.mark_hosting_layout_dirty_instance(&instance);
         }
     }

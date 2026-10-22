@@ -58,6 +58,9 @@ unicode-script = "0.5.8"
 i_overlay = { version = "=8.1.1", default-features = false }
 
 [dev-dependencies]
+# Integration tests need the test-only fixtures and upstream tools callbacks.
+# Enable them on this package without changing shipping defaults.
+nuxie-runtime = { path = ".", default-features = false, features = ["test-support", "tools"] }
 nuxie-scripting = { path = "../nuxie-scripting" }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-sriv = { path = "../nuxie-sriv" }

@@ -3408,7 +3408,8 @@ pub struct StateMachineInstance {
     // Never retain a cell guard across callbacks. Drop explicitly before managers.
     input_extras: Rc<RefCell<Sidecar<SMIInputExtras>>>,
     scripting: Sidecar<SMIScripting>,
-    nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
+    // Nuxie live moves replace host listeners without rebuilding the machine.
+    pub(crate) nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
     nested_artboard: Option<CoreHandle>,
     #[cfg(feature = "tools")]
     input_changed_callback:

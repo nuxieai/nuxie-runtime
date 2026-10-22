@@ -156,6 +156,9 @@ pub struct ArtboardComponentList {
     data_bind_path_referencer:
         crate::mechanical_port::source::data_bind_path_referencer::DataBindPathReferencer,
     list_items: Vec<CoreHandle>,
+    // Nuxie per-row collapse is keyed by item identity, so reorders retain it.
+    pub(crate) live_move_collapsed_rows: std::collections::HashSet<CoreHandle>,
+    pub(crate) live_move_collapsed_mask: Vec<u64>,
     artboards_map: HashMap<u32, CoreHandle>,
     artboard_instances_map: CoreHandleMap<RuntimeArtboardInstanceHandle>,
     state_machines_map: CoreHandleMap<RuntimeStateMachineInstanceHandle>,
@@ -199,6 +202,8 @@ impl Default for ArtboardComponentList {
             base: ArtboardComponentListBase::default(),
             data_bind_path_referencer: Default::default(),
             list_items: Vec::new(),
+            live_move_collapsed_rows: Default::default(),
+            live_move_collapsed_mask: Vec::new(),
             artboards_map: HashMap::new(),
             artboard_instances_map: CoreHandleMap::default(),
             state_machines_map: CoreHandleMap::default(),
@@ -339,6 +344,7 @@ impl ArtboardComponentList {
     }
 
     pub fn clear(&mut self) {
+        self.live_move_collapsed_rows.clear();
         self.reset_quiet_rows(0);
         for artboard in self.artboard_instances_map.values() {
             artboard.cleanup_semantic_tree();
@@ -371,6 +377,8 @@ impl ArtboardComponentList {
         &self,
         index: i32,
     ) -> Option<crate::mechanical_port::source::layout::layout_node_provider::LayoutNodeKey> {
+        // Nuxie: a collapsed row contributes no layout node.
+        if self.live_move_row_collapsed(index) { return None; }
         let artboard = self.artboard_instance(index)?;
         artboard.with_artboard_mut(|artboard| {
             artboard.take_layout_data();
@@ -452,7 +460,7 @@ impl ArtboardComponentList {
         let parent_is_stack = self.is_stack();
         let mut k = 0;
         while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+            if !self.live_move_row_collapsed(index) && let Some(artboard) = self.artboard_instance(index) {
                 LayoutComponent::set_parent_is_row_with_host_occurrence(
                     &artboard.core_handle(),
                     parent_is_row,
@@ -476,7 +484,7 @@ impl ArtboardComponentList {
         let has_virtual_window = self.virtualization_enabled() && self.window_visible_count > 0;
         let mut k = 0;
         while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+            if !self.live_move_row_collapsed(index) && let Some(artboard) = self.artboard_instance(index) {
                 let bounds = artboard.with_artboard_mut(|artboard| {
                     artboard.update_layout_bounds(animate);
                     artboard.layout_bounds()
@@ -508,7 +516,7 @@ impl ArtboardComponentList {
     ) -> bool {
         let mut k = 0;
         while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+            if !self.live_move_row_collapsed(index) && let Some(artboard) = self.artboard_instance(index) {
                 LayoutComponent::cascade_layout_style_occurrence(
                     &artboard.core_handle(),
                     inherited_interpolation,
@@ -526,7 +534,7 @@ impl ArtboardComponentList {
         let mut changed = false;
         let mut k = 0;
         while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+            if !self.live_move_row_collapsed(index) && let Some(artboard) = self.artboard_instance(index) {
                 if artboard.sync_style_changes() {
                     changed = true;
                 }
@@ -1093,7 +1101,8 @@ impl ArtboardComponentList {
         let rows = self.quiet_rows.borrow();
         while row < count {
             let word = row >> 6;
-            let quiet = rows.get(word).copied().unwrap_or(0);
+            let quiet = rows.get(word).copied().unwrap_or(0)
+                | self.live_move_collapsed_mask.get(word).copied().unwrap_or(0);
             let awake = !quiet & (u64::MAX << (row & 63));
             if awake != 0 {
                 return count.min((word << 6) + awake.trailing_zeros() as usize);
@@ -1178,7 +1187,7 @@ impl ArtboardComponentList {
         }
     }
 
-    fn reset_quiet_row(&mut self, row: usize) {
+    pub(crate) fn reset_quiet_row(&mut self, row: usize) {
         let word = row >> 6;
         if word >= self.quiet_rows.borrow().len() {
             return;
@@ -1301,6 +1310,8 @@ impl ArtboardComponentList {
     ) -> bool {
         let inactive = owner
             .with_downcast::<Self, _>(|owner| {
+                // Nuxie: preserve inactive VM change windows for collapsed rows.
+                if !owner.live_move_collapsed_rows.is_empty() { owner.inactive_change_sequence.mark_latest(); }
                 if owner.artboard_count() == 0 {
                     return true;
                 }
@@ -1403,6 +1414,7 @@ impl ArtboardComponentList {
         index: usize,
         scroll: Option<&ScrollConstraint>,
     ) -> Aabb {
+        if self.live_move_row_collapsed(index as i32) { return Aabb::default(); }
         let virtualized = self.virtualization_enabled_with_scroll(scroll);
         if virtualized {
             let count = self.artboard_sizes.len();
@@ -1460,6 +1472,8 @@ impl ArtboardComponentList {
     }
 
     pub fn invalidate_ordered_list_indices_cache(&mut self) {
+        // Nuxie: update the collapse bitmap on structural or visibility edits.
+        self.live_move_rebuild_collapse_mask();
         self.ordered_list_indices_cache_valid = false;
     }
 
@@ -1621,6 +1635,10 @@ impl ArtboardComponentList {
             });
             self.cached_ordered_list_indices = indices;
         }
+        // Nuxie: the same ordered indices serve drawing and pointer routing.
+        let mut indices = std::mem::take(&mut self.cached_ordered_list_indices);
+        indices.retain(|i| !self.live_move_row_collapsed(*i));
+        self.cached_ordered_list_indices = indices;
         self.ordered_list_indices_cache_valid = true;
     }
 

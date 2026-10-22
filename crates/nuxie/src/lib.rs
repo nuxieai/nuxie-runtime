@@ -10,6 +10,10 @@
 
 pub use nuxie_runtime::source as runtime;
 pub use nuxie_runtime::video;
+pub use nuxie_runtime::live_move;
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use nuxie_runtime::live_move_fixture;
 // Renderer DTOs have their own namespace; the primary math names below are
 // the types accepted and returned by the native runtime owners.
 pub use nuxie_render_api as render_api;

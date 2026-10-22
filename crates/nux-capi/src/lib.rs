@@ -16,6 +16,8 @@ pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
 mod player_globals;
+mod live_moves;
+pub use live_moves::*;
 mod rule_groups;
 mod value_policy;
 mod value_rules;
@@ -835,6 +837,7 @@ impl Drop for ScriptEffectTransaction {
 pub struct NuxPlayer {
     global_view_models: Rc<player_globals::GlobalViewModels>,
     video_occurrences: RefCell<video::VideoOccurrences>,
+    live_moves: RefCell<nuxie::live_move::LiveMoves>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
     artboard: Rc<ArtboardOccurrence>,
@@ -3220,6 +3223,7 @@ fn publish_player(
                 globals
             },
             video_occurrences: RefCell::new(video::VideoOccurrences::default()),
+            live_moves: RefCell::new(nuxie::live_move::LiveMoves::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
             observed_view_model_binding_revision: Cell::new(
@@ -4593,6 +4597,14 @@ fn player_step_body(
             (dirty, dirty, true)
         }
     };
+
+    // Nuxie live flights follow both slots after the existing player advance
+    // and every row's layout. The second pass updates only; time is not advanced.
+    if let Err(error) = player.live_moves.borrow_mut().after_advance(&artboard.native_handle()) {
+        player.artboard.poisoned.set(true);
+        return publish_player_step_failure(out_result, NuxStatus::RuntimeError,
+            format!("live move follow failed: {error:#}"));
+    }
 
     let events = match own_reported_events(
         reported_events,
@@ -6833,3 +6845,6 @@ mod firewall_tests {
         assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
     }
 }
+
+#[cfg(test)]
+mod live_move_tests;

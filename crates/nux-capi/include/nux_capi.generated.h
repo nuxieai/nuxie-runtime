@@ -2778,6 +2778,25 @@ NuxStatus nux_player_set_global_view_model(struct NuxPlayer *player,
                                            const struct NuxViewModelInstance *instance);
 
 /**
+ * Install live moves JSON and empty mounted flight slots.
+ * Returns INVALID_ARGUMENT for malformed JSON or replacement during a step.
+ * Input is length-delimited UTF-8, bounded to 1 MiB. Same thread and reentrancy
+ * rules as nux_player_step apply.
+ */
+NuxStatus nux_player_set_moves(struct NuxPlayer *player, struct NuxStringView json);
+
+/**
+ * Set collapse on one mounted row of a named non-virtual ArtboardComponentList.
+ * Collapsed rows retain their instances and VM values but skip playback,
+ * layout, drawing and hits. collapsed must be 0 or 1. Unknown rows or lists
+ * return INVALID_ARGUMENT. This does not reorder or remove a row.
+ */
+NuxStatus nux_player_set_row_collapsed(struct NuxPlayer *player,
+                                       struct NuxStringView list_name,
+                                       uint32_t row_index,
+                                       uint8_t collapsed);
+
+/**
  * Apply named input changes, pointers, and focus inputs in that order, then
  * advance exactly once. Focus inputs retain array order. Their listener events
  * and view-model writes are captured in this same step's result. The
@@ -2789,6 +2808,24 @@ NuxStatus nux_player_set_global_view_model(struct NuxPlayer *player,
 NuxStatus nux_player_step(struct NuxPlayer *player,
                           const struct NuxPlayerStep *step,
                           struct NuxPlayerStepResult **out_result);
+
+/**
+ * Show a retained Screen row and take off the transition's live units.
+ * A NULL transition_id performs immediate coming-home moves only.
+ * Returns INVALID_ARGUMENT for missing/ambiguous slots, incompatible units,
+ * overlapping flights, or an already active step. Rows must be mounted first.
+ */
+NuxStatus nux_player_step_begin(struct NuxPlayer *player,
+                                struct NuxStringView incoming_screen_id,
+                                const struct NuxStringView *transition_id);
+
+/**
+ * Land all live flights. Both identifiers must match the active step.
+ * A NULL transition_id matches a step begun without a transition.
+ */
+NuxStatus nux_player_step_end(struct NuxPlayer *player,
+                              struct NuxStringView incoming_screen_id,
+                              const struct NuxStringView *transition_id);
 
 NuxStatus nux_player_step_result_diagnostic(const struct NuxPlayerStepResult *result,
                                             struct NuxCapiDiagnosticView *out_diagnostic);

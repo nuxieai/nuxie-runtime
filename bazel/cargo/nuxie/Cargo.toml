@@ -23,7 +23,7 @@ path = "lib.rs"
 "android-authored-wgsl" = ["scripting", "nuxie-scripting/android-authored-wgsl"]
 "threading" = ["nuxie-runtime/threading"]
 "scriptnet" = ["scripting", "nuxie-scripting/scriptnet"]
-"test-support" = ["nuxie-runtime/tools", "nuxie-scripting?/tools"]
+"test-support" = ["nuxie-runtime/tools", "nuxie-runtime/test-support", "nuxie-scripting?/tools"]
 "scripting" = ["dep:nuxie-scripting", "nuxie-scripting?/luau"]
 
 [dependencies]

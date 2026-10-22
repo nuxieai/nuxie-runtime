@@ -351,3 +351,178 @@ fn mask_reads_mode_after_the_host_returns_coverage_image() {
     ));
     assert_eq!(&*modes.borrow(), &[api::LayerMaskMode::InvertedAlpha]);
 }
+
+#[test]
+fn translated_draw_rules_skip_noncontiguous_mask_and_keep_later_mask() {
+    use crate::source::{
+        generated::{
+            artboard_base::ArtboardBase,
+            backboard_base::BackboardBase,
+            component_base::ComponentBase,
+            draw_rules_base::DrawRulesBase,
+            draw_target_base::DrawTargetBase,
+            layer_mask_base::LayerMaskBase,
+            layout_component_base::LayoutComponentBase,
+            node_base::NodeBase,
+            shapes::{
+                paint::{fill_base::FillBase, solid_color_base::SolidColorBase},
+                parametric_path_base::ParametricPathBase,
+                rectangle_base::RectangleBase,
+                shape_base::ShapeBase,
+            },
+        },
+        layer_mask::LayerMask,
+        layout_measured_content_tests::Riv,
+    };
+    fn node(riv: &mut Riv, next: &mut u64, name: &str) -> u64 {
+        let id = *next;
+        *next += 1;
+        riv.object(NodeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .end();
+        id
+    }
+    fn shape(riv: &mut Riv, next: &mut u64, parent: u64, name: &str) -> u64 {
+        let id = *next;
+        *next += 4;
+        riv.object(ShapeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .end();
+        riv.object(RectangleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, id)
+            .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 10.0)
+            .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
+            .end();
+        riv.object(FillBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, id)
+            .end();
+        riv.object(SolidColorBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, id + 2)
+            .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xffff_ffff)
+            .end();
+        id
+    }
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .end();
+    let mut next = 1;
+    let first_source = shape(&mut riv, &mut next, 0, "First source");
+    let second_source = shape(&mut riv, &mut next, 0, "Second source");
+    let second_group = node(&mut riv, &mut next, "Second group");
+    let valid_member = shape(&mut riv, &mut next, second_group, "Valid member");
+    let first_group = node(&mut riv, &mut next, "First group");
+    let first_member = shape(&mut riv, &mut next, first_group, "First member");
+    let second_member = shape(&mut riv, &mut next, first_group, "Second member");
+    for (parent, source) in [(first_group, first_source), (second_group, second_source)] {
+        riv.object(LayerMaskBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .uint(LayerMaskBase::SOURCE_ID_PROPERTY_KEY, source)
+            .end();
+        next += 1;
+    }
+    let unrelated = shape(&mut riv, &mut next, 0, "Unrelated");
+    riv.object(DrawRulesBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, unrelated)
+        .uint(DrawRulesBase::DRAW_TARGET_ID_PROPERTY_KEY, next + 1)
+        .end();
+    // Rive's Before placement puts this drawable after the target in the
+    // bottom-first draw traversal, between the group's two members.
+    riv.object(DrawTargetBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, next)
+        .uint(DrawTargetBase::DRAWABLE_ID_PROPERTY_KEY, second_member)
+        .uint(DrawTargetBase::PLACEMENT_VALUE_PROPERTY_KEY, 0)
+        .end();
+    let mut factory = api::PersistentFactory::new(api::RecordingFactory::new());
+    let file = crate::File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("translated DrawRules scene imports");
+    let artboard = file.with_file(crate::File::artboard_default).unwrap();
+    // Sorting must neither panic in debug nor stop at the first mask.
+    for _ in 0..3 {
+        artboard.advance_default(0.0);
+    }
+    let (masks, mut current, objects) = artboard.with_artboard(|artboard| {
+        (
+            artboard.all_layer_masks().to_vec(),
+            artboard.first_drawable(),
+            artboard.objects().to_vec(),
+        )
+    });
+    assert_eq!(masks.len(), 2);
+    assert!(objects.iter().flatten().all(|object| {
+        object
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .is_none_or(|layout| !layout.is_css_mode())
+            })
+            .unwrap()
+    }));
+    let handle = |id: u64| objects[id as usize].clone().unwrap();
+    assert_eq!(
+        masks[0]
+            .with_downcast::<LayerMask, _>(LayerMask::source)
+            .flatten(),
+        Some(handle(first_source))
+    );
+    assert_eq!(
+        masks[1]
+            .with_downcast::<LayerMask, _>(LayerMask::source)
+            .flatten(),
+        Some(handle(second_source))
+    );
+    let mut chain = Vec::new();
+    while let Some(drawable) = current {
+        current = drawable.with(Drawable::prev_drawable).flatten();
+        chain.push(drawable);
+    }
+    let at = |id| {
+        chain
+            .iter()
+            .position(|drawable| drawable.authored_handle() == Some(handle(id)))
+            .unwrap()
+    };
+    assert!(at(second_member) < at(unrelated) && at(unrelated) < at(first_member));
+    assert!(at(first_member) < at(valid_member));
+    let brackets = chain
+        .iter()
+        .filter(|drawable| drawable.is_mask_start())
+        .collect::<Vec<_>>();
+    assert_eq!(brackets.len(), 1, "only the noncontiguous mask is skipped");
+    let start = brackets[0];
+    assert_eq!(start.layer_mask_marker().unwrap().borrow().mask, masks[1]);
+    let end = start
+        .layer_mask_marker()
+        .unwrap()
+        .borrow()
+        .paired_end
+        .as_ref()
+        .and_then(|end| end.upgrade())
+        .unwrap();
+    let start_at = chain.iter().position(|drawable| drawable == start).unwrap();
+    let end_at = chain.iter().position(|drawable| drawable == &end).unwrap();
+    assert!(start_at < at(valid_member) && at(valid_member) < end_at);
+    assert!(
+        masks[0]
+            .with_downcast::<LayerMask, _>(LayerMask::source_start)
+            .flatten()
+            .is_none()
+    );
+    assert!(
+        masks[1]
+            .with_downcast::<LayerMask, _>(LayerMask::source_start)
+            .flatten()
+            .is_some()
+    );
+    assert_mask_draws(&artboard.core_handle(), start, &end);
+}

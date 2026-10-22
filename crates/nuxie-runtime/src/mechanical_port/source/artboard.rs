@@ -1850,13 +1850,42 @@ impl Artboard {
         let mut current_drawable = self.first_drawable.clone();
         let mut next_drawable = None::<RuntimeDrawableOccurrence>;
         let mut clipping_stack = Vec::<CoreHandle>::new();
+        let mut css_clip_scopes = Vec::<(CoreHandle, Vec<CoreHandle>)>::new();
         while let Some(current) = current_drawable {
             current.with_mut(|current| current.set_needs_save_operation(true));
+            // A CSS proxy's shape clips open before its overflow save. Keep
+            // them outside that save until the matching layout draw restores
+            // it, even when a translated descendant's proxy has no clips.
+            if let Some(owner) = current.with_proxy(|proxy| proxy.owner_handle())
+                && owner
+                    .with(|object| {
+                        object
+                            .as_layout_component()
+                            .is_some_and(|layout| layout.is_css_mode() && layout.clips())
+                    })
+                    .unwrap_or(false)
+            {
+                let shapes = current
+                    .with(|drawable| drawable.clipping_shapes().to_vec())
+                    .unwrap_or_default();
+                if !shapes.is_empty() {
+                    css_clip_scopes.push((owner, shapes));
+                }
+            }
+            let mut scope_shapes = Vec::new();
+            for (_, shapes) in &css_clip_scopes {
+                for shape in shapes {
+                    if !scope_shapes.contains(shape) {
+                        scope_shapes.push(shape.clone());
+                    }
+                }
+            }
             let mut removing_index = clipping_stack.len();
             for (i, clipping) in clipping_stack.iter().enumerate() {
-                if !current
-                    .with(|current| current.clipping_shapes().contains(clipping))
-                    .unwrap_or(false)
+                if !scope_shapes.contains(clipping)
+                    && !current
+                        .with(|current| current.clipping_shapes().contains(clipping))
+                        .unwrap_or(false)
                 {
                     removing_index = i;
                     break;
@@ -1898,10 +1927,16 @@ impl Artboard {
             let clipping_count = current
                 .with(|current| current.clipping_shapes().len())
                 .unwrap_or(0);
-            for index in 0..clipping_count {
-                let clipping_shape = current
-                    .with(|current| current.clipping_shapes()[index].clone())
-                    .expect("live drawable");
+            for index in 0..scope_shapes.len() + clipping_count {
+                let clipping_shape = if let Some(shape) = scope_shapes.get(index) {
+                    shape.clone()
+                } else {
+                    current
+                        .with(|current| {
+                            current.clipping_shapes()[index - scope_shapes.len()].clone()
+                        })
+                        .expect("live drawable")
+                };
                 if !clipping_stack.contains(&clipping_shape) {
                     let Some(proxy) = create_clipping_proxy(&clipping_shape, true) else {
                         continue;
@@ -1925,6 +1960,13 @@ impl Artboard {
                     next_drawable = Some(proxy);
                     clipping_stack.push(clipping_shape);
                 }
+            }
+            if current.authored_handle().is_some_and(|owner| {
+                css_clip_scopes
+                    .last()
+                    .is_some_and(|(layout, _)| layout == &owner)
+            }) {
+                css_clip_scopes.pop();
             }
             next_drawable = Some(current.clone());
             current_drawable = current.with(Drawable::prev_drawable).flatten();

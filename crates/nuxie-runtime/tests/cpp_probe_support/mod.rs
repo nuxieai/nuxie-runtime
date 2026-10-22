@@ -32,8 +32,14 @@ pub(super) fn default_probe_path() -> PathBuf {
         .join("bin/debug/rive_cpp_probe")
 }
 
-pub(super) fn probe_path() -> Option<PathBuf> {
-    let path = if let Some(path) = std::env::var_os("RIVE_CPP_PROBE") {
+/// The pinned C++ oracle. A comparison never passes without it: a missing or
+/// stale probe fails the test and names the command that builds it.
+pub(super) fn probe_path() -> PathBuf {
+    require_probe(std::env::var_os("RIVE_CPP_PROBE"))
+}
+
+pub(super) fn require_probe(configured: Option<std::ffi::OsString>) -> PathBuf {
+    let path = if let Some(path) = configured {
         let path = PathBuf::from(path);
         if path.is_absolute() {
             path
@@ -41,15 +47,17 @@ pub(super) fn probe_path() -> Option<PathBuf> {
             repo_root().join(path)
         }
     } else {
-        let path = default_probe_path();
-        if !path.exists() {
-            return None;
-        }
-        path
+        default_probe_path()
     };
+    assert!(
+        path.exists(),
+        "the pinned C++ oracle is missing at {}; run `make test`, or `make cpp-probe` and set \
+         RIVE_CPP_PROBE to the probe it builds",
+        path.display()
+    );
 
     verify_probe_fingerprint(&path, "make cpp-probe");
-    Some(path)
+    path
 }
 
 pub(super) fn expected_probe_fingerprint() -> &'static str {

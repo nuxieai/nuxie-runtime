@@ -737,10 +737,7 @@ fn assert_path_commands_close(actual: &[PathCommand], expected: &[PathCommand], 
 
 #[test]
 fn runtime_drawable_dispatch_stream_filters_hidden_and_opacity_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_drawable_dispatch_filtering.riv";
     let bytes = synthetic_runtime_file(8201, |bytes| {
@@ -791,10 +788,7 @@ fn runtime_drawable_dispatch_stream_filters_hidden_and_opacity_like_cpp_probe() 
 
 #[test]
 fn runtime_drawable_dispatch_stream_filters_image_and_nested_artboard_will_draw_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_drawable_will_draw_prereqs.riv";
     let bytes = synthetic_runtime_file(8232, |bytes| {
@@ -863,10 +857,7 @@ fn runtime_drawable_dispatch_stream_filters_image_and_nested_artboard_will_draw_
 
 #[test]
 fn runtime_drawable_dispatch_stream_suppresses_empty_clips_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_empty_clip_filtering.riv";
     let bytes = synthetic_runtime_file(8202, |bytes| {
@@ -920,10 +911,7 @@ fn runtime_drawable_dispatch_stream_suppresses_empty_clips_like_cpp_probe() {
 
 #[test]
 fn runtime_drawable_dispatch_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_hidden_clip_path_filtering.riv";
     let bytes = synthetic_runtime_file(8203, |bytes| {
@@ -981,10 +969,7 @@ fn runtime_drawable_dispatch_stream_treats_hidden_clip_paths_as_empty_like_cpp_p
 
 #[test]
 fn runtime_drawable_dispatch_stream_treats_collapsed_clip_paths_as_empty_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_collapsed_clip_path_filtering.riv";
     let bytes = synthetic_runtime_file(8204, |bytes| {
@@ -1054,10 +1039,7 @@ fn runtime_drawable_dispatch_stream_treats_collapsed_clip_paths_as_empty_like_cp
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_shape_paint_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_shape_paint_payloads.riv";
     let bytes = synthetic_runtime_file(8205, |bytes| {
@@ -1252,10 +1234,7 @@ fn runtime_drawable_dispatch_stream_exposes_shape_paint_payloads_like_cpp_probe(
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_rounded_point_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_rounded_point_path_payloads.riv";
     let bytes = synthetic_runtime_file(8214, |bytes| {
@@ -1391,10 +1370,7 @@ fn runtime_drawable_dispatch_stream_exposes_rounded_point_path_payloads_like_cpp
 
 #[test]
 fn runtime_drawable_dispatch_stream_deforms_weighted_points_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_weighted_points_path_payloads.riv";
     let bytes = synthetic_runtime_file(8221, |bytes| {
@@ -1522,10 +1498,7 @@ fn runtime_drawable_dispatch_stream_deforms_weighted_points_path_payloads_like_c
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_line_trim_path_effect_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_line_trim_path_effect_payloads.riv";
     let bytes = synthetic_runtime_file(8233, |bytes| {
@@ -1608,10 +1581,7 @@ fn runtime_drawable_dispatch_stream_exposes_line_trim_path_effect_payloads_like_
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_gradient_paint_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_gradient_paint_payloads.riv";
     let bytes = synthetic_runtime_file(8215, |bytes| {
@@ -1722,10 +1692,7 @@ fn runtime_drawable_dispatch_stream_exposes_gradient_paint_payloads_like_cpp_pro
 
 #[test]
 fn runtime_drawable_dispatch_stream_world_stroke_gradient_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_world_stroke_gradient_payloads.riv";
     let bytes = synthetic_runtime_file(8252, |bytes| {
@@ -1830,10 +1797,7 @@ fn runtime_drawable_dispatch_stream_world_stroke_gradient_matches_cpp_probe() {
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_feather_paint_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_feather_paint_payloads.riv";
     let bytes = synthetic_runtime_file(8216, |bytes| {
@@ -1925,10 +1889,7 @@ fn runtime_drawable_dispatch_stream_exposes_feather_paint_payloads_like_cpp_prob
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_rectangle_parametric_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_rectangle_parametric_path_payloads.riv";
     let bytes = synthetic_runtime_file(8217, |bytes| {
@@ -1990,10 +1951,7 @@ fn runtime_drawable_dispatch_stream_exposes_rectangle_parametric_path_payloads_l
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_ellipse_parametric_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_ellipse_parametric_path_payloads.riv";
     let bytes = synthetic_runtime_file(8218, |bytes| {
@@ -2053,10 +2011,7 @@ fn runtime_drawable_dispatch_stream_exposes_ellipse_parametric_path_payloads_lik
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_polygon_parametric_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_polygon_parametric_path_payloads.riv";
     let bytes = synthetic_runtime_file(8219, |bytes| {
@@ -2118,10 +2073,7 @@ fn runtime_drawable_dispatch_stream_exposes_polygon_parametric_path_payloads_lik
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_star_parametric_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_star_parametric_path_payloads.riv";
     let bytes = synthetic_runtime_file(8220, |bytes| {
@@ -2184,10 +2136,7 @@ fn runtime_drawable_dispatch_stream_exposes_star_parametric_path_payloads_like_c
 
 #[test]
 fn runtime_drawable_dispatch_stream_exposes_triangle_parametric_path_payloads_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_triangle_parametric_path_payloads.riv";
     let bytes = synthetic_runtime_file(8221, |bytes| {

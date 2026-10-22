@@ -2092,10 +2092,7 @@ fn run_default_bind_source_impl(
     allow_view_model_triggers: bool,
     compare_binding: impl Fn(&CppRuntimeStateMachineAdvance, &RuntimeStateMachineInstanceHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let args = [
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
@@ -2159,10 +2156,7 @@ fn run_string_converter_case(label: &str, file_id: u64, converter_kind: StringCo
         "0".to_owned(),
         "1".to_owned(),
     ];
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let bytes = string_converter_condition_fixture_bytes(file_id, converter_kind);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
     let rust = native_fixture(&bytes, label);
@@ -2200,10 +2194,7 @@ fn run_context_bind_source(
     bind_context: impl FnOnce(&NativeFixture, &str) -> nuxie_runtime::CoreHandle,
     compare_binding: impl Fn(&CppRuntimeStateMachineAdvance, &RuntimeStateMachineInstanceHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
@@ -2240,10 +2231,7 @@ fn run_formula_context(
     bind_context: impl FnOnce(&NativeFixture, &str) -> nuxie_runtime::CoreHandle,
     compare_binding: impl Fn(&CppRuntimeStateMachineAdvance, &RuntimeStateMachineInstanceHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
@@ -2272,10 +2260,7 @@ fn run_formula_source_mutation(
     mutate_source: impl Fn(&nuxie_runtime::CoreHandle, &str),
     compare_binding: impl Fn(&CppRuntimeStateMachineAdvance, &RuntimeStateMachineInstanceHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
@@ -2318,10 +2303,7 @@ fn run_random_formula_source_change(
     mutate_source: impl Fn(&NativeFixture, &nuxie_runtime::CoreHandle, &str),
     assert_source: impl Fn(&NativeFixture, &nuxie_runtime::CoreHandle, usize, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let seeded_random_values = [0.25_f32, 0.75, 0.5];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
@@ -2372,10 +2354,7 @@ fn run_public_update_target_to_source(
     set_target: impl Fn(&NativeFixture, &str),
     compare_binding: impl Fn(&CppRuntimeStateMachineAdvance, &RuntimeStateMachineInstanceHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
@@ -2430,10 +2409,7 @@ fn run_formula_explicit_target_to_source(
     args: &[String],
     assert_source: impl Fn(&NativeFixture, &nuxie_runtime::CoreHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
@@ -2487,10 +2463,7 @@ fn run_formula_public_update_target_to_source(
     args: &[String],
     assert_source: impl Fn(&NativeFixture, &nuxie_runtime::CoreHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
@@ -2549,10 +2522,7 @@ fn run_default_source_handle_mutation(
     mutate_source: impl FnOnce(&NativeFixture, &nuxie_runtime::CoreHandle, &str),
     compare_binding: impl Fn(&CppRuntimeStateMachineAdvance, &RuntimeStateMachineInstanceHandle, &str),
 ) {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, args);
     let rust = native_fixture(&bytes, label);
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");

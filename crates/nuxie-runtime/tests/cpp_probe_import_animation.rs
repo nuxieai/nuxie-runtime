@@ -960,10 +960,7 @@ fn upstream_file_can_be_read_with_verified_signed_scripts() {
 
 #[test]
 fn keyed_property_importer_cursor_survives_next_animation_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_two_animation_importer_cursor_cpp.riv";
     let bytes = synthetic_two_animation_importer_cursor(8219);
@@ -999,10 +996,7 @@ fn keyed_property_importer_cursor_survives_next_animation_like_cpp_probe() {
 
 #[test]
 fn invalid_keyed_object_replaces_property_cursor_with_sink_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_invalid_keyed_object_property_sink_cpp.riv";
     let bytes = synthetic_invalid_keyed_object_property_sink(8229);
@@ -1023,10 +1017,7 @@ fn invalid_keyed_object_replaces_property_cursor_with_sink_like_cpp_probe() {
 
 #[test]
 fn negative_speed_nested_remap_uses_effective_start_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_negative_speed_nested_remap_cpp.riv";
     let bytes = synthetic_negative_speed_nested_remap(8220);
@@ -1071,10 +1062,7 @@ fn negative_speed_nested_remap_uses_effective_start_like_cpp_probe() {
 
 #[test]
 fn linear_animation_instance_advance_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let cases = [
         (
@@ -1230,10 +1218,7 @@ fn linear_animation_instance_advance_matches_cpp_probe() {
 
 #[test]
 fn linear_animation_loop_value_definition_fallback_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_linear_animation_loop_value_signed_cpp.riv";
     let bytes = synthetic_linear_animation_with_options(
@@ -1271,10 +1256,7 @@ fn linear_animation_loop_value_definition_fallback_matches_cpp_probe() {
 
 #[test]
 fn linear_animation_loop_value_arbitrary_signed_override_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_linear_animation_loop_value_signed_cpp.riv";
     let bytes = synthetic_linear_animation_with_options(
@@ -1316,10 +1298,7 @@ fn linear_animation_loop_value_arbitrary_signed_override_matches_cpp_probe() {
 
 #[test]
 fn linear_animation_loop_value_uses_retained_definition_like_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
+    let probe = probe_path();
 
     let label = "synthetic/runtime_linear_animation_retained_loop_value_cpp.riv";
     let bytes = synthetic_two_animation_loop_values(8228);

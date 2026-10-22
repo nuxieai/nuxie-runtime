@@ -50,6 +50,7 @@ impl From<u32> for ScrollPhysicsType {
 pub struct ScrollPhysics {
     pub base: ScrollPhysicsBase,
     last_time: i64,
+    pointer_time: Option<f32>,
     is_running: bool,
     speed: Vec2D,
     acceleration: Vec2D,
@@ -61,6 +62,7 @@ impl Default for ScrollPhysics {
         Self {
             base: ScrollPhysicsBase::default(),
             last_time: high_resolution_clock_micros(),
+            pointer_time: None,
             is_running: false,
             speed: Vec2D::default(),
             acceleration: Vec2D::default(),
@@ -100,19 +102,30 @@ impl ScrollPhysics {
         self.base.deserialize(property_key, reader, callbacks)
     }
 
+    /// Select the pointer clock for this drag only. A separate floating point
+    /// baseline preserves subsecond samples without changing upstream's clock.
+    pub fn set_pointer_time(&mut self, time_stamp: Option<f32>) {
+        self.pointer_time = time_stamp;
+    }
+
     pub fn accumulate(&mut self, delta: Vec2D, time_stamp: f32) {
-        let elapsed_seconds =
-            if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
-                let now = time_stamp;
-                let elapsed = now - self.last_time as f32;
-                self.last_time = now as i64;
-                elapsed
-            } else {
-                let now = high_resolution_clock_micros();
-                let elapsed = now.saturating_sub(self.last_time) as f32 / 1_000_000.0;
-                self.last_time = now;
-                elapsed
-            };
+        let elapsed_seconds = if let Some(previous) = self.pointer_time {
+            let elapsed = time_stamp - previous;
+            if elapsed > 0.0 {
+                self.pointer_time = Some(time_stamp);
+            }
+            elapsed
+        } else if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
+            let now = time_stamp;
+            let elapsed = now - self.last_time as f32;
+            self.last_time = now as i64;
+            elapsed
+        } else {
+            let now = high_resolution_clock_micros();
+            let elapsed = now.saturating_sub(self.last_time) as f32 / 1_000_000.0;
+            self.last_time = now;
+            elapsed
+        };
         if elapsed_seconds > 0.0 {
             let last_speed = self.speed;
             self.speed = Vec2D::new(delta.x / elapsed_seconds, delta.y / elapsed_seconds);
@@ -129,6 +142,7 @@ impl ScrollPhysics {
     }
 
     pub fn reset_base(&mut self) {
+        self.pointer_time = None;
         self.last_time =
             if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
                 0
@@ -302,6 +316,22 @@ fn high_resolution_clock_micros() -> i64 {
 mod clock_contract_tests {
     use super::ScrollPhysics;
     use crate::mechanical_port::source::{engine_clock::with_test_clock, math::vec2d::Vec2D};
+
+    #[test]
+    fn pointer_clock_preserves_subseconds_independently_of_arrival_time() {
+        fn speeds(clock: fn() -> i64) -> (Vec2D, Vec2D) {
+            let mut physics = ScrollPhysics::default();
+            physics.set_pointer_time(Some(10.25));
+            with_test_clock(clock, || physics.accumulate(Vec2D::new(-60.0, 0.0), 10.30));
+            let first = physics.speed();
+            with_test_clock(clock, || physics.accumulate(Vec2D::new(-60.0, 0.0), 10.35));
+            (first, physics.speed())
+        }
+        let fast = speeds(|| 124);
+        assert!((fast.0.x + 1200.0).abs() < 0.1);
+        assert!((fast.1.x + 1200.0).abs() < 0.1);
+        assert_eq!(fast, speeds(|| 9_000_000));
+    }
 
     #[test]
     fn scrolling_measures_motion_and_reset_with_the_engine_clock() {

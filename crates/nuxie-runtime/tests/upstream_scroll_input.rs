@@ -652,3 +652,48 @@ fn wheel_disabled_view_ignores_inertia_cancel() {
     assert_eq!(s.send_at(over, cancel), HitResult::None);
     assert!(s.running());
 }
+
+#[test]
+fn pointer_clock_drag_settles_identically_despite_dispatch_delays() {
+    use nuxie_runtime::source::pointer_button::PointerButton;
+    fn play(delayed: bool) -> (Vec2D, f32) {
+        let scene = Scene::vertical();
+        let position = scene.center();
+        scene.smi.with_instance_mut(|s| {
+            s.set_pointer_scroll_clock(true);
+            s.pointer_down_at(position, 2.25, 0, PointerButton::Primary);
+        });
+        for step in 1..=2 {
+            if delayed {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            scene.smi.with_instance_mut(|s| {
+                s.pointer_move(
+                    position + Vec2D::new(0.0, -60.0 * step as f32),
+                    2.25 + 0.05 * step as f32,
+                    0,
+                );
+            });
+            scene.advance(0.0);
+        }
+        let speed = physics(&scene.scroll, |p| p.speed());
+        scene.smi.with_instance_mut(|s| {
+            s.pointer_up_at(
+                position + Vec2D::new(0.0, -120.0),
+                2.35,
+                0,
+                PointerButton::Primary,
+            );
+        });
+        for _ in 0..600 {
+            scene.advance(1.0 / 60.0);
+        }
+        (speed, scene.get(ScrollConstraint::offset_y))
+    }
+    let fast = play(false);
+    assert!(
+        fast.0.y < -1000.0,
+        "the live drag must acquire velocity: {fast:?}"
+    );
+    assert_eq!(fast, play(true));
+}

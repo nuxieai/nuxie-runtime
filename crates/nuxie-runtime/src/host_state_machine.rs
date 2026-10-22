@@ -812,6 +812,43 @@ impl StateMachineInstance {
     pub fn submit_gamepads_from_buffer(&mut self, data: &[u8]) -> bool {
         self.native.submit_gamepads_from_buffer(data)
     }
+    /// Use host pointer time for scroll drag velocity on this machine.
+    pub fn set_pointer_scroll_clock(&mut self, enabled: bool) {
+        self.native
+            .with_instance_mut(|machine| machine.set_pointer_scroll_clock(enabled));
+    }
+    pub fn pointer_down_at(
+        &mut self,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
+        self.native.with_instance_mut(|machine| {
+            machine.pointer_down_at(
+                Vec2D::new(x, y),
+                timestamp_seconds,
+                pointer_id,
+                crate::source::pointer_button::PointerButton::Primary,
+            )
+        })
+    }
+    pub fn pointer_up_at(
+        &mut self,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
+        self.native.with_instance_mut(|machine| {
+            machine.pointer_up_at(
+                Vec2D::new(x, y),
+                timestamp_seconds,
+                pointer_id,
+                crate::source::pointer_button::PointerButton::Primary,
+            )
+        })
+    }
     pub fn pointer_move(
         &mut self,
         x: f32,
@@ -831,6 +868,19 @@ impl StateMachineInstance {
                 crate::source::pointer_button::PointerButton::Primary,
             )
         })
+    }
+    pub fn pointer_down_at_with_event_context(
+        &mut self,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        context: &StateMachineEventContext,
+    ) -> RuntimeHitResult {
+        let previous_count = self.synchronize_host_reported_events().len();
+        let result = self.pointer_down_at(x, y, timestamp_seconds, pointer_id);
+        self.attach_context_to_new_reports(previous_count, context);
+        result
     }
     pub fn pointer_down_with_event_context(
         &mut self,
@@ -852,6 +902,19 @@ impl StateMachineInstance {
                 crate::source::pointer_button::PointerButton::Primary,
             )
         })
+    }
+    pub fn pointer_up_at_with_event_context(
+        &mut self,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        context: &StateMachineEventContext,
+    ) -> RuntimeHitResult {
+        let previous_count = self.synchronize_host_reported_events().len();
+        let result = self.pointer_up_at(x, y, timestamp_seconds, pointer_id);
+        self.attach_context_to_new_reports(previous_count, context);
+        result
     }
     pub fn pointer_up_with_event_context(
         &mut self,

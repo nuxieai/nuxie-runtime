@@ -2296,7 +2296,7 @@ impl HitComponent for HitNestedArtboard {
 
     fn process_event(
         &self,
-        _machine: &mut StateMachineInstance,
+        outer: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
         can_hit: bool,
@@ -2324,8 +2324,13 @@ impl HitComponent for HitNestedArtboard {
             instance.with_instance_mut(|nested| {
                 if can_hit {
                     result = match hit_type {
-                        ListenerType::Down => nested.pointer_down(local, pointer_id, button),
-                        ListenerType::Up => nested.pointer_up(local, pointer_id, button),
+                        ListenerType::Down => {
+                            nested.set_pointer_scroll_clock(outer.pointer_scroll_clock());
+                            nested.pointer_down_at(local, timestamp, pointer_id, button)
+                        }
+                        ListenerType::Up => {
+                            nested.pointer_up_at(local, timestamp, pointer_id, button)
+                        }
                         ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
                         ListenerType::Exit => nested.pointer_exit(local, pointer_id),
                         ListenerType::DragStart => {
@@ -2593,7 +2598,7 @@ impl HitComponent for HitComponentList {
 
     fn process_event(
         &self,
-        _machine: &mut StateMachineInstance,
+        outer: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
         can_hit: bool,
@@ -2617,8 +2622,13 @@ impl HitComponent for HitComponentList {
             let item = machine.with_instance_mut(|nested| {
                 if running_can_hit {
                     match hit_type {
-                        ListenerType::Down => nested.pointer_down(local, pointer_id, button),
-                        ListenerType::Up => nested.pointer_up(local, pointer_id, button),
+                        ListenerType::Down => {
+                            nested.set_pointer_scroll_clock(outer.pointer_scroll_clock());
+                            nested.pointer_down_at(local, timestamp, pointer_id, button)
+                        }
+                        ListenerType::Up => {
+                            nested.pointer_up_at(local, timestamp, pointer_id, button)
+                        }
                         ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
                         ListenerType::Exit => nested.pointer_exit(local, pointer_id),
                         ListenerType::DragStart => {
@@ -3387,6 +3397,7 @@ pub struct StateMachineInstance {
     // Retain the same hit occurrence across a gesture, including re-sorting.
     // Re-picking on each event would hand a flick's tail to an outer view.
     scroll_latch: Option<Rc<dyn HitComponent>>,
+    pointer_scroll_clock: bool,
     /// Each pointer's drag owner in CSS content (docs/CSS_LAYOUT.md, 4.5).
     css_drag_owners: Vec<(i32, usize)>,
     /// The CSS boxes whose own hit hears the pointer move, enter or leave,
@@ -3496,6 +3507,7 @@ impl StateMachineInstance {
             advance_change_serial: 0,
             hit_components: Vec::new(),
             scroll_latch: None,
+            pointer_scroll_clock: false,
             css_drag_owners: Vec::new(),
             css_hover_boxes: Vec::new(),
             css_hits: false,
@@ -4702,6 +4714,36 @@ impl StateMachineInstance {
                 component.hit_test(position)
             }
         })
+    }
+
+    /// Opt in to host pointer timestamps for drag velocity, per instance.
+    /// Hosts must use the timestamped down/up methods with the same clock as moves.
+    pub fn set_pointer_scroll_clock(&mut self, enabled: bool) {
+        self.pointer_scroll_clock = enabled;
+    }
+
+    pub fn pointer_scroll_clock(&self) -> bool {
+        self.pointer_scroll_clock
+    }
+
+    pub fn pointer_down_at(
+        &mut self,
+        position: Vec2D,
+        timestamp: f32,
+        id: i32,
+        button: PointerButton,
+    ) -> HitResult {
+        self.update_listeners(position, ListenerType::Down, id, timestamp, button)
+    }
+
+    pub fn pointer_up_at(
+        &mut self,
+        position: Vec2D,
+        timestamp: f32,
+        id: i32,
+        button: PointerButton,
+    ) -> HitResult {
+        self.update_listeners(position, ListenerType::Up, id, timestamp, button)
     }
 
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, id: i32) -> HitResult {

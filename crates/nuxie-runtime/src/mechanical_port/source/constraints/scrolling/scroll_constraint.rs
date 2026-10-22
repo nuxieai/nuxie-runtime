@@ -355,18 +355,18 @@ impl ScrollConstraint {
 
     /// The CSS padding-box clip in viewport-local coordinates.
     pub(crate) fn css_scrollport(&self) -> Option<Aabb> {
+        if !self.has_css_scroll_axis() {
+            return None;
+        }
         self.with_viewport(|viewport| {
-            viewport.is_css_mode().then(|| {
-                let [top, right, bottom, left] = viewport.solved_border();
-                Aabb::from_ltwh(
-                    left,
-                    top,
-                    (viewport.layout_width() - left - right).max(0.0),
-                    (viewport.layout_height() - top - bottom).max(0.0),
-                )
-            })
+            let [top, right, bottom, left] = viewport.solved_border();
+            Aabb::from_ltwh(
+                left,
+                top,
+                (viewport.layout_width() - left - right).max(0.0),
+                (viewport.layout_height() - top - bottom).max(0.0),
+            )
         })
-        .flatten()
     }
 
     pub fn viewport_width(&self) -> f32 {
@@ -452,20 +452,21 @@ impl ScrollConstraint {
     /// padding box (docs/CSS_LAYOUT.md, section 3). Virtualized lists keep
     /// their own extents.
     fn css_scroll_range(&self) -> Option<crate::source::math::vec2d::Vec2D> {
-        if self.base.virtualize() {
+        if !self.has_css_scroll_axis() {
             return None;
         }
-        self.with_viewport(|viewport| viewport.is_css_mode().then(|| viewport.scroll_range()))
-            .flatten()
+        self.with_viewport(LayoutComponent::scroll_range)
     }
+    /// Virtualized and looping scrollers keep native metrics and coordinates.
     pub(crate) fn has_css_scroll_axis(&self) -> bool {
-        self.css_scroll_range().is_some() && !self.infinite()
+        !self.base.virtualize()
+            && !self.infinite()
+            && self
+                .with_viewport(LayoutComponent::is_css_mode)
+                .unwrap_or(false)
     }
     fn css_scroll_axis(&self, horizontal: bool) -> Option<CssScrollAxis> {
         let range = self.css_scroll_range()?;
-        if self.infinite() {
-            return None;
-        }
         let (origin, rtl) = self.with_viewport(|viewport| {
             let [top, right, _, left] = viewport.solved_border();
             let rtl = horizontal
@@ -598,7 +599,7 @@ impl ScrollConstraint {
     /// and scrolls toward its left, so its horizontal offset (0 at the
     /// start, negative toward the end) moves the content right.
     pub(crate) fn css_rtl(&self) -> bool {
-        self.css_scroll_range().is_some()
+        self.has_css_scroll_axis()
             && self
                 .with_viewport(|viewport| {
                     viewport.actual_direction()

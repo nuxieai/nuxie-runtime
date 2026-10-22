@@ -140,6 +140,7 @@ impl CssScrollAxis {
 pub struct ScrollConstraint {
     pub base: ScrollConstraintBase,
     scroll_mode: Option<ScrollMode>,
+    pending_offset_bindings: Vec<CoreHandle>,
     physics: Option<CoreHandle>,
     virtualizer: Option<Rc<RefCell<ScrollVirtualizer>>>,
     virtual_layout: Option<Rc<RefCell<VirtualLayout>>>,
@@ -189,6 +190,7 @@ impl Default for ScrollConstraint {
         Self {
             base: ScrollConstraintBase::default(),
             scroll_mode: None,
+            pending_offset_bindings: Vec::new(),
             physics: None,
             virtualizer: None,
             virtual_layout: None,
@@ -471,6 +473,16 @@ impl ScrollConstraint {
         self.scroll_mode == Some(ScrollMode::Css)
     }
 
+    pub(crate) fn register_offset_binding(&mut self, bind: CoreHandle) -> Option<bool> {
+        if self.scroll_mode.is_some() {
+            return Some(self.has_css_scroll_axis());
+        }
+        if !self.pending_offset_bindings.contains(&bind) {
+            self.pending_offset_bindings.push(bind);
+        }
+        None
+    }
+
     fn decide_scroll_mode(&mut self) {
         if self.scroll_mode.is_some() {
             return;
@@ -488,6 +500,15 @@ impl ScrollConstraint {
         } else {
             ScrollMode::Css
         });
+        if let Some(owner) = self.handle() {
+            for bind in std::mem::take(&mut self.pending_offset_bindings) {
+                crate::source::data_bind::data_bind::DataBind::scroll_mode_decided(
+                    &bind,
+                    &owner,
+                    self.has_css_scroll_axis(),
+                );
+            }
+        }
     }
 
     fn ignore_css_scroll_flag_change(&self, _property: &str, current: bool, value: bool) -> bool {

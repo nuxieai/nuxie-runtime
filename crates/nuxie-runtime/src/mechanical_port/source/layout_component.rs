@@ -2257,6 +2257,27 @@ impl LayoutComponent {
             self.mark_layout_node_dirty(false);
         }
     }
+    fn css_scroll_thumb_layout(&self, layout: Layout) -> Layout {
+        if !self.css_scroll_thumb_size || !self.is_css_mode() {
+            return layout;
+        }
+        // A constraint controls the outer box, independently of its animated item.
+        Layout::new(
+            layout.left(),
+            layout.top(),
+            if self.forced_width.is_finite() {
+                self.forced_width.max(0.0)
+            } else {
+                layout.width()
+            },
+            if self.forced_height.is_finite() {
+                self.forced_height.max(0.0)
+            } else {
+                layout.height()
+            },
+        )
+    }
+
     fn css_scroll_thumb_dimension(
         &self,
         style: &Style,
@@ -3839,7 +3860,7 @@ impl LayoutComponent {
     ) -> (bool, bool) {
         let old = self.current_layout_frame();
         let next = LayoutAnimationFrame {
-            layout: next,
+            layout: self.css_scroll_thumb_layout(next),
             content,
         };
         let css = self.is_css_mode();
@@ -6037,7 +6058,9 @@ impl LayoutComponent {
     fn sample_layout_animation(&mut self, factor: f32, old: LayoutAnimationFrame) -> (bool, bool) {
         let data = self.current_animation_data().unwrap();
         data.factor = factor;
-        let current = data.interpolate(factor);
+        let mut current = data.interpolate(factor);
+        // A scroll bar sets a thumb's outer size, whatever its animated frame.
+        current.layout = self.css_scroll_thumb_layout(current.layout);
         self.layout = current.layout;
         if factor == 1.0 {
             self.animation.as_mut().unwrap().in_flight = false;

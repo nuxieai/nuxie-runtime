@@ -805,14 +805,19 @@ fn css_box_paints(
             .any(crate::mechanical_port::source::layout_component::css_paint_draws)
 }
 
-/// Geometry bounds in root space, clipped by the same paths selection uses.
+/// Geometry bounds in root space, optionally clipped from an owner outward.
 fn geometry_visible_bounds(
-    handle: &CoreHandle,
+    clip_owner: &CoreHandle,
     bounds: NativeAabb,
     artboard_to_root: NativeMat2D,
     clip: bool,
     spaces: &[(CoreHandle, NativeMat2D)],
 ) -> Option<NativeAabb> {
+    // An empty shape's local bounds are the inverted expansion sentinel;
+    // transforming it would turn it into a huge rectangle.
+    if bounds.is_empty_or_nan() {
+        return None;
+    }
     if !clip {
         return Some(artboard_to_root.map_bounding_box(bounds));
     }
@@ -824,7 +829,7 @@ fn geometry_visible_bounds(
     ]
     .map(|point| artboard_to_root * point);
     let visible = crate::source::semantic::semantic_provider::rendered_geometry_visible_bounds(
-        handle, corners, spaces,
+        clip_owner, corners, spaces,
     )?;
     Some(NativeAabb::new(
         visible.min_x,
@@ -1252,11 +1257,15 @@ fn collect_geometry(
             continue;
         };
         let root_transform = drawing_to_root * world;
+        // Keep the ordinary catalogue's bounds within its artboard, including
+        // overflow and styleless layout children. Clip those bounds from the
+        // host outward, using the rendered occurrence transforms.
+        let host = artboard.with_artboard(|artboard| artboard.base.host());
         let Some(bounds) = geometry_visible_bounds(
-            &handle,
+            host.as_ref().unwrap_or(&handle),
             local_bounds,
             root_transform,
-            visibility == GeometryVisibility::Visible,
+            visibility == GeometryVisibility::Visible && host.is_some(),
             &spaces,
         )
         .filter(|bounds| !bounds.is_empty_or_nan())

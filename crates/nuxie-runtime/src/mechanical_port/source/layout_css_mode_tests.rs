@@ -7167,6 +7167,116 @@ fn css_fractional_index_uses_solved_item_steps_and_css_gaps() {
 }
 
 #[test]
+fn css_scroll_index_interpolates_an_oversized_single_item() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for rtl in [false, true] {
+        for pad in [0.0, 24.0] {
+            for viewport_padding in [false, true] {
+                let f = css_axis_row(
+                    rtl,
+                    100.0,
+                    &[300.0],
+                    0.0,
+                    pad,
+                    viewport_padding,
+                    false,
+                    None,
+                );
+                let scroll = css_axis_scroll(&f);
+                let expected = -(pad + 150.0);
+                assert!(CoreRegistry::set_double_handle(&scroll, 763, 0.5));
+                assert_eq!(
+                    scroll
+                        .with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+                    Some((expected, 0.5)),
+                    "rtl={rtl}, padding={pad}, viewport_padding={viewport_padding}"
+                );
+                // Read from an authored offset independently of the index setter.
+                scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                    s.set_authored_scroll_offset_x(expected)
+                });
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                    Some(0.5)
+                );
+                let end = scroll
+                    .with_downcast::<ScrollConstraint, _>(ScrollConstraint::max_offset_x)
+                    .unwrap();
+                if pad == 0.0 {
+                    assert_eq!(end, -200.0);
+                }
+                // Upstream targets the far end at and beyond the item count.
+                for index in [1.0, 2.0] {
+                    scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(index));
+                    let (offset, read) = scroll
+                        .with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index()))
+                        .unwrap();
+                    assert_eq!(offset, end);
+                    assert!((read - (-end - pad) / 300.0).abs() < 0.00001);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn css_scroll_index_interpolates_through_an_oversized_final_item_to_the_end() {
+    use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+    for rtl in [false, true] {
+        let f = css_axis_row(
+            rtl,
+            100.0,
+            &[100.0, 100.0, 300.0],
+            12.0,
+            0.0,
+            false,
+            false,
+            None,
+        );
+        let scroll = css_axis_scroll(&f);
+        for (index, offset) in [
+            (0.0, 0.0),
+            (1.0, -112.0),
+            (2.0, -224.0),
+            (2.25, -302.0),
+            (2.5, -380.0),
+        ] {
+            assert!(CoreRegistry::set_double_handle(&scroll, 763, index));
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index())),
+                Some((offset, index)),
+                "rtl={rtl}, index={index}"
+            );
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|s| {
+                s.set_authored_scroll_offset_x(offset)
+            });
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index),
+                Some(index)
+            );
+        }
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(ScrollConstraint::max_offset_x),
+            Some(-424.0)
+        );
+        let end_index = 2.0 + 200.0 / 312.0;
+        scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_authored_scroll_offset_x(-424.0));
+        let read = scroll
+            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::scroll_index)
+            .unwrap();
+        assert!((read - end_index).abs() < 0.00001);
+        for index in [end_index, 2.75, 3.0, 4.0] {
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|s| s.set_scroll_index(index));
+            let (offset, read) = scroll
+                .with_downcast::<ScrollConstraint, _>(|s| (s.offset_x(), s.scroll_index()))
+                .unwrap();
+            assert!((offset + 424.0).abs() < 0.0001);
+            assert!((read - end_index).abs() < 0.00001);
+        }
+    }
+}
+
+#[test]
 fn css_rtl_snap_uses_logical_starts_for_mixed_width_items() {
     use crate::source::constraints::scrolling::{
         elastic_scroll_physics::ElasticScrollPhysics, scroll_constraint::ScrollConstraint,

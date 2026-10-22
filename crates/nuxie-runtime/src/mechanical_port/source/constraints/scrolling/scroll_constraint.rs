@@ -2029,21 +2029,31 @@ impl ScrollConstraint {
     fn position_at_index(&self, index: f32) -> Option<Vec2D> {
         if self.css_scroll_axis(self.indexes_horizontally()).is_some() {
             let items = self.css_axis_items();
-            let &(last_index, _) = items.last()?;
-            let index = if index.is_nan() {
-                0.0
-            } else {
-                index.clamp(0.0, last_index as f32)
-            };
+            if items.is_empty() {
+                return None;
+            }
+            let index = if index.is_nan() { 0.0 } else { index.max(0.0) };
+            if index >= self.scroll_item_count() as f32 {
+                let x = self.css_scroll_axis(true).unwrap();
+                let y = self.css_scroll_axis(false).unwrap();
+                return Some(Vec2D::new(-x.range, -y.range));
+            }
             let selected = items
                 .iter()
                 .rposition(|(item, _)| *item as f32 <= index)
                 .unwrap_or(0);
             let (item_index, bounds) = items[selected];
             let next = items.get(selected + 1).copied();
-            let fraction = next.map_or(0.0, |(next_index, _)| {
-                ((index - item_index as f32) / (next_index - item_index) as f32).clamp(0.0, 1.0)
-            });
+            let fraction = next.map_or_else(
+                || {
+                    let fraction = (index - item_index as f32).max(0.0);
+                    // Collapsed trailing items fall back to the last visible start.
+                    if fraction < 1.0 { fraction } else { 0.0 }
+                },
+                |(next_index, _)| {
+                    ((index - item_index as f32) / (next_index - item_index) as f32).clamp(0.0, 1.0)
+                },
+            );
             let position = |horizontal| {
                 let axis = self.css_scroll_axis(horizontal).unwrap();
                 let start = axis.snap_position(bounds);
@@ -2205,6 +2215,13 @@ impl ScrollConstraint {
                     return index as f32
                         + (next_index - index) as f32 * (position - start) / (end - start);
                 }
+            }
+            let &(last_index, last) = items.last().unwrap();
+            let start = axis.snap_position(last);
+            let step = axis.step(last, None);
+            // The final item keeps its size and gap as its step within the scroll range.
+            if position > start && position <= axis.range && step > 0.0 {
+                return last_index as f32 + ((position - start) / step).min(1.0);
             }
             return nearest.0 as f32;
         }

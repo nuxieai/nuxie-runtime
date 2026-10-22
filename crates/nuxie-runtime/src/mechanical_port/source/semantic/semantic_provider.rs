@@ -220,7 +220,7 @@ impl RenderedClip {
 
 /// Visit clips through each nested artboard's host, mapping them with the
 /// same occurrence transforms the host geometry catalogue draws with.
-fn walk_painted_clips(
+fn walk_geometry_clips(
     component: &CoreHandle,
     spaces: &[(CoreHandle, Mat2D)],
     mut visit: impl FnMut(RenderedClip) -> bool,
@@ -238,27 +238,27 @@ fn walk_painted_clips(
     })
 }
 
-/// A painted CSS box or artboard's root-space polygon, clipped through
+/// A host geometry polygon in root space, clipped through
 /// its hosts. Its own content clip is left out; an artboard's frame stays.
-pub(crate) fn painted_box_visible_bounds(
+pub(crate) fn rendered_geometry_visible_bounds(
     component: &CoreHandle,
     polygon: [Vec2D; 4],
     spaces: &[(CoreHandle, Mat2D)],
 ) -> Option<Bounds> {
     let mut region = SemanticClipRegion::from_polygon(&polygon);
-    let complete = walk_painted_clips(component, spaces, |clip| {
+    let complete = walk_geometry_clips(component, spaces, |clip| {
         clip.intersect(&mut region);
         !region.is_empty()
     });
     (complete && !region.is_empty()).then(|| region.bounds())
 }
 
-pub(crate) fn painted_box_contains_point(
+pub(crate) fn rendered_geometry_contains_point(
     component: &CoreHandle,
     point: Vec2D,
     spaces: &[(CoreHandle, Mat2D)],
 ) -> bool {
-    walk_painted_clips(component, spaces, |clip| clip.contains(point))
+    walk_geometry_clips(component, spaces, |clip| clip.contains(point))
 }
 
 /// Yield each rendered clip once, crossing hosts into their parent

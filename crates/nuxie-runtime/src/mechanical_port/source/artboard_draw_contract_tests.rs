@@ -274,6 +274,16 @@ pub(crate) fn assert_mask_draws(
     start: &RuntimeDrawableOccurrence,
     end: &RuntimeDrawableOccurrence,
 ) {
+    let modes = cache_mask(root, start, end);
+    assert_eq!(&*modes.borrow(), &[api::LayerMaskMode::InvertedAlpha]);
+}
+
+/// Populate a scene's mask cache and expose subsequent coverage applications.
+pub(crate) fn cache_mask(
+    root: &CoreHandle,
+    start: &RuntimeDrawableOccurrence,
+    end: &RuntimeDrawableOccurrence,
+) -> Rc<RefCell<Vec<api::LayerMaskMode>>> {
     let mask = start.layer_mask_marker().unwrap().borrow().mask.clone();
     let modes = Rc::new(RefCell::new(Vec::new()));
     let host: api::DeferredCanvasHostHandle = Rc::new(RefCell::new(MaskHost {
@@ -291,7 +301,7 @@ pub(crate) fn assert_mask_draws(
         start,
         end
     ));
-    assert_eq!(&*modes.borrow(), &[api::LayerMaskMode::InvertedAlpha]);
+    modes
 }
 
 #[test]

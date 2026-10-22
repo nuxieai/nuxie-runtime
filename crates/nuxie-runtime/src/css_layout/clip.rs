@@ -2,25 +2,34 @@
 use super::keys;
 use crate::source::{
     core::CoreHandle,
-    drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
+    drawable::{Drawable, DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     factory::RuntimeFactoryHandle,
     layout_component::LayoutComponent,
     renderer::Renderer,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 /// State while walking from a painted box towards the root. An absolute
-/// box skips overflow until its containing block.
+/// box outside a masked subtree skips overflow until its containing block.
 #[derive(Default)]
 pub(crate) struct OverflowFilter {
     position: u8,
+    full_chain: bool,
 }
 
 impl OverflowFilter {
-    pub(crate) fn for_position(position: u8) -> Self {
-        let mut filter = Self::default();
-        filter.leave(position);
+    pub(crate) fn for_layout(layout: &LayoutComponent) -> Self {
+        let mut filter = Self {
+            full_chain: keeps_full_chain(layout),
+            ..Self::default()
+        };
+        filter.leave(position(layout));
         filter
+    }
+
+    pub(crate) fn keep_full_chain(&mut self) {
+        self.full_chain = true;
+        self.position = 0;
     }
 
     pub(crate) fn enter(&mut self, position: u8, artboard: bool) -> bool {
@@ -31,10 +40,15 @@ impl OverflowFilter {
     }
 
     pub(crate) fn leave(&mut self, position: u8) {
-        if position == 2 {
+        if !self.full_chain && position == 2 {
             self.position = position;
         }
     }
+}
+
+/// Masked content keeps ancestor overflow outside its cached canvas.
+pub(crate) fn keeps_full_chain(drawable: &Drawable) -> bool {
+    !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty()
 }
 
 pub(crate) fn position(layout: &LayoutComponent) -> u8 {
@@ -56,6 +70,9 @@ pub(crate) fn hit_test_ancestors(
     while let Some(owner) = parent {
         let Some((hit, next)) = owner.with_mut(|object| {
             let next = object.component_parent_handle();
+            if object.as_drawable().is_some_and(keeps_full_chain) {
+                filter.keep_full_chain();
+            }
             let position = object.as_layout_component().map(position).unwrap_or(0);
             let include = filter.enter(position, object.as_artboard().is_some());
             if let Some(artboard) = object.as_artboard_mut() {
@@ -118,16 +135,16 @@ pub(crate) fn draw_chain(
     root: &CoreHandle,
     root_overflow: bool,
     root_shapes: &[CoreHandle],
-    full_mask_clips: bool,
 ) -> (Vec<DrawClip>, bool) {
     let owner = match drawable {
         RuntimeDrawableOccurrence::Authored(owner) => owner.clone(),
         RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
     };
     let owner = paint_owner(&owner);
-    let full_mask_clips = full_mask_clips
-        && (!drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty());
     let mut filter = OverflowFilter::default();
+    if !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty() {
+        filter.keep_full_chain();
+    }
     let mut current = Some(owner.clone());
     let mut levels = Vec::new();
     let mut css_scope = root_overflow;
@@ -136,7 +153,7 @@ pub(crate) fn draw_chain(
             let mut clips = Vec::new();
             if root_overflow {
                 clips.extend(root_shapes.iter().cloned().map(DrawClip::Shape));
-                if filter.enter(0, true) || full_mask_clips {
+                if filter.enter(0, true) {
                     clips.push(DrawClip::Overflow(handle));
                 }
             }
@@ -149,7 +166,7 @@ pub(crate) fn draw_chain(
                 let position = position(layout);
                 css_scope |= layout.is_css_mode() && layout.clips();
                 if handle != owner {
-                    let include = filter.enter(position, false) || full_mask_clips;
+                    let include = filter.enter(position, false);
                     if layout.is_css_mode() && layout.clips() {
                         clips.extend(
                             layout
@@ -185,73 +202,6 @@ pub(crate) fn draw_chain(
         }
     }
     (chain, css_scope)
-}
-
-/// Split clips not shared by a mask range at both of its boundaries.
-/// Shared clips stay outside; every other start and end stays inside.
-/// Source ranges use the same rule when rendered into their own canvas.
-pub(crate) fn mask_boundaries(
-    drawables: &[(RuntimeDrawableOccurrence, Vec<DrawClip>, bool)],
-    masks: &[CoreHandle],
-) -> HashMap<RuntimeDrawableOccurrence, usize> {
-    use crate::source::layer_mask::LayerMask;
-    let mut boundaries = HashMap::<RuntimeDrawableOccurrence, usize>::new();
-    for mask in masks {
-        if mask
-            .with_downcast::<LayerMask, _>(LayerMask::is_self_referential)
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        for source in [false, true] {
-            let mut members =
-                drawables
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, (drawable, _, _))| {
-                        let masks = if source {
-                            drawable.source_of_layer_masks()
-                        } else {
-                            drawable.layer_masks()
-                        };
-                        masks.contains(mask).then_some(index)
-                    });
-            let Some(first) = members.next() else {
-                continue;
-            };
-            let last = members.last().unwrap_or(first);
-            let range = &drawables[first..=last];
-            if !range.iter().any(|(_, _, css)| *css) {
-                continue;
-            }
-            let prefix =
-                range
-                    .iter()
-                    .skip(1)
-                    .fold(drawables[first].1.len(), |prefix, (_, chain, _)| {
-                        drawables[first]
-                            .1
-                            .iter()
-                            .zip(chain)
-                            .take(prefix)
-                            .take_while(|(a, b)| a == b)
-                            .count()
-                    });
-            for boundary in [
-                Some(first),
-                (last + 1 < drawables.len()).then_some(last + 1),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                boundaries
-                    .entry(drawables[boundary].0.clone())
-                    .and_modify(|limit| *limit = (*limit).min(prefix))
-                    .or_insert(prefix);
-            }
-        }
-    }
-    boundaries
 }
 
 struct OverflowOperation {

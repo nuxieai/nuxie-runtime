@@ -460,6 +460,12 @@ fn walk_rendered_clips(
         let skip_own = !own_clip && (&owner == component || owner == paint_owner);
         let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
+            if object
+                .as_drawable()
+                .is_some_and(crate::css_layout::clip::keeps_full_chain)
+            {
+                filter.keep_full_chain();
+            }
             let position = object
                 .as_layout_component()
                 .map(crate::css_layout::clip::position)

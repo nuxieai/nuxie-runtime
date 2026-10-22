@@ -2068,9 +2068,7 @@ impl LayoutComponent {
             return crate::css_layout::clip::hit_test_ancestors(
                 self.parent_handle(),
                 position,
-                crate::css_layout::clip::OverflowFilter::for_position(
-                    crate::css_layout::clip::position(self),
-                ),
+                crate::css_layout::clip::OverflowFilter::for_layout(self),
             );
         }
         self.base.base.hit_test_point(position, true, primary)

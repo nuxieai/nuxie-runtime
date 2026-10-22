@@ -1840,39 +1840,7 @@ impl Artboard {
             }
         }
 
-        let mut drawables = Vec::new();
-        let mut current = last_drawable;
-        while let Some(drawable) = current {
-            current = drawable.with(Drawable::prev_drawable).flatten();
-            drawables.push(drawable);
-        }
-        self.interleave_clipping_shapes(&drawables, &HashSet::new());
-        let retry_masks = self.interleave_layer_masks(true);
-        if !retry_masks.is_empty() {
-            // Retry CSS clip splits without changing unsupported DrawRules
-            // ranges or the clip chains of unrelated masked subtrees.
-            self.interleave_clipping_shapes(&drawables, &retry_masks);
-            let _ = self.interleave_layer_masks(false);
-        }
-        self.clear_redundant_operations();
-    }
-
-    fn interleave_clipping_shapes(
-        &mut self,
-        drawables: &[RuntimeDrawableOccurrence],
-        full_mask_clips: &HashSet<CoreHandle>,
-    ) {
-        self.first_drawable = drawables.first().cloned();
-        for (index, drawable) in drawables.iter().enumerate() {
-            drawable.with_mut(|drawable| {
-                drawable.next = index
-                    .checked_sub(1)
-                    .map(|index| drawables[index].downgrade());
-                drawable.prev = drawables
-                    .get(index + 1)
-                    .map(RuntimeDrawableOccurrence::downgrade);
-            });
-        }
+        self.first_drawable = last_drawable;
         for clipping_shape in &self.clipping_shapes {
             clipping_shape.with_downcast_mut::<ClippingShape, _>(ClippingShape::reset_drawables);
         }
@@ -1923,26 +1891,10 @@ impl Artboard {
             .expect("artboard owner");
         let root_overflow = self.css_clips();
         let root_shapes = self.base.base.clipping_shapes().to_vec();
-        let chains = drawables
-            .iter()
-            .map(|drawable| {
-                let (chain, css_scope) = clip::draw_chain(
-                    drawable,
-                    &root,
-                    root_overflow,
-                    &root_shapes,
-                    drawable
-                        .layer_masks()
-                        .iter()
-                        .chain(drawable.source_of_layer_masks().iter())
-                        .any(|mask| full_mask_clips.contains(mask)),
-                );
-                (drawable.clone(), chain, css_scope)
-            })
-            .collect::<Vec<_>>();
-        let boundaries = clip::mask_boundaries(&chains, &self.layer_masks);
-        for (current, chain, css_scope) in chains {
+        let mut current_drawable = self.first_drawable.clone();
+        while let Some(current) = current_drawable {
             current.with_mut(|current| current.set_needs_save_operation(true));
+            let (chain, css_scope) = clip::draw_chain(&current, &root, root_overflow, &root_shapes);
             let css_chain = chain
                 .iter()
                 .chain(&clipping_stack)
@@ -1961,9 +1913,6 @@ impl Artboard {
                     .position(|clip| !chain.contains(clip))
                     .unwrap_or(clipping_stack.len())
             };
-            let removing_index = boundaries
-                .get(&current)
-                .map_or(removing_index, |limit| removing_index.min(*limit));
             if !clipping_stack.is_empty() && removing_index < clipping_stack.len() {
                 let mut i = clipping_stack.len() - 1;
                 loop {
@@ -2022,6 +1971,7 @@ impl Artboard {
                 }
             }
             next_drawable = Some(current.clone());
+            current_drawable = current.with(Drawable::prev_drawable).flatten();
         }
         if !clipping_stack.is_empty() {
             for i in (0..clipping_stack.len()).rev() {
@@ -2041,6 +1991,8 @@ impl Artboard {
             }
         }
         self.css_clip_operations = css_operations;
+        self.interleave_layer_masks();
+        self.clear_redundant_operations();
     }
 
     pub fn all_layer_masks(&self) -> &[CoreHandle] {
@@ -2193,66 +2145,9 @@ impl Artboard {
         Some(start)
     }
 
-    /// Retry contiguous ranges with CSS overflow markers. DrawRules gaps
-    /// retain Rive's skip behavior.
-    fn css_split_in_mask_range(&self, members: &[RuntimeDrawableOccurrence]) -> bool {
-        if self.css_clip_operations.is_empty() {
-            return false;
-        }
-        let members = members.iter().cloned().collect::<HashSet<_>>();
-        let mut range = Vec::new();
-        let mut last_member = None;
-        let mut d = self.first_drawable.clone();
-        while let Some(current) = d {
-            d = current.with(Drawable::prev_drawable).flatten();
-            if members.contains(&current) {
-                last_member = Some(range.len());
-            }
-            if last_member.is_some() {
-                range.push(current);
-            }
-        }
-        let Some(last) = last_member else {
-            return false;
-        };
-        let mut css_split = false;
-        for drawable in &range[..=last] {
-            if drawable.is_clip_start() || drawable.is_clip_end() {
-                css_split |= self.css_clip_operations.contains(drawable)
-                    && drawable
-                        .with_proxy(|proxy| {
-                            proxy
-                                .owner_handle()
-                                .with(|owner| {
-                                    owner
-                                        .as_layout_component()
-                                        .is_some_and(LayoutComponent::is_css_mode)
-                                })
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(false);
-            } else if !members.contains(drawable)
-                && !drawable.is_mask_start()
-                && !drawable.is_mask_end()
-                && !drawable
-                    .with_proxy(|proxy| {
-                        proxy.hittable_component().is_some_and(|owner| {
-                            members.contains(&RuntimeDrawableOccurrence::Authored(owner))
-                        })
-                    })
-                    .unwrap_or(false)
-            {
-                return false;
-            }
-        }
-        css_split
-    }
-
-    #[must_use]
-    fn interleave_layer_masks(&mut self, retry_css_splits: bool) -> HashSet<CoreHandle> {
+    fn interleave_layer_masks(&mut self) {
         let _relinking = self.draw_links.relinking();
         use crate::mechanical_port::source::layer_mask::{LayerMask, LayerMaskOp};
-        let mut retry_masks = HashSet::new();
         for mask in &self.layer_masks {
             mask.with_downcast_mut::<LayerMask, _>(LayerMask::reset_drawables);
         }
@@ -2283,9 +2178,6 @@ impl Artboard {
                 )
                 .is_none()
             {
-                if retry_css_splits && self.css_split_in_mask_range(&members) {
-                    retry_masks.insert(mask.clone());
-                }
                 continue;
             }
             let mut source = mask
@@ -2337,11 +2229,8 @@ impl Artboard {
                     .and_then(|p| p.upgrade())
                     .unwrap();
                 mask.with_downcast_mut::<LayerMask, _>(|m| m.source_bracket(start, end));
-            } else if retry_css_splits && self.css_split_in_mask_range(&source) {
-                retry_masks.insert(mask);
             }
         }
-        retry_masks
     }
 
     fn clear_redundant_operations(&mut self) {

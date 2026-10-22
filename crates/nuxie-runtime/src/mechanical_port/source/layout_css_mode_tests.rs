@@ -6635,7 +6635,109 @@ fn css_stacking_masked_card_keeps_its_subtree_and_mask_bracket() {
     );
 }
 
-fn assert_masked_absolute_escape(preceding: bool) {
+/// Tap targets and host selection use the same topmost box order.
+fn assert_stacking_hits(f: &Scene, point: (f32, f32), expected: &[&str]) {
+    use crate::source::drawable::RuntimeDrawableOccurrence;
+    let point = crate::source::math::vec2d::Vec2D::new(point.0, point.1);
+    let hits = f
+        .artboard
+        .with_artboard(|artboard| artboard.drawables().to_vec())
+        .into_iter()
+        .filter_map(|drawable| {
+            let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = &drawable else {
+                return None;
+            };
+            let name = proxy
+                .borrow()
+                .owner_handle()
+                .with(|object| {
+                    object
+                        .as_component()
+                        .map(|component| component.name().to_owned())
+                })
+                .flatten()?;
+            ([CARD.0, BADGE.0, LATER.0].contains(&name.as_str())
+                && drawable.hit_test_point(&point, false, true))
+            .then_some(name)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(hits, expected, "tap at {point:?}");
+    let geometry = f
+        .host()
+        .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.x, point.y));
+    let names = f
+        .geometry_names(&geometry)
+        .into_iter()
+        .filter(|name| [CARD.0, BADGE.0, LATER.0].contains(&name.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(names, expected, "selection at {point:?}");
+}
+
+#[test]
+fn css_unmasked_rounded_card_badge_escapes_in_paint_and_hit_order() {
+    let f = stacking_scene(
+        vec![
+            css("Spacer", sized_to(200.0, 40.0), vec![]),
+            B {
+                children: vec![painted(
+                    BADGE.0,
+                    BADGE.1,
+                    [
+                        sized_to(60.0, 40.0),
+                        stacking_z(10.0).to_vec(),
+                        vec![
+                            U(POSITION, 2),
+                            U(INSET_TOP_KIND, 1),
+                            F(INSET_TOP, -20.0),
+                            U(INSET_LEFT_KIND, 1),
+                            F(INSET_LEFT, 10.0),
+                        ],
+                    ]
+                    .concat(),
+                )],
+                ..stacking_box(
+                    CARD,
+                    &[
+                        vec![U(POSITION, 1), U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                        RADIUS_PERCENTS.map(|key| F(key, 20.0)).to_vec(),
+                    ]
+                    .concat(),
+                )
+            },
+            stacking_box(
+                LATER,
+                &[
+                    vec![U(POSITION, 1), F(MARGIN_TOP, -120.0)],
+                    stacking_z(5.0).to_vec(),
+                ]
+                .concat(),
+            ),
+        ],
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, LATER, BADGE], (50.0, 50.0));
+    let lines = f.draw_lines();
+    assert!(
+        active_clips_at_draw(&lines, BADGE.1)
+            .iter()
+            .any(|line| line.contains("cubic")),
+        "the escaped badge retains the card's rounded clip"
+    );
+    assert!(
+        !active_clips_at_draw(&lines, LATER.1)
+            .iter()
+            .any(|line| line.contains("cubic"))
+    );
+    assert!(
+        f.artboard
+            .with_artboard(|artboard| artboard.all_layer_masks().is_empty())
+    );
+    assert_stacking_hits(&f, (50.0, 50.0), &[BADGE.0, LATER.0, CARD.0]);
+    assert_stacking_hits(&f, (50.0, 30.0), &[LATER.0]);
+    assert_stacking_hits(&f, (15.0, 42.0), &[LATER.0]);
+}
+
+fn assert_masked_absolute_keeps_ancestor_clip(preceding: bool) {
     use crate::source::{
         drawable::{Drawable, RuntimeDrawableOccurrence},
         layer_mask::LayerMask,
@@ -6702,8 +6804,7 @@ fn assert_masked_absolute_escape(preceding: bool) {
         ],
         false,
     );
-    // The mask keeps its badge in its own paint unit, while the badge
-    // still skips the static ancestor's overflow inside that unit.
+    // The mask keeps both the badge's order and its full ancestor clip chain.
     assert_stacking_order(&f, &[CARD, BADGE, LATER], (30.0, 90.0));
     let lines = f.draw_lines();
     let has_overflow = |color| {
@@ -6712,7 +6813,7 @@ fn assert_masked_absolute_escape(preceding: bool) {
             .any(|line| line.contains("(200,0),(200,100),(0,100)"))
     };
     assert!(has_overflow(CARD.1));
-    assert!(!has_overflow(BADGE.1));
+    assert!(has_overflow(BADGE.1));
     assert!(!has_overflow(LATER.1));
     if preceding {
         assert!(has_overflow(FLOW.1));
@@ -6754,23 +6855,23 @@ fn assert_masked_absolute_escape(preceding: bool) {
     if preceding {
         assert!(at("Before") < start);
     }
-    let mut clips = 0usize;
+    assert!(
+        chain[..start]
+            .iter()
+            .any(|drawable| drawable.is_clip_start())
+    );
+    assert!(
+        chain[end + 1..]
+            .iter()
+            .any(|drawable| drawable.is_clip_end())
+    );
     for drawable in &chain[start + 1..end] {
-        if drawable.is_clip_start() {
-            clips += 1;
-        }
-        if drawable.is_clip_end() {
-            clips = clips
-                .checked_sub(1)
-                .expect("a clip end stays inside its mask");
-        }
         assert!(
-            drawable.is_clip_start()
-                || drawable.is_clip_end()
-                || drawable.layer_masks().contains(&mask)
+            !drawable.is_clip_start() && !drawable.is_clip_end(),
+            "the shared ancestor clip stays outside the mask's canvas"
         );
+        assert!(drawable.layer_masks().contains(&mask));
     }
-    assert_eq!(clips, 0, "mask range closes every clip it opens");
     let source_start = mask
         .with_downcast::<LayerMask, _>(LayerMask::source_start)
         .flatten()
@@ -6795,59 +6896,69 @@ fn assert_masked_absolute_escape(preceding: bool) {
         source_first < at("MaskSource") && at("MaskSource") < source_last,
         "the source's own paint supplies mask coverage"
     );
-    for (y, expected) in [
-        (90.0, vec![LATER.0, BADGE.0, CARD.0]),
-        (110.0, vec![LATER.0, BADGE.0]),
-    ] {
-        let point = crate::source::math::vec2d::Vec2D::new(30.0, y);
-        let hits = f
-            .artboard
-            .with_artboard(|artboard| artboard.drawables().to_vec())
-            .into_iter()
-            .filter_map(|drawable| {
-                let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = &drawable else {
-                    return None;
-                };
-                let name = proxy
-                    .borrow()
-                    .owner_handle()
-                    .with(|object| {
-                        object
-                            .as_component()
-                            .map(|component| component.name().to_owned())
-                    })
-                    .flatten()?;
-                ([CARD.0, BADGE.0, LATER.0].contains(&name.as_str())
-                    && drawable.hit_test_point(&point, false, true))
-                .then_some(name)
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(hits, expected, "tap at {point:?}");
-        let geometry = f
-            .host()
-            .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(30.0, y));
-        let names = f
-            .geometry_names(&geometry)
-            .into_iter()
-            .filter(|name| [CARD.0, BADGE.0, LATER.0].contains(&name.as_str()))
-            .collect::<Vec<_>>();
-        assert_eq!(names, expected, "selection at {point:?}");
-    }
-    crate::source::artboard::artboard_draw_contract_tests::assert_mask_draws(
+    assert_stacking_hits(&f, (30.0, 90.0), &[LATER.0, BADGE.0, CARD.0]);
+    assert_stacking_hits(&f, (30.0, 110.0), &[LATER.0]);
+    assert_stacking_hits(&f, (20.0, 95.0), &[LATER.0, BADGE.0, CARD.0]);
+
+    let applications = crate::source::artboard::artboard_draw_contract_tests::cache_mask(
         &f.artboard.core_handle(),
         &chain[start],
         &chain[end],
     );
+    assert_eq!(
+        &*applications.borrow(),
+        &[nuxie_render_api::LayerMaskMode::InvertedAlpha]
+    );
+    assert_eq!(
+        mask.with_downcast::<LayerMask, _>(LayerMask::test_dirty),
+        Some(false)
+    );
+    let composite_clips = |lines: &[String]| {
+        let at = lines
+            .iter()
+            .position(|line| line.starts_with("drawImage "))
+            .expect("the cached mask composites");
+        active_clips_at_line(lines, at)
+    };
+    let before = composite_clips(&f.draw_lines());
+    assert!(
+        before
+            .iter()
+            .any(|line| line.contains("(200,0),(200,100),(0,100)"))
+    );
+    for key in RADIUS_PERCENTS {
+        assert!(CoreRegistry::set_double_handle(
+            &f.record("Clip"),
+            key.into(),
+            40.0
+        ));
+    }
+    f.advance(3);
+    let after = composite_clips(&f.draw_lines());
+    assert_ne!(
+        before, after,
+        "the composite uses the current ancestor radius"
+    );
+    assert!(after.iter().any(|line| line.contains("cubic")));
+    assert_eq!(
+        applications.borrow().len(),
+        1,
+        "the ancestor clip is not baked into the cached mask"
+    );
+    assert_eq!(
+        mask.with_downcast::<LayerMask, _>(LayerMask::test_dirty),
+        Some(false)
+    );
+    assert_stacking_hits(&f, (30.0, 90.0), &[LATER.0, BADGE.0, CARD.0]);
+    assert_stacking_hits(&f, (30.0, 110.0), &[LATER.0]);
+    assert_stacking_hits(&f, (20.0, 95.0), &[LATER.0]);
 }
 
 #[test]
-fn css_masked_absolute_escape_balances_clips_after_shared_sibling() {
-    assert_masked_absolute_escape(true);
-}
-
-#[test]
-fn css_masked_absolute_escape_balances_clips_without_shared_sibling() {
-    assert_masked_absolute_escape(false);
+fn css_masked_absolute_badge_keeps_ancestor_clip_and_updates_cached_radius() {
+    for preceding in [false, true] {
+        assert_masked_absolute_keeps_ancestor_clip(preceding);
+    }
 }
 
 #[test]
@@ -6874,7 +6985,10 @@ fn css_stacking_source_only_transform_binding_allows_badge_to_escape() {
 
 /// Active clips at a paint, tracking each renderer save independently.
 fn active_clips_at_draw(lines: &[String], color: u32) -> Vec<String> {
-    let at = draw_at(lines, color);
+    active_clips_at_line(lines, draw_at(lines, color))
+}
+
+fn active_clips_at_line(lines: &[String], at: usize) -> Vec<String> {
     let mut clips = Vec::new();
     let mut stack = Vec::new();
     let mut at_draw = None;

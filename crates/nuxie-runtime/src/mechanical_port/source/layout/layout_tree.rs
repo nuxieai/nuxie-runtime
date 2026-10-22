@@ -256,6 +256,10 @@ pub(crate) fn content_item_style(container: &Style) -> Style {
         display: Display::Block,
         box_sizing: taffy::BoxSizing::ContentBox,
         direction: container.direction,
+        // Block text fills the inline space and aligns through text-align.
+        // Only grid items inherit the container's inline item alignment.
+        justify_self: matches!(container.display, Display::Block | Display::FlowRoot)
+            .then_some(taffy::AlignSelf::STRETCH),
         ..Style::default()
     }
 }

@@ -1,5 +1,4 @@
 use crate::mechanical_port::source::{
-    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::{CoreArena, CoreHandle},
     data_bind::data_bind_container::DataBindContainerOwner,
     data_bind::data_values::data_type::DataType,
@@ -161,8 +160,6 @@ pub struct DataBind {
     dirt: u32,
     next_observer: Option<CoreHandle>,
     target: Option<CoreHandle>,
-    // Cached from the target's load-time mode, never from layout during delivery.
-    scroll_offset_css: Option<bool>,
     source: Option<CoreHandle>,
     context_value: Option<RuntimeBindContextValue>,
     converter: Option<CoreHandle>,
@@ -192,7 +189,6 @@ impl Default for DataBind {
             dirt: 0,
             next_observer: None,
             target: None,
-            scroll_offset_css: None,
             source: None,
             context_value: None,
             converter: None,
@@ -691,8 +687,6 @@ impl DataBind {
         }
         self.unsubscribe_target();
         self.target = value;
-        self.scroll_offset_css = None;
-        self.register_scroll_offset_binding();
         if self.property_key() == u32::from(crate::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY) {
             if let Some(target) = &self.target {
                 target.with_mut(|target| {
@@ -704,56 +698,6 @@ impl DataBind {
         }
         self.mark_css_transform_target();
         self.subscribe_target();
-    }
-
-    fn is_scroll_offset(&self) -> bool {
-        matches!(
-            self.property_key() as u16,
-            ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY
-                | ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY
-        )
-    }
-
-    pub(crate) fn register_scroll_offset_binding(&mut self) {
-        if !self.is_scroll_offset() || self.scroll_offset_css.is_some() {
-            return;
-        }
-        let (Some(target), Some(bind)) = (self.target.clone(), self.handle()) else {
-            return;
-        };
-        if !target.is_type_of(ScrollConstraintBase::TYPE_KEY) {
-            return;
-        }
-        self.scroll_offset_css = target
-            .with_downcast_mut::<ScrollConstraint, _>(|scroll| scroll.register_offset_binding(bind))
-            .flatten();
-        if self.scroll_offset_css == Some(true) {
-            self.unsubscribe_target();
-        }
-    }
-
-    pub(crate) fn scroll_mode_decided(owner: &CoreHandle, target: &CoreHandle, css: bool) {
-        let container = owner
-            .with_mut(|owner| {
-                let bind = owner.as_data_bind_mut()?;
-                if bind.target.as_ref() != Some(target)
-                    || !bind.is_scroll_offset()
-                    || bind.scroll_offset_css.is_some()
-                {
-                    return None;
-                }
-                bind.scroll_offset_css = Some(css);
-                if css {
-                    bind.unsubscribe_target();
-                }
-                (css && bind.to_source())
-                    .then(|| bind.container.clone())
-                    .flatten()
-            })
-            .flatten();
-        if let Some(container) = container {
-            container.poll_scroll_offset_binding(owner);
-        }
     }
 
     fn mark_css_transform_target(&self) {
@@ -805,12 +749,8 @@ impl DataBind {
     pub fn configure_target(&mut self, target: CoreHandle, property_key: u32) {
         self.set_target(Some(target));
         let mut callbacks = DataBindInitializationCallbacks;
-        self.unsubscribe_target();
         self.base.set_property_key(property_key, &mut callbacks);
-        self.scroll_offset_css = None;
-        self.register_scroll_offset_binding();
         self.mark_css_transform_target();
-        self.subscribe_target();
     }
 
     pub fn on_target_destroyed(&mut self) {
@@ -832,10 +772,6 @@ impl DataBind {
         let Some(target) = self.target.as_ref() else {
             return false;
         };
-        if self.is_scroll_offset() {
-            // Before mount, preserve upstream push delivery until mode is decided.
-            return self.scroll_offset_css != Some(true);
-        }
         let key = self.base.property_key() as u16;
         if matches!(
             key,
@@ -1558,14 +1494,14 @@ mod observer_tests {
         scroll.base.set_scroll_offset_x_value(10.0);
         scroll.base.set_scroll_offset_y_value(20.0);
         let target = arena.insert(scroll);
-        let y = observe_read(
+        let _y = observe_read(
             &arena,
             &target,
             ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY,
             || {},
         );
         let read_target = target.clone();
-        let x = observe_read(
+        let _x = observe_read(
             &arena,
             &target,
             ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY,
@@ -1597,17 +1533,6 @@ mod observer_tests {
                 });
             },
         );
-        // These observers test raw property publication, not binding polling.
-        let observers = target.ensure_property_observers().unwrap();
-        for observer in [&y, &x] {
-            observer.with_mut(|owner| {
-                let bind = owner.as_data_bind_mut().unwrap();
-                if !bind.has_flag(OBSERVING) {
-                    observers.add(bind);
-                    bind.set_flag(OBSERVING, true);
-                }
-            });
-        }
         // The upstream NaN index branch resolves to zero before consulting layout.
         assert!(CoreRegistry::set_double_handle(
             &target,

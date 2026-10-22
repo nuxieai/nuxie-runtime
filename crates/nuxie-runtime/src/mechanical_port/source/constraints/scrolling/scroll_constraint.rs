@@ -40,7 +40,6 @@ use crate::mechanical_port::source::{
 enum ScrollSpace {
     None,
     Percent,
-    Offset,
     Index,
 }
 
@@ -126,21 +125,11 @@ impl CssScrollAxis {
     fn physical_delta(self, delta: f32) -> f32 {
         if self.rtl { -delta } else { delta }
     }
-
-    fn browser_offset(self, offset: f32) -> f32 {
-        let offset = offset.clamp(-self.range, 0.0);
-        if self.rtl { offset } else { -offset }
-    }
-
-    fn internal_offset(self, offset: f32) -> f32 {
-        (if self.rtl { offset } else { -offset }).clamp(-self.range, 0.0)
-    }
 }
 
 pub struct ScrollConstraint {
     pub base: ScrollConstraintBase,
     scroll_mode: Option<ScrollMode>,
-    pending_offset_bindings: Vec<CoreHandle>,
     physics: Option<CoreHandle>,
     virtualizer: Option<Rc<RefCell<ScrollVirtualizer>>>,
     virtual_layout: Option<Rc<RefCell<VirtualLayout>>>,
@@ -190,7 +179,6 @@ impl Default for ScrollConstraint {
         Self {
             base: ScrollConstraintBase::default(),
             scroll_mode: None,
-            pending_offset_bindings: Vec::new(),
             physics: None,
             virtualizer: None,
             virtual_layout: None,
@@ -473,16 +461,6 @@ impl ScrollConstraint {
         self.scroll_mode == Some(ScrollMode::Css)
     }
 
-    pub(crate) fn register_offset_binding(&mut self, bind: CoreHandle) -> Option<bool> {
-        if self.scroll_mode.is_some() {
-            return Some(self.has_css_scroll_axis());
-        }
-        if !self.pending_offset_bindings.contains(&bind) {
-            self.pending_offset_bindings.push(bind);
-        }
-        None
-    }
-
     fn decide_scroll_mode(&mut self) {
         if self.scroll_mode.is_some() {
             return;
@@ -500,15 +478,6 @@ impl ScrollConstraint {
         } else {
             ScrollMode::Css
         });
-        if let Some(owner) = self.handle() {
-            for bind in std::mem::take(&mut self.pending_offset_bindings) {
-                crate::source::data_bind::data_bind::DataBind::scroll_mode_decided(
-                    &bind,
-                    &owner,
-                    self.has_css_scroll_axis(),
-                );
-            }
-        }
     }
 
     fn ignore_css_scroll_flag_change(&self, _property: &str, current: bool, value: bool) -> bool {
@@ -1966,9 +1935,6 @@ impl ScrollConstraint {
             return None;
         }
         match intent.space {
-            ScrollSpace::Offset => self
-                .css_scroll_axis(is_x)
-                .map(|axis| axis.internal_offset(intent.value)),
             ScrollSpace::Percent => {
                 let content_size = if is_x {
                     self.content_width()
@@ -2497,63 +2463,6 @@ impl ScrollConstraint {
     }
     pub fn set_computed_content_width(&mut self, _value: f32) {}
     pub fn set_computed_content_height(&mut self, _value: f32) {}
-    pub fn bound_scroll_offset_x(&self) -> f32 {
-        if self.intent_x.space == ScrollSpace::Offset {
-            return self.intent_x.value;
-        }
-        self.css_scroll_axis(true).map_or_else(
-            || self.authored_scroll_offset_x(),
-            |axis| axis.browser_offset(self.offset_x),
-        )
-    }
-    pub fn bound_scroll_offset_y(&self) -> f32 {
-        if self.intent_y.space == ScrollSpace::Offset {
-            return self.intent_y.value;
-        }
-        self.css_scroll_axis(false).map_or_else(
-            || self.authored_scroll_offset_y(),
-            |axis| axis.browser_offset(self.offset_y),
-        )
-    }
-    pub(crate) fn set_bound_scroll_offset_occurrence(
-        owner: &CoreHandle,
-        value: f32,
-        horizontal: bool,
-    ) -> bool {
-        let mut completion = crate::source::core::PropertySetterCompletion::default();
-        let written = owner
-            .with_downcast_mut::<Self, _>(|scroll| {
-                scroll.set_bound_scroll_offset_with_completion(value, horizontal, &mut completion);
-            })
-            .is_some();
-        completion.finish();
-        written
-    }
-
-    fn set_bound_scroll_offset_with_completion(
-        &mut self,
-        value: f32,
-        horizontal: bool,
-        completion: &mut crate::source::core::PropertySetterCompletion,
-    ) {
-        if self.css_scroll_axis(horizontal).is_some() {
-            self.stop_physics();
-            let intent = ScrollAxisIntent {
-                space: ScrollSpace::Offset,
-                value,
-            };
-            if horizontal {
-                self.set_intent_x_with_completion(intent, completion);
-            } else {
-                self.set_intent_y_with_completion(intent, completion);
-            }
-        } else if horizontal {
-            self.set_authored_scroll_offset_x_with_completion(value, completion);
-        } else {
-            self.set_authored_scroll_offset_y_with_completion(value, completion);
-        }
-    }
-
     pub fn authored_scroll_offset_x(&self) -> f32 {
         self.base.scroll_offset_x()
     }
@@ -2565,15 +2474,11 @@ impl ScrollConstraint {
         self.set_authored_scroll_offset_x_with_completion(value, &mut completion);
         completion.finish();
     }
-    pub(crate) fn set_authored_scroll_offset_x_with_completion(
+    fn set_authored_scroll_offset_x_with_completion(
         &mut self,
         value: f32,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
-        // A later write supersedes this axis's held CSS intent, even if equal.
-        if self.has_css_scroll_axis() {
-            self.intent_x.space = ScrollSpace::None;
-        }
         if self.base.set_scroll_offset_x_value(value) {
             self.scroll_offset_x_changed();
             completion.record(self, ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
@@ -2584,15 +2489,11 @@ impl ScrollConstraint {
         self.set_authored_scroll_offset_y_with_completion(value, &mut completion);
         completion.finish();
     }
-    pub(crate) fn set_authored_scroll_offset_y_with_completion(
+    fn set_authored_scroll_offset_y_with_completion(
         &mut self,
         value: f32,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
-        // A later write supersedes this axis's held CSS intent, even if equal.
-        if self.has_css_scroll_axis() {
-            self.intent_y.space = ScrollSpace::None;
-        }
         if self.base.set_scroll_offset_y_value(value) {
             self.scroll_offset_y_changed();
             completion.record(self, ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);

@@ -122,12 +122,6 @@ impl DataBindContainerOwner {
             .remove_data_bind(bind);
     }
 
-    pub(crate) fn poll_scroll_offset_binding(&self, bind: &CoreHandle) {
-        if let Some(container) = self.container() {
-            container.poll_scroll_offset_binding(bind);
-        }
-    }
-
     pub fn sort_data_binds(&self) {
         self.container()
             .expect("live binding container")
@@ -509,12 +503,6 @@ impl DataBindContainer {
             state.data_binds.push(bind.clone());
             state.advance_cells.push(cells);
         }
-        bind.with_mut(|owner| {
-            owner
-                .as_data_bind_mut()
-                .unwrap()
-                .register_scroll_offset_binding()
-        });
         let persist = bind
             .with(|object| {
                 let bind = object
@@ -545,32 +533,6 @@ impl DataBindContainer {
                 DataBind::update_data_bind_handle(&bind, true);
             }
         }
-    }
-
-    fn poll_scroll_offset_binding(&self, bind: &CoreHandle) {
-        let changed = bind
-            .with_mut(|owner| {
-                let bind = owner.as_data_bind_mut().unwrap();
-                if bind.in_persisting_list() {
-                    return false;
-                }
-                bind.set_in_persisting_list(true);
-                bind.set_in_dirty_list(false);
-                true
-            })
-            .unwrap_or(false);
-        if !changed {
-            return;
-        }
-        let mut state = self.0.borrow_mut();
-        // Load-time mode selection precedes binding updates.
-        debug_assert!(!state.is_processing);
-        Self::erase(&mut state.dirty, bind);
-        let queues = state.queues.ensure_allocated();
-        Self::erase(&mut queues.dirty_to_source, bind);
-        Self::erase(&mut queues.pending_dirty_to_source, bind);
-        Self::erase(&mut queues.pending_dirty, bind);
-        queues.persisting.push(bind.clone());
     }
 
     /// Whether update_data_binds has binds to visit: persisting, queued to

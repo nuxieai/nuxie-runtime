@@ -3707,6 +3707,11 @@ impl LayoutComponent {
             (height - padding.top() - padding.bottom() - top - bottom).max(0.0),
         )
     }
+    /// Compare with the size actually given to content. The solved item
+    /// may already have changed even when the outer box stays the same.
+    fn css_content_size_changed(&self) -> bool {
+        self.is_css_mode() && self.propagated_content != Some(self.propagated_size())
+    }
     fn current_css_content_layout(&self) -> Option<Layout> {
         if !self.animates() {
             return self.css_content_layout;
@@ -5417,7 +5422,6 @@ impl LayoutComponent {
                 CoreCapabilities::world_transform_mark_dirty(self);
             }
         } else if next != self.layout
-            || content_from != content_to
             || self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds)
         {
             if self.layout.width() != next.width() || self.layout.height() != next.height() {
@@ -5431,6 +5435,9 @@ impl LayoutComponent {
             }
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
+        }
+        if self.css_content_size_changed() {
+            self.propagate_size();
         }
         self.place_css_content();
         self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
@@ -5560,7 +5567,7 @@ impl LayoutComponent {
                 });
                 changed = true;
             }
-        } else if next != old || content_from != content_to || force {
+        } else if next != old || force {
             if next.width() != old.width() || next.height() != old.height() {
                 owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
             }
@@ -5575,21 +5582,17 @@ impl LayoutComponent {
             });
             changed = true;
         }
-        // A CSS box whose padding or border alone changed resizes its
-        // content too (docs/CSS_LAYOUT.md, 5).
-        let content_changed = owner
+        let content_size_changed = owner
             .with(|object| {
-                object.as_layout_component().is_some_and(|layout| {
-                    layout.is_css_mode()
-                        && layout.propagated_content != Some(layout.propagated_size())
-                })
+                object
+                    .as_layout_component()
+                    .is_some_and(Self::css_content_size_changed)
             })
             .unwrap_or(false);
-        if content_changed && !changed {
+        if changed || content_size_changed {
             Self::propagate_size_occurrence(owner);
         }
         if changed {
-            Self::propagate_size_occurrence(owner);
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
                 owner.clone(),
             )
@@ -5817,16 +5820,26 @@ impl LayoutComponent {
                     != content
             })
             .unwrap_or(false);
-        if current != old || content_changed {
-            let resized = old.width() != current.width() || old.height() != current.height();
+        let resized = old.width() != current.width() || old.height() != current.height();
+        let changed = current != old || content_changed;
+        if changed {
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout = current;
                 layout.css_content_current = content;
             });
-            if resized || content_changed {
-                Self::propagate_size_occurrence(owner);
-            }
+        }
+        let content_size_changed = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .is_some_and(Self::css_content_size_changed)
+            })
+            .unwrap_or(false);
+        if resized || content_size_changed {
+            Self::propagate_size_occurrence(owner);
+        }
+        if changed {
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
                 owner.clone(),
             )
@@ -6065,14 +6078,17 @@ impl LayoutComponent {
         let current = data.interpolate(factor);
         let content = data.interpolate_content(factor);
         let content_changed = self.current_css_content_layout() != content;
-        if self.layout != current || content_changed {
-            let resized =
-                self.layout.width() != current.width() || self.layout.height() != current.height();
+        let resized =
+            self.layout.width() != current.width() || self.layout.height() != current.height();
+        let changed = self.layout != current || content_changed;
+        if changed {
             self.layout = current;
             self.css_content_current = content;
-            if resized || content_changed {
-                self.propagate_size();
-            }
+        }
+        if resized || self.css_content_size_changed() {
+            self.propagate_size();
+        }
+        if changed {
             CoreCapabilities::world_transform_mark_dirty(self);
         }
         self.place_css_content();

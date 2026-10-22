@@ -274,6 +274,7 @@ pub struct StyledText {
     value: Vec<u32>,
     runs: Vec<TextRun>,
     css_strut: Option<TextRun>,
+    css_indices: Option<crate::css_text::TextIndexMap>,
 }
 impl StyledText {
     pub fn empty(&self) -> bool {
@@ -283,6 +284,7 @@ impl StyledText {
         self.value.clear();
         self.runs.clear();
         self.css_strut = None;
+        self.css_indices = None;
     }
     pub fn append(
         &mut self,
@@ -317,6 +319,24 @@ impl StyledText {
     }
     pub fn unichars(&self) -> &[u32] {
         &self.value
+    }
+    pub fn source_unichars(&self) -> &[u32] {
+        self.css_indices
+            .as_ref()
+            .map_or(&self.value, |map| map.source())
+    }
+    pub fn source_to_display(&self, index: u32) -> u32 {
+        self.css_indices
+            .as_ref()
+            .map_or(index, |map| map.to_display(index))
+    }
+    pub fn display_to_source(&self, index: u32) -> u32 {
+        self.css_indices
+            .as_ref()
+            .map_or(index, |map| map.to_source(index))
+    }
+    pub(crate) fn css_indices(&self) -> Option<&crate::css_text::TextIndexMap> {
+        self.css_indices.as_ref()
     }
     pub fn runs(&self) -> &[TextRun] {
         &self.runs
@@ -894,6 +914,13 @@ impl Text {
     pub(crate) fn shape_world_transform_weak(&self) -> Weak<Cell<Mat2D>> {
         Rc::downgrade(&self.shape_world_transform)
     }
+    pub(crate) fn styled_text(&self) -> &StyledText {
+        &self.styled_text
+    }
+    pub(crate) fn css_selection_shape(&self) -> Option<super::fully_shaped_text::FullyShapedText> {
+        self.styled_text.css_indices.as_ref()?;
+        Some(super::fully_shaped_text::FullyShapedText::from_text(self))
+    }
     pub fn unichars(&self) -> &[u32] {
         self.styled_text.unichars()
     }
@@ -1191,6 +1218,7 @@ impl Text {
         font_scale: f32,
     ) -> bool {
         styled.clear();
+        let mut css_options = Vec::new();
         for (run_index, run) in self.all_runs.iter().enumerate() {
             let Some((style, text)) = run.with(|run| (run.style(), run.base.text().to_owned()))
             else {
@@ -1245,6 +1273,34 @@ impl Text {
                 &text,
                 run_index as u16,
             );
+            if self.css_owned {
+                css_options.resize(styled.value.len(), crate::css_text::style_options(&style));
+            }
+        }
+        let has_css = css_options.iter().any(Option::is_some);
+        if has_css {
+            let (value, map) = crate::css_text::display_text(&styled.value, &css_options);
+            let mut source_offset = 0;
+            for run in &mut styled.runs {
+                let end = source_offset + run.unichar_count;
+                run.unichar_count = map.to_display(end) - map.to_display(source_offset);
+                source_offset = end;
+            }
+            styled.runs.retain(|run| run.unichar_count != 0);
+            styled.value = value;
+            styled.css_indices = Some(map);
+        }
+        let display_lengths = has_css.then(|| {
+            let mut lengths = vec![0; self.all_runs.len()];
+            for run in &styled.runs {
+                lengths[run.style_id as usize] += run.unichar_count;
+            }
+            lengths
+        });
+        for (i, run) in self.all_runs.iter().enumerate() {
+            run.with_mut(|run| {
+                run.set_display_length(display_lengths.as_ref().map(|lengths| lengths[i]))
+            });
         }
         if with_modifiers {
             for group in self.modifier_groups.clone() {
@@ -1282,8 +1338,10 @@ impl Text {
             word_break,
             min_align_width,
             None,
+            None,
         )
     }
+    #[allow(clippy::too_many_arguments)]
     fn break_lines_with_strut(
         paragraphs: &[Paragraph],
         width: f32,
@@ -1292,12 +1350,13 @@ impl Text {
         word_break: TextWordBreak,
         min_align_width: f32,
         css_strut: Option<&TextRun>,
+        css_indices: Option<&crate::css_text::TextIndexMap>,
     ) -> Vec<Vec<GlyphLine>> {
         let auto_width = width == -1.0;
         let mut paragraph_width = width;
         let mut lines = Vec::with_capacity(paragraphs.len());
         for paragraph in paragraphs {
-            let paragraph_lines = GlyphLine::break_lines_with_word_break(
+            let mut paragraph_lines = GlyphLine::break_lines_with_word_break(
                 &paragraph.runs,
                 if auto_width || wrap == TextWrap::NoWrap {
                     -1.0
@@ -1306,6 +1365,11 @@ impl Text {
                 },
                 word_break,
             );
+            if let Some(map) = css_indices {
+                for line in &mut paragraph_lines {
+                    crate::css_text::trim_line(line, &paragraph.runs, map);
+                }
+            }
             if auto_width {
                 paragraph_width = paragraph_width.max(GlyphLine::compute_max_width(
                     &paragraph_lines,
@@ -1385,6 +1449,7 @@ impl Text {
                         self.word_break(),
                         0.0,
                         styled.css_strut.as_ref(),
+                        styled.css_indices.as_ref(),
                     );
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
@@ -1436,6 +1501,7 @@ impl Text {
                     self.word_break(),
                     0.0,
                     styled.css_strut.as_ref(),
+                    styled.css_indices.as_ref(),
                 );
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
@@ -1717,6 +1783,7 @@ impl Text {
                 this.word_break(),
                 0.0,
                 styled.css_strut.as_ref(),
+                styled.css_indices.as_ref(),
             );
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
@@ -2503,7 +2570,16 @@ impl Text {
         } else {
             TextWordBreak::Normal
         };
-        let lines = Self::break_lines(shape, 0.0, TextAlign::Left, self.wrap(), word_break);
+        let lines = Self::break_lines_with_strut(
+            shape,
+            0.0,
+            TextAlign::Left,
+            self.wrap(),
+            word_break,
+            0.0,
+            self.styled_text.css_strut.as_ref(),
+            self.styled_text.css_indices.as_ref(),
+        );
         Some(
             shape
                 .iter()
@@ -2542,6 +2618,12 @@ impl Text {
                     std::sync::Arc::as_ptr(font) as *const () as usize as u64
                 }));
                 mix(bits(strut.size) | (bits(strut.line_height) << 32));
+            }
+        }
+        if let Some(map) = &styled.css_indices {
+            mix(2);
+            for i in 0..styled.value.len() {
+                mix(u64::from(map.is_collapsible(i as u32)));
             }
         }
         for run in styled.runs() {
@@ -2649,6 +2731,7 @@ impl Text {
             self.word_break(),
             0.0,
             styled.css_strut.as_ref(),
+            styled.css_indices.as_ref(),
         );
         let mut y = 0.0f32;
         let mut computed_height = 0.0f32;

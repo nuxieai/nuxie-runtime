@@ -18,9 +18,10 @@ resolved explicitly.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.
 - BoxPaint: type 61004; properties 61097–61098 and 61101–61102.
+- TextStyleCssText: type 61005; properties 61104–61105.
 
-Types 61000–61099 and properties 61000–61999 are reserved for CSS layout and
-box paint (docs/CSS_LAYOUT.md); other definitions allocate outside that block.
+Types 61000–61099 and properties 61000–61999 are reserved for CSS layout,
+box paint and CSS text (docs/CSS_LAYOUT.md); other definitions allocate outside that block.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.
@@ -60,6 +61,7 @@ run font's `post` underline and `OS/2` strikeout metrics, with a fallback of
 0.06 em thick at 0.1 em below (underline) or 0.3 em above (line-through) the
 baseline. Readers without the type skip the record and its typed property, and
 draw the text undecorated.
-The CSS layout records (LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow)
+The CSS layout, box paint and text records (LayoutCssStyle, BoxBorder,
+BoxGradient, BoxShadow, BoxPaint, TextStyleCssText)
 are specified in [docs/CSS_LAYOUT.md](../../docs/CSS_LAYOUT.md): their
 encodings, what is refused at load, and how the runtime uses them.

@@ -225,7 +225,8 @@ fn nuxie_definitions_stay_out_of_the_cpp_registry() {
             ("BoxBorder", 61001),
             ("BoxGradient", 61002),
             ("BoxShadow", 61003),
-            ("BoxPaint", 61004)
+            ("BoxPaint", 61004),
+            ("TextStyleCssText", 61005)
         ]
     );
 

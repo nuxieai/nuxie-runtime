@@ -38,6 +38,7 @@ pub struct TextValueRun {
     glyph_hit_rects: Vec<Aabb>,
     style: Option<CoreHandle>,
     length: u32,
+    display_length: Option<u32>,
     text_component: Option<CoreHandle>,
 }
 
@@ -51,6 +52,7 @@ impl Default for TextValueRun {
             glyph_hit_rects: Vec::new(),
             style: None,
             length: u32::MAX,
+            display_length: None,
             text_component: None,
         }
     }
@@ -178,7 +180,13 @@ impl TextValueRun {
     pub fn set_style(&mut self, value: CoreHandle) {
         self.style = Some(value);
     }
+    pub(crate) fn set_display_length(&mut self, length: Option<u32>) {
+        self.display_length = length;
+    }
     pub fn length(&mut self) -> u32 {
+        if let Some(length) = self.display_length {
+            return length;
+        }
         if self.length == u32::MAX {
             let mut bytes = self.base.text().as_bytes();
             let mut n = 0;

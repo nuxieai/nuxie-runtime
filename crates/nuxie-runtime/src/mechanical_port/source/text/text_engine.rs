@@ -804,6 +804,7 @@ impl GlyphRun {
     }
 }
 
+#[derive(Clone)]
 pub struct OrderedLine {
     start_logical: Option<usize>,
     end_logical: Option<usize>,

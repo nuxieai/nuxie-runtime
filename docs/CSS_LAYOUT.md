@@ -26,10 +26,10 @@ It follows the precedent of Rive's `GridItemPlacement`:
 
 Its presence is also the switch between CSS mode and translated mode (section 2). Upstream may later start reading its unused flex keys (520 to 522, 600 to 603); this record never collides with them.
 
-Allocation, in a block of its own that `defs/nuxie/README.md` reserves for CSS layout and box paint (types 61000 to 61099, properties 61000 to 61999), so other Nuxie definitions, which allocate one after another from 60000, never reach it:
+Allocation, in a block of its own that `defs/nuxie/README.md` reserves for CSS layout, box paint and CSS text (types 61000 to 61099, properties 61000 to 61999), so other Nuxie definitions, which allocate one after another from 60000, never reach it:
 
-- **Type keys**: 61000 to 61004.
-- **Property keys**: 61000 to 61103.
+- **Type keys**: 61000 to 61005.
+- **Property keys**: 61000 to 61105.
 
 The definition files live in `defs/nuxie/` beside `video.json`, and the README's allocation list names them.
 
@@ -40,6 +40,7 @@ The definition files live in `defs/nuxie/` beside `video.json`, and the README's
 | `BoxGradient` | 61002 | `component.json` | a `LinearGradient` or `RadialGradient` painted by a box | ours |
 | `BoxShadow` | 61003 | `component.json` | a `Feather` on a `Fill` painted by a box | ours |
 | `BoxPaint` | 61004 | `component.json` | a box or a CSS artboard; at most one per parent | ours |
+| `TextStyleCssText` | 61005 | `component.json` | a `TextStylePaint` | ours |
 
 ### 1.2 Value encodings
 
@@ -424,6 +425,19 @@ Only a box that measures content is checked:
 - in translated mode, a box that hugs, or any leaf box but an artboard.
 
 A shape that layout resizes as paint is never measured, so it needs no check. Layout's own write-back never registers, because the natural size is the authored one, kept on the generated bases of parametric paths, n-slices and joysticks.
+
+### 5.1 CSS text processing
+
+`TextStyleCssText` is a child of each participating `TextStylePaint`. The compiler writes the inherited values on each style. Both properties are bindable uint8 values, default to 0 and do not animate:
+
+| CSS | Key | Values |
+|---|---|---|
+| `text-transform` | 61104 `textTransform` | 0 none, 1 uppercase, 2 lowercase, 3 capitalize |
+| `white-space` | 61105 `whiteSpace` | 0 normal, 1 pre, 2 pre-wrap, 3 pre-line, 4 nowrap |
+
+Only text owned by a CSS box uses these records. Runs without a record keep their source unchanged. `TextInput` keeps its editable value unchanged. The runtime derives one display string after reading authored and bound values, before shaping or modifiers. Full Unicode default case mapping can expand characters, including `ß` to `SS`; language tailoring is unavailable until the element carries a language. Capitalization and whitespace state cross run boundaries. Normal and nowrap collapse spaces, tabs and segment breaks; pre-line collapses spaces and tabs but keeps segment breaks; pre and pre-wrap preserve spaces and segment breaks. CRLF and CR normalize to LF. Wrapping remains on Rive's `Text.wrap` (683), set by the compiler. Paragraph-edge collapsible spaces are removed while building the display, and soft-line edge spaces are excluded from each broken line before measuring, aligning and drawing it. Preserved spaces are never trimmed by this pass.
+
+One source-to-display code-point boundary table covers expansions and removed whitespace. Run offsets, lengths and modifier ranges use display indices. Regular-text selection ranges, hit offsets, copied source text, and host caret, hit and selection rectangle queries use source indices (the host methods retain their UTF-8 byte offset API). Hits within an expanded character resolve to the nearest source boundary; boundaries removed by collapsing resolve to the end of the collapsed source span. Record writes, style changes and bound value changes dirty the shape and layout. A text without a CSS owner or without any participating record follows the translated path unchanged.
 
 ## 6. What the compiler stops writing
 

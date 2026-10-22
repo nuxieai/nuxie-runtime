@@ -463,7 +463,7 @@ impl Focusable for FocusDataFocusable {
 
     fn focused(&mut self) {
         if let Some(owner) = &self.owner {
-            owner.with_downcast_mut::<FocusData, _>(FocusData::focused);
+            FocusData::focused_occurrence(owner);
         }
     }
 
@@ -753,8 +753,7 @@ fn find_sibling_semantic_data(component: &Component) -> Option<CoreHandle> {
 }
 
 impl FocusData {
-    fn scroll_into_view(&mut self) {
-        let mut layout_component = self.component().parent_handle();
+    fn scroll_into_view(mut layout_component: Option<CoreHandle>, mut traversal: ParentTraversal) {
         while let Some(component) = layout_component.clone() {
             if component
                 .with(|component| component.as_layout_component().is_some())
@@ -780,7 +779,6 @@ impl FocusData {
             return;
         };
 
-        let mut traversal = ParentTraversal::from_component(self.component());
         while let Some(parent) = traversal.next() {
             if traversal.did_cross_boundary() {
                 if let (Some(host), Some(source_artboard)) =
@@ -814,17 +812,13 @@ impl FocusData {
             };
             for constraint in constraints {
                 constraint.with_downcast_mut::<ScrollConstraint, _>(|scroll_constraint| {
-                    self.scroll_constraint_to_show_bounds(scroll_constraint, element_bounds);
+                    Self::scroll_constraint_to_show_bounds(scroll_constraint, element_bounds);
                 });
             }
         }
     }
 
-    fn scroll_constraint_to_show_bounds(
-        &mut self,
-        constraint: &mut ScrollConstraint,
-        element_bounds: Aabb,
-    ) {
+    fn scroll_constraint_to_show_bounds(constraint: &mut ScrollConstraint, element_bounds: Aabb) {
         let Some(_content) = constraint.content_handle() else {
             return;
         };
@@ -875,14 +869,29 @@ impl FocusData {
         }
         if delta_x != 0.0 || delta_y != 0.0 {
             let current = Vec2D::new(effective_scroll_x, effective_scroll_y);
-            let target = Vec2D::new(effective_scroll_x + delta_x, effective_scroll_y + delta_y);
+            let delta = constraint.logical_scroll_delta(Vec2D::new(delta_x, delta_y));
+            let target = current + delta;
             let snapped = constraint.nearest_snap_offset_in_direction(current, target);
             constraint.scroll_to_position(snapped.x, snapped.y);
         }
     }
 
-    pub fn focused(&mut self) {
-        self.scroll_into_view();
+    pub fn focused_occurrence(owner: &CoreHandle) {
+        let Some((parent, traversal)) = owner.with_downcast::<Self, _>(|focus| {
+            (
+                focus.component().parent_handle(),
+                ParentTraversal::from_component(focus.component()),
+            )
+        }) else {
+            return;
+        };
+        // Scroll dirt can return through descendants to this FocusData.
+        // Release its arena borrow before moving the content.
+        Self::scroll_into_view(parent, traversal);
+        owner.with_downcast_mut::<Self, _>(Self::focused_after_scroll);
+    }
+
+    fn focused_after_scroll(&mut self) {
         self.focus_listeners
             .retain(RuntimeFocusListenerHandle::is_alive);
         for listener in &self.focus_listeners {

@@ -153,6 +153,9 @@ impl ScrollBarConstraint {
         if self.with_thumb(|_| ()).is_none() || self.with_track(|_| ()).is_none() {
             return;
         }
+        let css_viewport = self
+            .with_scroll(ScrollConstraint::has_css_scroll_axis)
+            .unwrap_or(false);
         let mut thumb_offset_x = 0.0;
         let mut thumb_offset_y = 0.0;
         if self.base.constrains_horizontal() {
@@ -177,9 +180,17 @@ impl ScrollBarConstraint {
                     max_thumb_offset
                 };
             }
+            if self.with_scroll(ScrollConstraint::css_rtl).unwrap_or(false) {
+                let solved_x = self.with_thumb(LayoutComponent::layout_x).unwrap();
+                let padding_left = self.with_track(LayoutComponent::padding_left).unwrap();
+                thumb_offset_x =
+                    padding_left + inner_width - thumb_width - thumb_offset_x - solved_x;
+            }
             if self.base.auto_size() {
-                self.with_thumb_mut(|thumb| thumb.set_forced_width(thumb_width))
-                    .expect("validated ScrollBarConstraint thumb");
+                self.with_thumb_mut(|thumb| {
+                    thumb.set_scroll_thumb_width(thumb_width, css_viewport)
+                })
+                .expect("validated ScrollBarConstraint thumb");
             }
         }
         if self.base.constrains_vertical() {
@@ -205,8 +216,10 @@ impl ScrollBarConstraint {
                 };
             }
             if self.base.auto_size() {
-                self.with_thumb_mut(|thumb| thumb.set_forced_height(thumb_height))
-                    .expect("validated ScrollBarConstraint thumb");
+                self.with_thumb_mut(|thumb| {
+                    thumb.set_scroll_thumb_height(thumb_height, css_viewport)
+                })
+                .expect("validated ScrollBarConstraint thumb");
             }
         }
         // The thumb offset is in track units, so apply it in the track's frame
@@ -332,8 +345,13 @@ impl ScrollBarConstraint {
             scroll
                 .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
                     let max_offset = scroll.max_offset_x();
+                    let progress = if scroll.css_rtl() {
+                        (inner_width - local_position.x) / track_range
+                    } else {
+                        local_position.x / track_range
+                    };
                     scroll.set_authored_scroll_offset_x(math_types::clamp(
-                        local_position.x / track_range * max_offset,
+                        progress * max_offset,
                         max_offset,
                         0.0,
                     ));
@@ -372,6 +390,9 @@ impl ScrollBarConstraint {
         }) else {
             return;
         };
+        let css_viewport = scroll
+            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::has_css_scroll_axis)
+            .unwrap_or(false);
         let (previous_x, previous_y) = scroll
             .with_downcast::<ScrollConstraint, _>(|scroll| (scroll.offset_x(), scroll.offset_y()))
             .expect("resolved ScrollConstraint occurrence");
@@ -386,7 +407,7 @@ impl ScrollBarConstraint {
                         thumb
                             .as_layout_component_mut()
                             .unwrap()
-                            .set_forced_width(thumb_width);
+                            .set_scroll_thumb_width(thumb_width, css_viewport);
                     })
                     .expect("validated ScrollBarConstraint thumb");
             }
@@ -394,7 +415,8 @@ impl ScrollBarConstraint {
             scroll
                 .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
                     let max_offset = scroll.max_offset_x();
-                    let thumb_offset = scroll.offset_x() / max_offset * track_range + delta.x;
+                    let delta_x = scroll.logical_scroll_delta(delta).x;
+                    let thumb_offset = scroll.offset_x() / max_offset * track_range + delta_x;
                     scroll.set_authored_scroll_offset_x(math_types::clamp(
                         thumb_offset / track_range * max_offset,
                         max_offset,
@@ -414,7 +436,7 @@ impl ScrollBarConstraint {
                         thumb
                             .as_layout_component_mut()
                             .unwrap()
-                            .set_forced_height(thumb_height);
+                            .set_scroll_thumb_height(thumb_height, css_viewport);
                     })
                     .expect("validated ScrollBarConstraint thumb");
             }

@@ -494,6 +494,7 @@ pub struct LayoutComponent {
     height_override: f32,
     height_unit_value_override: i8,
     forced_width: f32,
+    css_scroll_thumb_size: bool,
     forced_height: f32,
     virtual_grid: Option<Box<VirtualGrid>>,
     /// The natural size this box last measured for each host (UNIV-4844).
@@ -558,6 +559,7 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             forced_width: f32::NAN,
+            css_scroll_thumb_size: false,
             forced_height: f32::NAN,
             virtual_grid: None,
             measured_natural: RefCell::new(Vec::new()),
@@ -1533,6 +1535,7 @@ impl LayoutComponent {
         }
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
+            layout.apply_css_scroll_thumb_size(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
             layout.layout_data.set_style(style);
         });
@@ -2222,6 +2225,31 @@ impl LayoutComponent {
         );
         self.height_unit_value_override = if intrinsic { 3 } else { 1 };
         self.mark_layout_node_dirty(false);
+    }
+    pub(crate) fn set_scroll_thumb_width(&mut self, value: f32, css_viewport: bool) {
+        if self.css_scroll_thumb_size != css_viewport {
+            self.css_scroll_thumb_size = css_viewport;
+            self.mark_layout_style_dirty();
+        }
+        self.set_forced_width(value);
+    }
+    pub(crate) fn set_scroll_thumb_height(&mut self, value: f32, css_viewport: bool) {
+        if self.css_scroll_thumb_size != css_viewport {
+            self.css_scroll_thumb_size = css_viewport;
+            self.mark_layout_style_dirty();
+        }
+        self.set_forced_height(value);
+    }
+    fn apply_css_scroll_thumb_size(&self, style: &mut Style) {
+        if !self.css_scroll_thumb_size || !self.is_css_mode() {
+            return;
+        }
+        if self.forced_width.is_finite() {
+            style.size.width = taffy::style::Dimension::length(self.forced_width.max(0.0));
+        }
+        if self.forced_height.is_finite() {
+            style.size.height = taffy::style::Dimension::length(self.forced_height.max(0.0));
+        }
     }
     pub fn set_forced_width(&mut self, value: f32) {
         if self.forced_width == value {
@@ -3395,6 +3423,7 @@ impl LayoutComponent {
                 }
             }
         }
+        self.apply_css_scroll_thumb_size(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);
         self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {

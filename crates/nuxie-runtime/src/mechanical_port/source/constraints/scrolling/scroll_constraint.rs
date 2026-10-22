@@ -40,6 +40,7 @@ use crate::mechanical_port::source::{
 enum ScrollSpace {
     None,
     Percent,
+    Offset,
     Index,
 }
 
@@ -77,6 +78,58 @@ impl Default for ScrollAxisIntent {
     }
 }
 
+/// One solved CSS axis, measured from the viewport's padding edge in the
+/// content box's coordinates. Internal offsets stay negative toward the end.
+#[derive(Clone, Copy)]
+struct CssScrollAxis {
+    horizontal: bool,
+    rtl: bool,
+    origin: f32,
+    range: f32,
+    gap: f32,
+}
+
+impl CssScrollAxis {
+    fn start(self, bounds: Aabb) -> f32 {
+        if self.rtl {
+            self.origin - bounds.right()
+        } else if self.horizontal {
+            bounds.left() - self.origin
+        } else {
+            bounds.top() - self.origin
+        }
+    }
+
+    fn step(self, bounds: Aabb, next: Option<Aabb>) -> f32 {
+        next.map(|next| self.start(next) - self.start(bounds))
+            .unwrap_or_else(|| {
+                (if self.horizontal {
+                    bounds.width()
+                } else {
+                    bounds.height()
+                }) + self.gap
+            })
+    }
+
+    // Keep item alignment here so snap and index share the same positions.
+    fn snap_position(self, bounds: Aabb) -> f32 {
+        self.start(bounds).clamp(0.0, self.range)
+    }
+
+    fn physical_delta(self, delta: f32) -> f32 {
+        if self.rtl { -delta } else { delta }
+    }
+
+    fn browser_offset(self, offset: f32) -> f32 {
+        let offset = offset.clamp(-self.range, 0.0);
+        if self.rtl { offset } else { -offset }
+    }
+
+    fn internal_offset(self, offset: f32) -> f32 {
+        (if self.rtl { offset } else { -offset }).clamp(-self.range, 0.0)
+    }
+}
+
 pub struct ScrollConstraint {
     pub base: ScrollConstraintBase,
     physics: Option<CoreHandle>,
@@ -106,6 +159,7 @@ pub struct ScrollConstraint {
     scroll_idle_seconds: f32,
     intent_x: ScrollAxisIntent,
     intent_y: ScrollAxisIntent,
+    css_initial_snap_settled: bool,
 }
 
 impl Deref for ScrollConstraint {
@@ -152,6 +206,7 @@ impl Default for ScrollConstraint {
             scroll_idle_seconds: 0.0,
             intent_x: ScrollAxisIntent::default(),
             intent_y: ScrollAxisIntent::default(),
+            css_initial_snap_settled: false,
         }
     }
 }
@@ -299,7 +354,9 @@ impl ScrollConstraint {
     }
 
     pub fn viewport_width(&self) -> f32 {
-        if self.direction() == DraggableConstraintDirection::Vertical {
+        if self.css_scroll_range().is_some()
+            || self.direction() == DraggableConstraintDirection::Vertical
+        {
             self.with_viewport(LayoutComponent::layout_width)
                 .expect("ScrollConstraint viewport remains LayoutComponent")
         } else {
@@ -313,7 +370,9 @@ impl ScrollConstraint {
         }
     }
     pub fn viewport_height(&self) -> f32 {
-        if self.direction() == DraggableConstraintDirection::Horizontal {
+        if self.css_scroll_range().is_some()
+            || self.direction() == DraggableConstraintDirection::Horizontal
+        {
             self.with_viewport(LayoutComponent::layout_height)
                 .expect("ScrollConstraint viewport remains LayoutComponent")
         } else {
@@ -385,10 +444,146 @@ impl ScrollConstraint {
         self.with_viewport(|viewport| viewport.is_css_mode().then(|| viewport.scroll_range()))
             .flatten()
     }
+    pub(crate) fn has_css_scroll_axis(&self) -> bool {
+        self.css_scroll_range().is_some() && !self.infinite()
+    }
+    fn css_scroll_axis(&self, horizontal: bool) -> Option<CssScrollAxis> {
+        let range = self.css_scroll_range()?;
+        if self.infinite() {
+            return None;
+        }
+        let (origin, rtl) = self.with_viewport(|viewport| {
+            let [top, right, _, left] = viewport.solved_border();
+            let rtl = horizontal
+                && viewport.actual_direction()
+                    == crate::source::layout::layout_enums::LayoutDirection::Rtl;
+            (
+                if rtl {
+                    viewport.layout_width() - right
+                } else if horizontal {
+                    left
+                } else {
+                    top
+                },
+                rtl,
+            )
+        })?;
+        let (location, gap) = self.with_content(|content| {
+            let [top, right, bottom, left] = content.solved_border();
+            let basis = if horizontal {
+                content.inner_width() - left - right
+            } else {
+                content.inner_height() - top - bottom
+            };
+            let gap = content
+                .with_css(|css| {
+                    let key = if horizontal {
+                        crate::css_layout::keys::COLUMN_GAP
+                    } else {
+                        crate::css_layout::keys::ROW_GAP
+                    };
+                    let percent = css.number(key + 1).max(0.0);
+                    if percent != 0.0 {
+                        percent / 100.0 * basis.max(0.0)
+                    } else {
+                        css.number(key).max(0.0)
+                    }
+                })
+                .unwrap_or_else(|| {
+                    if horizontal {
+                        content.gap_horizontal()
+                    } else {
+                        content.gap_vertical()
+                    }
+                });
+            (
+                if horizontal {
+                    content.layout_x()
+                } else {
+                    content.layout_y()
+                },
+                gap,
+            )
+        })?;
+        Some(CssScrollAxis {
+            horizontal,
+            rtl,
+            origin: origin - location,
+            range: (if horizontal { range.x } else { range.y }).max(0.0),
+            gap,
+        })
+    }
+
+    fn css_axis_items(&self) -> Vec<(usize, Aabb)> {
+        let mut items = Vec::new();
+        let mut index = 0;
+        for child in self.layout_children.iter() {
+            let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
+                .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+            for node in 0..count {
+                let bounds = self.layout_child_bounds_for_node(child, node);
+                if !self.is_bounds_collapsed(bounds) {
+                    items.push((index, bounds));
+                }
+                index += 1;
+            }
+        }
+        items
+    }
+
+    fn settle_initial_css_snap(&mut self) {
+        if self.css_initial_snap_settled
+            || !self.snap()
+            || !self.scroll_layout_resolvable(self.indexes_horizontally())
+        {
+            return;
+        }
+        if self.css_scroll_axis(self.indexes_horizontally()).is_none() {
+            return;
+        }
+        let points = self.collect_snap_points();
+        if points.is_empty() {
+            return;
+        }
+        self.css_initial_snap_settled = true;
+        for horizontal in [true, false] {
+            if !(if horizontal {
+                self.constrains_horizontal()
+            } else {
+                self.constrains_vertical()
+            }) {
+                continue;
+            }
+            let current = if horizontal {
+                self.offset_x
+            } else {
+                self.offset_y
+            };
+            let nearest = points
+                .iter()
+                .map(|point| -(if horizontal { point.x } else { point.y }))
+                .min_by(|a, b| (a - current).abs().total_cmp(&(b - current).abs()))
+                .unwrap();
+            if horizontal {
+                self.set_authored_scroll_offset_x(nearest);
+            } else {
+                self.set_authored_scroll_offset_y(nearest);
+            }
+        }
+    }
+
+    pub fn logical_scroll_delta(&self, delta: Vec2D) -> Vec2D {
+        Vec2D::new(
+            self.css_scroll_axis(true)
+                .map_or(delta.x, |axis| axis.physical_delta(delta.x)),
+            delta.y,
+        )
+    }
+
     /// A right-to-left CSS viewport: its content starts at its right edge
     /// and scrolls toward its left, so its horizontal offset (0 at the
     /// start, negative toward the end) moves the content right.
-    fn css_rtl(&self) -> bool {
+    pub(crate) fn css_rtl(&self) -> bool {
         self.css_scroll_range().is_some()
             && self
                 .with_viewport(|viewport| {
@@ -899,6 +1094,7 @@ impl ScrollConstraint {
     // retained parent pointers without borrowing the supplied component.
     pub fn constrain(&mut self, _component: &CoreHandle) {
         self.resolve_scroll_intents();
+        self.settle_initial_css_snap();
         let displacement = self.displacement();
         self.scroll_transform = Mat2D::from_translate(displacement.x, displacement.y);
         self.child_constraint_applied_count = 0;
@@ -1181,13 +1377,18 @@ impl ScrollConstraint {
 
     fn collect_snap_points(&self) -> Vec<Vec2D> {
         let mut points = Vec::new();
+        let x_axis = self.css_scroll_axis(true);
+        let y_axis = self.css_scroll_axis(false);
         for child in self.layout_children.iter() {
             let node_count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                 .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
             for node in 0..node_count {
                 let bounds = self.layout_child_bounds_for_node(child, node);
                 if !self.is_bounds_collapsed(bounds) {
-                    points.push(Vec2D::new(bounds.left(), bounds.top()));
+                    points.push(Vec2D::new(
+                        x_axis.map_or(bounds.left(), |axis| axis.snap_position(bounds)),
+                        y_axis.map_or(bounds.top(), |axis| axis.snap_position(bounds)),
+                    ));
                 }
             }
         }
@@ -1668,6 +1869,9 @@ impl ScrollConstraint {
             return None;
         }
         match intent.space {
+            ScrollSpace::Offset => self
+                .css_scroll_axis(is_x)
+                .map(|axis| axis.internal_offset(intent.value)),
             ScrollSpace::Percent => {
                 let content_size = if is_x {
                     self.content_width()
@@ -1760,6 +1964,34 @@ impl ScrollConstraint {
     }
 
     fn position_at_index(&self, index: f32) -> Option<Vec2D> {
+        if self.css_scroll_axis(self.indexes_horizontally()).is_some() {
+            let items = self.css_axis_items();
+            let &(last_index, _) = items.last()?;
+            let index = if index.is_nan() {
+                0.0
+            } else {
+                index.clamp(0.0, last_index as f32)
+            };
+            let selected = items
+                .iter()
+                .position(|(item, _)| *item as f32 >= index.floor())
+                .unwrap_or(items.len() - 1);
+            let (item_index, bounds) = items[selected];
+            let next = items.get(selected + 1).copied();
+            let fraction = next.map_or(0.0, |(next_index, _)| {
+                ((index - item_index as f32) / (next_index - item_index) as f32).clamp(0.0, 1.0)
+            });
+            let position = |horizontal| {
+                let axis = self.css_scroll_axis(horizontal).unwrap();
+                let start = axis.snap_position(bounds);
+                let step = next.map_or_else(
+                    || axis.step(bounds, None),
+                    |(_, next)| axis.snap_position(next) - start,
+                );
+                -(start + step * fraction).clamp(0.0, axis.range)
+            };
+            return Some(Vec2D::new(position(true), position(false)));
+        }
         if index.is_nan() || (self.base.infinite() && !index.is_finite()) {
             return Some(Vec2D::default());
         }
@@ -1879,6 +2111,31 @@ impl ScrollConstraint {
     }
 
     fn index_at_position(&self, position: Vec2D) -> f32 {
+        if let Some(axis) = self.css_scroll_axis(self.indexes_horizontally()) {
+            let items = self.css_axis_items();
+            let Some(&(first_index, first)) = items.first() else {
+                return 0.0;
+            };
+            let position = -(if axis.horizontal {
+                position.x
+            } else {
+                position.y
+            });
+            if position < axis.snap_position(first) {
+                return first_index as f32;
+            }
+            for pair in items.windows(2) {
+                let (index, bounds) = pair[0];
+                let (next_index, next) = pair[1];
+                let start = axis.snap_position(bounds);
+                let end = axis.snap_position(next);
+                if position < end {
+                    return index as f32
+                        + (next_index - index) as f32 * (position - start) / (end - start);
+                }
+            }
+            return items.last().unwrap().0 as f32;
+        }
         if self
             .with_content(|content| content.children().is_empty())
             .unwrap_or(true)
@@ -2134,6 +2391,48 @@ impl ScrollConstraint {
     }
     pub fn set_computed_content_width(&mut self, _value: f32) {}
     pub fn set_computed_content_height(&mut self, _value: f32) {}
+    pub fn bound_scroll_offset_x(&self) -> f32 {
+        if self.intent_x.space == ScrollSpace::Offset {
+            return self.intent_x.value;
+        }
+        self.css_scroll_axis(true).map_or_else(
+            || self.authored_scroll_offset_x(),
+            |axis| axis.browser_offset(self.offset_x),
+        )
+    }
+    pub fn bound_scroll_offset_y(&self) -> f32 {
+        if self.intent_y.space == ScrollSpace::Offset {
+            return self.intent_y.value;
+        }
+        self.css_scroll_axis(false).map_or_else(
+            || self.authored_scroll_offset_y(),
+            |axis| axis.browser_offset(self.offset_y),
+        )
+    }
+    pub(crate) fn set_bound_scroll_offset_with_completion(
+        &mut self,
+        value: f32,
+        horizontal: bool,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
+        if self.css_scroll_axis(horizontal).is_some() {
+            self.stop_physics();
+            let intent = ScrollAxisIntent {
+                space: ScrollSpace::Offset,
+                value,
+            };
+            if horizontal {
+                self.set_intent_x_with_completion(intent, completion);
+            } else {
+                self.set_intent_y_with_completion(intent, completion);
+            }
+        } else if horizontal {
+            self.set_authored_scroll_offset_x_with_completion(value, completion);
+        } else {
+            self.set_authored_scroll_offset_y_with_completion(value, completion);
+        }
+    }
+
     pub fn authored_scroll_offset_x(&self) -> f32 {
         self.base.scroll_offset_x()
     }

@@ -7556,6 +7556,172 @@ fn css_focus_reveals_items_inside_the_bordered_padding_box() {
     }
 }
 
+fn css_offset_binding_scene(horizontal: bool, rtl: bool, virtualize: bool, flags: u32) -> Scene {
+    scene(
+        (800.0, 800.0),
+        css(
+            "Viewport",
+            [
+                vec![
+                    U(DISPLAY, 1),
+                    U(DIRECTION, if rtl { 2 } else { 1 }),
+                    U(if horizontal { OVERFLOW_X } else { OVERFLOW_Y }, 3),
+                ],
+                width(100.0).to_vec(),
+                height(100.0).to_vec(),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(if horizontal { 0 } else { 1 }),
+                scroll_properties: vec![
+                    F(if horizontal { 759 } else { 760 }, -400.0),
+                    U(850, u64::from(virtualize)),
+                ],
+                scroll_bind: Some((if horizontal { 759 } else { 760 }, u64::from(flags))),
+                ..css(
+                    "Content",
+                    [
+                        vec![
+                            U(DISPLAY, 1),
+                            U(61006, if horizontal { 0 } else { 2 }),
+                            F(FLEX_SHRINK, 0.0),
+                        ],
+                        width(if horizontal { 600.0 } else { 100.0 }).to_vec(),
+                        height(if horizontal { 100.0 } else { 600.0 }).to_vec(),
+                    ]
+                    .concat(),
+                    vec![css(
+                        "Item",
+                        [
+                            vec![F(FLEX_SHRINK, 0.0)],
+                            width(if horizontal { 600.0 } else { 100.0 }).to_vec(),
+                            height(if horizontal { 100.0 } else { 600.0 }).to_vec(),
+                        ]
+                        .concat(),
+                        vec![],
+                    )],
+                )
+            }],
+        ),
+    )
+}
+
+#[test]
+fn css_offset_bindings_survive_borrowed_viewport_and_content_collapse() {
+    use crate::source::{
+        data_bind::data_bind::{TO_SOURCE, TWO_WAY},
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for flags in [TO_SOURCE, TWO_WAY] {
+                for collapsed in ["Viewport", "Content"] {
+                    let f = css_offset_binding_scene(horizontal, rtl, false, flags);
+                    let number = f.bind_number();
+                    let read = || {
+                        CoreRegistry::get_double_handle(
+                            &number,
+                            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                        )
+                    };
+                    let expected = if horizontal && rtl { -400.0 } else { 400.0 };
+                    f.advance(4);
+                    assert_eq!(read(), Some(expected));
+                    for _ in 0..2 {
+                        // Keep the active layout borrowed throughout collapse propagation.
+                        assert_eq!(
+                            f.named(collapsed)
+                                .with_downcast_mut::<LayoutComponent, _>(
+                                    |layout| layout.collapse(true)
+                                ),
+                            Some(true)
+                        );
+                        f.advance(4);
+                        assert_eq!(read(), Some(expected));
+                        assert_eq!(
+                            f.named(collapsed)
+                                .with_downcast_mut::<LayoutComponent, _>(
+                                    |layout| layout.collapse(false)
+                                ),
+                            Some(true)
+                        );
+                        f.advance(4);
+                        assert_eq!(read(), Some(expected));
+                        assert_eq!(
+                            CoreRegistry::get_double_handle(
+                                &css_axis_scroll(&f),
+                                if horizontal { 759 } else { 760 }
+                            ),
+                            Some(-400.0)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn css_offset_bindings_poll_across_virtualization_changes() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        data_bind::data_bind::{TO_SOURCE, TWO_WAY},
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for flags in [TO_SOURCE, TWO_WAY] {
+                let f = css_offset_binding_scene(horizontal, rtl, true, flags);
+                let scroll = css_axis_scroll(&f);
+                let number = f.bind_number();
+                let read = || {
+                    CoreRegistry::get_double_handle(
+                        &number,
+                        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                    )
+                };
+                f.advance(4);
+                assert_eq!(read(), Some(-400.0));
+                assert!(CoreRegistry::set_bool_handle(&scroll, 850, false));
+                for name in ["Content", "Item"] {
+                    assert!(CoreRegistry::set_double_handle(
+                        &f.record(name),
+                        if horizontal {
+                            WIDTH.into()
+                        } else {
+                            HEIGHT.into()
+                        },
+                        200.0
+                    ));
+                }
+                f.advance(4);
+                let expected = if horizontal && rtl { -100.0 } else { 100.0 };
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                        scroll.virtualize(),
+                        if horizontal {
+                            scroll.max_offset_x()
+                        } else {
+                            scroll.max_offset_y()
+                        },
+                        if horizontal {
+                            scroll.bound_scroll_offset_x()
+                        } else {
+                            scroll.bound_scroll_offset_y()
+                        },
+                    )),
+                    Some((false, -100.0, expected))
+                );
+                assert_eq!(read(), Some(expected));
+                assert_eq!(
+                    CoreRegistry::get_double_handle(&scroll, if horizontal { 759 } else { 760 }),
+                    Some(-400.0)
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn css_bound_offsets_refresh_after_layout_changes() {
     use crate::source::{
@@ -7796,6 +7962,143 @@ fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
             Some(target)
         );
         assert_eq!(f.world_origin("B").0, 0.0);
+    }
+}
+
+#[test]
+fn translated_offset_bindings_keep_authored_values_and_notification_order() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        data_bind::data_bind::{DataBind, TO_SOURCE, TWO_WAY},
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    use std::cell::RefCell;
+    thread_local! {
+        static EVENTS: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+    }
+    fn raw_changed() {
+        EVENTS.with(|events| events.borrow_mut().push("raw"));
+    }
+    fn source_changed() {
+        EVENTS.with(|events| events.borrow_mut().push("source"));
+    }
+    let sized = |w, h| {
+        vec![
+            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, w),
+            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, h),
+        ]
+    };
+    for flags in [TO_SOURCE, TWO_WAY] {
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                name: "Viewport",
+                component: sized(200.0, 80.0),
+                children: vec![B {
+                    name: "List",
+                    component: sized(200.0, 240.0),
+                    scroll: Some(1),
+                    scroll_bind: Some((760, u64::from(flags))),
+                    children: vec![
+                        B {
+                            name: "Row",
+                            component: sized(200.0, 40.0),
+                            ..B::default()
+                        },
+                        B {
+                            name: "Tail",
+                            component: sized(200.0, 200.0),
+                            ..B::default()
+                        },
+                    ],
+                    ..B::default()
+                }],
+                ..B::default()
+            },
+        );
+        let scroll = css_axis_scroll(&f);
+        let number = f.bind_number();
+        f.advance(4);
+        let read = || {
+            CoreRegistry::get_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            )
+        };
+        assert_eq!(read(), Some(0.0));
+        // Explicit raw observers measure publication independently of binding delivery.
+        let raw = scroll.insert_sibling(DataBind::new(0, 760, 0)).unwrap();
+        let source = number
+            .insert_sibling(DataBind::new(
+                0,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                0,
+            ))
+            .unwrap();
+        let raw_observers = scroll.ensure_property_observers().unwrap();
+        let source_observers = number.ensure_property_observers().unwrap();
+        for (observer, target, callback, observers) in [
+            (&raw, &scroll, raw_changed as fn(), &raw_observers),
+            (&source, &number, source_changed as fn(), &source_observers),
+        ] {
+            observer.with_mut(|owner| {
+                let bind = owner.as_data_bind_mut().unwrap();
+                bind.set_target(Some(target.clone()));
+                bind.set_changed_callback(callback);
+                observers.add(bind);
+            });
+        }
+        for (previous, value) in [(0.0, -40.0), (-40.0, -80.0)] {
+            for observer in [&raw, &source] {
+                observer.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_dirt(0));
+            }
+            EVENTS.with(|events| events.borrow_mut().clear());
+            assert!(CoreRegistry::set_double_handle(&scroll, 760, value));
+            EVENTS.with(|events| assert_eq!(*events.borrow(), ["raw"]));
+            assert_eq!(read(), Some(previous));
+            f.advance(4);
+            assert_eq!(read(), Some(value));
+            assert_eq!(f.scroll_offset_y(), value);
+            EVENTS.with(|events| assert_eq!(*events.borrow(), ["raw", "source"]));
+            // Equal writes and unchanged polling produce no further notifications.
+            assert!(CoreRegistry::set_double_handle(&scroll, 760, value));
+            f.advance(4);
+            EVENTS.with(|events| assert_eq!(*events.borrow(), ["raw", "source"]));
+        }
+        for observer in [&raw, &source] {
+            observer.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_dirt(0));
+        }
+        EVENTS.with(|events| events.borrow_mut().clear());
+        // A native offset remains authored even outside a smaller scroll range.
+        assert!(CoreRegistry::set_double_handle(
+            &f.named("Viewport"),
+            LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+            220.0
+        ));
+        f.advance(4);
+        assert_eq!(
+            scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                scroll.max_offset_y(),
+                scroll.bound_scroll_offset_y(),
+            )),
+            Some((-20.0, -80.0))
+        );
+        assert_eq!(read(), Some(-80.0));
+        EVENTS.with(|events| assert!(events.borrow().is_empty()));
+        if flags == TWO_WAY {
+            assert!(CoreRegistry::set_double_handle(
+                &number,
+                ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                -120.0
+            ));
+            f.advance(4);
+            assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(-120.0));
+            assert_eq!(read(), Some(-120.0));
+            EVENTS.with(|events| assert_eq!(*events.borrow(), ["source", "raw"]));
+        }
+        for (observer, observers) in [(&raw, &raw_observers), (&source, &source_observers)] {
+            observer.with_mut(|owner| observers.remove(owner.as_data_bind_mut().unwrap()));
+        }
     }
 }
 

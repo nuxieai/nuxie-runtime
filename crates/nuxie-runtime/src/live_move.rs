@@ -497,7 +497,14 @@ pub fn move_instance(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
         .with_downcast::<Artboard, _>(Artboard::semantic_manager_handle)
         .flatten()
     {
-        let parent_node = SemanticData::find_closest_semantic_node_handle(Some(to.clone()));
+        let parent_node = SemanticData::find_closest_semantic_node_handle(Some(to.clone()))
+            .or_else(|| {
+                // Match the normal mount path when no slot ancestor has
+                // SemanticData. The unit still belongs to its Screen boundary.
+                parent_board
+                    .with_downcast::<Artboard, _>(Artboard::semantic_boundary_node)
+                    .flatten()
+            });
         let (previous_manager, boundary) =
             instance.with_artboard(|b| (b.semantic_manager(), b.semantic_boundary_node()));
         if let Some(boundary) = boundary.filter(|_| {
@@ -976,11 +983,20 @@ impl LiveMoves {
     /// Hook after the player's existing advance and layout, before drawing.
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
         self.prepare(root)?;
+        let mut updated = false;
         for flight in &self.flights {
+            let board = slot(&flight.flight, NestedArtboard::parent_artboard_handle)?;
+            if board
+                .as_ref()
+                .is_some_and(|board| !crate::hosted_scene::is_active_artboard(board))
+            {
+                continue;
+            }
             follow(flight, true)?;
+            updated = true;
             // A row can have settled before the post-advance flight write.
             // Update its component graph directly, never its playback.
-            if let Some(board) = slot(&flight.flight, NestedArtboard::parent_artboard_handle)? {
+            if let Some(board) = board {
                 Artboard::update_pass_handle(&board, false);
                 if let Some(instance) =
                     slot(&flight.flight, NestedArtboard::artboard_instance_default)?
@@ -992,10 +1008,10 @@ impl LiveMoves {
                 }
             }
         }
-        if !self.flights.is_empty() {
+        if updated {
             root.update_pass(true);
         }
-        Ok(!self.flights.is_empty())
+        Ok(updated)
     }
 }
 
@@ -1310,11 +1326,12 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         return Ok(());
     }
     if let Some(row) = row {
-        row.collapse_semantic_boundary(collapsed);
-        if !collapsed {
+        if collapsed {
+            row.collapse_semantic_boundary(true);
+        } else {
             // The list's inactive sequence was marked every skipped frame.
             row.update_data_binds(true);
-            row.with_artboard_mut(|b| b.mark_semantic_boundary_transform_dirty());
+            crate::hosted_scene::resume_semantics(&row);
         }
     }
     if let Some(parent) = parent {

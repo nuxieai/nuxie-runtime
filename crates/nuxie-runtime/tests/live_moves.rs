@@ -719,6 +719,21 @@ fn semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() {
         check(&s.s);
         s.begin();
         check(&s.f);
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        let keyed = unit
+            .with_artboard(|b| b.find_handle::<Node>("keyed"))
+            .unwrap();
+        let before_sleep = val(&keyed, 13);
+        set_row_collapsed(&list, 1, true).unwrap();
+        s.advance(0.1);
+        close(val(&keyed, 13), before_sleep);
+        let asleep = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+        assert!(asleep.iter().all(|node| !ids.contains(&node.id)));
+        set_row_collapsed(&list, 1, false).unwrap();
+        check(&s.f);
         s.advance(0.1);
         check(&s.f);
         s.end();
@@ -736,5 +751,102 @@ fn semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() {
         check(&s.f);
         s.moves.step_end(&s.root, "A", Some("back")).unwrap();
         check(&s.s);
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        set_row_collapsed(&list, 0, true).unwrap();
+        let asleep = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+        assert!(asleep.iter().all(|node| !ids.contains(&node.id)));
+        set_row_collapsed(&list, 0, false).unwrap();
+        check(&s.s);
     }
+}
+
+#[test]
+fn collapsed_semantic_geometry_is_validated_again_before_publishing_on_wake() {
+    use source::{
+        generated::layout_component_base::LayoutComponentBase,
+        math::path_types::PathDirection,
+        semantic::semantic_provider::{SemanticGeometryError, validate_semantic_geometry},
+    };
+    let mut s = Scene::from_bytes(&fixture::semantic_fixture());
+    s.machine.with_instance_mut(|m| m.enable_semantics());
+    assert!(CoreRegistry::set_bool_handle(
+        &s.b.core_handle(),
+        LayoutComponentBase::CLIP_PROPERTY_KEY.into(),
+        true
+    ));
+    s.advance(0.0);
+    assert_eq!(validate_semantic_geometry(&s.root.core_handle()), Ok(()));
+    s.b.with_artboard_mut(|b| {
+        let bounds = b.bounds();
+        let mut path = b.local_path().unwrap();
+        path.rewind();
+        for _ in 0..5000 {
+            path.add_rect(bounds, PathDirection::Clockwise);
+        }
+    });
+    assert_eq!(
+        validate_semantic_geometry(&s.root.core_handle()),
+        Err(SemanticGeometryError::LimitExceeded)
+    );
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    set_row_collapsed(&list, 1, true).unwrap();
+    assert_eq!(validate_semantic_geometry(&s.root.core_handle()), Ok(()));
+    set_row_collapsed(&list, 1, false).unwrap();
+    assert_eq!(
+        validate_semantic_geometry(&s.root.core_handle()),
+        Err(SemanticGeometryError::LimitExceeded)
+    );
+    s.b.with_artboard_mut(|b| {
+        let bounds = b.bounds();
+        let mut path = b.local_path().unwrap();
+        path.rewind();
+        path.add_rect(bounds, PathDirection::Clockwise);
+    });
+    assert_eq!(validate_semantic_geometry(&s.root.core_handle()), Ok(()));
+}
+
+#[test]
+fn semantics_enabled_after_collapse_publish_only_active_rows_and_wake_with_stable_ids() {
+    let s = Scene::from_bytes(&fixture::semantic_fixture());
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    set_row_collapsed(&list, 1, true).unwrap();
+    s.machine.with_instance_mut(|m| m.enable_semantics());
+    let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+    let fields = || {
+        let snapshot = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+        assert_eq!(
+            snapshot
+                .iter()
+                .map(|n| n.id)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            snapshot.len()
+        );
+        let mut ids: Vec<_> = snapshot
+            .iter()
+            .filter(|n| n.role == 6)
+            .map(|n| n.id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    let active = fields();
+    assert_eq!(active.len(), 1);
+    set_row_collapsed(&list, 1, false).unwrap();
+    let both = fields();
+    assert_eq!(both.len(), 2);
+    assert!(both.contains(&active[0]));
+    set_row_collapsed(&list, 1, true).unwrap();
+    assert_eq!(fields(), active);
+    set_row_collapsed(&list, 1, false).unwrap();
+    assert_eq!(fields(), both);
 }

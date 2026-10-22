@@ -2824,6 +2824,8 @@ impl Artboard {
             crate::mechanical_port::source::artboard_host::InactiveChangeMark,
         >,
     ) -> Option<CoreHandle> {
+        // Nuxie: invalidate hosted-scene query maps after mounting or rehoming.
+        crate::hosted_scene::membership_changed();
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             inactive_change_sequence: inactive_change_sequence
@@ -5883,6 +5885,8 @@ impl Artboard {
                         nested.cleanup_semantic_tree();
                         nested.build_semantic_tree(Some(semantic_manager.clone()), parent.clone());
                     }
+                    // Nuxie: collapse may predate enabling this semantic tree.
+                    crate::hosted_scene::collapse_new_row_semantics(&list, index as i32, &nested);
                 }
                 index += 1;
             }

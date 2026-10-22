@@ -1474,6 +1474,8 @@ impl ArtboardComponentList {
     pub fn invalidate_ordered_list_indices_cache(&mut self) {
         // Nuxie: update the collapse bitmap on structural or visibility edits.
         self.live_move_rebuild_collapse_mask();
+        // Nuxie: membership, reorders and row collapse invalidate query maps.
+        crate::hosted_scene::membership_changed();
         self.ordered_list_indices_cache_valid = false;
     }
 

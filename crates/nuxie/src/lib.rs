@@ -10,6 +10,8 @@
 
 pub use nuxie_runtime::source as runtime;
 pub use nuxie_runtime::video;
+#[doc(hidden)]
+pub use nuxie_runtime::hosted_scene;
 pub use nuxie_runtime::live_move;
 #[cfg(feature = "test-support")]
 #[doc(hidden)]

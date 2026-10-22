@@ -13,7 +13,11 @@ const MAX_VIDEO_SCENE_OBJECTS: usize = 65_536;
 const FIRST_NESTED_VIDEO_ID: usize = 1 << 30;
 
 pub(super) struct VideoOccurrences {
-    ids: std::collections::BTreeMap<(usize, usize, u64), usize>,
+    ids: std::collections::BTreeMap<(usize, usize, u64), (usize, nuxie::CoreHandle)>,
+    cached: Vec<LiveVideo>,
+    by_id: std::collections::BTreeMap<usize, usize>,
+    cache_key: Option<(u64, u64)>,
+    source_indices: Option<std::collections::BTreeMap<(usize, usize, u64), usize>>,
     next_id: usize,
 }
 
@@ -21,11 +25,16 @@ impl Default for VideoOccurrences {
     fn default() -> Self {
         Self {
             ids: Default::default(),
+            cached: Vec::new(),
+            by_id: Default::default(),
+            cache_key: None,
+            source_indices: None,
             next_id: FIRST_NESTED_VIDEO_ID,
         }
     }
 }
 
+#[derive(Clone)]
 struct LiveVideo {
     id: usize,
     source_artboard_index: usize,
@@ -34,17 +43,32 @@ struct LiveVideo {
 }
 
 impl VideoOccurrences {
-    fn collect(&mut self, root: &ArtboardInstance) -> Result<Vec<LiveVideo>, NuxStatus> {
+    fn refresh(
+        &mut self,
+        root: &ArtboardInstance,
+        walk: nuxie::hosted_scene::Walk,
+        step: u64,
+    ) -> Result<(), NuxStatus> {
         use std::collections::BTreeSet;
-        let file = root.native_file();
-        let sources = file.with_file(|file| {
-            (0..file.artboard_count())
-                .map(|index| file.artboard_handle(index))
-                .collect::<Vec<_>>()
+        // Render revisions also change for each decoder observation. Those
+        // changes cannot mount artboards. Reuse this map for the entire frame
+        // and invalidate immediately on actual membership edits between frames.
+        let key = (step, nuxie::hosted_scene::membership_revision());
+        if self.cache_key == Some(key) {
+            return Ok(());
+        }
+        let sources = self.source_indices.get_or_insert_with(|| {
+            root.native_file().with_file(|file| {
+                (0..file.artboard_count())
+                    .filter_map(|index| {
+                        file.artboard_handle(index)
+                            .map(|source| (source.identity_key(), index))
+                    })
+                    .collect()
+            })
         });
         let mut pending = vec![(root.native_handle(), true)];
         let mut visited = BTreeSet::new();
-        let mut live = BTreeSet::new();
         let mut output = Vec::new();
         let mut new_ids = std::collections::BTreeMap::new();
         let mut object_count = 0usize;
@@ -52,14 +76,17 @@ impl VideoOccurrences {
             if !visited.insert(artboard.core_handle().identity_key()) {
                 continue;
             }
+            if !is_root {
+                nuxie::hosted_scene::record_walk(walk);
+            }
             if visited.len() > MAX_VIDEO_SCENE_OBJECTS {
                 return Err(NuxStatus::LimitExceeded);
             }
             let source = artboard.with_artboard(|artboard| artboard.base.artboard_source_handle());
-            let source_artboard_index = sources
-                .iter()
-                .position(|candidate| candidate.as_ref() == source.as_ref())
-                .filter(|_| source.is_some())
+            let source_artboard_index = source
+                .as_ref()
+                .and_then(|source| sources.get(&source.identity_key()))
+                .copied()
                 .ok_or(NuxStatus::RuntimeError)?;
             let objects = artboard.with_artboard(|artboard| artboard.objects().to_vec());
             object_count = object_count
@@ -74,20 +101,19 @@ impl VideoOccurrences {
                 };
                 if handle.is_type_of(Video::TYPE_KEY) {
                     let identity = handle.identity_key();
-                    live.insert(identity);
                     let id = if is_root {
                         source_component_id
                     } else if let Some(id) =
                         self.ids.get(&identity).or_else(|| new_ids.get(&identity))
                     {
-                        *id
+                        id.0
                     } else {
                         let id = self.next_id;
                         self.next_id = id
                             .checked_add(1)
                             .filter(|next| *next <= i64::MAX as usize)
                             .ok_or(NuxStatus::LimitExceeded)?;
-                        new_ids.insert(identity, id);
+                        new_ids.insert(identity, (id, handle.clone()));
                         id
                     };
                     output.push(LiveVideo {
@@ -105,9 +131,7 @@ impl VideoOccurrences {
                         if host.artboard_count() > MAX_VIDEO_SCENE_OBJECTS {
                             return Err(NuxStatus::LimitExceeded);
                         }
-                        Ok((0..host.artboard_count())
-                            .filter_map(|index| host.artboard_instance(index as i32))
-                            .collect::<Vec<_>>())
+                        Ok(nuxie::hosted_scene::active_instances(object))
                     })
                     .ok_or(NuxStatus::RuntimeError)??;
                 if pending.len().saturating_add(children.len()) > MAX_VIDEO_SCENE_OBJECTS {
@@ -116,9 +140,22 @@ impl VideoOccurrences {
                 pending.extend(children.into_iter().map(|child| (child, false)));
             }
         }
-        self.ids.retain(|identity, _| live.contains(identity));
-        self.ids.extend(new_ids);
-        Ok(output)
+        // Identity metadata survives collapse, without retaining payload arenas.
+        // Reap retired identities only when allocating new occurrences, never
+        // by walking dormant rows on every frame.
+        if !new_ids.is_empty() {
+            self.ids
+                .retain(|_, (_, handle)| handle.with(|_| ()).is_some());
+            self.ids.extend(new_ids);
+        }
+        self.by_id = output
+            .iter()
+            .enumerate()
+            .map(|(index, video)| (video.id, index))
+            .collect();
+        self.cached = output;
+        self.cache_key = Some(key);
+        Ok(())
     }
 }
 
@@ -234,21 +271,27 @@ pub(crate) fn with_video<R>(
     let _handle = enter_handle(player, HandleKind::Player)?;
     let player = unsafe { &*player };
     let _occurrence = enter_occurrence(&player.artboard)?;
-    let videos = player
-        .video_occurrences
-        .try_borrow_mut()
-        .map_err(|_| NuxStatus::ReentrantCall)?
-        .collect(
+    let video = {
+        let mut videos = player
+            .video_occurrences
+            .try_borrow_mut()
+            .map_err(|_| NuxStatus::ReentrantCall)?;
+        videos.refresh(
             &*player
                 .artboard
                 .instance
                 .try_borrow()
                 .map_err(|_| NuxStatus::ReentrantCall)?,
+            nuxie::hosted_scene::Walk::VideoLookup,
+            player.video_query_step.get(),
         )?;
-    let video = videos
-        .into_iter()
-        .find(|video| video.id == component_id)
-        .ok_or(NuxStatus::NotFound)?;
+        videos
+            .by_id
+            .get(&component_id)
+            .and_then(|index| videos.cached.get(*index))
+            .cloned()
+            .ok_or(NuxStatus::NotFound)?
+    };
     body(&video.handle, &player.artboard)
 }
 pub(crate) fn status(result: Result<(), NuxStatus>) -> NuxStatus {
@@ -333,17 +376,22 @@ pub unsafe extern "C" fn nux_player_visit_videos(
             let _handle = enter_handle(player, HandleKind::Player)?;
             let player = unsafe { &*player };
             let _occurrence = enter_occurrence(&player.artboard)?;
-            let videos = player
-                .video_occurrences
-                .try_borrow_mut()
-                .map_err(|_| NuxStatus::ReentrantCall)?
-                .collect(
+            let videos = {
+                let mut videos = player
+                    .video_occurrences
+                    .try_borrow_mut()
+                    .map_err(|_| NuxStatus::ReentrantCall)?;
+                videos.refresh(
                     &*player
                         .artboard
                         .instance
                         .try_borrow()
                         .map_err(|_| NuxStatus::ReentrantCall)?,
+                    nuxie::hosted_scene::Walk::VideoEnumeration,
+                    player.video_query_step.get(),
                 )?;
+                videos.cached.clone()
+            };
             for video in videos {
                 let id = video.id;
                 let object = video.handle;

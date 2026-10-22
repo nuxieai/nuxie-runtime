@@ -137,3 +137,69 @@ The surface guard, Rust formatting check, and diff whitespace check pass. The ge
 The first attempt used the wrong fixture property name, `roleValue`, and failed before reaching a move. It was corrected to `role`. The first fix build also caught an ArtboardInstance closure signature mismatch. Both are resolved in the final runs above. The two red regression runs listed above show the actual duplicate snapshot failure before the semantic rehome fix. No final test failure remains.
 
 The iOS device harness has not been rerun here. Repeat the Bat Phone check and the Android harness with the fixed library. Verify that the native text editor, IME composition, and accessibility elements stay attached to the stable semantic IDs through every boundary. The snapshot tests prove the runtime and C API contract. They do not prove platform reconciliation. Typed-text writeback from the device finding remains a separate open question. No Cargo or Bazel command was invoked directly. No commit was made.
+
+
+Round 4 addresses the device collapsed-stack finding. The original evidence is in [the collapsed device investigation](live-moves-device-collapsed-investigation.md). The Simulator measured 55.4 ms per frame with 39 of 40 rows collapsed, versus 7.53 ms for one row. Android measured 56.175 ms versus 17.427 ms. Those device numbers precede this fix. No updated device run was possible in this sandbox.
+
+The unchanged C API probe reproduced 41 visible videos versus 2 in `round4red1`. Its visibility batch took 45.33 ms on this host. Adding visit counters reproduced the same defect in `round4countsred1`. That run visited 80 hosted artboards during enumeration, 3,280 during per-video lookups, 80 during semantic validation, and 160 during owner capture. The one-row counts were 2, 4, 2, and 4. The counters exclude the page root. Owner capture walks the scene before and after the advance.
+
+`crates/nuxie-runtime/src/hosted_scene.rs` now provides the shared query traversal. It uses the existing Nuxie collapse bitmap to skip retained row artboards. It preserves ordinary upstream host enumeration when no Nuxie row is collapsed. Video enumeration, semantic validation, and owner capture use this helper. The counters compile out without `test-support`. The ported files have small, commented hooks for semantic validation and membership invalidation. The new traversal and semantic wake machinery live outside the port.
+
+`crates/nux-capi/src/video.rs` now keeps an occurrence map and an ID index for the player step. It caches source-artboard indices too. Each player step changes the query key. Mounts, reorders, swaps, moves, and row collapse change a membership revision, so queries between advances cannot reuse a stale map. Decoder observations and clock updates can change render revisions without rebuilding the occurrence map. Repeated enumeration and per-video lookups reuse it. Video metadata is read from the live Video object on every callback. Existing tests still reject removed occurrences and preserve surviving IDs through reorder, and assign new IDs to replacements.
+
+Collapsed videos are omitted from enumeration. They cannot request visible decoders. Their identity metadata remains available for wake, without retaining their payload arenas. Retired identity metadata is reaped when new occurrences are allocated. The same moving video keeps ID 1073741826 and generation 0 through takeoff, landing, outgoing-row collapse, collapse of its own row, and wake. It returns immediately on wake, before another advance. Decoder lifetime while a whole unit is dormant still follows SDK policy.
+
+The stronger wake checks found a second issue. Upstream's semantic boundary wake restores the artboard's own SemanticData. Nuxie row collapse had also detached nested artboards. The failing snapshot changed from IDs `[2, 4]` to `[2]` after wake in `round4timing1` and `round4wakered1`. The Nuxie wake operation now restores the active descendant artboards too. Independently collapsed descendants stay asleep. A small semantic-build hook also handles rows collapsed before semantics are enabled. Those retained nodes are detached before the first snapshot. This keeps the geometry validator's active-row scope consistent with what can be published.
+
+The move also needs a semantic parent fallback when a slot has no explicit SemanticData ancestor. It now uses its owning Screen boundary, matching normal mounting. Otherwise the moved unit becomes a semantic root and escapes row collapse. The device-shaped fixture catches this case. Flight following now pauses its update passes while its hosting row is collapsed. Playback, text and focus resume on wake.
+
+The permanent regression checks every frame's four hosted-artboard visit counts, visible video count, and semantic node count. It measures one row, forty rows with 39 collapsed, and a flight in the only active destination row. The flight has one additional mounted unit because the destination's fresh unit remains until landing. It also enables semantics after collapse in a separate case. Collapse and wake restore exactly the same semantic and video IDs. Media commands, decoder steps, and later visibility queries cause zero additional scene visits after enumeration.
+
+The runtime regression now checks the focused and unfocused moved unit after collapsing and waking its own row. Its semantic IDs, text and focus survive. Another test places an over-budget clip in a row. Validation rejects it while active, skips it while the row publishes nothing, rejects it again immediately on wake, and succeeds after the clip is repaired. The late-enable test checks unique IDs and restores both units' original field IDs over repeated wake cycles.
+
+The three new C API test and fixture files and `crates/nuxie-runtime/tests/live_moves_device_fixture.rs` are permanent test inputs. They retain the real font, nested lists, native fields, videos, and authored device controls missing from the smaller fixture. Fixture exports use Bazel's undeclared output directory, or a portable temporary directory outside Bazel. They no longer write to a developer's handoff checkout. Both crate BUILD files were regenerated with `python3 tools/bazel/generate.py`. The generated-file check now passes, including the device fixture that caused the round 3 exception. No Cargo manifest, C header, export list, or shipping feature changed.
+
+| Hosted artboard visits per frame | Before, one row | Before, 39 collapsed | After, one row | After, 39 collapsed | After, flight |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Video enumeration | 2 | 80 | 2 | 2 | 3 |
+| Video lookup batch | 4 | 3280 | 0 | 0 | 0 |
+| Semantic validation | 2 | 80 | 2 | 2 | 3 |
+| Owner capture | 4 | 160 | 4 | 4 | 6 |
+
+Both the one-row case and the collapsed forty-row case enumerate 2 videos, report 2 visible videos, and publish 2 semantic nodes. The flight publishes 2 semantic nodes too. The late-enable case has the same counts as one row. Every one of the 20 measured frames asserts the visit counts. The subsequent sleep and wake checks preserve the exact ID sets.
+
+These host timings use fastbuild and 20 iterations per case. The final timing request filters out the separate fixture exporter test. They are not device frame times.
+
+| Host phase, ms | Before, one row | Before, 39 collapsed | After, one row | After, 39 collapsed |
+| --- | ---: | ---: | ---: | ---: |
+| Step plus presentation acknowledgement | 0.309577 | 4.662985 | 0.250125 | 4.144792 |
+| Video enumeration | 0.055433 | 1.207573 | 0.066046 | 0.091511 |
+| Visibility batch | 0.194860 | 49.469381 | 0.100204 | 0.146015 |
+| Semantic snapshot | 0.286338 | 6.672454 | 0.240050 | 0.512117 |
+
+The four hosted scene walks now have the same visit counts with 39 rows collapsed as with one row. Total step time is still 4.145 ms versus 0.250 ms. It includes other work. `RuntimeOwnedViewModelGraphTransaction::begin` still walks explicitly subscribed ViewModel graphs and checkpoints their properties. The root screens model retains all forty row models. This change preserves that rollback and subscription scope. These measurements do not isolate the remaining step cost. A phase profile and a separate checkpoint design are needed before claiming a constant total step budget.
+
+| Final round 4 command | Result | Runner ID |
+| --- | --- | --- |
+| `test -p nux-capi --test live_moves_collapsed_device_probe` | 2 passed, 0 failed, 0 ignored. | `round4v3probe` |
+| `test -p nux-capi --test live_moves_device_probe` | 1 passed, 0 failed, 0 ignored. | `round4v3device` |
+| `test -p nuxie-runtime --test live_moves` | 15 passed, 0 failed, 0 ignored. | `round4v3moves` |
+| `test -p nux-capi --lib live_moves` | 3 passed, 0 failed, 0 ignored. | `round4v3capimoves` |
+| `test -p nux-capi` | 216 passed, 0 failed, 0 ignored. All 23 targets passed. | `round4v3capi` |
+| `check -p nux-capi --all-targets` | All 27 targets built. | `round4v3check` |
+| `test -p nuxie-runtime --test live_moves_device_fixture` | 1 passed, 0 failed, 0 ignored. | `round4v3fixture` |
+| `test -p nuxie-runtime --test upstream_semantic_provider` | 6 passed, 0 failed, 0 ignored. | `round4v3semprovider` |
+| `test -p nuxie-runtime --test host_semantic_projections` | 26 passed, 0 failed, 0 ignored. | `round4v3semprojection` |
+| `test -p nuxie-runtime --test upstream_semantic_artboard_swap` | 8 passed, 0 failed, 0 ignored. | `round4v3semswap` |
+| `test -p nuxie-runtime --test semantic_focus_runtime` | 10 passed, 0 failed, 0 ignored. | `round4v3semfocus` |
+| `test -p nuxie-runtime --test upstream_semantic_data_lifecycle` | 13 passed, 0 failed, 0 ignored. | `round4v3semlifecycle` |
+| `test -p nuxie-runtime --test nux_video` | 31 passed, 0 failed, 0 ignored. | `round4v3video` |
+| `test -p nuxie-runtime --test video_properties` | 7 passed, 0 failed, 0 ignored. | `round4v3videoprops` |
+| `test -p nuxie-runtime --test upstream_collapsed_nested_databind` | 1 passed, 0 failed, 0 ignored. | `round4v3collapse` |
+| `test -p nux-capi --test live_moves_collapsed_device_probe live_moves_collapsed_rows` | 1 passed, 0 failed, 0 ignored. | `round4v3timing` |
+
+All final requests return exit code 0. The selected runtime suites contain 118 passing tests, including the fixture exporter. The full C API suite contains 216 passing tests. The generated-file check, surface guard, formatting of the new modules and tests, and diff whitespace check pass. No final test failure remains.
+
+The first performance fix exposed two semantic wake defects rather than a timing failure. The full-suite attempts `round4finalcapi` and `round4v2capi` each passed 215 tests and failed only the new collapsed probe. The final run above fixes that failure. The initial cache experiment also used the runtime frame ID, which is not the C API player step counter. The per-frame count assertion caught that mismatch. The cache now uses an explicit player step counter and the membership revision.
+
+Next, run the updated iOS and Android harnesses with this library. Check total frame cost and the new phase timing CSVs. Verify that only visible videos request decoders, that the active moving decoder keeps its native object, and that accessibility and native input reconciliation preserve the field IDs. Whole-row decoder suspension and restoration still need device coverage. Profile the remaining ViewModel checkpoint cost before changing its scope. No Cargo or Bazel command was invoked directly. No commit was made.

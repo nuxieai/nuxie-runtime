@@ -837,6 +837,8 @@ impl Drop for ScriptEffectTransaction {
 pub struct NuxPlayer {
     global_view_models: Rc<player_globals::GlobalViewModels>,
     video_occurrences: RefCell<video::VideoOccurrences>,
+    /// Media observations change render revisions without changing membership.
+    video_query_step: Cell<u64>,
     live_moves: RefCell<nuxie::live_move::LiveMoves>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
@@ -3223,6 +3225,7 @@ fn publish_player(
                 globals
             },
             video_occurrences: RefCell::new(video::VideoOccurrences::default()),
+            video_query_step: Cell::new(0),
             live_moves: RefCell::new(nuxie::live_move::LiveMoves::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
@@ -4600,6 +4603,9 @@ fn player_step_body(
 
     // Nuxie live flights follow both slots after the existing player advance
     // and every row's layout. The second pass updates only; time is not advanced.
+    player
+        .video_query_step
+        .set(player.video_query_step.get().wrapping_add(1));
     if let Err(error) = player.live_moves.borrow_mut().after_advance(&artboard.native_handle()) {
         player.artboard.poisoned.set(true);
         return publish_player_step_failure(out_result, NuxStatus::RuntimeError,

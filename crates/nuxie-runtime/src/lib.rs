@@ -25,6 +25,8 @@ pub mod text_decoration;
 pub mod utils;
 pub mod video;
 pub mod live_move;
+#[doc(hidden)]
+pub mod hosted_scene;
 
 /// Makes a Nuxie-owned type (keys 60000 and up) or, for any other key, the
 /// upstream type. Nuxie types share the Rive record grammar and ordinary

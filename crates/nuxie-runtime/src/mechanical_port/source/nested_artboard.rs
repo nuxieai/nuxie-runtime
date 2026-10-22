@@ -578,6 +578,8 @@ impl NestedArtboard {
     /// Runtime swaps use the handle boundary: semantic subtree construction
     /// can walk back through this host, so the callback cannot retain &mut self.
     pub fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+        // Nuxie: a bound swap can detach an instance before another advance.
+        crate::hosted_scene::membership_changed();
         let prepared = owner
             .with_mut(|owner| {
                 owner

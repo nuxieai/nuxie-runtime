@@ -41,6 +41,9 @@ pub(super) fn scene_roots_across(
         if !seen_artboards.insert(artboard.core_handle().identity_key()) {
             continue;
         }
+        if seen_artboards.len() > 1 {
+            nuxie::hosted_scene::record_walk(nuxie::hosted_scene::Walk::OwnerCapture);
+        }
         if seen_artboards.len() > limit {
             return Err(NuxStatus::LimitExceeded);
         }
@@ -86,9 +89,7 @@ pub(super) fn scene_roots_across(
                     if host.artboard_count() > limit {
                         return Err(NuxStatus::LimitExceeded);
                     }
-                    Ok((0..host.artboard_count())
-                        .filter_map(|index| host.artboard_instance(index as i32))
-                        .collect::<Vec<_>>())
+                    Ok(nuxie::hosted_scene::active_instances(object))
                 })
                 .ok_or(NuxStatus::RuntimeError)??;
             if pending.len().saturating_add(children.len()) > limit {

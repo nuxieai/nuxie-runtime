@@ -667,6 +667,13 @@ pub fn validate_semantic_geometry(root: &CoreHandle) -> Result<(), SemanticGeome
         }
         let parent = handle
             .with(|object| {
+                // Nuxie: count hosted visits made by semantic capture validation.
+                if object
+                    .as_artboard()
+                    .is_some_and(|board| board.host().is_some())
+                {
+                    crate::hosted_scene::record_walk(crate::hosted_scene::Walk::SemanticValidation);
+                }
                 append_semantic_children(object, &mut pending);
                 object
                     .as_semantic_data()
@@ -690,11 +697,9 @@ fn append_semantic_children(
     if let Some(container) = object.as_container_component() {
         pending.extend_from_slice(container.children());
     }
-    if let Some(host) = object.as_artboard_host() {
-        for index in 0..host.artboard_count() {
-            if let Some(instance) = host.artboard_instance(index as i32) {
-                pending.push(instance.core_handle());
-            }
-        }
+    // Nuxie: collapsed retained rows publish no semantics. Validate all nodes
+    // in active rows, including excluded nodes, and validate rows again on wake.
+    for instance in crate::hosted_scene::active_instances(object) {
+        pending.push(instance.core_handle());
     }
 }

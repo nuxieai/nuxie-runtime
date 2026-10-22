@@ -805,8 +805,8 @@ fn css_box_paints(
             .any(crate::mechanical_port::source::layout_component::css_paint_draws)
 }
 
-/// Painted bounds in root space, clipped by the same paths selection uses.
-fn painted_visible_bounds(
+/// Geometry bounds in root space, clipped by the same paths selection uses.
+fn geometry_visible_bounds(
     handle: &CoreHandle,
     bounds: NativeAabb,
     artboard_to_root: NativeMat2D,
@@ -823,7 +823,7 @@ fn painted_visible_bounds(
         NativeVec2D::new(bounds.left(), bounds.bottom()),
     ]
     .map(|point| artboard_to_root * point);
-    let visible = crate::source::semantic::semantic_provider::painted_box_visible_bounds(
+    let visible = crate::source::semantic::semantic_provider::rendered_geometry_visible_bounds(
         handle, corners, spaces,
     )?;
     Some(NativeAabb::new(
@@ -848,7 +848,7 @@ fn css_box_visible_bounds(
             Some(bounds)
         })
         .flatten()?;
-    painted_visible_bounds(handle, bounds, artboard_to_root, clip, spaces)
+    geometry_visible_bounds(handle, bounds, artboard_to_root, clip, spaces)
 }
 
 /// Whether a painted CSS box's own paint covers `point` (in its artboard),
@@ -874,13 +874,64 @@ fn css_box_paints_at(handle: &CoreHandle, point: NativeVec2D) -> bool {
         .unwrap_or(false)
 }
 
+/// Test the drawable itself in drawing space. Host geometry applies the
+/// rendered clip walker separately, without the interaction parent chain.
+fn authored_geometry_contains_point(handle: &CoreHandle, point: NativeVec2D) -> bool {
+    handle
+        .with_mut(|object| {
+            if object
+                .as_drawable()
+                .is_none_or(|drawable| drawable.is_hidden())
+            {
+                return false;
+            }
+            if let Some(shape) = object.as_shape_mut() {
+                return shape.hit_test_aabb(point) && shape.hit_test_hi_fi(point, 2.0);
+            }
+            if let Some(input) = object.as_text_input_mut() {
+                return input.contains_point(point);
+            }
+            // Text keeps its bounds-based selection from the query's
+            // prefilter. Its native point test adds only the parent chain.
+            if object.as_text().is_some() {
+                return true;
+            }
+            let Some(world) = object
+                .as_world_transform_component()
+                .map(|node| node.world_transform())
+            else {
+                return false;
+            };
+            let mut inverse = NativeMat2D::identity();
+            if !world.invert(&mut inverse) {
+                return false;
+            }
+            let local = inverse * point;
+            if let Some(geometry) = object
+                .as_layout_component()
+                .and_then(|layout| layout.css_box_geometry())
+            {
+                return crate::css_layout::paint::overflow_clip_contains(
+                    local,
+                    geometry.bounds,
+                    geometry.radii,
+                    (true, true),
+                );
+            }
+            object
+                .semantic_provider_local_bounds()
+                .is_some_and(|bounds| bounds.contains(local))
+        })
+        .unwrap_or(false)
+}
+
 fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisibility) -> bool {
     handle
         .with(|object| {
             // Native TextInput bounds describe shaped text, not the whole
             // editable field. The declared semantic field's layout remains a
             // hit target when its text is empty or the user clicks padding.
-            // Its native LayoutComponent point test retains ancestor clipping.
+            // Its own box remains a target through the rendered clip walker.
             let is_field_layout = object.as_layout_component().is_some()
                 && object.as_container_component().is_some_and(|component| {
                     component.children().iter().any(|child| {
@@ -1000,7 +1051,7 @@ fn collect_geometry(
         ))
     }) && covers.is_none_or(|covers| covers)
         && query.is_none_or(|point| {
-            crate::source::semantic::semantic_provider::painted_box_contains_point(
+            crate::source::semantic::semantic_provider::rendered_geometry_contains_point(
                 &handle,
                 render_to_native_point(point),
                 &spaces,
@@ -1009,7 +1060,7 @@ fn collect_geometry(
         && let Some(local_id) = local_id_for_handle(artboard, &handle)
         && let Some(bounds) = painted
             .and_then(|painted| {
-                painted_visible_bounds(
+                geometry_visible_bounds(
                     &handle,
                     painted,
                     drawing_to_root,
@@ -1094,7 +1145,7 @@ fn collect_geometry(
                 }
                 let artboard_point = inverse * render_to_native_point(point);
                 if !css_box_paints_at(&handle, artboard_point)
-                    || !crate::source::semantic::semantic_provider::painted_box_contains_point(
+                    || !crate::source::semantic::semantic_provider::rendered_geometry_contains_point(
                         &handle,
                         render_to_native_point(point),
                         &spaces,
@@ -1201,7 +1252,15 @@ fn collect_geometry(
             continue;
         };
         let root_transform = drawing_to_root * world;
-        let Some(bounds) = semantic_bounds(local_bounds, root_transform) else {
+        let Some(bounds) = geometry_visible_bounds(
+            &handle,
+            local_bounds,
+            root_transform,
+            visibility == GeometryVisibility::Visible,
+            &spaces,
+        )
+        .filter(|bounds| !bounds.is_empty_or_nan())
+        .map(native_to_render_bounds) else {
             continue;
         };
         if ![bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
@@ -1219,11 +1278,13 @@ fn collect_geometry(
                 continue;
             }
             let local_point = inverse * render_to_native_point(point);
-            let hit = handle
-                .with_mut(|object| object.component_hit_test_point(&local_point, false, true))
-                .flatten()
-                .unwrap_or(false);
-            if !hit {
+            if !authored_geometry_contains_point(&handle, local_point)
+                || !crate::source::semantic::semantic_provider::rendered_geometry_contains_point(
+                    &handle,
+                    render_to_native_point(point),
+                    &spaces,
+                )
+            {
                 continue;
             }
         }

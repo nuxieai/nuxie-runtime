@@ -7041,6 +7041,294 @@ fn css_box_shape_clip_selection_preserves_even_odd_holes() {
     assert!(tapped(&f, "Card", (50.0, 25.0)));
 }
 
+/// Ordinary shape and text geometry in an artboard whose own transform
+/// expands or rotates its drawing past a 100-point host clip.
+fn transformed_nested_geometry_scene(scale: f32, rotation: f32) -> Scene {
+    use crate::source::generated::{
+        assets::{
+            file_asset_base::FileAssetBase, file_asset_contents_base::FileAssetContentsBase,
+            font_asset_base::FontAssetBase,
+        },
+        nested_artboard_base::NestedArtboardBase,
+        text::{
+            text_base::TextBase, text_style_base::TextStyleBase,
+            text_style_paint_base::TextStylePaintBase, text_value_run_base::TextValueRunBase,
+        },
+        transform_component_base::TransformComponentBase,
+    };
+    let style = |riv: &mut Riv, parent| {
+        riv.object(LayoutComponentStyleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent);
+        write(riv, &point_units());
+        riv.end();
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(FontAssetBase::TYPE_KEY)
+        .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(FileAssetContentsBase::TYPE_KEY)
+        .byte_field(
+            FileAssetContentsBase::BYTES_PROPERTY_KEY,
+            include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+        )
+        .end();
+    // 0 artboard, 1 CSS record, 2 clip, 3 CSS record, 4 host, 5 and 6 styles.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 6)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2);
+    write(
+        &mut riv,
+        &[
+            sized_to(100.0, 100.0),
+            vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+        ]
+        .concat(),
+    );
+    riv.end();
+    riv.object(NestedArtboardBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Host")
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .end();
+    style(&mut riv, 0);
+    style(&mut riv, 2);
+    // 0 artboard, 1 shape, 2 rectangle, 3 fill, 4 color, 5 group,
+    // 6 text, 7 run, 8 text style, 9 fill, 10 color, 11 layout style.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .float(TransformComponentBase::SCALE_X_PROPERTY_KEY, scale)
+        .float(TransformComponentBase::SCALE_Y_PROPERTY_KEY, scale)
+        .float(TransformComponentBase::ROTATION_PROPERTY_KEY, rotation)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 11)
+        .end();
+    riv.object(ShapeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Rectangle")
+        .end();
+    riv.object(RectangleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1);
+    write(&mut riv, &clip_rectangle(0.0, 0.0, 100.0, 100.0));
+    riv.end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff11_2233)
+        .end();
+    riv.object(NodeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(TextBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 5)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Label")
+        .float(
+            NodeBase::Y_PROPERTY_KEY,
+            if rotation == 0.0 { 10.0 } else { 50.0 },
+        )
+        .end();
+    riv.object(TextValueRunBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 6)
+        .uint(TextValueRunBase::STYLE_ID_PROPERTY_KEY, 8)
+        .string(TextValueRunBase::TEXT_PROPERTY_KEY, "MMMMMMMMMMMMMMMMMMMM")
+        .end();
+    riv.object(TextStylePaintBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 6)
+        .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, 0)
+        .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 20.0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 8)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 9)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff44_5566)
+        .end();
+    style(&mut riv, 0);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the ordinary geometry scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("the outer artboard");
+    let scene = Scene {
+        _file: file,
+        artboard,
+        factory,
+    };
+    scene.advance(3);
+    scene
+}
+
+fn assert_transformed_ordinary_geometry_is_clipped(scale: f32, rotation: f32) {
+    use crate::source::math::{mat2d::Mat2D, vec2d::Vec2D};
+    let f = transformed_nested_geometry_scene(scale, rotation);
+    let lines = f.draw_lines();
+    assert!(
+        lines.iter().any(|line| line.starts_with("clipPath")
+            && line
+                .replace("-0", "0")
+                .contains("(100,0),(100,100),(0,100)")),
+        "{}",
+        lines.join("\n")
+    );
+    draw_at(&lines, 0xff11_2233);
+    draw_at(&lines, 0xff44_5566);
+    let child = f
+        .object("Host")
+        .with(|object| object.nested_artboard_instance_handle())
+        .flatten()
+        .expect("the nested instance");
+    let is_geometry = |hit: &crate::RuntimeGeometryHit, id| {
+        hit.path.len() == 2
+            && hit
+                .path
+                .last()
+                .is_some_and(|segment| segment.local_id == id)
+    };
+    let mut host = f.host();
+    let visible = host.visible_geometry_with_bounds();
+    let rectangle = visible
+        .iter()
+        .find(|hit| is_geometry(hit, 1))
+        .expect("visible rectangle");
+    let bounds = rectangle.bounds;
+    let right = if rotation == 0.0 {
+        100.0
+    } else {
+        100.0 / 2.0f32.sqrt()
+    };
+    for (got, expected) in [
+        (bounds.min_x, 0.0),
+        (bounds.min_y, 0.0),
+        (bounds.max_x, right),
+        (bounds.max_y, 100.0),
+    ] {
+        assert!((got - expected).abs() < 1.0e-3, "{bounds:?}");
+    }
+    let (inside, outside) = if rotation == 0.0 {
+        ((50.0, 50.0), (150.0, 50.0))
+    } else {
+        ((10.0, 80.0), (10.0, 120.0))
+    };
+    for (point, expected) in [(inside, true), (outside, false)] {
+        let hits =
+            host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.0, point.1));
+        assert_eq!(
+            hits.iter().any(|hit| is_geometry(hit, 1)),
+            expected,
+            "{point:?}"
+        );
+    }
+    let retained = host.retained_geometry_with_bounds();
+    let rectangle = retained
+        .iter()
+        .find(|hit| is_geometry(hit, 1))
+        .expect("retained rectangle");
+    assert!(rectangle.bounds.max_y > 100.0);
+    let text = child
+        .with_artboard(|artboard| artboard.find_handle::<crate::source::text::text::Text>("Label"))
+        .expect("the nested text");
+    let (local, world) = text
+        .with(|object| {
+            (
+                object
+                    .semantic_provider_local_bounds()
+                    .expect("text bounds"),
+                object
+                    .as_world_transform_component()
+                    .expect("text transform")
+                    .world_transform(),
+            )
+        })
+        .unwrap();
+    assert!(local.width() > 100.0, "{local:?}");
+    let y = (local.top() + local.bottom()) / 2.0;
+    let transform = child.with_artboard(|artboard| artboard.base.self_transform());
+    let xs = if rotation == 0.0 {
+        [25.0, 75.0]
+    } else {
+        [70.0, 90.0]
+    };
+    for (x, expected) in xs.into_iter().zip([true, false]) {
+        let point = transform * world * Vec2D::new(x, y);
+        assert_eq!(
+            (0.0..100.0).contains(&point.x) && (0.0..100.0).contains(&point.y),
+            expected,
+            "text point {point:?}"
+        );
+        let hits =
+            host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.x, point.y));
+        assert_eq!(
+            hits.iter().any(|hit| is_geometry(hit, 6)),
+            expected,
+            "text point {point:?}"
+        );
+    }
+    let text = visible
+        .iter()
+        .find(|hit| is_geometry(hit, 6))
+        .expect("visible text");
+    if rotation == 0.0 {
+        assert!(
+            (text.bounds.max_x - 100.0).abs() < 1.0e-3,
+            "{:?}",
+            text.bounds
+        );
+    } else {
+        assert!(
+            (text.bounds.max_y - 100.0).abs() < 1.0e-3,
+            "{:?}",
+            text.bounds
+        );
+    }
+    // The interaction chain retains upstream's mapping. Host geometry
+    // applies the rendered clips without changing that interaction query.
+    let rectangle = child
+        .with_artboard(|artboard| {
+            artboard.find_handle::<crate::source::shapes::shape::Shape>("Rectangle")
+        })
+        .expect("the nested rectangle");
+    let mut inverse = Mat2D::identity();
+    assert!(transform.invert(&mut inverse));
+    let point = inverse * Vec2D::new(outside.0, outside.1);
+    assert_eq!(
+        rectangle
+            .with_mut(|object| object.component_hit_test_point(&point, false, true))
+            .flatten(),
+        Some(true)
+    );
+}
+
+#[test]
+fn scaled_nested_ordinary_geometry_uses_rendered_host_clips() {
+    assert_transformed_ordinary_geometry_is_clipped(2.0, 0.0);
+}
+
+#[test]
+fn rotated_nested_ordinary_geometry_uses_rendered_host_clips() {
+    assert_transformed_ordinary_geometry_is_clipped(1.0, std::f32::consts::FRAC_PI_4);
+}
+
 /// A painted nested CSS artboard and its painted child under a 50-point
 /// host clip, with the host optionally rotated around its top-left corner.
 fn clipped_painted_nested_scene(rotation: f32) -> Scene {

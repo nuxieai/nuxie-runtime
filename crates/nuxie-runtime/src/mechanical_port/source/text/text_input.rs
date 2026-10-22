@@ -151,6 +151,10 @@ impl TextInput {
         })?
     }
     pub fn hit_test_point(&mut self, position: Vec2D, skip: bool, primary: bool) -> bool {
+        self.contains_point(position) && self.base.base.hit_test_point(&position, skip, primary)
+    }
+    /// The field's own target, before interaction or rendered ancestor clips.
+    pub(crate) fn contains_point(&mut self, position: Vec2D) -> bool {
         // The field is the whole viewport when the content hugs its text.
         // Resolve its bounds live, since its transform can change independently.
         if let Some(viewport) = self.field_viewport() {
@@ -189,7 +193,7 @@ impl TextInput {
                 return false;
             }
         }
-        self.base.base.hit_test_point(&position, skip, primary)
+        true
     }
     pub fn raw_text_input(&mut self) -> &mut RawTextInput {
         &mut self.raw_text_input

@@ -7799,6 +7799,143 @@ fn css_zero_sized_viewport_keeps_deferred_offsets_until_it_grows() {
     }
 }
 
+fn check_css_zero_sized_offset_write_order(bound_last: bool) {
+    use crate::source::{
+        animation::keyframe_double::KeyFrameDouble,
+        constraints::scrolling::scroll_constraint::ScrollConstraint, data_bind::data_bind::TWO_WAY,
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    for horizontal in [false, true] {
+        for rtl in [false, true] {
+            for write_path in 0..3 {
+                for initial in [0.0, -100.0] {
+                    let f = css_offset_binding_scene(horizontal, rtl, false, TWO_WAY, 0.0);
+                    let scroll = css_axis_scroll(&f);
+                    let key = if horizontal { 759 } else { 760 };
+                    let source_key =
+                        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into();
+                    let browser = |value| if horizontal && rtl { -value } else { value };
+                    assert!(CoreRegistry::set_double_handle(&scroll, key, initial));
+                    let number = f.bind_number();
+                    f.advance(4);
+                    // A write on one axis must leave the other axis's intent held.
+                    let other_value = if !horizontal && rtl { -60.0 } else { 60.0 };
+                    assert!(ScrollConstraint::set_bound_scroll_offset_occurrence(
+                        &scroll,
+                        other_value,
+                        !horizontal
+                    ));
+                    let write_authored = || {
+                        match write_path {
+                            0 => {
+                                scroll
+                                    .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                                        if horizontal {
+                                            scroll.set_authored_scroll_offset_x(-100.0);
+                                        } else {
+                                            scroll.set_authored_scroll_offset_y(-100.0);
+                                        }
+                                    })
+                                    .unwrap();
+                            }
+                            1 => {
+                                // Native and script writes share the registry path.
+                                assert!(CoreRegistry::set_double_handle(&scroll, key, -100.0));
+                            }
+                            _ => {
+                                let mut frame = KeyFrameDouble::default();
+                                frame.base.set_value_value(-100.0);
+                                assert!(frame.apply(&scroll, key, 1.0, None));
+                            }
+                        }
+                        f.advance(4);
+                    };
+                    let write_bound = || {
+                        assert!(CoreRegistry::set_double_handle(
+                            &number,
+                            source_key,
+                            browser(240.0)
+                        ));
+                        f.advance(4);
+                    };
+                    if bound_last {
+                        write_authored();
+                        write_bound();
+                    } else {
+                        write_bound();
+                        // No authored offset is applied while this write is held.
+                        assert_eq!(CoreRegistry::get_double_handle(&scroll, key), Some(initial));
+                        write_authored();
+                    }
+                    let expected = if bound_last { 240.0 } else { 100.0 };
+                    let state = || {
+                        scroll.with_downcast::<ScrollConstraint, _>(|scroll| {
+                            if horizontal {
+                                (
+                                    scroll.bound_scroll_offset_x(),
+                                    scroll.bound_scroll_offset_y(),
+                                )
+                            } else {
+                                (
+                                    scroll.bound_scroll_offset_y(),
+                                    scroll.bound_scroll_offset_x(),
+                                )
+                            }
+                        })
+                    };
+                    assert_eq!(CoreRegistry::get_double_handle(&scroll, key), Some(-100.0));
+                    assert_eq!(
+                        state(),
+                        Some((browser(expected), other_value)),
+                        "horizontal={horizontal}, rtl={rtl}, path={write_path}, initial={initial}"
+                    );
+                    assert_eq!(
+                        CoreRegistry::get_double_handle(&number, source_key),
+                        Some(browser(expected))
+                    );
+                    for size in [WIDTH, HEIGHT] {
+                        assert!(CoreRegistry::set_double_handle(
+                            &f.record("Viewport"),
+                            size.into(),
+                            100.0
+                        ));
+                    }
+                    f.advance(4);
+                    assert_eq!(
+                        CoreRegistry::get_double_handle(&scroll, key),
+                        Some(-expected),
+                        "horizontal={horizontal}, rtl={rtl}, path={write_path}, initial={initial}"
+                    );
+                    assert_eq!(
+                        scroll.with_downcast::<ScrollConstraint, _>(|scroll| {
+                            if horizontal {
+                                scroll.bound_scroll_offset_x()
+                            } else {
+                                scroll.bound_scroll_offset_y()
+                            }
+                        }),
+                        Some(browser(expected))
+                    );
+                    assert_eq!(
+                        CoreRegistry::get_double_handle(&number, source_key),
+                        Some(browser(expected))
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn css_deferred_offsets_yield_to_newer_authored_writes() {
+    check_css_zero_sized_offset_write_order(false);
+}
+
+#[test]
+fn css_deferred_offsets_replace_earlier_authored_writes() {
+    check_css_zero_sized_offset_write_order(true);
+}
+
 #[test]
 fn css_scroll_mode_ignores_late_virtualize_and_infinite_writes() {
     use crate::source::{

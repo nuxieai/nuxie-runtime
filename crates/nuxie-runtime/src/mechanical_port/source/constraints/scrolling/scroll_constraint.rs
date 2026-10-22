@@ -2565,11 +2565,15 @@ impl ScrollConstraint {
         self.set_authored_scroll_offset_x_with_completion(value, &mut completion);
         completion.finish();
     }
-    fn set_authored_scroll_offset_x_with_completion(
+    pub(crate) fn set_authored_scroll_offset_x_with_completion(
         &mut self,
         value: f32,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
+        // A later write supersedes this axis's held CSS intent, even if equal.
+        if self.has_css_scroll_axis() {
+            self.intent_x.space = ScrollSpace::None;
+        }
         if self.base.set_scroll_offset_x_value(value) {
             self.scroll_offset_x_changed();
             completion.record(self, ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
@@ -2580,11 +2584,15 @@ impl ScrollConstraint {
         self.set_authored_scroll_offset_y_with_completion(value, &mut completion);
         completion.finish();
     }
-    fn set_authored_scroll_offset_y_with_completion(
+    pub(crate) fn set_authored_scroll_offset_y_with_completion(
         &mut self,
         value: f32,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
+        // A later write supersedes this axis's held CSS intent, even if equal.
+        if self.has_css_scroll_axis() {
+            self.intent_y.space = ScrollSpace::None;
+        }
         if self.base.set_scroll_offset_y_value(value) {
             self.scroll_offset_y_changed();
             completion.record(self, ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);

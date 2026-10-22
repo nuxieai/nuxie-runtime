@@ -3356,6 +3356,219 @@ fn css_leaf_row_text_keeps_its_intrinsic_width_before_text_align() {
     }
 }
 
+fn enable_leaf_layout_interpolation(owner: &CoreHandle) {
+    use crate::source::layout::layout_enums::{LayoutAnimationStyle, LayoutStyleInterpolation};
+    owner
+        .with_downcast_mut::<LayoutComponent, _>(|layout| {
+            layout.with_style_mut(|style| {
+                style
+                    .base
+                    .set_animation_style_type_value(LayoutAnimationStyle::Custom as u8);
+                style
+                    .base
+                    .set_interpolation_type_value(LayoutStyleInterpolation::Linear as u8);
+                style.base.set_interpolation_time_value(1.0);
+            });
+        })
+        .unwrap();
+}
+
+fn retarget_css_leaf(f: &super::layout_fit_content_tests::CssTextLeaf, borrowed: bool) {
+    LayoutComponent::sync_style_occurrence(&f.label);
+    LayoutComponent::sync_style_occurrence(&f.root);
+    LayoutComponent::calculate_layout_occurrence(&f.root, f32::NAN, f32::NAN);
+    if borrowed {
+        f.label
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.update_layout_bounds(true);
+            })
+            .unwrap();
+    }
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, true);
+}
+
+fn advance_leaf_layout(owner: &CoreHandle, elapsed: f32, borrowed: bool) {
+    use crate::source::advance_flags::AdvanceFlags;
+    let flags = AdvanceFlags::NEW_FRAME | AdvanceFlags::ANIMATE;
+    if borrowed {
+        owner
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.advance_component(elapsed, flags);
+            })
+            .unwrap();
+    } else {
+        LayoutComponent::advance_component_occurrence(owner, elapsed, flags);
+    }
+}
+
+#[test]
+fn css_leaf_text_width_follows_layout_interpolation() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    for borrowed in [false, true] {
+        let f = CssTextLeaf::new("Hello", &[(WIDTH_KIND, 1)], &[(WIDTH, 100.0)]);
+        f.solve();
+        enable_leaf_layout_interpolation(&f.label);
+        let origin = f.offset();
+        CssTextLeaf::write(&f.record, &[], &[(WIDTH, 200.0)]);
+        retarget_css_leaf(&f, borrowed);
+        near(f.text_size().x, 100.0);
+        // Interpolation evaluates the current clock before advancing it.
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.text_size().x, 150.0);
+        assert_eq!(f.offset(), origin);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.text_size().x, 200.0);
+        assert_eq!(f.offset(), origin);
+    }
+}
+
+#[test]
+fn css_leaf_centered_text_position_follows_layout_interpolation() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    for borrowed in [false, true] {
+        let f = CssTextLeaf::new(
+            "Hello",
+            &[(DISPLAY, 1), (61013, 8), (WIDTH_KIND, 1), (HEIGHT_KIND, 1)],
+            &[(WIDTH, 300.0), (HEIGHT, 100.0)],
+        );
+        let text_height = f.measure(None).y;
+        f.solve();
+        enable_leaf_layout_interpolation(&f.label);
+        let old_top = (100.0 - text_height) / 2.0;
+        let new_top = (200.0 - text_height) / 2.0;
+        near(f.offset().y, old_top);
+        CssTextLeaf::write(&f.record, &[], &[(HEIGHT, 200.0)]);
+        retarget_css_leaf(&f, borrowed);
+        near(f.offset().y, old_top);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.first_line_position().y, (old_top + new_top) / 2.0);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.first_line_position().y, new_top);
+    }
+}
+
+#[test]
+fn css_leaf_text_alignment_interpolates_without_a_box_resize() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    for borrowed in [false, true] {
+        let f = CssTextLeaf::new(
+            "Hello",
+            &[(DISPLAY, 1), (61013, 4), (WIDTH_KIND, 1), (HEIGHT_KIND, 1)],
+            &[(WIDTH, 300.0), (HEIGHT, 100.0)],
+        );
+        let text_height = f.measure(None).y;
+        f.solve();
+        enable_leaf_layout_interpolation(&f.label);
+        CssTextLeaf::write(&f.record, &[(61013, 8)], &[]);
+        retarget_css_leaf(&f, borrowed);
+        near(f.offset().y, 0.0);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.offset().y, (100.0 - text_height) / 4.0);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.offset().y, (100.0 - text_height) / 2.0);
+    }
+}
+
+#[test]
+fn css_leaf_text_layout_retarget_keeps_smoothing_continuous() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    for borrowed in [false, true] {
+        let f = CssTextLeaf::new(
+            "Hello",
+            &[(61017, 5), (WIDTH_KIND, 1), (HEIGHT_KIND, 1)],
+            &[(WIDTH, 100.0), (HEIGHT, 100.0)],
+        );
+        let text_height = f.measure(None).y;
+        f.solve();
+        enable_leaf_layout_interpolation(&f.label);
+        CssTextLeaf::write(&f.record, &[], &[(WIDTH, 200.0), (HEIGHT, 200.0)]);
+        retarget_css_leaf(&f, borrowed);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        for target in [300.0, 400.0] {
+            let size = f.text_size();
+            let offset = f.offset();
+            CssTextLeaf::write(&f.record, &[], &[(WIDTH, target), (HEIGHT, target)]);
+            retarget_css_leaf(&f, borrowed);
+            assert_eq!(f.text_size(), size);
+            assert_eq!(f.offset(), offset);
+            // The second retarget also exercises copying the smoothing data.
+            advance_leaf_layout(&f.label, 0.0, borrowed);
+            near(f.text_size().x, size.x);
+            near(f.offset().y, offset.y);
+            advance_leaf_layout(&f.label, 0.25, borrowed);
+            advance_leaf_layout(&f.label, 0.0, borrowed);
+            let bounds = f
+                .label
+                .with_downcast::<LayoutComponent, _>(|layout| layout.layout_bounds())
+                .unwrap();
+            near(f.text_size().x, bounds.width());
+            near(f.offset().y, (bounds.height() - text_height) / 2.0);
+        }
+        advance_leaf_layout(&f.label, 1.0, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.text_size().x, 400.0);
+        near(f.offset().y, (400.0 - text_height) / 2.0);
+    }
+}
+
+#[test]
+fn translated_leaf_text_keeps_layout_interpolation() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    for borrowed in [false, true] {
+        let f = CssTextLeaf::new("Hello", &[], &[]);
+        f.label
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout
+                    .layout_data
+                    .appliers
+                    .as_mut()
+                    .unwrap()
+                    .retain(|applier| applier != &f.record);
+                layout.with_style_mut(|style| {
+                    style.base.set_intrinsically_sized_value_value(false);
+                    style
+                        .base
+                        .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                    style
+                        .base
+                        .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                    style.base.set_width_units_value_value(YGUnit::Point as u8);
+                    style.base.set_height_units_value_value(YGUnit::Point as u8);
+                });
+                layout.base.set_width_value(100.0);
+                layout.base.set_height_value(100.0);
+            })
+            .unwrap();
+        f.solve();
+        enable_leaf_layout_interpolation(&f.label);
+        f.label
+            .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                layout.base.set_width_value(200.0);
+                layout.base.set_height_value(200.0);
+            })
+            .unwrap();
+        retarget_css_leaf(&f, borrowed);
+        near(f.text_size().x, 100.0);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.text_size().x, 150.0);
+        near(f.text_size().y, 150.0);
+        near(f.offset().x, 0.0);
+        near(f.offset().y, 0.0);
+        advance_leaf_layout(&f.label, 0.5, borrowed);
+        advance_leaf_layout(&f.label, 0.0, borrowed);
+        near(f.text_size().x, 200.0);
+        near(f.text_size().y, 200.0);
+    }
+}
+
 /// Inline content in a block ignores justify-items, while a grid's
 /// anonymous item follows it and a flex item's width stays intrinsic.
 #[test]

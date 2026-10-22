@@ -174,15 +174,21 @@ pub struct LayoutAnimationData {
     pub elapsed_seconds: f32,
     pub from: Layout,
     pub to: Layout,
+    /// Anonymous CSS item endpoints travel with the box through smoothing.
+    pub content_from: Option<Layout>,
+    pub content_to: Option<Layout>,
 }
 impl LayoutAnimationData {
     pub fn interpolate(&self, factor: f32) -> Layout {
         Layout::lerp(self.from, self.to, factor)
     }
+    fn interpolate_content(&self, factor: f32) -> Option<Layout> {
+        self.content_from
+            .zip(self.content_to)
+            .map(|(from, to)| Layout::lerp(from, to, factor))
+    }
     pub fn copy(&mut self, source: &Self) {
-        self.from = source.from;
-        self.to = source.to;
-        self.elapsed_seconds = source.elapsed_seconds;
+        *self = *source;
     }
     pub fn copy_from(&mut self, source: &Self) {
         self.copy(source);
@@ -465,8 +471,12 @@ pub struct LayoutComponent {
     /// CSS mode: the content box size last given to the content layout
     /// resizes, so a padding or border change alone resizes it again.
     propagated_content: Option<Vec2D>,
-    /// The anonymous CSS item's bounds, relative to this box's border box.
+    /// The anonymous CSS item's solved bounds, relative to the border box.
     css_content_layout: Option<Layout>,
+    /// The item's current geometry, including layout interpolation.
+    css_content_current: Option<Layout>,
+    /// An artboard's drawing origin, captured without borrowing its base.
+    css_content_origin: Vec2D,
     /// Authored transform tracks and bindings are fixed at load, even when
     /// their current value is identity.
     css_transform_authored: bool,
@@ -522,6 +532,8 @@ impl Default for LayoutComponent {
             solved_border: [0.0; 4],
             propagated_content: None,
             css_content_layout: None,
+            css_content_current: None,
+            css_content_origin: Vec2D::default(),
             css_transform_authored: false,
             css_effect_state: (false, false),
             scroll_range: Vec2D::default(),
@@ -3093,42 +3105,26 @@ impl LayoutComponent {
         }
     }
     /// A CSS leaf box places its content (text, images, shapes, groups,
-    /// nested artboards) at its anonymous item's solved position. Taffy's
+    /// nested artboards) at its anonymous item's current position. Taffy's
     /// position includes border, padding and container alignment. The
     /// content is authored at (0, 0).
     /// Translated boxes leave content where it was authored, as Rive does,
     /// and so does a box with layout children (docs/CSS_LAYOUT.md, 5).
-    fn place_css_content_occurrence(owner: &CoreHandle) {
-        let Some((offset, children)) = owner
-            .with(|object| {
-                let layout = object.as_layout_component()?;
-                if !layout.is_css_mode() {
-                    return None;
-                }
-                // An artboard draws its background from its origin.
-                let start = object.as_artboard().map_or(Vec2D::default(), |artboard| {
-                    Vec2D::new(
-                        -artboard.layout_width() * artboard.origin_x(),
-                        -artboard.layout_height() * artboard.origin_y(),
-                    )
-                });
-                let offset = if layout.is_leaf() {
-                    let [top, _, _, left] = layout.solved_border;
-                    let padding = layout.solved_padding;
-                    let item = layout.css_content_layout;
-                    Vec2D::new(
-                        start.x + item.map_or(left + padding.left(), |item| item.left()),
-                        start.y + item.map_or(top + padding.top(), |item| item.top()),
-                    )
-                } else {
-                    Vec2D::default()
-                };
-                Some((offset, layout.base.children().to_vec()))
-            })
-            .flatten()
-        else {
-            return;
-        };
+    fn css_content_offset(&self) -> Vec2D {
+        if !self.is_leaf() {
+            return Vec2D::default();
+        }
+        let [top, _, _, left] = self.solved_border;
+        let padding = self.solved_padding;
+        let item = self.current_css_content_layout();
+        Vec2D::new(
+            -self.layout.width() * self.css_content_origin.x
+                + item.map_or(left + padding.left(), |item| item.left()),
+            -self.layout.height() * self.css_content_origin.y
+                + item.map_or(top + padding.top(), |item| item.top()),
+        )
+    }
+    fn set_css_content_offsets(children: Vec<CoreHandle>, offset: Vec2D) -> bool {
         let mut changed = false;
         for child in children {
             // Laid-out children and the box's own foreground paint stay.
@@ -3148,8 +3144,43 @@ impl LayoutComponent {
                 })
                 .unwrap_or(false);
         }
+        changed
+    }
+    fn place_css_content(&mut self) {
+        if self.is_css_mode()
+            && Self::set_css_content_offsets(
+                self.base.children().to_vec(),
+                self.css_content_offset(),
+            )
+        {
+            CoreCapabilities::world_transform_mark_dirty(self);
+        }
+    }
+    fn place_css_content_occurrence(owner: &CoreHandle) {
+        // An artboard draws from its own origin. Capture the origin before
+        // borrowing the LayoutComponent base, including for borrowed advances.
+        let origin = owner
+            .with(|object| {
+                object.as_artboard().map_or(Vec2D::default(), |artboard| {
+                    Vec2D::new(artboard.origin_x(), artboard.origin_y())
+                })
+            })
+            .unwrap_or_default();
+        let Some((offset, children)) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut()?;
+                if !layout.is_css_mode() {
+                    return None;
+                }
+                layout.css_content_origin = origin;
+                Some((layout.css_content_offset(), layout.base.children().to_vec()))
+            })
+            .flatten()
+        else {
+            return;
+        };
         // The content's world transforms follow, as when the box moves.
-        if changed {
+        if Self::set_css_content_offsets(children, offset) {
             owner.with_mut(|object| {
                 if let Some(layout) = object.as_layout_component_mut() {
                     CoreCapabilities::world_transform_mark_dirty(layout);
@@ -3666,7 +3697,7 @@ impl LayoutComponent {
         if !self.is_css_mode() {
             return Vec2D::new(width, height);
         }
-        if let Some(item) = self.css_content_layout {
+        if let Some(item) = self.current_css_content_layout() {
             return Vec2D::new(item.width(), item.height());
         }
         let [top, right, bottom, left] = self.solved_border;
@@ -3676,6 +3707,14 @@ impl LayoutComponent {
             (height - padding.top() - padding.bottom() - top - bottom).max(0.0),
         )
     }
+    fn current_css_content_layout(&self) -> Option<Layout> {
+        if !self.animates() {
+            return self.css_content_layout;
+        }
+        self.css_content_layout
+            .and(self.css_content_current.or(self.css_content_layout))
+    }
+
     // Plain groups contain free content; Solo children still receive the
     // enclosing layout's content size. Provider collection remains separately
     // transparent through both groups and Solos.
@@ -5328,27 +5367,35 @@ impl LayoutComponent {
             Self::update_provider_layout_bounds(&provider, animate);
         }
         let next = self.layout_data.solved_layout;
+        let content_from = self.current_css_content_layout();
+        let content_to = self.css_content_layout;
+        if !animate || !self.animates() {
+            self.css_content_current = content_to;
+        }
         self.layout_padding = self.solved_padding;
         if self.has_layout_flag(LayoutComponentFlags::JustAddedToHost) {
+            self.css_content_current = content_to;
             self.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
             self.layout = next;
             if let Some(data) = self.current_animation_data() {
                 data.from = next;
                 data.to = next;
+                data.content_from = content_to;
+                data.content_to = content_to;
                 data.elapsed_seconds = 0.0;
             }
             self.propagate_size();
+            self.place_css_content();
             CoreCapabilities::world_transform_mark_dirty(self);
             self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
             return;
         }
         if animate && self.animates() {
             let force = self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds);
-            let target = self
-                .current_animation_data()
-                .map(|data| data.to)
-                .unwrap_or(self.layout);
-            if next != target || force {
+            let current = self.current_animation_data().copied();
+            let target = current.map(|data| data.to).unwrap_or(self.layout);
+            let content_target = current.map_or(content_from, |data| data.content_to);
+            if next != target || content_to != content_target || force {
                 self.ensure_animation();
                 let data = self.current_animation_data().unwrap();
                 if data.elapsed_seconds != 0.0 {
@@ -5363,23 +5410,29 @@ impl LayoutComponent {
                 let data = self.current_animation_data().unwrap();
                 data.from = from;
                 data.to = next;
+                data.content_from = content_from;
+                data.content_to = content_to;
                 data.elapsed_seconds = 0.0;
                 self.propagate_size();
                 CoreCapabilities::world_transform_mark_dirty(self);
             }
         } else if next != self.layout
+            || content_from != content_to
             || self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds)
         {
             if self.layout.width() != next.width() || self.layout.height() != next.height() {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
             self.layout = next;
+            self.css_content_current = content_to;
             if let Some(animation) = self.animation.as_mut() {
                 animation.a.to = next;
+                animation.a.content_to = content_to;
             }
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
         }
+        self.place_css_content();
         self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
     }
     fn hosted_layout_roots(provider: &CoreHandle) -> Option<(bool, Vec<i32>)> {
@@ -5443,13 +5496,18 @@ impl LayoutComponent {
         for (_, provider) in Self::layout_providers_occurrence(owner) {
             Self::update_provider_layout_bounds(&provider, animate);
         }
-        let (next, old, just_added, animates, force, current) = owner
+        let (next, old, content_from, content_to, just_added, animates, force, current) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
+                if !animate || !layout.animates() {
+                    layout.css_content_current = layout.css_content_layout;
+                }
                 layout.layout_padding = layout.solved_padding;
                 (
                     layout.layout_data.solved_layout,
                     layout.layout,
+                    layout.current_css_content_layout(),
+                    layout.css_content_layout,
                     layout.has_layout_flag(LayoutComponentFlags::JustAddedToHost),
                     layout.animates(),
                     layout.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds),
@@ -5463,17 +5521,23 @@ impl LayoutComponent {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
                 layout.layout = next;
+                layout.css_content_current = content_to;
                 if let Some(data) = layout.current_animation_data() {
                     *data = LayoutAnimationData {
                         from: next,
                         to: next,
+                        content_from: content_to,
+                        content_to,
                         elapsed_seconds: 0.0,
                     };
                 }
             });
             changed = true;
         } else if animate && animates {
-            if next != current.map(|data| data.to).unwrap_or(old) || force {
+            if next != current.map(|data| data.to).unwrap_or(old)
+                || content_to != current.map_or(content_from, |data| data.content_to)
+                || force
+            {
                 owner.with_mut(|object| {
                     let layout = object.as_layout_component_mut().unwrap();
                     layout.ensure_animation();
@@ -5489,20 +5553,24 @@ impl LayoutComponent {
                     *layout.current_animation_data().unwrap() = LayoutAnimationData {
                         from: old,
                         to: next,
+                        content_from,
+                        content_to,
                         elapsed_seconds: 0.0,
                     };
                 });
                 changed = true;
             }
-        } else if next != old || force {
+        } else if next != old || content_from != content_to || force {
             if next.width() != old.width() || next.height() != old.height() {
                 owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
             }
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout = next;
+                layout.css_content_current = content_to;
                 if let Some(animation) = layout.animation.as_mut() {
                     animation.a.to = next;
+                    animation.a.content_to = content_to;
                 }
             });
             changed = true;
@@ -5645,7 +5713,10 @@ impl LayoutComponent {
         let Some(data) = layout.current_animation_data().copied() else {
             return false;
         };
-        animate && layout.animates() && layout.style.is_some() && data.to != target
+        animate
+            && layout.animates()
+            && layout.style.is_some()
+            && (data.to != target || data.content_to != layout.current_css_content_layout())
     }
 
     pub fn apply_interpolation_occurrence(owner: &CoreHandle, elapsed: f32, animate: bool) -> bool {
@@ -5691,6 +5762,8 @@ impl LayoutComponent {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.animation.as_mut().unwrap().b.from =
                     layout.animation.as_mut().unwrap().a.interpolate(f);
+                layout.animation.as_mut().unwrap().b.content_from =
+                    layout.animation.as_ref().unwrap().a.interpolate_content(f);
                 if f == 1.0 {
                     layout.animation.as_mut().unwrap().a = layout.animation.as_mut().unwrap().b;
                     layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
@@ -5716,6 +5789,7 @@ impl LayoutComponent {
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout = data.to;
+                layout.css_content_current = data.content_to;
                 if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
                     layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                     layout.animation.as_mut().unwrap().a = layout.animation.as_mut().unwrap().b;
@@ -5724,6 +5798,7 @@ impl LayoutComponent {
                 layout.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
             });
             Self::propagate_size_occurrence(owner);
+            Self::place_css_content_occurrence(owner);
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
                 owner.clone(),
             )
@@ -5732,10 +5807,24 @@ impl LayoutComponent {
         }
         let f = factor(data.elapsed_seconds);
         let current = data.interpolate(f);
-        if current != old {
+        let content = data.interpolate_content(f);
+        let content_changed = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .unwrap()
+                    .current_css_content_layout()
+                    != content
+            })
+            .unwrap_or(false);
+        if current != old || content_changed {
             let resized = old.width() != current.width() || old.height() != current.height();
-            owner.with_mut(|object| object.as_layout_component_mut().unwrap().layout = current);
-            if resized {
+            owner.with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.layout = current;
+                layout.css_content_current = content;
+            });
+            if resized || content_changed {
                 Self::propagate_size_occurrence(owner);
             }
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
@@ -5743,6 +5832,7 @@ impl LayoutComponent {
             )
             .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
         }
+        Self::place_css_content_occurrence(owner);
         owner.with_mut(|object| {
             object
                 .as_layout_component_mut()
@@ -5770,14 +5860,16 @@ impl LayoutComponent {
                 if !layout.animates() {
                     return false;
                 }
-                if let Some(data) = layout.current_animation_data() {
+                if let Some(data) = layout.current_animation_data().copied() {
                     layout.layout = data.to;
+                    layout.css_content_current = data.content_to;
                 }
                 true
             })
             .unwrap_or(false);
         if changed {
             Self::propagate_size_occurrence(owner);
+            Self::place_css_content_occurrence(owner);
         }
     }
 
@@ -5884,10 +5976,15 @@ impl LayoutComponent {
         })
     }
     fn ensure_animation(&mut self) -> &mut LayoutAnimation {
+        let content = self
+            .css_content_layout
+            .and(self.css_content_current.or(self.css_content_layout));
         self.animation.get_or_insert_with(|| {
             let data = LayoutAnimationData {
                 from: self.layout,
                 to: self.layout,
+                content_from: content,
+                content_to: content,
                 elapsed_seconds: 0.0,
             };
             Box::new(LayoutAnimation {
@@ -5904,7 +6001,11 @@ impl LayoutComponent {
         let Some(data) = self.current_animation_data().copied() else {
             return false;
         };
-        if !animate || !self.animates() || self.style.is_none() || data.to == target {
+        if !animate
+            || !self.animates()
+            || self.style.is_none()
+            || (data.to == target && data.content_to == self.current_css_content_layout())
+        {
             return false;
         }
         let transform_factor = |layout: &Self, seconds: f32| {
@@ -5929,6 +6030,12 @@ impl LayoutComponent {
             let factor = transform_factor(self, self.animation.as_ref().unwrap().a.elapsed_seconds);
             self.animation.as_mut().unwrap().b.from =
                 self.animation.as_mut().unwrap().a.interpolate(factor);
+            self.animation.as_mut().unwrap().b.content_from = self
+                .animation
+                .as_ref()
+                .unwrap()
+                .a
+                .interpolate_content(factor);
             if factor == 1.0 {
                 self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
                 self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
@@ -5942,6 +6049,7 @@ impl LayoutComponent {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
             self.layout = data.to;
+            self.css_content_current = data.content_to;
             if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
                 self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                 self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
@@ -5949,20 +6057,25 @@ impl LayoutComponent {
             }
             self.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
             self.propagate_size();
+            self.place_css_content();
             CoreCapabilities::world_transform_mark_dirty(self);
             return false;
         }
         let factor = transform_factor(self, data.elapsed_seconds);
-        let current = self.current_animation_data().unwrap().interpolate(factor);
-        if self.layout != current {
+        let current = data.interpolate(factor);
+        let content = data.interpolate_content(factor);
+        let content_changed = self.current_css_content_layout() != content;
+        if self.layout != current || content_changed {
             let resized =
                 self.layout.width() != current.width() || self.layout.height() != current.height();
             self.layout = current;
-            if resized {
+            self.css_content_current = content;
+            if resized || content_changed {
                 self.propagate_size();
             }
             CoreCapabilities::world_transform_mark_dirty(self);
         }
+        self.place_css_content();
         self.current_animation_data().unwrap().elapsed_seconds += elapsed;
         if factor != 1.0 {
             if self.is_artboard() {
@@ -5983,7 +6096,10 @@ impl LayoutComponent {
         } else {
             &animation.a
         };
-        if self.is_collapsed() || !self.animates() || self.style.is_none() || data.to == self.layout
+        if self.is_collapsed()
+            || !self.animates()
+            || self.style.is_none()
+            || (data.to == self.layout && data.content_to == self.current_css_content_layout())
         {
             QuietState::Quiet
         } else {
@@ -6002,10 +6118,12 @@ impl LayoutComponent {
     }
     pub fn interrupt_animation(&mut self) {
         if self.animates() {
-            if let Some(data) = self.current_animation_data() {
+            if let Some(data) = self.current_animation_data().copied() {
                 self.layout = data.to;
+                self.css_content_current = data.content_to;
             }
             self.propagate_size();
+            self.place_css_content();
         }
     }
     /// Only this box's layout data, for an owner that marks its artboard

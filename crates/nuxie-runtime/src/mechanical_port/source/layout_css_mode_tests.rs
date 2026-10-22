@@ -3408,6 +3408,76 @@ fn css_leaf_grid_item_size_changes_propagate_without_a_box_resize() {
     }
 }
 
+#[test]
+fn css_leaf_grid_item_snap_survives_an_animated_advance() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    use crate::source::layout::layout_enums::LayoutStyleInterpolation;
+    const JUSTIFY_ITEMS: u16 = 61015;
+    for borrowed in [false, true] {
+        for in_flight in [false, true] {
+            let f = CssTextLeaf::new(
+                "Hello",
+                &[
+                    (DISPLAY, 2),
+                    (JUSTIFY_ITEMS, 10),
+                    (WIDTH_KIND, 1),
+                    (HEIGHT_KIND, 1),
+                ],
+                &[(WIDTH, 300.0), (HEIGHT, 100.0)],
+            );
+            let line = f.measure(None).x;
+            let outer = f.solve();
+            enable_leaf_layout_interpolation(&f.label);
+            f.label
+                .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                    layout.set_inherited_interpolation(LayoutStyleInterpolation::Linear, None, 1.0);
+                })
+                .unwrap();
+            if in_flight {
+                CssTextLeaf::write(&f.record, &[(JUSTIFY_ITEMS, 8)], &[]);
+                retarget_css_leaf(&f, borrowed);
+                advance_leaf_layout(&f.label, 0.5, borrowed);
+                advance_leaf_layout(&f.label, 0.0, borrowed);
+                near(f.text_size().x, (300.0 + line) / 2.0);
+            }
+            // Snap an item-only change with either an idle animation record
+            // or a clock already in flight. Later advances must not undo it.
+            let alignments = if in_flight { [10, 8] } else { [8, 10] };
+            for justify in alignments {
+                CssTextLeaf::write(&f.record, &[(JUSTIFY_ITEMS, justify)], &[]);
+                LayoutComponent::sync_style_occurrence(&f.label);
+                LayoutComponent::calculate_layout_occurrence(&f.root, f32::NAN, f32::NAN);
+                if borrowed {
+                    f.label
+                        .with_downcast_mut::<LayoutComponent, _>(|layout| {
+                            layout.update_layout_bounds(false);
+                        })
+                        .unwrap();
+                } else {
+                    LayoutComponent::update_layout_bounds_occurrence(&f.label, false);
+                }
+                let expected_width = if justify == 8 { line } else { 300.0 };
+                let expected_left = (300.0 - expected_width) / 2.0;
+                near(f.text_size().x, expected_width);
+                near(f.offset().x, expected_left);
+                for elapsed in [0.0, 0.5, 0.0, 1.0, 0.0] {
+                    advance_leaf_layout(&f.label, elapsed, borrowed);
+                    near(f.text_size().x, expected_width);
+                    near(f.offset().x, expected_left);
+                }
+                assert_eq!(
+                    f.label
+                        .with_downcast::<LayoutComponent, _>(|layout| {
+                            layout.layout_data.solved_layout
+                        })
+                        .unwrap(),
+                    outer
+                );
+            }
+        }
+    }
+}
+
 fn enable_leaf_layout_interpolation(owner: &CoreHandle) {
     use crate::source::layout::layout_enums::{LayoutAnimationStyle, LayoutStyleInterpolation};
     owner

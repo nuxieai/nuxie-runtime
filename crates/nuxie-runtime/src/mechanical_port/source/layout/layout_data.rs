@@ -15,6 +15,9 @@ pub struct LayoutData {
     /// root's Taffy tree receives a copy only when it changes.
     style: Style,
     pub solved_layout: Layout,
+    /// Taffy's pending item result. Bounds updates commit it with the box
+    /// once the caller has chosen whether this layout should animate.
+    pub(crate) solved_content_layout: Option<Layout>,
     pub has_new_layout: bool,
     /// Queued for the owning layout tree since its last solve.
     queued: bool,
@@ -35,6 +38,7 @@ impl Default for LayoutData {
             style,
             // Positions are zero and dimensions undefined until the first solve.
             solved_layout: Layout::new(0.0, 0.0, f32::NAN, f32::NAN),
+            solved_content_layout: None,
             has_new_layout: true,
             queued: false,
             invalidated: false,

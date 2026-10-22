@@ -3356,6 +3356,55 @@ fn css_leaf_row_text_keeps_its_intrinsic_width_before_text_align() {
     }
 }
 
+/// Inline content in a block ignores justify-items, while a grid's
+/// anonymous item follows it and a flex item's width stays intrinsic.
+#[test]
+fn css_leaf_text_justify_items_applies_only_to_grid() {
+    use super::layout_fit_content_tests::{CssTextLeaf, near};
+    use crate::source::text::text::Text;
+    const JUSTIFY_ITEMS: u16 = 61015;
+    for (display, justify) in [(0, 8), (0, 3), (4, 8), (1, 8), (2, 8), (0, 0)] {
+        let f = CssTextLeaf::new(
+            "Hello",
+            &[
+                (DISPLAY, display),
+                (JUSTIFY_ITEMS, justify),
+                (WIDTH_KIND, 1),
+            ],
+            &[(WIDTH, 300.0)],
+        );
+        let line = f.measure(None).x;
+        assert!(line > 0.0 && line < 300.0);
+        let block = matches!(display, 0 | 4);
+        for centered_text in [false, true] {
+            f.text
+                .with_downcast_mut::<Text, _>(|text| {
+                    text.base
+                        .set_align_value_value(if centered_text { 2 } else { 0 });
+                })
+                .unwrap();
+            f.solve();
+            near(f.text_size().x, if block { 300.0 } else { line });
+            near(
+                f.offset().x,
+                if display == 2 {
+                    (300.0 - line) / 2.0
+                } else {
+                    0.0
+                },
+            );
+            near(
+                f.first_line_position().x,
+                if display == 2 || (block && centered_text) {
+                    (300.0 - line) / 2.0
+                } else {
+                    0.0
+                },
+            );
+        }
+    }
+}
+
 #[test]
 fn translated_leaf_text_keeps_its_authored_position_and_box_size() {
     use super::layout_fit_content_tests::{CssTextLeaf, near};

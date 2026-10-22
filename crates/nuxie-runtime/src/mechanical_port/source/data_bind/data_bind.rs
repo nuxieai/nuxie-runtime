@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::{CoreArena, CoreHandle},
     data_bind::data_bind_container::DataBindContainerOwner,
     data_bind::data_values::data_type::DataType,
@@ -773,6 +774,17 @@ impl DataBind {
             return false;
         };
         let key = self.base.property_key() as u16;
+        if matches!(
+            key,
+            ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY
+        ) && target
+            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::has_css_scroll_axis)
+            .unwrap_or(false)
+        {
+            // CSS offsets also change when layout changes their clamped range.
+            return false;
+        }
         if matches!(
             key,
             SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY

@@ -17,6 +17,7 @@ pub mod test_support;
 #[cfg(feature = "test-support")]
 extern crate self as nuxie_runtime;
 
+pub mod css_text;
 pub mod text_decoration;
 pub mod utils;
 pub mod video;
@@ -28,6 +29,7 @@ pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObjec
     match type_key {
         60000 => Some(Box::new(video::VideoAsset::default())),
         60001 => Some(Box::new(video::Video::default())),
+        61005 => Some(Box::new(css_text::TextStyleCssText::default())),
         60002 => Some(Box::new(text_decoration::TextStyleDecoration::default())),
         _ => css_layout::make_core(type_key)
             .or_else(|| source::generated::core_registry::CoreRegistry::make_core_box(type_key)),

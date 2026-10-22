@@ -54,7 +54,7 @@ impl Participant {
             &text.lines,
             &text.ordered_lines,
             &self.lookup,
-            self.source.len() as u32,
+            text.styled_text.unichars().len() as u32,
         )
     }
 }
@@ -107,6 +107,14 @@ impl Drop for TextSelectionController {
             });
         }
     }
+}
+
+fn source_position(text: &Text, display: CursorPosition) -> CursorPosition {
+    CursorPosition::new(
+        display.line_index(),
+        text.styled_text
+            .display_to_source(display.code_point_index()),
+    )
 }
 
 fn finite(p: Vec2D) -> bool {
@@ -230,7 +238,7 @@ impl TextSelectionController {
                 text: text.clone(),
                 id,
                 separator_before: separator_before.into(),
-                source: value.styled_text.unichars().to_vec(),
+                source: value.styled_text.source_unichars().to_vec(),
                 lookup: GlyphLookup::default(),
                 cursor: Cursor::zero(),
                 rects: Vec::new(),
@@ -403,12 +411,14 @@ impl TextSelectionController {
                     let distance = delta.x * delta.x + delta.y * delta.y;
                     if distance < *distance_squared {
                         *distance_squared = distance;
-                        *offset = CursorPosition::from_line_x(
-                            index as u32,
-                            local.x,
-                            &state.participants[i].layout(text),
-                        )
-                        .code_point_index();
+                        *offset = text.styled_text.display_to_source(
+                            CursorPosition::from_line_x(
+                                index as u32,
+                                local.x,
+                                &state.participants[i].layout(text),
+                            )
+                            .code_point_index(),
+                        );
                         found = true;
                     }
                 }
@@ -619,9 +629,9 @@ impl SelectionState {
             return;
         };
         if shape_changed {
-            if self.participants[i].source != text.styled_text.unichars() {
+            if self.participants[i].source != text.styled_text.source_unichars() {
                 self.clear();
-                self.participants[i].source = text.styled_text.unichars().to_vec();
+                self.participants[i].source = text.styled_text.source_unichars().to_vec();
             }
             self.participants[i].lookup_dirty = true;
         }
@@ -647,9 +657,9 @@ impl SelectionState {
                 }
                 Some(Endpoint {
                     participant: i,
-                    position: CursorPosition::from_translation(
-                        local,
-                        &self.participants[i].layout(text),
+                    position: source_position(
+                        text,
+                        CursorPosition::from_translation(local, &self.participants[i].layout(text)),
                     ),
                 })
             })
@@ -688,10 +698,13 @@ impl SelectionState {
                         best = distance;
                         result = Some(Endpoint {
                             participant: i,
-                            position: CursorPosition::from_line_x(
-                                line_index as u32,
-                                local.x,
-                                &self.participants[i].layout(text),
+                            position: source_position(
+                                text,
+                                CursorPosition::from_line_x(
+                                    line_index as u32,
+                                    local.x,
+                                    &self.participants[i].layout(text),
+                                ),
                             ),
                         });
                     }
@@ -730,12 +743,26 @@ impl SelectionState {
         self.dragging = false;
         self.anchor = anchor.with_downcast::<Text, _>(|text| Endpoint {
             participant: a,
-            position: CursorPosition::at_index(anchor_offset, &self.participants[a].layout(text)),
+            position: CursorPosition::new(
+                CursorPosition::at_index(
+                    text.styled_text.source_to_display(anchor_offset),
+                    &self.participants[a].layout(text),
+                )
+                .line_index(),
+                anchor_offset.min(self.participants[a].source.len() as u32),
+            ),
         });
         self.external_ranges = false;
         self.extent = extent.with_downcast::<Text, _>(|text| Endpoint {
             participant: e,
-            position: CursorPosition::at_index(extent_offset, &self.participants[e].layout(text)),
+            position: CursorPosition::new(
+                CursorPosition::at_index(
+                    text.styled_text.source_to_display(extent_offset),
+                    &self.participants[e].layout(text),
+                )
+                .line_index(),
+                extent_offset.min(self.participants[e].source.len() as u32),
+            ),
         });
         self.update_ranges();
         true
@@ -865,8 +892,12 @@ impl SelectionState {
         let p = &mut self.participants[i];
         if p.geometry_dirty || p.radius != radius {
             p.rects.clear();
-            let first = p.cursor.first().code_point_index();
-            let last = p.cursor.last().code_point_index();
+            let first = text
+                .styled_text
+                .source_to_display(p.cursor.first().code_point_index());
+            let last = text
+                .styled_text
+                .source_to_display(p.cursor.last().code_point_index());
             // Build the lookup before borrowing its sibling rectangle buffer.
             p.layout(text);
             let view = TextLayoutView::new(
@@ -874,7 +905,7 @@ impl SelectionState {
                 &text.lines,
                 &text.ordered_lines,
                 &p.lookup,
-                p.source.len() as u32,
+                text.styled_text.unichars().len() as u32,
             );
             if !view.ordered_lines().is_empty() {
                 Cursor::new(

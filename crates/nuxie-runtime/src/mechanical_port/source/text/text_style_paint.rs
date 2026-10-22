@@ -77,6 +77,7 @@ pub struct TextStylePaint {
     background: Option<CoreHandle>,
     /// Nuxie addition: the style's `TextStyleDecoration`, when it has one.
     decoration: Option<CoreHandle>,
+    css_text: Option<CoreHandle>,
 }
 impl TextStylePaint {
     pub fn new() -> Self {
@@ -89,6 +90,7 @@ impl TextStylePaint {
             has_contents: false,
             background: None,
             decoration: None,
+            css_text: None,
         }
     }
     pub fn rewind_path(&mut self) {
@@ -107,6 +109,12 @@ impl TextStylePaint {
     }
     pub fn set_decoration(&mut self, decoration: CoreHandle) {
         self.decoration = Some(decoration);
+    }
+    pub fn css_text(&self) -> Option<CoreHandle> {
+        self.css_text.clone()
+    }
+    pub fn set_css_text(&mut self, record: CoreHandle) {
+        self.css_text = Some(record);
     }
     pub fn add_path(&mut self, raw: &RawPath, opacity: f32) -> bool {
         let had = self.has_contents;

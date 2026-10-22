@@ -15,15 +15,32 @@ pub struct FullyShapedText {
     ellipsis_run: GlyphRun,
     bounds: Aabb,
     vertical_offset: f32,
+    text_length: Option<u32>,
 }
 impl FullyShapedText {
+    pub(crate) fn from_text(text: &Text) -> Self {
+        let mut result = Self {
+            paragraphs: text.shape.clone(),
+            paragraph_lines: text.lines.clone(),
+            ordered_lines: text.ordered_lines.clone(),
+            bounds: text.local_bounds(),
+            text_length: Some(text.styled_text.unichars().len() as u32),
+            ..Self::default()
+        };
+        result
+            .glyph_lookup
+            .compute(text.styled_text.unichars(), &result.paragraphs);
+        result
+    }
+
     pub fn layout_view(&self) -> super::text_layout_view::TextLayoutView<'_> {
         super::text_layout_view::TextLayoutView::new(
             &self.paragraphs,
             &self.paragraph_lines,
             &self.ordered_lines,
             &self.glyph_lookup,
-            self.glyph_lookup.last_code_point_index().saturating_sub(1),
+            self.text_length
+                .unwrap_or_else(|| self.glyph_lookup.last_code_point_index().saturating_sub(1)),
         )
     }
     pub fn vertical_offset(&self) -> f32 {
@@ -97,6 +114,7 @@ impl FullyShapedText {
         vertical_alignment: VerticalTextAlign,
         align_height: f32,
     ) {
+        self.text_length = None;
         self.vertical_offset = 0.0;
         self.paragraphs = runs[0]
             .font

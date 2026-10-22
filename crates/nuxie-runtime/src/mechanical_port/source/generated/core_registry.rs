@@ -9183,6 +9183,19 @@ impl CoreRegistry {
         value: u32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        if crate::css_text::is_property(property_key)
+            && let Some(record) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::css_text::TextStyleCssText>()
+        {
+            if record.set_property(property_key as u16, value) {
+                completion.record(
+                    crate::source::core::CoreObject::core(record),
+                    property_key as u16,
+                );
+            }
+            return;
+        }
         // Nuxie TextStyleDecoration.line: rebuilds the owning Text and tells
         // the property's observers, as the generated setters do.
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
@@ -9892,6 +9905,13 @@ impl CoreRegistry {
         object.get_uint(field)
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
+        if crate::css_text::is_property(property_key)
+            && let Some(record) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::css_text::TextStyleCssText>()
+        {
+            return record.property(property_key as u16);
+        }
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY)
             && let Some(decoration) = object
                 .as_registry_any_mut()
@@ -10710,6 +10730,9 @@ impl CoreRegistry {
     pub fn property_field_id(property_key: i32) -> i32 {
         if let Some(field) = crate::video::properties::field_id(property_key) {
             return field;
+        }
+        if crate::css_text::is_property(property_key) {
+            return 0;
         }
         // Nuxie TextStyleDecoration.line is a uint.
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
@@ -12048,6 +12071,11 @@ impl CoreRegistry {
         }
         if crate::video::properties::field_id(property_key as i32).is_some() {
             return object.as_registry_any().is::<crate::video::Video>();
+        }
+        if crate::css_text::is_property(property_key as i32) {
+            return object
+                .as_registry_any()
+                .is::<crate::css_text::TextStyleCssText>();
         }
         // Nuxie TextStyleDecoration.line, so keyed and host writes reach it.
         if property_key == u32::from(crate::text_decoration::LINE_PROPERTY_KEY) {

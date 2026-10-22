@@ -15,8 +15,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // then: AngularGradient, DataConverterStringTemplate, StringTemplateArgument
     // with its Number and String kinds, and TextStyleDecoration. CSS layout
     // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
-    // (61000 to 61004, docs/CSS_LAYOUT.md).
-    assert_eq!(DEFINITIONS.len(), 369);
+    // (61000 to 61005, including TextStyleCssText, docs/CSS_LAYOUT.md).
+    assert_eq!(DEFINITIONS.len(), 370);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -45,10 +45,10 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // (487) from upstream's artboard paint sources; LinearGradient's
     // transform (1103 to 1107) from upstream's angular gradients; Video's
     // paused, position, duration, ended, state and drawnByScript (60016 to
-    // 60021); and TextStyleDecoration's line (60022). CSS layout adds 104
-    // (61000 to 61103): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
-    // BoxBorder's 2 and BoxShadow's 1.
-    assert_eq!(runtime_property_count, 796);
+    // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 106
+    // (61000 to 61105): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
+    // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
+    assert_eq!(runtime_property_count, 798);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -82,8 +82,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .count();
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
-    // layout's 104.
-    assert_eq!(described_property_count, 579);
+    // layout's 104 and CSS text's 2.
+    assert_eq!(described_property_count, 581);
 }
 
 #[test]
@@ -1255,4 +1255,27 @@ fn json_bitmask_passthrough(json: &Value) -> Option<(&str, u8, u8)> {
         u8::try_from(json_u64(json, "passthroughBitWidth").unwrap_or(1))
             .expect("passthroughBitWidth fits u8"),
     ))
+}
+
+#[test]
+fn css_text_definition_has_bindable_non_animating_uint8_properties() {
+    let definition = definition_by_type_key(61005).unwrap();
+    assert_eq!(definition.name, "TextStyleCssText");
+    assert_eq!(definition.runtime_parent, Some("Component"));
+    for (key, name) in [(61104, "textTransform"), (61105, "whiteSpace")] {
+        let property = definition.property_by_key(key).unwrap();
+        assert_eq!(property.name, name);
+        assert_eq!(property.uint_storage(), Some(UintStorage::Uint8));
+        assert_eq!(
+            property.stored_field_initializer(),
+            Some(StoredFieldInitializer::Uint(0))
+        );
+        assert!(property.bindable);
+        assert!(!property.animates);
+        assert!(object_supports_property(61005, key));
+        assert_eq!(
+            core_registry_field_kind_by_property_key(key),
+            Some(CoreRegistryFieldKind::Uint)
+        );
+    }
 }

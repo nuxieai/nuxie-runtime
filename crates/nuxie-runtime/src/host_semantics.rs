@@ -1377,6 +1377,7 @@ impl ArtboardInstance {
 
 struct TextQuery {
     value: String,
+    indices: Option<crate::css_text::TextIndexMap>,
     shape: FullyShapedText,
     world: NativeMat2D,
 }
@@ -1396,6 +1397,19 @@ fn build_text_query(handle: &CoreHandle) -> Option<TextQuery> {
                 || !text.base.paragraph_spacing().is_finite()
             {
                 return None;
+            }
+            if let Some(shape) = text.css_selection_shape() {
+                let styled = text.styled_text();
+                return Some(TextQuery {
+                    value: styled
+                        .source_unichars()
+                        .iter()
+                        .map(|&cp| char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER))
+                        .collect(),
+                    indices: styled.css_indices().cloned(),
+                    shape,
+                    world,
+                });
             }
             let mut styled = StyledText::default();
             if !text.make_styled(&mut styled, true, 1.0) {
@@ -1446,6 +1460,7 @@ fn build_text_query(handle: &CoreHandle) -> Option<TextQuery> {
             }
             Some(TextQuery {
                 value,
+                indices: None,
                 shape,
                 world,
             })
@@ -1474,6 +1489,10 @@ impl ArtboardInstance {
         self.update_components();
         let query = build_text_query(&self.object_handle(local_id)?)?;
         let code_point = byte_to_code_point(&query.value, byte_offset)?;
+        let code_point = query
+            .indices
+            .as_ref()
+            .map_or(code_point, |map| map.to_display(code_point));
         let position = CursorPosition::at_index(code_point, &query.shape.layout_view());
         let visual = position.visual_position(&query.shape.layout_view());
         if !visual.found() {
@@ -1508,7 +1527,15 @@ impl ArtboardInstance {
             return None;
         }
         let position = CursorPosition::from_translation(local, &query.shape.layout_view());
-        code_point_to_byte(&query.value, position.code_point_index())
+        code_point_to_byte(
+            &query.value,
+            query
+                .indices
+                .as_ref()
+                .map_or(position.code_point_index(), |map| {
+                    map.to_source(position.code_point_index())
+                }),
+        )
     }
 
     pub fn text_selection_rects(&mut self, local_id: usize, range: Range<usize>) -> Vec<Aabb> {
@@ -1529,6 +1556,14 @@ impl ArtboardInstance {
         let Some(end) = byte_to_code_point(&query.value, range.end) else {
             return Vec::new();
         };
+        let start = query
+            .indices
+            .as_ref()
+            .map_or(start, |map| map.to_display(start));
+        let end = query
+            .indices
+            .as_ref()
+            .map_or(end, |map| map.to_display(end));
         let mut cursor = Cursor::new(
             CursorPosition::unresolved(start),
             CursorPosition::unresolved(end),

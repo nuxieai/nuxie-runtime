@@ -1,0 +1,31 @@
+{
+  "name": "TextStyleCssText",
+  "key": {
+    "int": 61005,
+    "string": "textstylecsstext"
+  },
+  "extends": "component.json",
+  "description": "CSS text processing on the parent TextStylePaint. Applies only to text owned by a CSS box; source strings stay unchanged.",
+  "properties": {
+    "textTransform": {
+      "type": "uint8",
+      "key": {
+        "int": 61104
+      },
+      "initialValue": "0",
+      "description": "CSS text-transform: 0 none, 1 uppercase, 2 lowercase, 3 capitalize. Uses Unicode default case mapping without language tailoring.",
+      "bindable": true,
+      "animates": false
+    },
+    "whiteSpace": {
+      "type": "uint8",
+      "key": {
+        "int": 61105
+      },
+      "initialValue": "0",
+      "description": "CSS white-space: 0 normal, 1 pre, 2 pre-wrap, 3 pre-line, 4 nowrap. Controls collapsing only; Text.wrap controls wrapping.",
+      "bindable": true,
+      "animates": false
+    }
+  }
+}

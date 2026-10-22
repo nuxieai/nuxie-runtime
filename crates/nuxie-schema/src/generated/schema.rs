@@ -376,6 +376,7 @@ pub enum ObjectKind {
     BoxGradient,
     BoxShadow,
     BoxPaint,
+    TextStyleCssText,
 }
 
 impl ObjectKind {
@@ -750,6 +751,7 @@ impl ObjectKind {
             Self::BoxGradient => &DEFINITIONS[366],
             Self::BoxShadow => &DEFINITIONS[367],
             Self::BoxPaint => &DEFINITIONS[368],
+            Self::TextStyleCssText => &DEFINITIONS[369],
         }
     }
 
@@ -1133,6 +1135,7 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         61002 => Some(ObjectKind::BoxGradient),
         61003 => Some(ObjectKind::BoxShadow),
         61004 => Some(ObjectKind::BoxPaint),
+        61005 => Some(ObjectKind::TextStyleCssText),
         _ => None,
     }
 }
@@ -1512,6 +1515,7 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "BoxGradient" => Some(&DEFINITIONS[366]),
         "BoxShadow" => Some(&DEFINITIONS[367]),
         "BoxPaint" => Some(&DEFINITIONS[368]),
+        "TextStyleCssText" => Some(&DEFINITIONS[369]),
         _ => None,
     }
 }
@@ -2414,6 +2418,8 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         61101 => Some(CoreRegistryFieldKind::Double),
         61102 => Some(CoreRegistryFieldKind::Double),
         61103 => Some(CoreRegistryFieldKind::Uint),
+        61104 => Some(CoreRegistryFieldKind::Uint),
+        61105 => Some(CoreRegistryFieldKind::Uint),
         _ => None,
     }
 }
@@ -3219,6 +3225,8 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         61101 => Some(FieldKind::Double),
         61102 => Some(FieldKind::Double),
         61103 => Some(FieldKind::Uint),
+        61104 => Some(FieldKind::Uint),
+        61105 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -4011,6 +4019,8 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         61101 => Some(FieldKind::Double),
         61102 => Some(FieldKind::Double),
         61103 => Some(FieldKind::Uint),
+        61104 => Some(FieldKind::Uint),
+        61105 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -34923,6 +34933,87 @@ static DEF_368_PROPERTIES: &[Property] = &[
     },
 ];
 
+static DEF_369_ANCESTORS: &[&str] = &["Component"];
+
+static DEF_369_PROPERTIES: &[Property] = &[
+    Property {
+        name: "textTransform",
+        key: Key {
+            int: 61104,
+            name: "textTransform",
+        },
+        alternates: &[],
+        declared_type: "uint8",
+        runtime_type: FieldKind::Uint,
+        description: Some(
+            "CSS text-transform: 0 none, 1 uppercase, 2 lowercase, 3 capitalize. Uses Unicode default case mapping without language tailoring.",
+        ),
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        sidecar: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: true,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "whiteSpace",
+        key: Key {
+            int: 61105,
+            name: "whiteSpace",
+        },
+        alternates: &[],
+        declared_type: "uint8",
+        runtime_type: FieldKind::Uint,
+        description: Some(
+            "CSS white-space: 0 normal, 1 pre, 2 pre-wrap, 3 pre-line, 4 nowrap. Controls collapsing only; Text.wrap controls wrapping.",
+        ),
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        sidecar: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: true,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+];
+
 static MIXIN_0_PROPERTIES: &[Property] = &[
     Property {
         name: "colorRed",
@@ -37443,6 +37534,10 @@ pub fn property_by_key_in_hierarchy(
         (61004, 61098) => Some(("BoxPaint", &DEF_368_PROPERTIES[1])),
         (61004, 61101) => Some(("BoxPaint", &DEF_368_PROPERTIES[2])),
         (61004, 61102) => Some(("BoxPaint", &DEF_368_PROPERTIES[3])),
+        (61005, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (61005, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (61005, 61104) => Some(("TextStyleCssText", &DEF_369_PROPERTIES[0])),
+        (61005, 61105) => Some(("TextStyleCssText", &DEF_369_PROPERTIES[1])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),
@@ -44715,5 +44810,24 @@ pub static DEFINITIONS: &[Definition] = &[
         cloneable: true,
         properties: DEF_368_PROPERTIES,
         ancestors: DEF_368_ANCESTORS,
+    },
+    Definition {
+        name: "TextStyleCssText",
+        rust_variant: "TextStyleCssText",
+        file: "nuxie/text_style_css_text.json",
+        type_key: Key {
+            int: 61005,
+            name: "textstylecsstext",
+        },
+        runtime_parent: Some("Component"),
+        raw_parent_file: Some("component.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_369_PROPERTIES,
+        ancestors: DEF_369_ANCESTORS,
     },
 ];

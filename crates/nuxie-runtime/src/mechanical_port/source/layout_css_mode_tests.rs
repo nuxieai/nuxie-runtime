@@ -8235,6 +8235,308 @@ fn css_bound_offsets_match_browser_scroll_top_and_scroll_left() {
     }
 }
 
+fn translated_offset_binding_scene(flags: u32) -> Scene {
+    let sized = |w, h| {
+        vec![
+            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, w),
+            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, h),
+        ]
+    };
+    scene(
+        (400.0, 300.0),
+        B {
+            name: "Viewport",
+            component: sized(200.0, 80.0),
+            children: vec![B {
+                name: "List",
+                component: sized(200.0, 240.0),
+                scroll: Some(1),
+                scroll_bind: Some((760, u64::from(flags))),
+                children: vec![
+                    B {
+                        name: "Row",
+                        component: sized(200.0, 40.0),
+                        ..B::default()
+                    },
+                    B {
+                        name: "Tail",
+                        component: sized(200.0, 200.0),
+                        ..B::default()
+                    },
+                ],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    )
+}
+
+fn scroll_offset_binding(f: &Scene) -> CoreHandle {
+    use crate::source::data_bind::data_bind_container::DataBindContainerOwner;
+    let scroll = css_axis_scroll(f);
+    DataBindContainerOwner::Authored(f.artboard.core_handle())
+        .data_binds()
+        .into_iter()
+        .find(|bind| {
+            bind.with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                bind.target().as_ref() == Some(&scroll) && matches!(bind.property_key(), 759 | 760)
+            }) == Some(true)
+        })
+        .expect("an offset binding")
+}
+
+#[test]
+fn scroll_offset_binding_delivery_survives_import_rebind_and_clone() {
+    use crate::source::data_bind::{
+        data_bind::{TO_SOURCE, TWO_WAY},
+        data_bind_container::DataBindContainerOwner,
+    };
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    fn assert_delivery(artboard: CoreHandle, css: bool) {
+        let binds = DataBindContainerOwner::Authored(artboard).data_binds();
+        let offsets: Vec<_> = binds
+            .iter()
+            .filter(|bind| {
+                bind.with(|owner| matches!(owner.as_data_bind().unwrap().property_key(), 759 | 760))
+                    == Some(true)
+            })
+            .collect();
+        assert_eq!(offsets.len(), 1);
+        offsets[0]
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                assert_eq!(bind.target_supports_push(), !css);
+                assert_eq!(bind.in_persisting_list(), css);
+            })
+            .unwrap();
+    }
+    for (css_viewport, virtualize) in [(false, false), (true, false), (true, true)] {
+        let css = css_viewport && !virtualize;
+        for flags in [TO_SOURCE, TWO_WAY] {
+            let mut f = if css_viewport {
+                css_offset_binding_scene(false, false, virtualize, flags, 100.0)
+            } else {
+                translated_offset_binding_scene(flags)
+            };
+            // Import registers bindings before the viewport is mounted.
+            let imported = f._file.with_file(|file| file.artboard().unwrap());
+            assert_delivery(imported, css);
+            assert_delivery(f.artboard.core_handle(), css);
+            for cloned in [false, true] {
+                if cloned {
+                    // Clones register their new bindings before initialize/clean.
+                    f.artboard = f.artboard.instance().expect("a cloned artboard");
+                }
+                for _ in 0..2 {
+                    let number = f.bind_number();
+                    f.advance(4);
+                    assert_delivery(f.artboard.core_handle(), css);
+                    let scroll = css_axis_scroll(&f);
+                    let binding = scroll_offset_binding(&f);
+                    // Classification must also work while its target is borrowed.
+                    scroll.with_mut(|_| {
+                        binding.with(|owner| {
+                            assert_eq!(owner.as_data_bind().unwrap().target_supports_push(), !css);
+                        });
+                    });
+                    assert!(CoreRegistry::set_double_handle(&scroll, 760, -40.0));
+                    DataBindContainerOwner::Authored(f.artboard.core_handle())
+                        .update_data_binds(true);
+                    assert_eq!(
+                        CoreRegistry::get_double_handle(
+                            &number,
+                            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()
+                        ),
+                        Some(if css { 40.0 } else { -40.0 })
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn scroll_offset_bindings_registered_before_mount_are_finalized_once() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        core::CoreArena,
+        core_context::{CoreContext, StatusCode},
+        data_bind::{
+            data_bind::{DataBind, TO_SOURCE},
+            data_bind_container::DataBindContainer,
+        },
+    };
+    struct Context {
+        arena: CoreArena,
+        root: CoreHandle,
+        content: CoreHandle,
+    }
+    impl CoreContext for Context {
+        fn core_arena(&self) -> &CoreArena {
+            &self.arena
+        }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            match id {
+                0 => Some(self.root.clone()),
+                1 => Some(self.content.clone()),
+                _ => None,
+            }
+        }
+    }
+    for (css_viewport, virtualize) in [(false, false), (true, false), (true, true)] {
+        let css = css_viewport && !virtualize;
+        let f = if css_viewport {
+            css_offset_binding_scene(false, false, virtualize, TO_SOURCE, 100.0)
+        } else {
+            translated_offset_binding_scene(TO_SOURCE)
+        };
+        let mut context = Context {
+            arena: css_axis_scroll(&f).retain_arena().unwrap(),
+            root: f.artboard.core_handle(),
+            content: f.named(if css_viewport { "Content" } else { "List" }),
+        };
+        let mut scroll = ScrollConstraint::default();
+        scroll.base.set_virtualize_value(virtualize);
+        let scroll = context.arena.insert(scroll);
+        scroll.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .base
+                .set_parent_id_value(1)
+        });
+        assert_eq!(
+            scroll.with_downcast_mut::<ScrollConstraint, _>(
+                |scroll| scroll.on_added_dirty(&mut context)
+            ),
+            Some(StatusCode::Ok)
+        );
+        let container = DataBindContainer::new_standalone();
+        let bindings: Vec<_> = [759, 760]
+            .into_iter()
+            .map(|key| {
+                let binding = context.arena.insert(DataBind::new(TO_SOURCE, key, 0));
+                binding.with_mut(|owner| {
+                    owner
+                        .as_data_bind_mut()
+                        .unwrap()
+                        .set_target(Some(scroll.clone()))
+                });
+                container.add_data_bind(binding.clone());
+                binding.with(|owner| {
+                    let bind = owner.as_data_bind().unwrap();
+                    assert!(bind.target_supports_push());
+                    assert!(!bind.in_persisting_list());
+                });
+                assert!(CoreRegistry::set_double_handle(&scroll, key as i32, -40.0));
+                assert_eq!(
+                    binding.with(|owner| owner.as_data_bind().unwrap().in_dirty_list()),
+                    Some(true)
+                );
+                binding
+            })
+            .collect();
+        // Finalizing while ScrollConstraint is borrowed must not reborrow it.
+        for _ in 0..2 {
+            assert_eq!(
+                scroll.with_downcast_mut::<ScrollConstraint, _>(
+                    |scroll| scroll.on_added_clean(&mut context)
+                ),
+                Some(StatusCode::Ok)
+            );
+            scroll.with_mut(|_| {
+                for binding in &bindings {
+                    binding.with(|owner| {
+                        let bind = owner.as_data_bind().unwrap();
+                        assert_eq!(bind.target_supports_push(), !css);
+                        assert_eq!(bind.in_persisting_list(), css);
+                        assert_eq!(bind.in_dirty_list(), !css);
+                    });
+                }
+            });
+        }
+        container.update_data_binds(true);
+        // Only the native subscription remains after finalizing and draining.
+        assert!(CoreRegistry::set_double_handle(&scroll, 760, -80.0));
+        assert_eq!(
+            bindings[1].with(|owner| owner.as_data_bind().unwrap().in_dirty_list()),
+            Some(!css)
+        );
+    }
+}
+
+#[test]
+fn translated_offset_bindings_follow_upstream_mid_frame_push_order() {
+    use crate::source::{
+        data_bind::{
+            data_bind::{BINDINGS, BINDINGS_TARGET, TWO_WAY},
+            data_bind_container::DataBindContainerOwner,
+        },
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+    };
+    use std::cell::RefCell;
+    thread_local! {
+        static EVENTS: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+    }
+    fn binding_changed() {
+        EVENTS.with(|events| events.borrow_mut().push("binding"));
+    }
+    let f = translated_offset_binding_scene(TWO_WAY);
+    let number = f.bind_number();
+    f.advance(4);
+    let scroll = css_axis_scroll(&f);
+    let binding = scroll_offset_binding(&f);
+    let container = DataBindContainerOwner::Authored(f.artboard.core_handle());
+    binding.with_mut(|owner| {
+        owner
+            .as_data_bind_mut()
+            .unwrap()
+            .set_changed_callback(binding_changed)
+    });
+    let source_key = ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into();
+    // Upstream data_bind.cpp keeps offsets push-driven. data_bind_container.cpp
+    // drains target dirt before dependents, and does not read a stale target
+    // over a source-only write. Check both passes without advancing layout.
+    assert!(CoreRegistry::set_double_handle(&scroll, 760, -40.0));
+    EVENTS.with(|events| assert_eq!(*events.borrow(), ["binding"]));
+    assert_eq!(
+        CoreRegistry::get_double_handle(&number, source_key),
+        Some(0.0)
+    );
+    binding.with(|owner| {
+        let bind = owner.as_data_bind().unwrap();
+        assert_eq!(bind.dirt(), BINDINGS_TARGET);
+        assert!(bind.in_dirty_list());
+        assert!(!bind.in_persisting_list());
+    });
+    container.update_data_binds(true);
+    assert_eq!(
+        CoreRegistry::get_double_handle(&number, source_key),
+        Some(-40.0)
+    );
+    assert_eq!(
+        binding.with(|owner| owner.as_data_bind().unwrap().dirt()),
+        Some(0)
+    );
+    EVENTS.with(|events| events.borrow_mut().clear());
+    assert!(CoreRegistry::set_double_handle(&number, source_key, -80.0));
+    EVENTS.with(|events| assert_eq!(*events.borrow(), ["binding"]));
+    assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(-40.0));
+    binding.with(|owner| {
+        let bind = owner.as_data_bind().unwrap();
+        assert_eq!(bind.dirt(), BINDINGS);
+        assert!(bind.in_dirty_list());
+    });
+    container.update_data_binds(true);
+    assert_eq!(CoreRegistry::get_double_handle(&scroll, 760), Some(-80.0));
+    assert_eq!(
+        CoreRegistry::get_double_handle(&number, source_key),
+        Some(-80.0)
+    );
+    EVENTS.with(|events| assert_eq!(*events.borrow(), ["binding"]));
+}
+
 #[test]
 fn translated_offset_bindings_keep_authored_values_and_notification_order() {
     use crate::source::{
@@ -8252,40 +8554,8 @@ fn translated_offset_bindings_keep_authored_values_and_notification_order() {
     fn source_changed() {
         EVENTS.with(|events| events.borrow_mut().push("source"));
     }
-    let sized = |w, h| {
-        vec![
-            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, w),
-            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, h),
-        ]
-    };
     for flags in [TO_SOURCE, TWO_WAY] {
-        let f = scene(
-            (400.0, 300.0),
-            B {
-                name: "Viewport",
-                component: sized(200.0, 80.0),
-                children: vec![B {
-                    name: "List",
-                    component: sized(200.0, 240.0),
-                    scroll: Some(1),
-                    scroll_bind: Some((760, u64::from(flags))),
-                    children: vec![
-                        B {
-                            name: "Row",
-                            component: sized(200.0, 40.0),
-                            ..B::default()
-                        },
-                        B {
-                            name: "Tail",
-                            component: sized(200.0, 200.0),
-                            ..B::default()
-                        },
-                    ],
-                    ..B::default()
-                }],
-                ..B::default()
-            },
-        );
+        let f = translated_offset_binding_scene(flags);
         let scroll = css_axis_scroll(&f);
         let number = f.bind_number();
         f.advance(4);
@@ -8330,7 +8600,7 @@ fn translated_offset_bindings_keep_authored_values_and_notification_order() {
             assert_eq!(read(), Some(value));
             assert_eq!(f.scroll_offset_y(), value);
             EVENTS.with(|events| assert_eq!(*events.borrow(), ["raw", "source"]));
-            // Equal writes and unchanged polling produce no further notifications.
+            // Equal writes and unchanged offsets produce no further notifications.
             assert!(CoreRegistry::set_double_handle(&scroll, 760, value));
             f.advance(4);
             EVENTS.with(|events| assert_eq!(*events.borrow(), ["raw", "source"]));

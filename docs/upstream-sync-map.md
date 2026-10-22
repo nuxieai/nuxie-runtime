@@ -7,6 +7,8 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 Keep the Nuxie Video hooks in `core_registry.rs` when syncing: `set_bool_with_completion`, `set_double_with_completion`, `get_bool`, `get_double`, `property_field_id` and `object_supports_property` route keys 60004 through 60020 to Video.
 
+Keep the CSS scroll mode hooks in `core_registry.rs` too: `ScrollConstraint`'s `virtualize` and `infinite` arms in `set_bool_with_completion` call `ScrollConstraint::set_virtualize_value` and `set_infinite_value`, which leave a loaded CSS viewport's flags unchanged, and its `CoreCapabilities` implement `lifecycle_on_added_clean` with `ScrollConstraint::on_added_clean`, where a viewport's scroll mode is decided once (`docs/CSS_LAYOUT.md` section 3). Translated viewports keep upstream's setters and toggles.
+
 ## Known Apple font boundary gap
 
 The host outline addition mirrors the first `CoreTextHBFont::getPath`

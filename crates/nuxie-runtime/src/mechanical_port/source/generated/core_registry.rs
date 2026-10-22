@@ -18992,7 +18992,7 @@ impl CoreRegistryObject
                 }
             },
             CoreField::ScrollConstraintVirtualize => {
-                if self.base.set_virtualize_value(value) {
+                if self.set_virtualize_value(value) {
                     if completion.is_borrowed_setter() {
                         self.virtualize_changed();
                     } else if let Some(owner) = self.handle() {
@@ -19004,7 +19004,7 @@ impl CoreRegistryObject
                 }
             },
             CoreField::ScrollConstraintInfinite => {
-                if self.base.set_infinite_value(value) {
+                if self.set_infinite_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::INFINITE_PROPERTY_KEY);
                 }
             },
@@ -64092,6 +64092,12 @@ impl CoreCapabilities
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::on_added_dirty(self, context))
+    }
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::on_added_clean(self, context))
     }
     fn lifecycle_import(
         &mut self,

@@ -1,5 +1,10 @@
 # Literal runtime translation plan
 
+Current sync scope is governed by [PARITY_WORKFLOW.md](PARITY_WORKFLOW.md),
+including the 2026-10-23 CSS layout/text and Luau product decision. The original
+whole-tree campaign below is historical; do not reimport excluded layout or guest
+Wasm engine behavior under its blanket upstream-authority language.
+
 Decision date: 2026-08-27
 
 Pinned authority: Rive runtime

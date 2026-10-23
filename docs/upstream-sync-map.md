@@ -1805,12 +1805,19 @@ browser renderers on `wasm32-unknown-unknown`. Do not introduce Yoga, an
 Emscripten product, runtime Naga, or legacy WGPU. These boundaries do not excuse
 omitting upstream lifecycle or observable behavior around an adapted library.
 
-Layout is a product divergence, not a translation target (decided 2026-10-14).
+Layout and CSS-oriented text are product divergences, not translation targets
+(confirmed 2026-10-23; see PARITY_WORKFLOW.md).
 Nuxie lays out with stock Taffy and CSS semantics; upstream Rive's Yoga fork is
 no longer an oracle for layout numbers. Treat an upstream change to Yoga, to
-`LayoutComponent`'s solve, or to layout-only fixtures as a product decision:
-summarize what it changes for authors, then ask whether to adopt the behavior
-through the CSS mapping (`layout_style_applier.rs`) or record it as skipped.
+`LayoutComponent`'s solve, or to layout-only fixtures as excluded by default:
+record upstream-specific semantics as skipped and continue without asking again.
+Small optimizations and clear fixes may be considered only when compatible with
+our CSS contract. Preserve CSS-oriented text differences; unrelated text fixes
+remain eligible. Wasm/AssemblyScript/AnimaScript guest-engine work is excluded;
+Luau remains our scripting direction. Browser renderer Wasm remains in scope.
+Split mixed commits and port applicable portions without blocking on exclusions.
+Upstream 868da86c's stack-layout portion is explicitly skipped by this decision;
+its independent state-machine portion still needs translation and both reviews.
 Never patch Taffy toward Yoga. Non-layout behavior around layout (dirt,
 callbacks, participant lifecycle, scroll/virtualization models) stays a normal
 translation. When a translated non-layout change moves a golden/Silver/probe

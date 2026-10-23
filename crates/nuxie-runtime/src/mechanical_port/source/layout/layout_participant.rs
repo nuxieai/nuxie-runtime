@@ -82,7 +82,7 @@ pub(crate) fn picture_natural_size(host: &CoreHandle, css: bool) -> Option<Vec2D
         return None;
     }
     let picture = MeshHost::from_handle(Some(host.clone()))?;
-    picture.natural_size_for_layout(css)
+    picture.natural_size_for_layout()
 }
 
 /// Called after the unbounded measure populated Text's measured-shape cache.
@@ -322,6 +322,19 @@ impl LayoutParticipant {
         if let Some(data) = self.layout_data.as_deref_mut() {
             data.add_applier(applier);
         }
+        self.refresh_picture_layout_mode();
+    }
+
+    fn refresh_picture_layout_mode(&self) {
+        let css = self.css_record().is_some();
+        self.with_host_mut(|host| {
+            if let Some(container) = host.as_container_component_mut() {
+                container.refresh_picture_layout_mode(css);
+            }
+            if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
+                sizeable.layout_mode_changed();
+            }
+        });
     }
 
     fn owner_handle(&self) -> Option<CoreHandle> {
@@ -661,7 +674,6 @@ impl LayoutParticipant {
                     width_scale,
                     height_scale,
                     direction,
-                    css,
                     self,
                 );
             }
@@ -700,7 +712,6 @@ impl LayoutParticipant {
             width_scale,
             height_scale,
             direction,
-            css,
         );
     }
 
@@ -772,6 +783,7 @@ impl LayoutParticipant {
         &mut self,
         active_parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
     ) -> bool {
+        self.refresh_picture_layout_mode();
         if self.layout_data.is_none() {
             return false;
         }

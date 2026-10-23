@@ -24,6 +24,49 @@ impl Default for ContainerComponent {
 }
 
 impl ContainerComponent {
+    /// Refresh a layout boundary without consulting any borrowed ancestor.
+    /// Content inherits this mode; nested boxes and participant hosts keep
+    /// their own context. Attachment initializes children added later.
+    pub(crate) fn refresh_picture_layout_mode(&mut self, css: bool) {
+        self.base.set_picture_layout_mode(css);
+        Self::refresh_picture_children(&self.children, css, self.base.base.base.handle().as_ref());
+    }
+
+    fn refresh_picture_children(children: &[CoreHandle], css: bool, active: Option<&CoreHandle>) {
+        for child in children {
+            if Some(child) == active
+                || !child.is_type_of(ContainerComponentBase::TYPE_KEY)
+                || child.is_type_of(
+                    crate::source::layout::layout_participant::LayoutParticipant::TYPE_KEY,
+                )
+                || child.is_type_of(
+                    crate::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+                )
+            {
+                continue;
+            }
+            let descendants = child
+                .with_mut(|object| {
+                    let component = object.as_component_mut()?;
+                    if component.owns_picture_layout_mode() {
+                        return None;
+                    }
+                    if component.inherit_picture_layout_mode(css) {
+                        if let Some(sizeable) = object.as_intrinsically_sizeable_mut() {
+                            sizeable.layout_mode_changed();
+                        }
+                    }
+                    object
+                        .as_container_component()
+                        .map(|container| container.children().to_vec())
+                })
+                .flatten();
+            if let Some(descendants) = descendants {
+                Self::refresh_picture_children(&descendants, css, active);
+            }
+        }
+    }
+
     pub fn children(&self) -> &[CoreHandle] {
         &self.children
     }

@@ -561,12 +561,10 @@ fn declared_picture_hit_area_uses_the_active_artboards_mode() {
             },
             mounts: Vec::new(),
         };
-        root.with_downcast_mut::<Artboard, _>(|root| {
+        root.with_downcast_mut::<Artboard, _>(|_root| {
             assert_eq!(
                 image.with_downcast::<Image, _>(|image| {
-                    image
-                        .hit_test_with_layout_root(&info, Mat2D::default(), Some(root))
-                        .is_some()
+                    image.hit_test(&info, Mat2D::default()).is_some()
                 }),
                 Some(css)
             );
@@ -828,6 +826,115 @@ fn picture_width(host: &CoreHandle) -> f32 {
     let image =
         crate::source::shapes::mesh_host::MeshHost::from_handle(Some(host.clone())).unwrap();
     image.width() * image.scale_x()
+}
+
+#[test]
+fn picture_content_receiver_measure_does_not_reborrow_owner() {
+    for css in [false, true] {
+        let (_arena, root, _image) = content_picture_fixture(false, css, false);
+        let measured = root
+            .with_downcast_mut::<LayoutComponent, _>(|root| {
+                root.measure_layout(
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                )
+            })
+            .unwrap();
+        let expected = if css { (480.0, 270.0) } else { (160.0, 90.0) };
+        near(measured.x, expected.0);
+        near(measured.y, expected.1);
+    }
+}
+
+#[test]
+fn picture_mode_refresh_preserves_fit_after_late_css_registration() {
+    use crate::source::layout::layout_enums::LayoutDirection;
+    for nested in [false, true] {
+        let (arena, root, image) = content_picture_fixture(false, false, nested);
+        image.with_downcast_mut::<Image, _>(|image| {
+            image.base.set_fit_value(7);
+            image.control_size(
+                Vec2D::new(200.0, 200.0),
+                LayoutScaleType::Fixed,
+                LayoutScaleType::Fixed,
+                LayoutDirection::Ltr,
+            );
+        });
+        let before = draw(&image, true);
+        let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&arena, &root, &record);
+        root.with_downcast_mut::<LayoutComponent, _>(|root| {
+            root.add_layout_style_applier(record);
+        });
+        near(
+            image
+                .with_downcast::<Image, _>(|image| image.geometry_size().x)
+                .unwrap(),
+            480.0,
+        );
+        close(draw(&image, true), before);
+    }
+}
+
+#[test]
+fn picture_participant_mode_is_independent_of_ancestor_mode() {
+    let (arena, root, participant, image) = receiver_picture_fixture(false);
+    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&arena, &root, &record);
+    root.with_downcast_mut::<LayoutComponent, _>(|root| root.add_layout_style_applier(record));
+    near(
+        image
+            .with_downcast::<Image, _>(|image| image.geometry_size().x)
+            .unwrap(),
+        160.0,
+    );
+
+    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&arena, &image, &record);
+    participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+        participant.add_layout_style_applier(record);
+    });
+    near(
+        image
+            .with_downcast::<Image, _>(|image| image.geometry_size().x)
+            .unwrap(),
+        480.0,
+    );
+}
+
+#[test]
+fn picture_nested_box_keeps_its_own_mode() {
+    let (arena, root, _outer_image) = content_picture_fixture(false, true, false);
+    let nested = layout(&arena, Some(&root), Some(200.0), true);
+    let image = arena.insert(Image::default());
+    attach(&arena, &nested, &image);
+    Image::set_asset_occurrence(&image, Some(arena.insert(ImageAsset::default())));
+    declare(&image, 480.0, 270.0);
+    decode(&image, 160, 90);
+    LayoutComponent::sync_style_occurrence(&root);
+    for css in [false, true] {
+        if css {
+            let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+            attach(&arena, &nested, &record);
+            nested.with_downcast_mut::<LayoutComponent, _>(|nested| {
+                nested.add_layout_style_applier(record);
+            });
+        }
+        let size = nested
+            .with_downcast_mut::<LayoutComponent, _>(|nested| {
+                nested.measure_layout(
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                )
+            })
+            .unwrap();
+        near(size.x, if css { 480.0 } else { 160.0 });
+        near(size.y, if css { 270.0 } else { 90.0 });
+    }
 }
 
 #[test]

@@ -299,17 +299,8 @@ impl Image {
     }
 
     pub fn hit_test<'a>(&'a self, hinfo: &HitInfo, xform: Mat2D) -> Option<&'a Core> {
-        self.hit_test_with_layout_root(hinfo, xform, None)
-    }
-
-    pub(crate) fn hit_test_with_layout_root<'a>(
-        &'a self,
-        hinfo: &HitInfo,
-        xform: Mat2D,
-        root: Option<&crate::source::artboard::Artboard>,
-    ) -> Option<&'a Core> {
         self.render_image()?;
-        let size = self.geometry_size_with_layout_root(root);
+        let size = self.geometry_size();
         let (width, height) = (size.x, size.y);
         if self.mesh.is_some() {
             println!("Missing mesh");
@@ -448,8 +439,10 @@ impl Image {
 
     /// CSS images keep their declared upright size across decode variants.
     /// VideoAsset does not project to ImageAsset and retains its frame sizing.
-    pub(crate) fn natural_size_for_layout(&self, css: bool) -> Vec2D {
-        if css && let Some(size) = self.declared_size() {
+    pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
+        if self.picture_uses_css_layout()
+            && let Some(size) = self.declared_size()
+        {
             return size;
         }
         Vec2D::new(self.width(), self.height())
@@ -465,45 +458,8 @@ impl Image {
             .filter(|size| size.x > 0.0 && size.y > 0.0)
     }
 
-    fn uses_css_layout(&self, root: Option<&crate::source::artboard::Artboard>) -> bool {
-        if let Some(participant) = self.layout_participant() {
-            return participant
-                .with_downcast::<LayoutParticipant, _>(|participant| {
-                    participant.css_record().is_some()
-                })
-                .unwrap_or(false);
-        }
-        LayoutParticipant::owning_layout_from(self.base.parent_handle())
-            .and_then(|owner| {
-                // Artboard::hit_test already holds this root mutably.
-                if let Some(root) = root
-                    && root.base.handle().as_ref() == Some(&owner)
-                {
-                    return Some(root.base.is_css_mode());
-                }
-                owner.with(|owner| {
-                    owner
-                        .as_layout_component()
-                        .is_some_and(|layout| layout.is_css_mode())
-                })
-            })
-            .unwrap_or(false)
-    }
-
     pub(crate) fn geometry_size(&self) -> Vec2D {
-        self.geometry_size_with_layout_root(None)
-    }
-
-    fn geometry_size_with_layout_root(
-        &self,
-        root: Option<&crate::source::artboard::Artboard>,
-    ) -> Vec2D {
-        if let Some(size) = self.declared_size()
-            && self.uses_css_layout(root)
-        {
-            return size;
-        }
-        Vec2D::new(self.width(), self.height())
+        self.natural_size_for_layout()
     }
 
     pub fn measure_layout(
@@ -534,14 +490,11 @@ impl Image {
         _width: LayoutScaleType,
         _height: LayoutScaleType,
         _direction: LayoutDirection,
-        css: bool,
     ) {
         if self.layout_width != size.x || self.layout_height != size.y {
             self.layout_width = size.x;
             self.layout_height = size.y;
-            // The layout owner or participant may still be mutably borrowed.
-            // Size propagation must never discover its mode by handle here.
-            self.update_image_scale_with_css(css);
+            self.update_image_scale();
         }
     }
 
@@ -618,13 +571,8 @@ impl Image {
         });
     }
 
-    fn update_image_scale(&mut self) {
-        // Asset and property updates occur outside layout size control.
-        let css = self.declared_size().is_some() && self.uses_css_layout(None);
-        self.update_image_scale_with_css(css);
-    }
-
-    fn update_image_scale_with_css(&mut self, css: bool) {
+    pub(crate) fn update_image_scale(&mut self) {
+        let css = self.picture_uses_css_layout();
         if self.image_asset().is_none() && self.runtime_size.is_none() {
             if self.layout_offset_x != 0.0 || self.layout_offset_y != 0.0 {
                 self.layout_offset_x = 0.0;
@@ -840,12 +788,12 @@ impl Image {
             // Wrappers have layout children, so their measured-content check
             // cannot notice a new frame size. Invalidate the participant and
             // its owning box directly, without borrowing this active host again.
-            for child in self.base.children().to_vec() {
-                child.with_downcast_mut::<LayoutParticipant, _>(|participant| {
-                    if participant.css_record().is_some() {
+            if self.picture_uses_css_layout() {
+                for child in self.base.children().to_vec() {
+                    child.with_downcast_mut::<LayoutParticipant, _>(|participant| {
                         participant.mark_layout_node_dirty_from_host(self, false);
-                    }
-                });
+                    });
+                }
             }
             self.measured_geometry_changed();
         }

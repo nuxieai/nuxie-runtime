@@ -154,7 +154,6 @@ fn real_import_instancing_and_scene_drawing_use_video_owners() {
                     LayoutScaleType::Fixed,
                     LayoutScaleType::Fixed,
                     LayoutDirection::Ltr,
-                    false,
                 );
             assert_eq!(
                 object.semantic_provider_local_bounds().unwrap().width(),
@@ -1242,7 +1241,6 @@ fn video_layout_uses_intrinsic_dimensions_before_decode() {
                 LayoutScaleType::Fixed,
                 LayoutScaleType::Fixed,
                 LayoutDirection::Ltr,
-                false,
             );
     });
     artboard.update_pass(true);

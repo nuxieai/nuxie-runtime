@@ -146,7 +146,7 @@ class RuntimeBuildTest(unittest.TestCase):
     def test_pool_capability_checks_the_actual_startup_arguments(self):
         router = self.root / ".local/share/nuxie-homelab/rust/route.py"
         router.parent.mkdir(parents=True)
-        router.write_text("runtime_run_supported=4\ndef runtime_run_compatible(args): return '--custom' not in args\n")
+        router.write_text("runtime_run_supported=5\ndef runtime_run_compatible(args): return '--custom' not in args\n")
         settings = self.root / ".config/nuxie/homelab-cluster.json"
         settings.parent.mkdir(parents=True); settings.write_text('{}')
         with patch.object(Path, "home", return_value=self.root), patch.dict(os.environ, {}, clear=True):
@@ -154,6 +154,8 @@ class RuntimeBuildTest(unittest.TestCase):
             self.assertFalse(self.original_pool_run(["bazel", "--custom"]))
             with patch.dict(os.environ, {"NUXIE_EXECUTION":"local"}):
                 self.assertFalse(self.original_pool_run(["bazel"]))
+            router.write_text("runtime_run_supported=4\ndef runtime_run_compatible(args): return True\n")
+            self.assertFalse(self.original_pool_run(["bazel"]))
 
     def test_failed_remote_program_still_publishes_its_newly_built_executable(self):
         retained = self.root / "retained/nuxie-codegen__bin"

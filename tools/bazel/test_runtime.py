@@ -30,6 +30,19 @@ class RuntimeBuildTest(unittest.TestCase):
         manifest.write_text(f'[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2024"\n' + extra)
         return manifest
 
+    def test_run_stays_with_bazel_instead_of_querying_and_executing_locally(self):
+        manifest = self.package("probe", library=False)
+        packages = collect_packages([manifest])
+        with patch.object(runtime, "packages_from_workspace", return_value=packages), \
+                patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+                patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run, \
+                patch.object(runtime.subprocess, "check_output", side_effect=AssertionError("local cquery")), \
+                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "probe", "--", "--help"]):
+            self.assertEqual(runtime.main(), 7)
+            args = run.call_args.args[0]
+            self.assertEqual(args[:2], ["bazel", "run"])
+            self.assertEqual(args[-2:], ["--", "--help"])
+
     def test_v2_routes_through_installed_guard_and_rejects_caller_jobs(self):
         with patch.dict(os.environ, {"NUXIE_CI_RUNNER_POLICY_VERSION": "2"}, clear=True):
             self.assertEqual(runtime.bazel_command(), ["/bin/bash", str(self.root / "tools/bazel/bazel.sh")])
@@ -163,11 +176,14 @@ class RuntimeBuildTest(unittest.TestCase):
              patch.object(runtime, "bazel_command", return_value=["bazel"]), \
              patch.object(runtime.subprocess, "check_output", return_value=output), \
              patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
-             patch("sys.argv", ["runtime.py", "run", "-p", "pixel-compare", "--bin", "corpus-r", "--", "--manifest", "corpus-r.toml"]):
+             patch("sys.argv", ["runtime.py", "build", "-p", "pixel-compare", "--bin", "corpus-r"]):
             self.assertEqual(runtime.main(), 0)
         published = self.root / "target/debug/corpus-r.exe"
         self.assertEqual(published.read_bytes(), executable.read_bytes())
-        self.assertEqual(run.call_args.args[0], [str(published), "--manifest", "corpus-r.toml"])
+        self.assertIn("build", run.call_args.args[0])
+        with patch.object(runtime.sys, "platform", "win32"):
+            self.assertTrue(runtime.executable_product(published))
+            self.assertFalse(runtime.executable_product(published.with_suffix(".pdb")))
 
     def test_shared_cache_override_preserves_default_output_isolation(self):
         executable = self.root / "bazel"

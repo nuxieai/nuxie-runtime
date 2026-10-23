@@ -333,6 +333,15 @@ def main():
                 flags.append("--test_env=NUXIE_RUSTFMT=" + rustfmt)
         if options["command"] == "clippy":
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
+        if options["command"] == "run":
+            # Bazel's installed launcher sends this complete invocation to a
+            # compatible pool host. Keeping execution with the build preserves
+            # runfiles/oracle paths and avoids a caller-side compilation tree.
+            for name in ("GOLDEN_RUNNER", "RUST_GOLDEN_RUNNER", "NUXIE_CPP_PROMISE_ORACLE", "NUXIE_CPP_CONTEXT_BLOB_ORACLE"):
+                if name in os.environ:
+                    flags.append("--action_env=" + name)
+            result = subprocess.run([*bazel, "run", *flags, *labels, "--", *runtime_args], cwd=ROOT)
+            return result.returncode
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"
         subprocess.run([*bazel, command, *flags, *labels], cwd=ROOT, check=True)
         if command == "test" or options["command"] == "clippy":
@@ -352,11 +361,6 @@ def main():
                 products.append(destination)
                 if options["json"]:
                     print(json.dumps({"reason": "compiler-artifact", "executable": str(destination) if executable_product(destination) else None, "filenames": [str(destination)], "target": {"name": options["selector"] or destination.name}, "profile": {"test": options["command"] == "test"}}))
-        if options["command"] == "run":
-            executables = [path for path in products if executable_product(path)]
-            if len(executables) != 1:
-                raise ValueError("run requires exactly one binary or example")
-            return subprocess.run([str(executables[0]), *runtime_args], cwd=ROOT).returncode
         return 0
     except (ValueError, IndexError, subprocess.CalledProcessError) as error:
         print(str(error), file=sys.stderr)

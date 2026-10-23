@@ -22,6 +22,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 use super::ore_binding_map_hpp::BindingMap;
+use super::ore_rstb_entry_bindings_hpp::{RstbEntryBindings, decodeEntryBindings};
 use super::ore_types_hpp::ShaderModuleDesc;
 use core::mem::ManuallyDrop;
 use core::ops::{Deref, DerefMut};
@@ -61,6 +62,7 @@ pub struct ShaderModuleMembers {
     // struct TextureSamplerPair
     // std::vector<TextureSamplerPair> m_textureSamplerPairs;
     pub m_textureSamplerPairs: Vec<TextureSamplerPair>,
+    pub m_entryBindings: Vec<RstbEntryBindings>,
 
     // (group, binding) -> per-backend native slot map for this shader's
     // resources. Parsed from the RSTB binding-map sidecar by each
@@ -120,6 +122,7 @@ impl Drop for ShaderModule {
             super::super::gpu_resource_hpp::record_resource_drop_stage(
                 "ShaderModule.textureSamplerPairs",
             );
+            core::ptr::drop_in_place(&mut self.m_entryBindings);
             core::ptr::drop_in_place(&mut self.m_textureSamplerPairs);
             #[cfg(test)]
             super::super::gpu_resource_hpp::record_resource_drop_stage("ShaderModule.base");
@@ -182,6 +185,15 @@ pub struct GLFixupEntry {
 }
 
 impl ShaderModule {
+    pub fn entryBindings(&self, name: Option<&str>) -> Option<&RstbEntryBindings> {
+        if self.m_entryBindings.len() == 1 {
+            return self.m_entryBindings.first();
+        }
+        let name = name?;
+        self.m_entryBindings
+            .iter()
+            .find(|e| e.name.as_bytes() == name.as_bytes())
+    }
     // public:
 
     // uint32_t shaderAssetId() const { return m_shaderAssetId; }
@@ -198,6 +210,11 @@ impl ShaderModule {
     // `@group/@binding` to native slots.
     // void applyBindingMapFromDesc(const ShaderModuleDesc& desc)
     pub fn applyBindingMapFromDesc(&mut self, desc: &ShaderModuleDesc<'_>) {
+        decodeEntryBindings(
+            desc.entryBindingBytes,
+            desc.entryBindingSize as usize,
+            &mut self.m_entryBindings,
+        );
         debug_assert!(
             desc.bindingMapSize().is_ok(),
             "ShaderModuleDesc::bindingMapSize exceeds its backing span"
@@ -328,6 +345,7 @@ impl ShaderModule {
             base: ManuallyDrop::new(GPUResource::new(None)),
             members: ManuallyDrop::new(ShaderModuleMembers {
                 m_textureSamplerPairs: Vec::new(),
+                m_entryBindings: Vec::new(),
                 m_bindingMap: BindingMap::default(),
                 #[cfg(feature = "track-rive-shader-id")]
                 m_shaderAssetId: 0,

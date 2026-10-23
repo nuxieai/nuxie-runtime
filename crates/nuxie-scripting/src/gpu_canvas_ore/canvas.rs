@@ -342,6 +342,7 @@ pub(super) fn begin_pass(
         return lua.create_userdata(Pass {
             pass: None,
             deferred_bind_groups: None,
+            draw_bindings: Default::default(),
             finished: false,
             sample_count: 1,
             pipeline_set: false,
@@ -379,6 +380,7 @@ pub(super) fn begin_pass(
     lua.create_userdata(Pass {
         pass,
         deferred_bind_groups: None,
+        draw_bindings: Default::default(),
         finished: false,
         sample_count: sample_count.unwrap_or(1).max(1),
         pipeline_set: false,

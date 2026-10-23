@@ -274,6 +274,8 @@ pub fn replayOreLifecycle(
                 glFixupBytes: fixups,
                 glFixupSize: fixups.map_or(0, |b| b.len() as u32),
                 shaderAssetId: p.shaderAssetId,
+                entryBindingBytes: blob(reader, p.entryBindingBytes),
+                entryBindingSize: blob(reader, p.entryBindingBytes).map_or(0, |b| b.len() as u32),
             };
             ctx.clearLastError();
             let module = ctx.makeShaderModule(&d);

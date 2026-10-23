@@ -118,6 +118,11 @@ pub fn recordMakeShaderModule(
             desc.glFixupBytes.is_none(),
         ),
         shaderAssetId: desc.shaderAssetId,
+        entryBindingBytes: cb.appendBlobRef(
+            desc.entryBindingBytes,
+            desc.entryBindingSize,
+            desc.entryBindingBytes.is_none(),
+        ),
         language: desc.language,
         stage: desc.stage,
         pad: [0; 2],

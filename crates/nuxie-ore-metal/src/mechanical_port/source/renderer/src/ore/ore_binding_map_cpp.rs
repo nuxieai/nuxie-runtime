@@ -29,7 +29,10 @@ fn samplerPairsDepthOnly(
                 continue;
             }
             let tex = bm.lookupEntry(u32::from(p.textureGroup), u32::from(p.textureBinding));
-            if tex.is_none_or(|tex| tex.textureSampleType != TextureSampleType::Depth) {
+            let Some(tex) = tex else {
+                continue;
+            };
+            if tex.textureSampleType != TextureSampleType::Depth {
                 return false;
             }
             paired = true;
@@ -80,6 +83,9 @@ pub fn unsampledFloatTextureBindings(
                 pairs.iter().any(|p| {
                     u32::from(p.textureGroup) == groupIndex
                         && u32::from(p.textureBinding) == binding
+                        && bm
+                            .lookupEntry(u32::from(p.samplerGroup), u32::from(p.samplerBinding))
+                            .is_some()
                 })
             })
     };

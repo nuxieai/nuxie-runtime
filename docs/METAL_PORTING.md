@@ -70,6 +70,13 @@ matching target-10 BindingMap and versioned supplemental reflection. Preserve
 entry interfaces, uniform sizes, binding groups and slots, texture/sampler
 classes, workgroup limits, and vertex maps.
 
+RSTB section `2` carries upstream per-entry binding use. Nuxie's digest-bound
+Metal supplemental reflection uses section `128`, version `1`; shader target
+`2` remains MSL and target `10` remains its binding map. Producer and consumer
+must change together and existing Metal artifacts must be recompiled. Do not
+infer a section's type from its payload or accept the old reflection tag as an
+alias. The reflection payload and source/map digest checks remain unchanged.
+
 Each source-required shader lookup creates a fresh physical module and correct
 occurrence identity. A Metal validation or execution failure must not be
 repaired by selecting target-0 WGSL, sharing a different physical module, or

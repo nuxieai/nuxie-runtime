@@ -15,6 +15,77 @@ use std::{any::Any, rc::Rc};
 fn rejected(message: impl Into<String>) -> GpuCanvasError {
     GpuCanvasError::new(format!("exact GPU-canvas: {}", message.into()))
 }
+
+/// Upstream moduleEntryBindingBytes: narrow and rename logical entries to the
+/// physical names used by a backend. Incomplete/older metadata stays absent.
+pub fn module_entry_bindings(bytes: &[u8], entries: &[GpuCanvasShaderEntry]) -> Vec<u8> {
+    use nuxie_ore_metal::{
+        rstb_entry_bindings::{decodeEntryBindings, moduleEntryBindingBytes},
+        rstb_entry_container::RstbEntryView,
+    };
+    let mut asset = Vec::new();
+    decodeEntryBindings(Some(bytes), bytes.len(), &mut asset);
+    let views: Vec<_> = entries
+        .iter()
+        .map(|entry| RstbEntryView {
+            stage: match entry.stage {
+                GpuCanvasShaderStage::Vertex => 0,
+                GpuCanvasShaderStage::Fragment => 1,
+                GpuCanvasShaderStage::Compute => 2,
+            },
+            logical: entry.logical_entry_point.as_str().into(),
+            physical: entry.physical_entry_point.as_str().into(),
+            ..Default::default()
+        })
+        .collect();
+    moduleEntryBindingBytes(&asset, &views, 0, views.len() as u32)
+}
+
+#[cfg(test)]
+mod entry_binding_tests {
+    use super::*;
+    use nuxie_ore_metal::rstb_entry_bindings::{
+        RstbEntryBindings, decodeEntryBindings, encodeEntryBindings,
+    };
+
+    #[test]
+    fn metadata_is_narrowed_and_renamed_per_physical_module() {
+        let asset = encodeEntryBindings(&[
+            RstbEntryBindings {
+                stage: 0,
+                name: "vertex".into(),
+                bindings: vec![1],
+            },
+            RstbEntryBindings {
+                stage: 1,
+                name: "fragment".into(),
+                bindings: vec![0x202],
+            },
+        ]);
+        let selected = GpuCanvasShaderEntry {
+            stage: GpuCanvasShaderStage::Fragment,
+            logical_entry_point: "fragment".into(),
+            physical_entry_point: "main".into(),
+        };
+        let bytes = module_entry_bindings(&asset, &[selected.clone()]);
+        let mut decoded = Vec::new();
+        assert!(decodeEntryBindings(Some(&bytes), bytes.len(), &mut decoded));
+        assert_eq!(
+            decoded,
+            vec![RstbEntryBindings {
+                stage: 1,
+                name: "main".into(),
+                bindings: vec![0x202]
+            }]
+        );
+        let missing = GpuCanvasShaderEntry {
+            logical_entry_point: "missing".into(),
+            ..selected
+        };
+        assert!(module_entry_bindings(&asset, &[missing]).is_empty());
+        assert!(module_entry_bindings(&[1, 1], &[]).is_empty());
+    }
+}
 fn context_error(context: &dyn ContextApi, fallback: &str) -> String {
     let error = context.lastError();
     if error.is_empty() {
@@ -56,6 +127,7 @@ impl ExactGpuCanvasShaderOccurrence {
                     ShaderLanguage::wgsl,
                     ShaderStage::autoDetect,
                     &shader.binding_map_bytes,
+                    &module_entry_bindings(&shader.entry_binding_bytes, &shader.entries),
                     None,
                     shader.shader_asset_id,
                     &shader.texture_sampler_pairs,
@@ -85,6 +157,10 @@ impl ExactGpuCanvasShaderOccurrence {
                         ShaderLanguage::glsl,
                         stage,
                         &shader.binding_map_bytes,
+                        &module_entry_bindings(
+                            &shader.entry_binding_bytes,
+                            std::slice::from_ref(entry),
+                        ),
                         Some(fixup),
                         shader.shader_asset_id,
                         &shader.texture_sampler_pairs,
@@ -101,6 +177,7 @@ impl ExactGpuCanvasShaderOccurrence {
                 ShaderLanguage::glsl,
                 ShaderStage::autoDetect,
                 shader.binding_map_bytes(),
+                &module_entry_bindings(shader.entry_binding_bytes(), shader.entries()),
                 None,
                 shader.shader_asset_id(),
                 shader.texture_sampler_pairs(),
@@ -115,6 +192,7 @@ impl ExactGpuCanvasShaderOccurrence {
                 ShaderLanguage::glsl,
                 ShaderStage::autoDetect,
                 shader.binding_map_bytes(),
+                &module_entry_bindings(shader.entry_binding_bytes(), shader.entries()),
                 None,
                 shader.shader_asset_id(),
                 shader.texture_sampler_pairs(),
@@ -212,6 +290,7 @@ fn make_shader_module(
     language: ShaderLanguage,
     stage: ShaderStage,
     binding_map: &[u8],
+    entry_bindings: &[u8],
     gl_fixup: Option<&[u8]>,
     shader_asset_id: u32,
     texture_sampler_pairs: &[GpuCanvasShaderTextureSamplerPair],
@@ -245,6 +324,9 @@ fn make_shader_module(
             stage,
             bindingMapBytes: Some(binding_map),
             bindingMapSize: binding_map_size,
+            entryBindingBytes: (!entry_bindings.is_empty()).then_some(entry_bindings),
+            entryBindingSize: u32::try_from(entry_bindings.len())
+                .map_err(|_| rejected("entry bindings exceed u32"))?,
             texSamplerPairBytes: (!pair_bytes.is_empty()).then_some(pair_bytes.as_slice()),
             texSamplerPairSize: pair_size,
             glFixupBytes: gl_fixup,

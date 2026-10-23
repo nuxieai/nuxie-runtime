@@ -599,6 +599,8 @@ pub struct ShaderModuleDesc<'a> {
 
     pub texSamplerPairBytes: Option<&'a [u8]>,
     pub texSamplerPairSize: u32,
+    pub entryBindingBytes: Option<&'a [u8]>,
+    pub entryBindingSize: u32,
 
     // GL program-link fixup blob from the RSTB (target IDs 14/15, one per
     // GLSL stage). Consumed by `oreGLFixupProgramBindings` at
@@ -635,6 +637,9 @@ impl ShaderModuleDesc<'_> {
     pub fn glFixupSize(&self) -> Result<u32, DescriptorSizeError> {
         checked_prefix(self.glFixupBytes, self.glFixupSize).map(|_| self.glFixupSize)
     }
+    pub fn entryBindingSize(&self) -> Result<u32, DescriptorSizeError> {
+        checked_prefix(self.entryBindingBytes, self.entryBindingSize).map(|_| self.entryBindingSize)
+    }
 }
 
 impl Default for ShaderModuleDesc<'_> {
@@ -652,6 +657,8 @@ impl Default for ShaderModuleDesc<'_> {
             bindingMapSize: 0,
             texSamplerPairBytes: None,
             texSamplerPairSize: 0,
+            entryBindingBytes: None,
+            entryBindingSize: 0,
             glFixupBytes: None,
             glFixupSize: 0,
             shaderAssetId: 0,
@@ -1514,6 +1521,8 @@ pub mod raw_abi {
         pub bindingMapSize: u32,
         pub texSamplerPairBytes: *const u8,
         pub texSamplerPairSize: u32,
+        pub entryBindingBytes: *const u8,
+        pub entryBindingSize: u32,
         pub glFixupBytes: *const u8,
         pub glFixupSize: u32,
         pub shaderAssetId: u32,
@@ -1538,6 +1547,10 @@ pub mod raw_abi {
                     optional_slice(self.texSamplerPairBytes, self.texSamplerPairSize)?
                 },
                 texSamplerPairSize: self.texSamplerPairSize,
+                entryBindingBytes: unsafe {
+                    optional_slice(self.entryBindingBytes, self.entryBindingSize)?
+                },
+                entryBindingSize: self.entryBindingSize,
                 glFixupBytes: unsafe { optional_slice(self.glFixupBytes, self.glFixupSize)? },
                 glFixupSize: self.glFixupSize,
                 shaderAssetId: self.shaderAssetId,

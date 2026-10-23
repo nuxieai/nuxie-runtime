@@ -10,7 +10,7 @@ impl UserData for Pipeline {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("getBindGroupLayout",|lua,this,group:u32| {
             if this.auto_layouts.is_empty() { return Err(Error::runtime("getBindGroupLayout: pipeline was built with explicit bindGroupLayouts; reuse the layout you supplied")); }
-            let layout=this.auto_layouts.get(group as usize).and_then(Clone::clone).ok_or_else(||Error::runtime(format!("getBindGroupLayout: group {group} not present in shader")))?;
+            let layout=this.auto_layouts.get(group as usize).and_then(Clone::clone).ok_or_else(||Error::runtime(format!("getBindGroupLayout: group {group} is not bound by the pipeline's entry points")))?;
             lua.create_userdata(layout)
         });
     }
@@ -398,8 +398,10 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                     &mut *context.borrow_mut(),
                     desc.vertexModule
                         .and_then(|module| module.shaderModuleBase()),
+                    desc.vertexEntryPoint,
                     desc.fragmentModule
                         .and_then(|module| module.shaderModuleBase()),
+                    desc.fragmentEntryPoint,
                 )?,
                 true,
             )

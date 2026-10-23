@@ -62,6 +62,7 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
         .create_userdata(pass::Pass {
             pass: Some(Box::new(inner)),
             deferred_bind_groups: None,
+            draw_bindings: Default::default(),
             finished: false,
             sample_count: 1,
             pipeline_set: false,
@@ -165,6 +166,7 @@ fn bind_groups_wait_for_first_pipeline() {
         .create_userdata(pass::Pass {
             pass: Some(Box::new(inner)),
             deferred_bind_groups: None,
+            draw_bindings: Default::default(),
             finished: false,
             sample_count: 1,
             pipeline_set: false,
@@ -591,6 +593,7 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
         .create_userdata(pass::Pass {
             pass: Some(Box::new(inner)),
             deferred_bind_groups: None,
+            draw_bindings: Default::default(),
             finished: false,
             sample_count: 1,
             pipeline_set: false,

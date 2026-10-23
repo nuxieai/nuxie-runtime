@@ -27,6 +27,8 @@ pub struct ShaderAsset {
     bytes: Vec<u8>,
     index: HashMap<u8, ShaderVariant>,
     pairs: Vec<TextureSamplerPair>,
+    entry_bindings_offset: usize,
+    entry_bindings_size: usize,
     indexed: bool,
     imported: bool,
     require_signed_scripts: bool,
@@ -42,6 +44,8 @@ impl Default for ShaderAsset {
             bytes: Vec::new(),
             index: HashMap::new(),
             pairs: Vec::new(),
+            entry_bindings_offset: 0,
+            entry_bindings_size: 0,
             indexed: false,
             imported: false,
             require_signed_scripts: false,
@@ -148,6 +152,8 @@ impl ShaderAsset {
     fn index(&mut self) -> bool {
         self.index.clear();
         self.pairs.clear();
+        self.entry_bindings_offset = 0;
+        self.entry_bindings_size = 0;
 
         if self.bytes.len() < 8 {
             return false;
@@ -219,6 +225,10 @@ impl ShaderAsset {
                     }
                 }
             }
+            if tag == 2 && length >= 1 {
+                self.entry_bindings_offset = cursor;
+                self.entry_bindings_size = length;
+            }
             cursor += length;
         }
 
@@ -238,6 +248,14 @@ impl ShaderAsset {
 
     pub fn file_extension(&self) -> &'static str {
         "rstb"
+    }
+
+    pub fn entry_bindings(&self) -> &[u8] {
+        if !self.indexed || self.entry_bindings_size == 0 {
+            return &[];
+        }
+        &self.bytes
+            [self.entry_bindings_offset..self.entry_bindings_offset + self.entry_bindings_size]
     }
 
     pub fn encoded_payload(&self) -> &[u8] {

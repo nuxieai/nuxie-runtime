@@ -118,6 +118,7 @@ impl PipelineSnapshot {
 //                  public ENABLE_LITE_RTTI(Pipeline)
 #[repr(C)]
 pub struct PipelineMembers {
+    pub m_entryUseKnown: bool,
     pub m_bindingMap: ManuallyDrop<BindingMap>,
     pub m_textureSamplerPairs: ManuallyDrop<Vec<TextureSamplerPair>>,
     pub(crate) m_layouts: ManuallyDrop<[Option<AnyResourceHandle>; kMaxBindGroups as usize]>,
@@ -182,11 +183,13 @@ unsafe impl GpuResourcePayload for Pipeline {
 
 impl Pipeline {
     pub(crate) fn new(desc: &PipelineDesc<'_>) -> Option<Self> {
-        let m_bindingMap = crate::bind_group_layout::bindingMapForStages(
+        let m_bindingMap = crate::bind_group_layout::bindingMapForEntries(
             desc.vertexModule
                 .and_then(AnyResourceHandle::shaderModuleBase),
+            desc.vertexEntryPoint,
             desc.fragmentModule
                 .and_then(AnyResourceHandle::shaderModuleBase),
+            desc.fragmentEntryPoint,
         );
         let mut m_textureSamplerPairs = Vec::new();
         for module in [desc.vertexModule, desc.fragmentModule]
@@ -208,6 +211,14 @@ impl Pipeline {
         Some(Self {
             base: ManuallyDrop::new(GPUResource::new(None)),
             members: ManuallyDrop::new(PipelineMembers {
+                m_entryUseKnown: crate::bind_group_layout::entryUseKnown(
+                    desc.vertexModule
+                        .and_then(AnyResourceHandle::shaderModuleBase),
+                    desc.vertexEntryPoint,
+                    desc.fragmentModule
+                        .and_then(AnyResourceHandle::shaderModuleBase),
+                    desc.fragmentEntryPoint,
+                ),
                 m_bindingMap: ManuallyDrop::new(m_bindingMap),
                 m_textureSamplerPairs: ManuallyDrop::new(m_textureSamplerPairs),
                 m_layouts: ManuallyDrop::new(m_layouts),

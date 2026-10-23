@@ -20,3 +20,5 @@ pub use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer, ore_commands, ore_deferred_resource, ore_handle, ore_make_recording,
     ore_make_replay, ore_render_pass_recording, ore_replay, ore_resource_commands,
 };
+#[cfg(test)]
+mod ore_entry_layout_test;

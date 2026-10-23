@@ -48,7 +48,7 @@ const APPLE_METAL_SOURCE_TARGET: u8 = 2;
 #[cfg(any(feature = "apple-authored-msl", test))]
 const APPLE_METAL_BINDING_MAP_TARGET: u8 = 10;
 #[cfg(any(feature = "apple-authored-msl", test))]
-const SUPPLEMENTAL_REFLECTION_SECTION: u8 = 2;
+const SUPPLEMENTAL_REFLECTION_SECTION: u8 = 128;
 #[cfg(any(feature = "apple-authored-msl", test))]
 const SUPPLEMENTAL_REFLECTION_VERSION: u8 = 1;
 const MAX_RSTB_BYTES: usize = 4 * 1024 * 1024;
@@ -197,6 +197,7 @@ impl ShaderAsset {
                 .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
                 .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?,
             self.texture_sampler_pairs(),
+            self.entry_bindings(),
         )
     }
 
@@ -229,6 +230,7 @@ impl ShaderAsset {
             sources,
             bindings: decode_binding_map(name, &binding_map)?,
             binding_map_bytes: std::sync::Arc::from(binding_map),
+            entry_binding_bytes: self.entry_bindings(),
             vertex_gl_fixup_bytes: std::sync::Arc::from(vertex_fixup),
             fragment_gl_fixup_bytes: std::sync::Arc::from(fragment_fixup),
             shader_asset_id: self
@@ -352,6 +354,7 @@ impl ShaderAsset {
                 entries,
                 bindings,
                 std::sync::Arc::from(binding_map),
+                self.entry_bindings(),
                 shader_asset_id,
                 self.texture_sampler_pairs(),
             )
@@ -420,6 +423,7 @@ impl ShaderAsset {
                 entries,
                 bindings,
                 std::sync::Arc::from(binding_map),
+                self.entry_bindings(),
                 entry_reflection,
                 binding_reflection,
                 self.asset
@@ -442,6 +446,13 @@ impl ShaderAsset {
                 (!bytes.is_empty()).then(|| bytes.to_vec())
             })
             .flatten()
+    }
+    fn entry_bindings(&self) -> std::sync::Arc<[u8]> {
+        self.asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                std::sync::Arc::from(asset.entry_bindings())
+            })
+            .expect("native ShaderAsset")
     }
     fn texture_sampler_pairs(&self) -> Vec<GpuCanvasShaderTextureSamplerPair> {
         self.asset
@@ -614,6 +625,7 @@ fn decode_whole_module_wgsl(
     binding_map: &[u8],
     shader_asset_id: u32,
     texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
+    entry_binding_bytes: std::sync::Arc<[u8]>,
 ) -> Result<GpuCanvasShader> {
     let (source, entries) = decode_whole_module_source(name, "WGSL", source_container)?;
     Ok(GpuCanvasShader {
@@ -621,6 +633,7 @@ fn decode_whole_module_wgsl(
         entries,
         bindings: decode_binding_map(name, &binding_map)?,
         binding_map_bytes: std::sync::Arc::from(binding_map),
+        entry_binding_bytes,
         shader_asset_id,
         texture_sampler_pairs,
     })
@@ -2105,6 +2118,67 @@ mod tests {
                 interpolation: Some(GpuCanvasShaderInterpolation::Perspective),
                 sampling: Some(GpuCanvasShaderSampling::Center),
             },
+        );
+    }
+
+    #[test]
+    fn upstream_entry_bindings_and_metal_reflection_have_disjoint_tags() {
+        let original = ShaderAsset::decode("native", &native_payload()).unwrap();
+        let source = original.variant(APPLE_METAL_SOURCE_TARGET).unwrap();
+        let map = original.variant(APPLE_METAL_BINDING_MAP_TARGET).unwrap();
+        let reflection = original.supplemental_reflection.clone().unwrap();
+        let entries = vec![1, 1, 2, 0, b'f', b's', 1, 0, 1];
+        let payload = rstb_payload_with_sections(
+            &[
+                (APPLE_METAL_SOURCE_TARGET, source.clone()),
+                (APPLE_METAL_BINDING_MAP_TARGET, map.clone()),
+            ],
+            &[(2, entries.clone()), (128, reflection.clone())],
+        );
+        let asset = ShaderAsset::decode("both", &payload).unwrap();
+        assert_eq!(&*asset.entry_bindings(), entries);
+        let shader = asset
+            .decode_apple_metal("both", Some(provenance(&payload)))
+            .unwrap();
+        assert_eq!(shader.entry_binding_bytes(), entries);
+        // An old section-2 Metal payload never masquerades as tag-128 reflection.
+        let old = rstb_payload_with_sections(
+            &[
+                (APPLE_METAL_SOURCE_TARGET, source),
+                (APPLE_METAL_BINDING_MAP_TARGET, map),
+            ],
+            &[(2, reflection)],
+        );
+        let asset = ShaderAsset::decode("old", &old).unwrap();
+        assert!(asset.supplemental_reflection.is_none());
+        assert!(
+            asset
+                .decode_apple_metal("old", Some(provenance(&old)))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_entry_bindings() {
+        let entries = vec![1, 1, 2, 0, b'f', b's', 1, 0, 1];
+        let pairs = make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2]]);
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(2, entries.clone()), (1, pairs)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("entry-bindings", &data).unwrap();
+        assert_eq!(&*asset.entry_bindings(), entries);
+        assert_eq!(upstream_texture_sampler_pairs(&asset).len(), 1);
+        assert_eq!(asset.variant(2).unwrap(), [0xaa]);
+        let old_data =
+            upstream_envelope(&make_upstream_rstb(4, &[(2, vec![0x42])], &[], 0x5253_5442));
+        assert!(
+            ShaderAsset::decode("old", &old_data)
+                .unwrap()
+                .entry_bindings()
+                .is_empty()
         );
     }
 

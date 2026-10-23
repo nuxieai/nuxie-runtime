@@ -449,6 +449,25 @@ pub enum BoxSizing {
     BorderBox,
     /// Size styles such size, min_size, max_size specify the box's "content box" (the size excluding padding/border/margin)
     ContentBox,
+    // nuxie-css: a canvas can mix a CSS content-sized axis with a frame's
+    // border-box axis. These internal variants are not authored CSS values.
+    /// Content-box width and border-box height.
+    ContentBoxWidth,
+    /// Border-box width and content-box height.
+    ContentBoxHeight,
+}
+
+// nuxie-css: keep the adjustment per axis throughout every layout algorithm,
+// including child and intrinsic measurement, rather than subtracting padding
+// from frame dimensions before its percentage basis is known.
+impl BoxSizing {
+    /// Padding and border added to the authored size and limits on each axis.
+    pub fn content_box_adjustment(self, padding_border: Size<f32>) -> Size<f32> {
+        Size {
+            width: if matches!(self, Self::ContentBox | Self::ContentBoxWidth) { padding_border.width } else { 0.0 },
+            height: if matches!(self, Self::ContentBox | Self::ContentBoxHeight) { padding_border.height } else { 0.0 },
+        }
+    }
 }
 
 #[cfg(feature = "parse")]

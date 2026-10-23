@@ -319,7 +319,12 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
         } => {
             // Stored frame dimensions are border-box sizes. Only open axes
             // take CSS sizes/limits; Rive item limits never apply here.
-            style.box_sizing = BoxSizing::BorderBox;
+            style.box_sizing = match (values.choice(keys::BOX_SIZING), width_hugs, height_hugs) {
+                (0, true, true) => BoxSizing::ContentBox,
+                (0, true, false) => BoxSizing::ContentBoxWidth,
+                (0, false, true) => BoxSizing::ContentBoxHeight,
+                _ => BoxSizing::BorderBox,
+            };
             style.display = values.display();
             style.min_size = Size::auto();
             style.max_size = Size::auto();
@@ -344,19 +349,49 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
                     // Taffy also transfers min/max through a ratio. With one
                     // frame axis, derive only the open auto axis here so its
                     // CSS limits cannot enlarge/shrink the fixed frame axis.
-                    let from_frame = |open: &mut Dimension, fixed: Dimension, scale: f32| {
-                        if matches!(
-                            open.expand(),
-                            ExpandedDimension::Auto | ExpandedDimension::Percent(_)
-                        ) && let ExpandedDimension::Length(frame) = fixed.expand()
-                        {
-                            *open = Dimension::length(frame * scale);
+                    // A content-box ratio relates content dimensions, even
+                    // when a frame supplies the closed axis's border box.
+                    use taffy::util::ResolveOrZero;
+                    let basis = if !width_hugs {
+                        match style.size.width.expand() {
+                            ExpandedDimension::Length(width) => Some(width),
+                            _ => None,
                         }
+                    } else {
+                        None
                     };
+                    let calc = |_: *const (), _: f32| 0.0;
+                    let edges = if values.choice(keys::BOX_SIZING) == 0 {
+                        (style.padding.resolve_or_zero(basis, calc)
+                            + style.border.resolve_or_zero(basis, calc))
+                        .sum_axes()
+                    } else {
+                        Size::ZERO
+                    };
+                    let from_frame =
+                        |open: &mut Dimension, fixed: Dimension, scale: f32, inset: f32| {
+                            if matches!(
+                                open.expand(),
+                                ExpandedDimension::Auto | ExpandedDimension::Percent(_)
+                            ) && let ExpandedDimension::Length(frame) = fixed.expand()
+                            {
+                                *open = Dimension::length((frame - inset).max(0.0) * scale);
+                            }
+                        };
                     if width_hugs {
-                        from_frame(&mut style.size.width, style.size.height, ratio);
+                        from_frame(
+                            &mut style.size.width,
+                            style.size.height,
+                            ratio,
+                            edges.height,
+                        );
                     } else if height_hugs {
-                        from_frame(&mut style.size.height, style.size.width, 1.0 / ratio);
+                        from_frame(
+                            &mut style.size.height,
+                            style.size.width,
+                            1.0 / ratio,
+                            edges.width,
+                        );
                     }
                 }
             }

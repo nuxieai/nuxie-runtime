@@ -16,7 +16,7 @@ use crate::util::sys::Vec;
 use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
 use crate::{
-    BlockContainerStyle, BlockItemStyle, BoxGenerationMode, BoxSizing, Contain, Dimension, Direction,
+    BlockContainerStyle, BlockItemStyle, BoxGenerationMode, Contain, Dimension, Direction,
     LayoutBlockContainer, RequestedAxis, TextAlign,
 };
 
@@ -402,8 +402,9 @@ pub fn compute_block_layout(
     let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border_size = (padding + border).sum_axes();
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
+        style.box_sizing().content_box_adjustment(padding_border_size);
 
     let min_size = style
         .min_size()
@@ -522,8 +523,9 @@ fn compute_inner(
     #[cfg(feature = "float_layout")]
     block_ctx.apply_content_box_inset([content_box_inset.left, content_box_inset.right]);
 
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
+        style.box_sizing().content_box_adjustment(padding_border_size);
     let size = style
         .size()
         .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
@@ -917,8 +919,9 @@ fn generate_item_list(
             let border =
                 child_style.border().resolve_or_zero(node_inner_size.width, |val, basis| tree.calc(val, basis));
             let pb_sum = (padding + border).sum_axes();
+            // nuxie-css: per-axis canvas sizing.
             let box_sizing_adjustment =
-                if child_style.box_sizing() == BoxSizing::ContentBox { pb_sum } else { Size::ZERO };
+                child_style.box_sizing().content_box_adjustment(pb_sum);
 
             let position = child_style.position();
             let overflow = child_style.overflow();

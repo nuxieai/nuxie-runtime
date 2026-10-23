@@ -3944,9 +3944,9 @@ impl StateMachineInstance {
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
                 if let Some(target) = target.as_ref() {
-                    let is_layout = target
-                        .with(|target| target.as_layout_component().is_some())
-                        .unwrap_or(false);
+                    let (is_layout, is_css_copy) = target
+                        .with(|target| (target.as_layout_component().is_some(), crate::source::nested_artboard_layout::NestedArtboardLayout::is_css_box_component(target)))
+                        .unwrap_or((false, false));
                     let hit_target = if is_layout {
                         target
                             .with_mut(|target| {
@@ -3961,7 +3961,7 @@ impl StateMachineInstance {
                     if let Some(hit_target) = hit_target {
                         self.add_to_hit_lookup(
                             hit_target,
-                            is_layout,
+                            is_layout || is_css_copy,
                             hit_lookup,
                             group.clone(),
                             false,
@@ -4015,6 +4015,7 @@ impl StateMachineInstance {
                         RuntimeDrawableOccurrence::Authored(target) => target
                             .with(|target| {
                                 target.as_layout_component().is_some()
+                                    || crate::source::nested_artboard_layout::NestedArtboardLayout::is_css_box_component(target)
                                     || target
                                         .as_drawable()
                                         .is_some_and(|drawable| drawable.is_proxy())
@@ -4288,7 +4289,7 @@ impl StateMachineInstance {
         {
             for child in children {
                 let is_layout = child
-                    .with(|child| child.as_layout_component().is_some())
+                    .with(|child| child.as_layout_component().is_some() || crate::source::nested_artboard_layout::NestedArtboardLayout::is_css_box_component(child))
                     .unwrap_or(false);
                 self.add_to_hit_lookup(
                     RuntimeDrawableOccurrence::Authored(child),

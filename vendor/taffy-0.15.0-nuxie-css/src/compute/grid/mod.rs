@@ -12,7 +12,7 @@ use crate::util::sys::{f32_max, f32_min, GridTrackVec, Vec};
 use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
 use crate::{
-    style_helpers::*, BoxGenerationMode, BoxSizing, CoreStyle, Direction, GridContainerStyle, GridItemStyle,
+    style_helpers::*, BoxGenerationMode, CoreStyle, Direction, GridContainerStyle, GridItemStyle,
     LayoutGridContainer, RequestedAxis,
 };
 use alignment::{align_and_position_item, align_tracks};
@@ -108,8 +108,9 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
     let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border = padding + border;
     let padding_border_size = padding_border.sum_axes();
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
+        style.box_sizing().content_box_adjustment(padding_border_size);
 
     let min_size = style
         .min_size()

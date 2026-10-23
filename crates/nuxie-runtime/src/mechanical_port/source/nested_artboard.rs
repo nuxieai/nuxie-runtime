@@ -1349,8 +1349,13 @@ impl NestedArtboard {
 
     pub(crate) fn natural_size_for_layout(&self) -> Option<Vec2D> {
         self.instance.as_ref().map(|instance| {
-            instance
-                .with_artboard(|board| Vec2D::new(board.original_width(), board.original_height()))
+            instance.with_artboard(|board| {
+                if board.is_css_mode() {
+                    Vec2D::new(board.layout_width(), board.layout_height())
+                } else {
+                    Vec2D::new(board.original_width(), board.original_height())
+                }
+            })
         })
     }
 
@@ -1359,9 +1364,10 @@ impl NestedArtboard {
     pub(crate) fn natural_bounds_for_layout(
         &self,
     ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+        let size = self.natural_size_for_layout()?;
         self.instance.as_ref().map(|instance| {
             instance.with_artboard(|board| {
-                let (width, height) = (board.original_width(), board.original_height());
+                let (width, height) = (size.x, size.y);
                 crate::mechanical_port::source::math::aabb::Aabb::from_ltwh(
                     -board.base.origin_x() * width,
                     -board.base.origin_y() * height,
@@ -1391,10 +1397,22 @@ impl NestedArtboard {
         };
         Vec2D::new(
             maximum_width.min(self.instance.as_ref().map_or(0.0, |instance| {
-                instance.with_artboard(|instance| instance.width())
+                instance.with_artboard(|instance| {
+                    if instance.is_css_mode() {
+                        instance.layout_width()
+                    } else {
+                        instance.width()
+                    }
+                })
             })),
             maximum_height.min(self.instance.as_ref().map_or(0.0, |instance| {
-                instance.with_artboard(|instance| instance.height())
+                instance.with_artboard(|instance| {
+                    if instance.is_css_mode() {
+                        instance.layout_height()
+                    } else {
+                        instance.height()
+                    }
+                })
             })),
         )
     }

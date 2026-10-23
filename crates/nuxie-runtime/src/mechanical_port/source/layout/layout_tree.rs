@@ -349,15 +349,16 @@ pub(crate) fn content_width_limits(
     let calc = |_: *const (), _: f32| 0.0;
     let padding_border = style.padding.resolve_or_zero(parent.width, calc)
         + style.border.resolve_or_zero(parent.width, calc);
-    let inset = if style.box_sizing == taffy::BoxSizing::BorderBox {
-        padding_border.horizontal_axis_sum()
-    } else {
-        0.0
-    } + if style.overflow.y == taffy::Overflow::Scroll {
-        style.scrollbar_width
-    } else {
-        0.0
-    };
+    let inset = padding_border.horizontal_axis_sum()
+        - style
+            .box_sizing
+            .content_box_adjustment(padding_border.sum_axes())
+            .width
+        + if style.overflow.y == taffy::Overflow::Scroll {
+            style.scrollbar_width
+        } else {
+            0.0
+        };
     let content = |value: Option<f32>| value.map(|value| (value - inset).max(0.0));
     (
         content(
@@ -380,15 +381,16 @@ pub(crate) fn content_height_limits(
     let calc = |_: *const (), _: f32| 0.0;
     let padding_border = style.padding.resolve_or_zero(parent.width, calc)
         + style.border.resolve_or_zero(parent.width, calc);
-    let inset = if style.box_sizing == taffy::BoxSizing::BorderBox {
-        padding_border.vertical_axis_sum()
-    } else {
-        0.0
-    } + if style.overflow.x == taffy::Overflow::Scroll {
-        style.scrollbar_width
-    } else {
-        0.0
-    };
+    let inset = padding_border.vertical_axis_sum()
+        - style
+            .box_sizing
+            .content_box_adjustment(padding_border.sum_axes())
+            .height
+        + if style.overflow.x == taffy::Overflow::Scroll {
+            style.scrollbar_width
+        } else {
+            0.0
+        };
     let content = |value: Option<f32>| value.map(|value| (value - inset).max(0.0));
     (
         content(

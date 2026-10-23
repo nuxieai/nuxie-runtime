@@ -66345,6 +66345,19 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_number::S
 impl CoreCapabilities
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn semantic_provider_local_bounds(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+        Some(self.local_bounds())
+    }
+    fn component_hit_test_point(
+        &mut self,
+        position: &crate::mechanical_port::source::math::vec2d::Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> Option<bool> {
+        Some(self.hit_test_point(position, skip_on_unclipped, is_primary_hit))
+    }
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,

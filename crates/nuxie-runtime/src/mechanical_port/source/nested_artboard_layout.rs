@@ -62,6 +62,61 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl NestedArtboardLayout {
+    /// CSS copies are boxes even though the native host is a Drawable rather
+    /// than a LayoutComponent. Its world transform already places this box.
+    pub(crate) fn css_box_bounds(&self) -> Option<Aabb> {
+        self.base
+            .base
+            .artboard_instance_handle(0)?
+            .with_artboard(|board| board.is_css_mode().then(|| board.bounds()))
+    }
+
+    pub(crate) fn is_css_box_component(object: &dyn crate::source::core::CoreObject) -> bool {
+        object
+            .as_any()
+            .downcast_ref::<Self>()
+            .is_some_and(|host| host.css_box_bounds().is_some())
+    }
+
+    pub fn local_bounds(&self) -> Aabb {
+        self.css_box_bounds().unwrap_or_default()
+    }
+
+    pub fn hit_test_point(
+        &mut self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        primary: bool,
+    ) -> bool {
+        let mut skip_parent_unclipped = skip_on_unclipped;
+        if let Some(bounds) = self.css_box_bounds() {
+            let collapsed = self
+                .base
+                .base
+                .artboard_instance_handle(0)
+                .is_some_and(|copy| copy.with_artboard(|board| board.is_collapsed()));
+            if collapsed {
+                return false;
+            }
+            if primary || !skip_on_unclipped {
+                let mut inverse = Mat2D::default();
+                if !self.base.base.world_transform().invert(&mut inverse)
+                    || !bounds.contains(inverse * *position)
+                {
+                    return false;
+                }
+            }
+            // This box has been tested. Ancestors restrict it only through
+            // their clips, just as LayoutComponent::hit_test_point does.
+            skip_parent_unclipped = true;
+        }
+        self.base
+            .base
+            .base
+            .base
+            .hit_test_point(position, skip_parent_unclipped, primary)
+    }
+
     pub fn layout_node(
         &self,
         _index: i32,
@@ -101,22 +156,34 @@ impl NestedArtboardLayout {
         let mut base = instance.with_artboard(|instance| {
             Vec2D::new(instance.layout_x(), instance.layout_y()) - instance.origin()
         });
-        if let Some((origin, row_offset)) = self.base.base.parent_handle().and_then(|parent| {
-            parent
-                .with(|parent| {
-                    parent.as_artboard().map(|board| {
-                        (
-                            board.origin(),
-                            if board.css_list_row_context().is_some() {
-                                Vec2D::new(board.layout_x(), board.layout_y())
-                            } else {
-                                Vec2D::default()
-                            },
-                        )
+        // The hoisted copy's scene parent may be a plain transform below the
+        // generated row. The row already carries the copy's layout offset;
+        // subtract it once while retaining the intervening world transforms.
+        let direct_parent = self.base.base.parent_handle();
+        if let Some((origin, row_offset)) =
+            owning_layout(direct_parent.clone()).and_then(|parent| {
+                parent
+                    .with(|object| {
+                        object
+                            .as_artboard()
+                            .filter(|board| {
+                                direct_parent.as_ref() == Some(&parent)
+                                    || board.css_list_row_context().is_some()
+                            })
+                            .map(|board| {
+                                (
+                                    board.origin(),
+                                    if board.css_list_row_context().is_some() {
+                                        Vec2D::new(board.layout_x(), board.layout_y())
+                                    } else {
+                                        Vec2D::default()
+                                    },
+                                )
+                            })
                     })
-                })
-                .flatten()
-        }) {
+                    .flatten()
+            })
+        {
             base += origin - row_offset;
         }
         let parent_world = self

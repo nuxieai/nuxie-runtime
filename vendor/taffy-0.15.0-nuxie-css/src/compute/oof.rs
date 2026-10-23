@@ -17,7 +17,7 @@ use crate::tree::{
 };
 use crate::util::sys::{f32_max, Vec};
 use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
-use crate::{AxisStaticEdge, BoxSizing, Direction};
+use crate::{AxisStaticEdge, Direction};
 
 #[cfg(feature = "content_size")]
 use super::common::scrollable_overflow::compute_scrollable_overflow_contribution;
@@ -488,8 +488,9 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     let padding = child_style.padding().resolve_or_zero(Some(area_width), |val, basis| tree.calc(val, basis));
     let border = child_style.border().resolve_or_zero(Some(area_width), |val, basis| tree.calc(val, basis));
     let padding_border_sum = (padding + border).sum_axes();
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if child_style.box_sizing() == BoxSizing::ContentBox { padding_border_sum } else { Size::ZERO };
+        child_style.box_sizing().content_box_adjustment(padding_border_sum);
 
     // Resolve inset
     let left = child_style.inset().left.maybe_resolve(area_width, |val, basis| tree.calc(val, basis));

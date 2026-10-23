@@ -1027,11 +1027,98 @@ fn css_artboard_ratio_respects_open_axis_sizes_and_keeps_frame_axes_fixed() {
     }
 }
 
+#[test]
+fn css_artboard_hug_content_box_adds_padding_only_on_open_axes() {
+    for display in [0, 1, 2] {
+        for (width_hugs, height_hugs, expected) in [
+            (true, true, (100.0, 44.0)),
+            (false, true, (300.0, 44.0)),
+            (true, false, (100.0, 160.0)),
+            (false, false, (300.0, 160.0)),
+        ] {
+            let scene = css_artboard_sizing_scene(
+                width_hugs,
+                height_hugs,
+                |riv| {
+                    riv.uint(DISPLAY, display);
+                    padded_root_record(riv);
+                },
+                false,
+            );
+            assert_eq!(root_size(&scene), expected, "display {display}");
+        }
+    }
+    let limited = css_artboard_sizing_scene(
+        true,
+        true,
+        |riv| {
+            padded_root_record(riv);
+            riv.uint(MIN_HEIGHT_KIND, 1)
+                .float(MIN_HEIGHT, 40.0)
+                .uint(MAX_WIDTH_KIND, 1)
+                .float(MAX_WIDTH_KIND + 1, 60.0);
+        },
+        false,
+    );
+    assert_eq!(
+        root_size(&limited),
+        (80.0, 60.0),
+        "content-box limits include padding"
+    );
+    for (width_hugs, height_hugs) in [(false, true), (true, false)] {
+        let scene = css_artboard_sizing_scene(
+            width_hugs,
+            height_hugs,
+            |riv| {
+                riv.float(ASPECT_RATIO, 2.0)
+                    .float(PADDING_TOP, 10.0)
+                    .float(PADDING_RIGHT, 10.0)
+                    .float(PADDING_BOTTOM, 10.0)
+                    .float(PADDING_LEFT, 10.0);
+            },
+            false,
+        );
+        assert_eq!(
+            root_size(&scene),
+            (300.0, 160.0),
+            "ratio relates content dimensions"
+        );
+    }
+    let scene = css_sized_leaf_scene_with_record(1, padded_root_record);
+    let world = scene_leaf_transform(&scene);
+    // Contain a 100 x 44 border box inside 200 x 100, without shrinking
+    // its padding into the declared 80 x 24 content dimensions.
+    assert_eq!(
+        (world[0], world[3], world[4], world[5]),
+        (2.0, 2.0, 0.0, 6.0)
+    );
+}
+
+fn padded_root_record(riv: &mut Riv) {
+    riv.uint(WIDTH_KIND, 1)
+        .float(WIDTH, 80.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 24.0)
+        .float(PADDING_TOP, 10.0)
+        .float(PADDING_RIGHT, 10.0)
+        .float(PADDING_BOTTOM, 10.0)
+        .float(PADDING_LEFT, 10.0);
+}
+
 fn css_sized_leaf_scene(fit: u64) -> Scene {
+    css_sized_leaf_scene_with_record(fit, |riv| {
+        riv.uint(WIDTH_KIND, 1)
+            .float(WIDTH, 200.0)
+            .uint(MIN_HEIGHT_KIND, 1)
+            .float(MIN_HEIGHT, 80.0);
+    })
+}
+
+fn css_sized_leaf_scene_with_record(fit: u64, root_record: impl FnOnce(&mut Riv)) -> Scene {
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
-    // The fitting box is 200 x 100. The source has stored dimensions 0 x 0,
-    // but solves to 200 x 80, so contain has unit scale and 10px top offset.
+    // The fitting box is 200 x 100. The source has stored dimensions 0 x 0
+    // and must solve from its record before fitting.
     board(&mut riv, 300.0, 300.0, 3);
     riv.object(LayoutComponentBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
@@ -1047,18 +1134,7 @@ fn css_sized_leaf_scene(fit: u64) -> Scene {
         .end();
     style(&mut riv, 0);
     style(&mut riv, 1);
-    css_sized_artboard(
-        &mut riv,
-        true,
-        true,
-        |riv| {
-            riv.uint(WIDTH_KIND, 1)
-                .float(WIDTH, 200.0)
-                .uint(MIN_HEIGHT_KIND, 1)
-                .float(MIN_HEIGHT, 80.0);
-        },
-        false,
-    );
+    css_sized_artboard(&mut riv, true, true, root_record, false);
     let scene = Scene::import(riv);
     scene.advance();
     scene
@@ -1083,6 +1159,80 @@ fn css_nested_leaf_fits_the_root_css_solved_size() {
         (world[0], world[3], world[4], world[5]),
         (1.0, 1.0, 0.0, 10.0)
     );
+}
+
+#[test]
+fn css_nested_intrinsic_measurement_uses_the_solved_css_border_box() {
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // An unsized fitting box around a CSS source whose stored size is zero.
+    board(&mut riv, 400.0, 300.0, 5);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 2)
+        .uint(ALIGN_ITEMS, 2)
+        .end();
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Unsized copy")
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 6)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .end();
+    riv.object(NestedArtboardLeafBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .uint(NestedArtboardLeafBase::FIT_PROPERTY_KEY, 1)
+        .end();
+    style(&mut riv, 0);
+    riv.object(LayoutComponentStyleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+            2,
+        )
+        .uint(LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY, 3)
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+            2,
+        )
+        .uint(LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY, 3)
+        .end();
+    css_sized_artboard(&mut riv, true, true, padded_root_record, false);
+    let scene = Scene::import(riv);
+    scene.advance();
+    let box_ = scene.artboard.with_artboard(|board| {
+        board
+            .find_handle::<LayoutComponent>("Unsized copy")
+            .unwrap()
+    });
+    assert_eq!(
+        box_.with_downcast::<LayoutComponent, _>(|box_| {
+            (box_.layout_width(), box_.layout_height())
+        }),
+        Some((100.0, 44.0))
+    );
+    let world = scene_leaf_transform(&scene);
+    assert_eq!((world[0], world[3]), (1.0, 1.0), "no content scaling");
+    // A source record write invalidates its host's cached intrinsic measure.
+    let leaf = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<NestedArtboardLeaf>()[0].clone());
+    let source = leaf
+        .with_downcast::<NestedArtboardLeaf, _>(|leaf| leaf.base.base.artboard_instance_handle(0))
+        .flatten()
+        .unwrap();
+    let record = source.with_artboard(|board| board.css_record()).unwrap();
+    CoreRegistry::set_double_handle(&record, WIDTH.into(), 120.0);
+    scene.advance();
+    assert_eq!(
+        box_.with_downcast::<LayoutComponent, _>(|box_| box_.layout_width()),
+        Some(140.0)
+    );
+    let world = scene_leaf_transform(&scene);
+    assert_eq!((world[0], world[3]), (1.0, 1.0));
 }
 
 #[test]
@@ -2042,6 +2192,26 @@ fn contents_list_scene_with_binding(
     virtualized: bool,
     bound_copy: bool,
 ) -> Scene {
+    contents_list_scene_with_row_options(
+        flagged,
+        percent,
+        copies,
+        virtualized,
+        bound_copy,
+        false,
+        false,
+    )
+}
+
+fn contents_list_scene_with_row_options(
+    flagged: bool,
+    percent: bool,
+    copies: u64,
+    virtualized: bool,
+    bound_copy: bool,
+    wrappers: bool,
+    host_semantics: bool,
+) -> Scene {
     use crate::source::generated::{
         animation::nested_state_machine_base::NestedStateMachineBase,
         constraints::{
@@ -2074,7 +2244,7 @@ fn contents_list_scene_with_binding(
         .float(PADDING_LEFT, 20.0)
         .float(PADDING_RIGHT, 20.0)
         .float(PADDING_TOP, 7.0)
-        .float(ROW_GAP, 8.0)
+        .float(ROW_GAP, if wrappers { 12.0 } else { 8.0 })
         .end();
     if virtualized {
         riv.object(LayoutComponentBase::TYPE_KEY)
@@ -2106,7 +2276,18 @@ fn contents_list_scene_with_binding(
             .bool(ScrollConstraintBase::VIRTUALIZE_PROPERTY_KEY, true)
             .end();
     }
-    style(&mut riv, 0);
+    if wrappers {
+        riv.object(LayoutComponentStyleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(
+                LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+                2,
+            )
+            .uint(LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY, 3)
+            .end();
+    } else {
+        style(&mut riv, 0);
+    }
     if virtualized {
         style(&mut riv, 2);
     }
@@ -2115,7 +2296,10 @@ fn contents_list_scene_with_binding(
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 60.0)
         .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 20.0)
         .uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0)
-        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 2 + copies * 3)
+        .uint(
+            LayoutComponentBase::STYLE_ID_PROPERTY_KEY,
+            2 + u64::from(wrappers) * 2 + copies * (3 + u64::from(host_semantics)),
+        )
         .end();
     riv.object(LAYOUT_CSS_STYLE)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
@@ -2131,10 +2315,25 @@ fn contents_list_scene_with_binding(
         .float(PADDING_TOP, 10.0)
         .float(PADDING_BOTTOM, 10.0)
         .end();
-    for index in 0..copies {
-        let host = 2 + index * 3;
-        riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+    if wrappers {
+        use crate::source::generated::node_base::NodeBase;
+        // Node is the concrete wire type for a plain transform. The abstract
+        // TransformComponent type (38) imports as a null object, which would
+        // leave the copy without a parent instead of exercising hoisting.
+        riv.object(NodeBase::TYPE_KEY)
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        riv.object(NodeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .end();
+    }
+    for index in 0..copies {
+        let host = 2 + u64::from(wrappers) * 2 + index * (3 + u64::from(host_semantics));
+        riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+            .uint(
+                ComponentBase::PARENT_ID_PROPERTY_KEY,
+                if wrappers { 3 } else { 0 },
+            )
             .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 2)
             .end();
         if bound_copy {
@@ -2166,10 +2365,49 @@ fn contents_list_scene_with_binding(
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
             .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
             .end();
+        if host_semantics {
+            use crate::source::generated::semantic::semantic_data_base::SemanticDataBase;
+            riv.object(SemanticDataBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+                .uint(
+                    SemanticDataBase::ROLE_PROPERTY_KEY,
+                    crate::source::semantic::semantic_role::SemanticRole::Button as u64,
+                )
+                .string(SemanticDataBase::LABEL_PROPERTY_KEY, "copy host")
+                .end();
+        }
     }
     style(&mut riv, 0);
-    contents_empty_machine(&mut riv);
-    contents_interactive_component(&mut riv);
+    if host_semantics {
+        use crate::source::generated::event_base::EventBase;
+        let event = 3 + u64::from(wrappers) * 2 + copies * 4;
+        riv.object(EventBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        contents_click_machine(&mut riv, 2 + u64::from(wrappers) * 2, event);
+    } else {
+        contents_empty_machine(&mut riv);
+    }
+    if host_semantics {
+        use crate::source::generated::shapes::paint::{
+            fill_base::FillBase, solid_color_base::SolidColorBase,
+        };
+        board(&mut riv, 10.0, 10.0, 4);
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        riv.object(FillBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        riv.object(SolidColorBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff112233)
+            .end();
+        style(&mut riv, 0);
+        contents_empty_machine(&mut riv);
+    } else {
+        contents_interactive_component(&mut riv);
+    }
     if bound_copy {
         contents_interactive_component(&mut riv);
     }
@@ -2218,6 +2456,37 @@ fn contents_empty_machine(riv: &mut Riv) {
         state_machine_layer_base::StateMachineLayerBase,
     };
     riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineLayerBase::TYPE_KEY).end();
+    for state in [
+        EntryStateBase::TYPE_KEY,
+        AnyStateBase::TYPE_KEY,
+        ExitStateBase::TYPE_KEY,
+    ] {
+        riv.object(state).end();
+    }
+}
+
+fn contents_click_machine(riv: &mut Riv, target: u64, event: u64) {
+    use crate::source::generated::animation::{
+        any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+        exit_state_base::ExitStateBase, listener_fire_event_base::ListenerFireEventBase,
+        listener_types::listener_input_type_base::ListenerInputTypeBase,
+        state_machine_base::StateMachineBase, state_machine_layer_base::StateMachineLayerBase,
+        state_machine_listener_base::StateMachineListenerBase,
+    };
+    riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineListenerBase::TYPE_KEY)
+        .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, target)
+        .end();
+    riv.object(ListenerInputTypeBase::TYPE_KEY)
+        .uint(
+            ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+            crate::source::listener_type::ListenerType::Click as u64,
+        )
+        .end();
+    riv.object(ListenerFireEventBase::TYPE_KEY)
+        .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, event)
+        .end();
     riv.object(StateMachineLayerBase::TYPE_KEY).end();
     for state in [
         EntryStateBase::TYPE_KEY,
@@ -2546,6 +2815,114 @@ fn css_list_contents_rows_use_the_copys_content_box_size_and_padding() {
 }
 
 #[test]
+fn css_list_contents_hoists_a_single_copy_through_plain_transform_nodes() {
+    use crate::source::{
+        generated::node_base::NodeBase, math::vec2d::Vec2D, node::Node,
+        semantic::semantic_provider::root_transform_point,
+    };
+    let scene = contents_list_scene_with_row_options(true, false, 1, false, false, true, false);
+    let rows = contents_rows(&scene);
+    for (index, row) in rows.iter().enumerate() {
+        // Check the imported parent chain before interpreting its geometry.
+        // find_all_handles::<Node>() also includes artboards and nested hosts;
+        // move the concrete plain group, rather than the row artboard itself.
+        let groups: Vec<_> = row.with_artboard(|board| {
+            board
+                .find_all_handles::<Node>()
+                .into_iter()
+                .filter(|node| node.core_type() == Some(NodeBase::TYPE_KEY))
+                .collect()
+        });
+        assert_eq!(groups.len(), 2, "both plain transform nodes must import");
+        let host =
+            row.with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>()[0].clone());
+        let parent = |handle: &CoreHandle| {
+            handle
+                .with(|object| object.component_parent_handle())
+                .flatten()
+        };
+        assert_eq!(parent(&groups[0]), Some(row.core_handle()));
+        assert_eq!(parent(&groups[1]), Some(groups[0].clone()));
+        assert_eq!(parent(&host), Some(groups[1].clone()));
+        assert_eq!(
+            row.with_artboard(|board| (board.layout_width(), board.layout_height())),
+            (120.0, 40.0)
+        );
+        let world = host
+            .with(|object| {
+                object
+                    .as_world_transform_component()
+                    .unwrap()
+                    .world_transform()
+            })
+            .unwrap();
+        // Component world matrices stop at their owning artboard. The list
+        // applies the row's solved position outside that tree when drawing.
+        assert_eq!(
+            (world[4], world[5]),
+            (0.0, 0.0),
+            "host in row artboard space"
+        );
+        let root = root_transform_point(&row.core_handle(), world * Vec2D::default())
+            .expect("mounted row projects through its retained draw transform");
+        assert_eq!((root.x, root.y), (20.0, 7.0 + index as f32 * 52.0));
+        CoreRegistry::set_double_handle(&groups[0], NodeBase::X_PROPERTY_KEY.into(), 11.0);
+    }
+    scene.advance();
+    for (index, row) in rows.iter().enumerate() {
+        let host =
+            row.with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>()[0].clone());
+        let world = host
+            .with(|object| {
+                object
+                    .as_world_transform_component()
+                    .unwrap()
+                    .world_transform()
+            })
+            .unwrap();
+        assert_eq!(
+            (world[4], world[5]),
+            (11.0, 0.0),
+            "plain ancestor translation in row artboard space"
+        );
+        let root = root_transform_point(&row.core_handle(), world * Vec2D::default())
+            .expect("mounted row projects through its retained draw transform");
+        assert_eq!(
+            (root.x, root.y),
+            (31.0, 7.0 + index as f32 * 52.0),
+            "plain ancestor transforms remain applied"
+        );
+    }
+    let machine = scene.artboard.state_machine_instance_handle(0).unwrap();
+    assert_eq!(
+        contents_tap_targets(&scene, &machine, 36.0, 60.0),
+        vec![contents_copy(&rows[1]).core_handle()],
+        "tap uses the translated copy's position in the root artboard"
+    );
+    for row in &rows {
+        let copy = contents_copy(row);
+        // Empty contents contribute neither boxes nor phantom list gaps.
+        let record = copy.with_artboard(|board| board.css_record()).unwrap();
+        CoreRegistry::set_uint_handle(&record, DISPLAY.into(), 3);
+    }
+    scene.advance();
+    assert!(
+        rows.iter()
+            .all(|row| row.with_artboard(|board| board.layout_height() == 0.0))
+    );
+    assert_eq!(root_size(&scene).1, 7.0);
+
+    // The transparent chain must not weaken the exactly-one-copy rule.
+    let multiple = contents_list_scene_with_row_options(true, false, 2, false, false, true, false);
+    for row in contents_rows(&multiple) {
+        assert_eq!(
+            row.with_artboard(|board| (board.layout_width(), board.layout_height())),
+            (80.0, 40.0)
+        );
+    }
+}
+
+#[test]
 fn css_list_contents_copy_percentages_use_the_lists_content_box() {
     let scene = contents_list_scene(true, true, 1);
     for row in contents_rows(&scene) {
@@ -2674,6 +3051,65 @@ fn css_list_contents_taps_and_semantics_follow_the_copy_box() {
     let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
     assert_eq!(nodes.iter().filter(|node| node.label == "copy").count(), 2);
     assert_eq!(click(), vec![copies[2].core_handle()]);
+}
+
+#[test]
+fn css_list_contents_host_semantics_and_taps_use_its_solved_box() {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let scene = contents_list_scene_with_row_options(true, false, 1, false, false, false, true);
+    let machine = scene.artboard.state_machine_instance_handle(0).unwrap();
+    machine.with_instance_mut(|machine| machine.enable_semantics());
+    for _ in 0..3 {
+        machine.advance_and_apply(1.0 / 60.0);
+    }
+    let manager = machine
+        .with_instance(|machine| machine.semantic_manager())
+        .unwrap();
+    let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let mut hosts: Vec<_> = nodes
+        .iter()
+        .filter(|node| node.label == "copy host")
+        .collect();
+    hosts.sort_by(|a, b| a.min_y.total_cmp(&b.min_y));
+    assert_eq!(hosts.len(), 3, "semantics attached to the copy host itself");
+    for (index, host) in hosts.iter().enumerate() {
+        assert_eq!(
+            (host.min_x, host.min_y, host.max_x, host.max_y),
+            (
+                20.0,
+                7.0 + index as f32 * 48.0,
+                140.0,
+                47.0 + index as f32 * 48.0
+            )
+        );
+    }
+    let list = contents_list(&scene);
+    let rows: Vec<_> = (0..3)
+        .map(|index| {
+            list.with_downcast::<ArtboardComponentList, _>(|list| {
+                list.state_machine_instance(index)
+            })
+            .flatten()
+            .unwrap()
+        })
+        .collect();
+    let before: Vec<_> = rows
+        .iter()
+        .map(|row| row.with_instance(|row| row.reported_event_count()))
+        .collect();
+    machine.with_instance_mut(|machine| {
+        let point = Vec2D::new(25.0, 60.0);
+        assert!(machine.listens_to_button_at(point, PointerButton::Primary));
+        assert!(!machine.listens_to_button_at(Vec2D::new(150.0, 60.0), PointerButton::Primary));
+        machine.pointer_down(point, 0, PointerButton::Primary);
+        machine.pointer_up(point, 0, PointerButton::Primary);
+    });
+    let counts: Vec<_> = rows
+        .iter()
+        .zip(before)
+        .map(|(row, before)| row.with_instance(|row| row.reported_event_count()) - before)
+        .collect();
+    assert_eq!(counts, vec![0, 1, 0], "only the second copy host is tapped");
 }
 
 #[test]

@@ -16,7 +16,7 @@ use crate::util::debug::debug_log;
 use crate::util::sys::{f32_max, f32_min, new_vec_with_capacity, Vec};
 use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
-use crate::{BoxGenerationMode, BoxSizing, Dimension, Direction, RequestedAxis};
+use crate::{BoxGenerationMode, Dimension, Direction, RequestedAxis};
 
 use super::common::alignment::apply_alignment_fallback;
 #[cfg(feature = "content_size")]
@@ -246,8 +246,9 @@ pub fn compute_flexbox_layout(
     let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border_sum = padding.sum_axes() + border.sum_axes();
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_sum } else { Size::ZERO };
+        style.box_sizing().content_box_adjustment(padding_border_sum);
 
     let min_size = style
         .min_size()
@@ -600,8 +601,9 @@ fn compute_constants(
     let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border_sum = padding.sum_axes() + border.sum_axes();
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_sum } else { Size::ZERO };
+        style.box_sizing().content_box_adjustment(padding_border_sum);
 
     // `normal` behaves as `stretch` for flex items. This is resolved once here so that
     // items with an `align_self` of `None`, which defer to this value, are also resolved.
@@ -748,8 +750,9 @@ fn generate_anonymous_flex_items(
                 .border()
                 .resolve_or_zero(constants.node_inner_size.width, |val, basis| tree.calc(val, basis));
             let pb_sum = (padding + border).sum_axes();
+            // nuxie-css: per-axis canvas sizing.
             let box_sizing_adjustment =
-                if child_style.box_sizing() == BoxSizing::ContentBox { pb_sum } else { Size::ZERO };
+                child_style.box_sizing().content_box_adjustment(pb_sum);
             FlexItem {
                 node: child,
                 order: index as u32,
@@ -952,12 +955,11 @@ fn determine_flex_base_size(
         // Percentage padding and border resolve against the container's inline size (its width),
         // whichever axis is the main axis
         let container_width = constants.node_inner_size.width;
-        let box_sizing_adjustment = if child_style.box_sizing() == BoxSizing::ContentBox {
+        // nuxie-css: add padding only on content-box axes.
+        let box_sizing_adjustment = {
             let padding = child_style.padding().resolve_or_zero(container_width, |val, basis| tree.calc(val, basis));
             let border = child_style.border().resolve_or_zero(container_width, |val, basis| tree.calc(val, basis));
-            (padding + border).sum_axes()
-        } else {
-            Size::ZERO
+            child_style.box_sizing().content_box_adjustment((padding + border).sum_axes())
         }
         .main(dir);
         // Percentage flex basis values resolve against the container's inner main size, but only
@@ -2199,8 +2201,9 @@ fn determine_used_cross_size(
                         .border()
                         .resolve_or_zero(constants.node_inner_size.width, |val, basis| tree.calc(val, basis));
                     let pb_sum = (padding + border).sum_axes();
+                    // nuxie-css: per-axis canvas sizing.
                     let box_sizing_adjustment =
-                        if child_style.box_sizing() == BoxSizing::ContentBox { pb_sum } else { Size::ZERO };
+                        child_style.box_sizing().content_box_adjustment(pb_sum);
 
                     let max_size_ignoring_aspect_ratio = child_style
                         .max_size()

@@ -131,3 +131,15 @@ In the runtime's
   differential fixtures at all three widths.
 - `translated_scroll_overflow_keeps_content_bounds_range`: translated
   (Rive) scrollers do not use Taffy's overflow and keep their range.
+
+## Per-axis canvas box sizing
+
+A Nuxie CSS artboard can have a Fixed frame axis (a border-box dimension)
+and an open Hug axis (the root record's box sizing). `BoxSizing` adds internal
+`ContentBoxWidth` and `ContentBoxHeight` variants for these mixed cases; they
+are not CSS parser keywords. `content_box_adjustment` returns the padding and
+border addition per axis. The existing size, limit and flex-basis calculations
+in root, block, flex, grid, leaf and out-of-flow layout use this adjustment,
+including grid item measurement/alignment. Ordinary `BorderBox` and
+`ContentBox` retain their behavior. Padding percentages still resolve at the
+original algorithm sites against the containing block's inline size.

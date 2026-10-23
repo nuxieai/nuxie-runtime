@@ -2438,15 +2438,15 @@ impl LayoutComponent {
         outer_size: f32,
         horizontal: bool,
     ) -> taffy::style::Dimension {
-        let edges = if style.box_sizing == taffy::BoxSizing::ContentBox {
-            let [top, right, bottom, left] = self.solved_border;
-            if horizontal {
-                self.solved_padding.left() + self.solved_padding.right() + left + right
-            } else {
-                self.solved_padding.top() + self.solved_padding.bottom() + top + bottom
-            }
+        let [top, right, bottom, left] = self.solved_border;
+        let edges = style.box_sizing.content_box_adjustment(taffy::Size {
+            width: self.solved_padding.left() + self.solved_padding.right() + left + right,
+            height: self.solved_padding.top() + self.solved_padding.bottom() + top + bottom,
+        });
+        let edges = if horizontal {
+            edges.width
         } else {
-            0.0
+            edges.height
         };
         taffy::style::Dimension::length((outer_size - edges).max(0.0))
     }
@@ -3346,8 +3346,9 @@ impl LayoutComponent {
                 if layout.with_css(|css| css.choice(GENERATED_LIST_ROW)) != Some(1) {
                     return None;
                 }
-                let providers = Self::layout_providers_children(layout.base.children(), false);
-                let [(_, host)] = providers.as_slice() else {
+                let mut providers = Vec::new();
+                Self::css_list_row_providers(layout.base.children(), &mut providers);
+                let [host] = providers.as_slice() else {
                     return None;
                 };
                 host.is_type_of(NestedArtboardLayoutBase::TYPE_KEY)
@@ -3356,10 +3357,7 @@ impl LayoutComponent {
             .flatten();
         let selected = candidate.and_then(|host| {
             let select = |nested: &crate::source::nested_artboard::NestedArtboard| {
-                if nested.parent_handle().as_ref() != Some(owner)
-                    || crate::css_layout::record::find_in(nested.base.base.base.children())
-                        .is_none()
-                {
+                if crate::css_layout::record::find_in(nested.base.base.base.children()).is_none() {
                     return None;
                 }
                 let copy = nested.artboard_instance_default();
@@ -3415,6 +3413,48 @@ impl LayoutComponent {
                     .unwrap()
                     .css_list_row_hoisted = hoisted
             });
+        }
+    }
+
+    /// A generated row can have plain drawing transforms around its copy.
+    /// Keep those in the scene graph (including their transforms), but not in
+    /// Taffy's tree. A participant or any other provider still counts as a box,
+    /// so only one hosted copy, with no other layout, can replace the row.
+    fn css_list_row_providers(children: &[CoreHandle], result: &mut Vec<CoreHandle>) {
+        use crate::source::generated::{
+            container_component_base::ContainerComponentBase,
+            layout::layout_participant_base::LayoutParticipantBase, node_base::NodeBase,
+            transform_component_base::TransformComponentBase,
+        };
+        for child in children {
+            if crate::source::layout::layout_node_provider::from_component(child).is_some() {
+                result.push(child.clone());
+            } else if child.is_type_of(ContainerComponentBase::TYPE_KEY) {
+                child.with(|object| {
+                    if let Some(container) = object.as_container_component() {
+                        if container
+                            .children()
+                            .iter()
+                            .any(|child| child.is_type_of(LayoutParticipantBase::TYPE_KEY))
+                        {
+                            result.push(child.clone());
+                        } else if matches!(
+                            child.core_type(),
+                            Some(NodeBase::TYPE_KEY | TransformComponentBase::TYPE_KEY)
+                        ) {
+                            Self::css_list_row_providers(container.children(), result);
+                        } else {
+                            // A layout below any other kind of ancestor keeps
+                            // its wrapper; it cannot be the transparent copy.
+                            let mut opaque = Vec::new();
+                            Self::css_list_row_providers(container.children(), &mut opaque);
+                            if !opaque.is_empty() {
+                                result.push(child.clone());
+                            }
+                        }
+                    }
+                });
+            }
         }
     }
 
@@ -5190,7 +5230,18 @@ impl LayoutComponent {
             if size.tag() != CompactLength::LENGTH_TAG {
                 return None;
             }
-            if parent.box_sizing == taffy::BoxSizing::ContentBox {
+            let content_box = if horizontal {
+                matches!(
+                    parent.box_sizing,
+                    taffy::BoxSizing::ContentBox | taffy::BoxSizing::ContentBoxWidth
+                )
+            } else {
+                matches!(
+                    parent.box_sizing,
+                    taffy::BoxSizing::ContentBox | taffy::BoxSizing::ContentBoxHeight
+                )
+            };
+            if content_box {
                 return Some(size.value());
             }
             let edges = if horizontal {

@@ -203,8 +203,6 @@ fn compute_in_flow_root_layout(
 
     #[cfg(feature = "block_layout")]
     {
-        use crate::BoxSizing;
-
         let parent_size = available_space.into_options();
         let style = tree.get_core_container_style(root);
 
@@ -214,8 +212,9 @@ fn compute_in_flow_root_layout(
             let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
             let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
             let padding_border_size = (padding + border).sum_axes();
+            // nuxie-css: per-axis canvas sizing.
             let box_sizing_adjustment =
-                if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
+                style.box_sizing().content_box_adjustment(padding_border_size);
 
             let min_size = style
                 .min_size()

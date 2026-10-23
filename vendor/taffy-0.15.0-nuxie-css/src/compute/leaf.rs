@@ -10,7 +10,7 @@ use crate::util::debug::debug_log;
 use crate::util::sys::f32_max;
 use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
-use crate::{BoxSizing, CoreStyle};
+use crate::{CoreStyle};
 use core::unreachable;
 
 /// Compute the size of a leaf node (node with no children)
@@ -34,7 +34,8 @@ where
     let border = style.border().resolve_or_zero(parent_size.width, &resolve_calc_value);
     let padding_border = padding + border;
     let pb_sum = padding_border.sum_axes();
-    let box_sizing_adjustment = if style.box_sizing() == BoxSizing::ContentBox { pb_sum } else { Size::ZERO };
+    // nuxie-css: per-axis canvas sizing.
+    let box_sizing_adjustment = style.box_sizing().content_box_adjustment(pb_sum);
 
     // Resolve node's preferred/min/max sizes (width/heights) against the available space (percentages resolve to pixel values)
     // For ContentSize mode, we pretend that the node has no size styles as these should be ignored.

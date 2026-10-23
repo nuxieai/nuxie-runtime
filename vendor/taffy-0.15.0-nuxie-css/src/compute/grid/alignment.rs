@@ -16,7 +16,7 @@ use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
 // nuxie-css: grid items contribute their margin boxes.
 use crate::compute::common::scrollable_overflow::compute_inflow_overflow_contribution;
 use crate::compute::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
-use crate::{AbsoluteAxis, BoxSizing, Direction, LayoutGridContainer};
+use crate::{AbsoluteAxis, Direction, LayoutGridContainer};
 
 /// Align the grid tracks within the grid according to the align-content (rows) or
 /// justify-content (columns) property. This only does anything if the size of the
@@ -144,8 +144,9 @@ pub(super) fn align_and_position_item(
         .map(|p| p.resolve_or_zero(Some(containing_block_size.width), |val, basis| tree.calc(val, basis)));
     let padding_border_size = (padding + border).sum_axes();
 
+    // nuxie-css: per-axis canvas sizing.
     let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
+        style.box_sizing().content_box_adjustment(padding_border_size);
 
     let size_style = style.size();
     let inherent_size = size_style

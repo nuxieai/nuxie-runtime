@@ -40,7 +40,7 @@ class RuntimeBuildTest(unittest.TestCase):
                 patch.object(runtime, "bazel_command", return_value=["bazel"]), \
                 patch.object(runtime, "pool_run_enabled", return_value=True), \
                 patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run, \
-                patch.object(runtime.subprocess, "check_output", side_effect=AssertionError("local cquery")), \
+                patch.object(runtime.subprocess, "check_output", return_value=""), \
                 patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "probe", "--", "--help"]):
             self.assertEqual(runtime.main(), 7)
             args = run.call_args.args[0]

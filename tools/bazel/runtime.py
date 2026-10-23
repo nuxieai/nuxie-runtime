@@ -4,6 +4,7 @@
 from pathlib import Path
 import filecmp
 import hashlib
+import importlib.util
 import json
 import os
 import platform as host_platform
@@ -281,13 +282,20 @@ def check_upstream_checkout():
             raise ValueError(f"RIVE_RUNTIME_DIR {checkout} has tracked changes; the tests need the pinned upstream as committed")
 
 
-def pool_run_enabled():
-    """The installed Bazelisk router owns remote run and product delivery."""
-    return (not any(os.environ.get(key) == value for key, value in
-                    (("NUXIE_EXECUTION", "local"), ("NUXIE_HOMELAB", "0"), ("_NUXIE_POOL_NESTED", "1"), ("BUILDKITE", "true")))
-            and not os.environ.get("BUILDKITE_JOB_ID")
-            and (Path.home() / ".config/nuxie/homelab-cluster.json").is_file()
-            and (Path.home() / ".local/share/nuxie-homelab/rust/route.py").is_file())
+def pool_run_enabled(bazel):
+    """Use remote run only with a client implementing its product contract."""
+    if (any(os.environ.get(key) == value for key, value in
+            (("NUXIE_EXECUTION", "local"), ("NUXIE_HOMELAB", "0"), ("_NUXIE_POOL_NESTED", "1"), ("BUILDKITE", "true")))
+            or os.environ.get("BUILDKITE_JOB_ID")):
+        return False
+    router = Path.home() / ".local/share/nuxie-homelab/rust/route.py"
+    if not router.is_file() or not (Path.home() / ".config/nuxie/homelab-cluster.json").is_file():
+        return False
+    spec = importlib.util.spec_from_file_location("nuxie_installed_pool_route", router)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return (getattr(module, "runtime_run_supported", False) is True
+            and module.runtime_run_compatible(bazel[1:]))
 
 
 def main():
@@ -335,7 +343,7 @@ def main():
             flags += ["--test_output=all", *["--test_arg=" + arg for arg in runtime_args]]
             flags += ["--test_env=" + name for name in sorted(os.environ)
                       if name.startswith(("NUXIE_", "RIVE_", "MTL_"))
-                      and not name.startswith(("NUXIE_BAZEL_", "NUXIE_CI_"))
+                      and not name.startswith(("NUXIE_BAZEL_", "NUXIE_CI_", "NUXIE_HOMELAB_"))
                       and name not in ("NUXIE_BUILDKITE_CACHE_ROOT", "NUXIE_NODE_OPTIONS", "NUXIE_GRADLE_MAX_WORKERS")]
             # The host rustfmt, which `make fmt-check` formats with, for tests that
             # format generated sources; Bazel's test PATH does not reach it.
@@ -344,7 +352,8 @@ def main():
                 flags.append("--test_env=NUXIE_RUSTFMT=" + rustfmt)
         if options["command"] == "clippy":
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
-        remote_run = options["command"] == "run" and pool_run_enabled()
+        remote_run = options["command"] == "run" and pool_run_enabled(bazel)
+        run_status = 0
         if remote_run:
             # Bazel's installed launcher sends this complete invocation to a
             # compatible pool host. Keeping execution with the build preserves
@@ -353,14 +362,17 @@ def main():
                 if name in os.environ:
                     flags.append("--action_env=" + name)
             result = subprocess.run([*bazel, "run", *flags, *labels, "--", *runtime_args], cwd=ROOT)
-            if result.returncode:
-                return result.returncode
+            run_status = result.returncode
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"
         if not remote_run:
             subprocess.run([*bazel, command, *flags, *labels], cwd=ROOT, check=True)
         if command == "test" or options["command"] == "clippy":
             return 0
-        output = subprocess.check_output([*bazel, "cquery", *flags, "set(" + " ".join(labels) + ")", "--output=files"], cwd=ROOT, text=True)
+        try:
+            output = subprocess.check_output([*bazel, "cquery", *flags, "set(" + " ".join(labels) + ")", "--output=files"], cwd=ROOT, text=True)
+        except subprocess.CalledProcessError:
+            if remote_run and run_status: return run_status
+            raise
         target_dir = Path(options["target_dir"] or os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))
         if options["target"]:
             target_dir /= options["target"]
@@ -380,7 +392,7 @@ def main():
             if len(executables) != 1:
                 raise ValueError("run requires exactly one binary or example")
             return subprocess.run([str(executables[0]), *runtime_args], cwd=ROOT).returncode
-        return 0
+        return run_status if remote_run else 0
     except (ValueError, IndexError, subprocess.CalledProcessError) as error:
         print(str(error), file=sys.stderr)
         return 2

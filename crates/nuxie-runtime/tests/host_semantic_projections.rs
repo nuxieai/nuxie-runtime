@@ -1336,8 +1336,11 @@ fn component_geometry_keeps_full_bounds_while_frame_clips_visibility_and_hits() 
     );
 }
 
-#[test]
-fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
+fn converted_component_list_fixture(
+    list_size: [f32; 2],
+    direction: u64,
+    width_override: Option<(u64, f32, u64)>,
+) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_657, 0] {
         push_var_uint(&mut bytes, value);
@@ -1369,14 +1372,20 @@ fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
     });
     push_object(&mut bytes, "LayoutComponent", |bytes| {
         push_uint(bytes, "Node", "parentId", 0);
-        push_f32(bytes, "LayoutComponent", "width", 20.0);
-        push_f32(bytes, "LayoutComponent", "height", 20.0);
+        push_f32(bytes, "LayoutComponent", "width", list_size[0]);
+        push_f32(bytes, "LayoutComponent", "height", list_size[1]);
         push_uint(bytes, "LayoutComponent", "styleId", 2);
     });
     push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
         push_uint(bytes, "Node", "parentId", 1);
         push_uint(bytes, "LayoutComponentStyle", "positionTypeValue", 1);
-        push_uint(bytes, "LayoutComponentStyle", "flexDirectionValue", 2);
+        push_uint(
+            bytes,
+            "LayoutComponentStyle",
+            "flexDirectionValue",
+            direction,
+        );
+        push_uint(bytes, "LayoutComponentStyle", "alignItemsValue", 4);
     });
     push_object(&mut bytes, "ArtboardComponentList", |bytes| {
         push_uint(bytes, "Node", "parentId", 1);
@@ -1396,6 +1405,29 @@ fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
         push_var_uint(bytes, 2);
         bytes.extend_from_slice(&[0, 0]);
     });
+    if let Some((scale, width, units)) = width_override {
+        push_object(&mut bytes, "ArtboardComponentListOverride", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_uint(
+                bytes,
+                "ArtboardComponentListOverride",
+                "instanceWidthScaleType",
+                scale,
+            );
+            push_f32(
+                bytes,
+                "ArtboardComponentListOverride",
+                "instanceWidth",
+                width,
+            );
+            push_uint(
+                bytes,
+                "ArtboardComponentListOverride",
+                "instanceWidthUnitsValue",
+                units,
+            );
+        });
+    }
     // Native authoring permits a row artboard without a sizing style.
     push_object(&mut bytes, "Artboard", |bytes| {
         push_f32(bytes, "Artboard", "width", 20.0);
@@ -1419,6 +1451,12 @@ fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
         push_uint(bytes, "Node", "parentId", 3);
         push_color(bytes, "SolidColor", "colorValue", 0xff33_6699);
     });
+    bytes
+}
+
+#[test]
+fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
+    let bytes = converted_component_list_fixture([20.0, 20.0], 2, None);
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
     let file = File::import(&bytes, retained, None, None, None).unwrap();
@@ -1494,6 +1532,64 @@ fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
                 .any(|line| line == format!("transform matrix=[1,0,0,1,{left},0]")),
             "drawing must place the row at its reported bounds: {stream}"
         );
+    }
+}
+
+#[test]
+fn unstyled_list_row_width_respects_fill_hug_fixed_and_authored_sizes() {
+    for (name, width_override, expected) in [
+        ("fill", Some((1, -1.0, 1)), 100.0),
+        ("hug", Some((2, -1.0, 1)), 10.0),
+        ("fixed points", Some((0, 40.0, 1)), 40.0),
+        ("fixed percent", Some((0, 50.0, 2)), 50.0),
+        ("authored", None, 20.0),
+    ] {
+        let mut bytes = converted_component_list_fixture([100.0, 100.0], 0, width_override);
+        // A definite layout child makes Hug's content width independent of
+        // the row's authored 20-point frame and the list's 100-point width.
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 10.0);
+            push_f32(bytes, "LayoutComponent", "height", 10.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 6);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+        });
+        let mut factory = PersistentFactory::new(RecordingFactory::default());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let mut artboard = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+        let source = file.with_file(|file| file.artboard_at_source(0)).unwrap();
+        let view_model = file
+            .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+            .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
+            .unwrap();
+        artboard.bind_owned_view_model_handle(view_model);
+        artboard.advance(0.0).unwrap();
+        let list = artboard.object_handle(3).unwrap();
+        for index in 0..3 {
+            let row = list
+                .with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(index))
+                .flatten()
+                .unwrap();
+            assert!(
+                row.with_artboard(|row| row.forced_width().is_nan()),
+                "{name}"
+            );
+            let width = row.with_artboard(|row| row.layout_width());
+            assert!(
+                (width - expected).abs() < 0.01,
+                "{name}, row {index}: {width}"
+            );
+            assert_eq!(row.with_artboard(|row| row.layout_height()), 20.0, "{name}");
+        }
     }
 }
 

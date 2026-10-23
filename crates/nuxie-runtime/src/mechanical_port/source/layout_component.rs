@@ -3446,22 +3446,42 @@ impl LayoutComponent {
         if self.style_handle().is_none() && !self.is_css_mode() {
             // Rive's editor supplies a sizing style for layout-hosted rows.
             // Native authoring can mount a row without one; its authored
-            // frame must not become an empty auto-sized item.
-            let size = |authored: f32, overridden: f32, forced: f32| {
-                Dimension::length(
-                    if !forced.is_nan() {
-                        forced
-                    } else if !overridden.is_nan() {
-                        overridden
-                    } else {
-                        authored
-                    }
-                    .max(0.0),
-                )
+            // frame supplies a size only where no sizing override defines it.
+            let size = |authored: f32, overridden: f32, forced: f32, unit: i8, scale| {
+                if !forced.is_nan() {
+                    return Dimension::length(forced.max(0.0));
+                }
+                let value = if overridden.is_nan() {
+                    authored
+                } else {
+                    overridden
+                };
+                let units = if unit == -1 {
+                    YGUnit::Point
+                } else {
+                    YGUnit::from(unit as u32)
+                };
+                if units == YGUnit::Auto && scale != LayoutScaleType::Fill {
+                    rive_hug_dimension(false)
+                } else {
+                    rive_dimension(value.max(0.0), units)
+                }
             };
             let mut style = self.layout_data.take_style();
-            style.size.width = size(self.base.width(), self.width_override, self.forced_width);
-            style.size.height = size(self.base.height(), self.height_override, self.forced_height);
+            style.size.width = size(
+                self.base.width(),
+                self.width_override,
+                self.forced_width,
+                self.width_unit_value_override,
+                self.effective_width_scale_type(),
+            );
+            style.size.height = size(
+                self.base.height(),
+                self.height_override,
+                self.forced_height,
+                self.height_unit_value_override,
+                self.effective_height_scale_type(),
+            );
             self.layout_data.set_style(style);
         }
     }

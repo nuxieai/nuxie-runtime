@@ -1851,6 +1851,10 @@ impl Artboard {
         let mut next_drawable = None::<RuntimeDrawableOccurrence>;
         let mut clipping_stack = Vec::<CoreHandle>::new();
         let mut css_clip_scopes = Vec::<(CoreHandle, Vec<CoreHandle>)>::new();
+        // Owners whose layout drawable this backward walk has passed. A draw
+        // rule can move it past its proxy, and a scope opened then would
+        // never close.
+        let mut passed_owners = HashSet::<CoreHandle>::new();
         while let Some(current) = current_drawable {
             current.with_mut(|current| current.set_needs_save_operation(true));
             // A CSS proxy's shape clips open before its overflow save. Keep
@@ -1868,7 +1872,7 @@ impl Artboard {
                 let shapes = current
                     .with(|drawable| drawable.clipping_shapes().to_vec())
                     .unwrap_or_default();
-                if !shapes.is_empty() {
+                if !shapes.is_empty() && !passed_owners.contains(&owner) {
                     css_clip_scopes.push((owner, shapes));
                 }
             }
@@ -1961,12 +1965,25 @@ impl Artboard {
                     clipping_stack.push(clipping_shape);
                 }
             }
-            if current.authored_handle().is_some_and(|owner| {
-                css_clip_scopes
-                    .last()
-                    .is_some_and(|(layout, _)| layout == &owner)
-            }) {
-                css_clip_scopes.pop();
+            // Close the owner's scope wherever it is, so one moved by a draw
+            // rule cannot keep its shapes open for later drawables.
+            if let Some(owner) = current.authored_handle() {
+                if let Some(index) = css_clip_scopes
+                    .iter()
+                    .rposition(|(layout, _)| layout == &owner)
+                {
+                    css_clip_scopes.remove(index);
+                    passed_owners.insert(owner);
+                } else if owner
+                    .with(|object| {
+                        object
+                            .as_layout_component()
+                            .is_some_and(|layout| layout.is_css_mode() && layout.clips())
+                    })
+                    .unwrap_or(false)
+                {
+                    passed_owners.insert(owner);
+                }
             }
             next_drawable = Some(current.clone());
             current_drawable = current.with(Drawable::prev_drawable).flatten();

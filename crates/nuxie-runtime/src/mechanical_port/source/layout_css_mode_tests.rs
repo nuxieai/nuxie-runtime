@@ -107,6 +107,8 @@ struct B {
     component_bind_flags: u64,
     /// A LayerMask on this box, referring to another box by name.
     mask_source: Option<&'static str>,
+    /// DrawRules on this box, drawing it before another box by name.
+    draw_before: Option<&'static str>,
     /// An ancestor ClippingShape sourced from these rectangle paths.
     clip_paths: Option<Vec<Vec<P>>>,
     clip_fill_rule: u64,
@@ -612,6 +614,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     // Resolve mask sources after every box has its object index, including
     // sources written after their masked subtree.
     let mut masks = Vec::new();
+    let mut draw_rules = Vec::new();
     let mut box_ids = Vec::new();
     let mut index = 0u64;
     for entry in &entries {
@@ -624,7 +627,34 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             if let Some(source) = node.mask_source {
                 masks.push((index, source));
             }
+            if let Some(target) = node.draw_before {
+                draw_rules.push((index, target));
+            }
         }
+    }
+    for (parent, target) in draw_rules {
+        use crate::source::generated::{
+            draw_rules_base::DrawRulesBase, draw_target_base::DrawTargetBase,
+        };
+        let target = box_ids
+            .iter()
+            .find(|(name, _)| *name == target)
+            .expect("the draw target box")
+            .1;
+        let rules = slots(&entries) + 1;
+        entries.push(Entry::Record(
+            DrawRulesBase::TYPE_KEY,
+            vec![U(DrawRulesBase::DRAW_TARGET_ID_PROPERTY_KEY, rules + 1)],
+            parent,
+        ));
+        entries.push(Entry::Record(
+            DrawTargetBase::TYPE_KEY,
+            vec![
+                U(DrawTargetBase::DRAWABLE_ID_PROPERTY_KEY, target),
+                U(DrawTargetBase::PLACEMENT_VALUE_PROPERTY_KEY, 0),
+            ],
+            rules,
+        ));
     }
     for (parent, source) in masks {
         use crate::source::generated::layer_mask_base::LayerMaskBase;
@@ -12528,4 +12558,69 @@ fn css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin() {
             "display {display}, range {range}"
         );
     }
+}
+/// The clip lines in force when the drawPath of `color` draws.
+fn clips_active_at(lines: &[String], color: u32) -> Vec<String> {
+    let wanted = format!("color=0x{color:08x}");
+    let mut frames: Vec<Vec<String>> = vec![Vec::new()];
+    for line in lines {
+        if line == "save" {
+            frames.push(Vec::new());
+        } else if line == "restore" {
+            frames.pop();
+        } else if line.starts_with("clipPath") {
+            frames.last_mut().expect("a frame").push(line.clone());
+        } else if line.starts_with("drawPath") && line.contains(&wanted) {
+            return frames.concat();
+        }
+    }
+    panic!("no draw of {wanted}")
+}
+
+/// A draw rule can move a clipping box's layout drawable ahead of its proxy.
+/// The proxy's clip scope then never opens, so the box's clipping shape does
+/// not stay on for the drawables after it.
+#[test]
+fn css_clip_scope_closes_when_a_draw_rule_moves_the_box_before_its_proxy() {
+    const FRONT: u32 = 0xff11_1111;
+    const INSIDE: u32 = 0xff33_3333;
+    const AFTER: u32 = 0xff44_4444;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Root",
+            [[U(DISPLAY, 1)].as_slice(), &sized_to(300.0, 100.0)].concat(),
+            vec![
+                painted("Front", FRONT, sized_to(50.0, 50.0)),
+                B {
+                    clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 40.0, 50.0)]),
+                    draw_before: Some("Front"),
+                    paints: vec![Paint::Fill(0xff22_2222)],
+                    ..css(
+                        "Card",
+                        [
+                            sized_to(100.0, 100.0),
+                            vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                        ]
+                        .concat(),
+                        vec![painted("Inside", INSIDE, sized_to(20.0, 20.0))],
+                    )
+                },
+                painted("After", AFTER, sized_to(50.0, 50.0)),
+            ],
+        ),
+    );
+    let lines = f.draw_lines();
+    assert!(
+        draw_at(&lines, INSIDE) < draw_at(&lines, FRONT),
+        "the draw rule moves the card's content before Front:\n{}",
+        lines.join("\n")
+    );
+    assert!(
+        !clips_active_at(&lines, AFTER)
+            .iter()
+            .any(|clip| clip.contains("(40,50)")),
+        "the card's clipping shape stays on for After:\n{}",
+        lines.join("\n")
+    );
 }

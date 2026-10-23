@@ -952,35 +952,35 @@ fn nested_layout_geometry_preserves_the_child_occurrence_path() {
     assert_eq!(occurrences.len(), 1);
     assert!(occurrences[0].is_current());
 
-    for geometry in [
-        artboard.visible_geometry_with_bounds(),
-        artboard.retained_geometry_with_bounds(),
-    ] {
-        let child = geometry
-            .iter()
-            .find(|hit| {
-                hit.path.len() == 2
-                    && hit.occurrence.is_empty()
-                    && (hit.bounds.min_x - 30.0).abs() < 0.01
-                    && (hit.bounds.min_y - 3.0).abs() < 0.01
-                    && (hit.bounds.max_x - 50.0).abs() < 0.01
-                    && (hit.bounds.max_y - 13.0).abs() < 0.01
-            })
-            .unwrap_or_else(|| panic!("nested layout child geometry is absent: {geometry:#?}"));
-        assert_ne!(
-            child.path[0].artboard_global_id,
-            child.path[1].artboard_global_id
-        );
-    }
+    // The child artboard clips to the zero height its styleless layout
+    // solves it to, so only the retained catalogue holds its shape
+    // (nested_layout_geometry_follows_the_child_artboards_frame_clip).
+    let geometry = artboard.retained_geometry_with_bounds();
+    let child = geometry
+        .iter()
+        .find(|hit| {
+            hit.path.len() == 2
+                && hit.occurrence.is_empty()
+                && (hit.bounds.min_x - 30.0).abs() < 0.01
+                && (hit.bounds.min_y - 3.0).abs() < 0.01
+                && (hit.bounds.max_x - 50.0).abs() < 0.01
+                && (hit.bounds.max_y - 13.0).abs() < 0.01
+        })
+        .unwrap_or_else(|| panic!("nested layout child geometry is absent: {geometry:#?}"));
+    assert_ne!(
+        child.path[0].artboard_global_id,
+        child.path[1].artboard_global_id
+    );
 }
 
 #[test]
-fn nested_layout_geometry_clips_at_the_host_without_losing_the_child() {
+fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
     let bytes = nested_artboard_layout_fixture();
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
     let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
-    let mut artboard = ArtboardInstance::from_native(file, 1).expect("root artboard instance");
+    let mut artboard =
+        ArtboardInstance::from_native(file.clone(), 1).expect("root artboard instance");
     artboard.advance(0.0).expect("initial layout settles");
     let host = artboard
         .native_handle()
@@ -992,30 +992,76 @@ fn nested_layout_geometry_clips_at_the_host_without_losing_the_child() {
         95.0,
     ));
     artboard.advance(0.0).expect("host movement settles");
-
-    for (catalogue, geometry, right) in [
-        ("visible", artboard.visible_geometry_with_bounds(), 100.0),
-        ("retained", artboard.retained_geometry_with_bounds(), 105.0),
-    ] {
-        let child = geometry
+    let child = host
+        .with(|object| object.nested_artboard_instance_handle())
+        .flatten()
+        .expect("nested layout child");
+    let nested_child = |geometry: &[nuxie_runtime::RuntimeGeometryHit]| {
+        geometry
             .iter()
             .find(|hit| hit.path.len() == 2 && hit.path[1].local_id == 1)
-            .unwrap_or_else(|| panic!("{catalogue} nested layout child is absent: {geometry:#?}"));
-        assert!(child.occurrence.is_empty());
-        assert_eq!(child.path[0].local_id, 1);
-        assert_ne!(
-            child.path[0].artboard_global_id,
-            child.path[1].artboard_global_id
+            .map(|hit| {
+                [
+                    hit.bounds.min_x,
+                    hit.bounds.min_y,
+                    hit.bounds.max_x,
+                    hit.bounds.max_y,
+                ]
+            })
+    };
+    let near = |got: Option<[f32; 4]>, expected: [f32; 4]| {
+        got.is_some_and(|got| got.iter().zip(expected).all(|(a, b)| (a - b).abs() < 0.01))
+    };
+    // The styleless nested layout solves its child artboard to 100 by 0, and
+    // that artboard clips, so drawing puts its content in a zero-height clip.
+    // Visible geometry and hits follow drawing; the retained catalogue keeps it.
+    assert!(near(
+        nested_child(&artboard.retained_geometry_with_bounds()),
+        [85.0, 3.0, 105.0, 13.0]
+    ));
+    assert_eq!(nested_child(&artboard.visible_geometry_with_bounds()), None);
+    for x in [90.0, 97.0] {
+        assert!(
+            nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(x, 8.0))).is_none()
         );
-        for (got, expected) in [
-            (child.bounds.min_x, 85.0),
-            (child.bounds.min_y, 3.0),
-            (child.bounds.max_x, right),
-            (child.bounds.max_y, 13.0),
-        ] {
-            assert!((got - expected).abs() < 0.01, "{catalogue}: {child:#?}");
-        }
     }
+
+    // Unclipped, the child shows within the root's frame, and hits agree.
+    assert!(CoreRegistry::set_bool_handle(
+        &child.core_handle(),
+        i32::from(schema_property_key("LayoutComponent", "clip")),
+        false,
+    ));
+    artboard.advance(0.0).expect("clip change settles");
+    assert!(near(
+        nested_child(&artboard.visible_geometry_with_bounds()),
+        [85.0, 3.0, 100.0, 13.0]
+    ));
+    for x in [90.0, 97.0] {
+        assert!(
+            nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(x, 8.0))).is_some()
+        );
+    }
+
+    // Queried from the hosted artboard itself, its host's frame still clips
+    // it, mapped into the child's own space.
+    let mut hosted = ArtboardInstance::from_native_handle(file, 0, child);
+    let hosted_shape = hosted
+        .visible_geometry_with_bounds()
+        .iter()
+        .find(|hit| hit.path.len() == 1 && hit.path[0].local_id == 1)
+        .map(|hit| {
+            [
+                hit.bounds.min_x,
+                hit.bounds.min_y,
+                hit.bounds.max_x,
+                hit.bounds.max_y,
+            ]
+        });
+    assert!(
+        near(hosted_shape, [-10.0, -5.0, 5.0, 5.0]),
+        "{hosted_shape:?}"
+    );
 }
 
 #[test]

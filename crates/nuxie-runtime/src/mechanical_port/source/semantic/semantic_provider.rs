@@ -225,17 +225,89 @@ fn walk_geometry_clips(
     spaces: &[(CoreHandle, Mat2D)],
     mut visit: impl FnMut(RenderedClip) -> bool,
 ) -> bool {
+    let mut hosts = None;
     walk_rendered_clips(component, false, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
-            let Some((_, transform)) = spaces.iter().find(|(owner, _)| owner == artboard) else {
+            let find = |spaces: &[(CoreHandle, Mat2D)]| {
+                spaces
+                    .iter()
+                    .find(|(owner, _)| owner == artboard)
+                    .map(|(_, transform)| *transform)
+            };
+            let Some(transform) =
+                find(spaces).or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces))))
+            else {
                 return false;
             };
-            clip.mapped(|point| *transform * point)
+            clip.mapped(|point| transform * point)
         } else {
             clip
         };
         visit(clip)
     })
+}
+
+/// The drawing spaces of the artboards hosting the query's root (the first
+/// of `spaces`), in the query's root space. A query of a hosted artboard
+/// climbs into them for their clips. Drawing maps a hosted artboard's space
+/// into its host's by the host's transform for it, so each host's space is
+/// reached through that transform's inverse.
+fn host_spaces(spaces: &[(CoreHandle, Mat2D)]) -> Vec<(CoreHandle, Mat2D)> {
+    let mut hosts = Vec::new();
+    let Some((mut child, mut child_drawing)) = spaces.first().cloned() else {
+        return hosts;
+    };
+    loop {
+        let Some((host, frame, weak)) = child
+            .with(|object| {
+                let artboard = object.as_artboard()?;
+                let frame_offset = if artboard.frame_origin() {
+                    Vec2D::new(
+                        artboard.layout_width() * artboard.origin_x(),
+                        artboard.layout_height() * artboard.origin_y(),
+                    )
+                } else {
+                    Vec2D::default()
+                };
+                Some((
+                    artboard.host()?,
+                    Mat2D::from_translation(frame_offset) * artboard.self_transform(),
+                    artboard.runtime_weak_handle(),
+                ))
+            })
+            .flatten()
+        else {
+            break;
+        };
+        let Some((parent, host_world)) = host
+            .with(|object| {
+                let world = object
+                    .as_artboard_host()?
+                    .world_transform_for_artboard(weak);
+                Some((object.component_artboard_handle()?, world))
+            })
+            .flatten()
+        else {
+            break;
+        };
+        let mut frame_inverse = Mat2D::default();
+        let mut world_inverse = Mat2D::default();
+        if !frame.invert(&mut frame_inverse) || !host_world.invert(&mut world_inverse) {
+            break;
+        }
+        let parent_drawing = child_drawing * frame_inverse * world_inverse;
+        if spaces
+            .iter()
+            .chain(&hosts)
+            .any(|(owner, _)| owner == &parent)
+        {
+            break;
+        }
+        hosts.push((parent.clone(), parent_drawing));
+        child = parent;
+        child_drawing = parent_drawing;
+    }
+    hosts
 }
 
 /// A host geometry polygon in root space, clipped through

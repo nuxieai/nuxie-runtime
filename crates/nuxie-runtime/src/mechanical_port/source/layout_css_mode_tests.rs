@@ -3,6 +3,7 @@
 //! translate to. The oracle is CSS arithmetic, as a browser computes it.
 use super::layout_measured_content_tests::Riv;
 use crate::source::{
+    core::CoreType,
     generated::{
         artboard_base::ArtboardBase,
         backboard_base::BackboardBase,
@@ -167,6 +168,8 @@ struct B {
     text_input: bool,
     input_properties: Vec<P>,
     input_style: Vec<P>,
+    input_axes: Vec<(u32, f32)>,
+    input_features: Vec<(u32, u32)>,
     input_style_keys: Vec<(u16, Vec<(u32, f32)>)>,
     input_style_bind: Option<u16>,
     input_drawable: bool,
@@ -556,6 +559,22 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             entries.push(Entry::FocusData(input));
             entries.push(Entry::TextStyle(input, &node.input_style));
             let style = slots(entries);
+            for &(tag, value) in &node.input_axes {
+                use crate::source::generated::text::text_style_axis_base::TextStyleAxisBase;
+                entries.push(Entry::Record(
+                    TextStyleAxisBase::TYPE_KEY,
+                    vec![U(289, tag.into()), F(288, value)],
+                    style,
+                ));
+            }
+            for &(tag, value) in &node.input_features {
+                use crate::source::generated::text::text_style_feature_base::TextStyleFeatureBase;
+                entries.push(Entry::Record(
+                    TextStyleFeatureBase::TYPE_KEY,
+                    vec![U(356, tag.into()), U(357, value.into())],
+                    style,
+                ));
+            }
             if let Some(key) = node.input_style_bind {
                 entries.push(Entry::Bind(key, 0, 0));
             }
@@ -11770,6 +11789,315 @@ fn css_input_scroll_fixture(multiline: bool, text: &'static str) -> Scene {
             ..B::default()
         },
     )
+}
+
+fn css_input_style_handle(f: &Scene) -> CoreHandle {
+    f.artboard
+        .with_artboard(|a| a.find_all_handles::<crate::source::text::text_style::TextStyle>())
+        .into_iter()
+        .next()
+        .unwrap()
+}
+
+fn css_input_font_asset(f: &Scene) -> CoreHandle {
+    f._file.with_file(|file| {
+        file.assets()
+            .iter()
+            .find(|a| a.is_type_of(crate::source::assets::font_asset::FontAsset::TYPE_KEY))
+            .unwrap()
+            .clone()
+    })
+}
+
+fn css_input_variable_scene(value: f32) -> Scene {
+    use crate::source::{assets::font_asset::FontAsset, text::font_hb::HbFont};
+    // The axis is an authored child of the input's style, as in a compiled file.
+    let root = B {
+        name: "Viewport",
+        css: Some(
+            [
+                width(100.0).to_vec(),
+                height(40.0).to_vec(),
+                vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 3), U(POSITION, 1)],
+            ]
+            .concat(),
+        ),
+        children: vec![B {
+            name: "Scroll content",
+            scroll: Some(1),
+            css: Some(
+                [
+                    width(100.0).to_vec(),
+                    height(40.0).to_vec(),
+                    vec![U(POSITION, 2)],
+                ]
+                .concat(),
+            ),
+            children: vec![B {
+                name: "Input layout",
+                css: Some(width(100.0).to_vec()),
+                text_input: true,
+                text: "wide words wide words wide words wide words wide words wide words",
+                input_properties: vec![U(979, 1), U(INPUT_ROWS, 2)],
+                input_style: vec![F(370, 20.0)],
+                input_axes: vec![(u32::from_be_bytes(*b"wdth"), value)],
+                input_features: vec![(u32::from_be_bytes(*b"liga"), 1)],
+                ..B::default()
+            }],
+            ..B::default()
+        }],
+        ..B::default()
+    };
+    let f = scene((400.0, 300.0), root);
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let bytes = std::fs::read(
+        std::path::PathBuf::from(root).join("tests/unit_tests/assets/RobotoFlex.ttf"),
+    )
+    .unwrap();
+    FontAsset::set_font_occurrence(
+        &css_input_font_asset(&f),
+        Some(HbFont::decode(&bytes).unwrap()),
+    );
+    f.advance(4);
+    f
+}
+
+fn css_input_line_count(f: &Scene) -> usize {
+    input_handle(f)
+        .with_mut(|o| {
+            o.as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .shape()
+                .line_count() as usize
+        })
+        .unwrap()
+}
+
+#[test]
+fn css_input_axis_change_wraps_and_scrolls_in_the_same_frame() {
+    use crate::source::text::text_style_axis::TextStyleAxis;
+    let f = css_input_variable_scene(25.0);
+    let wide = css_input_variable_scene(151.0);
+    let pair_width = |scene: &Scene| {
+        let font = css_input_style_handle(scene)
+            .with_mut(|o| o.as_text_style_mut().unwrap().font())
+            .flatten()
+            .unwrap();
+        let mut raw = crate::source::text::raw_text_input::RawTextInput::new();
+        raw.set_font(Some(font));
+        raw.set_text("wide words".into());
+        raw.measure(f32::MAX, f32::MAX).width()
+    };
+    let width = (pair_width(&f) + pair_width(&wide)) / 2.0;
+    for scene in [&f, &wide] {
+        for name in ["Viewport", "Scroll content", "Input layout"] {
+            assert!(CoreRegistry::set_double_handle(
+                &scene.record(name),
+                WIDTH.into(),
+                width
+            ));
+        }
+        scene.advance(4);
+    }
+    assert_ne!(css_input_line_count(&f), css_input_line_count(&wide));
+    let axis = f
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<TextStyleAxis>())
+        .remove(0);
+    assert!(CoreRegistry::set_double_handle(&axis, 288, 151.0));
+    f.advance(1);
+    assert_eq!(css_input_line_count(&f), css_input_line_count(&wide));
+    assert_eq!(f.max_offsets(), wide.max_offsets());
+}
+
+// Each mutation bypasses its authored changed callback. Also remove raw shape
+// dirt so the next read must validate the layout inputs rather than a sender.
+fn css_input_key_read_without_dirty(input: &str) {
+    use crate::source::{
+        assets::font_asset::FontAsset,
+        math::vec2d::Vec2D,
+        text::{text_style_axis::TextStyleAxis, text_style_feature::TextStyleFeature},
+    };
+    let f = css_input_variable_scene(25.0);
+    let handle = input_handle(&f);
+    let before = handle
+        .with_mut(|o| {
+            o.as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .css_layout_build_count
+        })
+        .unwrap();
+    let style = css_input_style_handle(&f);
+    let original_font = css_input_font_asset(&f)
+        .with_downcast::<FontAsset, _>(FontAsset::font)
+        .flatten()
+        .unwrap();
+    let original_range = f.max_offsets();
+    let original_lines = css_input_line_count(&f);
+    match input {
+        "text" => {
+            handle.with_mut(|o| {
+                o.as_text_input_mut()
+                    .unwrap()
+                    .base
+                    .set_text_value("one\ntwo\nthree".into())
+            });
+        }
+        "axis" => {
+            f.artboard
+                .with_artboard(|a| a.find_all_handles::<TextStyleAxis>())
+                .remove(0)
+                .with_downcast_mut::<TextStyleAxis, _>(|a| a.base.set_axis_value_value(151.0));
+        }
+        "font_asset" => {
+            css_input_font_asset(&f)
+                .with_downcast_mut::<FontAsset, _>(|a| a.restore_host_font(None));
+        }
+        "font_size" => {
+            style.with_mut(|o| {
+                o.as_text_style_mut()
+                    .unwrap()
+                    .base
+                    .set_font_size_value(32.0)
+            });
+        }
+        "line_height" => {
+            style.with_mut(|o| {
+                o.as_text_style_mut()
+                    .unwrap()
+                    .base
+                    .set_line_height_value(40.0)
+            });
+        }
+        "feature" => {
+            f.artboard
+                .with_artboard(|a| a.find_all_handles::<TextStyleFeature>())
+                .remove(0)
+                .with_downcast_mut::<TextStyleFeature, _>(|v| v.base.set_feature_value_value(0));
+        }
+        "rows" => {
+            handle.with_mut(|o| o.as_text_input_mut().unwrap().base.set_rows_value(4));
+        }
+        "width" => {
+            handle.with_mut(|o| {
+                o.as_text_input_mut().unwrap().control_size(
+                    Vec2D::new(50.0, 40.0),
+                    LayoutScaleType::Fixed,
+                    LayoutScaleType::Fixed,
+                    crate::source::layout::layout_enums::LayoutDirection::Ltr,
+                )
+            });
+        }
+        _ => unreachable!(),
+    }
+    handle.with_mut(|o| {
+        o.as_text_input_mut()
+            .unwrap()
+            .clear_css_input_shape_dirty_for_test()
+    });
+    let bounds = handle
+        .with(|o| o.as_text_input().unwrap().local_bounds())
+        .unwrap();
+    if input == "text" {
+        assert_eq!(bounds.height(), 60.0);
+    }
+    if input == "font_asset" {
+        assert_eq!(bounds.height(), 0.0);
+    }
+    let after = handle
+        .with_mut(|o| {
+            let raw = o.as_text_input_mut().unwrap().raw_text_input();
+            // Reading the shape, before update, must be sufficient.
+            let _ = raw.shape().line_count();
+            raw.css_layout_build_count
+        })
+        .unwrap();
+    assert!(after > before, "{input} left the positioned layout stale");
+    let again = handle
+        .with_mut(|o| {
+            o.as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .css_layout_build_count
+        })
+        .unwrap();
+    assert_eq!(
+        again, after,
+        "an unchanged key should reuse the positioned layout"
+    );
+    if input == "text" {
+        assert_eq!(css_input_line_count(&f), 3);
+    }
+    if input == "line_height" {
+        assert_eq!(input_line(&f).1, 40.0);
+    }
+    if input == "font_asset" {
+        assert!(
+            handle
+                .with_mut(|o| o
+                    .as_text_input_mut()
+                    .unwrap()
+                    .raw_text_input()
+                    .font()
+                    .is_none())
+                .unwrap()
+        );
+        assert_eq!(css_input_line_count(&f), 0);
+        f.advance(1);
+        assert_eq!(f.max_offsets(), (0.0, 0.0));
+        // The late arrival bypasses the asset notification too. The first
+        // solve must read through the key even though the style had no font.
+        css_input_font_asset(&f)
+            .with_downcast_mut::<FontAsset, _>(|a| a.restore_host_font(Some(original_font)));
+        f.advance(1);
+        assert_eq!(css_input_line_count(&f), original_lines);
+        assert_eq!(f.max_offsets(), original_range);
+    } else if input != "width" {
+        // A read which already rebuilt must still invalidate the cached solve.
+        f.advance(1);
+        if input == "text" {
+            assert_eq!(f.max_offsets().1, -20.0);
+        }
+        if input == "rows" {
+            assert_eq!(f.bounds("Input layout")[3], 80.0);
+        }
+    }
+}
+
+#[test]
+fn css_input_key_text_without_dirty() {
+    css_input_key_read_without_dirty("text");
+}
+#[test]
+fn css_input_key_axis_without_dirty() {
+    css_input_key_read_without_dirty("axis");
+}
+#[test]
+fn css_input_key_font_asset_without_dirty() {
+    css_input_key_read_without_dirty("font_asset");
+}
+#[test]
+fn css_input_key_font_size_without_dirty() {
+    css_input_key_read_without_dirty("font_size");
+}
+#[test]
+fn css_input_key_line_height_without_dirty() {
+    css_input_key_read_without_dirty("line_height");
+}
+#[test]
+fn css_input_key_feature_without_dirty() {
+    css_input_key_read_without_dirty("feature");
+}
+#[test]
+fn css_input_key_rows_without_dirty() {
+    css_input_key_read_without_dirty("rows");
+}
+#[test]
+fn css_input_key_width_without_dirty() {
+    css_input_key_read_without_dirty("width");
 }
 
 #[test]

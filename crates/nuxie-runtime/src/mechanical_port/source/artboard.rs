@@ -3524,6 +3524,20 @@ impl Artboard {
         root: &CoreHandle,
         parent_style: Option<&LayoutParentStyleSnapshot>,
     ) -> bool {
+        // Validate CSS input keys before either the dirty-root fast path or
+        // Taffy's own cached measurements can skip the solve.
+        let inputs = root
+            .with_downcast::<Artboard, _>(|a| {
+                a.find_all_handles::<crate::source::text::text_input::TextInput>()
+            })
+            .unwrap_or_default();
+        for input in inputs {
+            input.with_mut(|o| {
+                o.as_text_input_mut()
+                    .expect("TextInput")
+                    .check_css_layout_before_solve()
+            });
+        }
         let dirty = root
             .with_downcast_mut::<Artboard, _>(|artboard| {
                 artboard.is_cleaning_dirty_layouts = true;

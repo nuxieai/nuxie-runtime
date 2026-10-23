@@ -136,9 +136,14 @@ struct JournalEntry {
 pub struct RawTextInput {
     #[cfg(any(test, feature = "tools"))]
     pub measure_count: u32,
+    #[cfg(test)]
+    pub(crate) css_layout_build_count: u32,
     cursor: Cursor,
     text_run: TextRun,
     css_line_box: bool,
+    pub(super) css_layout_key: Option<super::text_input::CssInputLayoutKey>,
+    pub(super) css_layout_needs_solve: bool,
+    css_read_updates: u8,
     text_path: ShapePaintPath,
     selected_text_path: ShapePaintPath,
     color_glyphs: Vec<InputColorGlyph>,
@@ -195,8 +200,13 @@ impl RawTextInput {
         Self {
             #[cfg(any(test, feature = "tools"))]
             measure_count: 0,
+            #[cfg(test)]
+            css_layout_build_count: 0,
             cursor: Cursor::at_start(),
             css_line_box: false,
+            css_layout_key: None,
+            css_layout_needs_solve: false,
+            css_read_updates: 0,
             text_run: TextRun {
                 font: None,
                 size: 16.0,
@@ -619,8 +629,23 @@ impl RawTextInput {
     }
 
     pub fn update(&mut self, factory: &RuntimeFactoryHandle) -> u8 {
-        let mut updated = Flags::None as u8;
+        let mut updated = if self.css_line_box {
+            std::mem::take(&mut self.css_read_updates)
+        } else {
+            Flags::None as u8
+        };
         if self.text_run.font.is_none() {
+            if self.css_line_box {
+                self.ensure_shape();
+                if self.unflag(Flags::TextPathDirty as u8) {
+                    self.build_text_paths(factory);
+                    self.cursor_path.rewind();
+                    self.selection_path.path.rewind();
+                    self.selection_rects.clear();
+                    self.unflag(Flags::SelectionDirty as u8);
+                    updated |= Flags::ShapeDirty | Flags::SelectionDirty;
+                }
+            }
             return updated;
         }
         let mut update_text_path = false;
@@ -666,8 +691,30 @@ impl RawTextInput {
         updated
     }
 
+    // Reads may prepare paths before component update. Preserve its normal
+    // notifications for bounds and child stroke effects when that update runs.
+    pub(super) fn retain_css_update_notifications(&mut self, updated: u8) {
+        self.css_read_updates |= updated;
+    }
+
+    pub(super) fn ensure_css_layout(&mut self) {
+        if self.css_line_box {
+            self.ensure_shape();
+        }
+    }
+
     fn ensure_shape(&mut self) {
         if self.unflag(Flags::ShapeDirty as u8) {
+            #[cfg(test)]
+            if self.css_line_box {
+                self.css_layout_build_count += 1;
+            }
+            if self.css_line_box && self.text_run.font.is_none() {
+                self.shape = FullyShapedText::default();
+                self.shape.set_css_line_box(true);
+                self.flag(Flags::TextPathDirty | Flags::SelectionDirty);
+                return;
+            }
             self.text_run.unichar_count = self.text.len() as u32;
             self.prepare_obscured_text();
             let text = if self.obscured() {
@@ -1351,6 +1398,11 @@ impl RawTextInput {
             }
         }
         self.measuring_shape.as_ref().unwrap().bounds()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn clear_shape_dirty_for_test(&mut self) {
+        self.unflag(Flags::ShapeDirty as u8);
     }
 
     fn flagged(&self, mask: u8) -> bool {

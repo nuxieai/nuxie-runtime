@@ -42,6 +42,34 @@ pub struct TextStyle {
     text: Option<CoreHandle>,
 }
 
+// Retain the font instances, rather than pointer integers which an allocator
+// could reuse after an asset replacement. Options include tags as well as values.
+#[derive(Clone)]
+pub(super) struct CssInputFontKey {
+    asset: Option<CoreHandle>,
+    asset_id: u32,
+    base_font: Option<FontRef>,
+    pub(super) font: Option<FontRef>,
+    axes: Vec<(u32, u32)>,
+    features: Vec<(u32, u32)>,
+}
+
+impl PartialEq for CssInputFontKey {
+    fn eq(&self, other: &Self) -> bool {
+        let same_font = |a: &Option<FontRef>, b: &Option<FontRef>| match (a, b) {
+            (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        self.asset == other.asset
+            && self.asset_id == other.asset_id
+            && same_font(&self.base_font, &other.base_font)
+            && same_font(&self.font, &other.font)
+            && self.axes == other.axes
+            && self.features == other.features
+    }
+}
+
 impl Default for TextStyle {
     fn default() -> Self {
         Self {
@@ -150,6 +178,39 @@ impl TextStyle {
             }
         }
         StatusCode::Ok
+    }
+    /// CSS reads through current variation inputs before any layout solve.
+    /// The translated font() entry retains upstream's helper update order.
+    pub(super) fn css_input_font_key(&mut self) -> CssInputFontKey {
+        self.update_variable_font();
+        let asset = self.font_asset();
+        CssInputFontKey {
+            base_font: asset
+                .as_ref()
+                .and_then(|a| a.with_downcast::<FontAsset, _>(FontAsset::font))
+                .flatten(),
+            asset,
+            asset_id: self.base.font_asset_id(),
+            font: self.font(),
+            axes: self
+                .variations
+                .iter()
+                .filter_map(|a| {
+                    a.with_downcast::<TextStyleAxis, _>(|a| {
+                        (a.base.tag(), a.base.axis_value().to_bits())
+                    })
+                })
+                .collect(),
+            features: self
+                .style_features
+                .iter()
+                .filter_map(|f| {
+                    f.with_downcast::<TextStyleFeature, _>(|f| {
+                        (f.base.tag(), f.base.feature_value())
+                    })
+                })
+                .collect(),
+        }
     }
     pub fn font(&mut self) -> Option<FontRef> {
         if self.variable_font.is_some() {

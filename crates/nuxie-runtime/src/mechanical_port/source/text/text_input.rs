@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use super::raw_text_input::{Flags, RawTextInput};
 use super::text_input_cursor::TextInputCursor;
 use super::{text_interface::TextInterface, text_style::TextStyle};
@@ -72,6 +74,23 @@ impl TextInput {
     pub const TYPE_KEY: u16 = TextInputBase::TYPE_KEY;
 }
 
+/// Inputs to the one CSS positioned layout. Float bits also make an unchanged
+/// unspecified (NaN) size stable until the solver supplies the content box.
+#[derive(Clone, PartialEq)]
+pub(super) struct CssInputLayoutKey {
+    authored_text: String,
+    text: String,
+    font: Option<super::text_style::CssInputFontKey>,
+    font_size: u32,
+    line_height: u32,
+    rows: u32,
+    multiline: bool,
+    obscured: bool,
+    align: u32,
+    width: u32,
+    height: u32,
+}
+
 pub struct TextInput {
     pub base: TextInputBase,
     world_bounds: Aabb,
@@ -88,7 +107,7 @@ pub struct TextInput {
     layout_width: f32,
     layout_height: f32,
     css_owned: bool,
-    raw_text_input: RawTextInput,
+    raw_text_input: RefCell<RawTextInput>,
 }
 
 impl Default for TextInput {
@@ -109,7 +128,7 @@ impl Default for TextInput {
             layout_width: f32::NAN,
             layout_height: f32::NAN,
             css_owned: false,
-            raw_text_input: RawTextInput::default(),
+            raw_text_input: RefCell::new(RawTextInput::default()),
         }
     }
 }
@@ -136,90 +155,193 @@ impl TextInput {
     pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
         if self.css_owned != owned {
             self.css_owned = owned;
-            self.raw_text_input.set_css_line_box(owned);
+            self.raw_text_input.get_mut().set_css_line_box(owned);
             // Layout is assigning ownership, so it already has a solve in
             // progress. Reshape drawing without invalidating that solve.
             self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         }
     }
 
-    /// Read the style rather than the last shaped text: bindings and animation
-    /// can change these values before the next shape or layout pass.
-    pub(crate) fn css_natural_size(&self) -> Vec2D {
-        let height = self
-            .text_style
-            .as_ref()
-            .and_then(|style| {
-                style
-                    .with_mut(|object| {
-                        let style = object.as_text_style_mut()?;
-                        let authored = style.base.line_height();
-                        if authored >= 0.0 {
-                            return Some(authored);
-                        }
-                        let metrics = style.font()?.css_line_metrics(style.base.font_size());
-                        Some(metrics.normal_line_height())
-                    })
-                    .flatten()
-            })
-            .unwrap_or(0.0);
-        let rows = if self.base.multiline() {
-            match self.base.rows() {
-                0 => 2,
-                rows => rows,
+    /// Validate even when a changed callback or an update dirt was missed.
+    /// This is also used by immutable bounds readers, so the CSS layout lives
+    /// behind a RefCell. Translated readers never enter this path.
+    fn refresh_css_layout(&self) {
+        if !self.css_owned {
+            return;
+        }
+        let style = self.text_style.as_ref().and_then(|style| {
+            style
+                .with_mut(|o| {
+                    let style = o.as_text_style_mut()?;
+                    Some((
+                        style.css_input_font_key(),
+                        style.base.font_size(),
+                        style.base.line_height(),
+                    ))
+                })
+                .flatten()
+        });
+        let (font, font_size, line_height) = match style {
+            Some((font, size, height)) => (Some(font), size, height),
+            None => (None, 16.0, -1.0),
+        };
+        let mut raw = self.raw_text_input.borrow_mut();
+        let authored_text = self.base.text().to_owned();
+        let authored_changed = raw.css_layout_key.as_ref().is_none_or(|key| {
+            key.authored_text != authored_text || key.multiline != self.base.multiline()
+        });
+        let text = if authored_changed {
+            if self.base.multiline() {
+                authored_text.clone()
+            } else {
+                Self::stripped_line_breaks(&authored_text)
             }
         } else {
-            1
+            raw.text()
         };
+        let key = CssInputLayoutKey {
+            authored_text,
+            text,
+            font,
+            font_size: font_size.to_bits(),
+            line_height: line_height.to_bits(),
+            rows: self.base.rows(),
+            multiline: self.base.multiline(),
+            obscured: self.base.obscured(),
+            align: self.base.align_value(),
+            width: self.layout_width.to_bits(),
+            height: self.layout_height.to_bits(),
+        };
+        if raw.css_layout_key.as_ref() != Some(&key) {
+            raw.set_font(key.font.as_ref().and_then(|font| font.font.clone()));
+            raw.set_font_size(font_size);
+            raw.set_line_height(line_height);
+            if raw.text() != key.text {
+                raw.set_text_preserve_cursor(key.text.clone());
+            }
+            raw.set_obscured(key.obscured);
+            raw.set_max_width(if key.multiline {
+                self.layout_width
+            } else {
+                0.0
+            });
+            raw.set_sizing(if key.multiline {
+                TextSizing::AutoHeight
+            } else {
+                TextSizing::AutoWidth
+            });
+            Self::apply_alignment(&mut raw, self.alignment());
+            raw.invalidate_shape();
+            raw.css_layout_key = Some(key);
+            raw.css_layout_needs_solve = true;
+        }
+        // A selection read may have consumed shape dirt. Keep painting and all
+        // subsequent readers on this same layout, including an absent font.
+        raw.ensure_css_layout();
+        if let Some(factory) = self.base.with_artboard(|a| a.factory()).flatten() {
+            let updated = raw.update(&factory);
+            raw.retain_css_update_notifications(updated);
+        }
+    }
+
+    pub(crate) fn check_css_layout_before_solve(&mut self) {
+        if !self.css_owned {
+            return;
+        }
+        self.refresh_css_layout();
+        if std::mem::take(&mut self.raw_text_input.get_mut().css_layout_needs_solve) {
+            self.base.mark_layout_node_dirty();
+        }
+    }
+
+    pub(crate) fn css_natural_size(&self) -> Vec2D {
+        self.refresh_css_layout();
+        let raw = self.raw_text_input.borrow();
+        let height = raw
+            .css_layout_key
+            .as_ref()
+            .map(|key| {
+                let authored = f32::from_bits(key.line_height);
+                if authored >= 0.0 {
+                    authored
+                } else {
+                    key.font
+                        .as_ref()
+                        .and_then(|f| f.font.as_ref())
+                        .map(|f| {
+                            f.css_line_metrics(f32::from_bits(key.font_size))
+                                .normal_line_height()
+                        })
+                        .unwrap_or(0.0)
+                }
+            })
+            .unwrap_or(0.0);
+        let rows = raw
+            .css_layout_key
+            .as_ref()
+            .map(|key| {
+                if !key.multiline {
+                    1
+                } else if key.rows == 0 {
+                    2
+                } else {
+                    key.rows
+                }
+            })
+            .unwrap_or(1);
         Vec2D::new(0.0, height * rows as f32)
     }
 
     /// Feed the shared positioned layout from the live style in both solve
     /// and update. Bindings can change it before either pass runs.
     fn sync_text_style(&mut self, on_added: bool) {
-        if let Some((font, size, height)) = self.text_style.as_ref().and_then(|style| {
+        if self.css_owned {
+            self.refresh_css_layout();
+            return;
+        }
+        if let Some((font, size)) = self.text_style.as_ref().and_then(|style| {
             style
                 .with_mut(|object| {
                     let style = object.as_text_style_mut()?;
-                    Some((
-                        style.font(),
-                        style.base.font_size(),
-                        style.base.line_height(),
-                    ))
+                    Some((style.font(), style.base.font_size()))
                 })
                 .flatten()
         }) {
             // Upstream onAddedClean leaves the raw defaults alone when the
             // style has no font yet. Update forwards the style unconditionally.
-            if on_added && !self.css_owned && font.is_none() {
+            if on_added && font.is_none() {
                 return;
             }
-            self.raw_text_input.set_font(font);
-            self.raw_text_input.set_font_size(size);
-            self.raw_text_input
-                .set_line_height(if self.css_owned { height } else { -1.0 });
+            self.raw_text_input.get_mut().set_font(font);
+            self.raw_text_input.get_mut().set_font_size(size);
+            self.raw_text_input.get_mut().set_line_height(-1.0);
         }
     }
 
     /// The solve supplies the control's content box. All consumers use this
     /// positioned layout; form-control natural sizing remains independent.
     pub(crate) fn css_positioned_bounds(&mut self, size: Vec2D) -> Aabb {
-        self.sync_text_style(false);
         self.sync_css_box(size);
-        self.raw_text_input.positioned_layout_bounds()
+        self.refresh_css_layout();
+        self.raw_text_input.get_mut().css_layout_needs_solve = false;
+        self.raw_text_input.get_mut().positioned_layout_bounds()
     }
 
     fn sync_multiline_size(&mut self) {
-        self.raw_text_input.set_max_width(if self.base.multiline() {
-            self.layout_width
-        } else {
-            0.0
-        });
-        self.raw_text_input.set_sizing(if self.base.multiline() {
-            TextSizing::AutoHeight
-        } else {
-            TextSizing::AutoWidth
-        });
+        self.raw_text_input
+            .get_mut()
+            .set_max_width(if self.base.multiline() {
+                self.layout_width
+            } else {
+                0.0
+            });
+        self.raw_text_input
+            .get_mut()
+            .set_sizing(if self.base.multiline() {
+                TextSizing::AutoHeight
+            } else {
+                TextSizing::AutoWidth
+            });
     }
 
     fn sync_css_box(&mut self, size: Vec2D) {
@@ -257,6 +379,7 @@ impl TextInput {
         })?
     }
     pub fn hit_test_point(&mut self, position: Vec2D, skip: bool, primary: bool) -> bool {
+        self.refresh_css_layout();
         // The field is the whole viewport when the content hugs its text.
         // Resolve its bounds live, since its transform can change independently.
         if let Some(viewport) = self.field_viewport() {
@@ -297,8 +420,14 @@ impl TextInput {
         }
         self.base.base.hit_test_point(&position, skip, primary)
     }
+    #[cfg(test)]
+    pub(crate) fn clear_css_input_shape_dirty_for_test(&mut self) {
+        self.raw_text_input.get_mut().clear_shape_dirty_for_test();
+    }
+
     pub fn raw_text_input(&mut self) -> &mut RawTextInput {
-        &mut self.raw_text_input
+        self.refresh_css_layout();
+        self.raw_text_input.get_mut()
     }
     pub fn mark_paint_dirty(&mut self) {
         self.restart_cursor_blink();
@@ -312,7 +441,7 @@ impl TextInput {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         if self.css_owned {
-            self.raw_text_input.invalidate_shape();
+            self.raw_text_input.get_mut().invalidate_shape();
         }
         self.base.mark_layout_node_dirty();
     }
@@ -367,7 +496,7 @@ impl TextInput {
         self.update_alignment();
         self.mark_shape_dirty();
     }
-    fn update_alignment(&mut self) -> bool {
+    fn alignment(&self) -> (TextAlign, VerticalTextAlign, f32, f32) {
         let align = match self.base.align_value() {
             0 => TextAlign::Left,
             1 => TextAlign::Right,
@@ -431,21 +560,34 @@ impl TextInput {
         } else {
             height
         };
-        if self.raw_text_input.align() == align
-            && self.raw_text_input.align_width() == width
-            && self.raw_text_input.vertical_align() == vertical
-            && self.raw_text_input.align_height() == height
+        (align, vertical, width, height)
+    }
+
+    fn apply_alignment(
+        raw: &mut RawTextInput,
+        (align, vertical, width, height): (TextAlign, VerticalTextAlign, f32, f32),
+    ) -> bool {
+        if raw.align() == align
+            && raw.align_width() == width
+            && raw.vertical_align() == vertical
+            && raw.align_height() == height
         {
             return false;
         }
-        self.raw_text_input.set_align(align);
-        self.raw_text_input.set_align_width(width);
-        self.raw_text_input.set_vertical_align(vertical);
-        self.raw_text_input.set_align_height(height);
+        raw.set_align(align);
+        raw.set_align_width(width);
+        raw.set_vertical_align(vertical);
+        raw.set_align_height(height);
         true
     }
+
+    fn update_alignment(&mut self) -> bool {
+        let alignment = self.alignment();
+        Self::apply_alignment(self.raw_text_input.get_mut(), alignment)
+    }
     pub fn local_bounds(&self) -> Aabb {
-        self.raw_text_input.bounds()
+        self.refresh_css_layout();
+        self.raw_text_input.borrow().bounds()
     }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         self.base.on_added_clean(context);
@@ -461,7 +603,9 @@ impl TextInput {
             .cloned();
         {
             self.sync_text_style(true);
-            self.raw_text_input.set_obscured(self.base.obscured());
+            self.raw_text_input
+                .get_mut()
+                .set_obscured(self.base.obscured());
             self.sync_displayed_text_from_source(false);
         }
         self.scroll_constraint = self
@@ -510,12 +654,12 @@ impl TextInput {
                 .expect("TextInput retains its imported renderer factory");
             self.sync_text_style(false);
             self.update_alignment();
-            let changed = self.raw_text_input.update(&factory);
+            let changed = self.raw_text_input.get_mut().update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
                 self.world_bounds = self
                     .base
                     .world_transform()
-                    .map_bounding_box(self.raw_text_input.bounds());
+                    .map_bounding_box(self.raw_text_input.get_mut().bounds());
                 if !self.css_owned {
                     self.base.mark_layout_node_dirty();
                 }
@@ -534,7 +678,7 @@ impl TextInput {
                 if let Some(scroll) = self.scroll_constraint.clone() {
                     return Some((
                         scroll,
-                        self.raw_text_input.cursor_visual_position(),
+                        self.raw_text_input.get_mut().cursor_visual_position(),
                         self.base.multiline(),
                     ));
                 }
@@ -602,7 +746,10 @@ impl TextInput {
         } else {
             height
         };
-        self.raw_text_input.measure(max_width, max_height).size()
+        self.raw_text_input
+            .get_mut()
+            .measure(max_width, max_height)
+            .size()
     }
     pub fn control_size(
         &mut self,
@@ -626,6 +773,7 @@ impl TextInput {
     }
     pub fn selection_radius_changed(&mut self) {
         self.raw_text_input
+            .get_mut()
             .set_selection_corner_radius(self.base.selection_radius());
         self.mark_shape_dirty();
     }
@@ -633,7 +781,9 @@ impl TextInput {
         self.update_multiline(true);
     }
     pub fn obscured_changed(&mut self) {
-        self.raw_text_input.set_obscured(self.base.obscured());
+        self.raw_text_input
+            .get_mut()
+            .set_obscured(self.base.obscured());
         self.base.mark_layout_node_dirty();
         self.mark_shape_dirty();
     }
@@ -663,25 +813,27 @@ impl TextInput {
     fn sync_displayed_text_from_source(&mut self, preserve_cursor: bool) {
         {
             let next_display_text = self.displayed_text();
-            if self.raw_text_input.text() == next_display_text {
+            if self.raw_text_input.get_mut().text() == next_display_text {
                 return;
             }
             if preserve_cursor {
                 self.raw_text_input
+                    .get_mut()
                     .set_text_preserve_cursor(next_display_text);
             } else {
-                self.raw_text_input.set_text(next_display_text);
+                self.raw_text_input.get_mut().set_text(next_display_text);
             }
         }
         self.mark_shape_dirty();
     }
     fn sync_source_text_from_raw(&mut self) {
         {
-            let mut displayed = self.raw_text_input.text();
+            let mut displayed = self.raw_text_input.get_mut().text();
             if !self.base.multiline() {
                 let single_line = Self::stripped_line_breaks(&displayed);
                 if single_line != displayed {
                     self.raw_text_input
+                        .get_mut()
                         .set_text_preserve_cursor(single_line.clone());
                     displayed = single_line;
                 }
@@ -725,6 +877,7 @@ impl TextInput {
         pressed: bool,
         _repeat: bool,
     ) -> bool {
+        self.refresh_css_layout();
         {
             if pressed {
                 let system_modifier = if cfg!(target_os = "windows") {
@@ -749,46 +902,48 @@ impl TextInput {
                         if modifiers.0 & (system_modifier | KeyModifiers::SHIFT.0)
                             == system_modifier | KeyModifiers::SHIFT.0 =>
                     {
-                        self.raw_text_input.redo();
+                        self.raw_text_input.get_mut().redo();
                         self.sync_source_text_from_raw();
                         self.mark_shape_dirty();
                         return true;
                     }
                     Key::Z if modifiers.0 & system_modifier != 0 => {
-                        self.raw_text_input.undo();
+                        self.raw_text_input.get_mut().undo();
                         self.sync_source_text_from_raw();
                         self.mark_shape_dirty();
                         return true;
                     }
                     Key::A if modifiers.0 & system_modifier != 0 => {
-                        self.raw_text_input.select_all();
+                        self.raw_text_input.get_mut().select_all();
                         self.mark_paint_dirty();
                         return true;
                     }
                     Key::HOME => self
                         .raw_text_input
+                        .get_mut()
                         .cursor_left(super::raw_text_input::CursorBoundary::Line, select),
                     Key::END => self
                         .raw_text_input
+                        .get_mut()
                         .cursor_right(super::raw_text_input::CursorBoundary::Line, select),
                     Key::BACKSPACE => {
-                        self.raw_text_input.backspace(-1);
+                        self.raw_text_input.get_mut().backspace(-1);
                         self.sync_source_text_from_raw();
                         self.mark_shape_dirty();
                         return true;
                     }
                     Key::DELETE => {
-                        self.raw_text_input.backspace(1);
+                        self.raw_text_input.get_mut().backspace(1);
                         self.sync_source_text_from_raw();
                         self.mark_shape_dirty();
                         return true;
                     }
-                    Key::LEFT => self.raw_text_input.cursor_left(boundary, select),
-                    Key::RIGHT => self.raw_text_input.cursor_right(boundary, select),
-                    Key::UP => self.raw_text_input.cursor_up(select),
-                    Key::DOWN => self.raw_text_input.cursor_down(select),
+                    Key::LEFT => self.raw_text_input.get_mut().cursor_left(boundary, select),
+                    Key::RIGHT => self.raw_text_input.get_mut().cursor_right(boundary, select),
+                    Key::UP => self.raw_text_input.get_mut().cursor_up(select),
+                    Key::DOWN => self.raw_text_input.get_mut().cursor_down(select),
                     Key::ENTER if self.base.multiline() => {
-                        self.raw_text_input.insert("\n");
+                        self.raw_text_input.get_mut().insert("\n");
                         self.sync_source_text_from_raw();
                         self.mark_paint_dirty();
                         return true;
@@ -803,6 +958,7 @@ impl TextInput {
         false
     }
     pub fn text_input(&mut self, value: &str) -> bool {
+        self.refresh_css_layout();
         let value = if self.base.multiline() {
             value.to_owned()
         } else {
@@ -811,7 +967,7 @@ impl TextInput {
         if value.is_empty() {
             return true;
         }
-        self.raw_text_input.insert(&value);
+        self.raw_text_input.get_mut().insert(&value);
         self.sync_source_text_from_raw();
         self.mark_shape_dirty();
         true
@@ -819,10 +975,11 @@ impl TextInput {
     /// `Some` is upstream's handled result, including an empty secure selection.
     /// `None` lets the focus lookup continue to an ancestor.
     pub fn selected_text(&self) -> Option<String> {
+        self.refresh_css_layout();
         if self.base.obscured() {
             Some(String::new())
         } else {
-            let text = self.raw_text_input.selected_text();
+            let text = self.raw_text_input.borrow().selected_text();
             (!text.is_empty()).then_some(text)
         }
     }
@@ -836,9 +993,10 @@ impl TextInput {
     // FocusData's callback already owns its mutable arena borrow. Pass that
     // owner through so the first-child lookup can use it without reborrowing.
     pub(crate) fn focused_with_focus_data(&mut self, focus_data: Option<&mut FocusData>) {
+        self.refresh_css_layout();
         self.focused = true;
         if self.base.select_all_on_focus() || self.focused_by_traversal(focus_data) {
-            self.raw_text_input.select_all();
+            self.raw_text_input.get_mut().select_all();
         }
         self.mark_paint_dirty();
     }
@@ -861,7 +1019,7 @@ impl TextInput {
     }
     pub fn blurred(&mut self) {
         self.focused = false;
-        self.raw_text_input.clear_selection();
+        self.raw_text_input.get_mut().clear_selection();
         self.mark_paint_dirty();
     }
     pub fn world_position(&mut self, out: &mut Vec2D) -> bool {
@@ -873,17 +1031,24 @@ impl TextInput {
         true
     }
     pub fn world_bounds(&mut self, out: &mut Aabb) -> bool {
-        if self.world_bounds.is_empty_or_nan() {
+        let world_bounds = if self.css_owned {
+            self.base
+                .world_transform()
+                .map_bounding_box(self.local_bounds())
+        } else {
+            self.world_bounds
+        };
+        if world_bounds.is_empty_or_nan() {
             return false;
         }
         if let Some(bounds) = self.base.with_artboard_mut(|artboard| {
-            let minimum = artboard.root_transform(self.world_bounds.min());
-            let maximum = artboard.root_transform(self.world_bounds.max());
+            let minimum = artboard.root_transform(world_bounds.min());
+            let maximum = artboard.root_transform(world_bounds.max());
             Aabb::new(minimum.x, minimum.y, maximum.x, maximum.y)
         }) {
             *out = bounds;
         } else {
-            *out = self.world_bounds;
+            *out = world_bounds;
         }
         true
     }
@@ -963,22 +1128,24 @@ impl TextInput {
         true
     }
     pub fn start_drag(&mut self, world: Vec2D) {
+        self.refresh_css_layout();
         self.is_dragging = true;
         self.last_drag_world_position = world;
         let mut local = Vec2D::default();
         if self.world_to_local_with_viewport(world, &mut local, false) {
-            self.raw_text_input.move_cursor_to(local, false);
+            self.raw_text_input.get_mut().move_cursor_to(local, false);
             self.mark_paint_dirty();
         }
     }
     pub fn drag(&mut self, world: Vec2D) {
+        self.refresh_css_layout();
         if !self.is_dragging {
             return;
         }
         let mut local = Vec2D::default();
         if self.world_to_local_with_viewport(world, &mut local, true) {
             self.last_drag_world_position = world;
-            self.raw_text_input.move_cursor_to(local, true);
+            self.raw_text_input.get_mut().move_cursor_to(local, true);
             self.mark_paint_dirty();
         }
     }
@@ -989,11 +1156,13 @@ impl TextInput {
         self.scroll_y = 0.0;
     }
     pub fn select_word(&mut self) {
-        self.raw_text_input.select_word();
+        self.refresh_css_layout();
+        self.raw_text_input.get_mut().select_word();
         self.mark_paint_dirty();
     }
     pub fn select_line(&mut self) {
-        self.raw_text_input.select_line();
+        self.refresh_css_layout();
+        self.raw_text_input.get_mut().select_line();
         self.mark_paint_dirty();
     }
     pub fn advance_drag(&mut self, elapsed: f32) -> bool {
@@ -1002,6 +1171,7 @@ impl TextInput {
             self.scroll_y = 0.0;
             return false;
         }
+        self.refresh_css_layout();
         {
             let Some(scroll) = self.scroll_constraint.clone() else {
                 return false;
@@ -1035,7 +1205,7 @@ impl TextInput {
                     &mut local,
                     true,
                 ) {
-                    self.raw_text_input.move_cursor_to(local, true);
+                    self.raw_text_input.get_mut().move_cursor_to(local, true);
                     self.mark_paint_dirty();
                 }
             }
@@ -1059,7 +1229,7 @@ impl TextInput {
         self.focused
     }
     pub fn is_cursor_visible(&self) -> bool {
-        if !self.raw_text_input.cursor().is_collapsed() {
+        if !self.raw_text_input.borrow().cursor().is_collapsed() {
             return false;
         }
         self.focused && self.cursor_blink_visible
@@ -1099,12 +1269,12 @@ mod cpp_probe_tests {
         with_input(input, |input| {
             let mut local = Vec2D::default();
             assert!(input.world_to_local_with_viewport(world, &mut local, false));
-            input.raw_text_input.move_cursor_to(local, false);
+            input.raw_text_input.get_mut().move_cursor_to(local, false);
             input.mark_paint_dirty();
             let factory = artboard
                 .with_artboard(|artboard| artboard.factory())
                 .expect("retained factory");
-            input.raw_text_input.update(&factory);
+            input.raw_text_input.get_mut().update(&factory);
         });
     }
 
@@ -1119,11 +1289,17 @@ mod cpp_probe_tests {
             text_key,
             "seed".into()
         ));
-        with_input(&input, |input| input.raw_text_input.set_text("a\nb".into()));
+        with_input(&input, |input| {
+            input.raw_text_input.get_mut().set_text("a\nb".into())
+        });
         set_cursor(&input, 3, 3);
         with_input(&input, TextInput::sync_source_text_from_raw);
         assert_eq!(
-            Some(with_input(&input, |input| input.raw_text_input.text())).as_deref(),
+            Some(with_input(&input, |input| input
+                .raw_text_input
+                .get_mut()
+                .text()))
+            .as_deref(),
             Some("a b")
         );
         assert_eq!(cursor(&input), Some((3, 3)));

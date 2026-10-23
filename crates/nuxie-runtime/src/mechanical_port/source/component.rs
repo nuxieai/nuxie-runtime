@@ -1274,7 +1274,7 @@ impl Component {
         };
         if let Some(old) = self.parent_handle() {
             let next = context.resolve(self.base.parent_id());
-            if next.as_ref() != Some(&old) {
+            if next.as_ref() != Some(&old) && Self::is_css_style_parent(&old) {
                 Self::detach_css_child(&old, &this);
             }
         }
@@ -1302,17 +1302,16 @@ impl Component {
             .unwrap_or(StatusCode::MissingObject)
     }
 
-    fn is_css_input_parent(parent: &CoreHandle) -> bool {
+    fn is_css_style_parent(parent: &CoreHandle) -> bool {
         parent
             .with(|o| {
                 o.as_text_input().is_some_and(|i| i.has_css_layout_parent())
                     || o.as_text_style().is_some_and(|s| s.has_css_input_parent())
-                    || o.as_layout_component().is_some_and(|l| l.is_css_mode())
             })
             .unwrap_or(false)
     }
 
-    pub(crate) fn reparent_css_input_child(&mut self) -> bool {
+    pub(crate) fn reparent_css_style_child(&mut self) -> bool {
         let Some(this) = self.handle() else {
             return false;
         };
@@ -1323,7 +1322,7 @@ impl Component {
             .flatten()
         });
         let old = self.parent_handle();
-        if old == next || !old.iter().chain(next.iter()).any(Self::is_css_input_parent) {
+        if old == next || !old.iter().chain(next.iter()).any(Self::is_css_style_parent) {
             return false;
         }
         if let Some(old) = old {

@@ -87086,9 +87086,6 @@ impl crate::mechanical_port::source::generated::world_transform_component_base::
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
     for crate::mechanical_port::source::text::text_input::TextInput
 {
-    fn parent_id_changed(&mut self) {
-        crate::source::text::text_input::TextInput::parent_id_changed(self);
-    }
     fn notify_property_changed(&mut self, property_key: u16) {
         crate::mechanical_port::source::core::Core::notify_property_changed(
             &mut self

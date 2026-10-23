@@ -105,7 +105,7 @@ impl TextStyle {
     }
 
     pub fn parent_id_changed(&mut self) {
-        if self.base.reparent_css_input_child() {
+        if self.base.reparent_css_style_child() {
             self.text = <dyn TextInterface>::from_core(self.base.parent_handle());
             self.css_options_changed();
         }

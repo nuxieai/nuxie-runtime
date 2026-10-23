@@ -12826,50 +12826,85 @@ fn css_input_replaced_style_is_found_before_the_next_solve() {
 }
 
 #[test]
-fn css_input_css_to_translated_to_css_restores_the_authored_line_height() {
-    let f = scene(
-        (400.0, 300.0),
-        B {
-            css: Some(vec![]),
-            children: vec![
-                B {
-                    name: "css control",
-                    css: Some([width(100.0).to_vec(), height(60.0).to_vec()].concat()),
-                    text_input: true,
-                    text: "Hi",
-                    input_properties: vec![U(979, 0)],
-                    input_style: vec![F(370, 40.0)],
-                    ..B::default()
-                },
-                B {
-                    name: "translated control",
-                    component: vec![
-                        F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
-                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0),
-                    ],
-                    ..B::default()
-                },
-            ],
-            ..B::default()
-        },
-    );
-    f.advance(4);
-    let input = input_handle(&f);
-    for target in [
-        "translated control",
-        "css control",
-        "translated control",
-        "css control",
-    ] {
-        let id = f.artboard.with_artboard(|a| a.id_of(&f.named(target)));
-        CoreRegistry::set_uint_handle(&input, 5, id);
+fn css_input_parent_id_write_keeps_the_attached_parent_and_transform() {
+    for css in [false, true] {
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                css: Some(vec![]),
+                children: vec![
+                    B {
+                        name: "control",
+                        css: css.then(|| [width(100.0), height(60.0)].concat()),
+                        component: vec![
+                            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0),
+                        ],
+                        text_input: true,
+                        text: "Hi",
+                        input_properties: vec![U(979, 0)],
+                        input_style: vec![F(370, 40.0)],
+                        ..B::default()
+                    },
+                    B {
+                        name: "other",
+                        css: (!css).then(|| [width(200.0), height(80.0)].concat()),
+                        component: vec![
+                            F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0),
+                            F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 80.0),
+                        ],
+                        ..B::default()
+                    },
+                ],
+                ..B::default()
+            },
+        );
+        let input = input_handle(&f);
+        let parent = f.named("control");
+        let other = f.named("other");
+        let before = input_line(&f);
+        let other_id = f.artboard.with_artboard(|a| a.id_of(&other));
+        assert!(CoreRegistry::set_uint_handle(&input, 5, other_id));
         f.advance(1);
-        let line = input_line(&f);
-        if target == "css control" {
-            assert_eq!((line.0, line.1), (10.0, 40.0));
-        } else {
-            assert_ne!(line.1, 40.0);
-        }
+        assert_eq!(CoreRegistry::get_uint_handle(&input, 5), Some(other_id));
+        assert_eq!(
+            input.with(|o| o.component_parent_handle()).flatten(),
+            Some(parent.clone())
+        );
+        assert_eq!(
+            input
+                .with(|o| o
+                    .as_transform_component()
+                    .unwrap()
+                    .parent_transform_component())
+                .flatten(),
+            Some(parent.clone())
+        );
+        assert!(
+            parent
+                .with(|o| o
+                    .as_container_component()
+                    .unwrap()
+                    .children()
+                    .contains(&input))
+                .unwrap()
+        );
+        assert!(
+            !other
+                .with(|o| o
+                    .as_container_component()
+                    .unwrap()
+                    .children()
+                    .contains(&input))
+                .unwrap()
+        );
+        assert_eq!(input_line(&f), before);
+        assert_eq!(
+            parent.with_downcast::<LayoutComponent, _>(|l| l
+                .layout_style()
+                .item_is_compressible_replaced),
+            Some(css)
+        );
     }
 }
 

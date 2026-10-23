@@ -27,7 +27,7 @@ pub struct TextStyleFeature {
 
 impl TextStyleFeature {
     pub fn parent_id_changed(&mut self) {
-        if self.base.reparent_css_input_child() {
+        if self.base.reparent_css_style_child() {
             if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
                 parent.with_mut(|o| {
                     if let Some(style) = o.as_text_style_mut() {

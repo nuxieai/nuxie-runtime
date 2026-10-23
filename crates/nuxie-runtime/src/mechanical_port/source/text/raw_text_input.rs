@@ -317,9 +317,6 @@ impl RawTextInput {
     pub(crate) fn set_css_line_box(&mut self, enabled: bool) {
         if self.css_line_box != enabled {
             self.css_line_box = enabled;
-            if !enabled {
-                self.unflag(Flags::TextPathDirty as u8);
-            }
             self.invalidate_shape();
         }
     }

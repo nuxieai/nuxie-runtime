@@ -87,7 +87,7 @@ pub struct TextInput {
     scroll_y: f32,
     layout_width: f32,
     layout_height: f32,
-    css_owned: bool,
+    css_owned: Option<bool>,
     raw_text_input: RawTextInput,
 }
 
@@ -108,7 +108,7 @@ impl Default for TextInput {
             scroll_y: 0.0,
             layout_width: f32::NAN,
             layout_height: f32::NAN,
-            css_owned: false,
+            css_owned: None,
             raw_text_input: RawTextInput::default(),
         }
     }
@@ -134,17 +134,23 @@ impl TextInput {
     }
 
     pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
-        if self.css_owned != owned {
-            self.css_owned = owned;
-            if owned {
-                self.find_text_style();
-            }
-            self.raw_text_input.set_css_line_box(owned);
+        if let Some(attached) = self.css_owned {
+            debug_assert_eq!(
+                attached, owned,
+                "a text input keeps its attached layout mode"
+            );
+            return;
+        }
+        self.css_owned = Some(owned);
+        if owned {
+            self.raw_text_input.set_css_line_box(true);
             self.sync_text_style(false);
-            // Layout is assigning ownership, so it already has a solve in
-            // progress. Reshape drawing without invalidating that solve.
             self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         }
+    }
+
+    fn owned_by_css_layout(&self) -> bool {
+        self.css_owned == Some(true)
     }
 
     /// Read the style rather than the last shaped text: bindings and animation
@@ -182,7 +188,7 @@ impl TextInput {
     /// Feed the shared positioned layout from the live style in both solve
     /// and update. Bindings can change it before either pass runs.
     fn sync_text_style(&mut self, on_added: bool) {
-        let css = self.css_owned;
+        let css = self.owned_by_css_layout();
         if let Some((font, size, height)) = self.text_style.as_ref().and_then(|style| {
             style
                 .with_mut(|object| {
@@ -200,14 +206,14 @@ impl TextInput {
         }) {
             // Upstream onAddedClean leaves the raw defaults alone when the
             // style has no font yet. Update forwards the style unconditionally.
-            if on_added && !self.css_owned && font.is_none() {
+            if on_added && !css && font.is_none() {
                 return;
             }
             self.raw_text_input.set_font(font);
             self.raw_text_input.set_font_size(size);
             self.raw_text_input
-                .set_line_height(if self.css_owned { height } else { -1.0 });
-        } else if self.css_owned {
+                .set_line_height(if css { height } else { -1.0 });
+        } else if css {
             self.raw_text_input.set_font(None);
         }
     }
@@ -242,21 +248,8 @@ impl TextInput {
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
     }
 
-    pub fn parent_id_changed(&mut self) {
-        if self.base.reparent_css_input_child() {
-            let css = self
-                .base
-                .parent_handle()
-                .and_then(|p| p.with(|o| o.as_layout_component().is_some_and(|l| l.is_css_mode())))
-                .unwrap_or(false);
-            self.set_owned_by_css_layout(css);
-            self.refresh_scroll_constraint();
-            self.mark_shape_dirty();
-        }
-    }
-
     pub fn rows_changed(&mut self) {
-        if self.css_owned {
+        if self.owned_by_css_layout() {
             self.base.mark_layout_node_dirty();
         }
     }
@@ -279,7 +272,7 @@ impl TextInput {
     }
 
     pub(crate) fn css_style_link_changed(&mut self) {
-        if !self.css_owned {
+        if !self.owned_by_css_layout() {
             return;
         }
         self.find_text_style();
@@ -352,7 +345,7 @@ impl TextInput {
     pub fn mark_paint_dirty(&mut self) {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::PAINT, false);
-        if self.css_owned {
+        if self.owned_by_css_layout() {
             // Selection and cursor movement can move the caret's overflow.
             self.base.mark_layout_node_dirty();
         }
@@ -360,7 +353,7 @@ impl TextInput {
     pub fn mark_shape_dirty(&mut self) {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
-        if self.css_owned {
+        if self.owned_by_css_layout() {
             self.raw_text_input.invalidate_shape();
         }
         self.base.mark_layout_node_dirty();
@@ -423,7 +416,7 @@ impl TextInput {
             2 => TextAlign::Center,
             other => TextAlign::Unknown(other),
         };
-        let vertical = if self.css_owned {
+        let vertical = if self.owned_by_css_layout() {
             if self.base.multiline() {
                 VerticalTextAlign::Top
             } else {
@@ -442,7 +435,7 @@ impl TextInput {
         let viewport = self
             .scroll_constraint
             .as_ref()
-            .filter(|_| !self.css_owned)
+            .filter(|_| !self.owned_by_css_layout())
             .and_then(|scroll| {
                 scroll
                     .with(|scroll| {
@@ -496,7 +489,15 @@ impl TextInput {
     pub fn local_bounds(&self) -> Aabb {
         self.raw_text_input.bounds()
     }
-    fn refresh_scroll_constraint(&mut self) {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        self.base.on_added_clean(context);
+        self.source_text = self.base.text().to_owned();
+        self.find_text_style();
+        {
+            self.sync_text_style(true);
+            self.raw_text_input.set_obscured(self.base.obscured());
+            self.sync_displayed_text_from_source(false);
+        }
         self.scroll_constraint = self
             .base
             .parent_handle()
@@ -521,18 +522,6 @@ impl TextInput {
                     })
                 })?
             });
-    }
-
-    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        self.base.on_added_clean(context);
-        self.source_text = self.base.text().to_owned();
-        self.find_text_style();
-        {
-            self.sync_text_style(true);
-            self.raw_text_input.set_obscured(self.base.obscured());
-            self.sync_displayed_text_from_source(false);
-        }
-        self.refresh_scroll_constraint();
         self.update_multiline(false);
         self.update_alignment();
         self.set_owned_by_css_layout(self.has_css_layout_parent());
@@ -546,7 +535,7 @@ impl TextInput {
         &mut self,
         value: ComponentDirt,
     ) -> Option<(CoreHandle, super::cursor::CursorVisualPosition, bool)> {
-        if (self.text_style.is_some() || self.css_owned)
+        if (self.text_style.is_some() || self.owned_by_css_layout())
             && value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)
         {
             let factory = self
@@ -562,7 +551,7 @@ impl TextInput {
                     .base
                     .world_transform()
                     .map_bounding_box(self.raw_text_input.bounds());
-                if !self.css_owned {
+                if !self.owned_by_css_layout() {
                     self.base.mark_layout_node_dirty();
                 }
             }
@@ -635,7 +624,7 @@ impl TextInput {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
-        if self.css_owned {
+        if self.owned_by_css_layout() {
             return self.css_natural_size();
         }
         let max_width = if width_mode == LayoutMeasureMode::Undefined {
@@ -657,7 +646,7 @@ impl TextInput {
         _h: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        if self.css_owned {
+        if self.owned_by_css_layout() {
             self.sync_css_box(size);
         } else {
             self.layout_width = size.x;
@@ -756,7 +745,7 @@ impl TextInput {
         if sync {
             self.sync_displayed_text_from_source(true);
         }
-        if self.css_owned {
+        if self.owned_by_css_layout() {
             self.mark_shape_dirty();
         } else {
             // Upstream updateMultiline does not restart cursor blinking.

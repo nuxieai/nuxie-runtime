@@ -986,12 +986,13 @@ impl Shape {
         width: LayoutScaleType,
         height: LayoutScaleType,
         direction: LayoutDirection,
+        css: bool,
     ) {
         if let Some(path) = self.prepare_control_size(size) {
             path.with_mut(|path| {
-                path.as_parametric_path_mut()
+                path.as_intrinsically_sizeable_mut()
                     .expect("firstParametricPath selects a ParametricPath")
-                    .control_size(size, width, height, direction);
+                    .control_size(size, width, height, direction, css);
             });
         }
     }
@@ -1001,6 +1002,7 @@ impl Shape {
         width: LayoutScaleType,
         height: LayoutScaleType,
         direction: LayoutDirection,
+        css: bool,
     ) {
         let path = owner
             .with_downcast_mut::<Shape, _>(|shape| shape.prepare_control_size(size))
@@ -1009,9 +1011,9 @@ impl Shape {
         // this Shape. Its owning arena borrow must end before that virtual call.
         if let Some(path) = path {
             path.with_mut(|path| {
-                path.as_parametric_path_mut()
+                path.as_intrinsically_sizeable_mut()
                     .expect("firstParametricPath selects a ParametricPath")
-                    .control_size(size, width, height, direction);
+                    .control_size(size, width, height, direction, css);
             });
         }
     }
@@ -1035,6 +1037,7 @@ impl Shape {
         &mut self,
         size: Vec2D,
         participant: &mut LayoutParticipant,
+        _css: bool,
     ) {
         let bounds = self.compute_intrinsic_bounds_with_participant(Some(&mut *participant));
         Self::set_participant_scale(bounds, size, participant);

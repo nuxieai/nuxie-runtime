@@ -1,7 +1,7 @@
 //! CSS replaced picture sizing. All sizes returned here are border boxes.
 use taffy::{
     BoxSizing, Size, Style,
-    tree::{LayoutInput, SizingMode},
+    tree::{LayoutInput, RequestedAxis, SizingMode},
     util::{MaybeResolve, ResolveOrZero},
 };
 
@@ -40,11 +40,27 @@ pub(crate) fn resolve_replaced_size(
             value.map(|value| (value + adjustment).max(0.0))
         })
     };
-    let min = to_basis(style.min_size.maybe_resolve(input.parent_size, calc))
+    let mut min = to_basis(style.min_size.maybe_resolve(input.parent_size, calc))
         .map(|value| value.unwrap_or(0.0));
-    let max = to_basis(style.max_size.maybe_resolve(input.parent_size, calc))
+    let mut max = to_basis(style.max_size.maybe_resolve(input.parent_size, calc))
         .map(|value| value.unwrap_or(f32::INFINITY))
         .zip_map(min, f32::max);
+    // ContentSize is also used for the flex base, before main-axis bounds.
+    // Taffy applies those bounds to the hypothetical and final main sizes.
+    // Opposite-axis bounds still participate in a ratio transfer here.
+    if input.sizing_mode == SizingMode::ContentSize {
+        match input.axis {
+            RequestedAxis::Horizontal => {
+                min.width = 0.0;
+                max.width = f32::INFINITY;
+            }
+            RequestedAxis::Vertical => {
+                min.height = 0.0;
+                max.height = f32::INFINITY;
+            }
+            RequestedAxis::Both => {}
+        }
+    }
     let authored = if input.sizing_mode == SizingMode::InherentSize {
         to_basis(style.size.maybe_resolve(input.parent_size, calc))
     } else {

@@ -661,6 +661,7 @@ impl LayoutParticipant {
                     width_scale,
                     height_scale,
                     direction,
+                    css,
                     self,
                 );
             }
@@ -699,6 +700,7 @@ impl LayoutParticipant {
             width_scale,
             height_scale,
             direction,
+            css,
         );
     }
 

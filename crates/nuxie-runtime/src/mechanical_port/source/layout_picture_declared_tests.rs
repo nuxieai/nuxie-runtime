@@ -610,6 +610,9 @@ fn css_picture_chrome_sizing_table() {
     };
     let mut failures = Vec::new();
     for row in table["cases"].as_array().unwrap() {
+        if row["siblings"].is_array() {
+            continue;
+        }
         for wrapped in [false, true] {
             for video in [false, true] {
                 // The no-natural-dimensions cases use Image's missing asset size.
@@ -684,7 +687,7 @@ fn css_picture_chrome_sizing_table_resolver() {
     for row in table["cases"].as_array().unwrap() {
         // Explicit zero minima exercise flex's distribution in the layout
         // table. Other flex rows also exercise the resolver's intrinsic query.
-        if row["name"].as_str().unwrap().ends_with("-zero") {
+        if row["name"].as_str().unwrap().ends_with("-zero") || row["siblings"].is_array() {
             continue;
         }
         let enums: Vec<_> = row["enums"]
@@ -773,4 +776,274 @@ fn css_picture_chrome_sizing_table_resolver() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+fn content_picture_fixture(
+    video: bool,
+    css: bool,
+    nested: bool,
+) -> (CoreArena, CoreHandle, CoreHandle) {
+    let arena = CoreArena::default();
+    let root = layout(&arena, None, Some(200.0), true);
+    let parent = if nested {
+        let container = arena.insert(crate::source::shapes::shape::Shape::default());
+        attach(&arena, &root, &container);
+        container
+    } else {
+        root.clone()
+    };
+    let image = if video {
+        let asset = arena.insert(crate::video::VideoAsset::default());
+        asset.with_mut(|asset| {
+            asset.set_double(CoreField::DrawableAssetWidth, 480.0);
+            asset.set_double(CoreField::DrawableAssetHeight, 270.0);
+        });
+        let video = arena.insert(crate::video::Video::default());
+        assert_eq!(
+            video.with_mut(|video| video.file_asset_referencer_set_asset(asset)),
+            Some(true)
+        );
+        video
+    } else {
+        arena.insert(Image::default())
+    };
+    attach(&arena, &parent, &image);
+    if !video {
+        Image::set_asset_occurrence(&image, Some(arena.insert(ImageAsset::default())));
+        declare(&image, 480.0, 270.0);
+        decode(&image, 160, 90);
+    }
+    if css {
+        let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&arena, &root, &record);
+        CssTextLeaf::write(&record, &[(61021, 1)], &[(61022, 200.0)]);
+        root.with_downcast_mut::<LayoutComponent, _>(|root| root.add_layout_style_applier(record));
+    }
+    LayoutComponent::sync_style_occurrence(&root);
+    LayoutComponent::sync_layout_children_occurrence(&root);
+    (arena, root, image)
+}
+
+fn picture_width(host: &CoreHandle) -> f32 {
+    let image =
+        crate::source::shapes::mesh_host::MeshHost::from_handle(Some(host.clone())).unwrap();
+    image.width() * image.scale_x()
+}
+
+#[test]
+fn picture_content_receiver_bounds_does_not_reborrow_owner() {
+    for video in [false, true] {
+        for nested in [false, true] {
+            for css in [false, true] {
+                for receiver in [true, false] {
+                    let (_arena, root, image) = content_picture_fixture(video, css, nested);
+                    LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+                    if receiver {
+                        root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                            root.update_layout_bounds(false)
+                        });
+                    } else {
+                        LayoutComponent::update_layout_bounds_occurrence(&root, false);
+                    }
+                    near(picture_width(&image), if css { 480.0 } else { 200.0 });
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn picture_content_receiver_animation_does_not_reborrow_owner() {
+    use crate::source::layout::layout_enums::{LayoutDirection, LayoutStyleInterpolation};
+    for video in [false, true] {
+        for nested in [false, true] {
+            for css in [false, true] {
+                for receiver in [true, false] {
+                    let (_arena, root, image) = content_picture_fixture(video, css, nested);
+                    root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                        root.with_style_mut(|style| {
+                            style.base.set_animation_style_type_value(
+                                crate::source::layout::layout_enums::LayoutAnimationStyle::Custom
+                                    as u8,
+                            );
+                            style.base.set_interpolation_type_value(
+                                LayoutStyleInterpolation::Linear as u8,
+                            );
+                            style.base.set_interpolation_time_value(1.0);
+                        });
+                    });
+                    LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+                    LayoutComponent::update_layout_bounds_occurrence(&root, false);
+                    root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                        root.cascade_layout_style(
+                            LayoutStyleInterpolation::Linear,
+                            None,
+                            1.0,
+                            LayoutDirection::Ltr,
+                        );
+                        root.base.set_width_value(300.0);
+                    });
+                    if css {
+                        let record = root
+                            .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+                            .unwrap();
+                        CssTextLeaf::write(&record, &[], &[(61022, 300.0)]);
+                    }
+                    LayoutComponent::sync_style_occurrence(&root);
+                    LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+                    LayoutComponent::update_layout_bounds_occurrence(&root, true);
+                    for _ in 0..3 {
+                        if receiver {
+                            root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                                root.apply_interpolation(0.5, true)
+                            });
+                        } else {
+                            LayoutComponent::apply_interpolation_occurrence(&root, 0.5, true);
+                        }
+                    }
+                    near(picture_width(&image), if css { 480.0 } else { 300.0 });
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn css_picture_chrome_flex_basis_table() {
+    let table: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/css_picture_sizing_chrome.json"
+    ))
+    .unwrap();
+    let enums = |v: &serde_json::Value| -> Vec<(u16, u32)> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_u64().unwrap() as u16, p[1].as_u64().unwrap() as u32))
+            .collect()
+    };
+    let numbers = |v: &serde_json::Value| -> Vec<(u16, f32)> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_u64().unwrap() as u16, p[1].as_f64().unwrap() as f32))
+            .collect()
+    };
+    let mut failures = Vec::new();
+    for row in table["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["siblings"].is_array())
+    {
+        for wrapped in [false, true] {
+            for video in [false, true] {
+                let (arena, root, first, _) = picture_layout_fixture_with_natural_size(
+                    video,
+                    wrapped,
+                    &enums(&row["parent_enums"]),
+                    &enums(&row["enums"]),
+                    &numbers(&row["numbers"]),
+                    (100.0, 100.0),
+                );
+                let sibling = &row["siblings"][0];
+                let (second, _) = picture_layout_child(
+                    &arena,
+                    &root,
+                    video,
+                    wrapped,
+                    &enums(&sibling["enums"]),
+                    &numbers(&sibling["numbers"]),
+                    (100.0, 100.0),
+                );
+                let record = root
+                    .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+                    .unwrap();
+                CssTextLeaf::write(&record, &[], &numbers(&row["parent_numbers"]));
+                root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                    root.with_style_mut(|style| {
+                        style.base.set_intrinsically_sized_value_value(true)
+                    })
+                });
+                LayoutComponent::sync_style_occurrence(&root);
+                LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+                for (item, expected) in
+                    [(&first, &row["expected"]), (&second, &sibling["expected"])]
+                {
+                    let actual = solved(item);
+                    if (actual.width() - expected[0].as_f64().unwrap() as f32).abs() > 0.02
+                        || (actual.height() - expected[1].as_f64().unwrap() as f32).abs() > 0.02
+                    {
+                        failures.push(format!(
+                            "{} wrapped={wrapped} video={video}: {actual:?}, expected {expected}",
+                            row["name"]
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn css_picture_chrome_flex_basis_resolver() {
+    use taffy::{
+        Size,
+        tree::{LayoutInput, RequestedAxis, RunMode, SizingMode},
+    };
+    let table: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/css_picture_sizing_chrome.json"
+    ))
+    .unwrap();
+    for row in table["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["siblings"].is_array())
+    {
+        let baseline = &table["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|reference| reference["name"] == row["basis_reference"])
+            .unwrap()["expected"];
+        let enums: Vec<_> = row["enums"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_u64().unwrap() as u16, p[1].as_u64().unwrap() as u32))
+            .collect();
+        let numbers: Vec<_> = row["numbers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_u64().unwrap() as u16, p[1].as_f64().unwrap() as f32))
+            .collect();
+        let (_arena, _root, p) = picture_participant_fixture(false, &[], &enums, &numbers);
+        let style = p
+            .with_downcast::<LayoutParticipant, _>(|p| {
+                p.native_layout_data().unwrap().style().clone()
+            })
+            .unwrap();
+        let axis = if row["name"].as_str().unwrap().contains("column") {
+            RequestedAxis::Vertical
+        } else {
+            RequestedAxis::Horizontal
+        };
+        let result = crate::css_layout::replaced::resolve_replaced_size(
+            &style,
+            LayoutInput {
+                run_mode: RunMode::ComputeSize,
+                sizing_mode: SizingMode::ContentSize,
+                axis,
+                ..LayoutInput::HIDDEN
+            },
+            Size {
+                width: 100.0,
+                height: 100.0,
+            },
+        );
+        near(result.width, baseline[0].as_f64().unwrap() as f32);
+        near(result.height, baseline[1].as_f64().unwrap() as f32);
+    }
 }

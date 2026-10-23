@@ -1702,7 +1702,6 @@ fn picture_layout_fixture_with_natural_size(
     item_numbers: &[(u16, f32)],
     natural: (f32, f32),
 ) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
-    use crate::source::{generated::core_registry::CoreField, shapes::image::Image};
     let arena = CoreArena::default();
     let root = layout(&arena, None, Some(328.0), false);
     let root_record = arena.insert(crate::css_layout::LayoutCssStyle::default());
@@ -1713,12 +1712,34 @@ fn picture_layout_fixture_with_natural_size(
         root.add_layout_style_applier(root_record);
     })
     .unwrap();
+    let (item, participant) = picture_layout_child(
+        &arena,
+        &root,
+        video,
+        wrapped,
+        item_enums,
+        item_numbers,
+        natural,
+    );
+    (arena, root, item, participant)
+}
+
+fn picture_layout_child(
+    arena: &CoreArena,
+    root: &CoreHandle,
+    video: bool,
+    wrapped: bool,
+    item_enums: &[(u16, u32)],
+    item_numbers: &[(u16, f32)],
+    natural: (f32, f32),
+) -> (CoreHandle, CoreHandle) {
+    use crate::source::{generated::core_registry::CoreField, shapes::image::Image};
     let item = if wrapped {
         // The compiler puts authored CSS and box paint on a LayoutComponent,
         // with a filling picture participant as its only layout child.
-        let item = layout(&arena, Some(&root), None, false);
+        let item = layout(arena, Some(root), None, false);
         let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-        attach(&arena, &item, &record);
+        attach(arena, &item, &record);
         CssTextLeaf::write(&record, item_enums, item_numbers);
         item.with_downcast_mut::<LayoutComponent, _>(|item| {
             item.add_layout_style_applier(record);
@@ -1755,7 +1776,7 @@ fn picture_layout_fixture_with_natural_size(
         );
         host
     };
-    attach(&arena, item.as_ref().unwrap_or(&root), &host);
+    attach(arena, item.as_ref().unwrap_or(root), &host);
     let mut participant = LayoutParticipant::default();
     participant
         .base
@@ -1770,9 +1791,9 @@ fn picture_layout_fixture_with_natural_size(
         .base
         .set_height_units_value_value(YGUnit::Auto as u8);
     let participant = arena.insert(participant);
-    attach(&arena, &host, &participant);
+    attach(arena, &host, &participant);
     let mut context = ParentContext {
-        arena: &arena,
+        arena: arena,
         parent: host.clone(),
     };
     assert_eq!(
@@ -1780,7 +1801,7 @@ fn picture_layout_fixture_with_natural_size(
         StatusCode::Ok
     );
     let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&arena, &host, &record);
+    attach(arena, &host, &record);
     if wrapped {
         CssTextLeaf::write(
             &record,
@@ -1795,19 +1816,14 @@ fn picture_layout_fixture_with_natural_size(
             participant.add_layout_style_applier(record);
         })
         .unwrap();
-    LayoutComponent::sync_style_occurrence(&root);
+    LayoutComponent::sync_style_occurrence(root);
     LayoutParticipant::sync_style_changes_occurrence(&participant, None);
     if let Some(item) = &item {
         LayoutComponent::sync_style_occurrence(item);
         LayoutComponent::sync_layout_children_occurrence(item);
     }
-    LayoutComponent::sync_layout_children_occurrence(&root);
-    (
-        arena,
-        root,
-        item.unwrap_or_else(|| participant.clone()),
-        participant,
-    )
+    LayoutComponent::sync_layout_children_occurrence(root);
+    (item.unwrap_or_else(|| participant.clone()), participant)
 }
 
 fn assert_picture_size(root: &CoreHandle, participant: &CoreHandle, width: f32, height: f32) {
@@ -3515,5 +3531,86 @@ fn css_text_wrapped_lines_keep_the_full_line_height() {
         assert!(CoreRegistry::set_double_handle(&record, 61022, 30.0));
         LayoutComponent::sync_style_occurrence(&f.label);
         assert_line_box(&f, height * 2.0, &[baseline, baseline + height]);
+    }
+}
+
+#[test]
+fn shape_content_size_propagation_preserves_mode_during_bounds_and_animation() {
+    use crate::source::layout::layout_enums::{LayoutAnimationStyle, LayoutStyleInterpolation};
+    for css in [false, true] {
+        for receiver in [true, false] {
+            let f = shape_fixture(false, ShapeHost::HugBox, 0.0);
+            let record = if css {
+                let record = f
+                    ._arena
+                    .insert(crate::css_layout::LayoutCssStyle::default());
+                attach(&f._arena, &f.subject, &record);
+                CssTextLeaf::write(
+                    &record,
+                    &[(61021, 1), (61024, 1)],
+                    &[(61022, 100.0), (61025, 50.0)],
+                );
+                f.subject.with_downcast_mut::<LayoutComponent, _>(|owner| {
+                    owner.add_layout_style_applier(record.clone())
+                });
+                Some(record)
+            } else {
+                None
+            };
+            let set_size = |width, height| {
+                f.subject.with_downcast_mut::<LayoutComponent, _>(|owner| {
+                    owner.base.set_width_value(width);
+                    owner.base.set_height_value(height);
+                    owner.with_style_mut(|style| {
+                        style
+                            .base
+                            .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+                        style
+                            .base
+                            .set_layout_height_scale_type_value(LayoutScaleType::Fixed as u8);
+                        style.base.set_width_units_value_value(YGUnit::Point as u8);
+                        style.base.set_height_units_value_value(YGUnit::Point as u8);
+                        style
+                            .base
+                            .set_animation_style_type_value(LayoutAnimationStyle::Custom as u8);
+                        style
+                            .base
+                            .set_interpolation_type_value(LayoutStyleInterpolation::Linear as u8);
+                        style.base.set_interpolation_time_value(1.0);
+                    });
+                });
+                if let Some(record) = &record {
+                    CssTextLeaf::write(record, &[], &[(61022, width), (61025, height)]);
+                }
+                LayoutComponent::sync_style_occurrence(&f.subject);
+                LayoutComponent::calculate_layout_occurrence(&f.root, f32::NAN, f32::NAN);
+            };
+            let width = || {
+                f.path
+                    .with(|path| path.as_parametric_path().unwrap().base.width())
+                    .unwrap()
+            };
+            set_size(100.0, 50.0);
+            if receiver {
+                f.subject.with_downcast_mut::<LayoutComponent, _>(|owner| {
+                    owner.update_layout_bounds(false)
+                });
+            } else {
+                LayoutComponent::update_layout_bounds_occurrence(&f.subject, false);
+            }
+            near(width(), if css { 80.0 } else { 100.0 });
+            set_size(200.0, 100.0);
+            LayoutComponent::update_layout_bounds_occurrence(&f.subject, true);
+            for _ in 0..3 {
+                if receiver {
+                    f.subject.with_downcast_mut::<LayoutComponent, _>(|owner| {
+                        owner.apply_interpolation(0.5, true)
+                    });
+                } else {
+                    LayoutComponent::apply_interpolation_occurrence(&f.subject, 0.5, true);
+                }
+            }
+            near(width(), if css { 80.0 } else { 200.0 });
+        }
     }
 }

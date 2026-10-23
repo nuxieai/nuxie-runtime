@@ -36,6 +36,7 @@ use taffy::prelude::Style;
 pub struct CssRecord<const TYPE: u16> {
     component: Component,
     values: Box<[f32]>,
+    pending: RecordChanges,
 }
 
 pub type LayoutCssStyle = CssRecord<{ keys::LAYOUT_CSS_STYLE }>;
@@ -61,6 +62,7 @@ impl<const TYPE: u16> Default for CssRecord<TYPE> {
             values: (first..first + count as u16)
                 .map(keys::default_value)
                 .collect(),
+            pending: RecordChanges::default(),
         }
     }
 }
@@ -111,104 +113,20 @@ impl<const TYPE: u16> CssRecord<TYPE> {
         }
         self.values[slot] = value;
         completion.record(CoreObject::core(self), key);
-        self.changed(key);
+        self.pending.keys |= 1u128 << (key - keys::FIRST_KEY);
     }
-    fn changed(&mut self, key: u16) {
-        let Some(parent) = self.component.parent_handle() else {
-            return;
-        };
-        match TYPE {
-            keys::LAYOUT_CSS_STYLE => {
-                self.layout_changed(&parent, key);
-                // CSS painting order reads these, for a box or a
-                // participant (docs/CSS_LAYOUT.md, 4.4).
-                if matches!(
-                    key,
-                    keys::DISPLAY
-                        | keys::POSITION
-                        | keys::Z_INDEX_KIND
-                        | keys::Z_INDEX
-                        | keys::OVERFLOW_X
-                        | keys::OVERFLOW_Y
-                ) {
-                    mark_draw_order_dirty(&parent);
-                }
-                mark_owner_dirty(&parent);
-            }
-            // A Stroke's BoxBorder and a Feather's BoxShadow shape the paths
-            // their box draws them with.
-            keys::BOX_BORDER => css_paint_changed(Some(parent)),
-            keys::BOX_SHADOW => css_paint_changed(
-                parent
-                    .with(|feather| feather.component_parent_handle())
-                    .flatten(),
-            ),
-            // A BoxGradient places its gradient, which rebuilds its shader.
-            keys::BOX_GRADIENT => {
-                parent
-                    .with_mut(|gradient| gradient.component_add_dirt(ComponentDirt::PAINT, false));
-            }
-            // A BoxPaint sizes only its box's paint: nothing reflows.
-            keys::BOX_PAINT => LayoutComponent::css_paint_changed_occurrence(&parent),
-            _ => {}
+    fn take_notifications(&mut self) -> Option<RecordNotifications> {
+        let changes = std::mem::take(&mut self.pending);
+        if !changes.added && changes.keys == 0 {
+            return None;
         }
-    }
-    // A copy's record is physically a child of its host, but styles the
-    // mounted root. Ignore writes to an artboard record that is replaced.
-    fn layout_owner(&self, parent: &CoreHandle) -> Option<CoreHandle> {
-        let owner = if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
-            parent.clone()
-        } else {
-            parent
-                .with_downcast::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
-                    |host| host.base.base.artboard_instance_handle(0),
-                )
-                .flatten()?
-                .core_handle()
-        };
-        let record = self.component.handle()?;
-        let selected = owner
-            .with(|object| {
-                object
-                    .as_layout_component()
-                    .and_then(LayoutComponent::css_record)
-            })
-            .flatten();
-        (selected.as_ref() == Some(&record)).then_some(owner)
-    }
-    fn layout_changed(&self, parent: &CoreHandle, key: u16) {
-        if let Some(owner) = self.layout_owner(parent) {
-            if key == keys::DISPLAY {
-                let hidden = self.values().display_none();
-                LayoutComponent::css_display_changed_occurrence(&owner, hidden);
-            }
-            // Boxes that inherit the direction follow it.
-            if key == keys::DIRECTION {
-                LayoutComponent::direction_changed_occurrence(&owner);
-            }
-            if key == keys::DISPLAY || key == keys::FLEX_DIRECTION || key == keys::JUSTIFY_ITEMS {
-                LayoutComponent::css_flow_changed_occurrence(&owner);
-            }
-            // What only the box's paint and clip read.
-            if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4).contains(&key)
-                || (keys::BORDER_TOP..keys::BORDER_TOP + 4).contains(&key)
-                || key == keys::OVERFLOW_X
-                || key == keys::OVERFLOW_Y
-            {
-                LayoutComponent::css_paint_changed_occurrence(&owner);
-            }
-            if matches!(
-                key,
-                keys::DISPLAY
-                    | keys::POSITION
-                    | keys::Z_INDEX_KIND
-                    | keys::Z_INDEX
-                    | keys::OVERFLOW_X
-                    | keys::OVERFLOW_Y
-            ) {
-                mark_draw_order_dirty(&owner);
-            }
-        }
+        Some(RecordNotifications {
+            record: self.component.handle()?,
+            parent: self.component.parent_handle()?,
+            record_type: TYPE,
+            display_hidden: TYPE == keys::LAYOUT_CSS_STYLE && self.values().display_none(),
+            changes,
+        })
     }
     /// Parent kinds each record type accepts (docs/CSS_LAYOUT.md, 1.1).
     fn parent_supported(parent: &CoreHandle) -> bool {
@@ -269,29 +187,174 @@ impl<const TYPE: u16> CssRecord<TYPE> {
         if first.as_ref() != Some(&this) {
             return StatusCode::InvalidObject;
         }
-        if TYPE == keys::BOX_PAINT {
+        self.pending.added = true;
+        StatusCode::Ok
+    }
+}
+
+/// Record setters and clean callbacks only collect changes. CoreHandle drains
+/// these after releasing the record's mutable payload borrow, before returning
+/// to its caller. Layout/paint callbacks may then read the selected record,
+/// including through a nested child's style override.
+#[derive(Default)]
+struct RecordChanges {
+    added: bool,
+    keys: u128,
+}
+
+// One bit per CSS property, without allocating on each bound/animated write.
+const _: () = assert!(keys::LAST_KEY - keys::FIRST_KEY < 128);
+
+pub(crate) struct RecordNotifications {
+    record: CoreHandle,
+    parent: CoreHandle,
+    record_type: u16,
+    display_hidden: bool,
+    changes: RecordChanges,
+}
+
+impl RecordNotifications {
+    pub(crate) fn notify(mut self) {
+        if self.changes.added {
+            self.added();
+        }
+        while self.changes.keys != 0 {
+            let key = keys::FIRST_KEY + self.changes.keys.trailing_zeros() as u16;
+            self.changes.keys &= self.changes.keys - 1;
+            self.changed(key);
+        }
+    }
+    fn added(&self) {
+        let parent = self.parent.clone();
+        if self.record_type == keys::BOX_PAINT {
             LayoutComponent::css_paint_changed_occurrence(&parent);
-            return StatusCode::Ok;
+            return;
         }
         if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
             parent.with_mut(|object| {
                 if let Some(layout) = object.as_layout_component_mut() {
-                    layout.add_layout_style_applier(this.clone());
+                    layout.add_layout_style_applier(self.record.clone());
                 }
             });
         } else {
             // A participant also finds this record among its host's children
             // when its layout data is created after this point.
             layout_node_provider::with_mut(&parent, |provider| {
-                provider.add_layout_style_applier(this.clone())
+                provider.add_layout_style_applier(self.record.clone())
             });
         }
         if let Some(owner) = self.layout_owner(&parent) {
-            LayoutComponent::css_display_changed_occurrence(&owner, self.values().display_none());
+            LayoutComponent::css_display_changed_occurrence(&owner, self.display_hidden);
         }
         mark_owner_dirty(&parent);
-        StatusCode::Ok
     }
+    fn changed(&self, key: u16) {
+        let parent = self.parent.clone();
+        match self.record_type {
+            keys::LAYOUT_CSS_STYLE => {
+                self.layout_changed(&parent, key);
+                // CSS painting order reads these, for a box or a
+                // participant (docs/CSS_LAYOUT.md, 4.4).
+                if matches!(
+                    key,
+                    keys::DISPLAY
+                        | keys::POSITION
+                        | keys::Z_INDEX_KIND
+                        | keys::Z_INDEX
+                        | keys::OVERFLOW_X
+                        | keys::OVERFLOW_Y
+                ) {
+                    mark_draw_order_dirty(&parent);
+                }
+                mark_owner_dirty(&parent);
+            }
+            // A Stroke's BoxBorder and a Feather's BoxShadow shape the paths
+            // their box draws them with.
+            keys::BOX_BORDER => css_paint_changed(Some(parent)),
+            keys::BOX_SHADOW => css_paint_changed(
+                parent
+                    .with(|feather| feather.component_parent_handle())
+                    .flatten(),
+            ),
+            // A BoxGradient places its gradient, which rebuilds its shader.
+            keys::BOX_GRADIENT => {
+                parent
+                    .with_mut(|gradient| gradient.component_add_dirt(ComponentDirt::PAINT, false));
+            }
+            // A BoxPaint sizes only its box's paint: nothing reflows.
+            keys::BOX_PAINT => LayoutComponent::css_paint_changed_occurrence(&parent),
+            _ => {}
+        }
+    }
+    // A copy's record is physically a child of its host, but styles the
+    // mounted root. Ignore writes to an artboard record that is replaced.
+    fn layout_owner(&self, parent: &CoreHandle) -> Option<CoreHandle> {
+        let owner = if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
+            parent.clone()
+        } else {
+            parent
+                .with_downcast::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
+                    |host| host.base.base.artboard_instance_handle(0),
+                )
+                .flatten()?
+                .core_handle()
+        };
+        let selected = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .and_then(LayoutComponent::css_record)
+            })
+            .flatten();
+        (selected.as_ref() == Some(&self.record)).then_some(owner)
+    }
+    fn layout_changed(&self, parent: &CoreHandle, key: u16) {
+        if let Some(owner) = self.layout_owner(parent) {
+            if key == keys::DISPLAY {
+                let hidden = self.display_hidden;
+                LayoutComponent::css_display_changed_occurrence(&owner, hidden);
+            }
+            // Boxes that inherit the direction follow it.
+            if key == keys::DIRECTION {
+                LayoutComponent::direction_changed_occurrence(&owner);
+            }
+            if key == keys::DISPLAY || key == keys::FLEX_DIRECTION || key == keys::JUSTIFY_ITEMS {
+                LayoutComponent::css_flow_changed_occurrence(&owner);
+            }
+            // What only the box's paint and clip read.
+            if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4).contains(&key)
+                || (keys::BORDER_TOP..keys::BORDER_TOP + 4).contains(&key)
+                || key == keys::OVERFLOW_X
+                || key == keys::OVERFLOW_Y
+            {
+                LayoutComponent::css_paint_changed_occurrence(&owner);
+            }
+            if matches!(
+                key,
+                keys::DISPLAY
+                    | keys::POSITION
+                    | keys::Z_INDEX_KIND
+                    | keys::Z_INDEX
+                    | keys::OVERFLOW_X
+                    | keys::OVERFLOW_Y
+            ) {
+                mark_draw_order_dirty(&owner);
+            }
+        }
+    }
+}
+
+/// Called only at the end of a CSS record's CoreHandle::with_mut borrow.
+pub(crate) fn take_notifications(object: &mut dyn Any) -> Option<RecordNotifications> {
+    macro_rules! take {
+        ($($ty:ty),*) => {
+            $(if let Some(record) = object.downcast_mut::<$ty>() {
+                return record.take_notifications();
+            })*
+        };
+    }
+    take!(LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow, BoxPaint);
+    None
 }
 
 /// The record a component's children hold, if any.

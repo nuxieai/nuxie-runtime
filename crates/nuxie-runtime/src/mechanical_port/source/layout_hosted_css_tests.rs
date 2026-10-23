@@ -1246,3 +1246,233 @@ fn css_nested_whole_box_live_direction_border_and_overflow_use_the_copy_record()
     assert_eq!(copy_children(&copies[1]), [(4.0, 4.0), (4.0, 17.0)]);
     assert!(!copies[1].with_artboard(|board| board.clips()));
 }
+
+fn nested_copy_container_scene(bound_key: Option<u16>, record_first: bool) -> Scene {
+    use crate::source::generated::{
+        data_bind::{data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase},
+        viewmodel::{
+            viewmodel_base::ViewModelBase,
+            viewmodel_property_number_base::ViewModelPropertyNumberBase,
+        },
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    if bound_key.is_some() {
+        riv.object(ViewModelBase::TYPE_KEY).end();
+        riv.object(ViewModelPropertyNumberBase::TYPE_KEY).end();
+    }
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 300.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4);
+    if bound_key.is_some() {
+        riv.uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0);
+    }
+    riv.end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 2)
+        .end();
+    let host = if record_first { 3 } else { 2 };
+    for record in if record_first {
+        [true, false]
+    } else {
+        [false, true]
+    } {
+        if record {
+            riv.object(LAYOUT_CSS_STYLE)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+                .uint(
+                    DISPLAY,
+                    if bound_key == Some(JUSTIFY_ITEMS) {
+                        2
+                    } else {
+                        1
+                    },
+                )
+                .float(COLUMN_GAP, 8.0)
+                .uint(WIDTH_KIND, 1)
+                .float(WIDTH, 100.0)
+                .uint(HEIGHT_KIND, 1)
+                .float(HEIGHT, 60.0)
+                .end();
+            if let Some(key) = bound_key {
+                riv.object(DataBindContextBase::TYPE_KEY)
+                    .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, key.into())
+                    .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+                    .end();
+            }
+        } else {
+            riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+                .end();
+        }
+    }
+    style(&mut riv, 0);
+    // The component itself contains two copies of a third artboard.
+    board(&mut riv, 100.0, 60.0, 6);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .end();
+    for child in [2, 4] {
+        riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 2)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, child)
+            .uint(WIDTH_KIND, 1)
+            .float(WIDTH, 10.0)
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT, 10.0)
+            .end();
+    }
+    style(&mut riv, 0);
+    board(&mut riv, 10.0, 10.0, 2);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    style(&mut riv, 0);
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+fn nested_copy_children(
+    copy: &RuntimeArtboardInstanceHandle,
+) -> Vec<RuntimeArtboardInstanceHandle> {
+    copy.with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>())
+        .iter()
+        .map(|host| {
+            host.with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap()
+        })
+        .collect()
+}
+
+fn assert_bound_nested_copy_flow(key: u16, cases: &[(f32, [(f32, f32); 2])]) {
+    use crate::source::{
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+        viewmodel::viewmodel_instance::ViewModelInstance,
+    };
+    let scene = nested_copy_container_scene(Some(key), false);
+    let model = scene
+        .file
+        .with_file(|file| {
+            file.create_view_model_instance_for_artboard(scene.artboard.core_handle())
+        })
+        .unwrap();
+    let number = model
+        .with_downcast::<ViewModelInstance, _>(|model| model.property_values()[0].clone())
+        .unwrap();
+    scene.artboard.bind_view_model_instance(Some(model));
+    let copy = &display_copies(&scene)[0];
+    let children = nested_copy_children(copy);
+    for (value, positions) in cases {
+        CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            *value,
+        );
+        scene.advance();
+        let hidden = key == DISPLAY && *value == 3.0;
+        assert_eq!(
+            copy.with_artboard(|board| (
+                board.layout_bounds().width(),
+                board.layout_bounds().height()
+            )),
+            if hidden { (0.0, 0.0) } else { (100.0, 60.0) }
+        );
+        if !hidden {
+            let actual: Vec<_> = children
+                .iter()
+                .map(|child| child.with_artboard(|board| (board.layout_x(), board.layout_y())))
+                .collect();
+            assert_eq!(&actual, positions, "key {key}, value {value}");
+        }
+    }
+}
+
+#[test]
+fn css_nested_copy_bound_display_updates_nested_children() {
+    assert_bound_nested_copy_flow(
+        DISPLAY,
+        &[
+            (1.0, [(0.0, 0.0), (18.0, 0.0)]),
+            (3.0, [(0.0, 0.0); 2]),
+            (1.0, [(0.0, 0.0), (18.0, 0.0)]),
+        ],
+    );
+}
+
+#[test]
+fn css_nested_copy_bound_flex_direction_relayouts_nested_children() {
+    assert_bound_nested_copy_flow(
+        FLEX_DIRECTION,
+        &[
+            (0.0, [(0.0, 0.0), (18.0, 0.0)]),
+            (2.0, [(0.0, 0.0), (0.0, 10.0)]),
+            (1.0, [(90.0, 0.0), (72.0, 0.0)]),
+        ],
+    );
+}
+
+#[test]
+fn css_nested_copy_bound_justify_items_relayouts_nested_children() {
+    assert_bound_nested_copy_flow(
+        JUSTIFY_ITEMS,
+        &[
+            (0.0, [(0.0, 0.0), (0.0, 30.0)]),
+            (3.0, [(90.0, 0.0), (90.0, 30.0)]),
+            (10.0, [(0.0, 0.0), (0.0, 30.0)]),
+        ],
+    );
+}
+
+#[test]
+fn css_nested_copy_record_can_precede_its_parent_in_the_object_table() {
+    let scene = nested_copy_container_scene(None, true);
+    let copy = &display_copies(&scene)[0];
+    let positions: Vec<_> = nested_copy_children(copy)
+        .iter()
+        .map(|child| child.with_artboard(|board| (board.layout_x(), board.layout_y())))
+        .collect();
+    assert_eq!(positions, [(0.0, 0.0), (18.0, 0.0)]);
+    assert_eq!(
+        copy.with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (100.0, 60.0)
+    );
+}
+
+#[test]
+fn css_nested_copy_record_accepts_batched_registry_writes() {
+    let scene = nested_copy_container_scene(None, false);
+    let copy = &display_copies(&scene)[0];
+    let record = copy.with_artboard(|board| board.css_record()).unwrap();
+    record.with_mut(|object| {
+        CoreRegistry::set_uint(object, FLEX_DIRECTION.into(), 2);
+        CoreRegistry::set_double(object, PADDING_TOP.into(), 7.0);
+    });
+    scene.advance();
+    let positions: Vec<_> = nested_copy_children(copy)
+        .iter()
+        .map(|child| child.with_artboard(|board| (board.layout_x(), board.layout_y())))
+        .collect();
+    assert_eq!(positions, [(0.0, 7.0), (0.0, 17.0)]);
+    assert_eq!(
+        copy.with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (100.0, 67.0)
+    );
+}

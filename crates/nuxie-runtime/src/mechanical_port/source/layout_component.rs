@@ -2213,8 +2213,8 @@ impl LayoutComponent {
                     .as_layout_component_mut()
                     .expect("hosted layout root");
                 if layout.hosted_css_record == record {
-                    // The carrier may be borrowed by its live setter. Display
-                    // changes arrive separately with the already-read value.
+                    // Selection is unchanged. Live writes notify display
+                    // separately after releasing the record borrow.
                     return (record.is_some(), None);
                 }
                 layout.hosted_css_record = record;
@@ -3272,7 +3272,11 @@ impl LayoutComponent {
             if provider.is_type_of(LayoutComponentBase::TYPE_KEY) {
                 Self::mark_layout_node_dirty_occurrence(&provider, false);
             } else {
-                provider.with_mut(|object| object.layout_provider_mark_node_dirty(false));
+                provider.with_mut(|object| {
+                    if let Some(provider) = object.as_layout_node_provider_mut() {
+                        provider.mark_layout_node_dirty(false);
+                    }
+                });
             }
         }
     }

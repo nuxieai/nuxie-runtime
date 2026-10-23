@@ -1019,8 +1019,20 @@ impl CoreHandle {
         // available while an authored object is mutably borrowed. As above,
         // never carry the empty object guard into a runtime-root callback.
         {
-            let mut object = slot.object.borrow_mut();
-            if let Some(object) = object.as_deref_mut() {
+            let mut payload = slot.object.borrow_mut();
+            if let Some(object) = payload.as_deref_mut() {
+                if crate::css_layout::keys::range(slot.core_type.get()).is_some() {
+                    // CSS setters and clean callbacks collect graph updates.
+                    // Dispatch only after their source record can be read again.
+                    let result = f(object);
+                    let notifications =
+                        crate::css_layout::record::take_notifications(object.as_any_mut());
+                    drop(payload);
+                    if let Some(notifications) = notifications {
+                        notifications.notify();
+                    }
+                    return Some(result);
+                }
                 return Some(f(object));
             }
         }

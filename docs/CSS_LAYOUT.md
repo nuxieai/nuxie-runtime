@@ -201,7 +201,7 @@ On a participant the record contributes only item properties: display none, posi
 What the file must hold:
 
 - Every box keeps its `LayoutComponentStyle` (its `styleId`), as today: a `LayoutComponent` without one does not lay out, in either mode.
-- A record comes after its parent in the file, as every child does.
+- A record names its owner by `parentId`; it may precede that parent in the object table.
 - `position` is CSS's: a `static` box ignores its insets and is not the containing block of an absolute descendant, which is placed against its nearest positioned ancestor (or the artboard).
 
 At run time (animation, binding, scripts) values are stored as written. An enum outside its range reads as its initial value, and a length-percentage made mixed uses its percentage alone, until mixed values arrive (1.2).

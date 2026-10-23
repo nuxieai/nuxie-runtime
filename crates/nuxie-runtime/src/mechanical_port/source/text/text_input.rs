@@ -174,9 +174,9 @@ impl TextInput {
         Vec2D::new(0.0, height * rows as f32)
     }
 
-    /// The text's extent is independent of the form control's intrinsic size.
-    /// Read the live style here too, since layout can run before the shape pass.
-    pub(crate) fn css_text_extent(&mut self, width: f32) -> Vec2D {
+    /// Feed the shared positioned layout from the live style in both solve
+    /// and update. Bindings can change it before either pass runs.
+    fn sync_text_style(&mut self) {
         if let Some((font, size, height)) = self.text_style.as_ref().and_then(|style| {
             style
                 .with_mut(|object| {
@@ -191,9 +191,39 @@ impl TextInput {
         }) {
             self.raw_text_input.set_font(font);
             self.raw_text_input.set_font_size(size);
-            self.raw_text_input.set_line_height(height);
+            self.raw_text_input
+                .set_line_height(if self.css_owned { height } else { -1.0 });
         }
-        self.raw_text_input.measure(width, f32::MAX).size()
+    }
+
+    /// The solve supplies the control's content box. All consumers use this
+    /// positioned layout; form-control natural sizing remains independent.
+    pub(crate) fn css_positioned_bounds(&mut self, size: Vec2D) -> Aabb {
+        self.sync_text_style();
+        self.sync_css_box(size);
+        self.raw_text_input.positioned_layout_bounds()
+    }
+
+    fn sync_multiline_size(&mut self) {
+        self.raw_text_input.set_max_width(if self.base.multiline() {
+            self.layout_width
+        } else {
+            0.0
+        });
+        self.raw_text_input.set_sizing(if self.base.multiline() {
+            TextSizing::AutoHeight
+        } else {
+            TextSizing::AutoWidth
+        });
+    }
+
+    fn sync_css_box(&mut self, size: Vec2D) {
+        self.layout_width = size.x;
+        self.layout_height = size.y;
+        self.sync_multiline_size();
+        self.update_alignment();
+        // This is solver write-back, not a new authored layout request.
+        self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
     }
 
     pub fn rows_changed(&mut self) {
@@ -268,17 +298,18 @@ impl TextInput {
     pub fn mark_paint_dirty(&mut self) {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::PAINT, false);
+        if self.css_owned {
+            // Selection and cursor movement can move the caret's overflow.
+            self.base.mark_layout_node_dirty();
+        }
     }
     pub fn mark_shape_dirty(&mut self) {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
-        self.mark_layout_measure_dirty();
-    }
-    // Direct CSS content goes through the update-pass size comparison.
-    fn mark_layout_measure_dirty(&mut self) {
-        if !self.css_owned {
-            self.base.mark_layout_node_dirty();
+        if self.css_owned {
+            self.raw_text_input.invalidate_shape();
         }
+        self.base.mark_layout_node_dirty();
     }
     fn restart_cursor_blink(&mut self) {
         self.cursor_blink_seconds = 0.0;
@@ -354,15 +385,19 @@ impl TextInput {
         };
         // Upstream 7098a7c8: align against the viewport content box, not the
         // scrolling distance measured from the content origin to its far edge.
-        let viewport = self.scroll_constraint.as_ref().and_then(|scroll| {
-            scroll
-                .with(|scroll| {
-                    scroll
-                        .as_scroll_constraint()
-                        .and_then(ScrollConstraint::viewport_handle)
-                })
-                .flatten()
-        });
+        let viewport = self
+            .scroll_constraint
+            .as_ref()
+            .filter(|_| !self.css_owned)
+            .and_then(|scroll| {
+                scroll
+                    .with(|scroll| {
+                        scroll
+                            .as_scroll_constraint()
+                            .and_then(ScrollConstraint::viewport_handle)
+                    })
+                    .flatten()
+            });
         let (width, height) = viewport
             .and_then(|viewport| {
                 viewport
@@ -420,28 +455,7 @@ impl TextInput {
             })
             .cloned();
         {
-            if let Some(style) = &self.text_style
-                && let Some((font, font_size, line_height)) = style
-                    .with_mut(|style| {
-                        style.as_text_style_mut().map(|style| {
-                            (
-                                style.font(),
-                                style.base.font_size(),
-                                style.base.line_height(),
-                            )
-                        })
-                    })
-                    .flatten()
-                && let Some(font) = font
-            {
-                self.raw_text_input.set_font(Some(font));
-                self.raw_text_input.set_font_size(font_size);
-                self.raw_text_input.set_line_height(if self.css_owned {
-                    line_height
-                } else {
-                    -1.0
-                });
-            }
+            self.sync_text_style();
             self.raw_text_input.set_obscured(self.base.obscured());
             self.sync_displayed_text_from_source(false);
         }
@@ -481,7 +495,7 @@ impl TextInput {
         &mut self,
         value: ComponentDirt,
     ) -> Option<(CoreHandle, super::cursor::CursorVisualPosition, bool)> {
-        if let Some(style) = self.text_style.as_ref()
+        if self.text_style.is_some()
             && value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)
         {
             let factory = self
@@ -489,41 +503,16 @@ impl TextInput {
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("TextInput retains its imported renderer factory");
-            let (font, font_size, line_height) = style
-                .with_mut(|style| {
-                    style.as_text_style_mut().map(|style| {
-                        (
-                            style.font(),
-                            style.base.font_size(),
-                            style.base.line_height(),
-                        )
-                    })
-                })
-                .flatten()
-                .expect("TextInput style");
-            self.raw_text_input.set_font(font);
-            self.raw_text_input.set_font_size(font_size);
-            self.raw_text_input
-                .set_line_height(if self.css_owned { line_height } else { -1.0 });
+            self.sync_text_style();
             self.update_alignment();
-            let previous_extent = self.raw_text_input.bounds().size();
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
-                // Rows keep the natural size stable while typing. The leaf's
-                // cached scrollable overflow still needs the new text extent.
-                if self.css_owned && previous_extent != self.raw_text_input.bounds().size() {
-                    self.base.mark_layout_node_dirty();
-                }
                 self.world_bounds = self
                     .base
                     .world_transform()
                     .map_bounding_box(self.raw_text_input.bounds());
-                self.mark_layout_measure_dirty();
-            }
-            if self.css_owned {
-                if let Some(host) = self.base.handle() {
-                    self.base
-                        .with_artboard(|artboard| artboard.queue_measured_content(host));
+                if !self.css_owned {
+                    self.base.mark_layout_node_dirty();
                 }
             }
             if changed & Flags::SelectionDirty as u8 != 0 {
@@ -616,9 +605,13 @@ impl TextInput {
         _h: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        self.layout_width = size.x;
-        self.layout_height = size.y;
-        self.update_multiline(false);
+        if self.css_owned {
+            self.sync_css_box(size);
+        } else {
+            self.layout_width = size.x;
+            self.layout_height = size.y;
+            self.update_multiline(false);
+        }
     }
     pub fn text_changed(&mut self) {
         self.source_text = self.base.text().to_owned();
@@ -696,13 +689,7 @@ impl TextInput {
         }
     }
     fn update_multiline(&mut self, sync: bool) {
-        if self.base.multiline() {
-            self.raw_text_input.set_max_width(self.layout_width);
-            self.raw_text_input.set_sizing(TextSizing::AutoHeight);
-        } else {
-            self.raw_text_input.set_max_width(0.0);
-            self.raw_text_input.set_sizing(TextSizing::AutoWidth);
-        }
+        self.sync_multiline_size();
         if let Some(scroll) = self.scroll_constraint.clone() {
             scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
                 if self.base.multiline() && scroll.authored_scroll_offset_x() != 0.0 {
@@ -717,8 +704,7 @@ impl TextInput {
         if sync {
             self.sync_displayed_text_from_source(true);
         }
-        self.mark_layout_measure_dirty();
-        self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+        self.mark_shape_dirty();
     }
     pub fn key_input(
         &mut self,

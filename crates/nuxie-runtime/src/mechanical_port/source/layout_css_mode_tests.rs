@@ -11724,3 +11724,120 @@ fn css_input_scroll_authored_height_does_not_scroll_empty_rows() {
     assert_eq!(f.bounds("Input layout")[3], 40.0);
     assert_eq!(f.max_offsets(), (0.0, 0.0));
 }
+
+fn css_input_edit_before_selection(select_all: bool, deleting: bool) {
+    use crate::source::text::raw_text_input::CursorBoundary;
+    let short = "one\ntwo";
+    let long = "one\ntwo\nthree\nfour\nfive\nsix";
+    let f = css_input_scroll_fixture(true, if deleting { long } else { short });
+    f.advance(4);
+    assert_eq!(f.max_offsets().1, if deleting { -80.0 } else { 0.0 });
+    assert!(CoreRegistry::set_string_handle(
+        &input_handle(&f),
+        817,
+        if deleting { short } else { long }.to_owned(),
+    ));
+    input_handle(&f).with_mut(|object| {
+        let raw = object.as_text_input_mut().unwrap().raw_text_input();
+        if select_all {
+            raw.select_all();
+        } else {
+            raw.cursor_right(CursorBoundary::Character, false);
+        }
+    });
+    f.advance(4);
+    assert_eq!(f.bounds("Input layout")[3], 40.0);
+    assert_eq!(f.max_offsets().1, if deleting { 0.0 } else { -80.0 });
+    let ink_height = input_handle(&f)
+        .with_mut(|object| {
+            let raw = object.as_text_input_mut().unwrap().raw_text_input();
+            let normal = raw.text_path().raw_path().bounds().height();
+            normal.max(raw.selected_text_path().raw_path().bounds().height())
+        })
+        .unwrap();
+    assert!(
+        if deleting {
+            ink_height > 0.0 && ink_height < 40.0
+        } else {
+            ink_height > 80.0
+        },
+        "drawing must use the same edited layout: ink height {ink_height}"
+    );
+}
+
+#[test]
+fn css_input_edit_before_select_all_updates_scroll_range() {
+    css_input_edit_before_selection(true, false);
+}
+
+#[test]
+fn css_input_edit_before_cursor_movement_updates_scroll_range() {
+    css_input_edit_before_selection(false, false);
+}
+
+#[test]
+fn css_input_delete_before_select_all_shrinks_scroll_range() {
+    css_input_edit_before_selection(true, true);
+}
+
+#[test]
+fn css_input_scroll_uses_the_positioned_line_box() {
+    let f = css_input_scroll_fixture(true, "Hi");
+    assert!(CoreRegistry::set_bool_handle(&input_handle(&f), 979, false));
+    for name in ["Viewport", "Scroll content", "Input layout"] {
+        assert!(CoreRegistry::set_uint_handle(
+            &f.record(name),
+            HEIGHT_KIND.into(),
+            1
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &f.record(name),
+            HEIGHT.into(),
+            20.0
+        ));
+    }
+    let style = f
+        .artboard
+        .with_artboard(|artboard| {
+            artboard.find_all_handles::<crate::source::text::text_style::TextStyle>()
+        })
+        .into_iter()
+        .next()
+        .unwrap();
+    assert!(CoreRegistry::set_double_handle(&style, 370, 40.0));
+    f.advance(4);
+    let bounds = input_handle(&f)
+        .with_mut(|object| {
+            object
+                .as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .bounds()
+        })
+        .unwrap();
+    assert_eq!((bounds.top(), bounds.bottom()), (-10.0, 30.0));
+    assert_eq!(f.bounds("Input layout")[3], 20.0);
+    assert_eq!(f.max_offsets().1, -10.0);
+    scroll_input_by(&f, 0.0, -1000.0);
+    f.advance(2);
+    assert_eq!(f.scroll_offset("Scroll content"), (0.0, -10.0));
+}
+
+#[test]
+fn css_input_scroll_includes_the_positioned_caret() {
+    use crate::source::input::focusable::{Key, KeyModifiers};
+    let f = css_input_scroll_fixture(false, "Hi");
+    // Right alignment puts the text end on the box edge. Its one-point
+    // caret must remain reachable even though the glyphs fit inside.
+    assert!(CoreRegistry::set_uint_handle(&input_handle(&f), 222, 1));
+    input_handle(&f).with_mut(|object| {
+        assert!(object.as_text_input_mut().unwrap().key_input(
+            Key::END,
+            KeyModifiers(0),
+            true,
+            false
+        ));
+    });
+    f.advance(4);
+    assert_eq!(f.max_offsets().0, -1.0);
+}

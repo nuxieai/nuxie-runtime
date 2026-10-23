@@ -64,13 +64,26 @@ impl FullyShapedText {
         &self.glyph_lookup
     }
     pub fn bounds(&self) -> Aabb {
+        if self.css_line_box {
+            // Ordered lines already include alignment and CSS half-leading.
+            // Read their union rather than retain a second CSS rectangle.
+            return self
+                .ordered_lines
+                .iter()
+                .map(OrderedLine::line_box)
+                .reduce(|mut union, line| {
+                    union.expand(line);
+                    union
+                })
+                .unwrap_or_default();
+        }
         self.bounds
     }
     pub fn has_valid_bounds(&self) -> bool {
         if self.css_line_box {
             // A zero line height collapses the line box, not the glyph ink.
             // Keep non-finite and inverted bounds out of path generation.
-            let bounds = self.bounds;
+            let bounds = self.bounds();
             return !self.ordered_lines.is_empty()
                 && [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
                     .into_iter()
@@ -207,12 +220,14 @@ impl FullyShapedText {
                 _ => 0.0,
             };
         }
-        self.bounds = Aabb::new(
-            min_x,
-            min_y + self.vertical_offset,
-            max_x,
-            max_y + self.vertical_offset,
-        );
+        if !self.css_line_box {
+            self.bounds = Aabb::new(
+                min_x,
+                min_y + self.vertical_offset,
+                max_x,
+                max_y + self.vertical_offset,
+            );
+        }
         y = 0.0;
         if origin == TextOrigin::Baseline
             && !self.paragraph_lines.is_empty()

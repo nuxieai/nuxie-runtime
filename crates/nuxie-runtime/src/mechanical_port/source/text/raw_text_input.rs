@@ -50,6 +50,7 @@ pub enum Flags {
     SeparateSelectionText = 1 << 2,
     MeasureDirty = 1 << 3,
     Obscured = 1 << 4,
+    TextPathDirty = 1 << 5,
 }
 
 impl BitOr for Flags {
@@ -147,6 +148,7 @@ pub struct RawTextInput {
     text: Vec<Unichar>,
     obscured_text: Vec<Unichar>,
     shape: FullyShapedText,
+    // Upstream measurement only. CSS uses the primary positioned layout.
     measuring_shape: Option<Box<FullyShapedText>>,
     last_measure_max_width: f32,
     last_measure_max_height: f32,
@@ -178,6 +180,8 @@ impl Default for RawTextInput {
 }
 
 impl RawTextInput {
+    const CARET_WIDTH: f32 = 1.0;
+
     pub fn new() -> Self {
         Self {
             #[cfg(any(test, feature = "tools"))]
@@ -304,16 +308,14 @@ impl RawTextInput {
     pub(crate) fn set_css_line_box(&mut self, enabled: bool) {
         if self.css_line_box != enabled {
             self.css_line_box = enabled;
-            self.forget_line_indices();
-            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+            self.invalidate_shape();
         }
     }
 
     pub(crate) fn set_line_height(&mut self, height: f32) {
         if self.text_run.line_height != height {
             self.text_run.line_height = height;
-            self.forget_line_indices();
-            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+            self.invalidate_shape();
         }
     }
 
@@ -326,9 +328,7 @@ impl RawTextInput {
             return;
         }
         self.text_run.size = value;
-        // Nuxie addition: a new size can move every line break.
-        self.forget_line_indices();
-        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        self.invalidate_shape();
     }
 
     pub fn max_width(&self) -> f32 {
@@ -431,17 +431,13 @@ impl RawTextInput {
             return;
         }
         self.text_run.font = value;
-        // Nuxie addition: new glyph widths can move every line break.
-        self.forget_line_indices();
-        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        self.invalidate_shape();
     }
 
-    /// Shape the text again on the next update although none of its inputs
-    /// changed: for a host whose font fallbacks changed under the same font.
-    /// Nuxie addition; upstream has no reshape hook for a fallback change.
+    /// Invalidate the shared layout and its vertical navigation target for a
+    /// font or font-metric change, including fallbacks under the same font.
     pub fn invalidate_shape(&mut self) {
-        // New fallback glyphs can move line breaks, as a new font can.
-        self.forget_line_indices();
+        self.ideal_cursor_x = -1.0;
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
@@ -511,7 +507,32 @@ impl RawTextInput {
     }
 
     pub fn cursor_visual_position(&self) -> CursorVisualPosition {
+        if self.css_line_box {
+            let mut end = self.cursor.end();
+            end.resolve_line(&self.shape.layout_view());
+            return end.visual_position(&self.shape.layout_view());
+        }
         self.cursor_visual_position
+    }
+
+    /// CSS overflow reads the very layout used for drawing and hit testing.
+    /// It has no measurement shape or independently cached extent.
+    pub(crate) fn positioned_layout_bounds(&mut self) -> Aabb {
+        if self.text_run.font.is_none() {
+            return Aabb::default();
+        }
+        self.ensure_shape();
+        let mut bounds = self.shape.bounds();
+        let caret = self.cursor_visual_position();
+        if caret.found() {
+            bounds.expand(Aabb::new(
+                caret.x(),
+                caret.top(),
+                caret.x() + Self::CARET_WIDTH,
+                caret.bottom(),
+            ));
+        }
+        bounds
     }
 
     pub fn insert_code_point(&mut self, code_point: Unichar) {
@@ -595,9 +616,9 @@ impl RawTextInput {
             return updated;
         }
         let mut update_text_path = false;
-        if self.flagged(Flags::ShapeDirty as u8) {
+        self.ensure_shape();
+        if self.unflag(Flags::TextPathDirty as u8) {
             updated |= Flags::ShapeDirty as u8;
-            self.ensure_shape();
             update_text_path = true;
         }
         if self.unflag(Flags::SelectionDirty as u8) {
@@ -614,24 +635,13 @@ impl RawTextInput {
             self.selection_path
                 .update(&self.selection_rects, self.selection_corner_radius);
             self.cursor_path.rewind();
-            let caret_width = 1.0;
+            let caret_width = Self::CARET_WIDTH;
+            let caret = self.cursor_visual_position();
             let mut rectangle = RawPath::default();
-            rectangle.move_to(
-                self.cursor_visual_position.x(),
-                self.cursor_visual_position.top(),
-            );
-            rectangle.line_to(
-                self.cursor_visual_position.x() + caret_width,
-                self.cursor_visual_position.top(),
-            );
-            rectangle.line_to(
-                self.cursor_visual_position.x() + caret_width,
-                self.cursor_visual_position.bottom(),
-            );
-            rectangle.line_to(
-                self.cursor_visual_position.x(),
-                self.cursor_visual_position.bottom(),
-            );
+            rectangle.move_to(caret.x(), caret.top());
+            rectangle.line_to(caret.x() + caret_width, caret.top());
+            rectangle.line_to(caret.x() + caret_width, caret.bottom());
+            rectangle.line_to(caret.x(), caret.bottom());
             rectangle.close();
             self.cursor_path.add_path_clockwise(&rectangle, None);
         }
@@ -666,11 +676,19 @@ impl RawTextInput {
                 self.vertical_align,
                 self.align_height,
             );
+            // Selection may build the layout before update. Rendering must
+            // still rebuild its paths from that same positioned layout.
+            self.flag(Flags::TextPathDirty | Flags::SelectionDirty);
+            self.cursor
+                .resolve_line_positions(&self.shape.layout_view());
+            self.compute_visual_position_from_cursor();
         }
     }
 
     fn compute_visual_position_from_cursor(&mut self) {
-        self.cursor_visual_position = self.cursor_visual_position_at(self.cursor.end());
+        if !self.css_line_box {
+            self.cursor_visual_position = self.cursor_visual_position_at(self.cursor.end());
+        }
     }
 
     fn build_text_paths(&mut self, factory: &RuntimeFactoryHandle) {
@@ -1059,7 +1077,7 @@ impl RawTextInput {
     pub fn cursor_up(&mut self, select: bool) {
         self.ensure_shape();
         if self.ideal_cursor_x == -1.0 {
-            self.ideal_cursor_x = self.cursor_visual_position.x();
+            self.ideal_cursor_x = self.cursor_visual_position().x();
         }
         let line_index = self.cursor.end().line_index();
         let position = if line_index == 0 {
@@ -1082,7 +1100,7 @@ impl RawTextInput {
     pub fn cursor_down(&mut self, select: bool) {
         self.ensure_shape();
         if self.ideal_cursor_x == -1.0 {
-            self.ideal_cursor_x = self.cursor_visual_position.x();
+            self.ideal_cursor_x = self.cursor_visual_position().x();
         }
         let next_line_index = self.cursor.end().line_index_offset(1);
         let position = if self.shape.line_count() != 0
@@ -1238,16 +1256,15 @@ impl RawTextInput {
         } else {
             self.unflag(Flags::Obscured as u8);
         }
-        self.forget_line_indices();
-        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        self.invalidate_shape();
     }
 
     // From src/text/raw_text_input.cpp::obscured. A reflow leaves resolved
     // line indices stale, and update never resolves a line index twice, so
     // keep only the code point indices. The journal holds cursor snapshots
     // too, or undo would restore one resolved against the old layout.
-    // Upstream does this for masking only. Nuxie also does it for a change of
-    // font, font size, line height, CSS line box or font fallbacks.
+    // Upstream does this for masking only. All invalidations of our shared
+    // positioned layout discard its resolved cursor lines together.
     fn forget_line_indices(&mut self) {
         let unresolved = |cursor: Cursor| {
             Cursor::new(
@@ -1260,7 +1277,6 @@ impl RawTextInput {
             entry.cursor_from = unresolved(entry.cursor_from);
             entry.cursor_to = unresolved(entry.cursor_to);
         }
-        self.ideal_cursor_x = -1.0;
     }
 
     fn prepare_obscured_text(&mut self) {
@@ -1332,6 +1348,9 @@ impl RawTextInput {
     }
 
     fn flag(&mut self, mask: u8) {
+        if mask & Flags::ShapeDirty as u8 != 0 {
+            self.forget_line_indices();
+        }
         self.flags |= mask;
     }
 }

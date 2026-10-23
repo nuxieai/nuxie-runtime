@@ -5118,14 +5118,13 @@ impl LayoutComponent {
             .padding
             .resolve_or_zero(inputs.parent_size.width, calc);
         let border = style.border.resolve_or_zero(inputs.parent_size.width, calc);
-        let width = (output.size.width - (padding + border).horizontal_axis_sum()).max(0.0);
+        let inset = padding + border;
+        let size = Vec2D::new(
+            (output.size.width - inset.horizontal_axis_sum()).max(0.0),
+            (output.size.height - inset.vertical_axis_sum()).max(0.0),
+        );
         let scroll_container =
             style.overflow.x.is_scroll_container() || style.overflow.y.is_scroll_container();
-        let (start, end) = if style.direction.is_rtl() {
-            (padding.right, padding.left)
-        } else {
-            (padding.left, padding.right)
-        };
         output.scrollable_overflow_rect = taffy::geometry::Rect::ZERO;
         for child in children {
             let extent = child
@@ -5138,18 +5137,25 @@ impl LayoutComponent {
                     }
                     let input = object.as_text_input_mut()?;
                     input.set_owned_by_css_layout(true);
-                    Some(input.css_text_extent(width))
+                    Some(input.css_positioned_bounds(size))
                 })
                 .flatten();
             if let Some(extent) = extent {
-                let right = start + extent.x + if scroll_container { end } else { 0.0 };
+                let left = padding.left + extent.left();
+                let top = padding.top + extent.top();
+                let right = padding.left
+                    + extent.right()
+                    + if scroll_container { padding.right } else { 0.0 };
                 let bottom = padding.top
-                    + extent.y
+                    + extent.bottom()
                     + if scroll_container {
                         padding.bottom
                     } else {
                         0.0
                     };
+                output.scrollable_overflow_rect.left =
+                    output.scrollable_overflow_rect.left.min(left);
+                output.scrollable_overflow_rect.top = output.scrollable_overflow_rect.top.min(top);
                 output.scrollable_overflow_rect.right =
                     output.scrollable_overflow_rect.right.max(right);
                 output.scrollable_overflow_rect.bottom =

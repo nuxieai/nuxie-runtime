@@ -3,8 +3,8 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use crate::mechanical_port::source::math::raw_path::RawPath;
 use crate::mechanical_port::source::math::vec2d::Vec2D;
+use crate::mechanical_port::source::math::{aabb::Aabb, raw_path::RawPath};
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 use crate::mechanical_port::source::text::glyph_lookup::GlyphLookup;
 use nuxie_render_api::line_break::{
@@ -949,10 +949,27 @@ impl OrderedLine {
         self
     }
 
+    /// The positioned line box used by CSS drawing, selection and overflow.
+    pub(crate) fn line_box(&self) -> Aabb {
+        let width: f32 = self
+            .into_iter()
+            .map(|(run, index)| run.advances[index as usize])
+            .sum();
+        Aabb::new(
+            self.glyph_line.start_x,
+            self.top(),
+            self.glyph_line.start_x + width,
+            self.bottom(),
+        )
+    }
+
+    pub fn top(&self) -> f32 {
+        self.y - self.glyph_line.baseline + self.glyph_line.top
+    }
+
     pub(crate) fn run_vertical_bounds(&self, run: &GlyphRun) -> (f32, f32) {
         if self.css_line_box {
-            let top = self.y - self.glyph_line.baseline + self.glyph_line.top;
-            (top, self.bottom())
+            (self.top(), self.bottom())
         } else {
             let font = run.font.as_ref().expect("shaped text retains its font");
             (

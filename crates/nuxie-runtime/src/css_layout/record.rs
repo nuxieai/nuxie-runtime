@@ -255,6 +255,7 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                 provider.add_layout_style_applier(this.clone())
             });
         }
+        mark_draw_order_dirty(&parent);
         mark_owner_dirty(&parent);
         StatusCode::Ok
     }
@@ -279,6 +280,9 @@ pub(crate) fn mark_draw_order_dirty(owner: &CoreHandle) {
                 .flatten()
         };
     if let Some(artboard) = artboard {
+        if let Some(dirty) = artboard.artboard_dirty_handle() {
+            dirty.mark_css_clip_lists_dirty();
+        }
         artboard.with_mut(|object| object.component_add_dirt(ComponentDirt::DRAW_ORDER, false));
     }
 }

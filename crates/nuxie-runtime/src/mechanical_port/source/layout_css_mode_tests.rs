@@ -7312,6 +7312,175 @@ fn clipping_badge_scene(card_position: u64, badge_position: u64) -> Scene {
     f
 }
 
+/// Rive draw-order dirt changes links, not CSS clip membership.
+#[test]
+fn translated_deep_resorts_reuse_clip_lists_without_ancestor_steps() {
+    use crate::source::generated::{
+        draw_rules_base::DrawRulesBase, draw_target_base::DrawTargetBase,
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .end();
+    for parent in 0..200 {
+        riv.object(NodeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .end();
+    }
+    riv.object(ShapeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 200)
+        .end();
+    riv.object(RectangleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 201)
+        .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 10.0)
+        .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 201)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 203)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xffff_ffff)
+        .end();
+    riv.object(ShapeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(DrawRulesBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 201)
+        .uint(DrawRulesBase::DRAW_TARGET_ID_PROPERTY_KEY, 207)
+        .end();
+    riv.object(DrawTargetBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 206)
+        .uint(DrawTargetBase::DRAWABLE_ID_PROPERTY_KEY, 205)
+        .end();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("deep translated scene imports");
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    for _ in 0..3 {
+        artboard.advance_default(0.0);
+    }
+    let stats = || artboard.with_artboard(|artboard| artboard.css_clip_list_stats());
+    let sorts =
+        || artboard.with_artboard(|artboard| artboard.dirty_handle().draw_order_change_counter());
+    let initial = stats();
+    let initial_sorts = sorts();
+    let root = artboard.core_handle();
+    let target = artboard.with_artboard(|artboard| artboard.objects()[207].clone().unwrap());
+    assert_eq!(initial.0, 1);
+    assert!(initial.1 >= 200);
+    assert!(
+        artboard.with_artboard(|artboard| artboard.drawables().iter().all(|drawable| {
+            let (chain, scope) = crate::css_layout::clip::read_chain(
+                drawable,
+                &root,
+                artboard.base.base.css_clip_list(),
+            );
+            chain.is_empty() && !scope
+        }))
+    );
+    let draw = || {
+        let before = factory.borrow().stream().lines().count();
+        let mut renderer = factory.borrow().make_renderer();
+        artboard.draw(&mut renderer);
+        factory
+            .borrow()
+            .stream()
+            .lines()
+            .skip(before)
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    draw();
+    let first = draw();
+    for count in 1..=5 {
+        assert!(CoreRegistry::set_uint_handle(
+            &target,
+            DrawTargetBase::PLACEMENT_VALUE_PROPERTY_KEY.into(),
+            u32::from(count % 2),
+        ));
+        artboard.advance_default(0.0);
+        assert_eq!(sorts(), initial_sorts.wrapping_add(count));
+        assert_eq!(
+            stats(),
+            initial,
+            "a Rive re-sort builds nothing and takes no ancestor steps"
+        );
+        assert_eq!(draw(), first);
+    }
+}
+
+#[test]
+fn css_clip_lists_rebuild_once_for_overflow_and_position_changes() {
+    let f = clipping_badge_scene(0, 2);
+    let stats = || {
+        f.artboard
+            .with_artboard(|artboard| artboard.css_clip_list_stats())
+    };
+    let mut before = stats();
+    assert_badge_clip_case(&f, false);
+    for (position, overflow, clipped) in [(1, 2, true), (1, 0, false), (1, 2, true), (2, 2, false)]
+    {
+        assert!(CoreRegistry::set_uint_handle(
+            &f.record(BADGE.0),
+            POSITION.into(),
+            position
+        ));
+        for key in [OVERFLOW_X, OVERFLOW_Y] {
+            assert!(CoreRegistry::set_uint_handle(
+                &f.record(CARD.0),
+                key.into(),
+                overflow
+            ));
+        }
+        f.advance(3);
+        let after = stats();
+        assert_eq!(after.0, before.0 + 1, "one membership build per change");
+        assert!(after.1 > before.1);
+        assert_badge_clip_case(&f, clipped);
+        f.advance(3);
+        assert_eq!(stats(), after, "unchanged membership is reused");
+        before = after;
+    }
+}
+
+#[test]
+fn css_clip_lists_resolve_parents_before_out_of_order_proxy_owners() {
+    use crate::css_layout::clip;
+    let f = clipping_badge_scene(1, 2);
+    let root = f.artboard.core_handle();
+    let (mut objects, drawables, list) = f.artboard.with_artboard(|artboard| {
+        (
+            artboard.objects().to_vec(),
+            artboard.drawables().to_vec(),
+            artboard.base.base.css_clip_list().clone(),
+        )
+    });
+    let before = drawables
+        .iter()
+        .map(|drawable| clip::read_chain(drawable, &root, &list))
+        .collect::<Vec<_>>();
+    objects.reverse();
+    // Owners are also discovered from proxies when absent from this table.
+    let card = f.named(CARD.0);
+    objects.retain(|object| object.as_ref() != Some(&card));
+    clip::build_lists(&root, &list, &objects, &drawables);
+    let after = drawables
+        .iter()
+        .map(|drawable| clip::read_chain(drawable, &root, &list))
+        .collect::<Vec<_>>();
+    assert!(before == after, "membership is independent of object order");
+    assert_badge_clip_case(&f, true);
+}
+
 /// An overflow clip's path is made through the factory the artboard has when
 /// the clip first draws, not the one it had when the draw order was sorted.
 #[test]

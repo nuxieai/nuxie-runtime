@@ -35,13 +35,25 @@ impl ContainerComponent {
     }
 
     pub fn add_child(&mut self, component: CoreHandle) {
+        self.mark_css_clip_lists_dirty();
         self.component_children.push(component.clone().into());
         self.children.push(component);
     }
 
     pub(crate) fn add_runtime_child(&mut self, component: ComponentOccurrenceHandle) {
+        self.mark_css_clip_lists_dirty();
         assert!(component.authored().is_none());
         self.component_children.push(component);
+    }
+
+    fn mark_css_clip_lists_dirty(&self) {
+        if let Some(dirty) = self
+            .base
+            .artboard_handle()
+            .and_then(|artboard| artboard.artboard_dirty_handle())
+        {
+            dirty.mark_css_clip_lists_dirty();
+        }
     }
 
     pub fn component_children(&self) -> &[ComponentOccurrenceHandle] {

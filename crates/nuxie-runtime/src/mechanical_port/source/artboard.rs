@@ -91,6 +91,7 @@ pub type RootTransformCallback = fn(*mut (), f32, f32, bool) -> f32;
 
 struct ArtboardDirtyState {
     collapsed_runs_dirty: Cell<bool>,
+    css_clip_lists_dirty: Cell<bool>,
     depth: Cell<u32>,
     dirt: Cell<ComponentDirt>,
     did_change: Cell<bool>,
@@ -121,6 +122,7 @@ impl Default for RuntimeArtboardDirtyHandle {
     fn default() -> Self {
         Self(Rc::new(ArtboardDirtyState {
             collapsed_runs_dirty: Cell::new(true),
+            css_clip_lists_dirty: Cell::new(true),
             depth: Cell::new(0),
             dirt: Cell::new(ComponentDirt::FILTHY),
             did_change: Cell::new(true),
@@ -152,6 +154,10 @@ impl RuntimeArtboardDirtyHandle {
     }
     pub fn change_serial(&self) -> u32 {
         self.0.change_serial.get()
+    }
+
+    pub(crate) fn mark_css_clip_lists_dirty(&self) {
+        self.0.css_clip_lists_dirty.set(true);
     }
 
     /// Queue a CSS stacking change without borrowing an updating component.
@@ -379,6 +385,10 @@ pub struct Artboard {
     drawables: Vec<RuntimeDrawableOccurrence>,
     clipping_shapes: Vec<CoreHandle>,
     css_clip_operations: HashSet<RuntimeDrawableOccurrence>,
+    #[cfg(any(test, feature = "testing"))]
+    css_clip_list_builds: usize,
+    #[cfg(any(test, feature = "testing"))]
+    css_clip_parent_steps: usize,
     layer_masks: Vec<CoreHandle>,
     draw_targets: Vec<CoreHandle>,
     nested_artboards: Vec<CoreHandle>,
@@ -485,6 +495,10 @@ impl Default for Artboard {
             drawables: Vec::new(),
             clipping_shapes: Vec::new(),
             css_clip_operations: HashSet::new(),
+            #[cfg(any(test, feature = "testing"))]
+            css_clip_list_builds: 0,
+            #[cfg(any(test, feature = "testing"))]
+            css_clip_parent_steps: 0,
             layer_masks: Vec::new(),
             draw_targets: Vec::new(),
             nested_artboards: Vec::new(),
@@ -1161,15 +1175,18 @@ impl Artboard {
     #[cfg(any(feature = "tools", feature = "testing"))]
     pub fn add_object(&mut self, object: Option<CoreHandle>) {
         self.objects.push(object);
+        self.dirty_state.mark_css_clip_lists_dirty();
     }
 
     #[cfg(not(any(feature = "tools", feature = "testing")))]
     pub(crate) fn add_object(&mut self, object: Option<CoreHandle>) {
         self.objects.push(object);
+        self.dirty_state.mark_css_clip_lists_dirty();
     }
 
     pub(crate) fn release_import_slot(&mut self, index: usize) {
         self.objects[index] = None;
+        self.dirty_state.mark_css_clip_lists_dirty();
     }
 
     pub(crate) fn add_animation(&mut self, object: CoreHandle) {
@@ -1566,6 +1583,7 @@ impl Artboard {
         }
 
         root.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.dirty_state.mark_css_clip_lists_dirty();
             artboard.drawables = drawables;
             artboard.clipping_shapes = clipping_shapes;
             artboard.layer_masks = layer_masks;
@@ -1707,8 +1725,33 @@ impl Artboard {
         self.drawables = paint_order::order(&root, kind, items, &file_order);
     }
 
+    /// Membership builds and the parent links resolved by those builds.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn css_clip_list_stats(&self) -> (usize, usize) {
+        (self.css_clip_list_builds, self.css_clip_parent_steps)
+    }
+
+    fn rebuild_css_clip_lists(&mut self) {
+        if !self.dirty_state.0.css_clip_lists_dirty.replace(false) {
+            return;
+        }
+        use crate::css_layout::clip::{self, ClipList};
+        let root = crate::source::core::CoreObject::core(self)
+            .handle()
+            .expect("artboard owner");
+        let list = ClipList::root(&root, self.css_clips(), self.base.base.clipping_shapes());
+        let _steps = clip::build_lists(&root, &list, &self.objects, &self.drawables);
+        self.base.base.set_css_clip_list(list);
+        #[cfg(any(test, feature = "testing"))]
+        {
+            self.css_clip_list_builds += 1;
+            self.css_clip_parent_steps += _steps;
+        }
+    }
+
     fn sort_draw_order(&mut self) {
         let _relinking = self.draw_links.relinking();
+        self.rebuild_css_clip_lists();
         self.apply_css_paint_order();
         let counter = &self.dirty_state.0.draw_order_change_counter;
         counter.set(if counter.get() == u8::MAX {
@@ -1884,12 +1927,11 @@ impl Artboard {
         let root = crate::source::core::CoreObject::core(self)
             .handle()
             .expect("artboard owner");
-        let root_overflow = self.css_clips();
-        let root_shapes = self.base.base.clipping_shapes().to_vec();
         let mut current_drawable = self.first_drawable.clone();
         while let Some(current) = current_drawable {
             current.with_mut(|current| current.set_needs_save_operation(true));
-            let (chain, css_scope) = clip::draw_chain(&current, &root, root_overflow, &root_shapes);
+            let (chain, css_scope) =
+                clip::read_chain(&current, &root, self.base.base.css_clip_list());
             let css_chain = chain
                 .iter()
                 .chain(&clipping_stack)

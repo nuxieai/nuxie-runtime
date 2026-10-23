@@ -6,7 +6,11 @@ use crate::source::{
     layout_component::LayoutComponent,
     renderer::Renderer,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 /// State while walking from a painted box towards the root. An absolute
 /// box outside a masked subtree skips overflow until its containing block.
@@ -127,80 +131,223 @@ pub(crate) fn paint_owner(component: &CoreHandle) -> CoreHandle {
     component.clone()
 }
 
-/// Content clips and their enclosing shape clips, outside first. The root
-/// is supplied separately because sort_draw_order already borrows it.
-pub(crate) fn draw_chain(
+/// Membership for a paint owner, in tree order. Masked content reads the
+/// skipped entries too, without changing the cached membership.
+#[derive(Clone, Default)]
+pub(crate) struct ClipList {
+    entries: Vec<ClipEntry>,
+    scope: bool,
+}
+
+#[derive(Clone)]
+struct ClipEntry {
+    clip: DrawClip,
+    skipped: bool,
+}
+
+impl ClipList {
+    fn push(&mut self, clip: DrawClip) {
+        if !self.entries.iter().any(|entry| entry.clip == clip) {
+            self.entries.push(ClipEntry {
+                clip,
+                skipped: false,
+            });
+        }
+    }
+
+    pub(crate) fn root(root: &CoreHandle, overflow: bool, shapes: &[CoreHandle]) -> Self {
+        let mut list = Self {
+            scope: overflow,
+            ..Self::default()
+        };
+        if overflow {
+            for shape in shapes {
+                list.push(DrawClip::Shape(shape.clone()));
+            }
+            list.push(DrawClip::Overflow(root.clone()));
+        }
+        list
+    }
+
+    fn chain(&self, full: bool, shapes: &[CoreHandle]) -> (Vec<DrawClip>, bool) {
+        let mut chain = self
+            .entries
+            .iter()
+            .filter(|entry| full || !entry.skipped)
+            .map(|entry| entry.clip.clone())
+            .collect::<Vec<_>>();
+        for shape in shapes {
+            let clip = DrawClip::Shape(shape.clone());
+            if !chain.contains(&clip) {
+                chain.push(clip);
+            }
+        }
+        (chain, self.scope)
+    }
+}
+
+#[derive(Clone, Default)]
+struct BuildState {
+    paint: ClipList,
+    children: ClipList,
+    // Entries before this boundary have a positioned box between them
+    // and the next child. Older skips remain in force.
+    positioned_end: usize,
+    css_box: bool,
+}
+
+struct BuildNode {
+    parent: Option<CoreHandle>,
+    position: u8,
+    css_box: bool,
+    clips: bool,
+    shapes: Vec<CoreHandle>,
+    foreground: bool,
+}
+
+enum BuildStep {
+    Enter(CoreHandle),
+    Store(CoreHandle, BuildNode),
+}
+
+/// Resolve each parent once and store it before its children. Imported
+/// objects normally already have that order; late owners need not have it.
+/// Proxy owners join the same pass even when they are not in the object table.
+pub(crate) fn build_lists(
+    root: &CoreHandle,
+    root_list: &ClipList,
+    objects: &[Option<CoreHandle>],
+    drawables: &[RuntimeDrawableOccurrence],
+) -> usize {
+    use crate::source::generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase;
+    let mut states = HashMap::from([(
+        root.clone(),
+        BuildState {
+            paint: root_list.clone(),
+            children: root_list.clone(),
+            positioned_end: root_list.entries.len(),
+            css_box: false,
+        },
+    )]);
+    let mut scheduled = HashSet::new();
+    let mut parent_steps = 0;
+    let owners = drawables.iter().map(|drawable| match drawable {
+        RuntimeDrawableOccurrence::Authored(owner) => owner.clone(),
+        RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
+    });
+    for owner in objects.iter().flatten().cloned().chain(owners) {
+        let mut pending = vec![BuildStep::Enter(owner)];
+        while let Some(step) = pending.pop() {
+            match step {
+                BuildStep::Enter(owner) => {
+                    if states.contains_key(&owner) || !scheduled.insert(owner.clone()) {
+                        continue;
+                    }
+                    let Some(node) = owner.with(|object| {
+                        let layout = object.as_layout_component();
+                        let css_box = layout.is_some_and(LayoutComponent::is_css_mode);
+                        let clips = css_box && layout.is_some_and(LayoutComponent::clips);
+                        BuildNode {
+                            parent: object.component_parent_handle(),
+                            position: layout.map(position).unwrap_or(0),
+                            css_box,
+                            clips,
+                            shapes: if clips {
+                                layout.unwrap().clipping_shapes().to_vec()
+                            } else {
+                                Vec::new()
+                            },
+                            foreground: owner.is_type_of(ForegroundLayoutDrawableBase::TYPE_KEY),
+                        }
+                    }) else {
+                        continue;
+                    };
+                    parent_steps += usize::from(node.parent.is_some());
+                    let parent = node.parent.clone();
+                    pending.push(BuildStep::Store(owner, node));
+                    if let Some(parent) = parent {
+                        pending.push(BuildStep::Enter(parent));
+                    }
+                }
+                BuildStep::Store(owner, node) => {
+                    let parent = node.parent.as_ref().and_then(|parent| states.get(parent));
+                    let mut state = parent.cloned().unwrap_or_else(|| BuildState {
+                        children: ClipList {
+                            scope: root_list.scope,
+                            ..ClipList::default()
+                        },
+                        ..BuildState::default()
+                    });
+                    if node.position == 2 {
+                        for entry in &mut state.children.entries[state.positioned_end..] {
+                            if matches!(entry.clip, DrawClip::Overflow(_)) {
+                                entry.skipped = true;
+                            }
+                        }
+                    }
+                    state.children.scope |= node.clips;
+                    state.paint = if node.foreground && parent.is_some_and(|parent| parent.css_box)
+                    {
+                        parent.unwrap().paint.clone()
+                    } else {
+                        state.children.clone()
+                    };
+                    owner.with_mut(|object| {
+                        if let Some(drawable) = object.as_drawable_mut() {
+                            drawable.set_css_clip_list(state.paint.clone());
+                        }
+                    });
+                    if node.clips {
+                        for shape in node.shapes {
+                            state.children.push(DrawClip::Shape(shape));
+                        }
+                        state.children.push(DrawClip::Overflow(owner.clone()));
+                    }
+                    if node.position != 0 {
+                        state.positioned_end = state.children.entries.len();
+                    }
+                    state.css_box = node.css_box;
+                    states.insert(owner, state);
+                }
+            }
+        }
+    }
+    parent_steps
+}
+
+/// Sorting reads membership and the drawable's own shape list. It never
+/// resolves a parent, including for foreground paint and layout proxies.
+pub(crate) fn read_chain(
     drawable: &RuntimeDrawableOccurrence,
     root: &CoreHandle,
-    root_overflow: bool,
-    root_shapes: &[CoreHandle],
+    root_list: &ClipList,
 ) -> (Vec<DrawClip>, bool) {
     let owner = match drawable {
         RuntimeDrawableOccurrence::Authored(owner) => owner.clone(),
         RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
     };
-    let owner = paint_owner(&owner);
-    let mut filter = OverflowFilter::default();
-    if !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty() {
-        filter.keep_full_chain();
+    let shapes = drawable
+        .with(|drawable| drawable.clipping_shapes().to_vec())
+        .unwrap_or_default();
+    // The sort already holds the root's mutable receiver.
+    if &owner == root {
+        return root_list.chain(true, &shapes);
     }
-    let mut current = Some(owner.clone());
-    let mut levels = Vec::new();
-    let mut css_scope = root_overflow;
-    while let Some(handle) = current {
-        if &handle == root {
-            let mut clips = Vec::new();
-            if root_overflow {
-                clips.extend(root_shapes.iter().cloned().map(DrawClip::Shape));
-                if filter.enter(0, true) {
-                    clips.push(DrawClip::Overflow(handle));
-                }
+    let full = !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty();
+    owner
+        .with(|object| {
+            object
+                .as_drawable()
+                .map(|drawable| drawable.css_clip_list().chain(full, &shapes))
+        })
+        .flatten()
+        .unwrap_or_else(|| {
+            ClipList {
+                scope: root_list.scope,
+                ..ClipList::default()
             }
-            levels.push(clips);
-            break;
-        }
-        let Some((parent, clips)) = handle.with(|object| {
-            let mut clips = Vec::new();
-            if let Some(layout) = object.as_layout_component() {
-                let position = position(layout);
-                css_scope |= layout.is_css_mode() && layout.clips();
-                if handle != owner {
-                    let include = filter.enter(position, false);
-                    if layout.is_css_mode() && layout.clips() {
-                        clips.extend(
-                            layout
-                                .clipping_shapes()
-                                .iter()
-                                .cloned()
-                                .map(DrawClip::Shape),
-                        );
-                        if include {
-                            clips.push(DrawClip::Overflow(handle.clone()));
-                        }
-                    }
-                }
-                filter.leave(position);
-            }
-            (object.component_parent_handle(), clips)
-        }) else {
-            break;
-        };
-        levels.push(clips);
-        current = parent;
-    }
-    let mut chain = Vec::new();
-    for clip in levels.into_iter().rev().flatten().chain(
-        drawable
-            .with(|drawable| drawable.clipping_shapes().to_vec())
-            .unwrap_or_default()
-            .into_iter()
-            .map(DrawClip::Shape),
-    ) {
-        if !chain.contains(&clip) {
-            chain.push(clip);
-        }
-    }
-    (chain, css_scope)
+            .chain(full, &shapes)
+        })
 }
 
 struct OverflowOperation {

@@ -658,6 +658,7 @@ impl StateMachineLayerInstance {
             self.state_machine_changed_on_advance = false;
         }
         if self.is_frozen(machine, pose_since) {
+            machine.mark_frozen_layer_searched(&self.occurrence);
             #[cfg(feature = "testing")]
             FROZEN_LAYER_ADVANCES.with(|count| count.set(count.get() + 1));
             #[cfg(feature = "testing")]
@@ -756,13 +757,13 @@ impl StateMachineLayerInstance {
                 .flatten()
                 .expect("an authored StateTransition must expose early-exit enablement")
         {
-            machine.mark_view_model_changes_searched();
+            machine.mark_view_model_changes_searched(&self.occurrence);
             return false;
         }
         self.waiting_for_exit = false;
         self.ensure_any_state_instance(machine);
         if self.settled.get() {
-            machine.mark_view_model_changes_searched();
+            machine.mark_view_model_changes_searched(&self.occurrence);
             #[cfg(feature = "testing")]
             {
                 self.verify_settled(machine);
@@ -770,7 +771,7 @@ impl StateMachineLayerInstance {
             }
             return false;
         }
-        machine.mark_view_model_changes_searched();
+        machine.mark_view_model_changes_searched(&self.occurrence);
         if let Some(any_state) = self.any_state_instance.clone() {
             if self.try_change_state_from(machine, Some(any_state)) {
                 return true;
@@ -5168,7 +5169,16 @@ impl StateMachineInstance {
         }
         if new_frame {
             if let Some(bindables) = self.bindables.get_mut() {
-                bindables.change_baseline = bindables.change_searched;
+                if let Some(windows) = &mut bindables.layer_changes {
+                    let mut earliest = u64::MAX;
+                    for window in windows {
+                        window.baseline = window.searched;
+                        earliest = earliest.min(window.baseline);
+                    }
+                    bindables.change_baseline = earliest;
+                } else {
+                    bindables.change_baseline = bindables.change_searched;
+                }
                 bindables.changes_used.get_mut().clear();
                 bindables.listener_baseline.set(crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence());
             }
@@ -5574,10 +5584,46 @@ impl StateMachineInstance {
         self.view_model_value_changed(&source, layer.as_ref())
     }
 
-    pub fn change_pending(&self, sequence: u64) -> bool {
+    fn layer_index(
+        &self,
+        layer: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> Option<usize> {
+        layer.and_then(|layer| {
+            self.layers
+                .iter()
+                .position(|candidate| candidate.downgrade().ptr_eq(layer))
+        })
+    }
+
+    fn change_baseline_for(
+        &self,
+        layer: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> u64 {
+        self.bindables.get().map_or(0, |b| {
+            self.layer_index(layer)
+                .and_then(|index| b.layer_changes.as_ref()?.get(index))
+                .map_or(b.change_baseline, |window| window.baseline)
+        })
+    }
+
+    pub fn change_pending(
+        &self,
+        sequence: u64,
+        layer: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> bool {
+        self.bindables.get().is_some() && sequence > self.change_baseline_for(layer)
+    }
+
+    #[cfg(any(feature = "testing", feature = "tools"))]
+    pub fn has_layer_change_windows(&self) -> bool {
         self.bindables
             .get()
-            .is_some_and(|b| sequence > b.change_baseline)
+            .is_some_and(|b| b.layer_changes.is_some())
+    }
+
+    #[cfg(any(feature = "testing", feature = "tools"))]
+    pub fn tracks_view_model_changes(&self) -> bool {
+        self.bindables.get().is_some()
     }
 
     pub fn view_model_trigger_pending_for_listeners(&self, value: &CoreHandle) -> bool {
@@ -5605,7 +5651,7 @@ impl StateMachineInstance {
         if !value
             .with(|v| {
                 v.as_view_model_instance_value()
-                    .is_some_and(|v| v.change_sequence() > b.change_baseline)
+                    .is_some_and(|v| v.change_sequence() > self.change_baseline_for(layer))
             })
             .unwrap_or(false)
         {
@@ -5633,16 +5679,17 @@ impl StateMachineInstance {
         }
     }
 
-    fn mark_view_model_changes_searched(&mut self) {
+    fn mark_view_model_changes_searched(
+        &mut self,
+        layer: &RuntimeStateMachineLayerInstanceWeakHandle,
+    ) {
+        let index = self.layer_index(Some(layer));
         let Some(b) = self.bindables.get_mut() else {
             return;
         };
         b.change_searched = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
-        // A baseline at the highest inactive mark is at every host's mark.
-        if b.change_baseline
-            >= crate::mechanical_port::source::artboard_host::InactiveChangeMark::highest()
-        {
-            return;
+        if let Some(window) = index.and_then(|index| b.layer_changes.as_mut()?.get_mut(index)) {
+            window.searched = b.change_searched;
         }
         let mut inactive = 0;
         let mut artboard = self.artboard_instance.upgrade().map(|a| a.core_handle());
@@ -5661,9 +5708,27 @@ impl StateMachineInstance {
             artboard = parent;
         }
         b.change_baseline = b.change_baseline.max(inactive);
+        if let Some(window) = index.and_then(|index| b.layer_changes.as_mut()?.get_mut(index)) {
+            window.baseline = window.baseline.max(inactive);
+        }
+    }
+
+    fn mark_frozen_layer_searched(&mut self, layer: &RuntimeStateMachineLayerInstanceWeakHandle) {
+        let index = self.layer_index(Some(layer));
+        if let Some(window) = self
+            .bindables
+            .get_mut()
+            .and_then(|b| index.and_then(|index| b.layer_changes.as_mut()?.get_mut(index)))
+        {
+            window.searched = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
+        }
     }
 
     fn forget_view_model_changes(&mut self) {
+        let reads_pending = self
+            .machine
+            .with_downcast::<StateMachine, _>(StateMachine::reads_pending_changes)
+            .unwrap_or(false);
         if let Some(b) = self.bindables.get_mut() {
             let sequence = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
             // Outside advance, old changes are not pending. During advance,
@@ -5675,6 +5740,17 @@ impl StateMachineInstance {
                 sequence
             };
             b.change_searched = b.change_baseline;
+            if reads_pending && !self.layers.is_empty() {
+                b.layer_changes = Some(
+                    vec![
+                        super::state_machine_instance_clusters::SMILayerChangeWindow {
+                            baseline: b.change_baseline,
+                            searched: b.change_baseline,
+                        };
+                        self.layers.len()
+                    ],
+                );
+            }
             b.listener_baseline.set(sequence);
             b.changes_used.get_mut().clear();
         }

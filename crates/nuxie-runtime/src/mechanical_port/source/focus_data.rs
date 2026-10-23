@@ -331,6 +331,24 @@ impl FocusData {
         })
     }
 
+    pub fn blurs_on_outside_press(&self) -> bool {
+        self.component().parent_handle().and_then(|parent| {
+            parent.with_downcast::<crate::mechanical_port::source::text::text_input::TextInput, _>(|input| input.blurs_on_outside_press())
+        }).unwrap_or(false)
+    }
+
+    pub fn hit_test_focusable(&mut self, position: Vec2D) -> bool {
+        if let Some(hit) = self.component().parent_handle().and_then(|parent| {
+            parent.with_downcast_mut::<crate::mechanical_port::source::text::text_input::TextInput, _>(|input| input.hit_test_focusable(position))
+        }) { return hit; }
+        self.world_bounds().is_some_and(|bounds| {
+            position.x >= bounds.min_x
+                && position.x <= bounds.max_x
+                && position.y >= bounds.min_y
+                && position.y <= bounds.max_y
+        })
+    }
+
     pub fn focusable_artboard(&self) -> Option<CoreHandle> {
         self.component().artboard_handle()
     }
@@ -403,6 +421,23 @@ impl ComponentBaseCallbacks for FocusData {
 }
 
 impl Focusable for FocusDataFocusable {
+    fn blurs_on_outside_press(&self) -> bool {
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast::<FocusData, _>(FocusData::blurs_on_outside_press)
+            })
+            .unwrap_or(false)
+    }
+
+    fn hit_test_focusable(&mut self, position: Vec2D) -> bool {
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast_mut::<FocusData, _>(|owner| owner.hit_test_focusable(position))
+            })
+            .unwrap_or(false)
+    }
     fn accepts_text_input(&self) -> bool {
         self.owner
             .as_ref()

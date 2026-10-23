@@ -254,6 +254,7 @@ pub type ScrollIntoViewCallback = fn(&Bounds, &CoreHandle);
 pub struct FocusManager {
     runtime_self: RuntimeFocusManagerWeakHandle,
     primary_focus: Option<FocusNodeRef>,
+    press_focus: Option<FocusNodeRef>,
     root_nodes: Rc<RefCell<Vec<FocusNodeRef>>>,
     pending_focus_requests: Vec<PendingFocusRequest>,
     has_focusable_content: bool,
@@ -274,6 +275,7 @@ impl Default for FocusManager {
         Self {
             runtime_self: RuntimeFocusManagerWeakHandle::default(),
             primary_focus: None,
+            press_focus: None,
             root_nodes: Rc::new(RefCell::new(Vec::new())),
             pending_focus_requests: Vec::new(),
             has_focusable_content: false,
@@ -675,6 +677,29 @@ impl FocusManager {
     pub fn clear_focus(&mut self) {
         if let Some(old_focus) = self.primary_focus.take() {
             self.notify_focus_change(Some(&old_focus), None);
+        }
+    }
+
+    pub fn press_began(&mut self) {
+        self.press_focus = self.primary_focus.clone();
+    }
+
+    pub fn press_ended(&mut self, position: crate::mechanical_port::source::math::vec2d::Vec2D) {
+        let Some(pressed) = self.press_focus.take() else {
+            return;
+        };
+        if !self.has_primary_focus(&pressed) {
+            return;
+        }
+        let Some(focusable) = pressed.borrow().focusable() else {
+            return;
+        };
+        let should_blur = {
+            let mut focusable = focusable.borrow_mut();
+            focusable.blurs_on_outside_press() && !focusable.hit_test_focusable(position)
+        };
+        if should_blur {
+            self.clear_focus();
         }
     }
 

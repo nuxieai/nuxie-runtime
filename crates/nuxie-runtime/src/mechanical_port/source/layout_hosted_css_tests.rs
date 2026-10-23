@@ -12,6 +12,7 @@ use crate::source::{
         nested_artboard_layout_base::NestedArtboardLayoutBase,
         nested_artboard_leaf_base::NestedArtboardLeafBase,
     },
+    layout_component::LayoutComponent,
     math::mat2d::Mat2D,
     nested_artboard_layout::NestedArtboardLayout,
     nested_artboard_leaf::NestedArtboardLeaf,
@@ -262,19 +263,25 @@ fn css_nested_copy_without_either_record_keeps_instance_sizing() {
     }
 }
 
-fn leaf_transform(css: bool, fit_to_layout_parent: bool) -> Mat2D {
+fn leaf_scene(
+    css: bool,
+    fit_to_layout_parent: bool,
+    padding: [f32; 4],
+    border: f32,
+    layout_sibling: bool,
+) -> Scene {
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
-    // 0 outer artboard, 1 layout, 2 leaf, optional 3 CSS, then styles.
-    board(&mut riv, 300.0, 300.0, if css { 4 } else { 3 });
+    // 0 outer artboard, 1 layout, 2 leaf, optional CSS and layout sibling, then styles.
+    let sibling_id = 3 + u64::from(css);
+    let first_style = sibling_id + u64::from(layout_sibling);
+    board(&mut riv, 300.0, 300.0, first_style);
     riv.object(LayoutComponentBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Leaf sizing box")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
         .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
-        .uint(
-            LayoutComponentBase::STYLE_ID_PROPERTY_KEY,
-            if css { 5 } else { 4 },
-        )
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style + 1)
         .end();
     riv.object(NestedArtboardLeafBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
@@ -293,10 +300,22 @@ fn leaf_transform(css: bool, fit_to_layout_parent: bool) -> Mat2D {
             .float(WIDTH, 200.0)
             .uint(HEIGHT_KIND, 1)
             .float(HEIGHT, 100.0)
-            .float(PADDING_TOP, 10.0)
-            .float(PADDING_RIGHT, 10.0)
-            .float(PADDING_BOTTOM, 10.0)
-            .float(PADDING_LEFT, 10.0)
+            .float(PADDING_TOP, padding[0])
+            .float(PADDING_RIGHT, padding[1])
+            .float(PADDING_BOTTOM, padding[2])
+            .float(PADDING_LEFT, padding[3])
+            .float(BORDER_TOP, border)
+            .float(BORDER_TOP + 1, border)
+            .float(BORDER_TOP + 2, border)
+            .float(BORDER_TOP + 3, border)
+            .end();
+    }
+    if layout_sibling {
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 1.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 1.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style + 2)
             .end();
     }
     style(&mut riv, 0);
@@ -307,10 +326,17 @@ fn leaf_transform(css: bool, fit_to_layout_parent: bool) -> Mat2D {
         .float(LayoutComponentStyleBase::PADDING_BOTTOM_PROPERTY_KEY, 10.0)
         .float(LayoutComponentStyleBase::PADDING_LEFT_PROPERTY_KEY, 10.0)
         .end();
+    if layout_sibling {
+        style(&mut riv, sibling_id);
+    }
     board(&mut riv, 100.0, 100.0, 1);
     style(&mut riv, 0);
     let scene = Scene::import(riv);
     scene.advance();
+    scene
+}
+
+fn scene_leaf_transform(scene: &Scene) -> Mat2D {
     scene
         .artboard
         .with_artboard(|board| board.find_all_handles::<NestedArtboardLeaf>()[0].clone())
@@ -322,6 +348,16 @@ fn leaf_transform(css: bool, fit_to_layout_parent: bool) -> Mat2D {
         .unwrap()
 }
 
+fn leaf_transform(css: bool, fit_to_layout_parent: bool) -> Mat2D {
+    scene_leaf_transform(&leaf_scene(
+        css,
+        fit_to_layout_parent,
+        [10.0; 4],
+        0.0,
+        false,
+    ))
+}
+
 #[test]
 fn css_nested_leaf_contains_in_the_content_box() {
     for reach_parent in [false, true] {
@@ -330,6 +366,75 @@ fn css_nested_leaf_contains_in_the_content_box() {
             (world[0], world[3], world[4], world[5]),
             (0.8, 0.8, 60.0, 10.0)
         );
+    }
+}
+
+#[test]
+fn css_block_nested_leaf_excludes_border_and_padding_from_fit() {
+    let scene = leaf_scene(true, false, [10.0; 4], 2.0, false);
+    let world = scene_leaf_transform(&scene);
+    assert_eq!(
+        (world[0], world[3], world[4], world[5]),
+        (0.76, 0.76, 62.0, 12.0)
+    );
+}
+
+#[test]
+fn css_nested_leaf_refits_when_only_trailing_padding_changes() {
+    for (key, final_padding, expected) in [
+        (
+            PADDING_RIGHT,
+            [10.0, 110.0, 10.0, 10.0],
+            (0.8, 0.8, 10.0, 10.0),
+        ),
+        (
+            PADDING_BOTTOM,
+            [10.0, 10.0, 40.0, 10.0],
+            (0.5, 0.5, 75.0, 10.0),
+        ),
+    ] {
+        let scene = leaf_scene(true, false, [10.0; 4], 0.0, false);
+        let before = scene_leaf_transform(&scene);
+        let layout = scene.artboard.with_artboard(|board| {
+            board
+                .find_handle::<LayoutComponent>("Leaf sizing box")
+                .expect("sizing box")
+        });
+        let record = layout
+            .with_downcast::<LayoutComponent, _>(LayoutComponent::css_record)
+            .flatten()
+            .expect("sizing box CSS");
+        let final_value = if key == PADDING_RIGHT { 110.0 } else { 40.0 };
+        CoreRegistry::set_double_handle(&record, key.into(), final_value);
+        scene.advance();
+        let world = scene_leaf_transform(&scene);
+        let fresh = scene_leaf_transform(&leaf_scene(true, false, final_padding, 0.0, false));
+        let geometry = |world: Mat2D| (world[0], world[3], world[4], world[5]);
+        assert_eq!(geometry(world), expected, "padding key {key}");
+        assert_eq!(
+            geometry(world),
+            geometry(fresh),
+            "fresh import, padding key {key}"
+        );
+        assert_ne!(
+            geometry(world),
+            geometry(before),
+            "fit changed, padding key {key}"
+        );
+    }
+}
+
+#[test]
+fn css_nested_leaf_with_a_layout_sibling_fits_at_the_content_origin() {
+    for reach_parent in [false, true] {
+        for (border, expected) in [
+            (0.0, (0.8, 0.8, 60.0, 10.0)),
+            (2.0, (0.76, 0.76, 62.0, 12.0)),
+        ] {
+            let scene = leaf_scene(true, reach_parent, [10.0; 4], border, true);
+            let world = scene_leaf_transform(&scene);
+            assert_eq!((world[0], world[3], world[4], world[5]), expected);
+        }
     }
 }
 

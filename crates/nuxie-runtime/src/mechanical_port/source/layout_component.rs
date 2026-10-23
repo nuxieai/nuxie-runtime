@@ -513,6 +513,8 @@ pub struct LayoutComponent {
     css_content_layout: Option<Layout>,
     /// An artboard's drawing origin, captured without borrowing its base.
     css_content_origin: Vec2D,
+    /// The physical content box last used to place content and fit nested leaves.
+    placed_css_content_box: Option<Aabb>,
     /// Authored transform tracks and bindings are fixed at load, even when
     /// their current value is identity.
     css_transform_authored: bool,
@@ -571,6 +573,7 @@ impl Default for LayoutComponent {
             propagated_content: None,
             css_content_layout: None,
             css_content_origin: Vec2D::default(),
+            placed_css_content_box: None,
             css_transform_authored: false,
             css_effect_state: (false, false),
             scroll_range: Vec2D::default(),
@@ -3300,14 +3303,19 @@ impl LayoutComponent {
         changed
     }
     fn place_css_content(&mut self) {
-        if self.is_css_mode()
-            && Self::set_css_content_offsets(
-                self.base.children().to_vec(),
-                self.css_content_offset(),
-            )
+        if !self.is_css_mode() {
+            return;
+        }
+        let bounds_changed = self.css_content_box_changed();
+        if Self::set_css_content_offsets(self.base.children().to_vec(), self.css_content_offset())
+            || bounds_changed
         {
             CoreCapabilities::world_transform_mark_dirty(self);
         }
+    }
+    fn css_content_box_changed(&mut self) -> bool {
+        let bounds = self.css_content_box();
+        self.placed_css_content_box.replace(bounds) != Some(bounds)
     }
     fn place_css_content_occurrence(owner: &CoreHandle) {
         // An artboard draws from its own origin. Capture the origin before
@@ -3319,21 +3327,26 @@ impl LayoutComponent {
                 })
             })
             .unwrap_or_default();
-        let Some((offset, children)) = owner
+        let Some((offset, children, bounds_changed)) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut()?;
                 if !layout.is_css_mode() {
                     return None;
                 }
                 layout.css_content_origin = origin;
-                Some((layout.css_content_offset(), layout.base.children().to_vec()))
+                Some((
+                    layout.css_content_offset(),
+                    layout.base.children().to_vec(),
+                    layout.css_content_box_changed(),
+                ))
             })
             .flatten()
         else {
             return;
         };
         // The content's world transforms follow, as when the box moves.
-        if Self::set_css_content_offsets(children, offset) {
+        // A leaf fit depends on content dimensions even when its origin stays put.
+        if Self::set_css_content_offsets(children, offset) || bounds_changed {
             owner.with_mut(|object| {
                 if let Some(layout) = object.as_layout_component_mut() {
                     CoreCapabilities::world_transform_mark_dirty(layout);
@@ -3863,6 +3876,17 @@ impl LayoutComponent {
         Vec2D::new(
             (width - padding.left() - padding.right() - left - right).max(0.0),
             (height - padding.top() - padding.bottom() - top - bottom).max(0.0),
+        )
+    }
+    /// The physical content box, independent of the anonymous content item.
+    pub(crate) fn css_content_box(&self) -> Aabb {
+        let [top, right, bottom, left] = self.solved_border;
+        let padding = self.solved_padding;
+        Aabb::from_ltwh(
+            left + padding.left(),
+            top + padding.top(),
+            (self.layout.width() - padding.left() - padding.right() - left - right).max(0.0),
+            (self.layout.height() - padding.top() - padding.bottom() - top - bottom).max(0.0),
         )
     }
     /// Compare with the size actually given to content. The solved item

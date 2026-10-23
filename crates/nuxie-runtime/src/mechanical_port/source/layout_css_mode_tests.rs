@@ -10958,3 +10958,119 @@ fn css_scroll_overflow_block_row_includes_the_end_margin() {
     );
     assert_eq!(f.max_offsets(), (-57.0, 0.0));
 }
+
+// A 100 by 80 scroller without padding, as in Chrome 156's measurements.
+fn plain_scroller(display: u64, items: Vec<B>) -> Scene {
+    scene(
+        (400.0, 300.0),
+        overflow_viewport(
+            "Viewport",
+            [
+                width(100.0).to_vec(),
+                height(80.0).to_vec(),
+                vec![U(DISPLAY, display), U(61006, 2), U(OVERFLOW_Y, 3)],
+            ]
+            .concat(),
+            items,
+        ),
+    )
+}
+
+/// Chrome counts a relative item's margin box at its in-flow position and
+/// its shifted border box on its own: 120 points, `top: 30px` and a 17-point
+/// bottom margin read 70, and `top: -30px` reads 57.
+#[test]
+fn css_scroll_overflow_relative_items_count_their_margin_before_the_shift() {
+    for (display, top, range) in [
+        (1, 30.0, 70.0),
+        (2, 30.0, 70.0),
+        (0, 30.0, 70.0),
+        (1, -30.0, 57.0),
+    ] {
+        let f = plain_scroller(
+            display,
+            vec![css(
+                "Item",
+                [
+                    height(120.0).to_vec(),
+                    vec![
+                        F(FLEX_SHRINK, 0.0),
+                        U(POSITION, 1),
+                        U(INSET_TOP_KIND, 1),
+                        F(INSET_TOP, top),
+                        F(MARGIN_BOTTOM, 17.0),
+                    ],
+                ]
+                .concat(),
+                vec![],
+            )],
+        );
+        assert_eq!(
+            f.max_offsets(),
+            (0.0, -range),
+            "display {display}, top {top}"
+        );
+    }
+}
+
+/// An empty block's margins collapse with its neighbours', so its own
+/// margin box does not count. Chrome 156 reads these after a 120-point block.
+#[test]
+fn css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin() {
+    let spacer = |top: f32, bottom: f32| {
+        css(
+            "Spacer",
+            vec![
+                F(FLEX_SHRINK, 0.0),
+                F(MARGIN_TOP, top),
+                F(MARGIN_BOTTOM, bottom),
+            ],
+            vec![],
+        )
+    };
+    let block = |name: &'static str, height_value: f32, margin_top: f32| {
+        css(
+            name,
+            [
+                height(height_value).to_vec(),
+                vec![F(FLEX_SHRINK, 0.0), F(MARGIN_TOP, margin_top)],
+            ]
+            .concat(),
+            vec![],
+        )
+    };
+    for (display, items, range) in [
+        // Between blocks: the last block ends at 138.
+        (
+            0,
+            vec![
+                block("Item", 120.0, 0.0),
+                spacer(10.0, 17.0),
+                block("Last", 1.0, 0.0),
+            ],
+            58.0,
+        ),
+        // Last: the flow ends after the collapsed 17 or 30.
+        (0, vec![block("Item", 120.0, 0.0), spacer(10.0, 17.0)], 57.0),
+        (0, vec![block("Item", 120.0, 0.0), spacer(30.0, 17.0)], 70.0),
+        // Collapsing with the following block's 20-point top margin.
+        (
+            0,
+            vec![
+                block("Item", 120.0, 0.0),
+                spacer(10.0, 17.0),
+                block("Last", 1.0, 20.0),
+            ],
+            61.0,
+        ),
+        // Flex items' margins do not collapse.
+        (1, vec![block("Item", 120.0, 0.0), spacer(10.0, 17.0)], 67.0),
+    ] {
+        let f = plain_scroller(display, items);
+        assert_eq!(
+            f.max_offsets(),
+            (0.0, -range),
+            "display {display}, range {range}"
+        );
+    }
+}

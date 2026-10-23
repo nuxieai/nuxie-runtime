@@ -442,8 +442,13 @@ pub(super) fn align_and_position_item(
             overflow,
             contain,
             container_is_scroll_container,
-            // nuxie-css: in-flow items add their margin boxes; absolute ones keep stock behaviour.
+            // nuxie-css: in-flow items add their margin boxes at their in-flow position; absolute
+            // ones keep stock behaviour.
             (!position.is_out_of_flow()).then_some(resolved_margin),
+            Point {
+                x: relative_offset(position, inset_horizontal, direction),
+                y: relative_offset(position, inset_vertical, Direction::Ltr),
+            },
             direction.is_rtl(),
         )
     };
@@ -526,15 +531,22 @@ pub(super) fn align_item_within_area(
         alignment_based_offset
     };
 
-    let mut start = grid_area.start + offset_within_area;
-    if position == Position::Relative {
-        let relative_inset = if direction.is_rtl() {
-            inset.end.map(|pos| -pos).or(inset.start)
-        } else {
-            inset.start.or(inset.end.map(|pos| -pos))
-        };
-        start += relative_inset.unwrap_or(0.0);
-    }
+    // nuxie-css: the relative shift moved into `relative_offset` for the margin-box contribution.
+    let start = grid_area.start + offset_within_area + relative_offset(position, inset, direction);
 
     (start, resolved_margin)
+}
+
+// nuxie-css: the `position: relative` shift along one axis, shared by alignment and the
+// margin-box overflow contribution.
+fn relative_offset(position: Position, inset: Line<Option<f32>>, direction: Direction) -> f32 {
+    if position != Position::Relative {
+        return 0.0;
+    }
+    let relative_inset = if direction.is_rtl() {
+        inset.end.map(|pos| -pos).or(inset.start)
+    } else {
+        inset.start.or(inset.end.map(|pos| -pos))
+    };
+    relative_inset.unwrap_or(0.0)
 }

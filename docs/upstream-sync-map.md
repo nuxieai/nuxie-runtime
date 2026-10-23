@@ -93,18 +93,31 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `5551696a826ff546775fffe46ca78824b1f1dc51`
+- LAST_SYNCED_SHA: `868da86cad936d50b2a760e63e0808c77b687df2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `5551696a826ff546775fffe46ca78824b1f1dc51` (refreshed 2026-10-16 by the daily upstream sync).
+- Current target: `3ec7ef079f569a5f378f964008794ac30e348a56` (refreshed 2026-10-23).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  No upstream commits remain after this checkpoint at the fetched target.
-  All 261 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (283 after `5892bb05`); this
+  46 upstream commits remain after this checkpoint at the fetched target.
+  All 262 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (284 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `868da86c`, integrated atop downstream `50bf96810b`:
+  ported per-layer view-model pending-change windows, pending-reader classification,
+  layer-aware trigger comparisons and frozen-layer searched marks. Independent
+  source-equivalence and subsequent Rust-integration reviews passed. All 22
+  change-window cases (including four new upstream cases) and 793 runtime units
+  pass, with two existing ignores, on the rebased branch via builder-mac. All 51
+  provenance, Silver-manifest and pipeline metadata checks pass. Initial remote
+  tests lacked fixture files; supplying the exact pinned upstream assets resolved
+  that infrastructure failure. No assertions or tolerances changed. Stack grid
+  semantics, layout benchmarks and layout-only fixtures are explicitly excluded
+  under the October 23 CSS policy. `.rive_head` is private provenance, not ported
+  functionality. Renderer sources are unchanged. Golden/Silver execution, browser
+  compilation and hardware qualification were not rerun for this change.
 - Validation at `5551696a`, integrated atop downstream `d714f3f22c`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All five new upstream text cases and the changed component-list case
@@ -1817,7 +1830,7 @@ remain eligible. Wasm/AssemblyScript/AnimaScript guest-engine work is excluded;
 Luau remains our scripting direction. Browser renderer Wasm remains in scope.
 Split mixed commits and port applicable portions without blocking on exclusions.
 Upstream 868da86c's stack-layout portion is explicitly skipped by this decision;
-its independent state-machine portion still needs translation and both reviews.
+its independent state-machine portion is translated and reviewed at the checkpoint above.
 Never patch Taffy toward Yoga. Non-layout behavior around layout (dirt,
 callbacks, participant lifecycle, scroll/virtualization models) stays a normal
 translation. When a translated non-layout change moves a golden/Silver/probe

@@ -141,13 +141,15 @@ pub trait CoreObject: CoreRegistryObject + Any {
         )
         .unwrap_or_else(|| self.core_mut().on_added_dirty(context));
         if code == StatusCode::Ok {
-            // The concrete owner is still borrowed. Refresh existing content
-            // and fitted geometry here without resolving that owner by handle.
+            // Collect descendant and fitted geometry refreshes while the
+            // concrete receiver is available, then complete them after borrow.
             if let Some(container) = self.as_container_component_mut() {
                 container.refresh_attached_picture_layout_mode();
             }
-            if let Some(sizeable) = self.as_intrinsically_sizeable_mut() {
-                sizeable.layout_mode_changed();
+            if self.as_intrinsically_sizeable_mut().is_some() {
+                if let Some(host) = self.core().handle() {
+                    crate::source::layout::picture_layout_mode::geometry(host);
+                }
             }
         }
         code
@@ -994,6 +996,8 @@ impl CoreHandle {
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
             return None;
         }
+        // Declared before payload guards so refreshes run after their release.
+        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         // Release after the payload Ref/RefMut, including callback unwinding.
         let _release = CoreBorrowRelease(slot);
         // Authored objects and runtime Artboard roots occupy disjoint slots.
@@ -1024,6 +1028,8 @@ impl CoreHandle {
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
             return None;
         }
+        // Declared before payload guards so refreshes run after their release.
+        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         // Release after the payload Ref/RefMut, including callback unwinding.
         let _release = CoreBorrowRelease(slot);
         // Keep the two payload cells separate: liveness/type queries remain
@@ -1073,6 +1079,7 @@ impl CoreHandle {
         &self,
         f: impl FnOnce(&crate::mechanical_port::source::artboard::Artboard) -> R,
     ) -> Option<R> {
+        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         let slot = self.slot()?;
         let runtime_artboard = slot
             .runtime_artboard

@@ -386,3 +386,97 @@ fn picture_mode_follows_data_bound_nested_swaps_and_component_copies() {
         }
     }
 }
+
+#[test]
+fn picture_refresh_waits_for_borrowed_host_or_content() {
+    for mutable in [false, true] {
+        for participant in [false, true] {
+            let (arena, root, host, provider) = if participant {
+                let (arena, root, provider, host) = receiver_picture_fixture(false);
+                (arena, root, host, Some(provider))
+            } else {
+                let (arena, root, host) = content_picture_fixture(false, false, false);
+                (arena, root, host, None)
+            };
+            let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+            attach(&arena, if participant { &host } else { &root }, &record);
+            let register = || {
+                if let Some(provider) = provider.as_ref() {
+                    provider.with_downcast_mut::<LayoutParticipant, _>(|provider| {
+                        provider.add_layout_style_applier(record.clone())
+                    });
+                } else {
+                    root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                        root.add_layout_style_applier(record.clone())
+                    });
+                }
+            };
+            if mutable {
+                host.with_mut(|_| register());
+            } else {
+                host.with(|_| register());
+            }
+            measured_picture(&host, true);
+        }
+    }
+}
+
+#[test]
+fn picture_refresh_reattachment_waits_for_borrowed_descendant() {
+    let (arena, native, image) = content_picture_fixture(false, false, true);
+    let group = image
+        .with(|image| image.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let css = layout(&arena, None, Some(200.0), true);
+    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&arena, &css, &record);
+    css.with_downcast_mut::<LayoutComponent, _>(|css| css.add_layout_style_applier(record));
+    for (parent, mode) in [(&css, true), (&native, false)] {
+        image.with_mut(|_| reattach(&arena, parent, &group));
+        measured_picture(&image, mode);
+    }
+}
+
+#[test]
+fn picture_refresh_completes_after_runtime_artboard_receiver_borrow() {
+    let file = nested_sources_file();
+    let root = file.with_file(|file| file.artboard_named("CSS")).unwrap();
+    let mut context = root.with_artboard(|root| ObjectContext {
+        arena: root.core_arena().clone(),
+        objects: root.objects().to_vec(),
+    });
+    root.with_artboard_mut(|root| {
+        assert_eq!(
+            crate::source::core::CoreObject::on_added_dirty(&mut root.base, &mut context),
+            StatusCode::Ok
+        );
+    });
+    check_hosted_picture(&root, true);
+}
+
+#[test]
+fn picture_refresh_unwind_discards_pending_work_and_recovers() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let (arena, _root, participant, image) = receiver_picture_fixture(false);
+    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&arena, &image, &record);
+    let failure = catch_unwind(AssertUnwindSafe(|| {
+        image.with_mut(|_| {
+            participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                participant.add_layout_style_applier(record.clone());
+            });
+            panic!("abort picture refresh callback");
+        });
+    }))
+    .unwrap_err();
+    assert_eq!(
+        failure.downcast_ref::<&str>(),
+        Some(&"abort picture refresh callback")
+    );
+    measured_picture(&image, false);
+    participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+        participant.add_layout_style_applier(record);
+    });
+    measured_picture(&image, true);
+}

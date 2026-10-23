@@ -466,20 +466,22 @@ fn walk_rendered_clips(
             let chain = owner
                 .with(|object| {
                     if skip_own && object.as_artboard().is_some() {
-                        return Vec::new();
+                        return Some(Vec::new());
                     }
-                    object
-                        .as_drawable()
-                        .map(|drawable| {
-                            drawable
-                                .css_clip_list()
-                                .chain(crate::css_layout::clip::keeps_full_chain(drawable), &[])
-                                .0
-                        })
-                        .unwrap_or_default()
+                    object.as_drawable().map(|drawable| {
+                        drawable
+                            .css_clip_list()
+                            .chain(crate::css_layout::clip::keeps_full_chain(drawable), &[])
+                            .0
+                    })
                 })
-                .unwrap_or_default();
-            for entry in chain {
+                .flatten();
+            // A Path can provide semantic geometry without being drawable.
+            // Consume membership only when its drawable paint owner is found.
+            if chain.is_some() {
+                read_list = false;
+            }
+            for entry in chain.into_iter().flatten() {
                 match entry {
                     crate::css_layout::clip::DrawClip::Shape(shape) => list_shapes.push(shape),
                     crate::css_layout::clip::DrawClip::Overflow(clip_owner) => {
@@ -624,7 +626,7 @@ fn walk_rendered_clips(
                 return false;
             }
         }
-        read_list = is_artboard;
+        read_list |= is_artboard;
         current = parent;
     }
     true

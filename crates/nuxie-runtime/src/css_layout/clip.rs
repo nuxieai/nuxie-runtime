@@ -183,10 +183,13 @@ impl ClipList {
             css_context: overflow,
             ..Self::default()
         };
-        for shape in shapes {
-            list.push(DrawClip::Shape(shape.clone()));
-        }
         if overflow {
+            // Keep shapes around the CSS overflow save. Without that
+            // scope, Rive's shape membership belongs to each occurrence,
+            // including translated paint proxies with no shape clips.
+            for shape in shapes {
+                list.push(DrawClip::Shape(shape.clone()));
+            }
             list.push(DrawClip::Overflow(root.clone()));
         }
         list

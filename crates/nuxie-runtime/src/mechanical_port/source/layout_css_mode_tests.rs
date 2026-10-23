@@ -7817,6 +7817,189 @@ fn translated_clipping_layout_keeps_upstream_draw_lines() {
     );
 }
 
+/// Rive leaves a translated layout's paint proxy outside content shape clips.
+/// An artboard-level shape must not change that paint's draw or active clips.
+#[test]
+fn translated_artboard_shape_clip_keeps_upstream_paint_draw_lines() {
+    const COLOR: u32 = 0xff11_2233;
+    let make = |shape_clip: bool| {
+        try_scene_spec(
+            (400.0, 300.0),
+            ArtboardSpec {
+                clip_paths: shape_clip.then(|| vec![clip_rectangle(0.0, 0.0, 40.0, 50.0)]),
+                ..ArtboardSpec::default()
+            },
+            Some(B {
+                name: "Rive",
+                component: vec![
+                    F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                    F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0),
+                ],
+                paints: vec![Paint::Fill(COLOR)],
+                ..B::default()
+            }),
+        )
+        .unwrap()
+    };
+    let reference = make(false).draw_lines();
+    let f = make(true);
+    let lines = f.draw_lines();
+    let without_ids = |line: &str| {
+        line.split("id=")
+            .map(|part| part.trim_start_matches(|c: char| c.is_ascii_digit()))
+            .collect::<Vec<_>>()
+            .join("id=")
+    };
+    let draws = |lines: &[String]| {
+        lines
+            .iter()
+            .filter(|line| line.starts_with("drawPath"))
+            .map(|line| without_ids(line))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        draws(&lines),
+        draws(&reference),
+        "the translated paint draws as on main"
+    );
+    assert_eq!(
+        clips_active_at(&lines, COLOR)
+            .iter()
+            .map(|line| without_ids(line))
+            .collect::<Vec<_>>(),
+        clips_active_at(&reference, COLOR)
+            .iter()
+            .map(|line| without_ids(line))
+            .collect::<Vec<_>>(),
+        "the artboard's content shape clip must not cover the paint proxy: {lines:#?}",
+    );
+    let owner = f.named("Rive");
+    let root = f.artboard.core_handle();
+    f.artboard.with_artboard(|artboard| {
+        for drawable in artboard.drawables() {
+            let chain = crate::css_layout::clip::read_chain(
+                drawable,
+                &root,
+                artboard.base.base.css_clip_list(),
+            )
+            .0;
+            let shapes = drawable
+                .with(|drawable| drawable.clipping_shapes().to_vec())
+                .unwrap_or_default();
+            assert!(
+                chain
+                    == shapes
+                        .into_iter()
+                        .map(crate::css_layout::clip::DrawClip::Shape)
+                        .collect::<Vec<_>>(),
+                "translated membership comes from each occurrence"
+            );
+        }
+    });
+    assert!(
+        owner
+            .with(|object| !object.as_drawable().unwrap().clipping_shapes().is_empty())
+            .unwrap(),
+        "the authored layout keeps its content shape membership"
+    );
+}
+
+/// A path has semantic geometry but reads CSS clips from its drawable Shape.
+#[test]
+fn css_overflow_clips_a_paths_explicit_semantics_through_its_shape_owner() {
+    use crate::source::{
+        generated::semantic::semantic_data_base::SemanticDataBase,
+        semantic::semantic_provider::{
+            rendered_geometry_bounds, resolve_semantic_data, semantic_source_is_visible,
+        },
+    };
+    for (left, visible) in [(150.0, false), (80.0, true)] {
+        let mut riv = Riv::default();
+        riv.object(BackboardBase::TYPE_KEY).end();
+        // 0 artboard, 1 clip box, 2 CSS record, 3 shape, 4 path,
+        // 5 fill, 6 color, 7 semantic data, 8 and 9 layout styles.
+        riv.object(ArtboardBase::TYPE_KEY)
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 8)
+            .end();
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 9)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1);
+        write(
+            &mut riv,
+            &[
+                sized_to(100.0, 60.0),
+                vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+            ]
+            .concat(),
+        );
+        riv.end();
+        riv.object(ShapeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+            .end();
+        riv.object(RectangleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Semantic path");
+        write(&mut riv, &clip_rectangle(left, 10.0, 40.0, 20.0));
+        riv.end();
+        riv.object(FillBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3)
+            .end();
+        riv.object(SolidColorBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 5)
+            .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff11_2233)
+            .end();
+        riv.object(SemanticDataBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 4)
+            .uint(SemanticDataBase::ROLE_PROPERTY_KEY, 5)
+            .string(SemanticDataBase::LABEL_PROPERTY_KEY, "Path action")
+            .end();
+        for parent in [0, 1] {
+            riv.object(LayoutComponentStyleBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent);
+            write(&mut riv, &point_units());
+            riv.end();
+        }
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &riv.bytes(),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let artboard = file.with_file(File::artboard_default).unwrap();
+        for _ in 0..3 {
+            artboard.advance_default(FRAME);
+        }
+        let path = artboard.with_artboard(|artboard| artboard.objects()[4].clone().unwrap());
+        assert!(path.with(|object| object.as_drawable().is_none()).unwrap());
+        assert!(resolve_semantic_data(Some(&path)).has_semantics);
+        let bounds = rendered_geometry_bounds(Some(&path));
+        assert_eq!(
+            !bounds.is_empty_or_nan(),
+            visible,
+            "left={left}: {bounds:?}"
+        );
+        assert_eq!(semantic_source_is_visible(&path), visible, "left={left}");
+        if visible {
+            for (got, expected) in [
+                (bounds.min_x, 80.0),
+                (bounds.min_y, 10.0),
+                (bounds.max_x, 100.0),
+                (bounds.max_y, 30.0),
+            ] {
+                assert!((got - expected).abs() < 0.01, "{bounds:?}");
+            }
+        }
+    }
+}
+
 /// A box's own paint stays at the bottom of its stack whatever order its
 /// drawables arrive in. A retained remount (a late font or catalog
 /// registration re-creating the text inside a box) appends the re-created

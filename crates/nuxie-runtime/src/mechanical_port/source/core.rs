@@ -135,11 +135,22 @@ pub trait CoreObject: CoreRegistryObject + Any {
                 container.add_child(this);
             }
         }
-        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_dirty(
+        let code = crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_dirty(
             self,
             context,
         )
-        .unwrap_or_else(|| self.core_mut().on_added_dirty(context))
+        .unwrap_or_else(|| self.core_mut().on_added_dirty(context));
+        if code == StatusCode::Ok {
+            // The concrete owner is still borrowed. Refresh existing content
+            // and fitted geometry here without resolving that owner by handle.
+            if let Some(container) = self.as_container_component_mut() {
+                container.refresh_attached_picture_layout_mode();
+            }
+            if let Some(sizeable) = self.as_intrinsically_sizeable_mut() {
+                sizeable.layout_mode_changed();
+            }
+        }
+        code
     }
     fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_clean(

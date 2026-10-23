@@ -34,3 +34,23 @@ corpus and report unavailable device coverage honestly.
 Historical WGPU timing claims, capture recipes, and MSL-catalog commands are
 available in Git history. They do not establish parity for the current native
 renderers.
+
+## Portable shader generation on the pool
+
+Submit `//tools/shader-generation:renderer-shaders` with `nuxie-bazel
+//tools/shader-generation:renderer-shaders --platform linux --directory
+<artifact-directory>`. This builds the pinned Naga, glslang and SPIR-V tools on
+the pool; it does not add Naga to the runtime dependency graph. Do not substitute
+locally installed shader compilers for this target.
+
+The output tree contains `wgsl/`, `upstream/` (GLSL, minified headers and SPIR-V),
+and `provenance.json`. It does not produce Apple metallibs or establish device
+rendering parity. Import and validate generated products through the existing
+backend tooling before updating retained artifacts.
+
+When advancing the shader input revision, update the immutable archive revision
+and checksum in `bazel/shader-sources.bzl`, the complete per-file input hashes in
+`bazel/shader-source-manifest.json`, and the existing generator's revision pin
+together. The action rejects missing, extra or changed inputs. Keep compiler
+versions/checksums pinned in `bazel/shader-tools.bzl`; changing a toolchain is a
+separate deliberate change, not a workaround for a generation failure.

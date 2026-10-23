@@ -4,7 +4,7 @@ load("//bazel:source-path.bzl", "package_label")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["Cargo.toml", "Cargo.lock"])
+exports_files(["Cargo.toml", "Cargo.lock", "tools/generate-renderer-shaders.sh", "tools/renderer-shaders/clockwise_atomic_path_webgpu.main"])
 
 filegroup(name = "fixtures", srcs = glob(["fixtures/**", "defs/**", "silver-corpus.toml", "tools/renderer-timing-gate.sh"], allow_empty = True) + [package_label("crates/nuxie-schema:src/generated/schema.rs")])
 

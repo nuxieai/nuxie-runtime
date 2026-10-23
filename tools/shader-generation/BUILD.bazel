@@ -1,0 +1,17 @@
+load(":generation.bzl", "renderer_shaders")
+
+package(default_visibility = ["//visibility:public"])
+
+renderer_shaders(
+    name = "renderer-shaders",
+    sources = "@runtime_shader_sources//:sources",
+    manifest = "@runtime_shader_sources//:manifest",
+    generator = "//:tools/generate-renderer-shaders.sh",
+    overlay = "//:tools/renderer-shaders/clockwise_atomic_path_webgpu.main",
+    naga = "@runtime_shader_tools//:naga",
+    glslang = "@runtime_shader_tools//:glslangValidator",
+    spirv_opt = "@runtime_shader_tools//:spirv-opt",
+    ply = "@runtime_shader_tools//:ply",
+    ply_init = "@runtime_shader_tools//:ply_init",
+    tags = ["manual"],
+)

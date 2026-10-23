@@ -430,7 +430,8 @@ pub(crate) fn display_text(
             pieces.push((i, ch as u32, false));
             continue;
         };
-        let collapse = matches!(whitespace, 0 | 3 | 4);
+        // pre-wrap falls back to normal whitespace processing.
+        let collapse = matches!(whitespace, 0 | 2 | 3 | 4);
         // CSS segment breaks normalize CRLF and CR before whitespace processing.
         if ch == '\n' && i > 0 && chars[i - 1] == '\r' && options[i - 1].is_some() {
             continue;
@@ -480,7 +481,7 @@ pub(crate) fn display_text(
     };
     let mut display = Vec::with_capacity(pieces.len());
     for (source, cp, collapsible) in pieces {
-        if cp == 9 && options[source].is_some_and(|(_, whitespace)| matches!(whitespace, 1 | 2)) {
+        if cp == 9 && options[source].is_some_and(|(_, whitespace)| whitespace == 1) {
             map.preserved_tabs.push(display.len() as u32);
         }
         map.boundaries[source + 1] += 1;

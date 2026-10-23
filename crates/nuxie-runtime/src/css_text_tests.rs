@@ -371,13 +371,7 @@ fn css_text_sharp_s_expansion_keeps_modifier_run_coverage_in_display_indices() {
 
 #[test]
 fn css_text_white_space_modes_match_browser_strings_and_wraps() {
-    for (mode, expected) in [
-        (0, "a b"),
-        (1, "  a  \n b  "),
-        (2, "  a  \n b  "),
-        (3, "a\nb"),
-        (4, "a b"),
-    ] {
+    for (mode, expected) in [(0, "a b"), (1, "  a  \n b  "), (3, "a\nb"), (4, "a b")] {
         let scene = Scene::new(
             &[("  a  \n b  ", Some((0, mode)))],
             true,
@@ -396,8 +390,8 @@ fn css_text_white_space_modes_match_browser_strings_and_wraps() {
         false,
         false,
     );
-    let pre_wrap = Scene::new(
-        &[("one two three four", Some((0, 2)))],
+    let normal = Scene::new(
+        &[("one two three four", Some((0, 0)))],
         true,
         65.0,
         true,
@@ -405,7 +399,7 @@ fn css_text_white_space_modes_match_browser_strings_and_wraps() {
         false,
     );
     assert_eq!(pre.line_widths().len(), 1);
-    assert!(pre_wrap.line_widths().len() > 1);
+    assert!(normal.line_widths().len() > 1);
     let across = Scene::new(
         &[("a ", Some((0, 0))), (" b", Some((0, 0)))],
         true,
@@ -424,6 +418,52 @@ fn css_text_white_space_modes_match_browser_strings_and_wraps() {
         false,
     );
     assert_eq!(normalized.display(), "a\nb");
+}
+
+#[test]
+fn css_text_pre_wrap_falls_back_to_normal_strings_and_lines() {
+    let reference = Scene::new(&[("a", Some((0, 0)))], true, 300.0, true, false, false);
+    let a_width = reference.line_widths()[0];
+    let line_indices = |scene: &Scene| {
+        scene
+            .text()
+            .with_downcast::<Text, _>(|text| {
+                text.ordered_lines()
+                    .iter()
+                    .map(|line| {
+                        line.into_iter()
+                            .map(|(run, glyph)| run.text_indices[glyph as usize])
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap()
+    };
+    for (source, expected, width) in [
+        ("  one  \n two\t three   four  ", "one two three four", 65.0),
+        ("a    ", "a", a_width + 0.1),
+    ] {
+        let normal = Scene::new(&[(source, Some((0, 0)))], true, width, true, false, false);
+        let pre_wrap = Scene::new(&[(source, Some((0, 2)))], true, width, true, false, false);
+        assert_eq!(normal.display(), expected);
+        assert_eq!(pre_wrap.display(), expected);
+        assert_eq!(line_indices(&pre_wrap), line_indices(&normal));
+        assert_eq!(pre_wrap.line_widths(), normal.line_widths());
+        if expected == "a" {
+            assert_eq!(pre_wrap.line_widths().len(), 1);
+        } else {
+            assert!(pre_wrap.line_widths().len() > 1);
+        }
+        pre_wrap.text().with_downcast::<Text, _>(|text| {
+            assert!(
+                text.styled_text()
+                    .css_indices()
+                    .unwrap()
+                    .preserved_tabs()
+                    .is_empty()
+            );
+        });
+    }
 }
 
 #[test]
@@ -646,64 +686,56 @@ fn css_text_preserved_tabs_use_fixed_eight_space_advances_without_missing_glyphs
         })
         .unwrap();
     let tab_advance = 8.0 * space_advance;
-    for mode in [1, 2] {
-        for (source, prefix, tabs) in [
-            ("\tb", 0, 1),
-            ("\t\tb", 0, 2),
-            ("a\tb", 1, 1),
-            ("a\t\tb", 1, 2),
-        ] {
-            let mut scene = Scene::new(
-                &[(source, Some((0, mode)))],
-                true,
-                300.0,
-                mode == 2,
-                false,
-                false,
-            );
-            assert_eq!(scene.display(), source);
-            scene.text().with_downcast::<Text, _>(|text| {
-                let mut x = text.ordered_lines()[0].glyph_line().start_x;
-                let prefix_advance = a_advance * prefix as f32;
-                let mut seen = 0;
-                for (run, glyph) in &text.ordered_lines()[0] {
-                    let glyph = glyph as usize;
-                    assert_ne!(run.glyphs[glyph], 0);
-                    let index = run.text_indices[glyph] as usize;
-                    if text.unichars()[index] == 9 {
-                        assert_eq!(run.glyph_render_kind(glyph), GlyphRenderKind::Suppressed);
-                        assert!((run.advances[glyph] - tab_advance).abs() < 0.01);
-                        seen += 1;
-                        assert!(
-                            (x + run.advances[glyph] - prefix_advance - tab_advance * seen as f32)
-                                .abs()
-                                < 0.01
-                        );
-                    }
-                    if text.unichars()[index] == u32::from('b') {
-                        assert!((x - prefix_advance - tab_advance * tabs as f32).abs() < 0.01);
-                    }
-                    x += run.advances[glyph];
+    for (source, prefix, tabs) in [
+        ("\tb", 0, 1),
+        ("\t\tb", 0, 2),
+        ("a\tb", 1, 1),
+        ("a\t\tb", 1, 2),
+    ] {
+        let mut scene = Scene::new(&[(source, Some((0, 1)))], true, 300.0, false, false, false);
+        assert_eq!(scene.display(), source);
+        scene.text().with_downcast::<Text, _>(|text| {
+            let mut x = text.ordered_lines()[0].glyph_line().start_x;
+            let prefix_advance = a_advance * prefix as f32;
+            let mut seen = 0;
+            for (run, glyph) in &text.ordered_lines()[0] {
+                let glyph = glyph as usize;
+                assert_ne!(run.glyphs[glyph], 0);
+                let index = run.text_indices[glyph] as usize;
+                if text.unichars()[index] == 9 {
+                    assert_eq!(run.glyph_render_kind(glyph), GlyphRenderKind::Suppressed);
+                    assert!((run.advances[glyph] - tab_advance).abs() < 0.01);
+                    seen += 1;
+                    assert!(
+                        (x + run.advances[glyph] - prefix_advance - tab_advance * seen as f32)
+                            .abs()
+                            < 0.01
+                    );
                 }
-                assert_eq!(seen, tabs);
-                let styled = text.styled_text();
-                for index in 0..=source.chars().count() as u32 {
-                    assert_eq!(styled.source_to_display(index), index);
-                    assert_eq!(styled.display_to_source(index), index);
+                if text.unichars()[index] == u32::from('b') {
+                    assert!((x - prefix_advance - tab_advance * tabs as f32).abs() < 0.01);
                 }
-            });
-            let text = scene.text();
-            let id = scene.board.native_handle().with_artboard(|a| {
-                a.objects()
-                    .iter()
-                    .position(|h| h.as_ref() == Some(&text))
-                    .unwrap()
-            });
-            let before = scene.board.text_caret(id, prefix).unwrap();
-            let after = scene.board.text_caret(id, prefix + tabs as usize).unwrap();
-            assert!((after.top.x - before.top.x - tab_advance * tabs as f32).abs() < 0.01);
-        }
+                x += run.advances[glyph];
+            }
+            assert_eq!(seen, tabs);
+            let styled = text.styled_text();
+            for index in 0..=source.chars().count() as u32 {
+                assert_eq!(styled.source_to_display(index), index);
+                assert_eq!(styled.display_to_source(index), index);
+            }
+        });
+        let text = scene.text();
+        let id = scene.board.native_handle().with_artboard(|a| {
+            a.objects()
+                .iter()
+                .position(|h| h.as_ref() == Some(&text))
+                .unwrap()
+        });
+        let before = scene.board.text_caret(id, prefix).unwrap();
+        let after = scene.board.text_caret(id, prefix + tabs as usize).unwrap();
+        assert!((after.top.x - before.top.x - tab_advance * tabs as f32).abs() < 0.01);
     }
+
     for source in ["a\tb", "a\t\tb"] {
         let normal = Scene::new(&[(source, Some((0, 0)))], true, 300.0, true, false, false);
         assert_eq!(normal.display(), "a b");
@@ -770,38 +802,36 @@ fn css_text_preserved_tabs_measure_fixed_advances_in_the_tabs_own_style() {
         .text()
         .with_downcast::<Text, _>(|text| 8.0 * text.shape()[0].runs[0].advances[1])
         .unwrap();
-    for mode in [1, 2] {
-        let mut scene = Scene::new(
-            &[("a", Some((0, mode))), ("\tb", Some((0, mode)))],
-            true,
-            300.0,
-            mode == 2,
-            false,
-            false,
-        );
-        let style = scene.handles::<TextStylePaint>().remove(1);
-        CoreRegistry::set_double_handle(&style, 274, 40.0);
-        scene.advance();
-        scene.text().with_downcast::<Text, _>(|text| {
-            let line = &text.ordered_lines()[0];
-            let prefix_advance = text.shape()[0].runs[0].advances[0];
-            let mut x = line.glyph_line().start_x;
-            let mut found = false;
-            for (run, glyph) in line {
-                let glyph = glyph as usize;
-                let index = text.unichars()[run.text_indices[glyph] as usize];
-                if index == 9 {
-                    assert!((run.advances[glyph] - tab_advance).abs() < 0.01);
-                }
-                if index == u32::from('b') {
-                    assert!((x - prefix_advance - tab_advance).abs() < 0.01);
-                    found = true;
-                }
-                x += run.advances[glyph];
+    let mut scene = Scene::new(
+        &[("a", Some((0, 1))), ("\tb", Some((0, 1)))],
+        true,
+        300.0,
+        false,
+        false,
+        false,
+    );
+    let style = scene.handles::<TextStylePaint>().remove(1);
+    CoreRegistry::set_double_handle(&style, 274, 40.0);
+    scene.advance();
+    scene.text().with_downcast::<Text, _>(|text| {
+        let line = &text.ordered_lines()[0];
+        let prefix_advance = text.shape()[0].runs[0].advances[0];
+        let mut x = line.glyph_line().start_x;
+        let mut found = false;
+        for (run, glyph) in line {
+            let glyph = glyph as usize;
+            let index = text.unichars()[run.text_indices[glyph] as usize];
+            if index == 9 {
+                assert!((run.advances[glyph] - tab_advance).abs() < 0.01);
             }
-            assert!(found);
-        });
-    }
+            if index == u32::from('b') {
+                assert!((x - prefix_advance - tab_advance).abs() < 0.01);
+                found = true;
+            }
+            x += run.advances[glyph];
+        }
+        assert!(found);
+    });
 }
 
 #[test]

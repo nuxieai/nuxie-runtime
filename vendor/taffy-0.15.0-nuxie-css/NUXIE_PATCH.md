@@ -23,14 +23,29 @@ child's margin box with the unchanged stock contribution. Callers:
 - `src/compute/grid/alignment.rs`, `align_and_position_item`: in-flow grid
   items; absolutely positioned ones take the stock path.
 - `src/compute/block.rs`, the per-child contribution in the in-flow pass and
-  the recomputation after `align-content`: in-flow block children; floats
-  take the stock path.
+  the recomputation after `align-content`: in-flow block children with their
+  inline margins only; floats take the stock path. The block-axis end comes
+  from the flow instead: `perform_final_layout_on_in_flow_children` unions
+  the in-flow content's end after its trailing collapsed margins, and returns
+  it so the `align-content` recomputation moves it with the content. A
+  `relative_offset` field on the block item keeps each child's relative
+  shift for that recomputation.
+- `src/compute/grid/alignment.rs`: `relative_offset`, the relative shift
+  `align_item_within_area` applied inline, moved into a helper that the
+  margin-box contribution also uses.
 
 Rules the wrapper keeps:
 
 - The margin box is a union, so a negative margin never shrinks the border
   box or descendant overflow, and descendants are neither moved nor
   enlarged by their ancestor's margins.
+- The margin box sits at the child's in-flow position: callers pass the
+  `position: relative` shift already in the location, and the stock
+  contribution keeps the shifted border box, as Chrome counts both.
+- In block flow, margins collapse, so a child's own block-axis margins do
+  not count; the flow's end after the trailing collapsed margins does, also
+  when those margins collapse through the container to its parent. An empty
+  block's margins count only through that collapsed end.
 - RTL callers pass mirrored locations, so the logical start margin is the
   physical right one.
 - The margin box counts even when the border box is empty (an empty spacer
@@ -53,6 +68,17 @@ margin:
 | flex column, grid, block, flex row, RTL flex row, block row | 57 | 40 | 57 |
 | block, the margin collapsed through an auto-height child | 57 | 40 | 57 |
 | empty last item with a 17-point bottom margin (flex and block) | 57 | 40 | 57 |
+
+A 100 by 80 scroller without padding:
+
+| Case | Chrome | Stock | Fork |
+|---|---|---|---|
+| 120-point item, `top: 30px`, 17-point bottom margin (flex, grid, block) | 70 | 70 | 70 |
+| the same with `top: -30px` (flex) | 57 | 10 | 57 |
+| empty block (margins 10, 17) between a 120-point and a 1-point block | 58 | 58 | 58 |
+| the empty block last, margins 10 and 17, or 30 and 17 | 57, 70 | 40 | 57, 70 |
+| the empty block, then a 1-point block with a 20-point top margin | 61 | 61 | 61 |
+| the empty flex item last, margins 10 and 17 (flex margins do not collapse) | 67 | 40 | 67 |
 
 nuxie-dev's Chrome differential fixtures, ranges at widths 360, 402, 520:
 
@@ -93,8 +119,10 @@ In the runtime's
   `css_scroll_overflow_block_child_includes_its_end_margin`,
   `css_scroll_overflow_block_includes_a_margin_collapsed_through_a_child`,
   `css_scroll_overflow_empty_last_item_keeps_its_margin`,
-  `css_scroll_overflow_block_row_includes_the_end_margin`: the Chrome
-  measurements above, through the runtime's CSS records.
+  `css_scroll_overflow_block_row_includes_the_end_margin`,
+  `css_scroll_overflow_relative_items_count_their_margin_before_the_shift`,
+  `css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin`:
+  the Chrome measurements above, through the runtime's CSS records.
 - `css_scroll_overflow_descendants_do_not_gain_the_items_margin`: an item's
   margin is not added after its descendants' overflow (Chrome 120).
 - `css_scroll_overflow_c045_flex_item_margin_box`,

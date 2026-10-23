@@ -2636,8 +2636,17 @@ fn calculate_flex_item(
             item.overflow,
             item.contain,
             constants.is_scroll_container,
-            // nuxie-css: the used margins and the direction the location is mirrored for.
+            // nuxie-css: the used margins, the relative shift in `location`, and the direction the
+            // location is mirrored for.
             Some(item.margin),
+            {
+                let main = if is_rtl_row { -main_relative_inset } else { main_relative_inset };
+                if direction.is_row() {
+                    Point { x: main, y: cross_relative_inset }
+                } else {
+                    Point { x: cross_relative_inset, y: main }
+                }
+            },
             layout_direction.is_rtl(),
         ));
     }

@@ -14,10 +14,14 @@ use crate::util::sys::{f32_max, f32_min};
 /// margin boxes on. Chrome counts the margins of a scroll container's own children only.
 ///
 /// `margin` holds the used physical margins, auto margins included, or `None` for a child that
-/// keeps the stock contribution. Callers mirror `location` for RTL, so the logical start edge is
-/// then the physical right one. The margin box counts even when the border box is empty, as in
-/// Chrome. A margin box wholly before a scroll container's origin stays excluded, and margins
-/// never move or enlarge descendant overflow or shrink the stock contribution.
+/// keeps the stock contribution. Block layout passes inline margins only and adds its block-axis
+/// end, the trailing collapsed margins, once for the whole flow. `relative_offset` is the
+/// physical `position: relative` shift already in `location`: Chrome counts the margin box at
+/// the in-flow position and the shifted border box separately. Callers mirror `location` for
+/// RTL, so the logical start edge is then the physical right one. The margin box counts even
+/// when the border box is empty, as in Chrome. A margin box wholly before a scroll container's
+/// origin stays excluded, and margins never move or enlarge descendant overflow or shrink the
+/// stock contribution.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn compute_inflow_overflow_contribution(
     location: Point<f32>,
@@ -27,6 +31,7 @@ pub(crate) fn compute_inflow_overflow_contribution(
     contain: Contain,
     parent_is_scroll_container: bool,
     margin: Option<Rect<f32>>,
+    relative_offset: Point<f32>,
     is_rtl: bool,
 ) -> Rect<f32> {
     let contribution = compute_scrollable_overflow_contribution(
@@ -40,11 +45,15 @@ pub(crate) fn compute_inflow_overflow_contribution(
     let Some(margin) = margin else {
         return contribution;
     };
+    let origin = Point {
+        x: location.x - if is_rtl { -relative_offset.x } else { relative_offset.x },
+        y: location.y - relative_offset.y,
+    };
     let margin_box = Rect {
-        left: location.x - if is_rtl { margin.right } else { margin.left },
-        right: location.x + size.width + if is_rtl { margin.left } else { margin.right },
-        top: location.y - margin.top,
-        bottom: location.y + size.height + margin.bottom,
+        left: origin.x - if is_rtl { margin.right } else { margin.left },
+        right: origin.x + size.width + if is_rtl { margin.left } else { margin.right },
+        top: origin.y - margin.top,
+        bottom: origin.y + size.height + margin.bottom,
     };
     if parent_is_scroll_container && (margin_box.right <= 0.0 || margin_box.bottom <= 0.0) {
         return contribution;

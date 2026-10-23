@@ -25,8 +25,9 @@ do not edit them by hand.
 ## Carried patch
 
 In-flow block, flex and grid children count their margin boxes in
-scrollable overflow, so a last item's end margin extends a CSS scroll range
-as it does in Chrome. Translated scrollers do not use Taffy's overflow.
+scrollable overflow, at their in-flow position (block flow counts its end
+after the trailing collapsed margins), so a last item's end margin extends a
+CSS scroll range as it does in Chrome. Translated scrollers do not use Taffy's overflow.
 [NUXIE_PATCH.md](../vendor/taffy-0.15.0-nuxie-css/NUXIE_PATCH.md) lists the
 changed functions, the rules the change keeps, Chrome's numbers, the known
 differences that remain, and the guard tests.

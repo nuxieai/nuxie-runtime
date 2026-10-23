@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import uuid
 
 from cargo_graph import collect_packages, resolve_features
 from emit import render_package
@@ -280,9 +281,19 @@ def check_upstream_checkout():
             raise ValueError(f"RIVE_RUNTIME_DIR {checkout} has tracked changes; the tests need the pinned upstream as committed")
 
 
+def pool_run_enabled():
+    """The installed Bazelisk router owns remote run and product delivery."""
+    return (not any(os.environ.get(key) == value for key, value in
+                    (("NUXIE_EXECUTION", "local"), ("NUXIE_HOMELAB", "0"), ("_NUXIE_POOL_NESTED", "1"), ("BUILDKITE", "true")))
+            and not os.environ.get("BUILDKITE_JOB_ID")
+            and (Path.home() / ".config/nuxie/homelab-cluster.json").is_file()
+            and (Path.home() / ".local/share/nuxie-homelab/rust/route.py").is_file())
+
+
 def main():
     try:
         options = command_options(sys.argv[1:])
+        os.environ["NUXIE_HOMELAB_RUNTIME_INVOCATION"] = str(uuid.uuid4())
         if options["command"] == "test" and not options["no_run"]:
             check_upstream_checkout()
         labels = materialize(options, packages_from_workspace())
@@ -333,7 +344,8 @@ def main():
                 flags.append("--test_env=NUXIE_RUSTFMT=" + rustfmt)
         if options["command"] == "clippy":
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
-        if options["command"] == "run":
+        remote_run = options["command"] == "run" and pool_run_enabled()
+        if remote_run:
             # Bazel's installed launcher sends this complete invocation to a
             # compatible pool host. Keeping execution with the build preserves
             # runfiles/oracle paths and avoids a caller-side compilation tree.
@@ -341,9 +353,11 @@ def main():
                 if name in os.environ:
                     flags.append("--action_env=" + name)
             result = subprocess.run([*bazel, "run", *flags, *labels, "--", *runtime_args], cwd=ROOT)
-            return result.returncode
+            if result.returncode:
+                return result.returncode
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"
-        subprocess.run([*bazel, command, *flags, *labels], cwd=ROOT, check=True)
+        if not remote_run:
+            subprocess.run([*bazel, command, *flags, *labels], cwd=ROOT, check=True)
         if command == "test" or options["command"] == "clippy":
             return 0
         output = subprocess.check_output([*bazel, "cquery", *flags, "set(" + " ".join(labels) + ")", "--output=files"], cwd=ROOT, text=True)
@@ -361,6 +375,11 @@ def main():
                 products.append(destination)
                 if options["json"]:
                     print(json.dumps({"reason": "compiler-artifact", "executable": str(destination) if executable_product(destination) else None, "filenames": [str(destination)], "target": {"name": options["selector"] or destination.name}, "profile": {"test": options["command"] == "test"}}))
+        if options["command"] == "run" and not remote_run:
+            executables = [path for path in products if executable_product(path)]
+            if len(executables) != 1:
+                raise ValueError("run requires exactly one binary or example")
+            return subprocess.run([str(executables[0]), *runtime_args], cwd=ROOT).returncode
         return 0
     except (ValueError, IndexError, subprocess.CalledProcessError) as error:
         print(str(error), file=sys.stderr)

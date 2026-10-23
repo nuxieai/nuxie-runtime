@@ -1,10 +1,10 @@
 //! Exact pinned upstream shader source: renderer/src/shaders/draw_depthstencil_mesh.frag.
 #![allow(dead_code)]
-pub const PINNED_UPSTREAM_COMMIT: &str = "ce891f526a3297f9498a3e524fce6385cf0f2f25";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ada892f37808e289e716d29010b7e79d0656f79d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_mesh.frag";
-pub const PINNED_SOURCE_SHA256: &str = "52dd839a8034c26aa7582e7e4d58b382ce1f1bd7cd67b47b27e8eea62f49b53e";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 118;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 3393;
+pub const PINNED_SOURCE_SHA256: &str = "ddb587be61a695e79e18aeb43ffc1248e1d70b3cb1f923f6d0717a1d97ae28cb";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 129;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 3644;
 pub const PINNED_DRAW_DEPTHSTENCIL_MESH_FRAG_SOURCE: &str = r###"/*
  * Copyright 2022 Rive
  */
@@ -16,7 +16,10 @@ pub const PINNED_DRAW_DEPTHSTENCIL_MESH_FRAG_SOURCE: &str = r###"/*
 #ifdef @DRAW_IMAGE_MESH
 FRAG_TEXTURE_BLOCK_BEGIN
 TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
-#if defined(@ENABLE_ADVANCED_BLEND) && !defined(@RENDER_TO_UAV)
+// The Qualcomm compiler can't handle line breaks in #ifs.
+// clang-format off
+#if defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT) && !defined(@RENDER_TO_UAV)
+// clang-format on
 DST_COLOR_TEXTURE(@dstColorTexture);
 #endif
 FRAG_TEXTURE_BLOCK_END
@@ -32,7 +35,11 @@ SAMPLER_DYNAMIC_IMAGE(imageSampler)
 DYNAMIC_SAMPLER_BLOCK_END
 #endif // @DRAW_IMAGE_MESH
 
+#ifdef @RENDER_TO_UAV
+PLS_MAIN(@drawFragmentMain)
+#else
 FRAG_DATA_MAIN(half4, @drawFragmentMain)
+#endif
 {
 #ifdef @DRAW_IMAGE_MESH
     VARYING_UNPACK(v_imageTexCoord, float2);
@@ -119,7 +126,11 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
     }
 #endif
 
+#ifdef @RENDER_TO_UAV
+    EMIT_PLS
+#else
     EMIT_FRAG_DATA(color);
+#endif
 }
 
 #endif // FRAGMENT

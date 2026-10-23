@@ -1,11 +1,11 @@
 //! Exact pinned upstream shader source: renderer/src/shaders/draw_depthstencil_path.glsl.
 #![allow(dead_code)]
-pub const PINNED_UPSTREAM_COMMIT: &str = "1c75867de17587c541ad2d7ca88b10577b033bd2";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ada892f37808e289e716d29010b7e79d0656f79d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_path.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c6cf5c8514aec2f3c3f40c5f03268ba2224db766ce4617d8e1152716ec5b4f11";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 575;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 23047;
+    "da79fe1b8b066484bd2e4bceb89695ab29e27826d9d5a994bddf12ceaae389a0";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 583;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 23158;
 pub const PINNED_DRAW_DEPTHSTENCIL_PATH_GLSL_SOURCE: &str = r###"/*
  * Copyright 2026 Rive
  */
@@ -484,7 +484,11 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexIdx, _instanceIdx)
 
 #ifdef @FRAGMENT
 
+#ifdef @RENDER_TO_UAV
+PLS_MAIN(@drawFragmentMain)
+#else
 FRAG_DATA_MAIN(half4, @drawFragmentMain)
+#endif
 {
     VARYING_UNPACK(v_paint, float4);
 #ifdef @ENABLE_MODULATED_IMAGE
@@ -577,7 +581,11 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
     }
 #endif
 
+#ifdef @RENDER_TO_UAV
+    EMIT_PLS
+#else
     EMIT_FRAG_DATA(color);
+#endif
 }
 
 #endif // FRAGMENT

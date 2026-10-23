@@ -7249,10 +7249,7 @@ fn assert_badge_clip_case(f: &Scene, clipped: bool) {
         .expect("visible badge")
         .0;
     assert!((badge.bounds.min_y - 80.0).abs() < 0.01, "{badge:?}");
-    assert!(
-        (badge.bounds.max_y - if clipped { 100.0 } else { 120.0 }).abs() < 0.01,
-        "{badge:?}"
-    );
+    assert!((badge.bounds.max_y - 120.0).abs() < 0.01, "{badge:?}");
     for (y, expected) in [
         (90.0, vec![BADGE.0, LATER.0, CARD.0]),
         (
@@ -7299,6 +7296,23 @@ fn assert_badge_clip_case(f: &Scene, clipped: bool) {
             .filter(|name| [CARD.0, LATER.0, BADGE.0].contains(&name.as_str()))
             .collect::<Vec<_>>();
         assert_eq!(names, expected, "selection at {point:?}");
+        use crate::source::semantic::{
+            semantic_provider::rendered_geometry_intersects_viewport, semantic_snapshot::Bounds,
+        };
+        assert_eq!(
+            rendered_geometry_intersects_viewport(
+                &f.named(BADGE.0),
+                Bounds {
+                    min_x: 30.0,
+                    min_y: y,
+                    max_x: 31.0,
+                    max_y: y + 1.0,
+                }
+            )
+            .unwrap(),
+            expected.contains(&BADGE.0),
+            "drawing visibility at {point:?}",
+        );
     }
 }
 
@@ -7991,7 +8005,7 @@ fn css_overflow_clips_a_paths_explicit_semantics_through_its_shape_owner() {
             for (got, expected) in [
                 (bounds.min_x, 80.0),
                 (bounds.min_y, 10.0),
-                (bounds.max_x, 100.0),
+                (bounds.max_x, 120.0),
                 (bounds.max_y, 30.0),
             ] {
                 assert!((got - expected).abs() < 0.01, "{bounds:?}");

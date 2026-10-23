@@ -62,15 +62,13 @@ fn absolute_text_participant_bounds_and_hits_follow_the_drawn_clip_list() {
         );
         let visible = artboard.visible_geometry_with_bounds();
         let bounds = visible.iter().find(is_text).expect("visible text").bounds;
-        let right = raw.max_x.min(if escaped { 240.0 } else { 100.0 });
+        // The catalogue and outlines keep the full box; only hits use its
+        // clipped region, whether or not this participant escapes its parent.
         for (got, expected) in [
             (bounds.min_x, raw.min_x),
-            (bounds.max_x, right),
+            (bounds.max_x, raw.max_x),
             (bounds.min_y, raw.min_y),
-            (
-                bounds.max_y,
-                raw.max_y.min(if escaped { 120.0 } else { 60.0 }),
-            ),
+            (bounds.max_y, raw.max_y),
         ] {
             assert!(
                 (got - expected).abs() < 0.01,
@@ -98,6 +96,107 @@ fn absolute_text_participant_bounds_and_hits_follow_the_drawn_clip_list() {
                 .flatten()
                 .unwrap();
             assert_eq!(hit, expected, "native tap at x={x}, position={position}");
+        }
+    }
+}
+
+#[test]
+fn css_overflow_lists_clip_regions_under_both_frame_policies_without_trimming_boxes() {
+    use nuxie_runtime::source::{
+        math::vec2d::Vec2D as NativeVec2D,
+        semantic::semantic_provider::{
+            rendered_geometry_bounds, rendered_geometry_intersects_viewport,
+            semantic_source_is_visible,
+        },
+        semantic::semantic_snapshot::Bounds,
+    };
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(
+        &css_clip_fixture::absolute_text_scene(1, false, 100.0, 160.0),
+        retained,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let mut artboard = ArtboardInstance::from_native(file, 0).unwrap();
+    for _ in 0..3 {
+        artboard.advance(0.0).unwrap();
+    }
+    let root = artboard.native_handle().core_handle();
+    let text = artboard
+        .native_handle()
+        .with_artboard(|artboard| artboard.objects()[4].clone().unwrap());
+    let is_text = |hit: &&nuxie_runtime::RuntimeGeometryHit| {
+        hit.path.last().is_some_and(|segment| segment.local_id == 4)
+    };
+    let box_of =
+        |bounds: nuxie_render_api::Aabb| [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y];
+    let retained = artboard.retained_geometry_with_bounds();
+    let full = retained.iter().find(is_text).unwrap().bounds;
+    assert!(
+        full.max_x > 180.0,
+        "the text extends past its containing block: {full:?}"
+    );
+    for frame_clip in [true, false] {
+        assert!(CoreRegistry::set_bool_handle(
+            &root,
+            LayoutComponentBase::CLIP_PROPERTY_KEY.into(),
+            frame_clip
+        ));
+        artboard.advance(0.0).unwrap();
+        let visible = artboard.visible_geometry_with_bounds();
+        assert_eq!(
+            box_of(visible.iter().find(is_text).unwrap().bounds),
+            box_of(full)
+        );
+        let semantic = rendered_geometry_bounds(Some(&text));
+        assert_eq!(
+            [
+                semantic.min_x,
+                semantic.min_y,
+                semantic.max_x,
+                semantic.max_y
+            ],
+            box_of(full)
+        );
+        assert!(semantic_source_is_visible(&text));
+        for (x, host_hit) in [(90.0, true), (120.0, true), (180.0, false)] {
+            // Host queries ignore the translated 100-point frame, but keep
+            // the CSS containing block's 160-point overflow clip.
+            let hits = artboard.hit_test_segments_with_bounds(Vec2D::new(x, 20.0));
+            let hit = hits.iter().find(is_text);
+            assert_eq!(hit.is_some(), host_hit, "x={x}, frame_clip={frame_clip}");
+            if let Some(hit) = hit {
+                assert_eq!(box_of(hit.bounds), box_of(full));
+            }
+            if !frame_clip {
+                let native_hit = text
+                    .with_mut(|text| {
+                        text.component_hit_test_point(&NativeVec2D::new(x, 20.0), false, true)
+                    })
+                    .flatten()
+                    .unwrap();
+                assert_eq!(native_hit, host_hit, "native x={x}");
+            }
+            // Drawing keeps the translated frame when enabled. Without it,
+            // the CSS overflow still rejects the part past x=160.
+            let drawing = rendered_geometry_intersects_viewport(
+                &text,
+                Bounds {
+                    min_x: x,
+                    min_y: 20.0,
+                    max_x: x + 1.0,
+                    max_y: 21.0,
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                drawing,
+                host_hit && (!frame_clip || x < 100.0),
+                "drawing x={x}, frame_clip={frame_clip}"
+            );
         }
     }
 }
@@ -1456,7 +1555,6 @@ fn converted_component_list_fixture(
             "flexDirectionValue",
             direction,
         );
-        push_uint(bytes, "LayoutComponentStyle", "alignItemsValue", 4);
     });
     push_object(&mut bytes, "ArtboardComponentList", |bytes| {
         push_uint(bytes, "Node", "parentId", 1);

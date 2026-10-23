@@ -69,6 +69,16 @@ fn css(bytes: &mut Vec<u8>, parent: u64, enums: &[(u16, u64)], floats: &[(u16, f
 /// A text participant starts at x=80 inside a 100-point clipping box.
 /// A static box lets it escape; a positioned box is its containing block.
 pub fn absolute_text(parent_position: u64) -> Vec<u8> {
+    absolute_text_scene(parent_position, true, 240.0, 100.0)
+}
+
+/// Vary the root mode and frame independently from the CSS overflow box.
+pub fn absolute_text_scene(
+    parent_position: u64,
+    root_css: bool,
+    root_width: f32,
+    clip_width: f32,
+) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 0, 0] {
         uint(&mut bytes, value);
@@ -84,11 +94,18 @@ pub fn absolute_text(parent_position: u64) -> Vec<u8> {
         bytes.extend(font);
     });
     object(&mut bytes, "Artboard", |bytes| {
-        float(bytes, "LayoutComponent", "width", 240.0);
+        float(bytes, "LayoutComponent", "width", root_width);
         float(bytes, "LayoutComponent", "height", 120.0);
         number(bytes, "LayoutComponent", "styleId", 12);
     });
-    css(&mut bytes, 0, &[(61003, 2), (61004, 2)], &[]);
+    if root_css {
+        css(&mut bytes, 0, &[(61003, 2), (61004, 2)], &[]);
+    } else {
+        // Preserve object ids without putting the root in CSS mode.
+        object(&mut bytes, "Node", |bytes| {
+            number(bytes, "Component", "parentId", 0)
+        });
+    }
     object(&mut bytes, "LayoutComponent", |bytes| {
         number(bytes, "Component", "parentId", 0);
         string(bytes, "Component", "name", "Clip");
@@ -104,7 +121,7 @@ pub fn absolute_text(parent_position: u64) -> Vec<u8> {
             (61021, 1),
             (61024, 1),
         ],
-        &[(61022, 100.0), (61025, 60.0)],
+        &[(61022, clip_width), (61025, 60.0), (61009, 0.0)],
     );
     object(&mut bytes, "Text", |bytes| {
         number(bytes, "Component", "parentId", 2);

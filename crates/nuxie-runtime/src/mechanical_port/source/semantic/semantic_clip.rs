@@ -98,6 +98,15 @@ impl SemanticClipRegion {
     }
 }
 
+/// Native clip-list hits use the same normalized fill as host geometry.
+pub(crate) fn path_contains(
+    path: &RawPath,
+    rule: nuxie_render_api::FillRule,
+    point: Vec2D,
+) -> bool {
+    SemanticClipRegion::from_path(path, rule).contains(point)
+}
+
 fn contours_contain(
     contours: &[Vec<Point>],
     rule: nuxie_render_api::FillRule,

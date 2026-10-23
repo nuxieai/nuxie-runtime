@@ -7590,20 +7590,25 @@ fn css_focus_reveals_items_inside_the_bordered_padding_box() {
                                     .concat(),
                                     vec![],
                                 ),
-                                B {
-                                    text_input: true,
-                                    text: "focus",
-                                    ..css(
-                                        "Target",
-                                        [
-                                            vec![F(FLEX_SHRINK, 0.0)],
-                                            width(80.0).to_vec(),
-                                            height(80.0).to_vec(),
-                                        ]
-                                        .concat(),
-                                        vec![],
-                                    )
-                                },
+                                css(
+                                    "Target",
+                                    [
+                                        vec![F(FLEX_SHRINK, 0.0)],
+                                        width(80.0).to_vec(),
+                                        height(80.0).to_vec(),
+                                    ]
+                                    .concat(),
+                                    // Keep the outer reveal separate from TextInput's caret scroll.
+                                    vec![B {
+                                        text_input: true,
+                                        text: "focus",
+                                        ..css(
+                                            "Field box",
+                                            [width(80.0), height(80.0)].concat(),
+                                            vec![],
+                                        )
+                                    }],
+                                ),
                                 css(
                                     "Tail",
                                     [
@@ -7636,11 +7641,21 @@ fn css_focus_reveals_items_inside_the_bordered_padding_box() {
                 .clone();
             let machine = f.machine();
             machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+            // Inspect the reveal before any field paint or layout update.
+            assert_eq!(
+                scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                    scroll.authored_scroll_offset_x()
+                } else {
+                    scroll.authored_scroll_offset_y()
+                }),
+                Some(-80.0),
+                "horizontal={horizontal}, rtl={rtl}"
+            );
             f.advance(3);
             assert!(f.field_is_focused());
             let after = f.world_origin("Target");
             let after = if horizontal { after.0 } else { after.1 };
-            assert_eq!(after, 10.0);
+            assert_eq!(after, 10.0, "horizontal={horizontal}, rtl={rtl}");
             assert_eq!((after - before).abs(), 80.0);
             let bounds = f.bounds("Target");
             assert_eq!(after + if horizontal { bounds[2] } else { bounds[3] }, 90.0);
@@ -7759,6 +7774,18 @@ fn css_viewport_loaded_virtualized_keeps_native_scroll_mode() {
                 }
                 f.advance(4);
                 let expected = -400.0;
+                // Native RTL includes the content's negative x in viewport_width.
+                let viewport_extent = if horizontal && rtl { 200.0 } else { 100.0 };
+                let maximum = if horizontal && rtl { 0.0 } else { -100.0 };
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(|scroll| if horizontal {
+                        (scroll.viewport_width(), scroll.content_width())
+                    } else {
+                        (scroll.viewport_height(), scroll.content_height())
+                    }),
+                    Some((viewport_extent, 200.0)),
+                    "horizontal={horizontal}, rtl={rtl}, flags={flags}"
+                );
                 assert_eq!(
                     scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
                         scroll.virtualize(),
@@ -7773,7 +7800,8 @@ fn css_viewport_loaded_virtualized_keeps_native_scroll_mode() {
                             scroll.authored_scroll_offset_y()
                         },
                     )),
-                    Some((true, -100.0, expected))
+                    Some((true, maximum, expected)),
+                    "horizontal={horizontal}, rtl={rtl}, flags={flags}"
                 );
                 assert_eq!(
                     scroll.with_downcast::<ScrollConstraint, _>(
@@ -7785,6 +7813,36 @@ fn css_viewport_loaded_virtualized_keeps_native_scroll_mode() {
                 assert_eq!(
                     CoreRegistry::get_double_handle(&scroll, if horizontal { 759 } else { 760 }),
                     Some(-400.0)
+                );
+                let offset_key = if horizontal { 759 } else { 760 };
+                let (target, key) = if flags == TWO_WAY {
+                    (
+                        &number,
+                        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                    )
+                } else {
+                    (&scroll, offset_key)
+                };
+                assert!(CoreRegistry::set_double_handle(target, key, -100.0));
+                f.advance(4);
+                // Main's native setters retain the raw value even when range is zero.
+                assert_eq!(
+                    CoreRegistry::get_double_handle(&scroll, offset_key),
+                    Some(-100.0)
+                );
+                assert_eq!(read(), Some(-100.0));
+                assert_eq!(
+                    scroll.with_downcast::<ScrollConstraint, _>(|scroll| (
+                        scroll.virtualize(),
+                        scroll.has_css_scroll_axis(),
+                        if horizontal {
+                            scroll.clamped_offset_x()
+                        } else {
+                            scroll.clamped_offset_y()
+                        },
+                    )),
+                    Some((true, false, maximum)),
+                    "horizontal={horizontal}, rtl={rtl}, flags={flags}"
                 );
             }
         }

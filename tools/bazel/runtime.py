@@ -314,10 +314,13 @@ def run_io(options, arguments):
             existing(f"tools/golden-runner/build/{os_name}/bin/debug/rive_golden_runner")
         if program == "perf-compare" and "--rust-runner" not in flags and "RUST_GOLDEN_RUNNER" not in os.environ:
             existing("target/debug/rust-golden-runner")
-    output_options = {"--out":False, "--output":False, "--json":False, "--markdown":False, "--artifact":False,
+    output_options = {"--out":False, "--output":False, "--json":False, "--markdown":False,
                       "--output-dir":True, "--out-dir":True, "--destination":False}
     input_options = {"--defs", "--headers", "--extensions", "--assets-dir", "--rust-output-dir", "--reference-dir"}
     if program == "renderer-perf-parity-gate": input_options.add("--report")
+    if program == "riveabl-to-png": input_options.add("--artifact")
+    if program == "pixel-compare": output_options["--artifact"] = False
+    if program == "densify-corpus": output_options["--corpus"] = False
     if program == "capture-riv-corpus":
         output_options.update({"--stream-dir":True, "--reference-dir":True})
         input_options.discard("--reference-dir")
@@ -333,11 +336,15 @@ def run_io(options, arguments):
             if path.exists(): inputs.append(str(path.resolve()))
         else:
             outputs.append({"path": str(path.resolve()), "directory": output_options[key]})
-    for name in ("NUXIE_COMPONENT_GRAPH_TRACE", "LLVM_PROFILE_FILE"):
+    for name in ("NUXIE_COMPONENT_GRAPH_TRACE", "NUXIE_LAYOUT_VERIFY", "LLVM_PROFILE_FILE"):
         if os.environ.get(name):
-            path = Path(os.environ[name])
+            value = os.environ[name]
+            if name == "LLVM_PROFILE_FILE":
+                value = value.replace("%t", os.environ.get("TMPDIR", tempfile.gettempdir()))
+            path = Path(value)
             if not path.is_absolute(): path = ROOT / path
-            outputs.append({"path": str(path.resolve()), "directory":False})
+            outputs.append({"path": str(path.resolve()), "directory":False,
+                            **({"pattern":True} if name == "LLVM_PROFILE_FILE" else {})})
     return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs}
 
 
@@ -354,7 +361,7 @@ def pool_run_enabled(bazel):
     spec = importlib.util.spec_from_file_location("nuxie_installed_pool_route", router)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return (getattr(module, "runtime_run_supported", 0) >= 2
+    return (getattr(module, "runtime_run_supported", 0) >= 3
             and module.runtime_run_compatible(bazel[1:]))
 
 

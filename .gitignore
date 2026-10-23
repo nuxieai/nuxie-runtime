@@ -81,3 +81,6 @@ __pycache__/
 /.bazel-cache.local.bazelrc
 /.bazel-cache.*.tmp
 /bazel-*
+
+# Pool snapshots, downloaded products and request evidence
+/.nuxie/

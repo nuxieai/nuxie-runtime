@@ -72,10 +72,13 @@ impl MeshHost {
         }
     }
     pub fn width(&self) -> f32 {
-        self.image_or(Image::width, |n| n.width())
+        self.image_or(|image| image.geometry_size().x, |n| n.width())
     }
     pub fn height(&self) -> f32 {
-        self.image_or(Image::height, |n| n.height())
+        self.image_or(|image| image.geometry_size().y, |n| n.height())
+    }
+    pub(crate) fn natural_size_for_layout(&self, css: bool) -> Option<Vec2D> {
+        self.with_image(|image| image.natural_size_for_layout(css))
     }
     pub fn origin(&self) -> Vec2D {
         self.image_or(|i| Vec2D::new(i.origin_x(), i.origin_y()), |n| n.origin())

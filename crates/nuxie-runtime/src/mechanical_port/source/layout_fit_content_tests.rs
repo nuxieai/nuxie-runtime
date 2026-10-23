@@ -1,5 +1,7 @@
 //! CSS sizing through real layout owners and the upstream text measurer.
 use super::*;
+#[path = "layout_picture_declared_tests.rs"]
+mod picture_declared_tests;
 use crate::source::{
     assets::font_asset::FontAsset,
     core::CoreArena,

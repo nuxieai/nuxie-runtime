@@ -134,6 +134,7 @@ impl Image {
             sampler,
             save,
             world,
+            size,
             origin_x,
             origin_y,
             blend_mode,
@@ -153,6 +154,7 @@ impl Image {
                     owner.image_sampler(),
                     owner.base.needs_save_operation(),
                     owner.base.world_transform(),
+                    owner.geometry_size(),
                     owner.base.origin_x(),
                     owner.base.origin_y(),
                     owner.base.blend_mode(),
@@ -179,10 +181,12 @@ impl Image {
                 )
             });
         } else {
-            renderer.transform(nuxie_render_api::Mat2D(*world.values()));
-            renderer.translate(
-                -(image.width() as f32) * origin_x,
-                -(image.height() as f32) * origin_y,
+            Self::transform_raster(
+                renderer,
+                world,
+                size,
+                Vec2D::new(origin_x, origin_y),
+                image.as_ref(),
             );
             renderer.draw_image_with_additiveness(
                 Some(image.as_ref()),
@@ -238,8 +242,6 @@ impl Image {
         if self.base.needs_save_operation() {
             renderer.save();
         }
-        let width = render_image.width() as f32;
-        let height = render_image.height() as f32;
         if let Some(mesh) = self.mesh.clone() {
             mesh.with_mut(|mesh| {
                 mesh.mesh_drawable_draw(
@@ -252,12 +254,12 @@ impl Image {
                 );
             });
         } else {
-            renderer.transform(nuxie_render_api::Mat2D(
-                *self.base.world_transform().values(),
-            ));
-            renderer.translate(
-                -width * self.base.origin_x(),
-                -height * self.base.origin_y(),
+            Self::transform_raster(
+                renderer,
+                self.base.world_transform(),
+                self.geometry_size(),
+                Vec2D::new(self.base.origin_x(), self.base.origin_y()),
+                render_image.as_ref(),
             );
             renderer.draw_image_with_additiveness(
                 Some(render_image.as_ref()),
@@ -278,10 +280,37 @@ impl Image {
             && self.file_asset_referencer.has_asset()
     }
 
+    fn transform_raster(
+        renderer: &mut Renderer,
+        world: Mat2D,
+        size: Vec2D,
+        origin: Vec2D,
+        pixels: &dyn nuxie_render_api::RenderImage,
+    ) {
+        renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+        renderer.translate(-size.x * origin.x, -size.y * origin.y);
+        let width = pixels.width() as f32;
+        let height = pixels.height() as f32;
+        // Mesh vertices already use authored coordinates. Only raster draws
+        // map decoded pixels into the picture's logical dimensions.
+        if width > 0.0 && height > 0.0 && (size.x != width || size.y != height) {
+            renderer.scale(size.x / width, size.y / height);
+        }
+    }
+
     pub fn hit_test<'a>(&'a self, hinfo: &HitInfo, xform: Mat2D) -> Option<&'a Core> {
-        let render_image = self.render_image()?;
-        let width = render_image.width() as f32;
-        let height = render_image.height() as f32;
+        self.hit_test_with_layout_root(hinfo, xform, None)
+    }
+
+    pub(crate) fn hit_test_with_layout_root<'a>(
+        &'a self,
+        hinfo: &HitInfo,
+        xform: Mat2D,
+        root: Option<&crate::source::artboard::Artboard>,
+    ) -> Option<&'a Core> {
+        self.render_image()?;
+        let size = self.geometry_size_with_layout_root(root);
+        let (width, height) = (size.x, size.y);
         if self.mesh.is_some() {
             println!("Missing mesh");
         } else {
@@ -417,6 +446,66 @@ impl Image {
             .unwrap_or(0.0)
     }
 
+    /// CSS images keep their declared upright size across decode variants.
+    /// VideoAsset does not project to ImageAsset and retains its frame sizing.
+    pub(crate) fn natural_size_for_layout(&self, css: bool) -> Vec2D {
+        if css && let Some(size) = self.declared_size() {
+            return size;
+        }
+        Vec2D::new(self.width(), self.height())
+    }
+
+    fn declared_size(&self) -> Option<Vec2D> {
+        self.image_asset()
+            .and_then(|asset| {
+                asset.with_downcast::<ImageAsset, _>(|asset| {
+                    Vec2D::new(asset.base.width(), asset.base.height())
+                })
+            })
+            .filter(|size| size.x > 0.0 && size.y > 0.0)
+    }
+
+    fn uses_css_layout(&self, root: Option<&crate::source::artboard::Artboard>) -> bool {
+        if let Some(participant) = self.layout_participant() {
+            return participant
+                .with_downcast::<LayoutParticipant, _>(|participant| {
+                    participant.css_record().is_some()
+                })
+                .unwrap_or(false);
+        }
+        LayoutParticipant::owning_layout_from(self.base.parent_handle())
+            .and_then(|owner| {
+                // Artboard::hit_test already holds this root mutably.
+                if let Some(root) = root
+                    && root.base.handle().as_ref() == Some(&owner)
+                {
+                    return Some(root.base.is_css_mode());
+                }
+                owner.with(|owner| {
+                    owner
+                        .as_layout_component()
+                        .is_some_and(|layout| layout.is_css_mode())
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn geometry_size(&self) -> Vec2D {
+        self.geometry_size_with_layout_root(None)
+    }
+
+    fn geometry_size_with_layout_root(
+        &self,
+        root: Option<&crate::source::artboard::Artboard>,
+    ) -> Vec2D {
+        if let Some(size) = self.declared_size()
+            && self.uses_css_layout(root)
+        {
+            return size;
+        }
+        Vec2D::new(self.width(), self.height())
+    }
+
     pub fn measure_layout(
         &self,
         width: f32,
@@ -424,16 +513,17 @@ impl Image {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
+        let size = self.geometry_size();
         Vec2D::new(
             if width_mode == LayoutMeasureMode::Exactly {
                 width
             } else {
-                self.width()
+                size.x
             },
             if height_mode == LayoutMeasureMode::Exactly {
                 height
             } else {
-                self.height()
+                size.y
             },
         )
     }
@@ -508,10 +598,10 @@ impl Image {
         self.base.scale_y() * self.layout_scale_y
     }
     pub fn computed_width(&self) -> f32 {
-        self.width() * self.render_scale_x()
+        self.geometry_size().x * self.render_scale_x()
     }
     pub fn computed_height(&self) -> f32 {
-        self.height() * self.render_scale_y()
+        self.geometry_size().y * self.render_scale_y()
     }
 
     pub(crate) fn update_transform_after_super(&mut self) {
@@ -538,9 +628,14 @@ impl Image {
         // Video admission needs fitted geometry before opening a decoder. Use
         // its retained intrinsic dimensions until the first frame is available.
         let image_size = self
-            .render_image()
-            .map(|image| (image.width() as f32, image.height() as f32))
-            .or(self.runtime_size);
+            .declared_size()
+            .filter(|_| self.uses_css_layout(None))
+            .map(|size| (size.x, size.y))
+            .or_else(|| {
+                self.render_image()
+                    .map(|image| (image.width() as f32, image.height() as f32))
+                    .or(self.runtime_size)
+            });
         if let Some((image_width, image_height)) = image_size.filter(|(width, height)| {
             width.is_finite()
                 && *width > 0.0
@@ -642,11 +737,12 @@ impl Image {
         if self.image_asset().is_none() {
             return Aabb::default();
         }
+        let size = self.geometry_size();
         Aabb::from_ltwh(
-            -self.width() * self.base.origin_x(),
-            -self.height() * self.base.origin_y(),
-            self.width(),
-            self.height(),
+            -size.x * self.base.origin_x(),
+            -size.y * self.base.origin_y(),
+            size.x,
+            size.y,
         )
     }
 

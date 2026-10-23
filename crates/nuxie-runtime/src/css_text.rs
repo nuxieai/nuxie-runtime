@@ -493,51 +493,25 @@ pub(crate) fn display_text(
     (display, map)
 }
 
+/// Give each preserved tab a fixed eight-space advance and suppress its glyph.
 pub(crate) fn prepare_tabs(
     paragraphs: &mut [crate::source::text_engine::Paragraph],
     map: &TextIndexMap,
 ) {
     for paragraph in paragraphs {
+        let mut shift = 0.0;
         for run in &mut paragraph.runs {
             for (glyph, &index) in run.text_indices.iter().enumerate() {
+                run.xpos[glyph] += shift;
                 if map.is_tab(index) {
-                    run.css_tabs.push((glyph, 8.0 * run.advances[glyph]));
+                    let advance = run.advances[glyph];
+                    run.advances[glyph] = 8.0 * advance;
+                    shift += run.advances[glyph] - advance;
+                    run.css_tabs.push(glyph);
                 }
             }
+            run.xpos[run.glyphs.len()] += shift;
         }
-    }
-}
-
-#[cfg(test)]
-std::thread_local! {
-    static TAB_LAYOUT_GLYPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
-#[cfg(test)]
-pub(crate) fn take_tab_layout_glyph_visits() -> usize {
-    TAB_LAYOUT_GLYPH_VISITS.with(|visits| visits.replace(0))
-}
-
-/// Place a preserved tab at the next stop in its own font and style.
-/// The line breaker calls this as it advances through the glyphs of a line.
-pub(crate) fn layout_tab(
-    run: &mut crate::source::text_engine::GlyphRun,
-    glyph: usize,
-    line_x: f32,
-) {
-    #[cfg(test)]
-    TAB_LAYOUT_GLYPH_VISITS.with(|visits| visits.set(visits.get() + 1));
-    if let Ok(tab) = run
-        .css_tabs
-        .binary_search_by_key(&glyph, |&(index, _)| index)
-    {
-        let interval = run.css_tabs[tab].1;
-        let next = if interval > 0.0 && interval.is_finite() {
-            ((line_x / interval).floor() + 1.0) * interval
-        } else {
-            line_x
-        };
-        run.advances[glyph] = next - line_x;
     }
 }
 

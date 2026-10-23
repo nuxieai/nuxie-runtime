@@ -427,6 +427,7 @@ impl StyledText {
 /// reshaping it would produce these same paragraphs.
 struct MeasuredShape {
     unichars: Vec<u32>,
+    // Preserved tabs affect fixed advances and glyph suppression.
     css_tabs: Vec<u32>,
     runs: Vec<TextRun>,
     // fallback_state() when shaped. A shaping that called the fallback is not
@@ -1433,45 +1434,17 @@ impl Text {
         wrap: TextWrap,
         word_break: TextWordBreak,
         styled: &StyledText,
-        paragraphs: &mut [Paragraph],
+        paragraphs: &[Paragraph],
     ) -> Vec<Vec<GlyphLine>> {
-        if styled.preserved_tabs().is_empty() {
-            return Self::break_lines_with_strut(
-                paragraphs,
-                width,
-                align,
-                wrap,
-                word_break,
-                0.0,
-                styled.css_strut.as_ref(),
-                styled.css_indices.as_ref(),
-            );
-        }
-        let mut lines = Vec::with_capacity(paragraphs.len());
-        for paragraph in paragraphs.iter_mut() {
-            let mut paragraph_lines = GlyphLine::break_lines_with_tabs(
-                &mut paragraph.runs,
-                if width == -1.0 || wrap == TextWrap::NoWrap {
-                    -1.0
-                } else {
-                    width
-                },
-                word_break,
-            );
-            if let Some(map) = &styled.css_indices {
-                for line in &mut paragraph_lines {
-                    crate::css_text::trim_line(line, &paragraph.runs, map);
-                }
-            }
-            lines.push(paragraph_lines);
-        }
-        Self::space_lines(
+        Self::break_lines_with_strut(
             paragraphs,
-            lines,
             width,
             align,
+            wrap,
+            word_break,
             0.0,
             styled.css_strut.as_ref(),
+            styled.css_indices.as_ref(),
         )
     }
     fn space_lines(
@@ -1553,7 +1526,7 @@ impl Text {
                         self.wrap(),
                         self.word_break(),
                         &styled,
-                        &mut self.modifier_shape,
+                        &self.modifier_shape,
                     );
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
@@ -1596,7 +1569,7 @@ impl Text {
                     self.wrap(),
                     self.word_break(),
                     &styled,
-                    &mut self.shape,
+                    &self.shape,
                 );
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
@@ -1864,14 +1837,14 @@ impl Text {
             if !this.make_styled(&mut styled, true, scale) {
                 return true;
             }
-            let mut shape = styled.shape();
+            let shape = styled.shape();
             let lines = Text::break_styled_lines(
                 box_width,
                 this.align(),
                 this.wrap(),
                 this.word_break(),
                 &styled,
-                &mut shape,
+                &shape,
             );
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
@@ -2631,7 +2604,7 @@ impl Text {
         if self.styled_text.empty() {
             return Some(0.0);
         }
-        let mut temporary = if self.measured_shape.is_none() {
+        let temporary = if self.measured_shape.is_none() {
             let mut styled = StyledText::default();
             if !self.make_styled(&mut styled, true, 1.0) {
                 return Some(0.0);
@@ -2649,9 +2622,9 @@ impl Text {
         let wrap = self.wrap();
         let shape = self
             .measured_shape
-            .as_mut()
-            .map(|measured| &mut measured.shape)
-            .or(temporary.as_mut())?;
+            .as_ref()
+            .map(|measured| &measured.shape)
+            .or(temporary.as_ref())?;
         let lines = Self::break_styled_lines(
             0.0,
             TextAlign::Left,
@@ -2764,7 +2737,7 @@ impl Text {
         let paragraph_space = self.base.paragraph_spacing() * font_scale;
         // Shape only what the last measure didn't already shape.
         let fallback = fallback_state();
-        let (mut measured, keep) = match self.measured_shape.take() {
+        let (measured, keep) = match self.measured_shape.take() {
             Some(measured)
                 if measured.fallback == fallback
                     && styled.shapes_like(
@@ -2800,7 +2773,7 @@ impl Text {
                 (measured, fallback_calls() == calls)
             }
         };
-        let shape = &mut measured.shape;
+        let shape = &measured.shape;
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
                 TextWrap::NoWrap

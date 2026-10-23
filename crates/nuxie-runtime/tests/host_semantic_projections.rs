@@ -1385,7 +1385,6 @@ fn converted_component_list_fixture(
             "flexDirectionValue",
             direction,
         );
-        push_uint(bytes, "LayoutComponentStyle", "alignItemsValue", 4);
     });
     push_object(&mut bytes, "ArtboardComponentList", |bytes| {
         push_uint(bytes, "Node", "parentId", 1);

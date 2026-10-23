@@ -372,7 +372,7 @@ def pool_run_enabled(bazel):
     spec = importlib.util.spec_from_file_location("nuxie_installed_pool_route", router)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return (getattr(module, "runtime_run_supported", 0) >= 4
+    return (getattr(module, "runtime_run_supported", 0) >= 5
             and module.runtime_run_compatible(bazel[1:]))
 
 

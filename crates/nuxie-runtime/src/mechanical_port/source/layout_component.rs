@@ -534,8 +534,7 @@ pub struct LayoutComponent {
 
 impl Default for LayoutComponent {
     fn default() -> Self {
-        let mut base = LayoutComponentBase::default();
-        base.set_picture_layout_mode(false);
+        let base = LayoutComponentBase::default();
         Self {
             base,
             paints: ShapePaintContainer::default(),
@@ -1483,8 +1482,6 @@ impl LayoutComponent {
         let Some((mut style, context, appliers)) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                let css = layout.is_css_mode();
-                layout.refresh_picture_layout_mode(css);
                 let context = layout.style_sync_context(parent_style)?;
                 Some((
                     layout.layout_data.take_style(),
@@ -3558,8 +3555,6 @@ impl LayoutComponent {
     }
 
     pub fn sync_style(&mut self) {
-        let css = self.is_css_mode();
-        self.refresh_picture_layout_mode(css);
         let Some(context) = self.style_sync_context(None) else {
             return;
         };
@@ -6832,8 +6827,6 @@ impl LayoutComponent {
     }
     pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
         self.layout_data.add_applier(applier);
-        let css = self.is_css_mode();
-        self.refresh_picture_layout_mode(css);
     }
     /// The content box a translated `ScrollConstraint` moves gets an
     /// automatic minimum of 0 on each axis the constraint scrolls and the box

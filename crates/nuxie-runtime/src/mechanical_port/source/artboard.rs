@@ -1260,6 +1260,18 @@ impl Artboard {
             }
         }
 
+        // Every parent link and CSS record is now attached. Cache each picture's
+        // mode before clean callbacks can measure it, independently of record
+        // registration order. Instances receive fresh caches in their own arena.
+        for object in root
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects.clone())
+            .unwrap()
+            .into_iter()
+            .flatten()
+        {
+            crate::source::layout::picture_layout_mode::attached(object);
+        }
+
         let is_instance = root
             .with_downcast::<Artboard, _>(|a| a.is_instance)
             .unwrap();

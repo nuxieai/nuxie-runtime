@@ -1,5 +1,5 @@
 {
-  "checksum": "14cc8afa3c320a9536a0e76f48307aa2d5276afc1b022715a8214409b1feb1ec",
+  "checksum": "0aea628bfe84b1daeef6c534a8356be0802e363ada0b8a8078be153904e1b242",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5834,7 +5834,7 @@
       ],
       "version": "0.7.6"
     },
-    "nux-apple-product-extension 0.10.16": {
+    "nux-apple-product-extension 1.0.0": {
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
@@ -5863,9 +5863,9 @@
           }
         }
       ],
-      "version": "0.10.16"
+      "version": "1.0.0"
     },
-    "nux-capi 0.10.16": {
+    "nux-capi 1.0.0": {
       "build_script_attrs": {
         "deps": [
           {
@@ -6020,7 +6020,7 @@
           }
         }
       ],
-      "version": "0.10.16"
+      "version": "1.0.0"
     },
     "nuxie 0.1.0": {
       "common_attrs": {
@@ -6726,6 +6726,7 @@
           "js-host-seed",
           "policy-pass-counter",
           "scriptnet",
+          "test-support",
           "testing",
           "tools"
         ],
@@ -6758,10 +6759,6 @@
             {
               "id": "serde_json 1.0.150",
               "target": "serde_json"
-            },
-            {
-              "id": "taffy 0.15.0",
-              "target": "taffy"
             },
             {
               "id": "unicode-bidi 0.3.18",
@@ -10264,6 +10261,7 @@
         "crate_features": [
           "block_layout",
           "content_size",
+          "default",
           "detailed_layout_info",
           "flexbox",
           "grid",
@@ -10283,23 +10281,13 @@
         "edition": "2021"
       },
       "library_target_name": "taffy",
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
       "name": "taffy",
-      "package_url": "https://github.com/DioxusLabs/taffy",
-      "repository": {
-        "Http": {
-          "sha256": "3c8480887e8803986d96a7173729565520d4bbb721ad6b7ad6941a22897207aa",
-          "url": "https://static.crates.io/crates/taffy/0.15.0/download"
-        }
-      },
+      "repository": null,
       "targets": [
         {
           "Library": {
             "crate_name": "taffy",
-            "crate_root": "src/lib.rs"
+            "crate_root": "lib.rs"
           }
         }
       ],
@@ -11776,12 +11764,17 @@
     },
     "webgpu-renderer-replay 0.1.0": {
       "common_attrs": {
-        "deps": [
-          {
-            "id": "wasm-bindgen 0.2.126",
-            "target": "wasm_bindgen"
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(target_arch = \"wasm32\")": [
+              {
+                "id": "wasm-bindgen 0.2.126",
+                "target": "wasm_bindgen"
+              }
+            ]
           }
-        ],
+        },
         "edition": "2024"
       },
       "library_target_name": "webgpu_renderer_replay",
@@ -13458,10 +13451,10 @@
     "serde 1.0.228",
     "serde_json 1.0.150",
     "sha2 0.10.9",
+    "slotmap 1.1.1",
     "smallvec 1.15.2",
     "symphonia-codec-pcm 0.5.5",
     "symphonia-core 0.5.5",
-    "taffy 0.15.0",
     "toml 0.9.12+spec-1.1.0",
     "unicode-bidi 0.3.18",
     "unicode-properties 0.1.4",
@@ -13486,8 +13479,8 @@
     "luaur-rt 0.1.8": "bazel/native-tools-cargo/luaur-rt",
     "luaur-rt-test-harness 0.1.0": "bazel/native-tools-cargo/luaur-rt-test-harness",
     "luaur-vm 0.1.8": "bazel/native-tools-cargo/luaur-vm",
-    "nux-apple-product-extension 0.10.16": "bazel/native-tools-cargo/nux-apple-product-extension",
-    "nux-capi 0.10.16": "bazel/native-tools-cargo/nux-capi",
+    "nux-apple-product-extension 1.0.0": "bazel/native-tools-cargo/nux-apple-product-extension",
+    "nux-capi 1.0.0": "bazel/native-tools-cargo/nux-capi",
     "nuxie 0.1.0": "bazel/native-tools-cargo/nuxie",
     "nuxie-audio 0.1.0": "bazel/native-tools-cargo/nuxie-audio",
     "nuxie-binary 0.1.0": "bazel/native-tools-cargo/nuxie-binary",
@@ -13517,6 +13510,7 @@
     "symphonia-bundle-mp3 0.5.5": "bazel/native-tools-cargo/symphonia-bundle-mp3",
     "symphonia-format-riff 0.5.5": "bazel/native-tools-cargo/symphonia-format-riff",
     "symphonia-utils-xiph 0.5.5": "bazel/native-tools-cargo/symphonia-utils-xiph",
+    "taffy 0.15.0": "bazel/native-tools-cargo/taffy",
     "video-qualification 0.1.0": "bazel/native-tools-cargo/video-qualification",
     "vk-mem 0.5.0": "bazel/native-tools-cargo/vk-mem",
     "webgl2-renderer-replay 0.1.0": "bazel/native-tools-cargo/webgl2-renderer-replay",

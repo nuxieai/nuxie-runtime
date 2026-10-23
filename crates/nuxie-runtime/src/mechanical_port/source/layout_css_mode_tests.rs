@@ -10204,3 +10204,757 @@ fn css_box_clicks_through_a_child_that_hears_only_the_press() {
         ["pop pressed", "card clicked"]
     );
 }
+
+// The compiler puts container layout on the movable content box and padding
+// on its block viewport. Percentages keep the viewport's content-box basis.
+fn overflow_viewport(name: &'static str, props: Vec<P>, children: Vec<B>) -> B {
+    let container_key = |key| {
+        matches!(
+            key,
+            DISPLAY
+                | DIRECTION
+                | 61006
+                | 61007
+                | 61013
+                | 61015
+                | 61017
+                | 61018
+                | 61075
+                | 61076
+                | 61077
+                | 61078
+        )
+    };
+    let key = |p: &P| match *p {
+        U(key, _) | F(key, _) => key,
+    };
+    let mut content: Vec<P> = props
+        .iter()
+        .copied()
+        .filter(|p| container_key(key(p)))
+        .collect();
+    content.extend([
+        U(WIDTH_KIND, 7),
+        F(WIDTH_PERCENT, 100.0),
+        U(HEIGHT_KIND, 7),
+        F(61026, 100.0),
+    ]);
+    let viewport = props
+        .into_iter()
+        .filter(|p| !container_key(key(p)) || key(p) == DIRECTION)
+        .collect::<Vec<_>>();
+    css(
+        name,
+        viewport,
+        vec![B {
+            scroll: Some(2),
+            ..css("Scroll content", content, children)
+        }],
+    )
+}
+
+fn assert_chrome_range(f: &Scene, expected: (f32, f32)) {
+    let offsets = f.max_offsets();
+    // Chrome exposes integer scroll dimensions; Taffy keeps fractional layout.
+    assert!(
+        (-offsets.0 - expected.0).abs() < 0.5,
+        "horizontal: {offsets:?}, Chrome {expected:?}"
+    );
+    assert!(
+        (-offsets.1 - expected.1).abs() < 0.5,
+        "vertical: {offsets:?}, Chrome {expected:?}"
+    );
+}
+
+#[test]
+fn css_scroll_overflow_flex_row_includes_final_margin_and_padding() {
+    let f = scene(
+        (400.0, 300.0),
+        overflow_viewport(
+            "Viewport",
+            [
+                width(80.0).to_vec(),
+                height(100.0).to_vec(),
+                vec![
+                    U(DISPLAY, 1),
+                    U(OVERFLOW_X, 3),
+                    F(PADDING_LEFT, 5.0),
+                    F(PADDING_RIGHT, 11.0),
+                ],
+            ]
+            .concat(),
+            vec![css(
+                "Item",
+                [
+                    width(120.0).to_vec(),
+                    height(20.0).to_vec(),
+                    vec![F(FLEX_SHRINK, 0.0), F(61043, 17.0)],
+                ]
+                .concat(),
+                vec![],
+            )],
+        ),
+    );
+    assert_eq!(f.max_offsets(), (-57.0, 0.0));
+}
+
+#[test]
+fn css_scroll_overflow_flex_column_and_grid_include_final_margin_and_padding() {
+    for display in [1, 2] {
+        let f = scene(
+            (400.0, 300.0),
+            overflow_viewport(
+                "Viewport",
+                [
+                    width(100.0).to_vec(),
+                    height(80.0).to_vec(),
+                    vec![
+                        U(DISPLAY, display),
+                        U(61006, 2),
+                        U(OVERFLOW_Y, 3),
+                        F(PADDING_TOP, 5.0),
+                        F(PADDING_BOTTOM, 11.0),
+                    ],
+                ]
+                .concat(),
+                vec![css(
+                    "Item",
+                    [
+                        height(120.0).to_vec(),
+                        vec![F(FLEX_SHRINK, 0.0), F(MARGIN_BOTTOM, 17.0)],
+                    ]
+                    .concat(),
+                    vec![],
+                )],
+            ),
+        );
+        // The content box stays at the viewport's content-box size.
+        assert_eq!(f.bounds("Scroll content")[2..], [100.0, 80.0]);
+        assert_eq!(f.max_offsets(), (0.0, -57.0), "display {display}");
+    }
+}
+
+#[test]
+fn css_scroll_overflow_taffy_fork_counts_the_last_items_margin() {
+    use taffy::prelude::*;
+    use taffy::{Overflow, Point};
+
+    // Guards the local Taffy fork: stock 0.15.0 gives 40 for each of these
+    // trees, dropping the item's 17-point bottom margin from the range.
+    for display in [Display::Flex, Display::Grid, Display::Block] {
+        let mut tree: TaffyTree<()> = TaffyTree::new();
+        tree.disable_rounding();
+        let item = tree
+            .new_leaf(Style {
+                size: Size {
+                    width: length(20.0),
+                    height: length(120.0),
+                },
+                flex_shrink: 0.0,
+                margin: Rect {
+                    bottom: length(17.0),
+                    ..Rect::zero()
+                },
+                ..Style::default()
+            })
+            .unwrap();
+        let root = tree
+            .new_with_children(
+                Style {
+                    display,
+                    flex_direction: FlexDirection::Column,
+                    size: Size {
+                        width: length(100.0),
+                        height: length(96.0),
+                    },
+                    overflow: Point {
+                        x: Overflow::Scroll,
+                        y: Overflow::Scroll,
+                    },
+                    padding: Rect {
+                        top: length(5.0),
+                        bottom: length(11.0),
+                        ..Rect::zero()
+                    },
+                    ..Style::default()
+                },
+                &[item],
+            )
+            .unwrap();
+        tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
+        assert_eq!(
+            tree.layout(root).unwrap().scroll_height(),
+            57.0,
+            "the Taffy fork's margin patch is missing for {display:?}"
+        );
+    }
+}
+
+#[test]
+fn css_scroll_overflow_descendants_do_not_gain_the_items_margin() {
+    // Chrome reads 120: the descendant's 200 points, not the item's margin
+    // added after them. No padding, which Chrome adds after in-flow items only.
+    for display in [0, 1, 2] {
+        let f = scene(
+            (400.0, 300.0),
+            overflow_viewport(
+                "Viewport",
+                [
+                    width(100.0).to_vec(),
+                    height(80.0).to_vec(),
+                    vec![U(DISPLAY, display), U(61006, 2), U(OVERFLOW_Y, 3)],
+                ]
+                .concat(),
+                vec![css(
+                    "Item",
+                    [
+                        height(120.0).to_vec(),
+                        vec![
+                            U(DISPLAY, 1),
+                            U(61006, 2),
+                            F(FLEX_SHRINK, 0.0),
+                            F(MARGIN_BOTTOM, 17.0),
+                        ],
+                    ]
+                    .concat(),
+                    vec![css(
+                        "Descendant",
+                        [
+                            width(20.0).to_vec(),
+                            height(200.0).to_vec(),
+                            vec![F(FLEX_SHRINK, 0.0)],
+                        ]
+                        .concat(),
+                        vec![],
+                    )],
+                )],
+            ),
+        );
+        assert_eq!(f.max_offsets(), (0.0, -120.0), "display {display}");
+    }
+}
+
+#[test]
+fn css_scroll_overflow_c045_flex_item_margin_box() {
+    for (w, x) in [(360.0, 132.0), (402.0, 128.0), (520.0, 116.0)] {
+        let f = scene(
+            (w, 800.0),
+            css(
+                "a",
+                vec![
+                    U(WIDTH_KIND, 7),
+                    F(WIDTH_PERCENT, 10.0),
+                    U(BOX_SIZING, 1),
+                    F(PADDING_TOP, 16.0),
+                ],
+                vec![
+                    css(
+                        "b",
+                        [
+                            width(20.0).to_vec(),
+                            height(90.0).to_vec(),
+                            if w < 400.0 {
+                                padding(24.0).to_vec()
+                            } else {
+                                vec![
+                                    F(PADDING_TOP, 14.0),
+                                    F(PADDING_BOTTOM, 14.0),
+                                    F(61066, 5.0),
+                                    F(61070, 5.0),
+                                ]
+                            },
+                        ]
+                        .concat(),
+                        vec![],
+                    ),
+                    css(
+                        "c",
+                        [U(DISPLAY, 4)],
+                        vec![css(
+                            "d",
+                            vec![
+                                U(DISPLAY, if w < 400.0 { 3 } else { 0 }),
+                                U(WIDTH_KIND, 7),
+                                F(WIDTH_PERCENT, 30.0),
+                            ],
+                            vec![],
+                        )],
+                    ),
+                    css(
+                        "e",
+                        [
+                            width(170.0).to_vec(),
+                            vec![
+                                U(HEIGHT_KIND, 7),
+                                F(61026, 40.0),
+                                U(61030, 1),
+                                F(61031, 80.0),
+                                U(BOX_SIZING, 1),
+                            ],
+                        ]
+                        .concat(),
+                        vec![],
+                    ),
+                    overflow_viewport(
+                        "f",
+                        [
+                            height(120.0).to_vec(),
+                            vec![
+                                U(DISPLAY, 1),
+                                U(BOX_SIZING, 1),
+                                F(MARGIN_TOP, 2.0),
+                                F(61043, -8.0),
+                                F(MARGIN_BOTTOM, -8.0),
+                                F(MARGIN_LEFT, -8.0),
+                                U(OVERFLOW_Y, 4),
+                            ],
+                        ]
+                        .concat(),
+                        vec![css(
+                            "g",
+                            [
+                                width(150.0).to_vec(),
+                                height(260.0).to_vec(),
+                                vec![
+                                    F(PADDING_TOP, 2.0),
+                                    F(PADDING_BOTTOM, 2.0),
+                                    F(PADDING_LEFT, 12.0),
+                                    F(PADDING_RIGHT, 12.0),
+                                    F(BORDER_TOP, 3.0),
+                                    F(BORDER_RIGHT, 3.0),
+                                    F(BORDER_BOTTOM, 3.0),
+                                    F(BORDER_LEFT, 3.0),
+                                    F(61041, 3.0),
+                                    F(61043, 2.0),
+                                    F(MARGIN_BOTTOM, 24.0),
+                                    F(MARGIN_LEFT, 2.0),
+                                    F(FLEX_SHRINK, 0.0),
+                                ],
+                            ]
+                            .concat(),
+                            vec![],
+                        )],
+                    ),
+                ],
+            ),
+        );
+        assert_chrome_range(&f, (x, 176.0));
+    }
+}
+
+#[test]
+fn css_scroll_overflow_c147_grid_final_margin() {
+    for (w, y) in [(360.0, 594.0), (402.0, 494.0), (520.0, 494.0)] {
+        // A page box stands in for the body, so `a` keeps its 380 points
+        // when the page is narrower, as it does in Chrome.
+        let f = scene(
+            (w, 800.0),
+            css(
+                "Page",
+                vec![],
+                vec![overflow_viewport(
+                    "a",
+                    [
+                        width(380.0).to_vec(),
+                        height(60.0).to_vec(),
+                        vec![
+                            U(DISPLAY, 2),
+                            F(61075, 8.0),
+                            F(COLUMN_GAP, 2.0),
+                            U(POSITION, 1),
+                            U(OVERFLOW_Y, 3),
+                        ],
+                    ]
+                    .concat(),
+                    vec![
+                        css(
+                            "b",
+                            [
+                                U(DISPLAY, 1),
+                                U(61006, 2),
+                                U(61018, 9),
+                                F(61075, 16.0),
+                                F(COLUMN_GAP, 4.0),
+                                U(POSITION, 1),
+                                U(INSET_TOP_KIND, 1),
+                                F(INSET_TOP, -10.0),
+                                U(61057, 1),
+                                F(61058, 30.0),
+                            ],
+                            vec![css(
+                                "c",
+                                [
+                                    width(70.0).to_vec(),
+                                    height(50.0).to_vec(),
+                                    vec![
+                                        U(61014, 5),
+                                        F(MARGIN_TOP, -2.0),
+                                        F(61043, 8.0),
+                                        F(MARGIN_BOTTOM, 10.0),
+                                        F(MARGIN_LEFT, 6.0),
+                                    ],
+                                ]
+                                .concat(),
+                                vec![],
+                            )],
+                        ),
+                        css(
+                            "d",
+                            [
+                                width(110.0).to_vec(),
+                                height(if w < 380.0 { 140.0 } else { 40.0 }).to_vec(),
+                                vec![U(61014, 2)],
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                        css(
+                            "e",
+                            [
+                                width(180.0).to_vec(),
+                                height(220.0).to_vec(),
+                                vec![
+                                    F(PADDING_TOP, 12.0),
+                                    F(PADDING_RIGHT, 16.0),
+                                    F(PADDING_LEFT, 16.0),
+                                    F(61068, 6.0),
+                                    F(MARGIN_TOP, 22.0),
+                                    F(61043, 22.0),
+                                    F(MARGIN_BOTTOM, 22.0),
+                                    F(MARGIN_LEFT, 22.0),
+                                    U(POSITION, 1),
+                                    U(INSET_LEFT_KIND, 1),
+                                    F(INSET_LEFT, 0.0),
+                                    U(61054, 1),
+                                    F(61055, 20.0),
+                                ],
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                        css(
+                            "f",
+                            [
+                                width(60.0).to_vec(),
+                                height(90.0).to_vec(),
+                                vec![
+                                    F(61064, 5.0),
+                                    F(PADDING_RIGHT, 2.0),
+                                    F(PADDING_LEFT, 2.0),
+                                    F(PADDING_BOTTOM, 20.0),
+                                    F(MARGIN_TOP, 2.0),
+                                    F(MARGIN_BOTTOM, 2.0),
+                                    F(61043, 10.0),
+                                    F(MARGIN_LEFT, 10.0),
+                                ],
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                    ],
+                )],
+            ),
+        );
+        assert_chrome_range(&f, (0.0, y));
+    }
+}
+
+#[test]
+fn css_scroll_overflow_c297_flex_margin_and_viewport_padding() {
+    for (w, x) in [(360.0, 41.0), (402.0, 12.0), (520.0, 0.0)] {
+        let f = scene(
+            (w, 800.0),
+            overflow_viewport(
+                "a",
+                [
+                    height(160.0).to_vec(),
+                    padding(8.0).to_vec(),
+                    vec![
+                        U(DISPLAY, 1),
+                        U(WIDTH_KIND, 7),
+                        F(WIDTH_PERCENT, 70.0),
+                        U(BOX_SIZING, 1),
+                        F(BORDER_TOP, 7.0),
+                        U(OVERFLOW_Y, 4),
+                    ],
+                ]
+                .concat(),
+                vec![
+                    css(
+                        "b",
+                        [
+                            width(50.0).to_vec(),
+                            height(50.0).to_vec(),
+                            padding(16.0).to_vec(),
+                            vec![F(FLEX_SHRINK, 0.0), U(BOX_SIZING, 1)],
+                            if w >= 500.0 {
+                                vec![
+                                    F(MARGIN_TOP, 20.0),
+                                    F(MARGIN_BOTTOM, 20.0),
+                                    F(MARGIN_LEFT, 14.0),
+                                    F(61043, 14.0),
+                                ]
+                            } else {
+                                vec![]
+                            },
+                        ]
+                        .concat(),
+                        vec![],
+                    ),
+                    css(
+                        "c",
+                        [
+                            width(160.0).to_vec(),
+                            height(400.0).to_vec(),
+                            vec![
+                                U(61030, 1),
+                                F(61031, 220.0),
+                                F(BORDER_TOP, 2.0),
+                                F(BORDER_RIGHT, 3.0),
+                                F(BORDER_BOTTOM, 5.0),
+                                F(MARGIN_TOP, 14.0),
+                                F(MARGIN_BOTTOM, 14.0),
+                                F(MARGIN_LEFT, 20.0),
+                                F(61043, 20.0),
+                                F(FLEX_SHRINK, 0.0),
+                            ],
+                        ]
+                        .concat(),
+                        vec![],
+                    ),
+                    css(
+                        "d",
+                        [
+                            height(60.0).to_vec(),
+                            vec![
+                                U(WIDTH_KIND, 7),
+                                F(WIDTH_PERCENT, 70.0),
+                                U(BOX_SIZING, 1),
+                                F(PADDING_TOP, 8.0),
+                                F(PADDING_BOTTOM, 8.0),
+                                F(PADDING_LEFT, 12.0),
+                                F(PADDING_RIGHT, 12.0),
+                            ],
+                            if w >= 500.0 {
+                                vec![
+                                    F(MARGIN_TOP, 8.0),
+                                    F(MARGIN_BOTTOM, 8.0),
+                                    F(MARGIN_LEFT, 8.0),
+                                    F(61043, 8.0),
+                                ]
+                            } else {
+                                vec![]
+                            },
+                        ]
+                        .concat(),
+                        vec![],
+                    ),
+                ],
+            ),
+        );
+        assert_chrome_range(&f, (x, 298.0));
+    }
+}
+
+#[test]
+fn translated_scroll_overflow_keeps_content_bounds_range() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            name: "Viewport",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 80.0),
+            ],
+            style: vec![F(
+                LayoutComponentStyleBase::PADDING_BOTTOM_PROPERTY_KEY,
+                11.0,
+            )],
+            children: vec![B {
+                name: "Content",
+                scroll: Some(1),
+                component: vec![
+                    F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                    F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 120.0),
+                ],
+                children: vec![B {
+                    name: "Overflow",
+                    component: vec![
+                        F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0),
+                    ],
+                    style: vec![F(
+                        LayoutComponentStyleBase::MARGIN_BOTTOM_PROPERTY_KEY,
+                        17.0,
+                    )],
+                    ..B::default()
+                }],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    );
+    assert_eq!(f.max_offsets(), (0.0, -51.0));
+}
+
+#[test]
+fn css_scroll_overflow_rtl_includes_end_margin_and_padding() {
+    let f = scene(
+        (400.0, 300.0),
+        overflow_viewport(
+            "Viewport",
+            [
+                width(80.0).to_vec(),
+                height(100.0).to_vec(),
+                vec![
+                    U(DISPLAY, 1),
+                    U(DIRECTION, 2),
+                    U(OVERFLOW_X, 3),
+                    F(PADDING_RIGHT, 5.0),
+                    F(PADDING_LEFT, 11.0),
+                ],
+            ]
+            .concat(),
+            vec![css(
+                "Item",
+                [
+                    width(120.0).to_vec(),
+                    height(20.0).to_vec(),
+                    vec![F(FLEX_SHRINK, 0.0), F(MARGIN_LEFT, 17.0)],
+                ]
+                .concat(),
+                vec![],
+            )],
+        ),
+    );
+    assert_eq!(f.max_offsets(), (-57.0, 0.0));
+}
+
+// A block scroller with 5 and 11 points of padding, a 120-point item and a
+// 17-point end margin: Chrome 156 reads 57 for each of these.
+fn block_scroller(items: Vec<B>) -> Scene {
+    scene(
+        (400.0, 300.0),
+        overflow_viewport(
+            "Viewport",
+            [
+                width(100.0).to_vec(),
+                height(80.0).to_vec(),
+                vec![
+                    U(DISPLAY, 0),
+                    U(OVERFLOW_Y, 3),
+                    F(PADDING_TOP, 5.0),
+                    F(PADDING_BOTTOM, 11.0),
+                ],
+            ]
+            .concat(),
+            items,
+        ),
+    )
+}
+
+#[test]
+fn css_scroll_overflow_block_child_includes_its_end_margin() {
+    let f = block_scroller(vec![css(
+        "Item",
+        [height(120.0).to_vec(), vec![F(MARGIN_BOTTOM, 17.0)]].concat(),
+        vec![],
+    )]);
+    assert_eq!(f.max_offsets(), (0.0, -57.0));
+}
+
+#[test]
+fn css_scroll_overflow_block_includes_a_margin_collapsed_through_a_child() {
+    let f = block_scroller(vec![css(
+        "Wrapper",
+        vec![],
+        vec![css(
+            "Item",
+            [height(120.0).to_vec(), vec![F(MARGIN_BOTTOM, 17.0)]].concat(),
+            vec![],
+        )],
+    )]);
+    assert_eq!(f.max_offsets(), (0.0, -57.0));
+    // Padding stops the collapse; the margin then sits inside the wrapper.
+    let f = block_scroller(vec![css(
+        "Wrapper",
+        vec![F(PADDING_BOTTOM, 1.0)],
+        vec![css(
+            "Item",
+            [height(120.0).to_vec(), vec![F(MARGIN_BOTTOM, 17.0)]].concat(),
+            vec![],
+        )],
+    )]);
+    assert_eq!(f.max_offsets(), (0.0, -58.0));
+}
+
+#[test]
+fn css_scroll_overflow_empty_last_item_keeps_its_margin() {
+    let items = || {
+        vec![
+            css(
+                "Item",
+                [height(120.0).to_vec(), vec![F(FLEX_SHRINK, 0.0)]].concat(),
+                vec![],
+            ),
+            css(
+                "Spacer",
+                vec![F(FLEX_SHRINK, 0.0), F(MARGIN_BOTTOM, 17.0)],
+                vec![],
+            ),
+        ]
+    };
+    assert_eq!(block_scroller(items()).max_offsets(), (0.0, -57.0));
+    let f = scene(
+        (400.0, 300.0),
+        overflow_viewport(
+            "Viewport",
+            [
+                width(100.0).to_vec(),
+                height(80.0).to_vec(),
+                vec![
+                    U(DISPLAY, 1),
+                    U(61006, 2),
+                    U(OVERFLOW_Y, 3),
+                    F(PADDING_TOP, 5.0),
+                    F(PADDING_BOTTOM, 11.0),
+                ],
+            ]
+            .concat(),
+            items(),
+        ),
+    );
+    assert_eq!(f.max_offsets(), (0.0, -57.0));
+}
+
+#[test]
+fn css_scroll_overflow_block_row_includes_the_end_margin() {
+    let f = scene(
+        (400.0, 300.0),
+        overflow_viewport(
+            "Viewport",
+            [
+                width(80.0).to_vec(),
+                height(100.0).to_vec(),
+                vec![
+                    U(DISPLAY, 0),
+                    U(OVERFLOW_X, 3),
+                    F(PADDING_LEFT, 5.0),
+                    F(PADDING_RIGHT, 11.0),
+                ],
+            ]
+            .concat(),
+            vec![css(
+                "Item",
+                [
+                    width(120.0).to_vec(),
+                    height(20.0).to_vec(),
+                    vec![F(61043, 17.0)],
+                ]
+                .concat(),
+                vec![],
+            )],
+        ),
+    );
+    assert_eq!(f.max_offsets(), (-57.0, 0.0));
+}

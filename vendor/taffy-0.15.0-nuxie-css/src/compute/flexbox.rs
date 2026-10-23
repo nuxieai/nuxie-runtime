@@ -20,7 +20,8 @@ use crate::{BoxGenerationMode, BoxSizing, Dimension, Direction, RequestedAxis};
 
 use super::common::alignment::apply_alignment_fallback;
 #[cfg(feature = "content_size")]
-use super::common::scrollable_overflow::compute_scrollable_overflow_contribution;
+// nuxie-css: flex items contribute their margin boxes.
+use super::common::scrollable_overflow::compute_inflow_overflow_contribution;
 use super::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 
 /// The intermediate results of a flexbox calculation for a single item
@@ -2628,13 +2629,16 @@ fn calculate_flex_item(
         } else {
             Point { x: location.x - border.left, y: location.y - border.top }
         };
-        *total_overflow_rect = total_overflow_rect.union(compute_scrollable_overflow_contribution(
+        *total_overflow_rect = total_overflow_rect.union(compute_inflow_overflow_contribution(
             contribution_location,
             size,
             scrollable_overflow_rect,
             item.overflow,
             item.contain,
             constants.is_scroll_container,
+            // nuxie-css: the used margins and the direction the location is mirrored for.
+            Some(item.margin),
+            layout_direction.is_rtl(),
         ));
     }
 }

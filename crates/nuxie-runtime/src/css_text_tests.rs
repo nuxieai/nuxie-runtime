@@ -640,6 +640,26 @@ fn css_text_pre_wrap_preserves_cr_and_crlf() {
 }
 
 #[test]
+fn css_text_pre_wrap_cr_before_form_feed_uses_normal_fallback() {
+    assert_css_text_carriage_return(
+        &[("one\r\u{000c}two", Some((0, 2)))],
+        "one\r two",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+    );
+}
+
+#[test]
+fn css_text_pre_line_cr_before_form_feed_keeps_one_break() {
+    assert_css_text_carriage_return(
+        &[("one\r\u{000c}two", Some((0, 3)))],
+        "one\ntwo",
+        2,
+        &[0, 1, 2, 3, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
 fn css_text_nowrap_collapses_cr_and_crlf_but_keeps_br() {
     assert_css_text_carriage_return(
         &[("one\rtwo", Some((0, 4)))],

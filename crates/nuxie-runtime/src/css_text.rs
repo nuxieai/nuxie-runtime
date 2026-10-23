@@ -453,6 +453,7 @@ pub(crate) fn display_text(
         // Only an LF paired with CR inside a pre-wrap run bypasses its fallback.
         let preserved_lf = whitespace == 3
             || (whitespace == 2
+                && chars[i] == '\n'
                 && i > 0
                 && chars[i - 1] == '\r'
                 && source_run_ends.binary_search(&i).is_err());

@@ -692,6 +692,8 @@ pub struct GlyphRun {
     pub style_id: u16,
     pub level: u8,
     pub joiners: Vec<u32>,
+    /// CSS preserved tab glyph indices and their eight-space stop intervals.
+    pub css_tabs: Vec<(usize, f32)>,
 }
 
 impl Default for GlyphRun {
@@ -719,6 +721,7 @@ impl GlyphRun {
             style_id: 0,
             level: 0,
             joiners: Vec::new(),
+            css_tabs: Vec::new(),
         }
     }
 
@@ -746,6 +749,7 @@ impl GlyphRun {
             style_id: 0,
             level: 0,
             joiners: Vec::new(),
+            css_tabs: Vec::new(),
         }
     }
 
@@ -767,7 +771,15 @@ impl GlyphRun {
 
     /// Cluster pictures replace this font's whole cluster; glyph pictures
     /// replace only their own glyph. Advances and metrics are unchanged.
+    pub(crate) fn is_css_tab(&self, index: usize) -> bool {
+        self.css_tabs
+            .binary_search_by_key(&index, |&(glyph, _)| glyph)
+            .is_ok()
+    }
     pub fn glyph_render_kind(&self, index: usize) -> GlyphRenderKind {
+        if self.is_css_tab(index) {
+            return GlyphRenderKind::Suppressed;
+        }
         let font = self.font.as_ref().expect("shaped run retains its font");
         if font.host_picture_scope() == Some(HostPictureScope::Glyph) {
             return if font.is_color_glyph_with_text(self.glyphs[index], self.cluster_text(index)) {

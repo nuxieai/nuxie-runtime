@@ -633,3 +633,201 @@ fn css_text_tabs_collapse_but_nonbreaking_spaces_are_preserved() {
     );
     assert_eq!(scene.display(), "a b\u{a0} c");
 }
+
+#[test]
+fn css_text_preserved_tabs_use_eight_space_stops_without_missing_glyphs() {
+    use crate::source::text_engine::GlyphRenderKind;
+    let spaces = Scene::new(&[("a b", Some((0, 1)))], true, 300.0, false, false, false);
+    let space_advance = spaces
+        .text()
+        .with_downcast::<Text, _>(|text| {
+            let run = &text.shape()[0].runs[0];
+            run.advances[run
+                .text_indices
+                .iter()
+                .position(|&index| index == 1)
+                .unwrap()]
+        })
+        .unwrap();
+    let stop = 8.0 * space_advance;
+    for mode in [1, 2] {
+        for (source, tabs) in [("a\tb", 1), ("a\t\tb", 2)] {
+            let mut scene = Scene::new(
+                &[(source, Some((0, mode)))],
+                true,
+                300.0,
+                mode == 2,
+                false,
+                false,
+            );
+            assert_eq!(scene.display(), source);
+            scene.text().with_downcast::<Text, _>(|text| {
+                let mut x = text.ordered_lines()[0].glyph_line().start_x;
+                let mut seen = 0;
+                for (run, glyph) in &text.ordered_lines()[0] {
+                    let glyph = glyph as usize;
+                    assert_ne!(run.glyphs[glyph], 0);
+                    let index = run.text_indices[glyph] as usize;
+                    if text.unichars()[index] == 9 {
+                        assert_eq!(run.glyph_render_kind(glyph), GlyphRenderKind::Suppressed);
+                        seen += 1;
+                        assert!((x + run.advances[glyph] - stop * seen as f32).abs() < 0.01);
+                    }
+                    if text.unichars()[index] == u32::from('b') {
+                        assert!((x - stop * tabs as f32).abs() < 0.01);
+                    }
+                    x += run.advances[glyph];
+                }
+                assert_eq!(seen, tabs);
+                let styled = text.styled_text();
+                assert_eq!(styled.source_to_display(tabs + 1), tabs + 1);
+            });
+            let text = scene.text();
+            let id = scene.board.native_handle().with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .position(|h| h.as_ref() == Some(&text))
+                    .unwrap()
+            });
+            let first = scene.board.text_caret(id, 0).unwrap();
+            let b = scene.board.text_caret(id, tabs as usize + 1).unwrap();
+            assert!((b.top.x - first.top.x - stop * tabs as f32).abs() < 0.01);
+        }
+    }
+    let normal = Scene::new(&[("a\tb", Some((0, 0)))], true, 300.0, true, false, false);
+    assert_eq!(normal.display(), "a b");
+    normal.text().with_downcast::<Text, _>(|text| {
+        let run = &text.shape()[0].runs[0];
+        assert!((run.advances[1] - space_advance).abs() < 0.01);
+    });
+}
+
+#[test]
+fn css_text_preserved_tab_stops_restart_after_soft_wraps_and_newlines() {
+    let reference = Scene::new(&[("a b", Some((0, 2)))], true, 300.0, true, false, false);
+    let (stop, b_width) = reference
+        .text()
+        .with_downcast::<Text, _>(|text| {
+            let run = &text.shape()[0].runs[0];
+            (8.0 * run.advances[1], run.advances[2])
+        })
+        .unwrap();
+    for source in ["aaaa a\tb", "aaaa\na\tb"] {
+        let scene = Scene::new(
+            &[(source, Some((0, 2)))],
+            true,
+            stop + b_width + 0.5,
+            true,
+            false,
+            false,
+        );
+        scene.text().with_downcast::<Text, _>(|text| {
+            assert_eq!(text.ordered_lines().len(), 2);
+            let line = text.ordered_lines().last().unwrap();
+            let mut x = line.glyph_line().start_x;
+            let mut found = false;
+            for (run, glyph) in line {
+                let glyph = glyph as usize;
+                if text.unichars()[run.text_indices[glyph] as usize] == u32::from('b') {
+                    assert!((x - stop).abs() < 0.01);
+                    found = true;
+                }
+                x += run.advances[glyph];
+            }
+            assert!(found);
+        });
+    }
+}
+
+#[test]
+fn css_text_expansion_hits_and_selection_drags_use_source_caret_geometry() {
+    let mut scene = Scene::new(&[("ßx", Some((1, 0)))], true, 300.0, true, false, false);
+    let text = scene.text();
+    let id = scene.board.native_handle().with_artboard(|a| {
+        a.objects()
+            .iter()
+            .position(|h| h.as_ref() == Some(&text))
+            .unwrap()
+    });
+    let before = scene.board.text_caret(id, 0).unwrap();
+    let after = scene.board.text_caret(id, "ß".len()).unwrap();
+    let point = |fraction: f32| {
+        let mut point = before.top;
+        point.x += fraction * (after.top.x - before.top.x);
+        point.y = (before.top.y + before.bottom.y) / 2.0;
+        point
+    };
+    for (fraction, expected) in [(0.3, 0), (0.7, "ß".len())] {
+        assert_eq!(scene.board.text_hit(id, point(fraction)), Some(expected));
+    }
+    let mut selection = TextSelectionController::new();
+    assert!(selection.add(&text, ""));
+    let native = |fraction| {
+        let p = point(fraction);
+        Vec2D::new(p.x, p.y)
+    };
+    let mut offset = u32::MAX;
+    let mut distance = 0.0;
+    for (fraction, expected) in [(0.3, 0), (0.7, 1)] {
+        assert!(selection.hit_test(&text, native(fraction), true, &mut offset, &mut distance));
+        assert_eq!(offset, expected);
+    }
+    assert!(selection.pointer_down(Some(&text), native(0.3), 19, false));
+    assert!(selection.pointer_move(native(0.7), 19));
+    assert_eq!(selection.selected_text(), "ß");
+    assert_eq!(selection.selection(&text).last().code_point_index(), 1);
+    assert!(selection.pointer_move(native(0.3), 19));
+    assert!(!selection.has_selection());
+    assert_eq!(selection.selection(&text).last().code_point_index(), 0);
+    assert!(selection.pointer_up(native(0.7), 19));
+    assert_eq!(selection.selected_text(), "ß");
+}
+
+#[test]
+fn css_text_preserved_tabs_measure_stops_in_the_tabs_own_style() {
+    use crate::source::text::text_style_paint::TextStylePaint;
+    let mut reference = Scene::new(&[("a b", Some((0, 1)))], true, 300.0, false, false, false);
+    let style = reference.handles::<TextStylePaint>().remove(0);
+    CoreRegistry::set_double_handle(&style, 274, 40.0);
+    reference.advance();
+    let stop = reference
+        .text()
+        .with_downcast::<Text, _>(|text| 8.0 * text.shape()[0].runs[0].advances[1])
+        .unwrap();
+    let mut scene = Scene::new(
+        &[("a", Some((0, 1))), ("\tb", Some((0, 1)))],
+        true,
+        300.0,
+        false,
+        false,
+        false,
+    );
+    let style = scene.handles::<TextStylePaint>().remove(1);
+    CoreRegistry::set_double_handle(&style, 274, 40.0);
+    scene.advance();
+    scene.text().with_downcast::<Text, _>(|text| {
+        let line = &text.ordered_lines()[0];
+        let mut x = line.glyph_line().start_x;
+        let mut found = false;
+        for (run, glyph) in line {
+            let glyph = glyph as usize;
+            if text.unichars()[run.text_indices[glyph] as usize] == u32::from('b') {
+                assert!((x - stop).abs() < 0.01);
+                found = true;
+            }
+            x += run.advances[glyph];
+        }
+        assert!(found);
+    });
+}
+
+#[test]
+fn css_text_tabs_without_a_css_owner_or_record_keep_upstream_shaping() {
+    for (owner, options) in [(false, Some((0, 1))), (true, None), (false, None)] {
+        let scene = Scene::new(&[("a\tb", options)], owner, 300.0, false, false, false);
+        assert_eq!(scene.display(), "a\tb");
+        scene.text().with_downcast::<Text, _>(|text| {
+            assert!(text.styled_text().css_indices().is_none());
+        });
+    }
+}

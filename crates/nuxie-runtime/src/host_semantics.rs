@@ -1526,16 +1526,13 @@ impl ArtboardInstance {
         if !local.x.is_finite() || !local.y.is_finite() {
             return None;
         }
-        let position = CursorPosition::from_translation(local, &query.shape.layout_view());
-        code_point_to_byte(
-            &query.value,
-            query
-                .indices
-                .as_ref()
-                .map_or(position.code_point_index(), |map| {
-                    map.to_source(position.code_point_index())
-                }),
-        )
+        let layout = query.shape.layout_view();
+        let position = CursorPosition::from_translation(local, &layout);
+        let source = query
+            .indices
+            .as_ref()
+            .map_or(position, |map| map.hit_position(position, local, &layout));
+        code_point_to_byte(&query.value, source.code_point_index())
     }
 
     pub fn text_selection_rects(&mut self, local_id: usize, range: Range<usize>) -> Vec<Aabb> {

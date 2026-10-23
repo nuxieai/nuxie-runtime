@@ -2,6 +2,27 @@ use super::super::text_engine::{
     CssLineMetrics, GlyphLine, GlyphRun, LineMetrics, TextAlign, TextRun, TextWordBreak,
 };
 
+enum LineRuns<'a> {
+    Fixed(&'a [GlyphRun]),
+    Tabs(&'a mut [GlyphRun]),
+}
+impl std::ops::Deref for LineRuns<'_> {
+    type Target = [GlyphRun];
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Fixed(runs) => runs,
+            Self::Tabs(runs) => runs,
+        }
+    }
+}
+impl LineRuns<'_> {
+    fn start_line(&mut self, run: usize, glyph: usize) {
+        if let Self::Tabs(runs) = self {
+            crate::css_text::layout_tabs(runs, run, glyph);
+        }
+    }
+}
+
 fn auto_width(width: f32) -> bool {
     width < 0.0
 }
@@ -174,12 +195,29 @@ impl GlyphLine {
         width: f32,
         word_break: TextWordBreak,
     ) -> Vec<GlyphLine> {
+        Self::break_lines_impl(&mut LineRuns::Fixed(runs), width, word_break)
+    }
+
+    pub(crate) fn break_lines_with_tabs(
+        runs: &mut [GlyphRun],
+        width: f32,
+        word_break: TextWordBreak,
+    ) -> Vec<GlyphLine> {
+        Self::break_lines_impl(&mut LineRuns::Tabs(runs), width, word_break)
+    }
+
+    fn break_lines_impl(
+        runs: &mut LineRuns<'_>,
+        width: f32,
+        word_break: TextWordBreak,
+    ) -> Vec<GlyphLine> {
         let max_line_width = if auto_width(width) { f32::MAX } else { width };
         let mut lines = Vec::new();
         if runs.is_empty() {
             return lines;
         }
 
+        runs.start_line(0, 0);
         let mut limit = max_line_width;
         let mut advance_word = false;
         let mut start = WordMarker {
@@ -270,6 +308,11 @@ impl GlyphLine {
                                 lines.push(line.clone());
                             }
                             line = GlyphLine::at(line_end.run as u32, line_end.index);
+                            runs.start_line(
+                                line.start_run_index as usize,
+                                line.start_glyph_index as usize,
+                            );
+                            x = runs[break_run].xpos[break_index as usize];
                         }
                     }
                 } else {
@@ -280,6 +323,8 @@ impl GlyphLine {
                         lines.push(line.clone());
                     }
                     line = GlyphLine::at(start_run_index, start_break_index);
+                    runs.start_line(start_run_index as usize, start_break_index as usize);
+                    x = runs[break_run].xpos[break_index as usize];
                 }
             } else {
                 line.end_run_index = end.run as u32;
@@ -291,6 +336,7 @@ impl GlyphLine {
                         [(runs[start.run].breaks[start.index as usize] + 1) as usize];
                     limit = start_x + max_line_width;
                     line = GlyphLine::at(start.run as u32, start_break_index + 1);
+                    runs.start_line(start.run, (start_break_index + 1) as usize);
                 }
             }
         }

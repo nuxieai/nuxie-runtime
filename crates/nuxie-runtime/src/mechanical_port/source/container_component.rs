@@ -29,12 +29,21 @@ impl ContainerComponent {
     /// their own context. Attachment initializes children added later.
     pub(crate) fn refresh_picture_layout_mode(&mut self, css: bool) {
         self.base.set_picture_layout_mode(css);
-        Self::refresh_picture_children(&self.children, css, self.base.base.base.handle().as_ref());
+        self.refresh_attached_picture_layout_mode();
     }
 
-    fn refresh_picture_children(children: &[CoreHandle], css: bool, active: Option<&CoreHandle>) {
+    /// Attachment can move an existing drawing group, not only an empty one.
+    pub(crate) fn refresh_attached_picture_layout_mode(&mut self) {
+        Self::refresh_picture_children(
+            &self.children,
+            self.picture_uses_css_layout(),
+            self.base.base.base.handle().as_ref(),
+        );
+    }
+
+    fn refresh_picture_children(children: &[CoreHandle], css: bool, parent: Option<&CoreHandle>) {
         for child in children {
-            if Some(child) == active
+            if Some(child) == parent
                 || !child.is_type_of(ContainerComponentBase::TYPE_KEY)
                 || child.is_type_of(
                     crate::source::layout::layout_participant::LayoutParticipant::TYPE_KEY,
@@ -48,7 +57,11 @@ impl ContainerComponent {
             let descendants = child
                 .with_mut(|object| {
                     let component = object.as_component_mut()?;
-                    if component.owns_picture_layout_mode() {
+                    // onAddedDirty can attach an existing occurrence again.
+                    // Only its resolved parent supplies the inherited mode.
+                    if component.parent_handle().as_ref() != parent
+                        || component.owns_picture_layout_mode()
+                    {
                         return None;
                     }
                     if component.inherit_picture_layout_mode(css) {
@@ -62,7 +75,7 @@ impl ContainerComponent {
                 })
                 .flatten();
             if let Some(descendants) = descendants {
-                Self::refresh_picture_children(&descendants, css, active);
+                Self::refresh_picture_children(&descendants, css, Some(child));
             }
         }
     }

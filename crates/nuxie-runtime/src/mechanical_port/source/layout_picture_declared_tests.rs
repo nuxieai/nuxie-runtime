@@ -11,6 +11,9 @@ use nuxie_render_api::{
 };
 use std::rc::Rc;
 
+#[path = "layout_picture_attachment_tests.rs"]
+mod attachment_tests;
+
 #[derive(Clone)]
 struct Pixels(u32, u32, Rc<()>);
 impl RenderImage for Pixels {

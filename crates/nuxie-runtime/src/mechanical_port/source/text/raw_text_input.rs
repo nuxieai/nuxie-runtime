@@ -434,10 +434,12 @@ impl RawTextInput {
         self.invalidate_shape();
     }
 
-    /// Invalidate the shared layout and its vertical navigation target for a
-    /// font or font-metric change, including fallbacks under the same font.
+    /// Invalidate shaping, including fallbacks under the same font. Only CSS
+    /// discards the positioned layout's vertical navigation target.
     pub fn invalidate_shape(&mut self) {
-        self.ideal_cursor_x = -1.0;
+        if self.css_line_box {
+            self.ideal_cursor_x = -1.0;
+        }
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
@@ -616,9 +618,17 @@ impl RawTextInput {
             return updated;
         }
         let mut update_text_path = false;
-        self.ensure_shape();
-        if self.unflag(Flags::TextPathDirty as u8) {
+        let rebuild_text_path = if self.css_line_box {
+            self.ensure_shape();
+            self.unflag(Flags::TextPathDirty as u8)
+        } else {
+            // Upstream only rebuilds paths when shape dirt survives until
+            // update. Selection may already have consumed it in ensureShape.
+            self.flagged(Flags::ShapeDirty as u8)
+        };
+        if rebuild_text_path {
             updated |= Flags::ShapeDirty as u8;
+            self.ensure_shape();
             update_text_path = true;
         }
         if self.unflag(Flags::SelectionDirty as u8) {
@@ -676,12 +686,13 @@ impl RawTextInput {
                 self.vertical_align,
                 self.align_height,
             );
-            // Selection may build the layout before update. Rendering must
-            // still rebuild its paths from that same positioned layout.
-            self.flag(Flags::TextPathDirty | Flags::SelectionDirty);
-            self.cursor
-                .resolve_line_positions(&self.shape.layout_view());
-            self.compute_visual_position_from_cursor();
+            if self.css_line_box {
+                // CSS selection may build the layout before update. Rendering
+                // still rebuilds paths from that same positioned layout.
+                self.flag(Flags::TextPathDirty | Flags::SelectionDirty);
+                self.cursor
+                    .resolve_line_positions(&self.shape.layout_view());
+            }
         }
     }
 
@@ -1256,6 +1267,9 @@ impl RawTextInput {
         } else {
             self.unflag(Flags::Obscured as u8);
         }
+        // Upstream invalidates resolved lines and ideal x for masking only.
+        self.forget_line_indices();
+        self.ideal_cursor_x = -1.0;
         self.invalidate_shape();
     }
 
@@ -1263,8 +1277,8 @@ impl RawTextInput {
     // line indices stale, and update never resolves a line index twice, so
     // keep only the code point indices. The journal holds cursor snapshots
     // too, or undo would restore one resolved against the old layout.
-    // Upstream does this for masking only. All invalidations of our shared
-    // positioned layout discard its resolved cursor lines together.
+    // Upstream does this for masking only. CSS invalidations discard the
+    // positioned layout's resolved cursor lines together.
     fn forget_line_indices(&mut self) {
         let unresolved = |cursor: Cursor| {
             Cursor::new(
@@ -1348,7 +1362,7 @@ impl RawTextInput {
     }
 
     fn flag(&mut self, mask: u8) {
-        if mask & Flags::ShapeDirty as u8 != 0 {
+        if self.css_line_box && mask & Flags::ShapeDirty as u8 != 0 {
             self.forget_line_indices();
         }
         self.flags |= mask;

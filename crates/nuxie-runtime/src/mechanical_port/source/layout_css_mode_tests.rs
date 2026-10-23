@@ -11325,6 +11325,111 @@ fn css_input_live_font_and_line_height_remeasure_and_recentre() {
     }
 }
 
+// CSS reflow discards resolved cursor lines and history snapshots. The
+// translated regression preserves upstream's retained line indices.
+#[test]
+fn css_input_font_size_reflow_re_resolves_cursor_and_history_lines() {
+    use crate::source::text::{
+        cursor::{Cursor, CursorPosition},
+        font_hb::HbFont,
+        raw_text_input::RawTextInput,
+        text_engine::TextSizing,
+    };
+    let f = input_scene(true, true, None, -1.0, None);
+    let factory = f
+        .artboard
+        .with_artboard(|artboard| artboard.factory())
+        .unwrap();
+    input_handle(&f).with_mut(|object| {
+        let input = object.as_text_input_mut().unwrap().raw_text_input();
+        let load_font = |relative_path: &str| {
+            let root = std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+            let bytes = std::fs::read(
+                std::path::PathBuf::from(root)
+                    .join("tests/unit_tests")
+                    .join(relative_path),
+            )
+            .unwrap();
+            HbFont::decode(&bytes).unwrap()
+        };
+        input.set_text(String::new());
+        input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+        input.set_font_size(72.0);
+        // At 72 no two of these words fit in 230 points, so each takes a line of
+        // its own. At 24 the whole text fits on one line.
+        input.set_sizing(TextSizing::AutoHeight);
+        input.set_max_width(230.0);
+        input.insert("one two three");
+        input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(10)));
+        input.update(&factory);
+        assert_eq!(input.shape().line_count(), 3);
+        assert!(input.cursor().end() == CursorPosition::new(2, 10));
+        assert_caret_on_line(input, 2);
+        // An edit on the third line records the cursor resolved there.
+        input.insert("i");
+        input.update(&factory);
+        assert_eq!(input.text(), "one two thiree");
+        assert!(input.cursor().end() == CursorPosition::new(2, 11));
+
+        input.set_font_size(24.0);
+        input.update(&factory);
+        assert_eq!(input.shape().line_count(), 1);
+        assert!(input.cursor().end() == CursorPosition::new(0, 11));
+        assert_caret_on_line(input, 0);
+
+        // Undo restores the cursor from before the edit, on its new line.
+        input.undo();
+        input.update(&factory);
+        assert_eq!(input.text(), "one two three");
+        assert_eq!(input.shape().line_count(), 1);
+        assert!(input.cursor().end() == CursorPosition::new(0, 10));
+        assert_caret_on_line(input, 0);
+
+        // A selection resolved on the one line spans all three once the text
+        // grows again.
+        input.set_cursor(Cursor::new(
+            CursorPosition::unresolved(2),
+            CursorPosition::unresolved(10),
+        ));
+        input.update(&factory);
+        assert!(input.cursor().end() == CursorPosition::new(0, 10));
+        input.set_font_size(72.0);
+        input.update(&factory);
+        assert_eq!(input.shape().line_count(), 3);
+        assert!(input.cursor().start() == CursorPosition::new(0, 2));
+        assert!(input.cursor().end() == CursorPosition::new(2, 10));
+        assert_caret_on_line(input, 2);
+        let mut rects = Vec::new();
+        input
+            .cursor()
+            .selection_rects(&mut rects, &input.shape().layout_view());
+        for (index, line) in input.shape().ordered_lines().iter().enumerate() {
+            let baseline = line.y();
+            assert!(
+                rects
+                    .iter()
+                    .any(|rect| rect.top() < baseline && baseline < rect.bottom()),
+                "the selection has no rectangle on line {index}: {rects:?}"
+            );
+        }
+    });
+
+    // The caret has a visual position, and it spans the given line's baseline.
+    #[track_caller]
+    fn assert_caret_on_line(input: &RawTextInput, line: usize) {
+        let caret = input.cursor_visual_position();
+        assert!(caret.found(), "the caret has no visual position");
+        let baseline = input.shape().ordered_lines()[line].y();
+        assert!(
+            caret.top() < baseline && baseline < caret.bottom(),
+            "the caret spans {}..{}, not line {line} at baseline {baseline}",
+            caret.top(),
+            caret.bottom()
+        );
+    }
+}
+
 #[test]
 fn translated_input_keeps_upstream_content_measure_and_ignores_rows() {
     use crate::source::layout::layout_measure_mode::LayoutMeasureMode;
@@ -11334,7 +11439,7 @@ fn translated_input_keeps_upstream_content_measure_and_ignores_rows() {
         input_handle(&f)
             .with_mut(|object| {
                 let input = object.as_text_input_mut().unwrap();
-                let expected = input.raw_text_input().measure(f32::MAX, f32::MAX).size();
+                let expected = input.raw_text_input().bounds().size();
                 let actual = input.measure_layout(
                     0.0,
                     LayoutMeasureMode::Undefined,
@@ -11350,13 +11455,44 @@ fn translated_input_keeps_upstream_content_measure_and_ignores_rows() {
     CoreRegistry::set_uint_handle(&input_handle(&f), i32::from(INPUT_ROWS), 2);
     f.advance(4);
     assert_eq!(measure(), before);
-    CoreRegistry::set_string_handle(
-        &input_handle(&f),
-        817,
-        "A much longer line of text".to_owned(),
-    );
+    input_handle(&f).with_mut(|object| {
+        assert!(
+            object
+                .as_text_input_mut()
+                .unwrap()
+                .text_input(" A much longer line of typed text")
+        );
+    });
     f.advance(4);
     assert!(measure().x > before.x);
+}
+
+#[test]
+fn translated_input_edit_shaped_by_selection_does_not_dirty_layout_on_update() {
+    use crate::source::{component_dirt::ComponentDirt, text::text_input::TextInput};
+    let f = input_scene(false, true, None, -1.0, None);
+    f.advance(4);
+    let control = f.named("control");
+    control.with_downcast_mut::<LayoutComponent, _>(|layout| {
+        layout.layout_data.clear_dirty_for_test();
+    });
+    let dirty = || {
+        control
+            .with_downcast::<LayoutComponent, _>(|layout| layout.layout_data.is_dirty())
+            .unwrap()
+    };
+    let input = input_handle(&f);
+    input.with_downcast_mut::<TextInput, _>(|input| {
+        input.raw_text_input().insert("\nmore text");
+        input.raw_text_input().select_all();
+        input.mark_paint_dirty();
+    });
+    assert!(!dirty(), "upstream markPaintDirty only dirties paint");
+    TextInput::update_after_transform_occurrence(&input, ComponentDirt::PAINT);
+    assert!(
+        !dirty(),
+        "upstream update only dirties layout when raw update reports shapeDirty"
+    );
 }
 
 #[test]

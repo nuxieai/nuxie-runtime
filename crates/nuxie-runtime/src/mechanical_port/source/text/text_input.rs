@@ -176,7 +176,7 @@ impl TextInput {
 
     /// Feed the shared positioned layout from the live style in both solve
     /// and update. Bindings can change it before either pass runs.
-    fn sync_text_style(&mut self) {
+    fn sync_text_style(&mut self, on_added: bool) {
         if let Some((font, size, height)) = self.text_style.as_ref().and_then(|style| {
             style
                 .with_mut(|object| {
@@ -189,6 +189,11 @@ impl TextInput {
                 })
                 .flatten()
         }) {
+            // Upstream onAddedClean leaves the raw defaults alone when the
+            // style has no font yet. Update forwards the style unconditionally.
+            if on_added && !self.css_owned && font.is_none() {
+                return;
+            }
             self.raw_text_input.set_font(font);
             self.raw_text_input.set_font_size(size);
             self.raw_text_input
@@ -199,7 +204,7 @@ impl TextInput {
     /// The solve supplies the control's content box. All consumers use this
     /// positioned layout; form-control natural sizing remains independent.
     pub(crate) fn css_positioned_bounds(&mut self, size: Vec2D) -> Aabb {
-        self.sync_text_style();
+        self.sync_text_style(false);
         self.sync_css_box(size);
         self.raw_text_input.positioned_layout_bounds()
     }
@@ -455,7 +460,7 @@ impl TextInput {
             })
             .cloned();
         {
-            self.sync_text_style();
+            self.sync_text_style(true);
             self.raw_text_input.set_obscured(self.base.obscured());
             self.sync_displayed_text_from_source(false);
         }
@@ -503,7 +508,7 @@ impl TextInput {
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("TextInput retains its imported renderer factory");
-            self.sync_text_style();
+            self.sync_text_style(false);
             self.update_alignment();
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
@@ -704,7 +709,13 @@ impl TextInput {
         if sync {
             self.sync_displayed_text_from_source(true);
         }
-        self.mark_shape_dirty();
+        if self.css_owned {
+            self.mark_shape_dirty();
+        } else {
+            // Upstream updateMultiline does not restart cursor blinking.
+            self.base.mark_layout_node_dirty();
+            self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+        }
     }
     pub fn key_input(
         &mut self,

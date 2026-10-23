@@ -611,6 +611,7 @@ AUDITED_UNSCANNED_THIRD_PARTY_PATHS = {
     "vendor/symphonia-bundle-mp3-0.5.5",
     "vendor/symphonia-format-riff-0.5.5",
     "vendor/symphonia-utils-xiph-0.5.5",
+    "vendor/taffy-0.15.0-nuxie-css",
     "vendor/vk-mem-0.5.0",
 }
 

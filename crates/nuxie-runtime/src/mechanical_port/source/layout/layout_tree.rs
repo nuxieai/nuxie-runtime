@@ -346,113 +346,29 @@ pub(crate) fn compute_picture_leaf(
     style: &Style,
     natural: Vec2D,
 ) -> taffy::tree::LayoutOutput {
-    use taffy::{
-        tree::SizingMode,
-        util::{MaybeMath, MaybeResolve, ResolveOrZero},
-    };
-    let calc = |_: *const (), _: f32| 0.0;
-    let padding_border = style
-        .padding
-        .resolve_or_zero(inputs.parent_size.width, calc)
-        + style.border.resolve_or_zero(inputs.parent_size.width, calc);
-    let inset = padding_border.sum_axes();
-    let authored = if inputs.sizing_mode == SizingMode::InherentSize {
-        let adjustment = if style.box_sizing == taffy::BoxSizing::ContentBox {
-            inset
-        } else {
-            Size::ZERO
-        };
-        style
-            .size
-            .maybe_resolve(inputs.parent_size, calc)
-            .maybe_apply_aspect_ratio(style.aspect_ratio)
-            .maybe_add(adjustment)
-    } else {
-        Size::NONE
-    };
-    let known = inputs
-        .known_dimensions
-        .or(authored)
-        .zip_map(inset, |value, inset| {
-            value.map(|value| (value - inset).max(0.0))
-        });
-    let width_limits = content_width_limits(style, inputs.parent_size);
-    let height_limits = content_height_limits(style, inputs.parent_size);
-    taffy::compute_leaf_layout(inputs, style, calc, |_, available| {
-        let clamp = |value: f32, limits: (Option<f32>, Option<f32>)| {
-            value
-                .min(limits.1.unwrap_or(f32::INFINITY))
-                .max(limits.0.unwrap_or(0.0))
-        };
-        let width = known.width.map(|value| clamp(value, width_limits));
-        let height = known.height.map(|value| clamp(value, height_limits));
-        let ratio = (natural.x / natural.y)
-            .is_finite()
-            .then_some(natural.x / natural.y)
-            .filter(|ratio| *ratio > 0.0);
-        let mut size = match (width, height, ratio) {
-            (Some(width), Some(height), _) => Size { width, height },
-            (Some(width), None, Some(ratio)) => Size {
-                width,
-                height: width / ratio,
-            },
-            (None, Some(height), Some(ratio)) => Size {
-                width: height * ratio,
-                height,
-            },
-            (None, None, Some(_)) => {
-                // CSS 2.1 section 10.4: scale both auto axes together when
-                // their limits allow it. Conflicting limits break the ratio.
-                let minimum_scale = (width_limits.0.unwrap_or(0.0) / natural.x)
-                    .max(height_limits.0.unwrap_or(0.0) / natural.y);
-                let maximum_width = width_limits
-                    .1
-                    .unwrap_or(f32::INFINITY)
-                    .max(width_limits.0.unwrap_or(0.0));
-                let maximum_height = height_limits
-                    .1
-                    .unwrap_or(f32::INFINITY)
-                    .max(height_limits.0.unwrap_or(0.0));
-                let maximum_scale = (maximum_width / natural.x).min(maximum_height / natural.y);
-                let scale = if minimum_scale <= maximum_scale {
-                    1.0f32.clamp(minimum_scale, maximum_scale)
-                } else {
-                    minimum_scale
-                };
-                Size {
-                    width: natural.x * scale,
-                    height: natural.y * scale,
-                }
-            }
-            _ => Size {
-                width: width.unwrap_or(natural.x),
-                height: height.unwrap_or(natural.y),
-            },
-        };
-        // Replaced flex minima use the smaller content or transferred
-        // suggestion. A larger cross size may grow max-content, not the
-        // automatic minimum on the queried axis.
-        if known.width.is_none() && available.width == AvailableSpace::MinContent {
-            size.width = super::layout_participant::transferred_image_minimum(
-                natural.x,
-                natural.y,
-                height,
-                height_limits,
-            );
-        }
-        if known.height.is_none() && available.height == AvailableSpace::MinContent {
-            size.height = super::layout_participant::transferred_image_minimum(
-                natural.y,
-                natural.x,
-                width,
-                width_limits,
-            );
-        }
+    let size = crate::css_layout::replaced::resolve_replaced_size(
+        style,
+        inputs,
         Size {
-            width: clamp(size.width, width_limits),
-            height: clamp(size.height, height_limits),
-        }
-    })
+            width: natural.x,
+            height: natural.y,
+        },
+    );
+    // The resolver owns preferred sizing, ratio transfer and constraints.
+    // Keep the box metrics for overflow and baselines, without letting the
+    // generic leaf algorithm reapply the ratio after its final clamps.
+    let leaf_style = Style {
+        size: Size::auto(),
+        min_size: Size::auto(),
+        max_size: Size::auto(),
+        aspect_ratio: None,
+        ..style.clone()
+    };
+    let resolved = taffy::tree::LayoutInput {
+        known_dimensions: size.map(Some),
+        ..inputs
+    };
+    taffy::compute_leaf_layout(resolved, &leaf_style, |_, _| 0.0, |_, _| Size::ZERO)
 }
 
 /// Resolve width limits even during ContentSize, where Taffy defers these

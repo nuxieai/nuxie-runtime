@@ -127,6 +127,106 @@ fn close(actual: [f32; 4], expected: [f32; 4]) {
     }
 }
 
+fn receiver_picture_fixture(css: bool) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
+    let (arena, root, participant) = if css {
+        picture_participant_fixture(false, &[], &[(61021, 1)], &[(61022, 100.0)])
+    } else {
+        let arena = CoreArena::default();
+        let root = layout(&arena, None, Some(200.0), true);
+        let image = arena.insert(Image::default());
+        attach(&arena, &root, &image);
+        let mut participant = LayoutParticipant::default();
+        participant
+            .base
+            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+        participant
+            .base
+            .set_layout_height_scale_type_value(LayoutScaleType::Fill as u8);
+        let participant = arena.insert(participant);
+        attach(&arena, &image, &participant);
+        let mut context = ParentContext {
+            arena: &arena,
+            parent: image,
+        };
+        assert_eq!(
+            LayoutParticipant::on_added_clean_occurrence(&participant, &mut context),
+            StatusCode::Ok
+        );
+        LayoutComponent::sync_style_occurrence(&root);
+        LayoutComponent::sync_layout_children_occurrence(&root);
+        (arena, root, participant)
+    };
+    let image = host(&participant);
+    if !css {
+        Image::set_asset_occurrence(&image, Some(arena.insert(ImageAsset::default())));
+    }
+    declare(&image, 480.0, 270.0);
+    // Keep the translated image's automatic minimum below its Fill slots.
+    decode(&image, 160, 90);
+    (arena, root, participant, image)
+}
+
+#[test]
+fn picture_receiver_update_bounds_does_not_reborrow_participant() {
+    for css in [false, true] {
+        let (_arena, root, participant, image) = receiver_picture_fixture(css);
+        LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+        participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            participant.update_layout_bounds(false)
+        });
+        let width = image
+            .with_downcast::<Image, _>(Image::computed_width)
+            .unwrap();
+        near(width, if css { 100.0 } else { 200.0 });
+    }
+}
+
+#[test]
+fn picture_receiver_advance_does_not_reborrow_participant() {
+    use crate::source::{
+        advance_flags::AdvanceFlags,
+        layout::layout_enums::{LayoutDirection, LayoutStyleInterpolation},
+    };
+    for css in [false, true] {
+        let (_arena, root, participant, image) = receiver_picture_fixture(css);
+        LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+        LayoutComponent::update_layout_bounds_occurrence(&root, false);
+        participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            participant.cascade_layout_style(
+                LayoutStyleInterpolation::Linear,
+                None,
+                1.0,
+                LayoutDirection::Ltr,
+            );
+        });
+        if css {
+            let record = participant
+                .with_downcast::<LayoutParticipant, _>(|participant| {
+                    participant.css_record().unwrap()
+                })
+                .unwrap();
+            CssTextLeaf::write(&record, &[], &[(61022, 200.0)]);
+            LayoutParticipant::sync_style_changes_occurrence(&participant, None);
+        } else {
+            root.with_downcast_mut::<LayoutComponent, _>(|root| root.base.set_width_value(300.0));
+            LayoutComponent::sync_style_occurrence(&root);
+        }
+        LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+        participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            participant.update_layout_bounds(true);
+            for _ in 0..3 {
+                participant.advance_component(0.5, AdvanceFlags::NEW_FRAME | AdvanceFlags::ANIMATE);
+            }
+        });
+        near(
+            image
+                .with_downcast::<Image, _>(Image::computed_width)
+                .unwrap(),
+            if css { 200.0 } else { 300.0 },
+        );
+    }
+}
+
 fn clean_picture_transform(arena: &CoreArena, image: &CoreHandle) {
     let parent = image
         .with(|image| image.component_parent_handle())
@@ -472,4 +572,205 @@ fn declared_picture_hit_area_uses_the_active_artboards_mode() {
             );
         });
     }
+}
+
+// Expected border boxes are captured by the adjacent local Chrome oracle.
+// Chrome quantizes layout to 1/64 px; Taffy retains floating point precision.
+#[test]
+fn css_picture_chrome_sizing_table() {
+    let table: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/css_picture_sizing_chrome.json"
+    ))
+    .unwrap();
+    let pairs_u32 = |value: &serde_json::Value| -> Vec<(u16, u32)> {
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pair| {
+                (
+                    pair[0].as_u64().unwrap() as u16,
+                    pair[1].as_u64().unwrap() as u32,
+                )
+            })
+            .collect()
+    };
+    let pairs_f32 = |value: &serde_json::Value| -> Vec<(u16, f32)> {
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pair| {
+                (
+                    pair[0].as_u64().unwrap() as u16,
+                    pair[1].as_f64().unwrap() as f32,
+                )
+            })
+            .collect()
+    };
+    let mut failures = Vec::new();
+    for row in table["cases"].as_array().unwrap() {
+        for wrapped in [false, true] {
+            for video in [false, true] {
+                // The no-natural-dimensions cases use Image's missing asset size.
+                if video && row["natural"][0].as_f64() == Some(0.0) {
+                    continue;
+                }
+                let (_arena, root, item, participant) = picture_layout_fixture_with_natural_size(
+                    video,
+                    wrapped,
+                    &pairs_u32(&row["parent_enums"]),
+                    &pairs_u32(&row["enums"]),
+                    &pairs_f32(&row["numbers"]),
+                    (
+                        row["natural"][0].as_f64().unwrap() as f32,
+                        row["natural"][1].as_f64().unwrap() as f32,
+                    ),
+                );
+                let host = host(&participant);
+                if !video && let Some(decode_size) = row["decode"].as_array() {
+                    decode(
+                        &host,
+                        decode_size[0].as_u64().unwrap() as u32,
+                        decode_size[1].as_u64().unwrap() as u32,
+                    );
+                }
+                let record = root
+                    .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+                    .unwrap();
+                CssTextLeaf::write(&record, &[], &[(61022, 1000.0)]);
+                CssTextLeaf::write(&record, &[], &pairs_f32(&row["parent_numbers"]));
+                // The HTML parent has an auto height unless its CSS sets one.
+                // Do not supply the helper's default 800px native viewport.
+                root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                    root.with_style_mut(|style| {
+                        style.base.set_intrinsically_sized_value_value(true)
+                    });
+                });
+                LayoutComponent::sync_style_occurrence(&root);
+                LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+                let bounds = solved(&item);
+                let expected = [
+                    row["expected"][0].as_f64().unwrap() as f32,
+                    row["expected"][1].as_f64().unwrap() as f32,
+                ];
+                if (bounds.width() - expected[0]).abs() > 0.02
+                    || (bounds.height() - expected[1]).abs() > 0.02
+                {
+                    failures.push(format!(
+                        "{} wrapped={wrapped} video={video}: {:?}, expected {expected:?}; {}",
+                        row["name"],
+                        [bounds.width(), bounds.height()],
+                        row["rule"]
+                    ));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn css_picture_chrome_sizing_table_resolver() {
+    use taffy::{
+        AvailableSpace, Size,
+        tree::{LayoutInput, RunMode, SizingMode},
+    };
+    let table: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/css_picture_sizing_chrome.json"
+    ))
+    .unwrap();
+    let mut failures = Vec::new();
+    for row in table["cases"].as_array().unwrap() {
+        // Explicit zero minima exercise flex's distribution in the layout
+        // table. Other flex rows also exercise the resolver's intrinsic query.
+        if row["name"].as_str().unwrap().ends_with("-zero") {
+            continue;
+        }
+        let enums: Vec<_> = row["enums"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_u64().unwrap() as u16, p[1].as_u64().unwrap() as u32))
+            .collect();
+        let numbers: Vec<_> = row["numbers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_u64().unwrap() as u16, p[1].as_f64().unwrap() as f32))
+            .collect();
+        let (_arena, _root, participant) =
+            picture_participant_fixture(false, &[], &enums, &numbers);
+        let style = participant
+            .with_downcast::<LayoutParticipant, _>(|p| {
+                p.native_layout_data().unwrap().style().clone()
+            })
+            .unwrap();
+        let mut known = Size {
+            width: row["known"][0].as_f64().map(|value| value as f32),
+            height: row["known"][1].as_f64().map(|value| value as f32),
+        };
+        // Ask for the intrinsic main size before flex distributes space.
+        match row["name"].as_str().unwrap() {
+            "row-shrink" => known.width = None,
+            "column-shrink" => known.height = None,
+            _ => {}
+        }
+        let input = LayoutInput {
+            run_mode: RunMode::ComputeSize,
+            sizing_mode: if matches!(row["name"].as_str(), Some("row-shrink" | "column-shrink")) {
+                SizingMode::ContentSize
+            } else {
+                SizingMode::InherentSize
+            },
+            known_dimensions: known,
+            parent_size: Size {
+                width: Some(1000.0),
+                height: None,
+            },
+            available_space: Size {
+                width: if row["query"] == "min" {
+                    AvailableSpace::MinContent
+                } else {
+                    AvailableSpace::MaxContent
+                },
+                height: AvailableSpace::MaxContent,
+            },
+            ..LayoutInput::HIDDEN
+        };
+        for available in [
+            AvailableSpace::MinContent,
+            AvailableSpace::MaxContent,
+            AvailableSpace::Definite(1000.0),
+        ] {
+            let input = LayoutInput {
+                available_space: Size {
+                    width: available,
+                    height: available,
+                },
+                ..input
+            };
+            let output = crate::css_layout::replaced::resolve_replaced_size(
+                &style,
+                input,
+                Size {
+                    width: row["natural"][0].as_f64().unwrap() as f32,
+                    height: row["natural"][1].as_f64().unwrap() as f32,
+                },
+            );
+            let expected = [
+                row["expected"][0].as_f64().unwrap() as f32,
+                row["expected"][1].as_f64().unwrap() as f32,
+            ];
+            if (output.width - expected[0]).abs() > 0.02
+                || (output.height - expected[1]).abs() > 0.02
+            {
+                failures.push(format!(
+                    "{}: {:?}, expected {expected:?}; {}",
+                    row["name"], output, row["rule"]
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

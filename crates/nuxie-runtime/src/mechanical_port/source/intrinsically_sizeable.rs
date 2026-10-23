@@ -264,6 +264,19 @@ pub trait IntrinsicallySizeable {
     ) {
     }
 
+    /// Receiver-based layout still owns this participant's mutable borrow.
+    /// Hosts use the supplied receiver instead of resolving it by handle.
+    fn control_size_from_participant(
+        &mut self,
+        size: Vec2D,
+        width: LayoutScaleType,
+        height: LayoutScaleType,
+        direction: LayoutDirection,
+        _participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
+    ) {
+        self.control_size(size, width, height, direction);
+    }
+
     fn should_propagate_size_to_children(&self) -> bool {
         true
     }
@@ -303,7 +316,7 @@ pub fn control_size_handle(
 }
 
 macro_rules! intrinsic_owner {
-    ($owner:path $(, $natural:ident)?) => {
+    ($owner:path $(, $natural:ident)? $(; $($extra:item)*)?) => {
         impl IntrinsicallySizeable for $owner {
             $(
             fn natural_size_for_layout(&self) -> Option<Vec2D> {
@@ -328,14 +341,26 @@ macro_rules! intrinsic_owner {
             ) {
                 <$owner>::control_size(self, size, width, height, direction)
             }
+            $($($extra)*)?
         }
     };
 }
-intrinsic_owner!(
-    crate::mechanical_port::source::shapes::shape::Shape,
-    natural_size_for_layout
+intrinsic_owner!(crate::mechanical_port::source::shapes::shape::Shape, natural_size_for_layout;
+    fn control_size_from_participant(
+        &mut self, size: Vec2D, _width: LayoutScaleType, _height: LayoutScaleType,
+        _direction: LayoutDirection, participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
+    ) {
+        self.control_size_with_participant(size, participant);
+    }
 );
-intrinsic_owner!(crate::mechanical_port::source::shapes::image::Image);
+intrinsic_owner!(crate::mechanical_port::source::shapes::image::Image;
+    fn control_size_from_participant(
+        &mut self, size: Vec2D, _width: LayoutScaleType, _height: LayoutScaleType,
+        _direction: LayoutDirection, participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
+    ) {
+        self.control_size_with_css(size, participant.css_record().is_some());
+    }
+);
 intrinsic_owner!(
     crate::mechanical_port::source::shapes::parametric_path::ParametricPath,
     natural_size_for_layout

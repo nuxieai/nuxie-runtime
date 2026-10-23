@@ -94,11 +94,12 @@ pub(crate) fn host_min_content_width(
     css: bool,
 ) -> Option<f32> {
     if let Some(size) = picture_natural_size(host, css) {
-        return Some(transferred_image_minimum(
+        return Some(picture_minimum(
             size.x,
             size.y,
             known_height,
             cross_limits,
+            css,
         ));
     }
     let natural = natural_for_minimum(host, css);
@@ -116,9 +117,63 @@ pub(crate) fn host_min_content_width(
     .flatten()
 }
 
-/// CSS replaced items clamp their content suggestion through cross-axis
-/// limits, then take the smaller content and transferred suggestions.
-pub(super) fn transferred_image_minimum(
+/// Adapt a host minimum to the same CSS resolver as direct and wrapped
+/// participants. Transpose a vertical query at the caller, keeping ratio and
+/// constraint handling in one place. Translated images keep their old path.
+fn picture_minimum(
+    main: f32,
+    cross: f32,
+    known_cross: Option<f32>,
+    limits: (Option<f32>, Option<f32>),
+    css: bool,
+) -> f32 {
+    if css {
+        use taffy::{
+            AvailableSpace, LengthPercentageAuto, Size,
+            tree::{LayoutInput, RunMode, SizingMode},
+        };
+        let style = Style {
+            min_size: Size {
+                width: LengthPercentageAuto::auto(),
+                height: limits
+                    .0
+                    .map_or(LengthPercentageAuto::auto(), LengthPercentageAuto::length),
+            },
+            max_size: Size {
+                width: LengthPercentageAuto::auto(),
+                height: limits
+                    .1
+                    .map_or(LengthPercentageAuto::auto(), LengthPercentageAuto::length),
+            },
+            ..Style::default()
+        };
+        let input = LayoutInput {
+            run_mode: RunMode::ComputeSize,
+            sizing_mode: SizingMode::ContentSize,
+            known_dimensions: Size {
+                width: None,
+                height: known_cross.filter(|value| value.is_finite() && *value >= 0.0),
+            },
+            available_space: Size {
+                width: AvailableSpace::MinContent,
+                height: AvailableSpace::MinContent,
+            },
+            ..LayoutInput::HIDDEN
+        };
+        return crate::css_layout::replaced::resolve_replaced_size(
+            &style,
+            input,
+            Size {
+                width: main,
+                height: cross,
+            },
+        )
+        .width;
+    }
+    translated_image_minimum(main, cross, known_cross, limits)
+}
+
+fn translated_image_minimum(
     main: f32,
     cross: f32,
     known_cross: Option<f32>,
@@ -149,11 +204,12 @@ pub(crate) fn host_min_content_height(
     css: bool,
 ) -> Option<f32> {
     if let Some(size) = picture_natural_size(host, css) {
-        return Some(transferred_image_minimum(
+        return Some(picture_minimum(
             size.y,
             size.x,
             known_width,
             cross_limits,
+            css,
         ));
     }
     let natural = natural_for_minimum(host, css);
@@ -592,16 +648,20 @@ impl LayoutParticipant {
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let height_scale = LayoutScaleType::from(self.base.layout_height_scale_type());
         let css = self.css_record().is_some();
-        self.with_host_mut(|host| {
+        let Some(host) = self.owner_handle() else {
+            return;
+        };
+        host.with_mut(|host| {
             if let Some(text) = host.as_text_mut() {
                 text.set_owned_by_css_layout(css);
             }
             if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
-                sizeable.control_size(
+                sizeable.control_size_from_participant(
                     Vec2D::new(resolved.width(), resolved.height()),
                     width_scale,
                     height_scale,
                     direction,
+                    self,
                 );
             }
         });

@@ -1679,6 +1679,29 @@ fn picture_layout_fixture(
     item_enums: &[(u16, u32)],
     item_numbers: &[(u16, f32)],
 ) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
+    let natural = if wrapped {
+        (1200.0, 675.0)
+    } else {
+        (480.0, 270.0)
+    };
+    picture_layout_fixture_with_natural_size(
+        video,
+        wrapped,
+        container_enums,
+        item_enums,
+        item_numbers,
+        natural,
+    )
+}
+
+fn picture_layout_fixture_with_natural_size(
+    video: bool,
+    wrapped: bool,
+    container_enums: &[(u16, u32)],
+    item_enums: &[(u16, u32)],
+    item_numbers: &[(u16, f32)],
+    natural: (f32, f32),
+) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
     use crate::source::{generated::core_registry::CoreField, shapes::image::Image};
     let arena = CoreArena::default();
     let root = layout(&arena, None, Some(328.0), false);
@@ -1705,11 +1728,7 @@ fn picture_layout_fixture(
     } else {
         None
     };
-    let (width, height) = if wrapped {
-        (1200.0, 675.0)
-    } else {
-        (480.0, 270.0)
-    };
+    let (width, height) = natural;
     let host = if video {
         let asset = arena.insert(crate::video::VideoAsset::default());
         asset.with_mut(|asset| {
@@ -1956,7 +1975,7 @@ fn css_picture_participant_min_and_max_width_win() {
 }
 
 #[test]
-fn css_picture_flex_automatic_minimum_keeps_smaller_width_suggestion() {
+fn css_picture_flex_automatic_minimum_transfers_definite_height() {
     for video in [false, true] {
         for wrapped in [false, true] {
             let (natural_width, natural_height) = if wrapped {
@@ -1976,13 +1995,13 @@ fn css_picture_flex_automatic_minimum_keeps_smaller_width_suggestion() {
                 .unwrap();
             CssTextLeaf::write(&record, &[], &[(61022, natural_width * 1.25)]);
             LayoutComponent::sync_style_occurrence(&root);
-            assert_picture_size(&root, &item, natural_width * 1.25, natural_height * 2.0);
+            assert_picture_size(&root, &item, natural_width * 2.0, natural_height * 2.0);
         }
     }
 }
 
 #[test]
-fn css_picture_flex_automatic_minimum_keeps_smaller_height_suggestion() {
+fn css_picture_flex_automatic_minimum_transfers_definite_width() {
     for video in [false, true] {
         for wrapped in [false, true] {
             let (natural_width, natural_height) = if wrapped {
@@ -2006,7 +2025,7 @@ fn css_picture_flex_automatic_minimum_keeps_smaller_height_suggestion() {
                 &[(61022, natural_width * 2.0), (61025, natural_height * 1.25)],
             );
             LayoutComponent::sync_style_occurrence(&root);
-            assert_picture_size(&root, &item, natural_width * 2.0, natural_height * 1.25);
+            assert_picture_size(&root, &item, natural_width * 2.0, natural_height * 2.0);
         }
     }
 }
@@ -2760,6 +2779,46 @@ impl ShapeFixture {
         LayoutComponent::update_layout_bounds_occurrence(&self.root, false);
         solved(&self.subject).width()
     }
+}
+
+#[test]
+fn shape_receiver_size_control_does_not_reborrow_participant() {
+    use crate::source::{
+        advance_flags::AdvanceFlags,
+        layout::layout_enums::{LayoutDirection, LayoutStyleInterpolation},
+    };
+    let f = shape_fixture(false, ShapeHost::Participant, 0.0);
+    f.subject
+        .with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            participant
+                .base
+                .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+        });
+    LayoutParticipant::sync_style_changes_occurrence(&f.subject, None);
+    LayoutComponent::calculate_layout_occurrence(&f.root, f32::NAN, f32::NAN);
+    f.subject
+        .with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            participant.update_layout_bounds(false);
+            near(participant.host_scale_x(), 3.75);
+            participant.cascade_layout_style(
+                LayoutStyleInterpolation::Linear,
+                None,
+                1.0,
+                LayoutDirection::Ltr,
+            );
+        });
+    f.root
+        .with_downcast_mut::<LayoutComponent, _>(|root| root.base.set_width_value(400.0));
+    LayoutComponent::sync_style_occurrence(&f.root);
+    LayoutComponent::calculate_layout_occurrence(&f.root, f32::NAN, f32::NAN);
+    f.subject
+        .with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            participant.update_layout_bounds(true);
+            for _ in 0..3 {
+                participant.advance_component(0.5, AdvanceFlags::NEW_FRAME | AdvanceFlags::ANIMATE);
+            }
+            near(participant.host_scale_x(), 5.0);
+        });
 }
 
 #[test]

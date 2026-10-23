@@ -535,10 +535,18 @@ impl Image {
         _height: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
+        self.control_size_with_mode(size, None);
+    }
+
+    pub(crate) fn control_size_with_css(&mut self, size: Vec2D, css: bool) {
+        self.control_size_with_mode(size, Some(css));
+    }
+
+    fn control_size_with_mode(&mut self, size: Vec2D, css: Option<bool>) {
         if self.layout_width != size.x || self.layout_height != size.y {
             self.layout_width = size.x;
             self.layout_height = size.y;
-            self.update_image_scale();
+            self.update_image_scale_with_mode(css);
         }
     }
 
@@ -616,6 +624,10 @@ impl Image {
     }
 
     fn update_image_scale(&mut self) {
+        self.update_image_scale_with_mode(None);
+    }
+
+    fn update_image_scale_with_mode(&mut self, css: Option<bool>) {
         if self.image_asset().is_none() && self.runtime_size.is_none() {
             if self.layout_offset_x != 0.0 || self.layout_offset_y != 0.0 {
                 self.layout_offset_x = 0.0;
@@ -630,7 +642,7 @@ impl Image {
         // its retained intrinsic dimensions until the first frame is available.
         let image_size = self
             .declared_size()
-            .filter(|_| self.uses_css_layout(None))
+            .filter(|_| css.unwrap_or_else(|| self.uses_css_layout(None)))
             .map(|size| (size.x, size.y))
             .or_else(|| {
                 self.render_image()

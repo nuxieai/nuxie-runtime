@@ -665,16 +665,37 @@ impl Shape {
     }
 
     pub fn compute_intrinsic_bounds(&self) -> Aabb {
-        let participant = self.layout_participant();
-        if let Some(bounds) = participant.as_ref().and_then(|participant| {
-            participant
-                .with_downcast::<LayoutParticipant, _>(|participant| {
+        self.compute_intrinsic_bounds_with_participant(None)
+    }
+
+    fn compute_intrinsic_bounds_with_participant(
+        &self,
+        active: Option<&mut LayoutParticipant>,
+    ) -> Aabb {
+        let participant = if active.is_none() {
+            self.layout_participant()
+        } else {
+            None
+        };
+        if let Some(bounds) = active
+            .as_ref()
+            .and_then(|participant| {
+                participant
+                    .host_bounds_valid()
+                    .then(|| *participant.host_bounds())
+            })
+            .or_else(|| {
+                participant.as_ref().and_then(|participant| {
                     participant
-                        .host_bounds_valid()
-                        .then(|| *participant.host_bounds())
+                        .with_downcast::<LayoutParticipant, _>(|participant| {
+                            participant
+                                .host_bounds_valid()
+                                .then(|| *participant.host_bounds())
+                        })
+                        .flatten()
                 })
-                .flatten()
-        }) {
+            })
+        {
             return bounds;
         }
         let mut first = true;
@@ -726,7 +747,9 @@ impl Shape {
             });
         }
         let bounds = if first { Aabb::default() } else { result };
-        if let Some(participant) = participant {
+        if let Some(participant) = active {
+            participant.set_host_bounds(bounds, !used_pending);
+        } else if let Some(participant) = participant {
             participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
                 participant.set_host_bounds(bounds, !used_pending)
             });
@@ -1008,24 +1031,42 @@ impl Shape {
             .find(|path| path.is_type_of(crate::mechanical_port::source::generated::shapes::parametric_path_base::ParametricPathBase::TYPE_KEY))
             .cloned()
     }
-    fn update_layout_scale(&mut self, size: Vec2D) {
-        let Some(participant) = self.layout_participant() else {
-            return;
-        };
-        let bounds = self.compute_intrinsic_bounds();
+    pub(crate) fn control_size_with_participant(
+        &mut self,
+        size: Vec2D,
+        participant: &mut LayoutParticipant,
+    ) {
+        let bounds = self.compute_intrinsic_bounds_with_participant(Some(&mut *participant));
+        Self::set_participant_scale(bounds, size, participant);
+        // The receiver that controls the size dirties the host transform.
+    }
+
+    fn set_participant_scale(
+        bounds: Aabb,
+        size: Vec2D,
+        participant: &mut LayoutParticipant,
+    ) -> bool {
         let (width, height) = (bounds.width(), bounds.height());
         let (sx, sy) = (
             if width > 0.0 { size.x / width } else { 1.0 },
             if height > 0.0 { size.y / height } else { 1.0 },
         );
+        if sx != participant.host_scale_x() || sy != participant.host_scale_y() {
+            participant.set_host_scale(sx, sy);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn update_layout_scale(&mut self, size: Vec2D) {
+        let Some(participant) = self.layout_participant() else {
+            return;
+        };
+        let bounds = self.compute_intrinsic_bounds();
         let changed = participant
             .with_downcast_mut::<LayoutParticipant, _>(|participant| {
-                if sx != participant.host_scale_x() || sy != participant.host_scale_y() {
-                    participant.set_host_scale(sx, sy);
-                    true
-                } else {
-                    false
-                }
+                Self::set_participant_scale(bounds, size, participant)
             })
             .unwrap_or(false);
         if changed {

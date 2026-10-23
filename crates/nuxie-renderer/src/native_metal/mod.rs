@@ -447,6 +447,15 @@ impl NativeMetalFactory {
         (self.target_width, self.target_height)
     }
 
+    /// Set an explicit host ceiling before importing images. Defaults to 64 MiB.
+    #[cfg(feature = "rive-decoders")]
+    pub fn set_image_decode_limit(&self, max_decoded_bytes: usize) -> Result<(), RendererError> {
+        self.mechanical_context()?
+            .borrow_mut()
+            .set_image_decode_limit(max_decoded_bytes);
+        Ok(())
+    }
+
     pub fn adapter_name(&self) -> String {
         self.device.name().to_string()
     }

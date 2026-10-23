@@ -46,6 +46,13 @@ impl NativeWebGpuFactory {
         })
     }
 
+    /// Set an explicit host ceiling before importing images. Defaults to 64 MiB.
+    #[cfg(feature = "rive-decoders")]
+    pub fn set_image_decode_limit(&self, max_decoded_bytes: usize) -> Result<(), RendererError> {
+        self.core.set_image_decode_limit(max_decoded_bytes);
+        Ok(())
+    }
+
     pub fn adapter_name(&self) -> &str {
         &self.adapter_name
     }

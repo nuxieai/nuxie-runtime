@@ -350,30 +350,45 @@ impl StyledText {
             .as_ref()
             .map_or(&[], |map| map.preserved_tabs())
     }
+    fn preserved_carriage_returns(&self) -> &[u32] {
+        self.css_indices
+            .as_ref()
+            .map_or(&[], |map| map.preserved_carriage_returns())
+    }
     fn shape(&self) -> Vec<Paragraph> {
         let font = self.runs[0]
             .font
             .as_ref()
             .expect("shaped text retains its font");
-        if self.preserved_tabs().is_empty() {
+        if self.preserved_tabs().is_empty() && self.preserved_carriage_returns().is_empty() {
             return font.shape_text(self.unichars(), self.runs(), 0);
         }
         let mut shaping_text = self.value.clone();
         for &tab in self.preserved_tabs() {
             shaping_text[tab as usize] = 32;
         }
-        // A tab is an isolated gap, so font features and kerning cannot join
-        // it to either adjacent cluster when it is shaped as a space.
+        for &cr in self.preserved_carriage_returns() {
+            // CSS CR must not split bidi paragraphs or create a line break.
+            shaping_text[cr as usize] = 0x2060;
+        }
+        let mut controls: Vec<_> = self
+            .preserved_tabs()
+            .iter()
+            .chain(self.preserved_carriage_returns())
+            .copied()
+            .collect();
+        controls.sort_unstable();
+        // Isolate controls so font features cannot join adjacent clusters.
         let mut shaping_runs = Vec::new();
         let mut offset = 0;
         for run in &self.runs {
             let end = offset + run.unichar_count;
-            let first = self.preserved_tabs().partition_point(|&tab| tab < offset);
-            let last = self.preserved_tabs().partition_point(|&tab| tab < end);
-            for &tab in &self.preserved_tabs()[first..last] {
-                if tab > offset {
+            let first = controls.partition_point(|&index| index < offset);
+            let last = controls.partition_point(|&index| index < end);
+            for &index in &controls[first..last] {
+                if index > offset {
                     shaping_runs.push(TextRun {
-                        unichar_count: tab - offset,
+                        unichar_count: index - offset,
                         ..run.clone()
                     });
                 }
@@ -381,7 +396,7 @@ impl StyledText {
                     unichar_count: 1,
                     ..run.clone()
                 });
-                offset = tab + 1;
+                offset = index + 1;
             }
             if offset < end {
                 shaping_runs.push(TextRun {
@@ -392,14 +407,20 @@ impl StyledText {
             offset = end;
         }
         let mut paragraphs = font.shape_text(&shaping_text, &shaping_runs, 0);
-        crate::css_text::prepare_tabs(&mut paragraphs, self.css_indices.as_ref().unwrap());
+        crate::css_text::prepare_controls(&mut paragraphs, self.css_indices.as_ref().unwrap());
         paragraphs
     }
 
     /// Whether shaping this reads exactly what shaping `unichars` over `runs`
     /// reads: the same code points and runs, fonts by identity and sizes by bits.
-    fn shapes_like(&self, unichars: &[u32], runs: &[TextRun], tabs: &[u32]) -> bool {
-        if self.preserved_tabs() != tabs {
+    fn shapes_like(
+        &self,
+        unichars: &[u32],
+        runs: &[TextRun],
+        tabs: &[u32],
+        carriage_returns: &[u32],
+    ) -> bool {
+        if self.preserved_tabs() != tabs || self.preserved_carriage_returns() != carriage_returns {
             return false;
         }
         self.value == unichars
@@ -427,8 +448,9 @@ impl StyledText {
 /// reshaping it would produce these same paragraphs.
 struct MeasuredShape {
     unichars: Vec<u32>,
-    // Preserved tabs affect fixed advances and glyph suppression.
+    // Preserved controls affect shaping, advances and glyph suppression.
     css_tabs: Vec<u32>,
+    css_carriage_returns: Vec<u32>,
     runs: Vec<TextRun>,
     // fallback_state() when shaped. A shaping that called the fallback is not
     // kept: what the callback returns may change.
@@ -1275,6 +1297,7 @@ impl Text {
     ) -> bool {
         styled.clear();
         let mut css_options = Vec::new();
+        let mut css_run_ends = Vec::new();
         for (run_index, run) in self.all_runs.iter().enumerate() {
             let Some((style, text)) = run.with(|run| (run.style(), run.base.text().to_owned()))
             else {
@@ -1331,11 +1354,13 @@ impl Text {
             );
             if self.css_owned {
                 css_options.resize(styled.value.len(), crate::css_text::style_options(&style));
+                css_run_ends.push(styled.value.len());
             }
         }
         let has_css = css_options.iter().any(Option::is_some);
         if has_css {
-            let (value, map) = crate::css_text::display_text(&styled.value, &css_options);
+            let (value, map) =
+                crate::css_text::display_text(&styled.value, &css_options, &css_run_ends);
             let mut source_offset = 0;
             for run in &mut styled.runs {
                 let end = source_offset + run.unichar_count;
@@ -2143,8 +2168,8 @@ impl Text {
                         }
                         }
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {
-                            // Cluster pictures carry ink; CSS tabs carry only a gap.
-                            inked = !run.is_css_tab(index);
+                            // Cluster pictures carry ink; CSS controls have no ink.
+                            inked = !run.is_css_control(index);
                         }
                     }
                     // Nuxie addition: the run style's underline/line-through.
@@ -2588,7 +2613,12 @@ impl Text {
     fn take_measured_shape(&mut self, styled: &StyledText) -> Option<Vec<Paragraph>> {
         let measured = self.measured_shape.take()?;
         if measured.fallback == fallback_state()
-            && styled.shapes_like(&measured.unichars, &measured.runs, &measured.css_tabs)
+            && styled.shapes_like(
+                &measured.unichars,
+                &measured.runs,
+                &measured.css_tabs,
+                &measured.css_carriage_returns,
+            )
         {
             return Some(measured.shape);
         }
@@ -2677,7 +2707,8 @@ impl Text {
             mix(2);
             for i in 0..styled.value.len() {
                 mix(u64::from(map.is_collapsible(i as u32))
-                    | (u64::from(map.is_tab(i as u32)) << 1));
+                    | (u64::from(map.is_tab(i as u32)) << 1)
+                    | (u64::from(map.is_carriage_return(i as u32)) << 2));
             }
         }
         for run in styled.runs() {
@@ -2744,6 +2775,7 @@ impl Text {
                         &measured.unichars,
                         &measured.runs,
                         &measured.css_tabs,
+                        &measured.css_carriage_returns,
                     ) =>
             {
                 (measured, true)
@@ -2757,6 +2789,7 @@ impl Text {
                     Box::new(MeasuredShape {
                         unichars: Vec::new(),
                         css_tabs: Vec::new(),
+                        css_carriage_returns: Vec::new(),
                         runs: Vec::new(),
                         fallback,
                         shape: Vec::new(),
@@ -2766,6 +2799,10 @@ impl Text {
                 measured.unichars.extend_from_slice(styled.unichars());
                 measured.css_tabs.clear();
                 measured.css_tabs.extend_from_slice(styled.preserved_tabs());
+                measured.css_carriage_returns.clear();
+                measured
+                    .css_carriage_returns
+                    .extend_from_slice(styled.preserved_carriage_returns());
                 measured.runs.clear();
                 measured.runs.extend_from_slice(runs);
                 measured.fallback = fallback;

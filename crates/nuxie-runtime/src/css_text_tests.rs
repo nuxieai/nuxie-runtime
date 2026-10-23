@@ -420,6 +420,282 @@ fn css_text_white_space_modes_match_browser_strings_and_wraps() {
     assert_eq!(normalized.display(), "a\nb");
 }
 
+fn assert_css_text_carriage_return(
+    runs: &[(&str, Option<(u32, u32)>)],
+    expected: &str,
+    lines: usize,
+    boundaries: &[u32],
+) {
+    use crate::source::text_engine::GlyphRenderKind;
+
+    let mut scene = Scene::new(runs, true, 400.0, true, false, false);
+    let source: String = runs.iter().map(|(source, _)| *source).collect();
+    assert_eq!(scene.display(), expected);
+    assert_eq!(scene.display().split('\n').count(), lines);
+    assert_eq!(scene.line_widths().len(), lines);
+    for (run, &(source, _)) in scene.handles::<TextValueRun>().iter().zip(runs) {
+        run.with_downcast::<TextValueRun, _>(|run| assert_eq!(run.base.text(), source));
+    }
+    let text = scene.text();
+    text.with_downcast::<Text, _>(|text| {
+        let styled = text.styled_text();
+        let map = styled.css_indices().unwrap();
+        assert_eq!(
+            map.source(),
+            source.chars().map(u32::from).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            (0..=source.len() as u32)
+                .map(|index| styled.source_to_display(index))
+                .collect::<Vec<_>>(),
+            boundaries
+        );
+        let display_start = expected.len() as u32 - 3;
+        let source_start = source.len() as u32 - 3;
+        for index in 0..=3 {
+            assert_eq!(
+                styled.display_to_source(display_start + index),
+                source_start + index
+            );
+        }
+        let mut carriage_returns = 0;
+        for paragraph in text.shape() {
+            for run in &paragraph.runs {
+                for (glyph, &index) in run.text_indices.iter().enumerate() {
+                    if text.unichars()[index as usize] == u32::from('\r') {
+                        assert_eq!(run.glyph_render_kind(glyph), GlyphRenderKind::Suppressed);
+                        assert_eq!(run.advances[glyph], 0.0);
+                        carriage_returns += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            carriage_returns,
+            expected.chars().filter(|&ch| ch == '\r').count()
+        );
+    });
+    let mut selection = TextSelectionController::new();
+    assert!(selection.add(&text, ""));
+    assert_eq!(selection.source_text(&text), source);
+    selection.select_all();
+    assert_eq!(selection.selected_text(), source);
+    selection.set_range(&text, 3, source.len() as u32 - 3);
+    assert_eq!(selection.selected_text(), &source[3..source.len() - 3]);
+    let start = source.len() as u32 - 3;
+    selection.set_range(&text, start, start + 1);
+    assert_eq!(selection.selected_text(), "t");
+    assert_eq!(selection.selection(&text).first().code_point_index(), start);
+    let id = scene.board.native_handle().with_artboard(|a| {
+        a.objects()
+            .iter()
+            .position(|h| h.as_ref() == Some(&text))
+            .unwrap()
+    });
+    for index in 0..=source.len() {
+        let caret = scene.board.text_caret(id, index).unwrap();
+        assert!(caret.top.x.is_finite() && caret.top.y.is_finite());
+    }
+    let caret = scene.board.text_caret(id, start as usize).unwrap();
+    let end = scene.board.text_caret(id, start as usize + 1).unwrap();
+    assert!(end.top.x > caret.top.x);
+    // Hit inside the letter to avoid the coincident carets around invisible CR.
+    let point = nuxie_render_api::Vec2D::new(
+        caret.top.x + (end.top.x - caret.top.x) * 0.25,
+        (caret.top.y + caret.bottom.y) / 2.0,
+    );
+    assert_eq!(scene.board.text_hit(id, point), Some(start as usize));
+    let rects = selection.selection_rects(&text);
+    assert_eq!(rects.len(), 1);
+    assert!((rects[0].min_x - caret.top.x).abs() < 0.01);
+    assert!((rects[0].max_x - end.top.x).abs() < 0.01);
+}
+
+#[test]
+fn css_text_normal_cr_before_br_keeps_mandatory_break() {
+    assert_css_text_carriage_return(
+        &[
+            ("one\r", Some((0, 0))),
+            ("\n", Some((0, 3))),
+            ("two", Some((0, 0))),
+        ],
+        "one\ntwo",
+        2,
+        &[0, 1, 2, 3, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_normal_crlf_collapses() {
+    assert_css_text_carriage_return(
+        &[("one\r\ntwo", Some((0, 0)))],
+        "one two",
+        1,
+        &[0, 1, 2, 3, 4, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_normal_lone_cr_collapses() {
+    assert_css_text_carriage_return(
+        &[("one\rtwo", Some((0, 0)))],
+        "one two",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_pre_cr_before_br_keeps_mandatory_break() {
+    assert_css_text_carriage_return(
+        &[
+            ("one\r", Some((0, 1))),
+            ("\n", Some((0, 3))),
+            ("two", Some((0, 1))),
+        ],
+        "one\r\ntwo",
+        2,
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+    );
+}
+
+#[test]
+fn css_text_pre_crlf_keeps_one_break() {
+    assert_css_text_carriage_return(
+        &[("one\r\ntwo", Some((0, 1)))],
+        "one\r\ntwo",
+        2,
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+    );
+}
+
+#[test]
+fn css_text_pre_lone_cr_is_invisible_without_breaking() {
+    assert_css_text_carriage_return(
+        &[("one\rtwo", Some((0, 1)))],
+        "one\rtwo",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_pre_line_cr_before_br_keeps_mandatory_break() {
+    assert_css_text_carriage_return(
+        &[
+            ("one\r", Some((0, 3))),
+            ("\n", Some((0, 3))),
+            ("two", Some((0, 3))),
+        ],
+        "one\ntwo",
+        2,
+        &[0, 1, 2, 3, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_pre_line_crlf_keeps_one_break() {
+    assert_css_text_carriage_return(
+        &[("one\r\ntwo", Some((0, 3)))],
+        "one\ntwo",
+        2,
+        &[0, 1, 2, 3, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_pre_line_lone_cr_collapses() {
+    assert_css_text_carriage_return(
+        &[("one\rtwo", Some((0, 3)))],
+        "one two",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_pre_wrap_preserves_cr_and_crlf() {
+    assert_css_text_carriage_return(
+        &[("one\rtwo", Some((0, 2)))],
+        "one\rtwo",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7],
+    );
+    assert_css_text_carriage_return(
+        &[("one\r\ntwo", Some((0, 2)))],
+        "one\r\ntwo",
+        2,
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+    );
+    assert_css_text_carriage_return(
+        &[
+            ("one\r", Some((0, 2))),
+            ("\n", Some((0, 3))),
+            ("two", Some((0, 2))),
+        ],
+        "one\r\ntwo",
+        2,
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+    );
+}
+
+#[test]
+fn css_text_nowrap_collapses_cr_and_crlf_but_keeps_br() {
+    assert_css_text_carriage_return(
+        &[("one\rtwo", Some((0, 4)))],
+        "one two",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7],
+    );
+    assert_css_text_carriage_return(
+        &[("one\r\ntwo", Some((0, 4)))],
+        "one two",
+        1,
+        &[0, 1, 2, 3, 4, 4, 5, 6, 7],
+    );
+    assert_css_text_carriage_return(
+        &[
+            ("one\r", Some((0, 4))),
+            ("\n", Some((0, 3))),
+            ("two", Some((0, 4))),
+        ],
+        "one\ntwo",
+        2,
+        &[0, 1, 2, 3, 3, 4, 5, 6, 7],
+    );
+}
+
+#[test]
+fn css_text_lf_after_cr_uses_its_own_run_mode() {
+    for mode in [0, 2, 4] {
+        assert_css_text_carriage_return(
+            &[("one\r", Some((0, 1))), ("\ntwo", Some((0, mode)))],
+            "one\r two",
+            1,
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+        );
+        assert_css_text_carriage_return(
+            &[("one\r", Some((0, 3))), ("\ntwo", Some((0, mode)))],
+            "one two",
+            1,
+            &[0, 1, 2, 3, 4, 4, 5, 6, 7],
+        );
+    }
+    assert_css_text_carriage_return(
+        &[("one\r", Some((0, 0))), ("\ntwo", Some((0, 1)))],
+        "one\ntwo",
+        2,
+        &[0, 1, 2, 3, 3, 4, 5, 6, 7],
+    );
+    // Equal style values do not make adjacent runs a source CRLF pair.
+    assert_css_text_carriage_return(
+        &[("one\r", Some((0, 2))), ("\ntwo", Some((0, 2)))],
+        "one\r two",
+        1,
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8],
+    );
+}
+
 #[test]
 fn css_text_pre_wrap_falls_back_to_normal_strings_and_lines() {
     let reference = Scene::new(&[("a", Some((0, 0)))], true, 300.0, true, false, false);
@@ -649,7 +925,7 @@ fn css_text_translated_text_and_styles_without_records_stay_unchanged() {
 #[test]
 fn css_text_index_map_covers_every_source_boundary() {
     let source: Vec<_> = "  ß  ab  ".chars().map(u32::from).collect();
-    let (display, map) = display_text(&source, &vec![Some((1, 0)); source.len()]);
+    let (display, map) = display_text(&source, &vec![Some((1, 0)); source.len()], &[source.len()]);
     assert_eq!(display, "SS AB".chars().map(u32::from).collect::<Vec<_>>());
     assert_eq!(
         (0..=source.len() as u32)

@@ -694,6 +694,8 @@ pub struct GlyphRun {
     pub joiners: Vec<u32>,
     /// CSS preserved tab glyph indices, suppressed when drawing.
     pub css_tabs: Vec<usize>,
+    /// CSS preserved carriage return glyph indices, suppressed when drawing.
+    pub css_carriage_returns: Vec<usize>,
 }
 
 impl Default for GlyphRun {
@@ -722,6 +724,7 @@ impl GlyphRun {
             level: 0,
             joiners: Vec::new(),
             css_tabs: Vec::new(),
+            css_carriage_returns: Vec::new(),
         }
     }
 
@@ -750,6 +753,7 @@ impl GlyphRun {
             level: 0,
             joiners: Vec::new(),
             css_tabs: Vec::new(),
+            css_carriage_returns: Vec::new(),
         }
     }
 
@@ -771,11 +775,12 @@ impl GlyphRun {
 
     /// Cluster pictures replace this font's whole cluster; glyph pictures
     /// replace only their own glyph. Advances and metrics are unchanged.
-    pub(crate) fn is_css_tab(&self, index: usize) -> bool {
+    pub(crate) fn is_css_control(&self, index: usize) -> bool {
         self.css_tabs.binary_search(&index).is_ok()
+            || self.css_carriage_returns.binary_search(&index).is_ok()
     }
     pub fn glyph_render_kind(&self, index: usize) -> GlyphRenderKind {
-        if self.is_css_tab(index) {
+        if self.is_css_control(index) {
             return GlyphRenderKind::Suppressed;
         }
         let font = self.font.as_ref().expect("shaped run retains its font");

@@ -300,6 +300,7 @@ pub struct TextIndexMap {
     boundaries: Vec<u32>,
     collapsible: Vec<bool>,
     preserved_tabs: Vec<u32>,
+    preserved_carriage_returns: Vec<u32>,
 }
 impl TextIndexMap {
     pub fn source(&self) -> &[u32] {
@@ -325,6 +326,14 @@ impl TextIndexMap {
     }
     pub(crate) fn preserved_tabs(&self) -> &[u32] {
         &self.preserved_tabs
+    }
+    pub(crate) fn preserved_carriage_returns(&self) -> &[u32] {
+        &self.preserved_carriage_returns
+    }
+    pub(crate) fn is_carriage_return(&self, index: u32) -> bool {
+        self.preserved_carriage_returns
+            .binary_search(&index)
+            .is_ok()
     }
     pub(crate) fn is_tab(&self, index: u32) -> bool {
         self.preserved_tabs.binary_search(&index).is_ok()
@@ -387,6 +396,7 @@ fn titlecase(ch: char) -> Vec<char> {
 pub(crate) fn display_text(
     source: &[u32],
     options: &[Option<(u32, u32)>],
+    source_run_ends: &[usize],
 ) -> (Vec<u32>, TextIndexMap) {
     use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
     let chars: Vec<char> = source
@@ -430,18 +440,23 @@ pub(crate) fn display_text(
             pieces.push((i, ch as u32, false));
             continue;
         };
-        // pre-wrap falls back to normal whitespace processing.
+        // pre-wrap retains its normal fallback except for authored CR and CRLF.
         let collapse = matches!(whitespace, 0 | 2 | 3 | 4);
-        // CSS segment breaks normalize CRLF and CR before whitespace processing.
-        if ch == '\n' && i > 0 && chars[i - 1] == '\r' && options[i - 1].is_some() {
-            continue;
-        }
-        let ch = if ch == '\r' || ch == '\u{c}' {
-            '\n'
-        } else {
-            ch
+        // A CR is space-like in collapsing modes. Preserved CR stays in the
+        // display and source map, but is shaped as an invisible word joiner.
+        let ch = match ch {
+            '\r' if matches!(whitespace, 0 | 3 | 4) => ' ',
+            '\u{c}' => '\n',
+            _ => ch,
         };
-        if collapse && (ch == ' ' || ch == '\t' || (ch == '\n' && whitespace != 3)) {
+        // Each LF uses its own run's mode, including a compiler-authored br.
+        // Only an LF paired with CR inside a pre-wrap run bypasses its fallback.
+        let preserved_lf = whitespace == 3
+            || (whitespace == 2
+                && i > 0
+                && chars[i - 1] == '\r'
+                && source_run_ends.binary_search(&i).is_err());
+        if collapse && (ch == ' ' || ch == '\t' || (ch == '\n' && !preserved_lf)) {
             if pieces
                 .last()
                 .is_none_or(|&(_, cp, collapsible)| cp == 10 || collapsible)
@@ -478,11 +493,15 @@ pub(crate) fn display_text(
         boundaries: vec![0; source.len() + 1],
         collapsible: Vec::with_capacity(pieces.len()),
         preserved_tabs: Vec::new(),
+        preserved_carriage_returns: Vec::new(),
     };
     let mut display = Vec::with_capacity(pieces.len());
     for (source, cp, collapsible) in pieces {
         if cp == 9 && options[source].is_some_and(|(_, whitespace)| whitespace == 1) {
             map.preserved_tabs.push(display.len() as u32);
+        }
+        if cp == 13 && options[source].is_some() {
+            map.preserved_carriage_returns.push(display.len() as u32);
         }
         map.boundaries[source + 1] += 1;
         map.collapsible.push(collapsible);
@@ -494,8 +513,8 @@ pub(crate) fn display_text(
     (display, map)
 }
 
-/// Give each preserved tab a fixed eight-space advance and suppress its glyph.
-pub(crate) fn prepare_tabs(
+/// Set CSS control advances and suppress their glyphs without changing indices.
+pub(crate) fn prepare_controls(
     paragraphs: &mut [crate::source::text_engine::Paragraph],
     map: &TextIndexMap,
 ) {
@@ -509,6 +528,10 @@ pub(crate) fn prepare_tabs(
                     run.advances[glyph] = 8.0 * advance;
                     shift += run.advances[glyph] - advance;
                     run.css_tabs.push(glyph);
+                } else if map.is_carriage_return(index) {
+                    shift -= run.advances[glyph];
+                    run.advances[glyph] = 0.0;
+                    run.css_carriage_returns.push(glyph);
                 }
             }
             run.xpos[run.glyphs.len()] += shift;

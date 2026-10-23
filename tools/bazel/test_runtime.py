@@ -65,6 +65,15 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertEqual((self.root / "target/debug/silver-corpus__bin").read_bytes(), b"remote executable")
         self.assertTrue(os.access(self.root / "target/debug/silver-corpus__bin", os.X_OK))
 
+    def test_remote_run_declares_implicit_replay_and_external_output(self):
+        replay = self.root / "target/debug/renderer-replay"
+        replay.parent.mkdir(parents=True); replay.write_bytes(b"replay executable")
+        options = runtime.command_options(["run","-p","pixel-compare","--bin","corpus-r"])
+        result = runtime.run_io(options, ["--out","/tmp/runtime-probe.riv"])
+        self.assertEqual(result["inputs"],[str(replay)])
+        self.assertEqual(result["outputs"],[{"path":str(Path("/tmp/runtime-probe.riv").resolve()),"directory":False}])
+        self.assertEqual(runtime.run_io(options,["--replay","another-replay"])["inputs"],[])
+
     def test_remote_run_preserves_runtime_trace_and_profiling_environment(self):
         with patch.dict(os.environ, {"NUXIE_COMPONENT_GRAPH_TRACE":"target/trace.json",
                                     "RENDERER_PERF_BASELINE_SOURCE_ID":"baseline",
@@ -76,7 +85,7 @@ class RuntimeBuildTest(unittest.TestCase):
     def test_pool_capability_checks_the_actual_startup_arguments(self):
         router = self.root / ".local/share/nuxie-homelab/rust/route.py"
         router.parent.mkdir(parents=True)
-        router.write_text("runtime_run_supported=True\ndef runtime_run_compatible(args): return '--custom' not in args\n")
+        router.write_text("runtime_run_supported=2\ndef runtime_run_compatible(args): return '--custom' not in args\n")
         settings = self.root / ".config/nuxie/homelab-cluster.json"
         settings.parent.mkdir(parents=True); settings.write_text('{}')
         with patch.object(Path, "home", return_value=self.root), patch.dict(os.environ, {}, clear=True):

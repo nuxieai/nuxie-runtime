@@ -1438,6 +1438,21 @@ fn determine_container_main_size(
                     size
                 }
             }
+            // nuxie-css: intrinsic nowrap columns use the outer hypothetical main sizes
+            // already resolved by determine_flex_base_size, including automatic minima.
+            AvailableSpace::MinContent | AvailableSpace::MaxContent if constants.is_column && !constants.is_wrap => {
+                let longest_line_length: f32 = lines
+                    .iter()
+                    .map(|line| {
+                        let gap_sum = sum_axis_gaps(constants.gap.main(dir), line.items.len());
+                        let item_main_size_sum =
+                            line.items.iter().map(|item| item.hypothetical_outer_size.main(dir)).sum::<f32>();
+                        item_main_size_sum + gap_sum
+                    })
+                    .max_by(|a, b| a.total_cmp(b))
+                    .unwrap_or(0.0);
+                longest_line_length + main_content_box_inset
+            }
             AvailableSpace::MinContent if constants.is_wrap => {
                 let longest_line_length: f32 = lines
                     .iter()

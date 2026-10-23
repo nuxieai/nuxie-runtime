@@ -4218,6 +4218,530 @@ fn css_zero_percentages_resolve_against_an_indefinite_size() {
     assert_eq!(f.bounds("Capped")[3], 30.0);
 }
 
+/// `flex: 2` beside `height: 80px` in a column: its `0%` basis against an
+/// indefinite height is its content's size, here none, so the height does
+/// not stand in for it. Chrome 156 gives 0 in an auto-height column and
+/// grows it to 140 in a 200-point one.
+#[test]
+fn css_flex_basis_percentage_ignores_the_height_against_an_indefinite_column() {
+    const COLUMN: u64 = 2;
+    const FLEX_BASIS_KIND: u16 = 61010;
+    const PERCENTAGE: u64 = 7;
+    let column = |height_props: Vec<P>, painted: bool| {
+        scene(
+            (400.0, 400.0),
+            css(
+                "Column",
+                [
+                    [U(DISPLAY, 1), U(61006, COLUMN)].as_slice(),
+                    &width(200.0),
+                    &height_props,
+                ]
+                .concat(),
+                vec![
+                    css(
+                        "Before",
+                        [[F(FLEX_SHRINK, 0.0)].as_slice(), &height(30.0)].concat(),
+                        vec![],
+                    ),
+                    B {
+                        paints: if painted {
+                            vec![Paint::Fill(0xffcc_3333)]
+                        } else {
+                            vec![]
+                        },
+                        ..css(
+                            "Grow",
+                            [
+                                [F(FLEX_GROW, 2.0), U(FLEX_BASIS_KIND, PERCENTAGE)].as_slice(),
+                                &height(80.0),
+                            ]
+                            .concat(),
+                            vec![],
+                        )
+                    },
+                    css(
+                        "After",
+                        [[F(FLEX_SHRINK, 0.0)].as_slice(), &height(30.0)].concat(),
+                        vec![],
+                    ),
+                ],
+            ),
+        )
+    };
+    // A background is no content: painted or not, the item is the same.
+    for painted in [false, true] {
+        let auto = column(vec![], painted);
+        assert_eq!(
+            auto.bounds("Grow"),
+            [0.0, 30.0, 200.0, 0.0],
+            "painted {painted}"
+        );
+        assert_eq!(auto.bounds("After")[1], 30.0, "painted {painted}");
+        assert_eq!(auto.bounds("Column")[3], 60.0, "painted {painted}");
+        let definite = column(height(200.0).to_vec(), painted);
+        assert_eq!(
+            definite.bounds("Grow"),
+            [0.0, 30.0, 200.0, 140.0],
+            "painted {painted}"
+        );
+    }
+}
+
+/// A block parent measures its column with max-content available height.
+/// The preferred item height must not replace an unresolved percentage basis.
+#[test]
+fn css_flex_basis_percentage_in_a_column_under_a_block() {
+    for direction in [2, 3] {
+        for column_width in [false, true] {
+            let mut props = vec![U(DISPLAY, 1), U(61006, direction)];
+            if column_width {
+                props.extend(width(200.0));
+            }
+            let f = scene(
+                (360.0, 640.0),
+                css(
+                    "Block",
+                    vec![],
+                    vec![css(
+                        "Column",
+                        props,
+                        vec![css(
+                            "Grow",
+                            [&[F(FLEX_GROW, 2.0), U(61010, 7)][..], &height(80.0)].concat(),
+                            vec![],
+                        )],
+                    )],
+                ),
+            );
+            assert_eq!(
+                f.bounds("Grow")[3],
+                0.0,
+                "direction {direction}, width {column_width}"
+            );
+        }
+    }
+}
+
+/// Chrome 156: intrinsic single-line columns use each item's hypothetical
+/// main size, including the automatic minimum, whatever its flex basis.
+#[test]
+fn css_intrinsic_column_uses_hypothetical_item_heights() {
+    const FLEX_BASIS_KIND: u16 = 61010;
+    const FLEX_BASIS: u16 = 61011;
+    const MIN_HEIGHT_KIND: u16 = 61030;
+    const MIN_HEIGHT: u16 = 61031;
+    const MAX_HEIGHT_KIND: u16 = 61036;
+    const MAX_HEIGHT: u16 = 61037;
+    let flex = vec![F(FLEX_GROW, 2.0), U(FLEX_BASIS_KIND, 7)];
+    let zero_basis = vec![U(FLEX_BASIS_KIND, 1)];
+    let thirty_basis = vec![
+        F(FLEX_GROW, 1.0),
+        U(FLEX_BASIS_KIND, 1),
+        F(FLEX_BASIS, 30.0),
+    ];
+    let cases = [
+        ("auto basis, taller content", vec![], 120.0, 80.0),
+        ("auto basis, shorter content", vec![], 50.0, 80.0),
+        (
+            "percentage basis, taller content",
+            flex.clone(),
+            120.0,
+            120.0,
+        ),
+        (
+            "percentage basis, shorter content",
+            flex.clone(),
+            50.0,
+            50.0,
+        ),
+        ("percentage basis, empty content", flex.clone(), 0.0, 0.0),
+        (
+            "zero basis, taller content",
+            zero_basis.clone(),
+            120.0,
+            80.0,
+        ),
+        ("zero basis, shorter content", zero_basis, 50.0, 50.0),
+        (
+            "percentage basis, zero minimum",
+            [flex.clone(), vec![U(MIN_HEIGHT_KIND, 1)]].concat(),
+            120.0,
+            120.0,
+        ),
+        (
+            "100 point basis, empty content",
+            vec![U(FLEX_BASIS_KIND, 1), F(FLEX_BASIS, 100.0)],
+            0.0,
+            100.0,
+        ),
+        (
+            "100 point basis, taller content",
+            vec![U(FLEX_BASIS_KIND, 1), F(FLEX_BASIS, 100.0)],
+            120.0,
+            100.0,
+        ),
+        (
+            "30 point basis, empty content",
+            thirty_basis.clone(),
+            0.0,
+            30.0,
+        ),
+        ("30 point basis, taller content", thirty_basis, 120.0, 80.0),
+        (
+            "auto basis, maximum",
+            vec![U(MAX_HEIGHT_KIND, 1), F(MAX_HEIGHT, 60.0)],
+            120.0,
+            60.0,
+        ),
+        (
+            "auto basis, minimum",
+            vec![U(MIN_HEIGHT_KIND, 1), F(MIN_HEIGHT, 100.0)],
+            0.0,
+            100.0,
+        ),
+        (
+            "percentage basis, hidden overflow",
+            [flex, vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)]].concat(),
+            120.0,
+            120.0,
+        ),
+    ];
+    let mut failures = Vec::new();
+    for direction in [2, 3] {
+        // Auto height under a block parent takes the max-content path. The
+        // keywords also exercise explicit min-content and max-content requests.
+        for column_height_kind in [0, 2, 3] {
+            for (name, item_props, content_height, expected) in &cases {
+                let f = scene(
+                    (360.0, 640.0),
+                    css(
+                        "Block",
+                        vec![],
+                        vec![css(
+                            "Column",
+                            [
+                                &[
+                                    U(DISPLAY, 1),
+                                    U(61006, direction),
+                                    U(HEIGHT_KIND, column_height_kind),
+                                ][..],
+                                &width(200.0),
+                            ]
+                            .concat(),
+                            vec![css(
+                                "Item",
+                                [height(80.0).as_slice(), item_props].concat(),
+                                vec![css("Content", height(*content_height).to_vec(), vec![])],
+                            )],
+                        )],
+                    ),
+                );
+                let actual = [f.bounds("Item")[3], f.bounds("Column")[3]];
+                if actual != [*expected; 2] {
+                    failures.push(format!("{name}, direction {direction}, height kind {column_height_kind}: {actual:?}, expected {expected}"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Outer hypothetical sizes include margins; the container adds gaps and
+/// its own padding and border once, without counting overflowing content.
+#[test]
+fn css_intrinsic_column_sums_outer_hypothetical_sizes_and_gaps() {
+    for direction in [2, 3] {
+        for column_height_kind in [0, 2, 3] {
+            let f = scene(
+                (360.0, 640.0),
+                css(
+                    "Block",
+                    vec![],
+                    vec![css(
+                        "Column",
+                        [
+                            &[
+                                U(DISPLAY, 1),
+                                U(61006, direction),
+                                U(HEIGHT_KIND, column_height_kind),
+                                F(61075, 9.0),
+                                F(PADDING_TOP, 4.0),
+                                F(PADDING_BOTTOM, 6.0),
+                                F(BORDER_TOP, 2.0),
+                                F(BORDER_BOTTOM, 3.0),
+                            ][..],
+                            &width(200.0),
+                        ]
+                        .concat(),
+                        vec![
+                            css(
+                                "Fixed",
+                                [
+                                    height(80.0).as_slice(),
+                                    &[F(MARGIN_TOP, 7.0), F(MARGIN_BOTTOM, 11.0)],
+                                ]
+                                .concat(),
+                                vec![css("Overflowing content", height(120.0).to_vec(), vec![])],
+                            ),
+                            css(
+                                "Flexible",
+                                vec![
+                                    F(FLEX_GROW, 2.0),
+                                    U(61010, 7),
+                                    F(MARGIN_TOP, -3.0),
+                                    F(MARGIN_BOTTOM, 5.0),
+                                ],
+                                vec![css("Content", height(50.0).to_vec(), vec![])],
+                            ),
+                        ],
+                    )],
+                ),
+            );
+            assert_eq!(
+                [
+                    f.bounds("Fixed")[3],
+                    f.bounds("Flexible")[3],
+                    f.bounds("Column")[3]
+                ],
+                [80.0, 50.0, 174.0],
+                "direction {direction}, height kind {column_height_kind}",
+            );
+        }
+    }
+}
+
+/// A plain Taffy tree isolates intrinsic main sizing from runtime measurement.
+#[test]
+fn css_flex_basis_taffy_intrinsic_columns_use_content() {
+    use taffy::prelude::*;
+    for direction in [FlexDirection::Column, FlexDirection::ColumnReverse] {
+        for constraint in [AvailableSpace::MinContent, AvailableSpace::MaxContent] {
+            for basis in [
+                Dimension::percent(0.0),
+                Dimension::length(0.0),
+                Dimension::content(),
+            ] {
+                for (content_height, min_height, max_height, expected) in [
+                    (0.0, None, None, 0.0),
+                    (50.0, None, None, 50.0),
+                    (0.0, None, Some(40.0), 0.0),
+                    (0.0, Some(20.0), None, 20.0),
+                ] {
+                    let mut tree = TaffyTree::<f32>::new();
+                    tree.disable_rounding();
+                    let item = tree
+                        .new_leaf_with_context(
+                            Style {
+                                size: Size {
+                                    width: length(110.0),
+                                    height: length(80.0),
+                                },
+                                min_size: Size {
+                                    width: auto(),
+                                    height: min_height.map(length).unwrap_or(auto()),
+                                },
+                                max_size: Size {
+                                    width: auto(),
+                                    height: max_height.map(length).unwrap_or(auto()),
+                                },
+                                flex_basis: basis,
+                                flex_grow: 2.0,
+                                ..Style::default()
+                            },
+                            content_height,
+                        )
+                        .unwrap();
+                    let column = tree
+                        .new_with_children(
+                            Style {
+                                flex_direction: direction,
+                                size: Size {
+                                    width: length(200.0),
+                                    height: auto(),
+                                },
+                                ..Style::default()
+                            },
+                            &[item],
+                        )
+                        .unwrap();
+                    tree.compute_layout_with_measure(
+                        column,
+                        Size {
+                            width: AvailableSpace::Definite(200.0),
+                            height: constraint,
+                        },
+                        |inputs, _, content, style| {
+                            taffy::compute_leaf_layout(
+                                inputs,
+                                style,
+                                |_, _| 0.0,
+                                |known, _| {
+                                    known.unwrap_or(Size {
+                                        width: 0.0,
+                                        height: content.copied().unwrap_or(0.0),
+                                    })
+                                },
+                            )
+                        },
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        tree.layout(item).unwrap().size.height,
+                        expected,
+                        "{direction:?}, {constraint:?}, {basis:?}, content {content_height}, min {min_height:?}, max {max_height:?}"
+                    );
+                    assert_eq!(tree.layout(column).unwrap().size.height, expected);
+                }
+            }
+        }
+    }
+}
+
+/// The compiler writes a block viewport and a full-size block content box.
+/// Chrome 156 gives the reverse column 144 points, including the empty
+/// flexible item's 44 points of vertical margins.
+#[test]
+fn css_flex_basis_percentage_in_a_reverse_column_under_a_block_scroller() {
+    let f = try_scene(
+        (360.0, 640.0),
+        Some(vec![]),
+        overflow_viewport(
+            "a",
+            [height(160.0).as_slice(), &[U(OVERFLOW_Y, 4)]].concat(),
+            vec![
+                css(
+                    "b",
+                    [
+                        &[
+                            U(DISPLAY, 1),
+                            U(61006, 3),
+                            U(61018, 2),
+                            U(61013, 2),
+                            F(PADDING_TOP, 14.0),
+                            F(PADDING_RIGHT, 8.0),
+                            F(PADDING_BOTTOM, 18.0),
+                            F(PADDING_LEFT, 8.0),
+                            F(BORDER_TOP, 1.0),
+                            F(BORDER_LEFT, 8.0),
+                        ][..],
+                        &width(250.0),
+                        &height(380.0),
+                    ]
+                    .concat(),
+                    vec![
+                        css(
+                            "c",
+                            [
+                                &[
+                                    U(BOX_SIZING, 1),
+                                    F(PADDING_TOP, 14.0),
+                                    F(PADDING_RIGHT, 14.0),
+                                    F(PADDING_BOTTOM, 14.0),
+                                    F(PADDING_LEFT, 14.0),
+                                    F(BORDER_BOTTOM, 6.0),
+                                ][..],
+                                &height(80.0),
+                                &width(170.0),
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                        css(
+                            "d",
+                            [
+                                &[
+                                    U(WIDTH_KIND, 7),
+                                    F(WIDTH_PERCENT, 90.0),
+                                    F(MARGIN_TOP + 1, 3.0),
+                                    F(61043 + 1, 3.0),
+                                    F(MARGIN_BOTTOM + 1, 3.0),
+                                    F(MARGIN_LEFT + 1, 3.0),
+                                ][..],
+                                &height(10.0),
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                    ],
+                ),
+                css(
+                    "e",
+                    vec![
+                        U(DISPLAY, 1),
+                        U(61006, 3),
+                        F(MARGIN_TOP, 18.0),
+                        F(61043, -4.0),
+                        F(MARGIN_BOTTOM, 18.0),
+                        F(MARGIN_LEFT, -4.0),
+                    ],
+                    vec![
+                        css(
+                            "f",
+                            [height(10.0).as_slice(), &width(80.0), &padding(10.0)].concat(),
+                            vec![],
+                        ),
+                        css(
+                            "g",
+                            [
+                                &[
+                                    U(BOX_SIZING, 1),
+                                    F(BORDER_TOP, 1.0),
+                                    F(BORDER_RIGHT, 1.0),
+                                    F(BORDER_BOTTOM, 1.0),
+                                    F(BORDER_LEFT, 1.0),
+                                ][..],
+                                &height(70.0),
+                                &width(180.0),
+                            ]
+                            .concat(),
+                            vec![],
+                        ),
+                        B {
+                            paints: vec![Paint::Fill(0xffcc_3333)],
+                            ..css(
+                                "h",
+                                [
+                                    &[
+                                        F(FLEX_GROW, 2.0),
+                                        U(61010, 7),
+                                        F(MARGIN_TOP, 22.0),
+                                        F(61043, 6.0),
+                                        F(MARGIN_BOTTOM, 22.0),
+                                        F(MARGIN_LEFT, 6.0),
+                                    ][..],
+                                    &height(80.0),
+                                    &width(110.0),
+                                ]
+                                .concat(),
+                                vec![],
+                            )
+                        },
+                    ],
+                ),
+            ],
+        ),
+    )
+    .expect("the scene imports");
+    let e = f.bounds("e");
+    let world_bounds = |name| {
+        let [x, y, width, height] = f.bounds(name);
+        [e[0] + x, e[1] + y, width, height]
+    };
+    assert_eq!(
+        [world_bounds("h"), world_bounds("f"), world_bounds("g"), e],
+        [
+            [2.0, 453.0, 110.0, 0.0],
+            [-4.0, 545.0, 100.0, 30.0],
+            [-4.0, 475.0, 180.0, 70.0],
+            [-4.0, 431.0, 368.0, 144.0],
+        ],
+        "scroll offsets {:?}",
+        f.max_offsets(),
+    );
+    assert_chrome_range(&f, (4.0, 433.0));
+}
+
 /// A CSS artboard without layout children places its content at its
 /// content box's origin, as a CSS leaf box does.
 #[test]

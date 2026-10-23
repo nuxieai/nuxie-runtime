@@ -131,3 +131,76 @@ In the runtime's
   differential fixtures at all three widths.
 - `translated_scroll_overflow_keeps_content_bounds_range`: translated
   (Rive) scrollers do not use Taffy's overflow and keep their range.
+
+## Intrinsic single-line columns use outer hypothetical main sizes
+
+In `src/compute/flexbox.rs`, `determine_container_main_size`, a column
+with `flex-wrap: nowrap` sized under a min-content or max-content
+constraint sums its items' outer hypothetical main sizes, then adds the
+main-axis gaps and the container's padding and border insets. This applies
+to every flex basis and does not depend on the grow or shrink factor.
+
+`determine_flex_base_size` runs first and already computes
+`hypothetical_inner_size` by clamping the flex base size by the resolved
+minimum and maximum. The automatic minimum participates in this clamp:
+for the non-replaced block items in the guard tests it is the smaller of
+content size and a definite specified height, or zero for a scroll
+container. `hypothetical_outer_size` adds the used margins. The patch
+reuses that field rather than measuring content or resolving the limits
+again. Flexible-length resolution then initializes each item's target
+size from its hypothetical size as usual.
+
+Upstream's preferred-size shortcut avoids an expensive measurement by
+assuming an inherent-size measurement would return the preferred main
+size. That is insufficient for intrinsic columns: an unresolved percentage
+basis uses content and can size either below or above the specified
+height. For example, `flex: 2; height: 80px` with 120 points of content
+uses 120, while empty content uses zero.
+
+Bypassing that shortcut alone also differs from Chrome. The general
+column path measures content and floors it by the flex basis, allowing
+content past a definite preferred height to enlarge the column. Chrome
+156 instead uses the hypothetical size: `height: 80px` with 120 points of
+content stays 80, as do `flex-basis: 0; height: 80px` and
+`flex: 1 1 30px; height: 80px` with that content. The latter two reach 80
+through their automatic minimum. A 100-point basis with the same content
+stays 100.
+
+Rows and wrapping columns (`wrap` and `wrap-reverse`) retain the upstream
+intrinsic-sizing path, including both preferred-size shortcuts unchanged.
+Only nowrap columns take the new branch, which requires
+`!constants.is_wrap`, even when a wrapping container happens to collect
+only one line. Wrapping columns have not been measured against Chrome.
+
+A runtime layout root with definite available height can bypass the
+intrinsic path. A block parent measures its children with max-content
+available height and exposes the difference. Reverse direction, margins,
+paint, sibling padding and borders, and scrolling are not required.
+
+Guard tests in the runtime's `layout_css_mode_tests.rs`:
+
+- `css_intrinsic_column_uses_hypothetical_item_heights`: all 15 supplied
+  Chrome 156 measurements, each with a block parent, normal and reverse
+  columns, and auto, min-content and max-content column heights. Covers
+  auto, percentage and length bases, content below and above the specified
+  height, explicit minimum and maximum heights, and hidden overflow.
+- `css_intrinsic_column_sums_outer_hypothetical_sizes_and_gaps`: multiple
+  items, positive and negative margins, a gap, padding and borders; the
+  expected sizes are 80 and 50 for the items and 174 for the column.
+- `css_flex_basis_percentage_in_a_column_under_a_block`: the minimal record
+  tree, with normal and reverse columns and with and without an explicit
+  column width.
+- `css_flex_basis_taffy_intrinsic_columns_use_content`: a fresh plain Taffy
+  tree under min-content and max-content constraints, both column
+  directions, percentage, length and content bases, empty and 50-point
+  content, and explicit minimum and maximum heights.
+- `css_flex_basis_percentage_in_a_reverse_column_under_a_block_scroller`:
+  the compiler's viewport/content-box lowering and the differential
+  fixture's full geometry. Chrome 156 at width 360 gives the flexible
+  item `[2, 453, 110, 0]`, its column `[-4, 431, 368, 144]`, and scroll
+  range `(4, 433)`. Before either patch the item was 80 points tall and the
+  vertical range was 513.
+- The existing
+  `css_flex_basis_percentage_ignores_the_height_against_an_indefinite_column`
+  still covers painted and unpainted items, including growth to 140 in a
+  definite 200-point column.

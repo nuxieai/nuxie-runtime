@@ -15,8 +15,8 @@ pub struct LayoutData {
     /// root's Taffy tree receives a copy only when it changes.
     style: Style,
     pub solved_layout: Layout,
-    /// Taffy's pending item result. Bounds updates commit it with the box
-    /// once the caller has chosen whether this layout should animate.
+    /// Taffy's pending content item, or a picture participant's content box.
+    /// Bounds updates apply it with the outer box.
     pub(crate) solved_content_layout: Option<Layout>,
     pub has_new_layout: bool,
     /// Queued for the owning layout tree since its last solve.

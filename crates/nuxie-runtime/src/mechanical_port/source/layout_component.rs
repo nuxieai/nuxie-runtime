@@ -5563,16 +5563,43 @@ impl LayoutComponent {
             if context.kind == LayoutNodeKind::Content {
                 continue;
             }
-            let content_layout = context.content_item.map(|item| {
-                let output = tree.taffy.layout(item).expect("solved content item");
-                Layout::new(
-                    output.location.x,
-                    output.location.y,
-                    output.size.width,
-                    output.size.height,
-                )
-            });
             let output = tree.taffy.layout(id).expect("solved layout node");
+            let content_layout = context
+                .content_item
+                .map(|item| {
+                    let output = tree.taffy.layout(item).expect("solved content item");
+                    Layout::new(
+                        output.location.x,
+                        output.location.y,
+                        output.size.width,
+                        output.size.height,
+                    )
+                })
+                .or_else(|| {
+                    (context.kind == LayoutNodeKind::Participant
+                        && tree
+                            .taffy
+                            .style(id)
+                            .expect("solved layout style")
+                            .item_is_replaced)
+                        .then(|| {
+                            let inset = output.padding + output.border;
+                            Layout::new(
+                                inset.left,
+                                inset.top,
+                                (output.size.width
+                                    - inset.left
+                                    - inset.right
+                                    - output.scrollbar_size.width)
+                                    .max(0.0),
+                                (output.size.height
+                                    - inset.top
+                                    - inset.bottom
+                                    - output.scrollbar_size.height)
+                                    .max(0.0),
+                            )
+                        })
+                });
             let hoisted = Self::hoisted_offset(tree, id);
             let next = Layout::new(
                 output.location.x - hoisted.x,
@@ -5643,9 +5670,11 @@ impl LayoutComponent {
                         layout.layout_data.solved_layout = next;
                         changed
                     } else if let Some(data) = Self::layout_data_of(object) {
-                        let changed = data.solved_layout != next;
+                        let changed = data.solved_layout != next
+                            || data.solved_content_layout != content_layout;
                         data.has_new_layout |= touched || changed;
                         data.solved_layout = next;
+                        data.solved_content_layout = content_layout;
                         changed
                     } else {
                         false

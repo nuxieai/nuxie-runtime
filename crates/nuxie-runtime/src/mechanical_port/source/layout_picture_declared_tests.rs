@@ -127,6 +127,103 @@ fn close(actual: [f32; 4], expected: [f32; 4]) {
     }
 }
 
+fn clean_picture_transform(arena: &CoreArena, image: &CoreHandle) {
+    let parent = image
+        .with(|image| image.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let mut context = ParentContext { arena, parent };
+    assert_eq!(
+        image.with_mut(|image| image
+            .as_transform_component_mut()
+            .unwrap()
+            .on_added_clean(&mut context)),
+        Some(StatusCode::Ok)
+    );
+}
+
+fn assert_padded_picture_paint(fit: u32) {
+    for wrapped in [true, false] {
+        for (padding, border) in [(10.0, 0.0), (6.0, 4.0)] {
+            let (arena, root, item, participant) = picture_layout_fixture(
+                false,
+                wrapped,
+                &[],
+                &[(61001, 1), (61021, 1)],
+                &[
+                    (61022, 100.0),
+                    (61063, padding),
+                    (61065, padding),
+                    (61067, padding),
+                    (61069, padding),
+                    (61071, border),
+                    (61072, border),
+                    (61073, border),
+                    (61074, border),
+                ],
+            );
+            let image = host(&participant);
+            clean_picture_transform(&arena, &image);
+            image.with_downcast_mut::<Image, _>(|image| image.base.set_fit_value(fit));
+            decode(&image, 480, 270);
+            assert_picture_size(&root, &item, 100.0, 65.0);
+            LayoutComponent::update_layout_bounds_occurrence(&root, false);
+            for occurrence in [false, true] {
+                close(draw(&image, occurrence), [10.0, 10.0, 80.0, 45.0]);
+            }
+        }
+    }
+}
+
+#[test]
+fn css_padded_picture_fill_paints_its_content_box() {
+    assert_padded_picture_paint(7);
+}
+
+#[test]
+fn css_padded_picture_contain_paints_its_content_box() {
+    assert_padded_picture_paint(1);
+}
+
+#[test]
+fn css_padded_picture_cover_paints_its_content_box() {
+    assert_padded_picture_paint(2);
+}
+
+#[test]
+fn css_padded_picture_declared_size_ignores_decode_resolution() {
+    for wrapped in [true, false] {
+        for fit in [7, 1, 2] {
+            let (arena, root, item, participant) = picture_layout_fixture(
+                false,
+                wrapped,
+                &[],
+                &[(61001, 1), (61021, 1)],
+                &[
+                    (61022, 100.0),
+                    (61063, 10.0),
+                    (61065, 10.0),
+                    (61067, 10.0),
+                    (61069, 10.0),
+                ],
+            );
+            let image = host(&participant);
+            clean_picture_transform(&arena, &image);
+            declare(&image, 6000.0, 4000.0);
+            image.with_downcast_mut::<Image, _>(|image| image.base.set_fit_value(fit));
+            decode(&image, 6000, 4000);
+            assert_picture_size(&root, &item, 100.0, 73.33333);
+            LayoutComponent::update_layout_bounds_occurrence(&root, false);
+            let full = draw(&image, true);
+            close(full, [10.0, 10.0, 80.0, 53.33333]);
+            decode(&image, 4096, 2731);
+            for occurrence in [false, true] {
+                close(draw(&image, occurrence), full);
+            }
+        }
+    }
+}
+
 #[test]
 fn css_declared_picture_keeps_natural_size_after_decode() {
     let (_arena, root, item) = picture_participant_fixture(false, &[], &[], &[]);

@@ -1956,6 +1956,62 @@ fn css_picture_participant_min_and_max_width_win() {
 }
 
 #[test]
+fn css_picture_flex_automatic_minimum_keeps_smaller_width_suggestion() {
+    for video in [false, true] {
+        for wrapped in [false, true] {
+            let (natural_width, natural_height) = if wrapped {
+                (1200.0, 675.0)
+            } else {
+                (480.0, 270.0)
+            };
+            let (_arena, root, item, _) = picture_layout_fixture(
+                video,
+                wrapped,
+                &[(61000, 1)],
+                &[(61024, 1)],
+                &[(61025, natural_height * 2.0)],
+            );
+            let record = root
+                .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+                .unwrap();
+            CssTextLeaf::write(&record, &[], &[(61022, natural_width * 1.25)]);
+            LayoutComponent::sync_style_occurrence(&root);
+            assert_picture_size(&root, &item, natural_width * 1.25, natural_height * 2.0);
+        }
+    }
+}
+
+#[test]
+fn css_picture_flex_automatic_minimum_keeps_smaller_height_suggestion() {
+    for video in [false, true] {
+        for wrapped in [false, true] {
+            let (natural_width, natural_height) = if wrapped {
+                (1200.0, 675.0)
+            } else {
+                (480.0, 270.0)
+            };
+            let (_arena, root, item, _) = picture_layout_fixture(
+                video,
+                wrapped,
+                &[(61000, 1), (61006, 2)],
+                &[(61021, 1)],
+                &[(61022, natural_width * 2.0)],
+            );
+            let record = root
+                .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+                .unwrap();
+            CssTextLeaf::write(
+                &record,
+                &[(61024, 1)],
+                &[(61022, natural_width * 2.0), (61025, natural_height * 1.25)],
+            );
+            LayoutComponent::sync_style_occurrence(&root);
+            assert_picture_size(&root, &item, natural_width * 2.0, natural_height * 1.25);
+        }
+    }
+}
+
+#[test]
 fn css_picture_natural_ratio_respects_max_height() {
     for video in [false, true] {
         for wrapped in [false, true] {

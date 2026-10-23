@@ -118,7 +118,7 @@ pub(crate) fn host_min_content_width(
 
 /// CSS replaced items clamp their content suggestion through cross-axis
 /// limits, then take the smaller content and transferred suggestions.
-fn transferred_image_minimum(
+pub(super) fn transferred_image_minimum(
     main: f32,
     cross: f32,
     known_cross: Option<f32>,
@@ -551,6 +551,31 @@ impl LayoutParticipant {
         )
     }
 
+    /// Pictures fit inside their content box. Other hosts keep the border
+    /// box. Keep the solved insets when the outer size is interpolating.
+    pub(crate) fn resolved_host_layout(&self) -> Layout {
+        let resolved = Layout::new(
+            self.resolved_left(),
+            self.resolved_top(),
+            self.resolved_width(),
+            self.resolved_height(),
+        );
+        let Some(content) = self
+            .layout_data
+            .as_deref()
+            .and_then(|data| data.solved_content_layout)
+        else {
+            return resolved;
+        };
+        let outer = self.solved_layout();
+        Layout::new(
+            resolved.left() + content.left(),
+            resolved.top() + content.top(),
+            (resolved.width() - (outer.width() - content.width())).max(0.0),
+            (resolved.height() - (outer.height() - content.height())).max(0.0),
+        )
+    }
+
     fn apply_resolved_layout_size(&mut self) {
         let direction = self
             .owning_layout_handle()
@@ -563,10 +588,7 @@ impl LayoutParticipant {
             })
             .flatten()
             .unwrap_or(LayoutDirection::Inherit);
-        let resolved = self
-            .animation
-            .as_ref()
-            .map_or_else(|| self.solved_layout(), |a| a.animated_layout);
+        let resolved = self.resolved_host_layout();
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let height_scale = LayoutScaleType::from(self.base.layout_height_scale_type());
         let css = self.css_record().is_some();
@@ -591,10 +613,7 @@ impl LayoutParticipant {
                 (
                     participant.owner_handle(),
                     participant.owning_layout_handle(),
-                    participant.animation.as_ref().map_or_else(
-                        || participant.solved_layout(),
-                        |animation| animation.animated_layout,
-                    ),
+                    participant.resolved_host_layout(),
                     LayoutScaleType::from(participant.layout_width_scale_type()),
                     LayoutScaleType::from(participant.layout_height_scale_type()),
                     participant.css_record().is_some(),

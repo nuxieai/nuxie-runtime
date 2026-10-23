@@ -543,7 +543,8 @@ impl Image {
     }
 
     pub fn layout_base_translation(&self, participant: &LayoutParticipant) -> Vec2D {
-        Vec2D::new(participant.resolved_left(), participant.resolved_top())
+        let content = participant.resolved_host_layout();
+        Vec2D::new(content.left(), content.top())
     }
 
     pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {

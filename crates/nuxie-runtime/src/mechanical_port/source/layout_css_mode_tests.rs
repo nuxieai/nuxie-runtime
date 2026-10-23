@@ -7312,6 +7312,34 @@ fn clipping_badge_scene(card_position: u64, badge_position: u64) -> Scene {
     f
 }
 
+/// An overflow clip's path is made through the factory the artboard has when
+/// the clip first draws, not the one it had when the draw order was sorted.
+#[test]
+fn css_overflow_clip_path_uses_the_factory_installed_after_sorting() {
+    let f = clipping_badge_scene(1, 2);
+    let mut replacement = PersistentFactory::new(RecordingFactory::new());
+    f.artboard.with_artboard_mut(|artboard| {
+        artboard.set_factory(
+            RuntimeFactoryHandle::from_factory(&mut replacement).expect("retained factory"),
+        )
+    });
+    let paths_made = |factory: &PersistentFactory<RecordingFactory>| {
+        factory
+            .borrow()
+            .stream()
+            .matches("makeEmptyRenderPath")
+            .count()
+    };
+    let before = paths_made(&f.factory);
+    assert!(badge_draw_has_card_clip(&f));
+    assert_eq!(
+        paths_made(&f.factory),
+        before,
+        "a path from the replaced factory"
+    );
+    assert!(paths_made(&replacement) > 0);
+}
+
 /// A positioned card clips the escaped badge inside its own z-order slot.
 #[test]
 fn css_stacking_absolute_badge_escapes_positioned_clipping_card() {

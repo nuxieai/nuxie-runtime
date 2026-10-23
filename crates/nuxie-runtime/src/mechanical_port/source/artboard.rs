@@ -1848,15 +1848,10 @@ impl Artboard {
         use crate::css_layout::clip::{self, DrawClip};
         self.css_clip_operations.clear();
         let mut css_operations = HashSet::new();
-        let clip_factory = self.factory();
         let mut create_clipping_proxy = |clip: &DrawClip, is_start: bool, css_scope: bool| {
             let clipping_shape = match clip {
                 DrawClip::Overflow(owner) => {
-                    let operation = clip::operation(
-                        owner.clone(),
-                        is_start,
-                        clip_factory.clone().expect("Artboard renderer factory"),
-                    );
+                    let operation = clip::operation(owner.clone(), is_start);
                     css_operations.insert(operation.clone());
                     return Some(operation);
                 }

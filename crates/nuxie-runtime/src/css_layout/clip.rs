@@ -3,7 +3,6 @@ use super::keys;
 use crate::source::{
     core::CoreHandle,
     drawable::{Drawable, DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
-    factory::RuntimeFactoryHandle,
     layout_component::LayoutComponent,
     renderer::Renderer,
 };
@@ -206,7 +205,6 @@ pub(crate) fn draw_chain(
 
 struct OverflowOperation {
     owner: CoreHandle,
-    factory: RuntimeFactoryHandle,
     start: bool,
 }
 
@@ -243,7 +241,23 @@ impl ProxyDrawing for OverflowOperation {
                 })
                 .flatten();
             if let Some(paths) = paths {
-                renderer.clip_path(paths.borrow_mut().clip.render_path(&self.factory));
+                // Like a shape paint's path, the clip path is made through the
+                // artboard's factory at its first draw, which a renderer callback
+                // such as the save above may have replaced since sorting.
+                let owner = &self.owner;
+                let factory = || {
+                    owner
+                        .with(|object| {
+                            let layout = object.as_layout_component()?;
+                            layout
+                                .with_artboard(|artboard| artboard.factory())
+                                .flatten()
+                        })
+                        .flatten()
+                        .expect("a drawing CSS overflow box has its imported Artboard factory")
+                };
+                let mut paths = paths.borrow_mut();
+                renderer.clip_path(paths.clip.render_path_with_deferred_factory(factory));
             }
         } else if needs_save_operation {
             renderer.restore();
@@ -251,16 +265,8 @@ impl ProxyDrawing for OverflowOperation {
     }
 }
 
-pub(crate) fn operation(
-    owner: CoreHandle,
-    start: bool,
-    factory: RuntimeFactoryHandle,
-) -> RuntimeDrawableOccurrence {
+pub(crate) fn operation(owner: CoreHandle, start: bool) -> RuntimeDrawableOccurrence {
     RuntimeDrawableOccurrence::runtime_proxy(Rc::new(RefCell::new(DrawableProxy::new(Box::new(
-        OverflowOperation {
-            owner,
-            start,
-            factory,
-        },
+        OverflowOperation { owner, start },
     )))))
 }

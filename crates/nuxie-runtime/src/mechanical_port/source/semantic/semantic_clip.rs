@@ -1,4 +1,3 @@
-use super::semantic_snapshot::Bounds;
 use crate::mechanical_port::source::math::{path_types::PathVerb, raw_path::RawPath, vec2d::Vec2D};
 use i_overlay::{
     core::{fill_rule::FillRule, overlay_rule::OverlayRule},
@@ -41,6 +40,9 @@ impl SemanticClipRegion {
     pub fn is_empty(&self) -> bool {
         self.contours.is_empty()
     }
+    pub fn contains(&self, point: Vec2D) -> bool {
+        contours_contain(&self.contours, nuxie_render_api::FillRule::NonZero, point)
+    }
     pub fn intersect_polygon(&mut self, polygon: &[Vec2D]) {
         let clip = polygon
             .iter()
@@ -77,30 +79,6 @@ impl SemanticClipRegion {
             .flatten()
             .collect();
     }
-    pub fn bounds(&self) -> Bounds {
-        let mut result = Bounds::for_expansion();
-        for point in self.contours.iter().flatten() {
-            result.expand((point[0] as f32, point[1] as f32));
-        }
-        result
-    }
-}
-
-/// Point containment uses the same flattened contours as bounds clipping.
-pub(super) fn path_contains(
-    path: &RawPath,
-    rule: nuxie_render_api::FillRule,
-    point: Vec2D,
-) -> bool {
-    flatten_path(path).is_ok_and(|contours| contours_contain(&contours, rule, point))
-}
-
-pub(super) fn polygon_contains(polygon: &[Vec2D], point: Vec2D) -> bool {
-    let contour = polygon
-        .iter()
-        .map(|p| [f64::from(p.x), f64::from(p.y)])
-        .collect();
-    contours_contain(&[contour], nuxie_render_api::FillRule::NonZero, point)
 }
 
 fn contours_contain(
@@ -347,9 +325,16 @@ mod tests {
             let mut region = SemanticClipRegion::from_polygon(&target);
             region.intersect_path(&path, rule);
             assert_eq!(region.is_empty(), empty);
-            assert_eq!(path_contains(&path, rule, Vec2D::new(2.0, 2.0)), !empty);
-            assert!(path_contains(&path, rule, Vec2D::new(0.5, 0.5)));
-            assert!(!path_contains(&path, rule, Vec2D::new(5.0, 2.0)));
+            let mut clip = SemanticClipRegion::from_polygon(&[
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(4.0, 0.0),
+                Vec2D::new(4.0, 4.0),
+                Vec2D::new(0.0, 4.0),
+            ]);
+            clip.intersect_path(&path, rule);
+            assert_eq!(clip.contains(Vec2D::new(2.0, 2.0)), !empty);
+            assert!(clip.contains(Vec2D::new(0.5, 0.5)));
+            assert!(!clip.contains(Vec2D::new(5.0, 2.0)));
         }
     }
 
@@ -358,13 +343,17 @@ mod tests {
         let mut path = RawPath::default();
         path.add_oval(Aabb::new(0.0, 0.0, 100.0, 100.0), PathDirection::Clockwise);
         let rule = nuxie_render_api::FillRule::NonZero;
-        assert!(path_contains(&path, rule, Vec2D::new(50.0, 2.0)));
-        assert!(!path_contains(&path, rule, Vec2D::new(2.0, 2.0)));
-        assert!(!path_contains(
-            &RawPath::default(),
-            rule,
-            Vec2D::new(0.0, 0.0)
-        ));
+        let mut clip = SemanticClipRegion::from_polygon(&[
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(100.0, 0.0),
+            Vec2D::new(100.0, 100.0),
+            Vec2D::new(0.0, 100.0),
+        ]);
+        clip.intersect_path(&path, rule);
+        assert!(clip.contains(Vec2D::new(50.0, 2.0)));
+        assert!(!clip.contains(Vec2D::new(2.0, 2.0)));
+        clip.intersect_path(&RawPath::default(), rule);
+        assert!(!clip.contains(Vec2D::new(0.0, 0.0)));
     }
 
     #[test]

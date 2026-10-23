@@ -8,6 +8,7 @@ use crate::mechanical_port::source::{
     core_context::CoreContext,
     drawable::{Drawable, DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     generated::{
+        artboard_component_list_base::ArtboardComponentListBase,
         core_registry::CoreCapabilities,
         layout_component_base::{LayoutComponentBase, LayoutComponentBaseCallbacks},
     },
@@ -1481,7 +1482,14 @@ impl LayoutComponent {
     ) {
         let Some((mut style, context, appliers)) = owner
             .with_mut(|object| {
+                let list_row = object
+                    .as_artboard()
+                    .and_then(Artboard::host)
+                    .is_some_and(|host| host.is_type_of(ArtboardComponentListBase::TYPE_KEY));
                 let layout = object.as_layout_component_mut().unwrap();
+                if list_row {
+                    layout.sync_unstyled_list_row_size();
+                }
                 let context = layout.style_sync_context(parent_style)?;
                 Some((
                     layout.layout_data.take_style(),
@@ -3433,6 +3441,29 @@ impl LayoutComponent {
     }
     pub fn is_leaf(&self) -> bool {
         Self::layout_providers_children(self.base.children(), false).is_empty()
+    }
+    fn sync_unstyled_list_row_size(&mut self) {
+        if self.style_handle().is_none() && !self.is_css_mode() {
+            // Rive's editor supplies a sizing style for layout-hosted rows.
+            // Native authoring can mount a row without one; its authored
+            // frame must not become an empty auto-sized item.
+            let size = |authored: f32, overridden: f32, forced: f32| {
+                Dimension::length(
+                    if !forced.is_nan() {
+                        forced
+                    } else if !overridden.is_nan() {
+                        overridden
+                    } else {
+                        authored
+                    }
+                    .max(0.0),
+                )
+            };
+            let mut style = self.layout_data.take_style();
+            style.size.width = size(self.base.width(), self.width_override, self.forced_width);
+            style.size.height = size(self.base.height(), self.height_override, self.forced_height);
+            self.layout_data.set_style(style);
+        }
     }
     fn style_sync_context(
         &mut self,

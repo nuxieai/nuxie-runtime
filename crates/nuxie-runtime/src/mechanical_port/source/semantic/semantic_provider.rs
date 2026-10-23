@@ -164,11 +164,11 @@ fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
     !geometry.is_empty()
         && geometry
             .into_iter()
-            .all(|(owner, polygon)| clip_to_rendered_ancestors(&owner, polygon.to_vec()).is_empty())
+            .all(|(owner, polygon)| !geometry_with_rendered_clips(&owner, &polygon).is_visible())
 }
 
-fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
-    let mut region = SemanticClipRegion::from_polygon(&polygon);
+fn geometry_with_rendered_clips(component: &CoreHandle, polygon: &[Vec2D]) -> RenderedGeometry {
+    let mut geometry = RenderedGeometry::unclipped(polygon);
     let complete = walk_rendered_clips(component, true, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
             let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
@@ -180,13 +180,49 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
         } else {
             clip
         };
-        clip.intersect(&mut region);
-        !region.is_empty()
+        geometry.intersect(clip)
     });
-    if !complete && !region.is_empty() {
-        return SemanticClipRegion::default();
+    geometry.finish(complete)
+}
+
+/// Full bounds for outlines and semantic frames, plus the effective visible
+/// region for visibility and hits. Both answers come from one clip walk.
+pub(crate) struct RenderedGeometry {
+    pub bounds: Bounds,
+    visible_region: SemanticClipRegion,
+}
+
+impl RenderedGeometry {
+    pub(crate) fn unclipped(polygon: &[Vec2D]) -> Self {
+        let mut bounds = Bounds::for_expansion();
+        for point in polygon {
+            bounds.expand((point.x, point.y));
+        }
+        Self {
+            bounds,
+            visible_region: SemanticClipRegion::from_polygon(polygon),
+        }
     }
-    region
+
+    fn intersect(&mut self, clip: RenderedClip) -> bool {
+        clip.intersect(&mut self.visible_region);
+        self.is_visible()
+    }
+
+    fn finish(mut self, complete: bool) -> Self {
+        if !complete && self.is_visible() {
+            self.visible_region = SemanticClipRegion::default();
+        }
+        self
+    }
+
+    pub(crate) fn is_visible(&self) -> bool {
+        !self.visible_region.is_empty()
+    }
+
+    pub(crate) fn contains_point(&self, point: Vec2D) -> bool {
+        self.visible_region.contains(point)
+    }
 }
 
 /// A clip in its owning artboard's drawing space. Both host geometry
@@ -208,13 +244,6 @@ impl RenderedClip {
         match self {
             Self::Path(path, rule) => region.intersect_path(path, *rule),
             Self::Polygon(corners) => region.intersect_polygon(corners),
-        }
-    }
-
-    fn contains(&self, point: Vec2D) -> bool {
-        match self {
-            Self::Path(path, rule) => super::semantic_clip::path_contains(path, *rule, point),
-            Self::Polygon(corners) => super::semantic_clip::polygon_contains(corners, point),
         }
     }
 }
@@ -316,27 +345,16 @@ fn host_spaces(spaces: &[(CoreHandle, Mat2D)]) -> Vec<(CoreHandle, Mat2D)> {
     hosts
 }
 
-/// A host geometry polygon in root space, clipped through
-/// its hosts. Its own content clip is left out; an artboard's frame stays.
-pub(crate) fn rendered_geometry_visible_bounds(
+/// A full host geometry polygon and its visible region in root space.
+/// Its own content clip is left out; an artboard's frame stays.
+pub(crate) fn rendered_geometry_projection(
     component: &CoreHandle,
     polygon: [Vec2D; 4],
     spaces: &[(CoreHandle, Mat2D)],
-) -> Option<Bounds> {
-    let mut region = SemanticClipRegion::from_polygon(&polygon);
-    let complete = walk_geometry_clips(component, spaces, |clip| {
-        clip.intersect(&mut region);
-        !region.is_empty()
-    });
-    (complete && !region.is_empty()).then(|| region.bounds())
-}
-
-pub(crate) fn rendered_geometry_contains_point(
-    component: &CoreHandle,
-    point: Vec2D,
-    spaces: &[(CoreHandle, Mat2D)],
-) -> bool {
-    walk_geometry_clips(component, spaces, |clip| clip.contains(point))
+) -> RenderedGeometry {
+    let mut geometry = RenderedGeometry::unclipped(&polygon);
+    let complete = walk_geometry_clips(component, spaces, |clip| geometry.intersect(clip));
+    geometry.finish(complete)
 }
 
 /// Yield each rendered clip once, crossing hosts into their parent
@@ -567,7 +585,8 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
     }
 }
 
-/// Host-only visible geometry, including rendered clipping and frame origins.
+/// Full bounds of visible host geometry, including frame origins. Rendered
+/// clips decide visibility without trimming the reported box.
 /// This is not the native SemanticProvider::semanticBounds contract.
 pub fn rendered_geometry_bounds(component: Option<&CoreHandle>) -> Bounds {
     let Some(component) = component else {
@@ -576,15 +595,19 @@ pub fn rendered_geometry_bounds(component: Option<&CoreHandle>) -> Bounds {
     let geometry = semantic_geometry(component);
     if !geometry.is_empty() {
         let mut result = Bounds::for_expansion();
+        let mut visible = false;
         for (owner, polygon) in geometry {
-            let visible = clip_to_rendered_ancestors(&owner, polygon.to_vec());
-            if !visible.is_empty() {
-                let bounds = visible.bounds();
-                result.expand((bounds.min_x, bounds.min_y));
-                result.expand((bounds.max_x, bounds.max_y));
-            }
+            let geometry = geometry_with_rendered_clips(&owner, &polygon);
+            visible |= geometry.is_visible();
+            let bounds = geometry.bounds;
+            result.expand((bounds.min_x, bounds.min_y));
+            result.expand((bounds.max_x, bounds.max_y));
         }
-        return result;
+        return if visible {
+            result
+        } else {
+            Bounds::for_expansion()
+        };
     }
     // Nodes without rectangular geometry retain the existing point fallback.
     let Some((point, artboard)) = component
@@ -700,7 +723,7 @@ pub fn rendered_geometry_intersects_host_clip(
         {
             return Err(SemanticGeometryError::InvalidPath);
         }
-        let mut region = clip_to_rendered_ancestors(&owner, polygon);
+        let mut region = geometry_with_rendered_clips(&owner, &polygon).visible_region;
         region.status()?;
         region.intersect_polygon(&corners);
         if let Some((path, fill_rule)) = host_clip {
@@ -795,7 +818,9 @@ pub fn validate_semantic_geometry(root: &CoreHandle) -> Result<(), SemanticGeome
             .flatten();
         if let Some(parent) = parent {
             for (owner, polygon) in semantic_geometry(&parent) {
-                clip_to_rendered_ancestors(&owner, polygon.to_vec()).status()?;
+                geometry_with_rendered_clips(&owner, &polygon)
+                    .visible_region
+                    .status()?;
             }
         }
     }

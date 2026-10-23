@@ -6911,14 +6911,13 @@ fn css_centered_origin_child_geometry_uses_the_drawing_transform() {
             f.advance(2);
             assert_eq!(f.world_origin("Card"), (-50.0, 0.0));
             let left = if frame_origin { 0.0 } else { -50.0 };
-            let width = if child_clips { 5.0 } else { 10.0 };
             let mut host = f.host();
             let visible = host.visible_geometry_with_bounds();
             assert_eq!(f.geometry_names(&visible), ["Card"]);
             let bounds = visible[0].bounds;
             assert_eq!(
                 (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
-                (left, 0.0, left + width, 10.0)
+                (left, 0.0, left + 10.0, 10.0)
             );
             assert_eq!(
                 f.geometry_names(
@@ -6979,11 +6978,11 @@ fn css_artboard_own_paint_precedes_content_clipping_shapes() {
     let mut host = f.host();
     let visible = host.visible_geometry_with_bounds();
     assert_eq!(f.geometry_names(&visible), ["Artboard", "Card"]);
-    for (hit, right) in visible.iter().zip([100.0, 50.0]) {
+    for hit in &visible {
         let bounds = hit.bounds;
         assert_eq!(
             (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
-            (0.0, 0.0, right, 50.0)
+            (0.0, 0.0, 100.0, 50.0)
         );
     }
     assert_eq!(
@@ -7004,8 +7003,8 @@ fn css_artboard_own_paint_precedes_content_clipping_shapes() {
     );
 }
 
-/// Bounds and selection share shape clips, while taps keep the upstream
-/// interaction chain, which does not test ClippingShape paths.
+/// Bounds keep the full box while selection follows shape clips. Taps keep
+/// the upstream interaction chain, which does not test ClippingShape paths.
 #[test]
 fn css_box_shape_clip_agrees_for_selection_and_visible_bounds() {
     let f = shape_clipped_box(true, 20.0);
@@ -7015,13 +7014,13 @@ fn css_box_shape_clip_agrees_for_selection_and_visible_bounds() {
     let bounds = visible[0].bounds;
     assert_eq!(
         (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
-        (0.0, 0.0, 50.0, 50.0)
+        (0.0, 0.0, 100.0, 50.0)
     );
     let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(25.0, 25.0));
     assert_eq!(f.geometry_names(&hits), ["Card"]);
     let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(75.0, 25.0));
     assert!(hits.is_empty());
-    // This point is inside the visible bounds but outside the rounded
+    // This point is inside the full bounds but outside the rounded
     // source path, so the bounds prefilter cannot hide a wrong point test.
     assert!(
         host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(2.0, 2.0))
@@ -7242,16 +7241,17 @@ fn assert_transformed_ordinary_geometry_is_clipped(scale: f32, rotation: f32) {
         .find(|hit| is_geometry(hit, 1))
         .expect("visible rectangle");
     let bounds = rectangle.bounds;
-    let right = if rotation == 0.0 {
-        100.0
+    let (left, right, bottom) = if rotation == 0.0 {
+        (0.0, 100.0 * scale, 100.0 * scale)
     } else {
-        100.0 / 2.0f32.sqrt()
+        let diagonal = 100.0 / 2.0f32.sqrt();
+        (-diagonal, diagonal, 2.0 * diagonal)
     };
     for (got, expected) in [
-        (bounds.min_x, 0.0),
+        (bounds.min_x, left),
         (bounds.min_y, 0.0),
         (bounds.max_x, right),
-        (bounds.max_y, 100.0),
+        (bounds.max_y, bottom),
     ] {
         assert!((got - expected).abs() < 1.0e-3, "{bounds:?}");
     }
@@ -7318,18 +7318,18 @@ fn assert_transformed_ordinary_geometry_is_clipped(scale: f32, rotation: f32) {
         .iter()
         .find(|hit| is_geometry(hit, 6))
         .expect("visible text");
+    assert_eq!(
+        text.bounds,
+        retained
+            .iter()
+            .find(|hit| is_geometry(hit, 6))
+            .unwrap()
+            .bounds
+    );
     if rotation == 0.0 {
-        assert!(
-            (text.bounds.max_x - 100.0).abs() < 1.0e-3,
-            "{:?}",
-            text.bounds
-        );
+        assert!(text.bounds.max_x > 100.0, "{:?}", text.bounds);
     } else {
-        assert!(
-            (text.bounds.max_y - 100.0).abs() < 1.0e-3,
-            "{:?}",
-            text.bounds
-        );
+        assert!(text.bounds.max_y > 100.0, "{:?}", text.bounds);
     }
     // The interaction chain retains upstream's mapping. Host geometry
     // applies the rendered clips without changing that interaction query.
@@ -7488,11 +7488,21 @@ fn assert_nested_paint_clipped_by_host(rotation: f32) {
         .find(|hit| hit.path.len() == 2 && hit.path.last().unwrap().local_id == 0)
         .expect("nested own paint");
     let bounds = nested.bounds;
+    let (left, right, bottom) = if rotation == 0.0 {
+        (100.0, 200.0, 130.0)
+    } else {
+        let diagonal = 50.0 / 2.0f32.sqrt();
+        (
+            100.0 - diagonal,
+            100.0 + 2.0 * diagonal,
+            80.0 + 3.0 * diagonal,
+        )
+    };
     for (got, want) in [
-        (bounds.min_x, 100.0),
+        (bounds.min_x, left),
         (bounds.min_y, 80.0),
-        (bounds.max_x, 150.0),
-        (bounds.max_y, 130.0),
+        (bounds.max_x, right),
+        (bounds.max_y, bottom),
     ] {
         assert!((got - want).abs() < 1.0e-3, "{bounds:?}");
     }
@@ -7500,8 +7510,15 @@ fn assert_nested_paint_clipped_by_host(rotation: f32) {
         .iter()
         .find(|hit| hit.path.len() == 2 && hit.path.last().unwrap().local_id == 5)
         .expect("nested child paint");
-    assert!(card.bounds.min_x >= 100.0 - 1.0e-3 && card.bounds.min_y >= 80.0 - 1.0e-3);
-    assert!(card.bounds.max_x <= 150.0 + 1.0e-3 && card.bounds.max_y <= 130.0 + 1.0e-3);
+    let retained = host.retained_geometry_with_bounds();
+    assert_eq!(
+        card.bounds,
+        retained
+            .iter()
+            .find(|hit| hit.path == card.path)
+            .unwrap()
+            .bounds
+    );
     let path = nested.path.clone();
     let selects = |hits: Vec<crate::RuntimeGeometryHit>| hits.iter().any(|hit| hit.path == path);
     assert!(
@@ -7519,7 +7536,6 @@ fn assert_nested_paint_clipped_by_host(rotation: f32) {
         ),
         "the host clips this painted point"
     );
-    let retained = host.retained_geometry_with_bounds();
     assert!(
         retained
             .iter()
@@ -7537,12 +7553,17 @@ fn css_rotated_nested_artboard_paint_selection_and_bounds_cross_host_clips() {
     assert_nested_paint_clipped_by_host(std::f32::consts::FRAC_PI_4);
 }
 
-/// Top-level own paint stays within the frame and ignores its content
-/// overflow, with zero or centered origins and a larger BoxPaint too.
+/// Top-level own paint reports its full box and hits only within the frame,
+/// with zero or centered origins and a larger BoxPaint too.
 #[test]
 fn css_top_level_artboard_paint_keeps_frame_geometry() {
     for origin_x in [0.0, 0.5] {
         for box_paint in [None, Some(paint_points(200.0, 100.0))] {
+            let expected = if box_paint.is_some() {
+                (-50.0, -25.0, 150.0, 75.0)
+            } else {
+                (0.0, 0.0, 100.0, 50.0)
+            };
             let f = try_scene_spec(
                 (100.0, 50.0),
                 ArtboardSpec {
@@ -7565,7 +7586,7 @@ fn css_top_level_artboard_paint_keeps_frame_geometry() {
             let bounds = visible[0].bounds;
             assert_eq!(
                 (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
-                (0.0, 0.0, 100.0, 50.0)
+                expected
             );
             assert_eq!(
                 f.geometry_names(

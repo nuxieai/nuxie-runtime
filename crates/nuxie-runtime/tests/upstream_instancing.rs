@@ -204,7 +204,8 @@ fn host_rendered_geometry_follows_registered_custom_clip_paths() {
         generated::core_registry::CoreRegistry,
         generated::shapes::clipping_shape_base::ClippingShapeBase,
         semantic::semantic_provider::{
-            rendered_geometry_bounds as semantic_bounds, semantic_source_is_visible,
+            rendered_geometry_bounds as semantic_bounds, rendered_geometry_intersects_viewport,
+            semantic_source_is_visible,
         },
     };
 
@@ -262,10 +263,28 @@ fn host_rendered_geometry_follows_registered_custom_clip_paths() {
     })
     .unwrap();
     let partial = semantic_bounds(Some(&node));
-    assert!((partial.min_x - midpoint).abs() < 0.01);
-    assert!((partial.max_x - unclipped.max_x).abs() < 0.01);
-    assert!((partial.min_y - unclipped.min_y).abs() < 0.01);
-    assert!((partial.max_y - unclipped.max_y).abs() < 0.01);
+    assert_eq!(partial, unclipped, "a partial clip preserves the full box");
+    use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+    assert!(
+        !rendered_geometry_intersects_viewport(
+            &node,
+            Bounds {
+                max_x: midpoint - 0.01,
+                ..unclipped
+            }
+        )
+        .unwrap()
+    );
+    assert!(
+        rendered_geometry_intersects_viewport(
+            &node,
+            Bounds {
+                min_x: midpoint + 0.01,
+                ..unclipped
+            }
+        )
+        .unwrap()
+    );
     assert!(semantic_source_is_visible(&node));
 
     assert!(CoreRegistry::set_bool_handle(

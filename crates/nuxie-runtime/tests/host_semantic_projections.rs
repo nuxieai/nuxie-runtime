@@ -1035,13 +1035,16 @@ fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
     artboard.advance(0.0).expect("clip change settles");
     assert!(near(
         nested_child(&artboard.visible_geometry_with_bounds()),
-        [85.0, 3.0, 100.0, 13.0]
+        [85.0, 3.0, 105.0, 13.0]
     ));
     for x in [90.0, 97.0] {
         assert!(
             nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(x, 8.0))).is_some()
         );
     }
+    assert!(
+        nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(102.0, 8.0))).is_none()
+    );
 
     // Queried from the hosted artboard itself, its host's frame still clips
     // it, mapped into the child's own space.
@@ -1059,9 +1062,323 @@ fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
             ]
         });
     assert!(
-        near(hosted_shape, [-10.0, -5.0, 5.0, 5.0]),
+        near(hosted_shape, [-10.0, -5.0, 10.0, 5.0]),
         "{hosted_shape:?}"
     );
+    for (x, expected) in [(0.0, true), (7.0, false)] {
+        assert_eq!(
+            hosted
+                .hit_test_segments_with_bounds(Vec2D::new(x, 0.0))
+                .iter()
+                .any(|hit| hit.path.len() == 1 && hit.path[0].local_id == 1),
+            expected
+        );
+    }
+}
+
+#[test]
+fn component_geometry_keeps_full_bounds_while_frame_clips_visibility_and_hits() {
+    use nuxie_runtime::source::semantic::semantic_provider::{
+        rendered_geometry_bounds, semantic_bounds, semantic_source_is_visible,
+    };
+
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9_658, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 60.0);
+        push_f32(bytes, "Artboard", "height", 20.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 5);
+        push_f32(bytes, "Node", "x", 30.0);
+        push_f32(bytes, "Node", "y", 10.0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 60.0);
+        push_f32(bytes, "ParametricPath", "height", 20.0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Node", "parentId", 3);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_6699);
+    });
+    push_object(&mut bytes, "Node", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 5);
+        push_f32(bytes, "Node", "x", 90.0);
+        push_f32(bytes, "Node", "y", 10.0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 6);
+        push_f32(bytes, "ParametricPath", "width", 60.0);
+        push_f32(bytes, "ParametricPath", "height", 20.0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Node", "parentId", 6);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Node", "parentId", 8);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_6699);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 402.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "NestedArtboard", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_uint(bytes, "NestedArtboard", "artboardId", 0);
+        push_f32(bytes, "Node", "x", 400.0);
+    });
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let mut artboard = ArtboardInstance::from_native(file, 1).unwrap();
+    artboard.advance(0.0).unwrap();
+    let host = artboard.object_handle(1).unwrap();
+    let child = host
+        .with(|object| object.nested_artboard_instance_handle())
+        .flatten()
+        .unwrap();
+    let shape = child
+        .with_artboard(|artboard| artboard.base.resolve_handle(1))
+        .unwrap();
+    let full = [400.0, 0.0, 460.0, 20.0];
+    let coords = |bounds: nuxie_runtime::source::semantic::semantic_snapshot::Bounds| {
+        [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+    };
+    assert!(semantic_source_is_visible(&shape));
+    assert_eq!(coords(semantic_bounds(Some(&shape))), full);
+    assert_eq!(coords(rendered_geometry_bounds(Some(&shape))), full);
+    let group = child
+        .with_artboard(|artboard| artboard.base.resolve_handle(5))
+        .unwrap();
+    // A semantic group keeps its full descendant box, including a child
+    // clipped away, while any part of the group remains visible.
+    assert_eq!(
+        coords(rendered_geometry_bounds(Some(&group))),
+        [400.0, 0.0, 520.0, 20.0]
+    );
+    let visible = artboard.visible_geometry_with_bounds();
+    let row = visible
+        .iter()
+        .find(|hit| hit.path.len() == 2 && hit.path[1].local_id == 1)
+        .unwrap();
+    assert_eq!(
+        [
+            row.bounds.min_x,
+            row.bounds.min_y,
+            row.bounds.max_x,
+            row.bounds.max_y
+        ],
+        full
+    );
+    let path = row.path.clone();
+    for (x, expected) in [(401.0, true), (430.0, false)] {
+        let hits = artboard.hit_test_segments_with_bounds(Vec2D::new(x, 10.0));
+        assert_eq!(hits.iter().any(|hit| hit.path == path), expected);
+        if expected {
+            assert_eq!(
+                hits.iter().find(|hit| hit.path == path).unwrap().bounds,
+                row.bounds
+            );
+        }
+    }
+
+    assert!(CoreRegistry::set_double_handle(
+        &host,
+        i32::from(schema_property_key("Node", "x")),
+        410.0
+    ));
+    artboard.advance(0.0).unwrap();
+    assert!(!semantic_source_is_visible(&shape));
+    assert!(rendered_geometry_bounds(Some(&shape)).is_empty_or_nan());
+    assert!(
+        artboard
+            .visible_geometry_with_bounds()
+            .iter()
+            .all(|hit| hit.path != path)
+    );
+    assert!(
+        artboard
+            .hit_test_segments_with_bounds(Vec2D::new(430.0, 10.0))
+            .iter()
+            .all(|hit| hit.path != path)
+    );
+    assert!(
+        artboard
+            .retained_geometry_with_bounds()
+            .iter()
+            .any(|hit| hit.path == path)
+    );
+}
+
+#[test]
+fn converted_component_list_rows_are_visible_and_hittable_where_they_draw() {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9_657, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ViewModel", |_| {});
+    push_object(&mut bytes, "ViewModelPropertyNumber", |bytes| {
+        push_string(bytes, "ViewModelPropertyNumber", "name", "count");
+    });
+    push_object(&mut bytes, "ViewModelInstance", |bytes| {
+        push_uint(bytes, "ViewModelInstance", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "ViewModelInstanceNumber", |bytes| {
+        push_uint(bytes, "ViewModelInstanceNumber", "parentId", 0);
+        push_uint(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        push_f32(bytes, "ViewModelInstanceNumber", "propertyValue", 3.0);
+    });
+    push_object(&mut bytes, "ViewModel", |_| {});
+    push_object(&mut bytes, "ViewModelInstance", |bytes| {
+        push_uint(bytes, "ViewModelInstance", "viewModelId", 1);
+    });
+    push_object(&mut bytes, "DataConverterNumberToList", |bytes| {
+        push_uint(bytes, "DataConverterNumberToList", "viewModelId", 1);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+        push_uint(bytes, "Artboard", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "LayoutComponent", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_f32(bytes, "LayoutComponent", "width", 20.0);
+        push_f32(bytes, "LayoutComponent", "height", 20.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 2);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_uint(bytes, "LayoutComponentStyle", "positionTypeValue", 1);
+        push_uint(bytes, "LayoutComponentStyle", "flexDirectionValue", 2);
+    });
+    push_object(&mut bytes, "ArtboardComponentList", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    push_object(&mut bytes, "DataBindContext", |bytes| {
+        push_uint(
+            bytes,
+            "DataBind",
+            "propertyKey",
+            u64::from(schema_property_key("ArtboardComponentList", "listSource")),
+        );
+        push_uint(bytes, "DataBind", "converterId", 0);
+        push_var_uint(
+            bytes,
+            u64::from(schema_property_key("DataBindContext", "sourcePathIds")),
+        );
+        push_var_uint(bytes, 2);
+        bytes.extend_from_slice(&[0, 0]);
+    });
+    // Native authoring permits a row artboard without a sizing style.
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 20.0);
+        push_f32(bytes, "Artboard", "height", 20.0);
+        push_uint(bytes, "Artboard", "viewModelId", 1);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_f32(bytes, "Node", "x", 10.0);
+        push_f32(bytes, "Node", "y", 10.0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 20.0);
+        push_f32(bytes, "ParametricPath", "height", 20.0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Node", "parentId", 3);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_6699);
+    });
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let mut artboard = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+    let source = file.with_file(|file| file.artboard_at_source(0)).unwrap();
+    let view_model = file
+        .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+        .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
+        .unwrap();
+    artboard.bind_owned_view_model_handle(view_model);
+    artboard.advance(0.0).unwrap();
+    let list = artboard.object_handle(3).unwrap();
+    assert_eq!(
+        list.with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::artboard_count),
+        Some(3)
+    );
+    let rows: Vec<_> = artboard
+        .visible_geometry_with_bounds()
+        .into_iter()
+        .filter(|hit| hit.path.len() == 2 && hit.path[1].local_id == 1)
+        .collect();
+    assert_eq!(
+        rows.len(),
+        3,
+        "converted list must expose all three painted rows"
+    );
+    for index in 0..3 {
+        let row = rows
+            .iter()
+            .find(|hit| hit.occurrence[0].item_index == index)
+            .unwrap();
+        let left = index as f32 * 20.0;
+        assert_eq!(
+            [
+                row.bounds.min_x,
+                row.bounds.min_y,
+                row.bounds.max_x,
+                row.bounds.max_y
+            ],
+            [left, 0.0, left + 20.0, 20.0]
+        );
+        assert!(
+            artboard
+                .hit_test_segments_with_bounds(Vec2D::new(left + 10.0, 10.0))
+                .iter()
+                .any(|hit| hit.path == row.path && hit.occurrence == row.occurrence)
+        );
+    }
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    let recording = factory.borrow().canonical_recording();
+    let stream = recording.stream();
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .count(),
+        3
+    );
+    assert_eq!(
+        stream
+            .lines()
+            .filter(|line| line.starts_with("clipPath ")
+                && line.ends_with("points=[(-0,-0),(20,-0),(20,20),(-0,20)]}}"))
+            .count(),
+        3,
+        "drawing must clip each row to its full authored frame: {stream}"
+    );
+    for left in [20, 40] {
+        assert!(
+            stream
+                .lines()
+                .any(|line| line == format!("transform matrix=[1,0,0,1,{left},0]")),
+            "drawing must place the row at its reported bounds: {stream}"
+        );
+    }
 }
 
 #[test]
@@ -1196,7 +1513,13 @@ fn directly_queried_list_artboard_geometry_follows_its_hosts_clip() {
         })
         .expect("third list item paints just inside the wrapper clip");
     let shape_id = root_hit.path[1].local_id;
-    assert!((root_hit.bounds.max_x - 370.0).abs() < 0.01);
+    let full = artboard
+        .retained_geometry_with_bounds()
+        .into_iter()
+        .find(|hit| hit.path == root_hit.path && hit.occurrence == root_hit.occurrence)
+        .unwrap();
+    assert_eq!(root_hit.bounds, full.bounds);
+    assert!(root_hit.bounds.max_x > 370.0);
     assert!(
         artboard
             .hit_test_segments_with_bounds(Vec2D::new(371.0, 114.0))
@@ -1231,7 +1554,7 @@ fn directly_queried_list_artboard_geometry_follows_its_hosts_clip() {
         .visible_geometry_with_bounds()
         .into_iter()
         .find(is_shape)
-        .expect("direct query retains the visible part of the list item");
+        .expect("direct query retains the partly visible list item");
     let expected_min = local_point(root_hit.bounds.min_x, root_hit.bounds.min_y);
     let expected_max = local_point(root_hit.bounds.max_x, root_hit.bounds.max_y);
     for (got, expected) in [

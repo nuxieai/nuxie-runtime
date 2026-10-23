@@ -884,7 +884,9 @@ fn authored_corner_radius_changes_host_geometry_not_native_semantic_bounds() {
             layout::layout_component_style_base::LayoutComponentStyleBase,
             layout_component_base::LayoutComponentBase,
         },
-        semantic::semantic_provider::{rendered_geometry_bounds, semantic_bounds},
+        semantic::semantic_provider::{
+            rendered_geometry_bounds, rendered_geometry_intersects_viewport, semantic_bounds,
+        },
     };
     let fixture = dropdown();
     let data = fixture
@@ -918,6 +920,7 @@ fn authored_corner_radius_changes_host_geometry_not_native_semantic_bounds() {
         true
     ));
     let mut bounds = Vec::new();
+    let mut visible_edges = Vec::new();
     let mut transforms = Vec::new();
     for radius in [0.0, 1000.0, 0.0] {
         assert!(CoreRegistry::set_double_handle(
@@ -936,17 +939,28 @@ fn authored_corner_radius_changes_host_geometry_not_native_semantic_bounds() {
             expected
         );
         bounds.push(rendered_geometry_bounds(Some(&owner)));
+        visible_edges.push(
+            rendered_geometry_intersects_viewport(
+                &owner,
+                nuxie_runtime::source::semantic::semantic_snapshot::Bounds {
+                    max_x: expected.min_x + 0.001,
+                    ..expected
+                },
+            )
+            .unwrap(),
+        );
         transforms.push(
             owner
                 .with(|object| object.as_node().unwrap().world_transform())
                 .unwrap(),
         );
     }
-    assert!(
-        bounds[1].min_x > bounds[0].min_x && bounds[1].max_x < bounds[0].max_x,
-        "rounding the enclosing parent must trim both ends of the control"
+    assert_eq!(
+        bounds[0], bounds[1],
+        "rounding changes the clip, not the full box"
     );
     assert_eq!(bounds[0], bounds[2]);
+    assert_eq!(visible_edges, [true, false, true]);
     assert_eq!(
         transforms[0], transforms[1],
         "control must remain stationary"

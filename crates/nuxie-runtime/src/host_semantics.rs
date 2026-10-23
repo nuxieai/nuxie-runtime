@@ -320,7 +320,9 @@ pub struct RuntimeScrollConstraintSnapshot {
     pub scroll_active: bool,
 }
 
-/// One exact drawable occurrence and its settled world-space bounds.
+/// One exact drawable occurrence and its full settled world-space bounds.
+/// Visible catalogues and hits filter by the rendered region without trimming
+/// these bounds, so an outline can extend beyond an ancestor's clip.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeGeometryHit {
     pub path: Vec<RuntimeGeometryHitPathSegment>,
@@ -805,21 +807,20 @@ fn css_box_paints(
             .any(crate::mechanical_port::source::layout_component::css_paint_draws)
 }
 
-/// Geometry bounds in root space, optionally clipped from an owner outward.
-fn geometry_visible_bounds(
+/// Full bounds in root space, admitted by the visible region and optional hit.
+/// One projection retains both the box and the rendered clips applied to it.
+fn geometry_bounds(
     clip_owner: &CoreHandle,
     bounds: NativeAabb,
     artboard_to_root: NativeMat2D,
     clip: bool,
     spaces: &[(CoreHandle, NativeMat2D)],
+    query: Option<Vec2D>,
 ) -> Option<NativeAabb> {
     // An empty shape's local bounds are the inverted expansion sentinel;
     // transforming it would turn it into a huge rectangle.
     if bounds.is_empty_or_nan() {
         return None;
-    }
-    if !clip {
-        return Some(artboard_to_root.map_bounding_box(bounds));
     }
     let corners = [
         NativeVec2D::new(bounds.left(), bounds.top()),
@@ -828,22 +829,34 @@ fn geometry_visible_bounds(
         NativeVec2D::new(bounds.left(), bounds.bottom()),
     ]
     .map(|point| artboard_to_root * point);
-    let visible = crate::source::semantic::semantic_provider::rendered_geometry_visible_bounds(
-        clip_owner, corners, spaces,
-    )?;
+    use crate::source::semantic::semantic_provider::{
+        RenderedGeometry, rendered_geometry_projection,
+    };
+    let geometry = if clip {
+        rendered_geometry_projection(clip_owner, corners, spaces)
+    } else {
+        RenderedGeometry::unclipped(&corners)
+    };
+    if !geometry.is_visible()
+        || query.is_some_and(|point| !geometry.contains_point(render_to_native_point(point)))
+    {
+        return None;
+    }
+    let bounds = geometry.bounds;
     Some(NativeAabb::new(
-        visible.min_x,
-        visible.min_y,
-        visible.max_x,
-        visible.max_y,
+        bounds.min_x,
+        bounds.min_y,
+        bounds.max_x,
+        bounds.max_y,
     ))
 }
 
-fn css_box_visible_bounds(
+fn css_box_geometry_bounds(
     handle: &CoreHandle,
     artboard_to_root: NativeMat2D,
     clip: bool,
     spaces: &[(CoreHandle, NativeMat2D)],
+    query: Option<Vec2D>,
 ) -> Option<NativeAabb> {
     let bounds = handle
         .with_mut(|object| {
@@ -853,7 +866,7 @@ fn css_box_visible_bounds(
             Some(bounds)
         })
         .flatten()?;
-    geometry_visible_bounds(handle, bounds, artboard_to_root, clip, spaces)
+    geometry_bounds(handle, bounds, artboard_to_root, clip, spaces, query)
 }
 
 /// Whether a painted CSS box's own paint covers `point` (in its artboard),
@@ -1055,22 +1068,16 @@ fn collect_geometry(
             covers,
         ))
     }) && covers.is_none_or(|covers| covers)
-        && query.is_none_or(|point| {
-            crate::source::semantic::semantic_provider::rendered_geometry_contains_point(
-                &handle,
-                render_to_native_point(point),
-                &spaces,
-            )
-        })
         && let Some(local_id) = local_id_for_handle(artboard, &handle)
         && let Some(bounds) = painted
             .and_then(|painted| {
-                geometry_visible_bounds(
+                geometry_bounds(
                     &handle,
                     painted,
                     drawing_to_root,
                     visibility == GeometryVisibility::Visible,
                     &spaces,
+                    query,
                 )
             })
             .filter(|bounds| !bounds.is_empty_or_nan())
@@ -1127,11 +1134,12 @@ fn collect_geometry(
                     .filter(|bounds| !bounds.is_empty_or_nan())
                     .map(native_to_render_bounds)
             };
-            let visible = css_box_visible_bounds(
+            let visible = css_box_geometry_bounds(
                 &handle,
                 drawing_to_root,
                 visibility == GeometryVisibility::Visible,
                 &spaces,
+                query,
             )
             .and_then(render_bounds);
             // Visible-geometry selection: where the box paints, inside its
@@ -1149,13 +1157,7 @@ fn collect_geometry(
                     continue;
                 }
                 let artboard_point = inverse * render_to_native_point(point);
-                if !css_box_paints_at(&handle, artboard_point)
-                    || !crate::source::semantic::semantic_provider::rendered_geometry_contains_point(
-                        &handle,
-                        render_to_native_point(point),
-                        &spaces,
-                    )
-                {
+                if !css_box_paints_at(&handle, artboard_point) {
                     continue;
                 }
             }
@@ -1257,15 +1259,15 @@ fn collect_geometry(
             continue;
         };
         let root_transform = drawing_to_root * world;
-        // Visible bounds take the same clips, from the drawable outward, as
-        // the point test below and as drawing: its artboard's frame when that
-        // artboard clips, its hosts' clips, and any clipping shapes.
-        let Some(bounds) = geometry_visible_bounds(
+        // The visible region takes drawing's frame, host and shape clips.
+        // Outlines and hit observations keep the full transformed box.
+        let Some(bounds) = geometry_bounds(
             &handle,
             local_bounds,
             root_transform,
             visibility == GeometryVisibility::Visible,
             &spaces,
+            query,
         )
         .filter(|bounds| !bounds.is_empty_or_nan())
         .map(native_to_render_bounds) else {
@@ -1286,13 +1288,7 @@ fn collect_geometry(
                 continue;
             }
             let local_point = inverse * render_to_native_point(point);
-            if !authored_geometry_contains_point(&handle, local_point)
-                || !crate::source::semantic::semantic_provider::rendered_geometry_contains_point(
-                    &handle,
-                    render_to_native_point(point),
-                    &spaces,
-                )
-            {
+            if !authored_geometry_contains_point(&handle, local_point) {
                 continue;
             }
         }

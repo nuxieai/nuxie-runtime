@@ -1260,6 +1260,22 @@ impl Artboard {
             }
         }
 
+        // Every parent link and CSS record is attached now. Like picture mode,
+        // input ownership must be recorded before clean callbacks, using record
+        // presence rather than the order that appliers register themselves.
+        for object in root
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects.clone())
+            .unwrap()
+            .into_iter()
+            .flatten()
+        {
+            object.with_mut(|object| {
+                if let Some(input) = object.as_text_input_mut() {
+                    input.set_owned_by_css_layout(input.has_css_layout_parent());
+                }
+            });
+        }
+
         let is_instance = root
             .with_downcast::<Artboard, _>(|a| a.is_instance)
             .unwrap();

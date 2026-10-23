@@ -257,7 +257,13 @@ impl TextInput {
     pub(crate) fn has_css_layout_parent(&self) -> bool {
         self.base
             .parent_handle()
-            .and_then(|p| p.with(|o| o.as_layout_component().is_some_and(|l| l.is_css_mode())))
+            .and_then(|parent| {
+                parent.with(|parent| {
+                    parent.as_layout_component().is_some_and(|layout| {
+                        crate::css_layout::record::find_in(layout.children()).is_some()
+                    })
+                })
+            })
             .unwrap_or(false)
     }
 
@@ -406,8 +412,13 @@ impl TextInput {
         self.mark_shape_dirty();
     }
     pub fn vertical_align_value_changed(&mut self) {
-        self.update_alignment();
-        self.mark_shape_dirty();
+        if self.owned_by_css_layout() {
+            // CSS single lines are centred and multiline controls start at top.
+            self.mark_paint_dirty();
+        } else {
+            self.update_alignment();
+            self.mark_shape_dirty();
+        }
     }
     fn update_alignment(&mut self) -> bool {
         let align = match self.base.align_value() {
@@ -524,7 +535,6 @@ impl TextInput {
             });
         self.update_multiline(false);
         self.update_alignment();
-        self.set_owned_by_css_layout(self.has_css_layout_parent());
         if self.text_style.is_none() {
             StatusCode::MissingObject
         } else {
@@ -662,7 +672,11 @@ impl TextInput {
     pub fn selection_radius_changed(&mut self) {
         self.raw_text_input
             .set_selection_corner_radius(self.base.selection_radius());
-        self.mark_shape_dirty();
+        if self.owned_by_css_layout() {
+            self.mark_paint_dirty();
+        } else {
+            self.mark_shape_dirty();
+        }
     }
     pub fn multiline_changed(&mut self) {
         self.update_multiline(true);

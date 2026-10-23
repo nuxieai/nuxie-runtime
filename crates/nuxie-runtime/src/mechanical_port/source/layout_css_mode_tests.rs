@@ -100,6 +100,8 @@ fn padding(value: f32) -> [P; 4] {
 struct B {
     name: &'static str,
     css: Option<Vec<P>>,
+    /// Write this box's CSS record after its input, to vary clean callback order.
+    css_after_input: bool,
     /// Translated mode: `LayoutComponent` keys (width, height, fractions).
     component: Vec<P>,
     /// Transform and opacity properties on the box itself.
@@ -463,6 +465,18 @@ struct ArtboardSpec {
 fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Option<Scene> {
     let artboard_css = spec.css.clone();
     let artboard_paints = spec.paints.as_slice();
+    fn push_css_record<'a>(node: &'a B, index: u64, entries: &mut Vec<Entry<'a>>) {
+        if let Some(props) = &node.css {
+            let record = slots(entries) + 1;
+            entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
+            if let Some(key) = node.bind {
+                entries.push(Entry::Bind(key, 0, node.bind_source));
+            }
+            for (key, keys) in &node.css_keys {
+                entries.push(Entry::Keys(record, *key, keys));
+            }
+        }
+    }
     fn walk<'a>(
         node: &'a B,
         parent: u64,
@@ -477,15 +491,8 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         for (key, keys) in &node.component_keys {
             entries.push(Entry::Keys(index, *key, keys));
         }
-        if let Some(props) = &node.css {
-            let record = slots(entries) + 1;
-            entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), index));
-            if let Some(key) = node.bind {
-                entries.push(Entry::Bind(key, 0, node.bind_source));
-            }
-            for (key, keys) in &node.css_keys {
-                entries.push(Entry::Keys(record, *key, keys));
-            }
+        if !node.css_after_input {
+            push_css_record(node, index, entries);
         }
         if let Some(props) = &node.box_paint {
             let record = slots(entries) + 1;
@@ -591,6 +598,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 let fill = slots(entries);
                 entries.push(Entry::Solid(0xff123456, fill));
             }
+        }
+        if node.css_after_input {
+            push_css_record(node, index, entries);
         }
         for child in &node.children {
             walk(child, index, entries, late);
@@ -11222,6 +11232,41 @@ fn input_normal(f: &Scene, size: f32) -> f32 {
 }
 
 #[test]
+fn css_input_ownership_is_independent_of_css_record_order() {
+    use crate::source::generated::text::{
+        text_input_base::TextInputBase, text_style_base::TextStyleBase,
+    };
+    for css_after_input in [false, true] {
+        for multiline in [false, true] {
+            let f = scene(
+                (400.0, 300.0),
+                B {
+                    name: "control",
+                    css: Some(if multiline {
+                        width(200.0).to_vec()
+                    } else {
+                        sized_to(200.0, 60.0)
+                    }),
+                    css_after_input,
+                    text_input: true,
+                    text: "Hi",
+                    input_properties: vec![U(
+                        TextInputBase::MULTILINE_PROPERTY_KEY,
+                        u64::from(multiline),
+                    )],
+                    input_style: vec![F(TextStyleBase::LINE_HEIGHT_PROPERTY_KEY, 20.0)],
+                    ..B::default()
+                },
+            );
+            f.advance(4);
+            assert_eq!(f.bounds("control")[3], if multiline { 40.0 } else { 60.0 });
+            let (top, height, _) = input_line(&f);
+            assert_eq!((top, height), (if multiline { 0.0 } else { 20.0 }, 20.0));
+        }
+    }
+}
+
+#[test]
 fn css_input_natural_line_and_authored_line_height_ignore_typed_content() {
     for authored in [-1.0, 40.0] {
         let f = input_scene(true, false, None, authored, None);
@@ -12413,20 +12458,38 @@ fn css_input_scroll_includes_the_positioned_caret() {
 
 #[test]
 fn css_input_click_at_wrapped_line_start_keeps_caret_affinity() {
-    css_input_wrapped_line_start_caret(0.0, false);
+    css_input_wrapped_line_start_caret(0.0, None);
 }
 
 #[test]
 fn css_input_fractional_padding_keeps_wrapped_caret_after_layout() {
-    css_input_wrapped_line_start_caret(0.3, false);
+    css_input_wrapped_line_start_caret(0.3, None);
 }
 
 #[test]
 fn css_input_rows_in_a_fixed_height_box_preserve_wrapped_caret_affinity() {
-    css_input_wrapped_line_start_caret(0.3, true);
+    css_input_wrapped_line_start_caret(0.3, Some(U(INPUT_ROWS, 4)));
 }
 
-fn css_input_wrapped_line_start_caret(padding: f32, change_rows: bool) {
+#[test]
+fn css_input_selection_radius_preserves_wrapped_caret_affinity() {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    css_input_wrapped_line_start_caret(
+        0.3,
+        Some(F(TextInputBase::SELECTION_RADIUS_PROPERTY_KEY, 9.0)),
+    );
+}
+
+#[test]
+fn css_input_ignored_vertical_alignment_preserves_wrapped_caret_affinity() {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    css_input_wrapped_line_start_caret(
+        0.3,
+        Some(U(TextInputBase::VERTICAL_ALIGN_VALUE_PROPERTY_KEY, 2)),
+    );
+}
+
+fn css_input_wrapped_line_start_caret(padding: f32, input_change: Option<P>) {
     use crate::source::{
         input::focusable::{Key, KeyModifiers},
         math::vec2d::Vec2D,
@@ -12445,7 +12508,7 @@ fn css_input_wrapped_line_start_caret(padding: f32, change_rows: bool) {
             padding
         ));
     }
-    if change_rows {
+    if matches!(input_change, Some(U(INPUT_ROWS, _))) {
         CoreRegistry::set_uint_handle(&control, HEIGHT_KIND.into(), 1);
         CoreRegistry::set_double_handle(&control, HEIGHT.into(), 40.0);
     }
@@ -12479,9 +12542,32 @@ fn css_input_wrapped_line_start_caret(padding: f32, change_rows: bool) {
         let caret = raw.cursor_visual_position();
         assert_eq!((caret.x(), caret.top(), caret.bottom()), (0.0, 20.0, 40.0));
     });
-    if change_rows {
-        CoreRegistry::set_uint_handle(&input, INPUT_ROWS.into(), 4);
+    match input_change {
+        Some(U(key, value)) => {
+            assert!(CoreRegistry::set_uint_handle(
+                &input,
+                key.into(),
+                value as u32
+            ));
+        }
+        Some(F(key, value)) => {
+            assert!(CoreRegistry::set_double_handle(&input, key.into(), value));
+        }
+        None => {}
     }
+    input.with_mut(|object| {
+        assert_eq!(
+            object
+                .as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .cursor()
+                .end()
+                .line_index(),
+            1,
+            "a non-geometric change preserves the resolved line before update"
+        );
+    });
     f.advance(4);
     assert_eq!(f.scroll_offset("Scroll content").1, -20.0);
     input.with_mut(|object| {

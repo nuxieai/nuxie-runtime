@@ -4,6 +4,9 @@
 // both stage pair sources for depth-only non-filtering samplers (50ba2f5a).
 // The legacy live adapter uses the same builder in exact_gpu_canvas.rs. This retained
 // mechanical file is not compiled; its older local derivation is not the live owner.
+// Upstream 8920a6b entry-specific automatic layouts and draw validation live in
+// nuxie-scripting/src/gpu_canvas_ore/{shader,pipeline,pass}.rs. Raw section 2 is
+// transported by render-api's authored_ore_shader module bridge.
 // Upstream 57dddb37 allocScriptRenderCanvas is implemented by
 // nuxie-scripting/src/vm/lua_canvas.rs::allocate_script_render_canvas, shared by
 // both 2D and ORE canvases: deferred host first, then late-bound shell, then

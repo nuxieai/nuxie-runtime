@@ -118,6 +118,10 @@ impl OreMetalGpuCanvas {
             .map_err(|_| unsupported("shader source exceeds u32"))?;
         let binding_map_size = u32::try_from(shader.binding_map_bytes().len())
             .map_err(|_| unsupported("binding map exceeds u32"))?;
+        let entry_bindings = nuxie_render_api::authored_ore_shader::module_entry_bindings(
+            shader.entry_binding_bytes(),
+            shader.entries(),
+        );
         let module = self
             .context
             .makeShaderModule(&ShaderModuleDesc {
@@ -125,6 +129,10 @@ impl OreMetalGpuCanvas {
                 codeSize: code_size,
                 bindingMapBytes: Some(shader.binding_map_bytes()),
                 bindingMapSize: binding_map_size,
+                entryBindingBytes: (!entry_bindings.is_empty())
+                    .then_some(entry_bindings.as_slice()),
+                entryBindingSize: u32::try_from(entry_bindings.len())
+                    .map_err(|_| unsupported("entry bindings exceed u32"))?,
                 label: Some("authenticated GPUCanvas MSL"),
                 ..ShaderModuleDesc::default()
             })
@@ -217,8 +225,6 @@ impl OreMetalGpuCanvas {
         }
 
         validate_pipeline_shape(pipeline_plan)?;
-        let layouts = self.make_layouts(&shader.artifact)?;
-        let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
         let vertex_entry = pipeline_plan
             .vertex_entry
             .as_ref()
@@ -229,6 +235,26 @@ impl OreMetalGpuCanvas {
             .ok_or_else(|| unsupported("fragment entry selection is absent"))?;
         require_entry(&shader.artifact, vertex_entry, true)?;
         require_entry(&shader.artifact, fragment_entry, false)?;
+        let selected_map = nuxie_ore_metal::bind_group_layout::bindingMapForEntries(
+            shader.module.shaderModuleBase(),
+            Some(&vertex_entry.physical_entry_point),
+            shader.module.shaderModuleBase(),
+            Some(&fragment_entry.physical_entry_point),
+        );
+        let bindings: Vec<_> = shader
+            .artifact
+            .bindings()
+            .iter()
+            .filter(|binding| {
+                (0..selected_map.size()).any(|i| {
+                    let selected = selected_map.at(i);
+                    selected.group == binding.group && selected.binding == binding.binding
+                })
+            })
+            .cloned()
+            .collect();
+        let layouts = self.make_layouts(&shader.artifact, &bindings)?;
+        let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
         let pipeline = self
             .context
             .makePipeline(
@@ -258,7 +284,7 @@ impl OreMetalGpuCanvas {
                 None,
             )
             .ok_or_else(|| unsupported("ORE pipeline creation failed"))?;
-        let groups = self.make_groups(&shader.artifact, pipeline_plan, &layouts)?;
+        let groups = self.make_groups(&shader.artifact, &bindings, pipeline_plan, &layouts)?;
 
         let descriptor = MTLTextureDescriptor::new();
         descriptor.setPixelFormat(MTLPixelFormat::RGBA8Unorm);
@@ -324,11 +350,14 @@ impl OreMetalGpuCanvas {
             )
             .ok_or_else(|| unsupported(self.context.lastError()))?;
         pass.setPipeline(Some(&pipeline));
+        let mut draw_bindings = nuxie_ore_metal::draw_bindings::DrawBindings::default();
+        draw_bindings.setPipeline(Some(&pipeline));
         for (group_index, group) in groups.iter().enumerate() {
             if let Some(group) = group {
                 let group_index = u32::try_from(group_index)
                     .map_err(|_| unsupported("binding-group index exceeds u32"))?;
                 pass.setBindGroup(group_index, Some(group), None, 0);
+                draw_bindings.setBindGroup(group_index, Some(group));
             }
         }
         pass.setViewport(
@@ -339,6 +368,10 @@ impl OreMetalGpuCanvas {
             0.0,
             1.0,
         );
+        let mut binding_error = String::new();
+        if !draw_bindings.validate(Some(&mut binding_error)) {
+            return Err(unsupported(binding_error));
+        }
         pass.draw(
             draw.vertex_count,
             draw.instance_count,
@@ -419,8 +452,9 @@ impl OreMetalGpuCanvas {
     fn make_layouts(
         &mut self,
         shader: &GpuCanvasAppleMetalShader,
+        bindings: &[nuxie_render_api::GpuCanvasShaderBinding],
     ) -> Result<Vec<Option<AnyResourceHandle>>, GpuCanvasError> {
-        let max_group = shader.bindings().iter().map(|binding| binding.group).max();
+        let max_group = bindings.iter().map(|binding| binding.group).max();
         let Some(max_group) = max_group else {
             return Ok(Vec::new());
         };
@@ -428,7 +462,7 @@ impl OreMetalGpuCanvas {
             return Err(unsupported("binding group exceeds ORE kMaxBindGroups"));
         }
         let mut by_group = BTreeMap::<u8, Vec<BindGroupLayoutEntry>>::new();
-        for binding in shader.bindings() {
+        for binding in bindings {
             if binding.kind != GpuCanvasShaderResourceKind::UniformBuffer {
                 return Err(unsupported("only uniform-buffer bindings are supported"));
             }
@@ -484,6 +518,7 @@ impl OreMetalGpuCanvas {
     fn make_groups(
         &mut self,
         shader: &GpuCanvasAppleMetalShader,
+        bindings: &[nuxie_render_api::GpuCanvasShaderBinding],
         plan: &GpuCanvasPipelinePlan,
         layouts: &[Option<AnyResourceHandle>],
     ) -> Result<Vec<Option<AnyResourceHandle>>, GpuCanvasError> {
@@ -499,6 +534,12 @@ impl OreMetalGpuCanvas {
         }
         let mut buffers = BTreeMap::<(u32, u32), AnyResourceHandle>::new();
         for uniform in &plan.uniform_buffers {
+            if !bindings.iter().any(|binding| {
+                (u32::from(binding.group), u32::from(binding.binding))
+                    == (uniform.group, uniform.binding)
+            }) {
+                continue;
+            }
             let reflection = shader
                 .binding_reflection()
                 .iter()
@@ -526,7 +567,7 @@ impl OreMetalGpuCanvas {
                 return Err(unsupported("duplicate uniform binding"));
             }
         }
-        if buffers.len() != shader.bindings().len() {
+        if buffers.len() != bindings.len() {
             return Err(unsupported(
                 "uniform snapshots do not cover every shader binding",
             ));
@@ -537,8 +578,7 @@ impl OreMetalGpuCanvas {
                 continue;
             };
             let mut entries = Vec::new();
-            for binding in shader
-                .bindings()
+            for binding in bindings
                 .iter()
                 .filter(|binding| usize::from(binding.group) == group_index)
             {

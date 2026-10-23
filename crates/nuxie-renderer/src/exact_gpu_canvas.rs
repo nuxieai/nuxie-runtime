@@ -13,14 +13,14 @@ use std::sync::{Arc, Weak};
 use nuxie_ore_metal::context::{ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BlendFactor, BlendOp, BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment,
-    ColorTargetState, ColorWriteMask, CompareFunction, CullMode, DepthStencilAttachment,
-    DepthStencilState, Filter, IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology,
-    RenderPassDesc, SampEntry, SampleType, SamplerDesc, StageVisibility, StencilFaceState,
-    StencilOp, StoreOp, TexEntry, TextureAspect, TextureDataDesc, TextureDesc, TextureFormat,
-    TextureType, TextureViewDesc, TextureViewDimension, UBOEntry, VertexAttribute,
-    VertexBufferLayout, VertexFormat, VertexStepMode, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BlendFactor, BlendOp,
+    BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment, ColorTargetState,
+    ColorWriteMask, CompareFunction, CullMode, DepthStencilAttachment, DepthStencilState, Filter,
+    IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology, RenderPassDesc, SampEntry, SampleType,
+    SamplerDesc, StageVisibility, StencilFaceState, StencilOp, StoreOp, TexEntry, TextureAspect,
+    TextureDataDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
+    TextureViewDimension, UBOEntry, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexStepMode, WrapMode, kMaxBindGroups,
 };
 use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment,
@@ -611,7 +611,9 @@ fn build_pipeline(
     let layouts = make_layouts(
         context,
         vertex_module.shaderModuleBase(),
+        Some(&vertex_entry.physical_entry_point),
         fragment_module_and_entry.and_then(|(module, _)| module.shaderModuleBase()),
+        fragment_module_and_entry.map(|(_, entry)| entry.physical_entry_point.as_str()),
     )?;
     let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
     let (depth_stencil, stencil_front, stencil_back, stencil_read_mask, stencil_write_mask) =
@@ -716,12 +718,14 @@ fn shader_occurrence<'a>(
 fn make_layouts(
     context: &mut dyn ContextApi,
     vertex: Option<&nuxie_ore_metal::shader_module::ShaderModule>,
+    vertex_entry: Option<&str>,
     fragment: Option<&nuxie_ore_metal::shader_module::ShaderModule>,
+    fragment_entry: Option<&str>,
 ) -> Result<Vec<Option<AnyResourceHandle>>, GpuCanvasError> {
     use nuxie_ore_metal::bind_group_layout::{
-        bindingMapForStages, makeBindGroupLayoutFromBindingMap,
+        bindingMapForEntries, makeBindGroupLayoutFromBindingMap,
     };
-    let bindings = bindingMapForStages(vertex, fragment);
+    let bindings = bindingMapForEntries(vertex, vertex_entry, fragment, fragment_entry);
     let Some(max_group) = (0..bindings.size()).map(|i| bindings.at(i).group).max() else {
         return Ok(Vec::new());
     };
@@ -1056,6 +1060,7 @@ fn execute_pass(
             })
         })?;
 
+    let mut draw_bindings = nuxie_ore_metal::draw_bindings::DrawBindings::default();
     for draw in &authored.draws {
         let pipeline = pipelines
             .get(draw.pipeline_index as usize)
@@ -1066,6 +1071,7 @@ fn execute_pass(
         if !pipeline_error.is_empty() {
             return Err(rejected(format!("setPipeline: {pipeline_error}")));
         }
+        draw_bindings.setPipeline(Some(&pipeline.pipeline));
         for (slot, buffer) in &pipeline.vertex_buffers {
             pass.setVertexBuffer(*slot, Some(buffer), 0);
         }
@@ -1080,9 +1086,18 @@ fn execute_pass(
                     None,
                     0,
                 );
+                let error = context.lastError();
+                if !error.is_empty() {
+                    return Err(rejected(format!("setBindGroup: {error}")));
+                }
+                draw_bindings.setBindGroup(group_index as u32, Some(group));
             }
         }
         apply_pass_state(pass.as_mut(), draw, width, height)?;
+        let mut binding_error = String::new();
+        if !draw_bindings.validate(Some(&mut binding_error)) {
+            return Err(rejected(binding_error));
+        }
         if let Some(indexed) = &draw.indexed_draw {
             if pipeline.index_buffer.is_none() {
                 return Err(rejected("indexed draw has no index buffer"));

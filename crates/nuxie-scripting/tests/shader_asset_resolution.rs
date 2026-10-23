@@ -1094,6 +1094,7 @@ fn opaque_shader_handles_are_rejected_by_another_factory_domain() {
         entries: Vec::new(),
         bindings: Vec::new(),
         binding_map_bytes: Arc::from([]),
+        entry_binding_bytes: Arc::from([]),
         shader_asset_id: 0,
         texture_sampler_pairs: Vec::new(),
     };

@@ -29,10 +29,13 @@ pub mod bind_group {
 pub mod deferred_bind_groups {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_deferred_bind_groups_hpp::*;
 }
+pub mod draw_bindings {
+    pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_draw_bindings_hpp::*;
+}
 pub mod bind_group_layout {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_layout_hpp::*;
     pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-        bindingMapForStages, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
+        bindingMapForStages, bindingMapForEntries, entryUseKnown, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
         populateBindGroupLayoutEntries, populateBindGroupLayoutEntriesFromShader,
         NativeSlotScope, validatePipelineDesc, validateStagesAgree, validateSplitStageSlots,
         validateBindGroupDesc, validateStageLimits,
@@ -68,6 +71,9 @@ pub mod render_pass {
 }
 pub mod rstb_entry_container {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_rstb_entry_container_hpp::*;
+}
+pub mod rstb_entry_bindings {
+    pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_rstb_entry_bindings_hpp::*;
 }
 pub mod sampler {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_sampler_hpp::*;

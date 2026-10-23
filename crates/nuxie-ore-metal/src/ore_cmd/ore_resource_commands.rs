@@ -108,12 +108,13 @@ pub struct ShaderModuleDescPOD {
     pub bindingMapBytes: BlobRef,
     pub texSamplerPairBytes: BlobRef,
     pub glFixupBytes: BlobRef,
+    pub entryBindingBytes: BlobRef,
     pub shaderAssetId: u32,
     pub language: ShaderLanguage,
     pub stage: ShaderStage,
     pub pad: [u8; 2],
 }
-const _: [(); 120] = [(); std::mem::size_of::<ShaderModuleDescPOD>()];
+const _: [(); 136] = [(); std::mem::size_of::<ShaderModuleDescPOD>()];
 crate::impl_wire_pod!(ShaderModuleDescPOD {
     code: BlobRef,
     label: BlobRef,
@@ -122,6 +123,7 @@ crate::impl_wire_pod!(ShaderModuleDescPOD {
     bindingMapBytes: BlobRef,
     texSamplerPairBytes: BlobRef,
     glFixupBytes: BlobRef,
+    entryBindingBytes: BlobRef,
     shaderAssetId: u32,
     language: ShaderLanguage,
     stage: ShaderStage,

@@ -4,12 +4,14 @@ use super::*;
 use luaur_rt::FromLua;
 use nuxie_ore_metal::bind_group::{scriptDynamicOffsetAlignment, validateSetBindGroup};
 use nuxie_ore_metal::deferred_bind_groups::DeferredBindGroups;
+use nuxie_ore_metal::draw_bindings::DrawBindings;
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::script_guards::*;
 
 pub(super) struct Pass {
     // C++ destroys the deferred groups before the underlying render pass.
     pub deferred_bind_groups: Option<DeferredBindGroups>,
+    pub draw_bindings: DrawBindings,
     pub pass: Option<Box<dyn RenderPassApi>>,
     pub finished: bool,
     pub sample_count: u32,
@@ -36,6 +38,13 @@ impl Pass {
         if !self.pipeline_set {
             return Err(Error::runtime(kGuardSetPipelineBeforeDraw));
         }
+        let mut message = String::new();
+        if !self.draw_bindings.validate(Some(&mut message)) {
+            message.truncate(message.len().min(255));
+            if !message.is_empty() {
+                return Err(Error::runtime(message));
+            }
+        }
         Ok(())
     }
     fn pass(&mut self) -> &mut dyn RenderPassApi {
@@ -53,6 +62,7 @@ impl UserData for Pass {
                 groups.flush(&mut **this.pass.as_mut().expect("validated pass"));
             }
             let error=context.borrow().lastError();if !error.is_empty(){return Err(Error::runtime(format!("setPipeline: {error}")));}
+            this.draw_bindings.setPipeline(Some(&pipeline.resource));
             this.pipeline_set=true;Ok(())
         });
         methods.add_method_mut(
@@ -112,6 +122,7 @@ impl UserData for Pass {
             }
             if !this.pipeline_set {
                 this.deferred_bind_groups.get_or_insert_with(DeferredBindGroups::default).defer(group, Some(&bg.resource), Some(&values), values.len() as u32);
+                this.draw_bindings.setBindGroup(group, Some(&bg.resource));
                 return Ok(());
             }
             if let Some(context) = context.as_ref() { context.borrow().clearLastError(); }
@@ -120,6 +131,7 @@ impl UserData for Pass {
                 let error = context.borrow().lastError();
                 if !error.is_empty() { return Err(Error::runtime(format!("setBindGroup: {error}"))); }
             }
+            this.draw_bindings.setBindGroup(group, Some(&bg.resource));
             Ok(())
         });
         methods.add_method_mut(
@@ -242,6 +254,7 @@ impl UserData for Pass {
                 this.pass().finish();
             }
             this.finished = true;
+            this.draw_bindings = DrawBindings::default();
             Ok(())
         });
     }

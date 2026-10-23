@@ -44,7 +44,36 @@ pub struct TextureSamplerPair {
 #[cfg(all(test, feature = "with-rive-tools"))]
 mod tests {
     use super::*;
-    use crate::bind_group_layout::{NativeSlotScope, validateSplitStageSlots, validateStagesAgree};
+    use crate::bind_group_layout::{NativeSlotScope, validateStagesAgree};
+
+    fn validateSplitStageSlots(
+        apart: bool,
+        map: &BindingMap,
+        scope: NativeSlotScope,
+        error: Option<&mut String>,
+    ) -> bool {
+        use crate::bind_group_layout::{BindGroupLayout, populateBindGroupLayoutEntries};
+        use crate::types::BindGroupLayoutEntry;
+        let owned: Vec<_> = (0..2)
+            .map(|group| {
+                let mut layout = BindGroupLayout::new();
+                layout.m_groupIndex = group;
+                let mut entries = vec![BindGroupLayoutEntry::default(); map.size()];
+                let count = populateBindGroupLayoutEntries(&mut entries, map, group, &[]);
+                entries.truncate(count as usize);
+                layout.m_entries = entries;
+                layout
+            })
+            .collect();
+        let layouts: Vec<_> = owned.iter().map(Some).collect();
+        crate::bind_group_layout::validateSplitStageSlots(
+            apart,
+            Some(&layouts),
+            layouts.len() as u32,
+            scope,
+            error,
+        )
+    }
 
     fn split_entry(
         group: u8,
@@ -1266,6 +1295,37 @@ impl BindingMap {
 
     pub fn groupLayoutCount(&self) -> usize {
         self.m_groupLayouts.len()
+    }
+    pub fn narrow(&mut self, mut keep: impl FnMut(&Entry) -> bool) {
+        let mut changed = Vec::new();
+        self.m_entries.retain(|e| {
+            if keep(e) {
+                true
+            } else {
+                if !changed.contains(&e.group) {
+                    changed.push(e.group);
+                }
+                false
+            }
+        });
+        self.m_groupLayouts.retain_mut(|g| {
+            let lost = g.layoutId != Self::kNoLayoutId && changed.contains(&g.group);
+            let mut has_rows = false;
+            for e in &self.m_entries {
+                if e.group != g.group {
+                    continue;
+                }
+                has_rows = true;
+                if lost {
+                    g.layoutId =
+                        (g.layoutId ^ (0x100 | u64::from(e.binding))).wrapping_mul(0x100000001b3);
+                }
+            }
+            if lost && g.layoutId == Self::kNoLayoutId {
+                g.layoutId = 1;
+            }
+            has_rows
+        });
     }
 
     pub fn groupLayoutAt(&self, i: usize) -> &GroupLayout {

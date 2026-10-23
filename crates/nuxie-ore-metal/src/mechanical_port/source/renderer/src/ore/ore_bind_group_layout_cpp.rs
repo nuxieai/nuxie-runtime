@@ -573,6 +573,56 @@ pub fn bindingMapForStages(
     merged
 }
 
+pub fn entryUseKnown(
+    vertex: Option<&ShaderModule>,
+    vertexEntry: Option<&str>,
+    fragment: Option<&ShaderModule>,
+    fragmentEntry: Option<&str>,
+) -> bool {
+    vertex.is_some_and(|v| v.entryBindings(vertexEntry).is_some())
+        && fragment.is_none_or(|f| f.entryBindings(fragmentEntry).is_some())
+}
+fn stagesFromOneFile(vertex: Option<&ShaderModule>, fragment: Option<&ShaderModule>) -> bool {
+    match (vertex, fragment) {
+        (Some(v), Some(f)) => {
+            std::ptr::eq(v, f) || sameBakedLayout(&v.m_bindingMap, &f.m_bindingMap)
+        }
+        _ => true,
+    }
+}
+fn narrowedToEntry(module: &ShaderModule, entry: Option<&str>) -> BindingMap {
+    let mut map = module.m_bindingMap.clone();
+    if let Some(used) = module.entryBindings(entry) {
+        map.narrow(|e| used.uses(e.group as u32, e.binding as u32));
+    }
+    map
+}
+pub fn bindingMapForEntries(
+    vertex: Option<&ShaderModule>,
+    vertexEntry: Option<&str>,
+    fragment: Option<&ShaderModule>,
+    fragmentEntry: Option<&str>,
+) -> BindingMap {
+    if stagesFromOneFile(vertex, fragment) {
+        let mut map = bindingMapForStages(vertex, fragment);
+        if entryUseKnown(vertex, vertexEntry, fragment, fragmentEntry) {
+            let v = vertex.unwrap().entryBindings(vertexEntry).unwrap();
+            let f = fragment.and_then(|f| f.entryBindings(fragmentEntry));
+            map.narrow(|e| {
+                v.uses(e.group as u32, e.binding as u32)
+                    || f.is_some_and(|f| f.uses(e.group as u32, e.binding as u32))
+            });
+        }
+        return map;
+    }
+    let mut map = narrowedToEntry(vertex.unwrap(), vertexEntry);
+    map.replaceStage(
+        &narrowedToEntry(fragment.unwrap(), fragmentEntry),
+        Stage::FS,
+    );
+    map
+}
+
 pub fn populateBindGroupLayoutEntriesFromShader(
     entries: &mut [BindGroupLayoutEntry],
     shader: Option<&ShaderModule>,
@@ -1061,56 +1111,69 @@ pub enum NativeSlotScope {
 
 pub fn validateSplitStageSlots(
     stagesCompiledApart: bool,
-    mergedMap: &BindingMap,
+    layouts: Option<&[Option<&BindGroupLayout>]>,
+    layoutCount: u32,
     scope: NativeSlotScope,
     mut outError: Option<&mut String>,
 ) -> bool {
     if !stagesCompiledApart || scope == NativeSlotScope::perStage {
         return true;
     }
-    let mut claimed: Vec<(u32, u16, u8, u8)> = Vec::with_capacity(mergedMap.size());
-    for i in 0..mergedMap.size() {
-        let e = mergedMap.at(i);
-        let vs = e.backendSlot[0];
-        let fs = e.backendSlot[1];
-        if vs != BindingMap::kAbsent && fs != BindingMap::kAbsent && vs != fs {
-            if let Some(error) = outError.as_mut() {
-                **error = format!(
-                    "@group({}) @binding({}): the vertex module put it on native slot {vs} and the fragment module on {fs}, and this backend shares one slot namespace between the stages. Declare the same bindings in both files, or compile both stages from one shader",
-                    e.group, e.binding
-                );
+    let mut claimed: Vec<(u32, u32, u8, u8)> = Vec::new();
+    for layout in layouts
+        .into_iter()
+        .flat_map(|l| l.iter().take(layoutCount as usize))
+        .flatten()
+    {
+        let group = layout.groupIndex();
+        for e in layout.entries() {
+            let vs = e.nativeSlotVS;
+            let fs = e.nativeSlotFS;
+            if vs != BindGroupLayoutEntry::kNativeSlotAbsent
+                && fs != BindGroupLayoutEntry::kNativeSlotAbsent
+                && vs != fs
+            {
+                if let Some(error) = outError.as_mut() {
+                    **error = format!(
+                        "@group({}) @binding({}): the vertex module put it on native slot {vs} and the fragment module on {fs}, and this backend shares one slot namespace between the stages. Declare the same bindings in both files, or compile both stages from one shader",
+                        group, e.binding
+                    );
+                }
+                return false;
             }
-            return false;
-        }
-        let slot = if vs != BindingMap::kAbsent { vs } else { fs };
-        if slot == BindingMap::kAbsent {
-            continue;
-        }
-        let scope_key = if scope == NativeSlotScope::perGroup {
-            u32::from(e.group)
-        } else {
-            match e.kind {
-                ResourceKind::UniformBuffer
-                | ResourceKind::StorageBufferRO
-                | ResourceKind::StorageBufferRW => 0,
-                ResourceKind::SampledTexture | ResourceKind::StorageTexture => 1,
-                ResourceKind::Sampler | ResourceKind::ComparisonSampler => 2,
-                _ => 0,
-            }
-        };
-        for &(key, previous_slot, group, binding) in &claimed {
-            if key != scope_key || previous_slot != slot {
+            let slot = if vs != BindGroupLayoutEntry::kNativeSlotAbsent {
+                vs
+            } else {
+                fs
+            };
+            if slot == BindGroupLayoutEntry::kNativeSlotAbsent {
                 continue;
             }
-            if let Some(error) = outError.as_mut() {
-                **error = format!(
-                    "@group({}) @binding({}) and @group({group}) @binding({binding}) both land on native slot {slot}: the vertex and fragment modules were compiled apart, and this backend shares one slot namespace between them. Declare the same bindings in both, or compile both stages from one shader",
-                    e.group, e.binding
-                );
+            let scope_key = if scope == NativeSlotScope::perGroup {
+                group
+            } else {
+                match e.kind {
+                    BindingKind::uniformBuffer
+                    | BindingKind::storageBufferRO
+                    | BindingKind::storageBufferRW => 0,
+                    BindingKind::sampledTexture | BindingKind::storageTexture => 1,
+                    BindingKind::sampler | BindingKind::comparisonSampler => 2,
+                }
+            };
+            for &(key, previous_slot, previous_group, binding) in &claimed {
+                if key != scope_key || previous_slot != slot {
+                    continue;
+                }
+                if let Some(error) = outError.as_mut() {
+                    **error = format!(
+                        "@group({}) @binding({}) and @group({previous_group}) @binding({binding}) both land on native slot {slot}: the vertex and fragment modules were compiled apart, and this backend shares one slot namespace between them. Declare the same bindings in both, or compile both stages from one shader",
+                        group, e.binding
+                    );
+                }
+                return false;
             }
-            return false;
+            claimed.push((scope_key, slot, group as u8, e.binding as u8));
         }
-        claimed.push((scope_key, slot, e.group, e.binding));
     }
     true
 }
@@ -1297,13 +1360,14 @@ fn validatePipelineDescWithBases(
     layouts: Option<&[Option<&BindGroupLayout>]>,
     mut outError: Option<&mut String>,
 ) -> bool {
-    let stages_compiled_apart = match (desc.vertexModule, desc.fragmentModule) {
-        (Some(v), Some(f)) => !v.ptr_eq(f),
-        _ => false,
-    };
+    let stages_compiled_apart = !stagesFromOneFile(vertex, fragment);
     if stages_compiled_apart {
         if let (Some(v), Some(f)) = (vertex, fragment) {
-            if !validateStagesAgree(&v.m_bindingMap, &f.m_bindingMap, outError.as_deref_mut()) {
+            if !validateStagesAgree(
+                &narrowedToEntry(v, desc.vertexEntryPoint),
+                &narrowedToEntry(f, desc.fragmentEntryPoint),
+                outError.as_deref_mut(),
+            ) {
                 return false;
             }
         }
@@ -1326,7 +1390,13 @@ fn validatePipelineDescWithBases(
             desc.fragmentModule.is_some(),
             outError.as_deref_mut(),
         )
-        && validateSplitStageSlots(stages_compiled_apart, mergedMap, scope, outError)
+        && validateSplitStageSlots(
+            stages_compiled_apart,
+            layouts,
+            desc.bindGroupLayoutCount,
+            scope,
+            outError,
+        )
 }
 
 pub fn validatePipelineDesc(

@@ -1986,6 +1986,7 @@ pub struct GpuCanvasAppleMetalShader {
     entries: Vec<GpuCanvasShaderEntry>,
     bindings: Vec<GpuCanvasShaderBinding>,
     binding_map_bytes: Arc<[u8]>,
+    entry_binding_bytes: Arc<[u8]>,
     entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
     binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
     shader_asset_id: u32,
@@ -1999,11 +2000,13 @@ impl GpuCanvasAppleMetalShader {
     ///
     /// # Safety
     ///
-    /// `source`, `binding_map_bytes`, the decoded entry and binding maps, and
+    /// `source`, `binding_map_bytes`, `entry_binding_bytes`, the decoded entry and binding maps, and
     /// both reflection tables must all have been decoded and cross-validated
     /// from `artifact_sha256` at `artifact_size`. `binding_map_bytes` must be
     /// the exact authenticated target-10 blob represented by `bindings`,
-    /// including append-only row tails and trailing extension data. The source
+    /// including append-only row tails and trailing extension data.
+    /// `entry_binding_bytes` must be the exact authenticated section-2 bytes.
+    /// The source
     /// must also retain the trusted exporter's validity guarantee for unsafe
     /// backend passthrough. Supplying arbitrary, merely authenticated,
     /// unrelated, or hand-mutated parts invalidates the safety argument.
@@ -2016,6 +2019,7 @@ impl GpuCanvasAppleMetalShader {
         entries: Vec<GpuCanvasShaderEntry>,
         bindings: Vec<GpuCanvasShaderBinding>,
         binding_map_bytes: Arc<[u8]>,
+        entry_binding_bytes: Arc<[u8]>,
         entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
         binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
         shader_asset_id: u32,
@@ -2028,6 +2032,7 @@ impl GpuCanvasAppleMetalShader {
                 entries,
                 bindings,
                 binding_map_bytes,
+                entry_binding_bytes,
                 entry_reflection,
                 binding_reflection,
                 shader_asset_id,
@@ -2052,6 +2057,9 @@ impl GpuCanvasAppleMetalShader {
     /// information that older readers intentionally preserve.
     pub fn binding_map_bytes(&self) -> &[u8] {
         &self.binding_map_bytes
+    }
+    pub fn entry_binding_bytes(&self) -> &[u8] {
+        &self.entry_binding_bytes
     }
     pub fn entry_reflection(&self) -> &[GpuCanvasShaderEntryReflection] {
         &self.entry_reflection
@@ -2078,6 +2086,7 @@ pub struct GpuCanvasVulkanSpirVShader {
     entries: Vec<GpuCanvasShaderEntry>,
     bindings: Vec<GpuCanvasShaderBinding>,
     binding_map_bytes: Arc<[u8]>,
+    entry_binding_bytes: Arc<[u8]>,
     shader_asset_id: u32,
     texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
     provenance: GpuCanvasShaderProvenance,
@@ -2092,7 +2101,8 @@ impl GpuCanvasVulkanSpirVShader {
     /// `code`, `entries`, `bindings`, and `binding_map_bytes` must be the exact
     /// target-5 and target-13 data decoded from `artifact_sha256` at
     /// `artifact_size`. The SPIR-V must retain the trusted exporter's validity
-    /// guarantee for unsafe Vulkan driver passthrough.
+    /// guarantee for unsafe Vulkan driver passthrough. `entry_binding_bytes`
+    /// must be the exact authenticated section-2 bytes.
     #[doc(hidden)]
     pub unsafe fn from_verified_parts(
         provenance: GpuCanvasShaderProvenance,
@@ -2102,6 +2112,7 @@ impl GpuCanvasVulkanSpirVShader {
         entries: Vec<GpuCanvasShaderEntry>,
         bindings: Vec<GpuCanvasShaderBinding>,
         binding_map_bytes: Arc<[u8]>,
+        entry_binding_bytes: Arc<[u8]>,
         shader_asset_id: u32,
         texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
     ) -> Option<Self> {
@@ -2112,6 +2123,7 @@ impl GpuCanvasVulkanSpirVShader {
                 entries,
                 bindings,
                 binding_map_bytes,
+                entry_binding_bytes,
                 shader_asset_id,
                 texture_sampler_pairs,
                 provenance,
@@ -2132,6 +2144,9 @@ impl GpuCanvasVulkanSpirVShader {
 
     pub fn binding_map_bytes(&self) -> &[u8] {
         &self.binding_map_bytes
+    }
+    pub fn entry_binding_bytes(&self) -> &[u8] {
+        &self.entry_binding_bytes
     }
 
     pub fn shader_asset_id(&self) -> u32 {
@@ -2154,6 +2169,7 @@ pub struct GpuCanvasShader {
     pub bindings: Vec<GpuCanvasShaderBinding>,
     /// Exact target-16 bytes consumed by the ORE WebGPU module constructor.
     pub binding_map_bytes: Arc<[u8]>,
+    pub entry_binding_bytes: Arc<[u8]>,
     pub shader_asset_id: u32,
     pub texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
 }
@@ -2189,6 +2205,7 @@ pub struct GpuCanvasWebGl2Shader {
     pub sources: Vec<String>,
     pub bindings: Vec<GpuCanvasShaderBinding>,
     pub binding_map_bytes: Arc<[u8]>,
+    pub entry_binding_bytes: Arc<[u8]>,
     pub vertex_gl_fixup_bytes: Arc<[u8]>,
     pub fragment_gl_fixup_bytes: Arc<[u8]>,
     pub shader_asset_id: u32,

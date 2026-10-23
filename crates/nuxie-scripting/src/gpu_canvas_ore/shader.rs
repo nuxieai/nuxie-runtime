@@ -1,7 +1,9 @@
 //! Shader entry selection and binding-map layout construction from
 //! `src/lua/renderer/lua_gpu.cpp` and `ScriptedShader` in rive_lua_libs.hpp.
 use super::*;
-use nuxie_ore_metal::bind_group_layout::{bindingMapForStages, makeBindGroupLayoutFromBindingMap};
+use nuxie_ore_metal::bind_group_layout::{
+    bindingMapForEntries, bindingMapForStages, makeBindGroupLayoutFromBindingMap,
+};
 use nuxie_ore_metal::shader_module::ShaderModule;
 use nuxie_render_api::GpuCanvasShaderStage;
 
@@ -139,9 +141,11 @@ impl UserData for Layout {}
 pub(super) fn auto_layouts(
     context: &mut dyn ContextApi,
     vertex: Option<&ShaderModule>,
+    vertex_entry: Option<&str>,
     fragment: Option<&ShaderModule>,
+    fragment_entry: Option<&str>,
 ) -> Result<Vec<Option<Layout>>> {
-    let binding_map = bindingMapForStages(vertex, fragment);
+    let binding_map = bindingMapForEntries(vertex, vertex_entry, fragment, fragment_entry);
     let mut seen = [false; kMaxBindGroups as usize];
     let mut max_group = 0;
     for index in 0..binding_map.size() {

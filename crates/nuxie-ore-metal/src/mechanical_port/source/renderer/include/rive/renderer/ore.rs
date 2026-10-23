@@ -18,10 +18,14 @@ pub mod ore_context_hpp;
 pub mod ore_context_metal_hpp;
 #[path = "ore/ore_deferred_bind_groups_hpp.rs"]
 pub mod ore_deferred_bind_groups_hpp;
+#[path = "ore/ore_draw_bindings_hpp.rs"]
+pub mod ore_draw_bindings_hpp;
 #[path = "ore/ore_pipeline_hpp.rs"]
 pub mod ore_pipeline_hpp;
 #[path = "ore/ore_render_pass_hpp.rs"]
 pub mod ore_render_pass_hpp;
+#[path = "ore/ore_rstb_entry_bindings_hpp.rs"]
+pub mod ore_rstb_entry_bindings_hpp;
 #[path = "ore/ore_rstb_entry_container_hpp.rs"]
 pub mod ore_rstb_entry_container_hpp;
 #[path = "ore/ore_sampler_hpp.rs"]

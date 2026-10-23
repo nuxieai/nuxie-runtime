@@ -312,7 +312,8 @@ impl LayoutStyleApplier for LayoutCssStyle {
         // replaced sizing; a box applies it to its filling picture separately.
         let picture = self.component.parent_handle().filter(|host| {
             context.css_role == CssRole::Participant
-                && host.is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+                && host
+                    .is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
         });
         style.item_is_replaced = picture.is_some();
         if let Some(picture) = picture {

@@ -282,8 +282,11 @@ impl BlockContext<'_> {
 }
 
 use super::common::alignment::{apply_alignment_fallback, compute_alignment_offset};
-#[cfg(feature = "content_size")]
+// nuxie-css: floats keep the stock contribution; in-flow children contribute their margin boxes.
+#[cfg(all(feature = "content_size", feature = "float_layout"))]
 use super::common::scrollable_overflow::compute_scrollable_overflow_contribution;
+#[cfg(feature = "content_size")]
+use super::common::scrollable_overflow::compute_inflow_overflow_contribution;
 use super::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 
 /// Per-child data that is accumulated and modified over the course of the layout algorithm
@@ -721,13 +724,20 @@ fn compute_inner(
                                 y: layout.location.y - resolved_border.top,
                             }
                         };
-                        inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
+                        // nuxie-css: in-flow children add their margin boxes; floats keep stock behaviour.
+                        #[cfg(feature = "float_layout")]
+                        let margin = (!item.float.is_floated()).then_some(layout.margin);
+                        #[cfg(not(feature = "float_layout"))]
+                        let margin = Some(layout.margin);
+                        inflow_overflow_rect = inflow_overflow_rect.union(compute_inflow_overflow_contribution(
                             contribution_location,
                             layout.size,
                             layout.scrollable_overflow_rect,
                             item.overflow,
                             item.contain,
                             is_scroll_container,
+                            margin,
+                            direction.is_rtl(),
                         ));
                     }
                 }
@@ -1742,13 +1752,16 @@ fn perform_final_layout_on_in_flow_children(
                 } else {
                     Point { x: location.x - resolved_border.left, y: location.y - resolved_border.top }
                 };
-                inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
+                inflow_overflow_rect = inflow_overflow_rect.union(compute_inflow_overflow_contribution(
                     contribution_location,
                     final_size,
                     item_layout.scrollable_overflow_rect,
                     item.overflow,
                     item.contain,
                     is_scroll_container,
+                    // nuxie-css: the used margins and the direction the location is mirrored for.
+                    Some(resolved_margin),
+                    direction.is_rtl(),
                 ));
             }
 

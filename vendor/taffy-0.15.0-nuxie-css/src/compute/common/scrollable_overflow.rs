@@ -3,6 +3,55 @@ use crate::geometry::{Point, Rect, Size};
 use crate::style::{Contain, Overflow};
 use crate::util::sys::{f32_max, f32_min};
 
+// nuxie-css: the in-flow margin-area contribution (see NUXIE_PATCH.md).
+/// Returns `compute_scrollable_overflow_contribution` extended by the node's margin box, for
+/// in-flow block, flex and grid children. Chrome counts an in-flow child's margin box in its
+/// scroll container's scrollable overflow, so a last child's end margin extends the scroll
+/// range; stock Taffy counts only the border box.
+///
+/// This applies at every level, not only directly inside a scroll container, so a box whose
+/// children overflow it (such as a scroller's content box sized to its viewport) passes their
+/// margin boxes on. Chrome counts the margins of a scroll container's own children only.
+///
+/// `margin` holds the used physical margins, auto margins included, or `None` for a child that
+/// keeps the stock contribution. Callers mirror `location` for RTL, so the logical start edge is
+/// then the physical right one. The margin box counts even when the border box is empty, as in
+/// Chrome. A margin box wholly before a scroll container's origin stays excluded, and margins
+/// never move or enlarge descendant overflow or shrink the stock contribution.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compute_inflow_overflow_contribution(
+    location: Point<f32>,
+    size: Size<f32>,
+    scrollable_overflow_rect: Rect<f32>,
+    overflow: Point<Overflow>,
+    contain: Contain,
+    parent_is_scroll_container: bool,
+    margin: Option<Rect<f32>>,
+    is_rtl: bool,
+) -> Rect<f32> {
+    let contribution = compute_scrollable_overflow_contribution(
+        location,
+        size,
+        scrollable_overflow_rect,
+        overflow,
+        contain,
+        parent_is_scroll_container,
+    );
+    let Some(margin) = margin else {
+        return contribution;
+    };
+    let margin_box = Rect {
+        left: location.x - if is_rtl { margin.right } else { margin.left },
+        right: location.x + size.width + if is_rtl { margin.left } else { margin.right },
+        top: location.y - margin.top,
+        bottom: location.y + size.height + margin.bottom,
+    };
+    if parent_is_scroll_container && (margin_box.right <= 0.0 || margin_box.bottom <= 0.0) {
+        return contribution;
+    }
+    contribution.union(margin_box)
+}
+
 #[inline(always)]
 /// Determine the rectangle that a given node contributes to its parent's scrollable overflow
 /// rectangle.

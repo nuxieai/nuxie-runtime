@@ -13,7 +13,8 @@ use crate::util::sys::f32_max;
 use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
 
 #[cfg(feature = "content_size")]
-use crate::compute::common::scrollable_overflow::compute_scrollable_overflow_contribution;
+// nuxie-css: grid items contribute their margin boxes.
+use crate::compute::common::scrollable_overflow::compute_inflow_overflow_contribution;
 use crate::compute::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 use crate::{AbsoluteAxis, BoxSizing, Direction, LayoutGridContainer};
 
@@ -434,13 +435,16 @@ pub(super) fn align_and_position_item(
         } else {
             Point { x: x - container_border.left, y: y - container_border.top }
         };
-        compute_scrollable_overflow_contribution(
+        compute_inflow_overflow_contribution(
             contribution_location,
             Size { width, height },
             layout_output.scrollable_overflow_rect,
             overflow,
             contain,
             container_is_scroll_container,
+            // nuxie-css: in-flow items add their margin boxes; absolute ones keep stock behaviour.
+            (!position.is_out_of_flow()).then_some(resolved_margin),
+            direction.is_rtl(),
         )
     };
     #[cfg(not(feature = "content_size"))]

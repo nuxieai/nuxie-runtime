@@ -13640,4 +13640,110 @@ fn css_clip_scope_closes_when_a_draw_rule_moves_the_box_before_its_proxy() {
         "the card's clipping shape stays on for After:\n{}",
         lines.join("\n")
     );
+/// The fill colours a draw paints, in order.
+fn painted_colors(lines: &[String]) -> Vec<String> {
+    lines
+        .iter()
+        .filter(|line| line.starts_with("drawPath"))
+        .filter_map(|line| line.split("color=").nth(1))
+        .map(|rest| rest.split(',').next().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// A data-bind update runs while the artboard is borrowed; the `overflow`
+/// and `z-index` it writes still reach the next draw order.
+#[test]
+fn css_stacking_bound_overflow_and_z_index_reach_the_draw_order() {
+    use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+    let set_number = |number: &CoreHandle, value: f32| {
+        assert!(CoreRegistry::set_double_handle(
+            number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            value
+        ));
+    };
+    let f = stacking_badge(
+        B {
+            bind: Some(OVERFLOW_X),
+            ..stacking_box(CARD, &[U(POSITION, 1)])
+        },
+        &stacking_z(5.0),
+        None,
+        false,
+    );
+    let numbers = f.bind_numbers();
+    for (overflow, clipped) in [(2.0, true), (0.0, false), (2.0, true)] {
+        set_number(&numbers[0], overflow);
+        f.advance(3);
+        assert_eq!(badge_draw_has_card_clip(&f), clipped, "overflow {overflow}");
+    }
+
+    let card = |z: f32| {
+        stacking_box(
+            CARD,
+            &[[U(POSITION, 1)].as_slice(), &stacking_z(z)].concat(),
+        )
+    };
+    let bound = stacking_badge(
+        B {
+            bind: Some(Z_INDEX),
+            ..card(0.0)
+        },
+        &stacking_z(5.0),
+        None,
+        false,
+    );
+    let numbers = bound.bind_numbers();
+    for z in [10.0, 0.0] {
+        set_number(&numbers[0], z);
+        bound.advance(3);
+        let fixed = stacking_badge(card(z), &stacking_z(5.0), None, false);
+        assert_eq!(
+            painted_colors(&bound.draw_lines()),
+            painted_colors(&fixed.draw_lines()),
+            "z-index {z}"
+        );
+    }
+}
+
+/// A field half clipped by its box's overflow takes a tap only where it
+/// shows, through the ancestor walk, as on main.
+#[test]
+fn css_text_input_takes_taps_only_where_its_box_shows_it() {
+    // A page box keeps `Clip` at its own size; a scene's root box takes
+    // the page's.
+    let f = scene(
+        (200.0, 200.0),
+        css(
+            "Page",
+            vec![],
+            vec![css(
+                "Clip",
+                [
+                    [U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)].as_slice(),
+                    &width(100.0),
+                    &height(100.0),
+                ]
+                .concat(),
+                vec![B {
+                    text_input: true,
+                    ..css(
+                        "Field",
+                        [
+                            [F(FLEX_SHRINK, 0.0)].as_slice(),
+                            &width(180.0),
+                            &height(40.0),
+                        ]
+                        .concat(),
+                        vec![],
+                    )
+                }],
+            )],
+        ),
+    );
+    let machine = f.machine();
+    click(&machine, 150.0, 20.0);
+    assert!(!f.field_is_focused(), "on the clipped half");
+    click(&machine, 50.0, 20.0);
+    assert!(f.field_is_focused(), "on the shown half");
 }

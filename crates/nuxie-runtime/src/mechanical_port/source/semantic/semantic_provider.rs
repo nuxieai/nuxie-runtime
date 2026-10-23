@@ -466,10 +466,7 @@ fn walk_rendered_clips(
             {
                 filter.keep_full_chain();
             }
-            let position = object
-                .as_layout_component()
-                .map(crate::css_layout::clip::position)
-                .unwrap_or(0);
+            let position = crate::css_layout::clip::object_position(&*object);
             let include_overflow = filter.enter(position, is_artboard);
             filter.leave(position);
             if is_artboard {

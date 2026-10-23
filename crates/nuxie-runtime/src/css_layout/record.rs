@@ -157,6 +157,9 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                 ) {
                     mark_draw_order_dirty(&parent);
                 }
+                if matches!(key, keys::POSITION | keys::OVERFLOW_X | keys::OVERFLOW_Y) {
+                    mark_clip_lists_dirty(&parent);
+                }
                 mark_owner_dirty(&parent);
             }
             // A Stroke's BoxBorder and a Feather's BoxShadow shape the paths
@@ -256,6 +259,7 @@ impl<const TYPE: u16> CssRecord<TYPE> {
             });
         }
         mark_draw_order_dirty(&parent);
+        mark_clip_lists_dirty(&parent);
         mark_owner_dirty(&parent);
         StatusCode::Ok
     }
@@ -269,21 +273,35 @@ pub fn find_in(children: &[CoreHandle]) -> Option<CoreHandle> {
         .cloned()
 }
 
-/// `owner`'s artboard sorts its draw order again.
+fn artboard_of(owner: &CoreHandle) -> Option<CoreHandle> {
+    if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
+        Some(owner.clone())
+    } else {
+        owner
+            .with(|object| object.component_artboard_handle())
+            .flatten()
+    }
+}
+
+/// `owner`'s artboard sorts its draw order again. The dirty handle never
+/// borrows the artboard, so a change made while it is borrowed (during an
+/// advance or a data-bind update) still reaches the next sort.
 pub(crate) fn mark_draw_order_dirty(owner: &CoreHandle) {
-    let artboard =
-        if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
-            Some(owner.clone())
-        } else {
-            owner
-                .with(|object| object.component_artboard_handle())
-                .flatten()
-        };
-    if let Some(artboard) = artboard {
-        if let Some(dirty) = artboard.artboard_dirty_handle() {
-            dirty.mark_css_clip_lists_dirty();
-        }
+    let Some(artboard) = artboard_of(owner) else {
+        return;
+    };
+    if let Some(dirty) = artboard.artboard_dirty_handle() {
+        dirty.mark_css_draw_order_dirty();
+    } else {
         artboard.with_mut(|object| object.component_add_dirt(ComponentDirt::DRAW_ORDER, false));
+    }
+}
+
+/// `owner`'s artboard rebuilds its CSS clip lists at its next sort: a box's
+/// `position` or `overflow` changed, or a record arrived.
+pub(crate) fn mark_clip_lists_dirty(owner: &CoreHandle) {
+    if let Some(dirty) = artboard_of(owner).and_then(|artboard| artboard.artboard_dirty_handle()) {
+        dirty.mark_css_clip_lists_dirty();
     }
 }
 

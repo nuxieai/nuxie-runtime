@@ -1,7 +1,7 @@
 //! CSS overflow clips follow containing blocks, independently of paint order.
 use super::keys;
 use crate::source::{
-    core::CoreHandle,
+    core::{CoreHandle, CoreObject},
     drawable::{Drawable, DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     layout_component::LayoutComponent,
     renderer::Renderer,
@@ -54,6 +54,20 @@ pub(crate) fn keeps_full_chain(drawable: &Drawable) -> bool {
     !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty()
 }
 
+/// A component's `position` for the containing-block rule: a layout's as
+/// `position` reads it, a participant's from the record among its children
+/// (as paint order reads it), and static for anything else.
+pub(crate) fn object_position(object: &dyn CoreObject) -> u8 {
+    if let Some(layout) = object.as_layout_component() {
+        return position(layout);
+    }
+    object
+        .as_container_component()
+        .and_then(|container| super::record::find_in(container.children()))
+        .and_then(|record| super::record::with_values(&record, |css| css.choice(keys::POSITION)))
+        .unwrap_or(0)
+}
+
 pub(crate) fn position(layout: &LayoutComponent) -> u8 {
     if layout.is_artboard() {
         return 0;
@@ -76,7 +90,7 @@ pub(crate) fn hit_test_ancestors(
             if object.as_drawable().is_some_and(keeps_full_chain) {
                 filter.keep_full_chain();
             }
-            let position = object.as_layout_component().map(position).unwrap_or(0);
+            let position = object_position(&*object);
             let include = filter.enter(position, object.as_artboard().is_some());
             if let Some(artboard) = object.as_artboard_mut() {
                 return (
@@ -87,9 +101,15 @@ pub(crate) fn hit_test_ancestors(
             let hit = if let Some(layout) = object.as_layout_component() {
                 !layout.is_hidden() && layout.hit_test_contains(point, true, false, None, include)
             } else {
-                object
+                let visible = object
                     .as_drawable()
-                    .is_none_or(|drawable| !drawable.is_hidden())
+                    .is_none_or(|drawable| !drawable.is_hidden());
+                // A field's own target, which the ancestor chain checked for
+                // anything inside it too.
+                visible
+                    && object
+                        .as_text_input_mut()
+                        .is_none_or(|input| input.contains_point(*point))
             };
             filter.leave(position);
             (hit, next)
@@ -249,7 +269,7 @@ pub(crate) fn build_lists(
                         let clips = css_box && layout.is_some_and(LayoutComponent::clips);
                         BuildNode {
                             parent: object.component_parent_handle(),
-                            position: layout.map(position).unwrap_or(0),
+                            position: object_position(object),
                             css_box,
                             clips,
                             shapes: if clips {

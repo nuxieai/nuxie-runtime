@@ -2186,7 +2186,7 @@ impl ArtboardComponentList {
         let css_item = artboard.with_artboard(|artboard| artboard.css_record());
         owner
             .with_downcast_mut::<Self, _>(|owner| {
-                LayoutComponent::set_hosted_css_item_occurrence(
+                LayoutComponent::set_hosted_css_record_occurrence(
                     &artboard.core_handle(),
                     css_item,
                     Some(owner),

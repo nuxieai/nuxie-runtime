@@ -1,4 +1,4 @@
-//! Hosted CSS roots use live item styles. Expected geometry matches Chrome.
+//! Hosted CSS roots use live whole-box styles. Expected geometry matches Chrome.
 use super::layout_measured_content_tests::Riv;
 use crate::css_layout::keys::*;
 use crate::source::{
@@ -754,7 +754,7 @@ fn interactive_display_scene(item_record: bool, root_css: bool, bound: bool) -> 
     if root_css {
         riv.object(LAYOUT_CSS_STYLE)
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
-            // A flex row: the item's block/flex/grid must never replace it.
+            // The fallback container is a flex row; each copy can replace it.
             .uint(DISPLAY, 1)
             .end();
     }
@@ -980,8 +980,12 @@ fn css_nested_bound_item_display_toggles_and_relayouts() {
                 .unwrap();
             assert_eq!(
                 second,
-                (10.0, 0.0),
-                "container stays a flex row, item display {display}"
+                match display {
+                    1 => (10.0, 0.0),
+                    2 => (0.0, 20.0),
+                    _ => (0.0, 10.0),
+                },
+                "the copy's display controls its container, display {display}"
             );
         }
         assert_eq!(
@@ -1019,4 +1023,226 @@ fn css_nested_item_display_on_a_translated_artboard_keeps_existing_behavior() {
         40.0
     );
     assert_eq!(copies[1].with_artboard(|board| board.layout_y()), 40.0);
+}
+
+// The first copy has a whole-box record; the second uses the component's
+// own column with 4-point padding and a 3-point gap.
+fn whole_box_scene(padding: f32, bound_padding: bool) -> Scene {
+    use crate::source::generated::{
+        data_bind::{data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase},
+        viewmodel::{
+            viewmodel_base::ViewModelBase,
+            viewmodel_property_number_base::ViewModelPropertyNumberBase,
+        },
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    if bound_padding {
+        riv.object(ViewModelBase::TYPE_KEY).end();
+        riv.object(ViewModelPropertyNumberBase::TYPE_KEY).end();
+    }
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 300.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 500.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5);
+    if bound_padding {
+        riv.uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0);
+    }
+    riv.end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 2)
+        .end();
+    riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 0)
+        .float(COLUMN_GAP, 8.0)
+        .uint(BOX_SIZING, 0)
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 100.0)
+        .float(PADDING_TOP, padding)
+        .float(PADDING_RIGHT, padding)
+        .float(PADDING_BOTTOM, padding)
+        .float(PADDING_LEFT, padding)
+        .end();
+    if bound_padding {
+        riv.object(DataBindContextBase::TYPE_KEY)
+            .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, PADDING_TOP.into())
+            .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+            .end();
+    }
+    riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .end();
+    style(&mut riv, 0);
+    board(&mut riv, 200.0, 100.0, 6);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 2)
+        .float(ROW_GAP, 3.0)
+        .float(PADDING_TOP, 4.0)
+        .float(PADDING_RIGHT, 4.0)
+        .float(PADDING_BOTTOM, 4.0)
+        .float(PADDING_LEFT, 4.0)
+        .end();
+    for index in 0..2 {
+        let child = 2 + index * 2;
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 7 + index)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, child)
+            .uint(WIDTH_KIND, 1)
+            .float(WIDTH, 10.0)
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT, 10.0)
+            .end();
+    }
+    style(&mut riv, 0);
+    style(&mut riv, 2);
+    style(&mut riv, 4);
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+fn copy_children(copy: &RuntimeArtboardInstanceHandle) -> Vec<(f32, f32)> {
+    copy.with_artboard(|board| board.find_all_handles::<LayoutComponent>())
+        .iter()
+        .filter(|child| !child.is_type_of(ArtboardBase::TYPE_KEY))
+        .map(|child| {
+            child
+                .with_downcast::<LayoutComponent, _>(|child| (child.layout_x(), child.layout_y()))
+                .unwrap()
+        })
+        .collect()
+}
+
+#[test]
+fn css_nested_whole_box_record_controls_only_its_copies_container() {
+    let scene = whole_box_scene(20.0, false);
+    let copies = display_copies(&scene);
+    assert_eq!(copy_children(&copies[0]), [(20.0, 20.0), (38.0, 20.0)]);
+    assert_eq!(copy_children(&copies[1]), [(4.0, 4.0), (4.0, 17.0)]);
+}
+
+#[test]
+fn css_nested_whole_box_content_width_adds_its_padding() {
+    let scene = whole_box_scene(10.0, false);
+    let copies = display_copies(&scene);
+    assert_eq!(
+        copies[0].with_artboard(|board| board.layout_bounds().width()),
+        120.0
+    );
+    assert_eq!(
+        copies[1].with_artboard(|board| board.layout_bounds().width()),
+        200.0
+    );
+}
+
+#[test]
+fn css_nested_whole_box_without_copy_record_keeps_its_artboard_record() {
+    let scene = whole_box_scene(20.0, false);
+    let copies = display_copies(&scene);
+    assert_eq!(copy_children(&copies[1]), [(4.0, 4.0), (4.0, 17.0)]);
+    assert_eq!(
+        copies[1].with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (200.0, 100.0)
+    );
+}
+
+#[test]
+fn css_nested_whole_box_bound_padding_updates_only_its_copy() {
+    use crate::source::{
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+        viewmodel::viewmodel_instance::ViewModelInstance,
+    };
+    let scene = whole_box_scene(20.0, true);
+    let instance = scene
+        .file
+        .with_file(|file| {
+            file.create_view_model_instance_for_artboard(scene.artboard.core_handle())
+        })
+        .unwrap();
+    let number = instance
+        .with_downcast::<ViewModelInstance, _>(|instance| instance.property_values()[0].clone())
+        .unwrap();
+    scene.artboard.bind_view_model_instance(Some(instance));
+    let copies = display_copies(&scene);
+    for padding in [20.0, 30.0, 0.0] {
+        CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            padding,
+        );
+        scene.advance();
+        assert_eq!(
+            copy_children(&copies[0]),
+            [(20.0, padding), (38.0, padding)]
+        );
+        assert_eq!(copy_children(&copies[1]), [(4.0, 4.0), (4.0, 17.0)]);
+        assert_eq!(
+            copies[1].with_artboard(|board| board.layout_y()),
+            padding + 30.0
+        );
+    }
+}
+
+#[test]
+fn css_nested_whole_box_ignores_its_replaced_artboard_record() {
+    let scene = whole_box_scene(20.0, false);
+    let copies = display_copies(&scene);
+    let own = copies[0]
+        .core_handle()
+        .with(|object| {
+            crate::css_layout::record::find_in(object.as_container_component().unwrap().children())
+        })
+        .flatten()
+        .unwrap();
+    CoreRegistry::set_uint_handle(&own, DISPLAY.into(), 3);
+    CoreRegistry::set_uint_handle(&own, DIRECTION.into(), 2);
+    CoreRegistry::set_double_handle(&own, PADDING_TOP.into(), 77.0);
+    scene.advance();
+    assert_eq!(copy_children(&copies[0]), [(20.0, 20.0), (38.0, 20.0)]);
+    assert_eq!(
+        copies[0].with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (140.0, 50.0)
+    );
+    assert_eq!(copy_children(&copies[1]), [(4.0, 4.0), (4.0, 17.0)]);
+}
+
+#[test]
+fn css_nested_whole_box_live_direction_border_and_overflow_use_the_copy_record() {
+    let scene = whole_box_scene(20.0, false);
+    let copies = display_copies(&scene);
+    let record = copies[0].with_artboard(|board| board.css_record()).unwrap();
+    CoreRegistry::set_uint_handle(&record, DIRECTION.into(), 2);
+    CoreRegistry::set_uint_handle(&record, OVERFLOW_X.into(), 2);
+    for key in BORDER_TOP..BORDER_TOP + 4 {
+        CoreRegistry::set_double_handle(&record, key.into(), 5.0);
+    }
+    scene.advance();
+    assert_eq!(copy_children(&copies[0]), [(115.0, 25.0), (97.0, 25.0)]);
+    assert_eq!(
+        copies[0].with_artboard(|board| board.layout_bounds().width()),
+        150.0
+    );
+    assert!(copies[0].with_artboard(|board| board.clips()));
+    assert_eq!(copy_children(&copies[1]), [(4.0, 4.0), (4.0, 17.0)]);
+    assert!(!copies[1].with_artboard(|board| board.clips()));
 }

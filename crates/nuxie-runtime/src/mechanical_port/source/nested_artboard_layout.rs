@@ -290,7 +290,7 @@ impl NestedArtboardLayoutBaseCallbacks for NestedArtboardLayout {
 }
 
 impl StyleOverrideProvider for NestedArtboardLayout {
-    fn css_item_record(&self, _artboard: &RuntimeArtboardInstanceHandle) -> Option<CoreHandle> {
+    fn css_record_override(&self, _artboard: &RuntimeArtboardInstanceHandle) -> Option<CoreHandle> {
         crate::css_layout::record::find_in(self.base.base.children())
     }
     fn is_row(&self) -> bool {

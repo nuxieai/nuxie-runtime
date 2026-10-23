@@ -119,34 +119,7 @@ impl<const TYPE: u16> CssRecord<TYPE> {
         };
         match TYPE {
             keys::LAYOUT_CSS_STYLE => {
-                if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
-                    if key == keys::DISPLAY {
-                        let hidden = self.values().display_none();
-                        LayoutComponent::css_display_changed_occurrence(&parent, hidden);
-                    }
-                    // Boxes that inherit the direction follow it.
-                    if key == keys::DIRECTION {
-                        LayoutComponent::direction_changed_occurrence(&parent);
-                    }
-                    if key == keys::DISPLAY
-                        || key == keys::FLEX_DIRECTION
-                        || key == keys::JUSTIFY_ITEMS
-                    {
-                        LayoutComponent::css_flow_changed_occurrence(&parent);
-                    }
-                    // What only the box's paint and clip read.
-                    if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4)
-                        .contains(&key)
-                        || (keys::BORDER_TOP..keys::BORDER_TOP + 4).contains(&key)
-                        || key == keys::OVERFLOW_X
-                        || key == keys::OVERFLOW_Y
-                    {
-                        LayoutComponent::css_paint_changed_occurrence(&parent);
-                    }
-                }
-                if key == keys::DISPLAY {
-                    self.hosted_display_changed(&parent);
-                }
+                self.layout_changed(&parent, key);
                 // CSS painting order reads these, for a box or a
                 // participant (docs/CSS_LAYOUT.md, 4.4).
                 if matches!(
@@ -180,17 +153,61 @@ impl<const TYPE: u16> CssRecord<TYPE> {
             _ => {}
         }
     }
-    fn hosted_display_changed(&self, parent: &CoreHandle) {
-        let root = parent
-            .with_downcast::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
-                |host| host.base.base.artboard_instance_handle(0),
-            )
+    // A copy's record is physically a child of its host, but styles the
+    // mounted root. Ignore writes to an artboard record that is replaced.
+    fn layout_owner(&self, parent: &CoreHandle) -> Option<CoreHandle> {
+        let owner = if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
+            parent.clone()
+        } else {
+            parent
+                .with_downcast::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
+                    |host| host.base.base.artboard_instance_handle(0),
+                )
+                .flatten()?
+                .core_handle()
+        };
+        let record = self.component.handle()?;
+        let selected = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .and_then(LayoutComponent::css_record)
+            })
             .flatten();
-        if let Some(root) = root {
-            LayoutComponent::hosted_css_display_changed_occurrence(
-                &root.core_handle(),
-                self.values().display_none(),
-            );
+        (selected.as_ref() == Some(&record)).then_some(owner)
+    }
+    fn layout_changed(&self, parent: &CoreHandle, key: u16) {
+        if let Some(owner) = self.layout_owner(parent) {
+            if key == keys::DISPLAY {
+                let hidden = self.values().display_none();
+                LayoutComponent::css_display_changed_occurrence(&owner, hidden);
+            }
+            // Boxes that inherit the direction follow it.
+            if key == keys::DIRECTION {
+                LayoutComponent::direction_changed_occurrence(&owner);
+            }
+            if key == keys::DISPLAY || key == keys::FLEX_DIRECTION || key == keys::JUSTIFY_ITEMS {
+                LayoutComponent::css_flow_changed_occurrence(&owner);
+            }
+            // What only the box's paint and clip read.
+            if (keys::RADIUS_TOP_LEFT_PERCENT..keys::RADIUS_TOP_LEFT_PERCENT + 4).contains(&key)
+                || (keys::BORDER_TOP..keys::BORDER_TOP + 4).contains(&key)
+                || key == keys::OVERFLOW_X
+                || key == keys::OVERFLOW_Y
+            {
+                LayoutComponent::css_paint_changed_occurrence(&owner);
+            }
+            if matches!(
+                key,
+                keys::DISPLAY
+                    | keys::POSITION
+                    | keys::Z_INDEX_KIND
+                    | keys::Z_INDEX
+                    | keys::OVERFLOW_X
+                    | keys::OVERFLOW_Y
+            ) {
+                mark_draw_order_dirty(&owner);
+            }
         }
     }
     /// Parent kinds each record type accepts (docs/CSS_LAYOUT.md, 1.1).
@@ -262,15 +279,15 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                     layout.add_layout_style_applier(this.clone());
                 }
             });
-            let hidden = self.values().display_none();
-            LayoutComponent::css_display_changed_occurrence(&parent, hidden);
         } else {
             // A participant also finds this record among its host's children
             // when its layout data is created after this point.
             layout_node_provider::with_mut(&parent, |provider| {
                 provider.add_layout_style_applier(this.clone())
             });
-            self.hosted_display_changed(&parent);
+        }
+        if let Some(owner) = self.layout_owner(&parent) {
+            LayoutComponent::css_display_changed_occurrence(&owner, self.values().display_none());
         }
         mark_owner_dirty(&parent);
         StatusCode::Ok

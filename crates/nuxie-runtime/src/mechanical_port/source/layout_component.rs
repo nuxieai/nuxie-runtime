@@ -493,9 +493,9 @@ pub struct LayoutComponent {
     width_unit_value_override: i8,
     height_override: f32,
     height_unit_value_override: i8,
-    /// Item properties supplied by this hosted occurrence's CSS carrier.
-    /// Container properties still come from the artboard's own record.
-    hosted_css_item: Option<CoreHandle>,
+    /// The whole-box CSS record for this hosted occurrence. List rows use
+    /// their own record; nested copies replace it with the host's record.
+    hosted_css_record: Option<CoreHandle>,
     forced_width: f32,
     css_scroll_thumb_size: bool,
     forced_height: f32,
@@ -563,7 +563,7 @@ impl Default for LayoutComponent {
             width_unit_value_override: -1,
             height_override: f32::NAN,
             height_unit_value_override: -1,
-            hosted_css_item: None,
+            hosted_css_record: None,
             forced_width: f32::NAN,
             css_scroll_thumb_size: false,
             forced_height: f32::NAN,
@@ -1485,12 +1485,7 @@ impl LayoutComponent {
                 Some((
                     layout.layout_data.take_style(),
                     context,
-                    layout
-                        .layout_data
-                        .appliers
-                        .as_deref()
-                        .cloned()
-                        .unwrap_or_default(),
+                    layout.style_appliers(),
                 ))
             })
             .flatten()
@@ -1543,7 +1538,6 @@ impl LayoutComponent {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
             layout.apply_css_scroll_thumb_size(&mut style);
-            layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
             layout.layout_data.set_style(style);
         });
@@ -2208,7 +2202,7 @@ impl LayoutComponent {
         self.mark_layout_node_dirty(false);
     }
 
-    pub(crate) fn set_hosted_css_item_occurrence(
+    pub(crate) fn set_hosted_css_record_occurrence(
         owner: &CoreHandle,
         record: Option<CoreHandle>,
         host: Option<&mut dyn crate::source::artboard_host::ArtboardHost>,
@@ -2218,34 +2212,25 @@ impl LayoutComponent {
                 let layout = object
                     .as_layout_component_mut()
                     .expect("hosted layout root");
-                if layout.hosted_css_item == record {
+                if layout.hosted_css_record == record {
                     // The carrier may be borrowed by its live setter. Display
                     // changes arrive separately with the already-read value.
                     return (record.is_some(), None);
                 }
-                layout.hosted_css_item = record;
-                let hidden = layout
-                    .with_css(|css| css.display_none() || layout.hosted_item_display_hidden());
+                layout.hosted_css_record = record;
+                let hidden = layout.with_css(|css| css.display_none());
                 (true, hidden)
             })
             .unwrap_or((false, None));
         if let Some(hidden) = hidden {
             Self::set_css_display_hidden_occurrence(owner, hidden);
+            Self::mark_layout_style_dirty_occurrence(owner);
         }
         if changed {
             Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
         }
     }
 
-    fn apply_hosted_css_item(&self, style: &mut Style) {
-        if self.is_css_mode() {
-            if let Some(record) = &self.hosted_css_item {
-                crate::css_layout::record::with_values(record, |values| {
-                    crate::css_layout::style::apply_hosted_item(values, style);
-                });
-            }
-        }
-    }
     pub fn set_parent_is_row(&mut self, row: bool) {
         self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         self.mark_layout_node_dirty(false);
@@ -3192,15 +3177,35 @@ impl LayoutComponent {
         self.with_style(|style| style.is_grid() && !style.is_stack())
             .unwrap_or(false)
     }
-    /// This box's `LayoutCssStyle`: present exactly when the box is in CSS
-    /// mode (docs/CSS_LAYOUT.md, 2.1).
+    /// The selected whole-box record in CSS mode: a hosted copy's record,
+    /// or the box's own record when there is no override. The artboard must
+    /// have its own record to opt into CSS mode.
     pub fn css_record(&self) -> Option<CoreHandle> {
-        self.layout_data
+        let own = self
+            .layout_data
             .appliers
             .as_deref()?
             .iter()
-            .find(|applier| applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE))
-            .cloned()
+            .find(|applier| applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE))?;
+        Some(self.hosted_css_record.as_ref().unwrap_or(own).clone())
+    }
+    fn style_appliers(&self) -> Vec<CoreHandle> {
+        self.layout_data
+            .appliers
+            .as_deref()
+            .map(|appliers| {
+                appliers
+                    .iter()
+                    .map(|applier| {
+                        if applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE) {
+                            self.hosted_css_record.as_ref().unwrap_or(applier).clone()
+                        } else {
+                            applier.clone()
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
     pub fn is_css_mode(&self) -> bool {
         self.css_record().is_some()
@@ -3231,32 +3236,8 @@ impl LayoutComponent {
     /// `display: none` hides the box as the style's display none does. The
     /// record passes its value, since it is borrowed while it calls.
     pub(crate) fn css_display_changed_occurrence(owner: &CoreHandle, hidden: bool) {
-        let hidden = hidden
-            || owner
-                .with(|object| {
-                    object
-                        .as_layout_component()
-                        .unwrap()
-                        .hosted_item_display_hidden()
-                })
-                .unwrap_or(false);
         if Self::set_css_display_hidden_occurrence(owner, hidden) {
             Self::mark_layout_node_dirty_occurrence(owner, false);
-        }
-    }
-    /// A copy's item record is borrowed by its setter, so use the passed
-    /// value and read only the hosted root's separate container record.
-    pub(crate) fn hosted_css_display_changed_occurrence(owner: &CoreHandle, hidden: bool) {
-        let hidden = owner
-            .with(|object| {
-                let layout = object.as_layout_component().unwrap();
-                layout.with_css(|css| hidden || css.display_none())
-            })
-            .flatten();
-        if let Some(hidden) = hidden {
-            if Self::set_css_display_hidden_occurrence(owner, hidden) {
-                Self::mark_layout_node_dirty_occurrence(owner, false);
-            }
         }
     }
     fn set_css_display_hidden_occurrence(owner: &CoreHandle, hidden: bool) -> bool {
@@ -3529,7 +3510,7 @@ impl LayoutComponent {
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
             css_role: crate::css_layout::record::role(
-                self.is_artboard() && self.hosted_css_item.is_none(),
+                self.is_artboard() && self.hosted_css_record.is_none(),
                 false,
             ),
             css: self.is_css_mode(),
@@ -3542,12 +3523,7 @@ impl LayoutComponent {
         let mut taffy_style = self.layout_data.take_style();
         self.clear_virtual_grid_placement(&mut taffy_style);
         let this = self.base.handle();
-        let appliers = self
-            .layout_data
-            .appliers
-            .as_deref()
-            .cloned()
-            .unwrap_or_default();
+        let appliers = self.style_appliers();
         for pass in 0..5 {
             for applier in &appliers {
                 let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
@@ -3569,7 +3545,6 @@ impl LayoutComponent {
             }
         }
         self.apply_css_scroll_thumb_size(&mut taffy_style);
-        self.apply_hosted_css_item(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);
         self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
@@ -4856,7 +4831,7 @@ impl LayoutComponent {
                 .with(|object| {
                     object.as_artboard().is_some()
                         && !object.as_layout_component().is_some_and(|layout| {
-                            layout.is_css_mode() && layout.hosted_css_item.is_some()
+                            layout.is_css_mode() && layout.hosted_css_record.is_some()
                         })
                 })
                 .unwrap_or(false)
@@ -5637,20 +5612,9 @@ impl LayoutComponent {
     pub fn solved_border(&self) -> [f32; 4] {
         self.solved_border
     }
-    fn hosted_item_display_hidden(&self) -> bool {
-        let Some(own) = self.css_record() else {
-            return false;
-        };
-        self.hosted_css_item
-            .as_ref()
-            // A list row uses its own record, which may be the active setter.
-            .filter(|item| **item != own)
-            .and_then(|item| crate::css_layout::record::with_values(item, |css| css.display_none()))
-            .unwrap_or(false)
-    }
     fn refresh_style_display_hidden(&mut self) {
         let hidden = self
-            .with_css(|css| css.display_none() || self.hosted_item_display_hidden())
+            .with_css(|css| css.display_none())
             .or_else(|| self.with_style(|style| style.display() == YGDisplay::None))
             .unwrap_or(false);
         self.set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, hidden);

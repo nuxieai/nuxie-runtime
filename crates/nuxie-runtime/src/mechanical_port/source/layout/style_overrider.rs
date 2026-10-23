@@ -15,7 +15,7 @@ pub trait StyleOverrideProvider {
     fn instance_height(&self) -> f32;
     fn instance_width(&self) -> f32;
     /// List overrides use the row's record. Nested copies supply their own.
-    fn css_item_record(&self, artboard: &RuntimeArtboardInstanceHandle) -> Option<CoreHandle> {
+    fn css_record_override(&self, artboard: &RuntimeArtboardInstanceHandle) -> Option<CoreHandle> {
         artboard.with_artboard(|artboard| artboard.css_record())
     }
     fn mark_hosting_layout_dirty(&mut self, artboard: &RuntimeArtboardInstanceHandle);
@@ -36,7 +36,7 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
     fn update_css_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) -> bool {
         let record = artboard
             .with_artboard(|artboard| artboard.css_record())
-            .and_then(|_| provider.css_item_record(artboard));
+            .and_then(|_| provider.css_record_override(artboard));
         let css = record.is_some();
         if css {
             // Parent context applies even when CSS owns instance sizing.
@@ -46,7 +46,7 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
                 provider.borrowed_artboard_host(),
             );
         }
-        LayoutComponent::set_hosted_css_item_occurrence(
+        LayoutComponent::set_hosted_css_record_occurrence(
             &artboard.core_handle(),
             record,
             provider.borrowed_artboard_host(),

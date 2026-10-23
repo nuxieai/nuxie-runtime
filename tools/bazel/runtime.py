@@ -291,8 +291,15 @@ RUN_ENVIRONMENT = {
 
 
 def run_environment():
-    return ["--action_env=" + name for name in sorted(os.environ)
-            if name in RUN_ENVIRONMENT or name.startswith(("RENDERER_", "BENCH_", "MTL_", "LLVM_PROFILE_"))]
+    flags = []
+    for name in sorted(os.environ):
+        if name not in RUN_ENVIRONMENT and not name.startswith(("RENDERER_", "BENCH_", "MTL_", "LLVM_PROFILE_")): continue
+        if name == "LLVM_PROFILE_FILE":
+            value = os.environ[name].replace("%t", os.environ.get("TMPDIR", tempfile.gettempdir()))
+            if not Path(value).is_absolute(): value = str(ROOT / value)
+            flags.append("--action_env=" + name + "=" + str(Path(value).resolve()))
+        else: flags.append("--action_env=" + name)
+    return flags
 
 
 def run_io(options, arguments):
@@ -330,6 +337,7 @@ def run_io(options, arguments):
         key, separator, value = argument.partition("=")
         if key not in output_options and key not in input_options: continue
         if not separator: value = next(args)
+        if value in (os.devnull, "/dev/stdout", "/dev/stderr", "/dev/fd/1", "/dev/fd/2"): continue
         path = Path(value)
         if not path.is_absolute(): path = ROOT / path
         if key in input_options:
@@ -339,13 +347,15 @@ def run_io(options, arguments):
     for name in ("NUXIE_COMPONENT_GRAPH_TRACE", "NUXIE_LAYOUT_VERIFY", "LLVM_PROFILE_FILE"):
         if os.environ.get(name):
             value = os.environ[name]
+            if value == os.devnull: continue
             if name == "LLVM_PROFILE_FILE":
                 value = value.replace("%t", os.environ.get("TMPDIR", tempfile.gettempdir()))
             path = Path(value)
             if not path.is_absolute(): path = ROOT / path
             outputs.append({"path": str(path.resolve()), "directory":False,
                             **({"pattern":True} if name == "LLVM_PROFILE_FILE" else {})})
-    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs}
+    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs,
+            **({"platform":"macos"} if program == "video-qualification" else {})}
 
 
 def pool_run_enabled(bazel):
@@ -361,7 +371,7 @@ def pool_run_enabled(bazel):
     spec = importlib.util.spec_from_file_location("nuxie_installed_pool_route", router)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return (getattr(module, "runtime_run_supported", 0) >= 3
+    return (getattr(module, "runtime_run_supported", 0) >= 4
             and module.runtime_run_compatible(bazel[1:]))
 
 

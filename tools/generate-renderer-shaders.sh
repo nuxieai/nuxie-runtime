@@ -6,12 +6,21 @@ rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
 source_shader_dir="$rive_runtime/renderer/src/shaders"
 output_dir="${RENDERER_SHADER_OUTPUT_DIR:-$root/crates/nuxie-renderer/src/generated}"
 requested_upstream_out="${RENDERER_SHADER_UPSTREAM_OUT:-}"
-export PATH="$HOME/.cargo/bin:$PATH"
+declared_manifest=""
+if [[ "$#" == 2 && "$1" == "--declared-inputs" ]]; then
+    declared_manifest="$2"
+elif [[ "$#" != 0 ]]; then
+    echo "usage: $0 [--declared-inputs manifest.json]" >&2
+    exit 1
+fi
+if [[ -z "$declared_manifest" ]]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
 # Upstream's WGSL header minifier assigns short identifiers while iterating
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="12e5327ba8cb4346155010d34584cb4dab640d51"
+expected_runtime_revision="ada892f37808e289e716d29010b7e79d0656f79d"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"
@@ -24,6 +33,11 @@ for tool in glslangValidator spirv-opt naga; do
     fi
 done
 
+if [[ -n "$declared_manifest" ]]; then
+    python3 "$root/tools/shader-generation/verify_inputs.py" \
+        --manifest "$declared_manifest" --source-root "$rive_runtime" \
+        --revision "$expected_runtime_revision"
+else
 runtime_revision="$(git -C "$rive_runtime" rev-parse HEAD)"
 if [[ "$runtime_revision" != "$expected_runtime_revision" ]]; then
     echo "wrong rive-runtime revision: expected $expected_runtime_revision, got $runtime_revision" >&2
@@ -53,6 +67,7 @@ if [[ -n "$untracked_local_sources" ]]; then
     echo "local clockwise-atomic shader sources have untracked inputs:" >&2
     printf '%s\n' "$untracked_local_sources" >&2
     exit 1
+fi
 fi
 
 # 395defdb (alpha-zero dither suppression) was carried here as an overlay while
@@ -157,10 +172,10 @@ fi
 mkdir -p "$output_dir"
 rm -f "$output_dir"/*.wgsl
 
-PATH="$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" wgsl
+make -C "$shader_dir" OUT="$upstream_out" wgsl
 while IFS= read -r header; do
     source="${header%.hpp}.wgsl"
-    PATH="$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" "$source"
+    make -C "$shader_dir" OUT="$upstream_out" "$source"
     output="$output_dir/$(basename "$source")"
     cp "$source" "$output"
     normalize_wgsl "$output"

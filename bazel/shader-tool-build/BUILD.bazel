@@ -1,0 +1,49 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load(":tool.bzl", "compiler_tool")
+
+package(default_visibility = ["//visibility:public"])
+
+# These dependencies belong only to the generator tool, never a runtime crate.
+rust_binary(
+    name = "naga",
+    srcs = ["@runtime_shader_naga//:src/bin/naga.rs"],
+    crate_root = "@runtime_shader_naga//:src/bin/naga.rs",
+    edition = "2021",
+    rustc_env = {"CARGO_PKG_VERSION": "30.0.0"},
+    deps = ["@runtime_shader_crates//:" + name for name in [
+        "anyhow", "argh", "bincode", "codespan-reporting", "env_logger", "log", "naga",
+    ]],
+)
+
+cmake(
+    name = "glslang_build",
+    lib_source = "@runtime_shader_glslang//:sources",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_EXTERNAL": "OFF",
+        "BUILD_SHARED_LIBS": "OFF",
+        "ENABLE_OPT": "OFF",
+        "ENABLE_GLSLANG_BINARIES": "ON",
+        "GLSLANG_TESTS": "OFF",
+    },
+    out_binaries = ["glslang"],
+)
+filegroup(name = "glslang_binary", srcs = [":glslang_build"], output_group = "glslang")
+compiler_tool(name = "glslangValidator", binary = ":glslang_binary")
+
+cmake(
+    name = "spirv_build",
+    lib_source = "@runtime_shader_spirv//:sources",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
+        "SPIRV_SKIP_TESTS": "ON",
+        "SPIRV_SKIP_EXECUTABLES": "OFF",
+    },
+    # Match the existing frozen shader generator's archive-build identity.
+    env = {"SOURCE_DATE_EPOCH": "1769111119"},
+    out_binaries = ["spirv-opt"],
+)
+filegroup(name = "spirv_binary", srcs = [":spirv_build"], output_group = "spirv-opt")
+compiler_tool(name = "spirv-opt", binary = ":spirv_binary")

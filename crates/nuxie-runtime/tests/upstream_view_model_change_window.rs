@@ -1,4 +1,4 @@
-//! Literal cases from runtime/view_model_change_window_test.cpp through c4d2c6cb.
+//! Literal cases from runtime/view_model_change_window_test.cpp through 868da86c.
 // StateMachineInstance::layer_state is a testing/tools observation seam.
 #![cfg(any(feature = "testing", feature = "tools"))]
 
@@ -85,6 +85,112 @@ fn trigger(vm: &CoreHandle, name: &str) -> CoreHandle {
 }
 fn fire(vm: &CoreHandle, name: &str) {
     assert!(ViewModelInstanceTrigger::trigger_handle(&trigger(vm, name)));
+}
+
+struct LaterLayerScene {
+    file: RuntimeFileHandle,
+    artboard: RuntimeArtboardInstanceHandle,
+    machine: RuntimeStateMachineInstanceHandle,
+    view_model: CoreHandle,
+}
+impl LaterLayerScene {
+    fn new() -> Self {
+        let file = read_file("later_layer_trigger.riv");
+        let artboard = artboard(&file, "LaterLayer");
+        let machine = artboard.state_machine_at(0).unwrap();
+        let view_model = first_vm(&file, &artboard);
+        bind(&machine, &view_model);
+        Self {
+            file,
+            artboard,
+            machine,
+            view_model,
+        }
+    }
+    fn arm(&self) {
+        property(&self.view_model, "armed")
+            .with_downcast_mut::<ViewModelInstanceBoolean, _>(|v| v.set_value(true))
+            .unwrap();
+    }
+    fn states(&self) -> Vec<String> {
+        (0..3).map(|i| state(&self.machine, i)).collect()
+    }
+    fn advance(&self, seconds: f32) {
+        self.machine.with_instance_mut(|m| m.advance(seconds, true));
+    }
+}
+
+#[test]
+fn later_layer_fire_reaches_earlier_layer_next_frame() {
+    let scene = LaterLayerScene::new();
+    scene.advance(0.0);
+    assert_eq!(scene.states(), ["early_idle", "waiting", "late_idle"]);
+    scene.arm();
+    scene.advance(0.016);
+    assert_eq!(scene.states(), ["early_idle", "firing", "late_one"]);
+    scene.advance(0.016);
+    assert_eq!(scene.states(), ["early_one", "firing", "late_one"]);
+    scene.advance(0.016);
+    assert_eq!(scene.states(), ["early_one", "firing", "late_one"]);
+}
+
+#[test]
+fn later_layer_fire_reaches_earlier_layer_when_host_settles() {
+    let scene = LaterLayerScene::new();
+    scene.machine.advance_and_apply(0.0);
+    assert_eq!(scene.states(), ["early_idle", "waiting", "late_idle"]);
+    scene.arm();
+    scene.machine.advance_and_apply(0.016);
+    assert_eq!(scene.states(), ["early_one", "firing", "late_one"]);
+    scene.machine.advance_and_apply(0.016);
+    scene.machine.advance_and_apply(0.016);
+    assert_eq!(scene.states(), ["early_one", "firing", "late_one"]);
+}
+
+#[test]
+fn only_pending_change_readers_keep_layer_windows() {
+    let scene = LaterLayerScene::new();
+    assert!(
+        scene
+            .machine
+            .with_instance(|m| m.tracks_view_model_changes())
+    );
+    assert!(
+        scene
+            .machine
+            .with_instance(|m| m.has_layer_change_windows())
+    );
+    #[cfg(not(feature = "editor"))]
+    {
+        let file = read_file("list_item_parent_trigger.riv");
+        let a = artboard(&file, "Quiet");
+        let m = a.state_machine_at(0).unwrap();
+        bind(&m, &default_vm(&file, &a));
+        assert!(m.with_instance(|m| m.tracks_view_model_changes()));
+        assert!(!m.with_instance(|m| m.has_layer_change_windows()));
+    }
+}
+
+#[test]
+fn frozen_layer_ignores_fires_before_rebinding() {
+    let scene = LaterLayerScene::new();
+    for _ in 0..3 {
+        scene.advance(0.016);
+    }
+    assert_eq!(scene.states(), ["early_idle", "waiting", "late_idle"]);
+    #[cfg(not(feature = "editor"))]
+    assert!(scene.machine.with_instance(|m| m.is_layer_frozen(0)));
+    let other = first_vm(&scene.file, &scene.artboard);
+    fire(&other, "go");
+    for _ in 0..3 {
+        scene.advance(0.016);
+    }
+    bind(&scene.machine, &other);
+    scene.advance(0.016);
+    assert_eq!(scene.states(), ["early_idle", "waiting", "late_idle"]);
+    fire(&other, "go");
+    scene.advance(0.016);
+    assert_eq!(scene.states(), ["early_one", "waiting", "late_one"]);
 }
 fn state(machine: &RuntimeStateMachineInstanceHandle, layer: usize) -> String {
     machine

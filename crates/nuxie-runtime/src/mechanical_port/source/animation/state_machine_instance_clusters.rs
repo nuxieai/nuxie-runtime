@@ -85,8 +85,15 @@ impl BindablePropertyInstances {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub(super) struct SMILayerChangeWindow {
+    pub baseline: u64,
+    pub searched: u64,
+}
+
 #[derive(Default)]
 pub(super) struct SMIBindables {
+    pub layer_changes: Option<Vec<SMILayerChangeWindow>>,
     pub change_baseline: u64,
     pub change_searched: u64,
     pub listener_baseline: Rc<std::cell::Cell<u64>>,

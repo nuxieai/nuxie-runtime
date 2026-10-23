@@ -149,6 +149,23 @@ impl Default for TransitionViewModelCondition {
 }
 
 impl TransitionViewModelCondition {
+    pub fn reads_pending_change(&self) -> bool {
+        self.reads_component_trigger()
+            || [self.left_comparator(), self.right_comparator()]
+                .into_iter()
+                .flatten()
+                .any(|comparator| {
+                    comparator.is_type_of(TransitionSelfComparatorBase::TYPE_KEY)
+                        || comparator.is_type_of(TransitionValueTriggerComparatorBase::TYPE_KEY)
+                        || (Self::is_viewmodel_property(&comparator)
+                            && comparator
+                                .with(|c| c.transition_comparator_bindable_property())
+                                .flatten()
+                                .is_some_and(|b| {
+                                    Self::bindable_kind(&b) == Some(ComparandKind::Trigger)
+                                }))
+                })
+    }
     pub fn reads_component_trigger(&self) -> bool {
         [self.left_comparator(), self.right_comparator()]
             .into_iter()
@@ -300,6 +317,7 @@ impl TransitionViewModelCondition {
         comparator: &CoreHandle,
         recipe: &ComparandRecipe,
         machine: &StateMachineInstance,
+        layer: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
     ) -> Option<RuntimeComparisonValue> {
         match recipe {
             ComparandRecipe::ArtboardProperty => {
@@ -330,7 +348,7 @@ impl TransitionViewModelCondition {
                         else { target.as_view_model_instance_value().map_or(0, |v| v.change_sequence()) }
                     })).unwrap_or(0);
                     Some(RuntimeComparisonValue::Uint(u32::from(
-                        machine.change_pending(sequence),
+                        machine.change_pending(sequence, layer),
                     )))
                 } else {
                     machine.component_comparison_value(object_id, property_key)
@@ -383,7 +401,7 @@ impl TransitionViewModelCondition {
                             .and_then(|source| {
                                 source.with(|source| {
                                     source.as_view_model_instance_value().is_some_and(|value| {
-                                        machine.change_pending(value.change_sequence())
+                                        machine.change_pending(value.change_sequence(), layer)
                                     })
                                 })
                             })
@@ -550,8 +568,8 @@ impl TransitionViewModelCondition {
                 right: right_recipe,
             } => {
                 let (Some(left), Some(right)) = (
-                    Self::comparand_value(left, left_recipe, machine),
-                    Self::comparand_value(right, right_recipe, machine),
+                    Self::comparand_value(left, left_recipe, machine, layer.as_ref()),
+                    Self::comparand_value(right, right_recipe, machine, layer.as_ref()),
                 ) else {
                     return false;
                 };

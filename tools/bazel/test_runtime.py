@@ -35,14 +35,14 @@ class RuntimeBuildTest(unittest.TestCase):
         return manifest
 
     def test_run_stays_with_bazel_instead_of_querying_and_executing_locally(self):
-        manifest = self.package("probe", library=False)
+        manifest = self.package("nuxie-codegen", library=False)
         packages = collect_packages([manifest])
         with patch.object(runtime, "packages_from_workspace", return_value=packages), \
                 patch.object(runtime, "bazel_command", return_value=["bazel"]), \
                 patch.object(runtime, "pool_run_enabled", return_value=True), \
                 patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run, \
                 patch.object(runtime.subprocess, "check_output", return_value=""), \
-                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "probe", "--", "--help"]):
+                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "nuxie-codegen", "--", "--help"]):
             self.assertEqual(runtime.main(), 7)
             args = run.call_args.args[0]
             self.assertEqual(args[3:5], ["bazel", "run"])
@@ -50,7 +50,7 @@ class RuntimeBuildTest(unittest.TestCase):
             self.assertEqual(args[-2:], ["--", "--help"])
 
     def test_remote_run_publishes_the_executed_binary_for_following_reports(self):
-        retained = self.root / "retained/silver-corpus__bin"
+        retained = self.root / "retained/nuxie-codegen__bin"
         retained.parent.mkdir(); retained.write_bytes(b"remote executable"); retained.chmod(0o755)
         with patch.object(runtime, "packages_from_workspace", return_value={}), \
                 patch.object(runtime, "materialize", return_value=["//silver:lib", "//silver:bin"]), \
@@ -58,67 +58,82 @@ class RuntimeBuildTest(unittest.TestCase):
                 patch.object(runtime, "pool_run_enabled", return_value=True), \
                 patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
                 patch.object(runtime.subprocess, "check_output", return_value=str(retained)), \
-                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "silver-corpus"]):
+                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "nuxie-codegen", "--", "--help"]):
             self.assertEqual(runtime.main(), 0)
             self.assertEqual(run.call_count, 1)
             self.assertEqual(run.call_args.args[0][4], "run")
-        self.assertEqual((self.root / "target/debug/silver-corpus__bin").read_bytes(), b"remote executable")
-        self.assertTrue(os.access(self.root / "target/debug/silver-corpus__bin", os.X_OK))
+        self.assertEqual((self.root / "target/debug/nuxie-codegen__bin").read_bytes(), b"remote executable")
+        self.assertTrue(os.access(self.root / "target/debug/nuxie-codegen__bin", os.X_OK))
 
-    def test_remote_run_declares_implicit_replay_and_external_output(self):
-        replay = self.root / "target/debug/renderer-replay"
-        replay.parent.mkdir(parents=True); replay.write_bytes(b"replay executable")
-        options = runtime.command_options(["run","-p","pixel-compare","--bin","corpus-r"])
-        result = runtime.run_io(options, ["--out","/tmp/runtime-probe.riv"])
-        self.assertEqual(result["inputs"],[str(replay)])
-        self.assertEqual(result["outputs"],[{"path":str(Path("/tmp/runtime-probe.riv").resolve()),"directory":False}])
-        self.assertEqual(runtime.run_io(options,["--replay","another-replay"])["inputs"],[])
+    def test_codegen_declares_its_complete_fixture_inputs_and_output(self):
+        font = self.root / "fixture.ttf"; font.write_bytes(b"font")
+        options = runtime.command_options(["run", "-p", "nuxie-codegen"])
+        result = runtime.run_io(options, ["fixture", "--name", "text-style-feature",
+                                         "--font", str(font), "--out", "/tmp/runtime-probe.riv"])
+        self.assertEqual(result["inputs"], [str(font)])
+        self.assertEqual(result["outputs"], [{"path":str(Path("/tmp/runtime-probe.riv").resolve()), "directory":False}])
+        self.assertEqual(result["platform"], "portable")
 
-    def test_run_io_classifies_inputs_and_outputs_by_program(self):
-        report = self.root / "reports/input.json"; report.parent.mkdir(); report.write_text("{}")
-        data = self.root / "target/silver-inputs"; data.mkdir(parents=True)
-        (data / "case.sriv").write_bytes(b"sriv")
-        runner = self.root / "tools/golden-runner/build/macosx/bin/release/rive_golden_runner"
-        runner.parent.mkdir(parents=True); runner.write_bytes(b"oracle")
-        scripted = runner.with_name("rive_golden_runner_scripted"); scripted.write_bytes(b"scripted")
-        with patch.dict(os.environ, {"NUXIE_COMPONENT_GRAPH_TRACE":str(self.root.parent / "trace.json")}, clear=True):
-            options = runtime.command_options(["run","-p","perf-compare","--bin","renderer-perf-parity-gate"])
-            value = runtime.run_io(options,["--report",str(report),"--markdown",str(self.root.parent / "report.md")])
-            self.assertEqual(value["inputs"],[str(report)])
-            self.assertEqual({Path(item["path"]).name for item in value["outputs"]},{"report.md","trace.json"})
-        options = runtime.command_options(["run","-p","silver-corpus"])
-        self.assertEqual(runtime.run_io(options,["--rust-output-dir",str(data)])["inputs"],[str(data)])
-        options = runtime.command_options(["run","-p","pixel-compare","--bin","capture-riv-corpus"])
-        self.assertEqual(set(runtime.run_io(options,[])["inputs"]),{str(runner),str(scripted)})
+    def test_codegen_schema_and_callback_contracts_include_directories(self):
+        options = runtime.command_options(["run", "-p", "nuxie-codegen"])
+        schema = runtime.run_io(options, ["--defs", "defs/upstream", "--extensions", "defs/nuxie", "--out", "generated.rs"])
+        self.assertEqual(set(schema["inputs"]), {str(self.root / "defs/upstream"), str(self.root / "defs/nuxie")})
+        callbacks = runtime.run_io(options, ["changed-callbacks", "--headers", "headers", "--out", "callbacks.rs"])
+        self.assertEqual(callbacks["inputs"], [str(self.root / "headers")])
 
-    def test_platform_qualification_and_null_outputs_preserve_their_semantics(self):
-        options = runtime.command_options(["run","-p","video-qualification"])
-        with patch.dict(os.environ,{"LLVM_PROFILE_FILE":os.devnull},clear=True):
-            value = runtime.run_io(options,["--output",os.devnull])
-        self.assertEqual(value["platform"],"macos")
-        self.assertEqual(value["outputs"],[])
-        for program in ("native_metal_tracer_root", "ffi_metal_draw", "video_apple"):
-            options = runtime.command_options(["run","-p","nux-capi","--example",program])
-            with patch.object(sys,"platform","darwin"):
-                self.assertEqual(runtime.run_io(options,[])["platform"],"macos")
-        options = runtime.command_options(["run","-p","nuxie-codegen"])
-        self.assertEqual(runtime.run_io(options,[])["platform"],"portable")
+    def test_unknown_tools_subcommands_and_options_keep_execution_local(self):
+        for package, selector, arguments in (
+            ("golden-compare", None, ["--corpus", "/tmp/cases/corpus.toml"]),
+            ("pixel-compare", "generate-corpus-r", ["/tmp/corpus-root"]),
+            ("nux-capi", "video_apple", []),
+            ("nuxie-codegen", None, ["new-subcommand", "--out", "result"]),
+            ("nuxie-codegen", None, ["--defs", "defs", "--out", "result", "--new-input", "/tmp/input"]),
+        ):
+            options = runtime.command_options(["run", "-p", package] + (["--bin", selector] if selector else []))
+            with self.subTest(package=package, selector=selector):
+                self.assertIsNone(runtime.run_io(options, arguments))
+
+    def test_undeclared_run_builds_in_pool_and_executes_with_original_caller_inputs(self):
+        corpus = self.root / "external/corpus.toml"; corpus.parent.mkdir(); corpus.write_text("fixture = 'neighbor.riv'")
+        companion = corpus.with_name("neighbor.riv"); companion.write_bytes(b"caller fixture")
+        retained = self.root / "retained/golden-compare"; retained.parent.mkdir()
+        retained.write_text("#!/usr/bin/env python3\nimport pathlib, sys\np=pathlib.Path(sys.argv[2])\nassert p.with_name('neighbor.riv').read_bytes()==b'caller fixture'\np.with_name('output.txt').write_text('done')\nraise SystemExit(7)\n")
+        retained.chmod(0o755)
+        real_run = subprocess.run
+        calls = []
+        def run(arguments, **kwargs):
+            calls.append(arguments)
+            if arguments[0] == sys.executable:
+                self.assertTrue(arguments[2].endswith("/nuxie-homelab/rust/route.py"))
+                self.assertEqual(arguments[3:5], ["/usr/bin/false", "build"])
+                return SimpleNamespace(returncode=0)
+            return real_run(arguments, **kwargs)
+        with patch.object(runtime, "packages_from_workspace", return_value={}), \
+                patch.object(runtime, "materialize", return_value=["//golden:bin"]), \
+                patch.object(runtime, "bazel_command", return_value=["/usr/bin/false"]), \
+                patch.object(runtime, "pool_run_enabled", return_value=True), \
+                patch.object(runtime.subprocess, "run", side_effect=run), \
+                patch.object(runtime.subprocess, "check_output", return_value=str(retained)) as query, \
+                patch.dict(os.environ, {}, clear=True), \
+                patch.object(sys, "argv", ["runtime.py", "run", "-p", "golden-compare", "--", "--corpus", str(corpus)]):
+            self.assertEqual(runtime.main(), 7)
+            self.assertEqual(query.call_args.args[0][3:5], ["/usr/bin/false", "cquery"])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(companion.with_name("output.txt").read_text(), "done")
+        self.assertEqual(calls[-1][1:], ["--corpus", str(corpus)])
 
     def test_llvm_temporary_directory_expansion_matches_the_declared_destination(self):
-        options = runtime.command_options(["run","-p","rust-golden-runner"])
-        with patch.dict(os.environ,{"LLVM_PROFILE_FILE":"%t/run-%p.profraw","TMPDIR":str(self.root)},clear=True):
+        options = runtime.command_options(["run", "-p", "nuxie-codegen"])
+        with patch.dict(os.environ, {"LLVM_PROFILE_FILE":"%t/run-%p.profraw", "TMPDIR":str(self.root)}, clear=True):
             flags = runtime.run_environment()
-            output = runtime.run_io(options,[])["outputs"][0]
+            output = runtime.run_io(options, ["--help"])["outputs"][0]
         self.assertIn("--action_env=LLVM_PROFILE_FILE=" + output["path"], flags)
+        self.assertTrue(output["pattern"])
 
-    def test_run_io_distinguishes_converter_inputs_and_profile_patterns(self):
-        artifact = self.root / "frame.rgba"; artifact.write_bytes(b"frame")
-        options = runtime.command_options(["run","-p","pixel-compare","--bin","riveabl-to-png"])
-        with patch.dict(os.environ, {"NUXIE_LAYOUT_VERIFY":"/tmp/layout.txt", "LLVM_PROFILE_FILE":"/tmp/run-%p.profraw"}, clear=True):
-            value = runtime.run_io(options,["--artifact",str(artifact)])
-        self.assertEqual(value["inputs"],[str(artifact)])
-        self.assertEqual({Path(item["path"]).name for item in value["outputs"]},{"layout.txt","run-%p.profraw"})
-        self.assertTrue(next(item for item in value["outputs"] if item["path"].endswith("profraw"))["pattern"])
+    def test_null_output_is_a_sink_on_the_worker(self):
+        options = runtime.command_options(["run", "-p", "nuxie-codegen"])
+        with patch.dict(os.environ, {"LLVM_PROFILE_FILE":os.devnull}, clear=True):
+            self.assertEqual(runtime.run_io(options, ["--defs", "defs", "--out", os.devnull])["outputs"], [])
 
     def test_remote_run_preserves_runtime_trace_and_profiling_environment(self):
         with patch.dict(os.environ, {"NUXIE_COMPONENT_GRAPH_TRACE":"target/trace.json",
@@ -141,9 +156,9 @@ class RuntimeBuildTest(unittest.TestCase):
                 self.assertFalse(self.original_pool_run(["bazel"]))
 
     def test_failed_remote_program_still_publishes_its_newly_built_executable(self):
-        retained = self.root / "retained/silver-corpus__bin"
+        retained = self.root / "retained/nuxie-codegen__bin"
         retained.parent.mkdir(); retained.write_bytes(b"new remote validator"); retained.chmod(0o755)
-        destination = self.root / "target/debug/silver-corpus__bin"
+        destination = self.root / "target/debug/nuxie-codegen__bin"
         destination.parent.mkdir(parents=True); destination.write_bytes(b"previous validator")
         with patch.object(runtime, "packages_from_workspace", return_value={}), \
                 patch.object(runtime, "materialize", return_value=["//silver:lib", "//silver:bin"]), \
@@ -151,7 +166,7 @@ class RuntimeBuildTest(unittest.TestCase):
                 patch.object(runtime, "pool_run_enabled", return_value=True), \
                 patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=7)), \
                 patch.object(runtime.subprocess, "check_output", return_value=str(retained)), \
-                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "silver-corpus"]):
+                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "nuxie-codegen", "--", "--help"]):
             self.assertEqual(runtime.main(), 7)
         self.assertEqual(destination.read_bytes(),b"new remote validator")
 

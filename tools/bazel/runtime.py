@@ -303,66 +303,60 @@ def run_environment():
 
 
 def run_io(options, arguments):
-    """Declare runtime tool defaults and caller-visible destinations explicitly."""
+    """Return a complete tool contract, or keep execution beside caller inputs.
+
+    Adding a tool requires declaring its whole CLI file closure here. Unknown
+    programs, subcommands and options still compile in the pool; their downloaded
+    executable runs on the caller without guessing paths from argument spelling.
+    """
     program = options["selector"] or (options["packages"][0] if len(options["packages"]) == 1 else None)
-    flags = {argument.split("=",1)[0] for argument in arguments if argument.startswith("--")}
-    inputs = []
-    def existing(relative):
-        path = (ROOT / relative).resolve()
-        if path.exists(): inputs.append(str(path))
-    if program in ("corpus-r", "capture-riv-corpus", "capture-corpus-r-references") and "--replay" not in flags:
-        existing("target/debug/renderer-replay")
-    if program == "capture-riv-corpus":
-        for flag, binary in (("--runner", "rive_golden_runner"), ("--scripted-runner", "rive_golden_runner_scripted")):
-            if flag not in flags: existing("tools/golden-runner/build/macosx/bin/release/" + binary)
-    if program in ("golden-compare", "perf-compare"):
-        if "--cpp-runner" not in flags and "GOLDEN_RUNNER" not in os.environ:
-            os_name = "macosx" if sys.platform == "darwin" else "linux"
-            existing(f"tools/golden-runner/build/{os_name}/bin/debug/rive_golden_runner")
-        if program == "perf-compare" and "--rust-runner" not in flags and "RUST_GOLDEN_RUNNER" not in os.environ:
-            existing("target/debug/rust-golden-runner")
-    output_options = {"--out":False, "--output":False, "--json":False, "--markdown":False,
-                      "--output-dir":True, "--out-dir":True, "--destination":False}
-    input_options = {"--defs", "--headers", "--extensions", "--assets-dir", "--rust-output-dir", "--reference-dir"}
-    if program == "renderer-perf-parity-gate": input_options.add("--report")
-    if program == "riveabl-to-png": input_options.add("--artifact")
-    if program == "pixel-compare": output_options["--artifact"] = False
-    if program == "densify-corpus": output_options["--corpus"] = False
-    if program == "capture-riv-corpus":
-        output_options.update({"--stream-dir":True, "--reference-dir":True})
-        input_options.discard("--reference-dir")
-    outputs = []
-    args = iter(arguments)
-    for argument in args:
-        key, separator, value = argument.partition("=")
-        if key not in output_options and key not in input_options: continue
-        if not separator: value = next(args)
-        if value in (os.devnull, "/dev/stdout", "/dev/stderr", "/dev/fd/1", "/dev/fd/2"): continue
+    if program != "nuxie-codegen":
+        return None
+    arguments = list(arguments)
+    subcommand = arguments.pop(0) if arguments and arguments[0] in ("fixture", "changed-callbacks") else None
+    if arguments in (["--help"], ["-h"]) and subcommand != "changed-callbacks":
+        values = {}
+    else:
+        allowed = ({"--name", "--font", "--out"} if subcommand == "fixture" else
+                   {"--headers", "--out"} if subcommand == "changed-callbacks" else
+                   {"--defs", "--extensions", "--out"})
+        values = {}
+        if len(arguments) % 2:
+            return None
+        for index in range(0, len(arguments), 2):
+            key, value = arguments[index:index + 2]
+            if key not in allowed or key in values:
+                return None
+            values[key] = value
+        required = ({"--name", "--out"} if subcommand == "fixture" else
+                    {"--headers", "--out"} if subcommand == "changed-callbacks" else
+                    {"--defs", "--out"})
+        if not required.issubset(values):
+            return None
+        if subcommand == "changed-callbacks" and arguments[::2] != ["--headers", "--out"]:
+            return None
+    inputs, outputs = [], []
+    sinks = (os.devnull, "/dev/stdout", "/dev/stderr", "/dev/fd/1", "/dev/fd/2")
+    for key, value in values.items():
+        if key == "--name" or value in sinks:
+            continue
         path = Path(value)
         if not path.is_absolute(): path = ROOT / path
-        if key in input_options:
-            if path.exists(): inputs.append(str(path.resolve()))
+        if key == "--out":
+            outputs.append({"path": str(path.resolve()), "directory": False})
         else:
-            outputs.append({"path": str(path.resolve()), "directory": output_options[key]})
+            inputs.append(str(path.resolve()))
     for name in ("NUXIE_COMPONENT_GRAPH_TRACE", "NUXIE_LAYOUT_VERIFY", "LLVM_PROFILE_FILE"):
-        if os.environ.get(name):
-            value = os.environ[name]
-            if value == os.devnull: continue
-            if name == "LLVM_PROFILE_FILE":
-                value = value.replace("%t", os.environ.get("TMPDIR", tempfile.gettempdir()))
-            path = Path(value)
-            if not path.is_absolute(): path = ROOT / path
-            outputs.append({"path": str(path.resolve()), "directory":False,
-                            **({"pattern":True} if name == "LLVM_PROFILE_FILE" else {})})
-    # Native diagnostics/qualification programs can have successful no-op mains
-    # on other operating systems. Preserve their caller OS unless the program
-    # declares a platform-independent CLI contract here.
-    portable = {"nuxie-codegen", "silver-corpus", "pixel-compare", "riveabl-to-png",
-                "generate-corpus", "generate-corpus-r", "densify-corpus",
-                "renderer-timing-compare", "renderer-perf-parity-gate"}
-    platform = "portable" if program in portable else ("macos" if sys.platform == "darwin" else "linux")
-    if program == "video-qualification": platform = "macos"
-    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs, "platform":platform}
+        value = os.environ.get(name)
+        if not value or value in sinks:
+            continue
+        if name == "LLVM_PROFILE_FILE":
+            value = value.replace("%t", os.environ.get("TMPDIR", tempfile.gettempdir()))
+        path = Path(value)
+        if not path.is_absolute(): path = ROOT / path
+        outputs.append({"path": str(path.resolve()), "directory":False,
+                        **({"pattern":True} if name == "LLVM_PROFILE_FILE" else {})})
+    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs, "platform":"portable"}
 
 
 def pool_run_enabled(bazel):
@@ -436,12 +430,14 @@ def main():
                 flags.append("--test_env=NUXIE_RUSTFMT=" + rustfmt)
         if options["command"] == "clippy":
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
-        remote_run = options["command"] == "run" and pool_run_enabled(bazel)
+        pool_run = options["command"] == "run" and pool_run_enabled(bazel)
+        io = run_io(options, runtime_args) if pool_run else None
+        remote_run = pool_run and io is not None
         run_status = 0
         selected_bazel = ([sys.executable, "-I", str(Path.home() / ".local/share/nuxie-homelab/rust/route.py"), *bazel]
-                          if remote_run else bazel)
+                          if pool_run else bazel)
         if remote_run:
-            os.environ["NUXIE_HOMELAB_RUNTIME_IO"] = json.dumps(run_io(options, runtime_args))
+            os.environ["NUXIE_HOMELAB_RUNTIME_IO"] = json.dumps(io)
             # Bazel's installed launcher sends this complete invocation to a
             # compatible pool host. Keeping execution with the build preserves
             # runfiles/oracle paths and avoids a caller-side compilation tree.
@@ -450,7 +446,9 @@ def main():
             run_status = result.returncode
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"
         if not remote_run:
-            subprocess.run([*bazel, command, *flags, *labels], cwd=ROOT, check=True)
+            if pool_run:
+                print("Runtime tool runs here using pool-built products; its remote IO contract is not declared.", file=sys.stderr)
+            subprocess.run([*selected_bazel, command, *flags, *labels], cwd=ROOT, check=True)
         if command == "test" or options["command"] == "clippy":
             return 0
         try:

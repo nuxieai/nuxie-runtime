@@ -50,12 +50,25 @@ tools/bazel/runtime.py test -p nux-capi --lib --test capi
 tools/bazel/runtime.py run -p nuxie-codegen -- --help
 ```
 
-The runtime shares Bazel action, dependency-download, and fetched repository
-caches with other Nuxie Bazel workspaces under `~/.cache/nuxie/bazel`. Each Git
-worktree retains its own Bazel output base and `target/` products. Set an absolute `NUXIE_BAZEL_CACHE_DIR`
-when using the package or distribution frontends to relocate the reusable
-caches; leave the output base at its checkout-specific default. Test the cache
-override with `python3 -B -m unittest discover -s tools -p 'test_bazel_cache.py'`.
+With the installed Nuxie homelab client, compilation and tests use the shared
+pool automatically. Artifact builds download products for the caller's OS;
+Wasm products remain portable. `run` executes remotely only when that tool's
+complete input/output contract is declared. Initially this covers
+`nuxie-codegen` schema generation, `changed-callbacks`, and `fixture` commands.
+Other tools build remotely, then run their downloaded executable in this
+checkout with the original arguments and environment. This preserves external
+corpus companions, positional directories, native devices, and local outputs
+until those tools receive explicit remote contracts. No local compilation is
+needed for these runs.
+
+Without a configured pool (or when explicitly building locally), the runtime
+shares Bazel action, dependency-download, and fetched repository caches with
+other Nuxie Bazel workspaces under `~/.cache/nuxie/bazel`. Each Git worktree
+retains its own Bazel output base and `target/` products. Set an absolute
+`NUXIE_BAZEL_CACHE_DIR` when using the package or distribution frontends to
+relocate reusable caches; leave the output base at its checkout-specific
+default. Test the cache override with
+`python3 -B -m unittest discover -s tools -p 'test_bazel_cache.py'`.
 
 Cargo manifests remain the dependency and feature authority. Run
 `python3 tools/bazel/generate.py` after changing them and use `--check` to verify

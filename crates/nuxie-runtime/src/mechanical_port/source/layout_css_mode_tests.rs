@@ -165,6 +165,11 @@ struct B {
     nested_scroller: bool,
     /// A text input as this box's content, focusable through its FocusData.
     text_input: bool,
+    input_properties: Vec<P>,
+    input_style: Vec<P>,
+    input_style_keys: Vec<(u16, Vec<(u32, f32)>)>,
+    input_style_bind: Option<u16>,
+    input_drawable: bool,
     /// The text input's text.
     text: &'static str,
     /// The ScrollConstraint's threshold, the distance a press moves before
@@ -308,9 +313,9 @@ enum Entry<'a> {
     EmptyText(u64),
     /// A TextInput named "Field" with its text, and the FocusData and text
     /// style in it.
-    TextInput(u64, &'static str),
+    TextInput(u64, &'a B),
     FocusData(u64),
-    TextStyle(u64),
+    TextStyle(u64, &'a [P]),
     /// An Event of a name, in the artboard.
     Event(&'static str),
     /// A NestedArtboard of the second artboard, and its NestedStateMachine.
@@ -546,10 +551,27 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             entries.push(Entry::NestedMachine(slots(entries)));
         }
         if node.text_input {
-            entries.push(Entry::TextInput(index, node.text));
+            entries.push(Entry::TextInput(index, node));
             let input = slots(entries);
             entries.push(Entry::FocusData(input));
-            entries.push(Entry::TextStyle(input));
+            entries.push(Entry::TextStyle(input, &node.input_style));
+            let style = slots(entries);
+            if let Some(key) = node.input_style_bind {
+                entries.push(Entry::Bind(key, 0, 0));
+            }
+            for (key, keys) in &node.input_style_keys {
+                entries.push(Entry::Keys(style, *key, keys));
+            }
+            if node.input_drawable {
+                entries.push(Entry::Record(
+                    crate::source::generated::text::text_input_text_base::TextInputTextBase::TYPE_KEY,
+                    vec![], input,
+                ));
+                let drawable = slots(entries);
+                entries.push(Entry::Fill(drawable));
+                let fill = slots(entries);
+                entries.push(Entry::Solid(0xff123456, fill));
+            }
         }
         for child in &node.children {
             walk(child, index, entries, late);
@@ -913,28 +935,48 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .string(ComponentBase::NAME_PROPERTY_KEY, "Note")
                     .end();
             }
-            Entry::TextInput(parent, text) => {
+            Entry::TextInput(parent, node) => {
                 use crate::source::generated::text::text_input_base::TextInputBase;
                 riv.object(TextInputBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .string(ComponentBase::NAME_PROPERTY_KEY, "Field")
-                    .string(TextInputBase::TEXT_PROPERTY_KEY, text)
-                    .end();
+                    .string(TextInputBase::TEXT_PROPERTY_KEY, node.text);
+                for property in &node.input_properties {
+                    match *property {
+                        U(key, value) => {
+                            riv.uint(key, value);
+                        }
+                        F(key, value) => {
+                            riv.float(key, value);
+                        }
+                    }
+                }
+                riv.end();
             }
             Entry::FocusData(parent) => {
                 riv.object(crate::source::generated::focus_data_base::FocusDataBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .end();
             }
-            Entry::TextStyle(parent) => {
+            Entry::TextStyle(parent, props) => {
                 use crate::source::generated::text::{
                     text_style_base::TextStyleBase, text_style_paint_base::TextStylePaintBase,
                 };
                 riv.object(TextStylePaintBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, font_asset)
-                    .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0)
-                    .end();
+                    .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0);
+                for property in *props {
+                    match *property {
+                        U(key, value) => {
+                            riv.uint(key, value);
+                        }
+                        F(key, value) => {
+                            riv.float(key, value);
+                        }
+                    }
+                }
+                riv.end();
             }
             Entry::Nested(parent) => {
                 use crate::source::generated::nested_artboard_base::NestedArtboardBase;
@@ -11073,4 +11115,477 @@ fn css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin() {
             "display {display}, range {range}"
         );
     }
+}
+
+// TextInput.rows is a Nuxie control attribute, outside the CSS record.
+const INPUT_ROWS: u16 = 60023;
+
+fn input_scene(
+    css: bool,
+    multiline: bool,
+    rows: Option<u64>,
+    line_height: f32,
+    fixed_height: Option<f32>,
+) -> Scene {
+    use crate::source::generated::text::{
+        text_input_base::TextInputBase, text_style_base::TextStyleBase,
+    };
+    let mut properties = vec![U(
+        TextInputBase::MULTILINE_PROPERTY_KEY,
+        u64::from(multiline),
+    )];
+    if let Some(rows) = rows {
+        properties.push(U(INPUT_ROWS, rows));
+    }
+    let mut css_properties = width(200.0).to_vec();
+    if let Some(value) = fixed_height {
+        css_properties.extend(height(value));
+    }
+    scene(
+        (400.0, 300.0),
+        B {
+            css: Some(vec![]),
+            children: vec![B {
+                name: "control",
+                css: css.then_some(css_properties),
+                style: vec![
+                    U(
+                        LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                        1,
+                    ),
+                    U(
+                        LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+                        1,
+                    ),
+                ],
+                text_input: true,
+                text: "Hi",
+                input_properties: properties,
+                input_style: vec![F(TextStyleBase::LINE_HEIGHT_PROPERTY_KEY, line_height)],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    )
+}
+
+fn input_handle(f: &Scene) -> CoreHandle {
+    f.artboard
+        .with_artboard(|artboard| {
+            artboard.find_handle::<crate::source::text::text_input::TextInput>("Field")
+        })
+        .unwrap()
+}
+
+fn input_line(f: &Scene) -> (f32, f32, f32) {
+    input_handle(f)
+        .with_mut(|object| {
+            let raw = object.as_text_input_mut().unwrap().raw_text_input();
+            let shape = raw.shape();
+            let line = &shape.paragraph_lines()[0][0];
+            (
+                line.top + shape.vertical_offset(),
+                line.bottom - line.top,
+                line.baseline + shape.vertical_offset(),
+            )
+        })
+        .unwrap()
+}
+
+fn input_normal(f: &Scene, size: f32) -> f32 {
+    input_handle(f)
+        .with_mut(|object| {
+            let raw = object.as_text_input_mut().unwrap().raw_text_input();
+            let metrics = raw.font().unwrap().css_line_metrics(size);
+            metrics.ascent + metrics.descent + metrics.line_gap
+        })
+        .unwrap()
+}
+
+#[test]
+fn css_input_natural_line_and_authored_line_height_ignore_typed_content() {
+    for authored in [-1.0, 40.0] {
+        let f = input_scene(true, false, None, authored, None);
+        f.advance(4);
+        let expected = if authored < 0.0 {
+            input_normal(&f, 16.0)
+        } else {
+            authored
+        };
+        assert_eq!(f.bounds("control")[3], expected);
+        assert_eq!(input_line(&f).1, expected);
+        let before = f.bounds("control");
+        CoreRegistry::set_string_handle(
+            &input_handle(&f),
+            817,
+            "A very long string that must never size a form control".to_owned(),
+        );
+        f.advance(4);
+        assert_eq!(f.bounds("control"), before);
+        input_handle(&f).with_mut(|object| {
+            assert!(
+                object
+                    .as_text_input_mut()
+                    .unwrap()
+                    .text_input(" More typed text")
+            );
+        });
+        f.advance(4);
+        assert_eq!(f.bounds("control"), before);
+    }
+}
+
+#[test]
+fn css_input_rows_import_defaults_and_authored_height() {
+    for (multiline, rows, expected_rows) in [
+        (false, None, 1),
+        (false, Some(4), 1),
+        (true, None, 2),
+        (true, Some(2), 2),
+        (true, Some(4), 4),
+    ] {
+        for authored_height in [None, Some(60.0)] {
+            let f = input_scene(true, multiline, rows, 20.0, authored_height);
+            f.advance(4);
+            assert_eq!(
+                CoreRegistry::get_uint_handle(&input_handle(&f), i32::from(INPUT_ROWS)),
+                Some(rows.unwrap_or(2) as u32)
+            );
+            assert_eq!(
+                f.bounds("control")[3],
+                authored_height.unwrap_or(expected_rows as f32 * 20.0)
+            );
+            let (top, line_height, _) = input_line(&f);
+            assert_eq!(line_height, 20.0);
+            assert_eq!(
+                top,
+                if multiline {
+                    0.0
+                } else {
+                    (f.bounds("control")[3] - 20.0) / 2.0
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn css_input_single_line_centres_with_css_half_leading() {
+    for height in [-1.0, 40.0, 11.0] {
+        let f = input_scene(true, false, None, height, Some(60.0));
+        f.advance(4);
+        let used = if height < 0.0 {
+            input_normal(&f, 16.0)
+        } else {
+            height
+        };
+        let (top, line_height, baseline) = input_line(&f);
+        assert_eq!(
+            (top, line_height, baseline),
+            super::layout_fit_content_tests::placeholder_line(16.0, height, 60.0)
+        );
+        assert_eq!(top, (60.0 - used) / 2.0);
+        assert_eq!(line_height, used);
+        input_handle(&f).with_mut(|object| {
+            let metrics = object
+                .as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .font()
+                .unwrap()
+                .css_line_metrics(16.0);
+            assert_eq!(
+                baseline,
+                top + metrics.ascent + ((used - metrics.ascent - metrics.descent) / 2.0).floor()
+            );
+        });
+    }
+}
+
+#[test]
+fn css_input_live_font_and_line_height_remeasure_and_recentre() {
+    use crate::source::text::text_style::TextStyle;
+    for fixed in [None, Some(60.0)] {
+        let f = input_scene(true, false, None, -1.0, fixed);
+        f.advance(4);
+        let style = f
+            .artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<TextStyle>())
+            .into_iter()
+            .next()
+            .unwrap();
+        for (key, value, expected) in [(274, 24.0, input_normal(&f, 24.0)), (370, 40.0, 40.0)] {
+            CoreRegistry::set_double_handle(&style, key, value);
+            f.advance(4);
+            assert_eq!(f.bounds("control")[3], fixed.unwrap_or(expected));
+            let (top, height, _) = input_line(&f);
+            assert_eq!(height, expected);
+            assert_eq!(top, (fixed.unwrap_or(expected) - expected) / 2.0);
+        }
+    }
+}
+
+#[test]
+fn translated_input_keeps_upstream_content_measure_and_ignores_rows() {
+    use crate::source::layout::layout_measure_mode::LayoutMeasureMode;
+    let f = input_scene(false, true, Some(4), 40.0, None);
+    f.advance(4);
+    let measure = || {
+        input_handle(&f)
+            .with_mut(|object| {
+                let input = object.as_text_input_mut().unwrap();
+                let expected = input.raw_text_input().measure(f32::MAX, f32::MAX).size();
+                let actual = input.measure_layout(
+                    0.0,
+                    LayoutMeasureMode::Undefined,
+                    0.0,
+                    LayoutMeasureMode::Undefined,
+                );
+                assert_eq!(actual, expected);
+                actual
+            })
+            .unwrap()
+    };
+    let before = measure();
+    CoreRegistry::set_uint_handle(&input_handle(&f), i32::from(INPUT_ROWS), 2);
+    f.advance(4);
+    assert_eq!(measure(), before);
+    CoreRegistry::set_string_handle(
+        &input_handle(&f),
+        817,
+        "A much longer line of text".to_owned(),
+    );
+    f.advance(4);
+    assert!(measure().x > before.x);
+}
+
+#[test]
+fn compressible_replaced_is_only_set_for_css_input_boxes() {
+    for css in [false, true] {
+        let f = input_scene(css, false, None, -1.0, None);
+        f.advance(4);
+        assert_eq!(
+            f.named("control")
+                .with_downcast::<LayoutComponent, _>(|layout| layout
+                    .layout_style()
+                    .item_is_compressible_replaced),
+            Some(css)
+        );
+        assert_eq!(
+            f.artboard.with_artboard(|artboard| artboard
+                .base
+                .layout_style()
+                .item_is_compressible_replaced),
+            false
+        );
+    }
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            name: "ordinary",
+            css: Some(width(200.0).to_vec()),
+            ..B::default()
+        },
+    );
+    assert_eq!(
+        f.named("ordinary")
+            .with_downcast::<LayoutComponent, _>(|layout| layout
+                .layout_style()
+                .item_is_compressible_replaced),
+        Some(false)
+    );
+}
+
+#[test]
+fn css_input_font_animation_and_line_height_binding_follow_live_style() {
+    for fixed in [None, Some(60.0)] {
+        let mut css = width(200.0).to_vec();
+        if let Some(height_value) = fixed {
+            css.extend(height(height_value));
+        }
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                css: Some(vec![]),
+                children: vec![B {
+                    name: "control",
+                    css: Some(css),
+                    text_input: true,
+                    text: "Hi",
+                    input_properties: vec![U(979, 0)],
+                    input_style_keys: vec![(274, vec![(0, 16.0), (60, 32.0)])],
+                    ..B::default()
+                }],
+                ..B::default()
+            },
+        );
+        animate(&f, 0.5);
+        f.advance(2);
+        let expected = input_normal(&f, 24.0);
+        assert_eq!(f.bounds("control")[3], fixed.unwrap_or(expected));
+        assert_eq!(
+            input_line(&f).0,
+            (fixed.unwrap_or(expected) - expected) / 2.0
+        );
+        assert_eq!(input_line(&f).1, expected);
+    }
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            css: Some(vec![]),
+            children: vec![B {
+                name: "control",
+                css: Some(width(200.0).to_vec()),
+                text_input: true,
+                text: "Hi",
+                input_properties: vec![U(979, 0)],
+                input_style_bind: Some(370),
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    );
+    set_bound(&f, 40.0);
+    f.advance(2);
+    assert_eq!(f.bounds("control")[3], 40.0);
+    assert_eq!(input_line(&f).1, 40.0);
+}
+
+#[test]
+fn css_input_rows_live_write_remeasures_without_changing_text() {
+    let f = input_scene(true, true, Some(2), 20.0, None);
+    f.advance(4);
+    assert_eq!(f.bounds("control")[3], 40.0);
+    assert!(CoreRegistry::set_uint_handle(
+        &input_handle(&f),
+        i32::from(INPUT_ROWS),
+        4
+    ));
+    f.advance(4);
+    assert_eq!(f.bounds("control")[3], 80.0);
+}
+
+// The compiler mounts content -> input layout -> TextInput. TextInput is a
+// drawable, not a LayoutParticipant host (LayoutNodeProvider::from_component).
+#[test]
+fn css_input_layout_box_measures_and_updates_its_live_line() {
+    use crate::source::{layout::layout_node_provider, text::text_style::TextStyle};
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            name: "content",
+            css: Some([width(200.0), height(100.0)].concat()),
+            children: vec![B {
+                name: "input layout",
+                css: Some([vec![U(POSITION, 2)], width(200.0).to_vec()].concat()),
+                text_input: true,
+                text: "Hi",
+                input_properties: vec![U(979, 0)],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    );
+    f.advance(4);
+    let input = input_handle(&f);
+    let layout = f.named("input layout");
+    assert_eq!(
+        input
+            .with(|object| object.component_parent_handle())
+            .flatten(),
+        Some(layout.clone())
+    );
+    assert!(layout_node_provider::from_component(&input).is_none());
+    assert_eq!(
+        LayoutComponent::layout_providers_occurrence(&f.named("content")),
+        vec![(layout.clone(), layout.clone())]
+    );
+    assert_eq!(f.bounds("input layout")[3], input_normal(&f, 16.0));
+    assert_eq!(
+        layout.with_downcast::<LayoutComponent, _>(|layout| layout
+            .layout_style()
+            .item_is_compressible_replaced),
+        Some(true)
+    );
+    let style = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<TextStyle>())
+        .into_iter()
+        .next()
+        .unwrap();
+    CoreRegistry::set_double_handle(&style, 274, 24.0);
+    f.advance(4);
+    assert_eq!(f.bounds("input layout")[3], input_normal(&f, 24.0));
+}
+
+#[test]
+fn css_input_zero_line_height_still_draws_glyph_ink() {
+    for multiline in [false, true] {
+        for fixed_height in [None, Some(60.0)] {
+            let mut control_css = width(200.0).to_vec();
+            if let Some(value) = fixed_height {
+                control_css.extend(height(value));
+            }
+            let f = scene(
+                (400.0, 300.0),
+                B {
+                    name: "control",
+                    css: Some(control_css),
+                    text_input: true,
+                    text: "Hi",
+                    input_drawable: true,
+                    input_properties: vec![U(979, u64::from(multiline))],
+                    input_style: vec![F(370, 0.0)],
+                    ..B::default()
+                },
+            );
+            f.advance(4);
+            assert_eq!(f.bounds("control")[3], fixed_height.unwrap_or(0.0));
+            assert_eq!(input_line(&f).1, 0.0);
+            let ink = input_handle(&f)
+                .with_mut(|object| {
+                    let raw = object.as_text_input_mut().unwrap().raw_text_input();
+                    assert_eq!(raw.bounds().height(), 0.0);
+                    assert!(
+                        !raw.text_path().empty(),
+                        "a zero-height CSS line still has glyph ink"
+                    );
+                    raw.text_path().raw_path().bounds()
+                })
+                .unwrap();
+            assert!(ink.width() > 0.0 && ink.height() > 0.0);
+            let lines = f.draw_lines();
+            assert!(
+                lines
+                    .iter()
+                    .any(|line| line.starts_with("drawPath") && line.contains("color=0xff123456,")),
+                "{}",
+                lines.join("\n")
+            );
+        }
+    }
+}
+
+#[test]
+fn css_input_auto_width_uses_its_replaced_intrinsic_width() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            name: "container",
+            css: Some(width(200.0).to_vec()),
+            children: vec![B {
+                name: "control",
+                css: Some(vec![]),
+                text_input: true,
+                text: "Hi",
+                input_properties: vec![U(979, 0)],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    );
+    f.advance(4);
+    // No cols or size attribute is implemented. Content gives no width.
+    assert_eq!(f.bounds("control")[2], 0.0);
+    assert_eq!(f.bounds("control")[3], input_normal(&f, 16.0));
 }

@@ -934,15 +934,40 @@ impl Schema {
         }
         owned.validate_namespace(true)?;
         for (file, def) in owned.defs {
-            if schema.defs.insert(file.clone(), def).is_some() {
-                bail!("extension definition shadows upstream file {file}");
-            }
+            schema.merge_extension(file, def)?;
         }
         schema.validate_extends()?;
         schema.validate_definition_keys()?;
         schema.validate_property_keys()?;
         schema.validate_bitmask_passthroughs()?;
         Ok(schema)
+    }
+
+    // A declaration without a type key adds owned properties to its named
+    // upstream target. Whole Nuxie types keep their ordinary inheritance.
+    fn merge_extension(&mut self, file: String, def: RawDefinition) -> Result<()> {
+        if def.key.is_none() {
+            let target = def
+                .extends
+                .as_ref()
+                .context("property extension needs extends")?;
+            let base = self
+                .defs
+                .get_mut(target)
+                .with_context(|| format!("{file}: missing extension target {target}"))?;
+            if base.name != def.name || base.type_key().is_none() {
+                bail!("{file}: property extension must name its target type");
+            }
+            for (name, property) in def.properties {
+                if base.properties.contains_key(&name) {
+                    bail!("{file}: property extension shadows {target}.{name}");
+                }
+                base.properties.insert(name, property);
+            }
+        } else if self.defs.insert(file.clone(), def).is_some() {
+            bail!("extension definition shadows upstream file {file}");
+        }
+        Ok(())
     }
 
     fn validate_namespace(&self, extension: bool) -> Result<()> {
@@ -2343,6 +2368,49 @@ mod extension_namespace_tests {
             defs: BTreeMap::from([("test.json".into(), def)]),
         }
     }
+    #[test]
+    fn nuxie_properties_extend_an_upstream_type_without_a_new_type_key() {
+        let mut upstream = schema(r#"{"name":"TextInput","key":{"int":569},"properties":{}}"#);
+        let extension = serde_json::from_str(r#"{"name":"TextInput","extends":"test.json","properties":{"rows":{"type":"uint","key":{"int":60023},"initialValue":"2","bindable":true}}}"#).unwrap();
+        upstream
+            .merge_extension("nuxie/text_input.json".into(), extension)
+            .unwrap();
+        assert_eq!(upstream.defs.len(), 1);
+        assert_eq!(upstream.defs["test.json"].type_key(), Some(569));
+        assert_eq!(
+            upstream.defs["test.json"].properties["rows"]
+                .key
+                .as_ref()
+                .unwrap()
+                .int,
+            Some(60023)
+        );
+        let rendered = upstream.render().unwrap();
+        assert!(rendered.contains("60023"));
+        assert!(rendered.contains("name: \"rows\""));
+    }
+
+    #[test]
+    fn property_extensions_refuse_missing_targets_wrong_names_and_shadowing() {
+        for json in [
+            r#"{"name":"TextInput","extends":"missing.json","properties":{}}"#,
+            r#"{"name":"Other","extends":"test.json","properties":{}}"#,
+            r#"{"name":"TextInput","extends":"test.json","properties":{"text":{"type":"uint","key":{"int":60023}}}}"#,
+        ] {
+            let mut upstream = schema(
+                r#"{"name":"TextInput","key":{"int":569},"properties":{"text":{"type":"String","key":{"int":817}}}}"#,
+            );
+            assert!(
+                upstream
+                    .merge_extension(
+                        "nuxie/input.json".into(),
+                        serde_json::from_str(json).unwrap()
+                    )
+                    .is_err()
+            );
+        }
+    }
+
     #[test]
     fn upstream_types_and_alternate_properties_cannot_enter_owned_band() {
         for json in [

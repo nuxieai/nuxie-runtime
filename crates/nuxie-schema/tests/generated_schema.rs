@@ -48,7 +48,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 106
     // (61000 to 61105): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
-    assert_eq!(runtime_property_count, 798);
+    // TextInput.rows adds one owned attribute on an upstream record.
+    assert_eq!(runtime_property_count, 799);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -83,7 +84,35 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
     // layout's 104 and CSS text's 2.
-    assert_eq!(described_property_count, 581);
+    // TextInput.rows also describes its CSS-only interpretation.
+    assert_eq!(described_property_count, 582);
+}
+
+#[test]
+fn owned_rows_attribute_is_importable_only_on_text_input() {
+    let input = definition_by_type_key(569).unwrap();
+    let rows = input.property_by_key(60023).unwrap();
+    assert_eq!(rows.name, "rows");
+    assert_eq!(
+        rows.stored_field_initializer(),
+        Some(StoredFieldInitializer::Uint(2))
+    );
+    assert!(rows.deserializes && rows.bindable);
+    assert!(!rows.animates);
+    assert!(object_supports_property(569, 60023));
+    assert!(!object_supports_property(135, 60023));
+    assert_eq!(
+        core_registry_field_kind_by_property_key(60023),
+        Some(CoreRegistryFieldKind::Uint)
+    );
+    assert_eq!(
+        core_registry_setter_field_kind_by_property_key(60023),
+        Some(FieldKind::Uint)
+    );
+    assert_eq!(
+        core_registry_getter_field_kind_by_property_key(60023),
+        Some(FieldKind::Uint)
+    );
 }
 
 #[test]
@@ -223,6 +252,7 @@ fn generated_schema_metadata_matches_reconciled_pinned_seed_json() {
         let actual_property_names = definition
             .properties
             .iter()
+            .filter(|property| property.key.int < 60000)
             .map(|property| property.name.to_owned())
             .collect::<BTreeSet<_>>();
         let expected_property_names = expected_properties.keys().cloned().collect::<BTreeSet<_>>();
@@ -232,7 +262,11 @@ fn generated_schema_metadata_matches_reconciled_pinned_seed_json() {
             definition.name
         );
 
-        for property in definition.properties {
+        for property in definition
+            .properties
+            .iter()
+            .filter(|property| property.key.int < 60000)
+        {
             let property_json = expected_properties.get(property.name).unwrap_or_else(|| {
                 panic!(
                     "missing JSON property {}.{}",

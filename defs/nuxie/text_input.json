@@ -1,0 +1,16 @@
+{
+  "name": "TextInput",
+  "extends": "text/text_input.json",
+  "properties": {
+    "rows": {
+      "type": "uint",
+      "key": {
+        "int": 60023,
+        "string": "rows"
+      },
+      "initialValue": "2",
+      "bindable": true,
+      "description": "Natural line count for a CSS multiline input. Single-line inputs use one line; translated inputs ignore this attribute. Zero uses the HTML default of two."
+    }
+  }
+}

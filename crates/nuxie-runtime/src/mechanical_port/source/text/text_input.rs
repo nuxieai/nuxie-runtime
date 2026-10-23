@@ -87,6 +87,7 @@ pub struct TextInput {
     scroll_y: f32,
     layout_width: f32,
     layout_height: f32,
+    css_owned: bool,
     raw_text_input: RawTextInput,
 }
 
@@ -107,6 +108,7 @@ impl Default for TextInput {
             scroll_y: 0.0,
             layout_width: f32::NAN,
             layout_height: f32::NAN,
+            css_owned: false,
             raw_text_input: RawTextInput::default(),
         }
     }
@@ -128,6 +130,53 @@ impl TextInput {
                 crate::source::core::CoreObject::core(self),
                 TextInputBase::SELECT_ALL_ON_FOCUS_PROPERTY_KEY,
             );
+        }
+    }
+
+    pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
+        if self.css_owned != owned {
+            self.css_owned = owned;
+            self.raw_text_input.set_css_line_box(owned);
+            // Layout is assigning ownership, so it already has a solve in
+            // progress. Reshape drawing without invalidating that solve.
+            self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+        }
+    }
+
+    /// Read the style rather than the last shaped text: bindings and animation
+    /// can change these values before the next shape or layout pass.
+    pub(crate) fn css_natural_size(&self) -> Vec2D {
+        let height = self
+            .text_style
+            .as_ref()
+            .and_then(|style| {
+                style
+                    .with_mut(|object| {
+                        let style = object.as_text_style_mut()?;
+                        let authored = style.base.line_height();
+                        if authored >= 0.0 {
+                            return Some(authored);
+                        }
+                        let metrics = style.font()?.css_line_metrics(style.base.font_size());
+                        Some(metrics.ascent + metrics.descent + metrics.line_gap)
+                    })
+                    .flatten()
+            })
+            .unwrap_or(0.0);
+        let rows = if self.base.multiline() {
+            match self.base.rows() {
+                0 => 2,
+                rows => rows,
+            }
+        } else {
+            1
+        };
+        Vec2D::new(0.0, height * rows as f32)
+    }
+
+    pub fn rows_changed(&mut self) {
+        if self.css_owned {
+            self.mark_shape_dirty();
         }
     }
 
@@ -201,7 +250,13 @@ impl TextInput {
     pub fn mark_shape_dirty(&mut self) {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
-        self.base.mark_layout_node_dirty();
+        self.mark_layout_measure_dirty();
+    }
+    // Direct CSS content goes through the update-pass size comparison.
+    fn mark_layout_measure_dirty(&mut self) {
+        if !self.css_owned {
+            self.base.mark_layout_node_dirty();
+        }
     }
     fn restart_cursor_blink(&mut self) {
         self.cursor_blink_seconds = 0.0;
@@ -261,11 +316,19 @@ impl TextInput {
             2 => TextAlign::Center,
             other => TextAlign::Unknown(other),
         };
-        let vertical = match self.base.vertical_align_value() {
-            0 => VerticalTextAlign::Top,
-            1 => VerticalTextAlign::Bottom,
-            2 => VerticalTextAlign::Middle,
-            other => VerticalTextAlign::Unknown(other),
+        let vertical = if self.css_owned {
+            if self.base.multiline() {
+                VerticalTextAlign::Top
+            } else {
+                VerticalTextAlign::Middle
+            }
+        } else {
+            match self.base.vertical_align_value() {
+                0 => VerticalTextAlign::Top,
+                1 => VerticalTextAlign::Bottom,
+                2 => VerticalTextAlign::Middle,
+                other => VerticalTextAlign::Unknown(other),
+            }
         };
         // Upstream 7098a7c8: align against the viewport content box, not the
         // scrolling distance measured from the content origin to its far edge.
@@ -336,17 +399,26 @@ impl TextInput {
             .cloned();
         {
             if let Some(style) = &self.text_style
-                && let Some((font, font_size)) = style
+                && let Some((font, font_size, line_height)) = style
                     .with_mut(|style| {
-                        style
-                            .as_text_style_mut()
-                            .map(|style| (style.font(), style.base.font_size()))
+                        style.as_text_style_mut().map(|style| {
+                            (
+                                style.font(),
+                                style.base.font_size(),
+                                style.base.line_height(),
+                            )
+                        })
                     })
                     .flatten()
                 && let Some(font) = font
             {
                 self.raw_text_input.set_font(Some(font));
                 self.raw_text_input.set_font_size(font_size);
+                self.raw_text_input.set_line_height(if self.css_owned {
+                    line_height
+                } else {
+                    -1.0
+                });
             }
             self.raw_text_input.set_obscured(self.base.obscured());
             self.sync_displayed_text_from_source(false);
@@ -395,16 +467,22 @@ impl TextInput {
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("TextInput retains its imported renderer factory");
-            let (font, font_size) = style
+            let (font, font_size, line_height) = style
                 .with_mut(|style| {
-                    style
-                        .as_text_style_mut()
-                        .map(|style| (style.font(), style.base.font_size()))
+                    style.as_text_style_mut().map(|style| {
+                        (
+                            style.font(),
+                            style.base.font_size(),
+                            style.base.line_height(),
+                        )
+                    })
                 })
                 .flatten()
                 .expect("TextInput style");
             self.raw_text_input.set_font(font);
             self.raw_text_input.set_font_size(font_size);
+            self.raw_text_input
+                .set_line_height(if self.css_owned { line_height } else { -1.0 });
             self.update_alignment();
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
@@ -412,7 +490,13 @@ impl TextInput {
                     .base
                     .world_transform()
                     .map_bounding_box(self.raw_text_input.bounds());
-                self.base.mark_layout_node_dirty();
+                self.mark_layout_measure_dirty();
+            }
+            if self.css_owned {
+                if let Some(host) = self.base.handle() {
+                    self.base
+                        .with_artboard(|artboard| artboard.queue_measured_content(host));
+                }
             }
             if changed & Flags::SelectionDirty as u8 != 0 {
                 for child in self.base.children().to_vec() {
@@ -482,6 +566,9 @@ impl TextInput {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
+        if self.css_owned {
+            return self.css_natural_size();
+        }
         let max_width = if width_mode == LayoutMeasureMode::Undefined {
             f32::MAX
         } else {
@@ -602,7 +689,7 @@ impl TextInput {
         if sync {
             self.sync_displayed_text_from_source(true);
         }
-        self.base.mark_layout_node_dirty();
+        self.mark_layout_measure_dirty();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
     }
     pub fn key_input(

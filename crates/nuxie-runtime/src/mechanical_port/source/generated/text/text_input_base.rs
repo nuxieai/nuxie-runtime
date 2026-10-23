@@ -8,6 +8,7 @@ pub trait TextInputBaseCallbacks:
     fn notify_property_changed(&mut self, property_key: u16);
     fn text_changed(&mut self) {}
     fn selection_radius_changed(&mut self) {}
+    fn rows_changed(&mut self) {}
     fn multiline_changed(&mut self) {}
     fn obscured_changed(&mut self) {}
     fn align_value_changed(&mut self) {}
@@ -18,6 +19,7 @@ pub struct TextInputBase {
     pub base: Drawable,
     text: String,
     selection_radius: f32,
+    rows: u32,
     multiline: bool,
     obscured: bool,
     select_all_on_focus: bool,
@@ -31,6 +33,7 @@ impl Default for TextInputBase {
             base: Drawable::default(),
             text: "".to_owned(),
             selection_radius: 5.0,
+            rows: 2,
             multiline: true,
             obscured: false,
             select_all_on_focus: false,
@@ -44,6 +47,7 @@ impl TextInputBase {
     pub const TYPE_KEY: u16 = 569;
     pub const TEXT_PROPERTY_KEY: u16 = 817;
     pub const SELECTION_RADIUS_PROPERTY_KEY: u16 = 818;
+    pub const ROWS_PROPERTY_KEY: u16 = 60023;
     pub const MULTILINE_PROPERTY_KEY: u16 = 979;
     pub const OBSCURED_PROPERTY_KEY: u16 = 1095;
     pub const SELECT_ALL_ON_FOCUS_PROPERTY_KEY: u16 = 1099;
@@ -146,6 +150,22 @@ impl TextInputBase {
         self.selection_radius = value;
         true
     }
+    pub fn rows(&self) -> u32 {
+        self.rows
+    }
+    pub fn set_rows(&mut self, value: u32, callbacks: &mut impl TextInputBaseCallbacks) {
+        if self.set_rows_value(value) {
+            callbacks.rows_changed();
+            TextInputBaseCallbacks::notify_property_changed(callbacks, Self::ROWS_PROPERTY_KEY);
+        }
+    }
+    pub(crate) fn set_rows_value(&mut self, value: u32) -> bool {
+        if self.rows == value {
+            return false;
+        }
+        self.rows = value;
+        true
+    }
     pub fn multiline(&self) -> bool {
         self.multiline
     }
@@ -210,6 +230,7 @@ impl TextInputBase {
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextInputBaseCallbacks) {
         self.text.clone_from(&object.text);
         self.selection_radius = object.selection_radius;
+        self.rows = object.rows;
         self.multiline = object.multiline;
         self.obscured = object.obscured;
         self.select_all_on_focus = object.select_all_on_focus;
@@ -224,6 +245,10 @@ impl TextInputBase {
         callbacks: &mut impl TextInputBaseCallbacks,
     ) -> bool {
         match property_key {
+            Self::ROWS_PROPERTY_KEY => {
+                self.rows = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
             Self::ALIGN_VALUE_PROPERTY_KEY => {
                 self.align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true

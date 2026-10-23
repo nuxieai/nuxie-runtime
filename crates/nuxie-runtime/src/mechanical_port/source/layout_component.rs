@@ -1542,6 +1542,7 @@ impl LayoutComponent {
         }
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
+            style.item_is_compressible_replaced = layout.is_css_text_input();
             layout.apply_css_scroll_thumb_size(&mut style);
             layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
@@ -3533,6 +3534,7 @@ impl LayoutComponent {
                 }
             }
         }
+        taffy_style.item_is_compressible_replaced = self.is_css_text_input();
         self.apply_css_scroll_thumb_size(&mut taffy_style);
         self.apply_hosted_css_item(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);
@@ -3567,7 +3569,8 @@ impl LayoutComponent {
     /// Only content with a measurable size needs an anonymous CSS item.
     /// Empty boxes keep Taffy's empty-container behavior.
     fn has_css_content_item(&self) -> bool {
-        self.is_css_mode()
+        !self.is_css_text_input()
+            && self.is_css_mode()
             && self.is_leaf()
             && self.measured_hosts()[0].iter().any(|host| {
                 host.with_mut(|object| object.as_text_mut().is_some())
@@ -3576,6 +3579,16 @@ impl LayoutComponent {
                         .natural_of(host)
                         .is_some_and(|size| size.x != 0.0 || size.y != 0.0)
             })
+    }
+    /// A form control uses its content box for its editable line. Container
+    /// alignment does not place an anonymous text item inside that control.
+    fn is_css_text_input(&self) -> bool {
+        self.is_css_mode()
+            && self.is_leaf()
+            && self
+                .children()
+                .iter()
+                .any(|child| child.is_type_of(crate::source::text::text_input::TextInput::TYPE_KEY))
     }
     /// Records the natural size this box measured for `host`.
     fn note_measured_natural(&self, host: &CoreHandle, natural: Option<Vec2D>) {
@@ -4032,6 +4045,9 @@ impl LayoutComponent {
                 child.with_mut(|object| {
                     if let Some(text) = object.as_text_mut() {
                         text.set_owned_by_css_layout(css);
+                    }
+                    if let Some(input) = object.as_text_input_mut() {
+                        input.set_owned_by_css_layout(css);
                     }
                 });
                 let controlled =
@@ -5112,6 +5128,9 @@ impl LayoutComponent {
                 if let Some(text) = object.as_text_mut() {
                     text.set_owned_by_css_layout(css_text_owner);
                 }
+                if let Some(input) = object.as_text_input_mut() {
+                    input.set_owned_by_css_layout(css_text_owner);
+                }
             });
             // Image already measures exact offers as exact sizes. Preserve that
             // protocol; controlled geometry and drawing groups use authored bounds.
@@ -5166,7 +5185,7 @@ impl LayoutComponent {
                 && available.height == taffy::prelude::AvailableSpace::MinContent
             {
                 if let Some(minimum) =
-                    host_min_content_height(host, known.width, width_limits, css_owner)
+                    host_min_content_height(host, known.width, width_limits, css_text_owner)
                 {
                     measured.y = minimum;
                 }
@@ -5286,7 +5305,7 @@ impl LayoutComponent {
                                     &host,
                                     known.height,
                                     height_limits,
-                                    css_owner,
+                                    css_text_owner,
                                 )
                             },
                             |width, width_mode, height, height_mode| {

@@ -120,6 +120,14 @@ fn is_upstream_definition(definition: &nuxie_schema::Definition) -> bool {
     !definition.file.starts_with("nuxie/")
 }
 
+// Owned attributes on upstream records have no C++ members. The complete
+// list is pinned below, and its keys must remain absent from upstream.
+fn upstream_properties(properties: &[Property]) -> impl Iterator<Item = &Property> {
+    properties
+        .iter()
+        .filter(|property| property.key.int < 60000)
+}
+
 /// Whether `property` is a member of its C++ class itself: a stored field
 /// outside upstream's lazy sidecars (rive-runtime 3fc5a3360), which the
 /// runtime build keeps in `<Type><Group>Sidecar`, held as
@@ -133,7 +141,7 @@ fn sidecar_groups(
     definition: &nuxie_schema::Definition,
 ) -> BTreeMap<&'static str, Vec<&'static Property>> {
     let mut groups = BTreeMap::<&'static str, Vec<&'static Property>>::new();
-    for property in definition.properties {
+    for property in upstream_properties(definition.properties) {
         if let Some(group) = property.sidecar {
             groups.entry(group).or_default().push(property);
         }
@@ -183,14 +191,22 @@ fn cpp_sidecar_members(header: &Path, struct_name: &str) -> BTreeMap<String, Str
         .collect()
 }
 
-fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, &'static [Property])> {
+fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, Vec<&'static Property>)> {
     upstream_definitions()
-        .map(|definition| (definition.name, definition.file, definition.properties))
-        .chain(
-            RUNTIME_MIXINS
-                .iter()
-                .map(|mixin| (mixin.name, mixin.file, mixin.properties)),
-        )
+        .map(|definition| {
+            (
+                definition.name,
+                definition.file,
+                upstream_properties(definition.properties).collect(),
+            )
+        })
+        .chain(RUNTIME_MIXINS.iter().map(|mixin| {
+            (
+                mixin.name,
+                mixin.file,
+                upstream_properties(mixin.properties).collect(),
+            )
+        }))
 }
 
 /// Nuxie's own definitions (defs/nuxie/) have no upstream C++, so the
@@ -255,6 +271,22 @@ fn nuxie_definitions_stay_out_of_the_cpp_registry() {
                 property.key.int
             );
         }
+    }
+    let owned_attributes = upstream_definitions()
+        .flat_map(|definition| {
+            definition
+                .properties
+                .iter()
+                .filter(|property| property.key.int >= 60000)
+                .map(move |property| (definition.name, property.name, property.key.int))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(owned_attributes, [("TextInput", "rows", 60023)]);
+    for (owner, name, key) in owned_attributes {
+        assert!(
+            !property_keys.contains(&key),
+            "{owner}.{name} key {key} is also upstream's"
+        );
     }
 }
 
@@ -438,9 +470,7 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>();
-        let rust_members = definition
-            .properties
-            .iter()
+        let rust_members = upstream_properties(definition.properties)
             .filter(|property| stored_class_member(property))
             .map(|property| cpp_member_name(property.name))
             .collect::<BTreeSet<_>>();
@@ -453,7 +483,7 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
             header.display()
         );
 
-        for property in definition.properties {
+        for property in upstream_properties(definition.properties) {
             assert_eq!(
                 cpp_members.contains(&cpp_member_name(property.name)),
                 stored_class_member(property),
@@ -509,7 +539,7 @@ fn generated_rust_schema_matches_cpp_stored_field_initializers() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let initializers = parse_cpp_member_initializers(&header);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition.properties) {
             let Some(rust_initializer) = property.stored_field_initializer() else {
                 continue;
             };
@@ -578,9 +608,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
     for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let cpp_notified_properties = cpp_notified_property_names(&header);
-        let rust_setter_properties = definition
-            .properties
-            .iter()
+        let rust_setter_properties = upstream_properties(definition.properties)
             .filter(|property| property.cpp_generates_value_setter_body())
             .map(|property| property.name.to_owned())
             .collect::<BTreeSet<_>>();
@@ -597,7 +625,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
 
         let cpp_changed_hooks = cpp_changed_hook_names(&header);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition.properties) {
             assert_eq!(
                 cpp_changed_hooks.contains(property.name),
                 property.cpp_generates_changed_hook(),
@@ -739,7 +767,7 @@ fn generated_rust_schema_matches_cpp_value_getters() {
     for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition.properties) {
             let getter = cpp_property_getter(&header, property.name);
             assert_eq!(
                 getter.is_some(),
@@ -883,7 +911,7 @@ fn generated_rust_schema_matches_cpp_property_declarations() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let declarations = cpp_zero_declarations(&header);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition.properties) {
             let value_declaration = cpp_zero_declaration(&declarations, property.name);
             assert_eq!(
                 value_declaration.is_some(),
@@ -1250,7 +1278,7 @@ fn generated_rust_schema_matches_cpp_deserialize_switches() {
         let constants = parse_u16_constants(&header);
         let cpp_deserialized_keys = parse_cpp_deserialize_property_keys(&header, &constants);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition.properties) {
             assert_eq!(
                 cpp_deserialized_keys.contains(&property.key.int),
                 property.deserializes,
@@ -1473,16 +1501,12 @@ fn generated_rust_schema_matches_cpp_copy_methods() {
     for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         // Class members copy one by one; a sidecar group copies whole.
-        let rust_stored_members = definition
-            .properties
-            .iter()
+        let rust_stored_members = upstream_properties(definition.properties)
             .filter(|property| stored_class_member(property))
             .map(|property| cpp_member_name(property.name))
             .chain(sidecar_groups(definition).into_keys().map(str::to_owned))
             .collect::<BTreeSet<_>>();
-        let rust_encoded_copy_hooks = definition
-            .properties
-            .iter()
+        let rust_encoded_copy_hooks = upstream_properties(definition.properties)
             .filter(|property| property.encoded)
             .map(|property| cpp_member_name(property.name))
             .collect::<BTreeSet<_>>();

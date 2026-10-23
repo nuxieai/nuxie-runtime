@@ -17,7 +17,7 @@ Words used below:
 
 ### 1.1 Why a new record type
 
-`nuxie-codegen` accepts Nuxie definitions only as whole types in `defs/nuxie/`. It refuses a Nuxie file that shadows an upstream definition, so we cannot add properties to Rive's `LayoutComponentStyle` or `LayoutSizingStyle`. The CSS properties therefore live on one new record type, `LayoutCssStyle`.
+CSS properties live on one new record type, `LayoutCssStyle`, instead of extending Rive's `LayoutComponentStyle` or `LayoutSizingStyle`. `nuxie-codegen` refuses definitions that shadow upstream types. It also supports explicit property-only Nuxie extensions, used for the TextInput `rows` attribute in section 5; those keep the upstream type key and add only owned property keys.
 
 It follows the precedent of Rive's `GridItemPlacement`:
 
@@ -414,17 +414,21 @@ Flex, grid and block alignment apply to that item, including block `align-conten
 | Drawing group | the union of its content, each child placed by its local transform (a path's transform composed through any nodes inside its shape; images and joysticks about their origin, joysticks at their position). A child without a natural size of its own (a text inside the group) adds nothing | No |
 | N-slice, joystick | its authored width and height | As today |
 | Mounted artboard (a component-list item) or nested artboard | A list row with an artboard record, or a `NestedArtboardLayout` with both an artboard record and a host child record, is a CSS layout box: its content supplies its natural size and its item record supplies sizes, limits and margins (2.1). Other mounted or nested artboards use their artboard's own size, like an image: a box hugs to it, and on an axis where it has a definite size that size is its automatic minimum, clamped by a length maximum or by a percentage of a parent's definite length, with no minimum on a scroll-container axis | CSS hosted roots reflow to their CSS item size. A `NestedArtboardLeaf` keeps its fit and alignment; in a CSS sizing box it fits to the physical content-box dimensions, independent of the anonymous item's size. In a leaf box the content placement is already applied, so the fit starts at local (0, 0). With layout children, content is not moved and the fit starts at the content box's border-and-padding origin. Changes to these fitting bounds recompute the leaf's transform, even when the outer box and content placement stay fixed. A translated sizing box fits the leaf to its whole local bounds. Other cases keep existing sizing |
-| Text input, scripted layout, artboard without an instance | zero | |
+| Text input | CSS mode: zero natural width; one live line height for a single-line control, or `rows` live line heights for a multiline control. The authored TextStyle line height wins; otherwise `normal` uses the same rounded hhea ascent, descent and line gap as Text. `rows` is the Nuxie uint attribute 60023 on TextInput (type 569), declared in `defs/nuxie/text_input.json`, not a CSS record field. Its default is 2; zero also uses 2. A single-line input always uses 1. CSS width stays with the box, with no text-based width. Translated mode keeps upstream's current-content measurement and ignores rows | The compiler places TextInput directly inside a LayoutComponent; TextInput is a drawable, not a LayoutParticipant host. CSS layout gives the control its content box, without an anonymous item. The control's box sets Taffy's `item_is_compressible_replaced`, so auto block width uses its intrinsic width and grid gets a zero min-content contribution. An authored CSS height wins. A single line centres vertically; multiline text starts at the top. A zero line height collapses the line box but still paints glyph ink. Drawing, bounds, carets and selection use the measured line height and Text's half-leading baseline rule, so a placeholder Text with the same font and line height aligns with typed text |
+| Scripted layout, artboard without an instance | zero | |
 
 A CSS box's automatic minimum is the largest of its contents' own: content with a zero minimum (the rows above that say so) adds nothing, and the rest still count. A translated box keeps a zero automatic minimum when any of its measured content has none, as today.
 
 **The update-pass check stays.** It keeps these natural sizes current. The component graph's update loop queues the measured host of each member that recomputes:
 
 - a local transform (Transform dirt);
+- a CSS text input after its text-shape update, including a live font, font-size, line-height, multiline or rows change;
 - a path or its vertices (Path and Vertices dirt);
 - an n-slice (NSlicer dirt).
 
 Joysticks (size, origin, position) and images (origin, new decoded image) hand themselves to the same queue.
+
+TextInput forwards its live font, font size and, in CSS mode, line height to RawTextInput on that shape update. Typing changes its drawing but not its CSS natural size.
 
 At the end of each update step, each queued host's natural size is compared with the size its box last measured (within 16 ULPs). A change marks the box, which lays out one frame later.
 

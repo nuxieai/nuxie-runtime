@@ -16,6 +16,7 @@ pub struct FullyShapedText {
     bounds: Aabb,
     vertical_offset: f32,
     text_length: Option<u32>,
+    css_line_box: bool,
 }
 impl FullyShapedText {
     pub(crate) fn from_text(text: &Text) -> Self {
@@ -31,6 +32,10 @@ impl FullyShapedText {
             .glyph_lookup
             .compute(text.styled_text.unichars(), &result.paragraphs);
         result
+    }
+
+    pub(crate) fn set_css_line_box(&mut self, enabled: bool) {
+        self.css_line_box = enabled;
     }
 
     pub fn layout_view(&self) -> super::text_layout_view::TextLayoutView<'_> {
@@ -62,6 +67,17 @@ impl FullyShapedText {
         self.bounds
     }
     pub fn has_valid_bounds(&self) -> bool {
+        if self.css_line_box {
+            // A zero line height collapses the line box, not the glyph ink.
+            // Keep non-finite and inverted bounds out of path generation.
+            let bounds = self.bounds;
+            return !self.ordered_lines.is_empty()
+                && [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+                    .into_iter()
+                    .all(f32::is_finite)
+                && bounds.width() >= 0.0
+                && bounds.height() >= 0.0;
+        }
         !self.bounds.is_empty_or_nan()
     }
     pub fn line_count(&self) -> u32 {
@@ -122,7 +138,7 @@ impl FullyShapedText {
             .expect("shaped text retains its font")
             .shape_text(text, runs, -1);
         self.glyph_lookup.compute(text, &self.paragraphs);
-        self.paragraph_lines = Text::break_lines_aligned(
+        self.paragraph_lines = Text::break_lines_with_strut(
             &self.paragraphs,
             if sizing == TextSizing::AutoWidth {
                 -1.0
@@ -133,6 +149,8 @@ impl FullyShapedText {
             wrap,
             TextWordBreak::BreakWord,
             align_width,
+            self.css_line_box.then_some(&runs[0]),
+            None,
         );
         self.ordered_lines.clear();
         self.ellipsis_run = GlyphRun::default();
@@ -182,7 +200,7 @@ impl FullyShapedText {
         }
         let max_y = min_y.max(y - paragraph_spacing);
         let slack = align_height - (max_y - min_y);
-        if slack > 0.0 {
+        if slack > 0.0 || self.css_line_box {
             self.vertical_offset = match vertical_alignment {
                 VerticalTextAlign::Middle => slack / 2.0,
                 VerticalTextAlign::Bottom => slack,
@@ -218,15 +236,18 @@ impl FullyShapedText {
                     }
                     _ => {}
                 }
-                self.ordered_lines.push(OrderedLine::new(
-                    paragraph,
-                    line,
-                    max_width,
-                    ellipsis_line == line_index,
-                    ellipsis_last,
-                    &mut self.ellipsis_run,
-                    y + line.baseline + self.vertical_offset,
-                ));
+                self.ordered_lines.push(
+                    OrderedLine::new(
+                        paragraph,
+                        line,
+                        max_width,
+                        ellipsis_line == line_index,
+                        ellipsis_last,
+                        &mut self.ellipsis_run,
+                        y + line.baseline + self.vertical_offset,
+                    )
+                    .with_css_line_box(self.css_line_box),
+                );
                 if line_index == ellipsis_line {
                     return;
                 }

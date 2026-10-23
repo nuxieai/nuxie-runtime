@@ -137,6 +137,7 @@ pub struct RawTextInput {
     pub measure_count: u32,
     cursor: Cursor,
     text_run: TextRun,
+    css_line_box: bool,
     text_path: ShapePaintPath,
     selected_text_path: ShapePaintPath,
     color_glyphs: Vec<InputColorGlyph>,
@@ -182,6 +183,7 @@ impl RawTextInput {
             #[cfg(any(test, feature = "tools"))]
             measure_count: 0,
             cursor: Cursor::at_start(),
+            css_line_box: false,
             text_run: TextRun {
                 font: None,
                 size: 16.0,
@@ -296,6 +298,25 @@ impl RawTextInput {
         }
     }
 
+    // Line height and the CSS line box never move a break, but they decide
+    // how many lines a fixed height box keeps, so a resolved line index can
+    // outlive its line.
+    pub(crate) fn set_css_line_box(&mut self, enabled: bool) {
+        if self.css_line_box != enabled {
+            self.css_line_box = enabled;
+            self.forget_line_indices();
+            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        }
+    }
+
+    pub(crate) fn set_line_height(&mut self, height: f32) {
+        if self.text_run.line_height != height {
+            self.text_run.line_height = height;
+            self.forget_line_indices();
+            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        }
+    }
+
     pub fn font_size(&self) -> f32 {
         self.text_run.size
     }
@@ -305,6 +326,8 @@ impl RawTextInput {
             return;
         }
         self.text_run.size = value;
+        // Nuxie addition: a new size can move every line break.
+        self.forget_line_indices();
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
@@ -408,6 +431,8 @@ impl RawTextInput {
             return;
         }
         self.text_run.font = value;
+        // Nuxie addition: new glyph widths can move every line break.
+        self.forget_line_indices();
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
@@ -415,6 +440,8 @@ impl RawTextInput {
     /// changed: for a host whose font fallbacks changed under the same font.
     /// Nuxie addition; upstream has no reshape hook for a fallback change.
     pub fn invalidate_shape(&mut self) {
+        // New fallback glyphs can move line breaks, as a new font can.
+        self.forget_line_indices();
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
@@ -623,6 +650,7 @@ impl RawTextInput {
             } else {
                 &mut self.text
             };
+            self.shape.set_css_line_box(self.css_line_box);
             self.shape.shape_aligned(
                 text,
                 std::slice::from_mut(&mut self.text_run),
@@ -1210,6 +1238,17 @@ impl RawTextInput {
         } else {
             self.unflag(Flags::Obscured as u8);
         }
+        self.forget_line_indices();
+        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+    }
+
+    // From src/text/raw_text_input.cpp::obscured. A reflow leaves resolved
+    // line indices stale, and update never resolves a line index twice, so
+    // keep only the code point indices. The journal holds cursor snapshots
+    // too, or undo would restore one resolved against the old layout.
+    // Upstream does this for masking only. Nuxie also does it for a change of
+    // font, font size, line height, CSS line box or font fallbacks.
+    fn forget_line_indices(&mut self) {
         let unresolved = |cursor: Cursor| {
             Cursor::new(
                 CursorPosition::unresolved(cursor.start().code_point_index()),
@@ -1222,7 +1261,6 @@ impl RawTextInput {
             entry.cursor_to = unresolved(entry.cursor_to);
         }
         self.ideal_cursor_x = -1.0;
-        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
     fn prepare_obscured_text(&mut self) {
@@ -1251,6 +1289,10 @@ impl RawTextInput {
             } else {
                 &mut self.text
             };
+            self.measuring_shape
+                .as_mut()
+                .unwrap()
+                .set_css_line_box(self.css_line_box);
             self.measuring_shape.as_mut().unwrap().shape_aligned(
                 text,
                 std::slice::from_mut(&mut self.text_run),

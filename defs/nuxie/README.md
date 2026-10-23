@@ -4,6 +4,13 @@ These definitions extend the ordinary RIV record stream. They are inputs to
 `nuxie-codegen`, alongside the pinned upstream `dev/defs` directory. They do
 not define a package/archive or duplicate the upstream definitions.
 
+A property-only extension omits `key`, names the upstream type, and uses
+`extends` for its upstream definition path. `text_input.json` adds `rows`
+this way: the generator merges its owned property into TextInput without
+allocating another record type or changing upstream JSON. Extension namespace
+and collision validation apply before generation. Whole Nuxie records such
+as Video keep their own type key and inherit as usual.
+
 Type keys and property keys are independent namespaces. Allocate both from
 60000–65535. The generator rejects upstream use of this band (including
 alternate keys), owned keys outside it, and duplicate definitions/keys.
@@ -13,6 +20,7 @@ resolved explicitly.
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
+- TextInput.rows: property 60023 on upstream type 569; default 2.
 - LayoutCssStyle: type 61000; properties 61000–61082 and 61099–61100.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.

@@ -173,6 +173,12 @@ fn natural_bounds_for_layout_host(
         {
             return Content::Rect(bounds);
         }
+        if css && transform.is_none() {
+            if let Some(input) = object.as_text_input_mut() {
+                let size = input.css_natural_size();
+                return Content::Rect(Aabb::from_ltwh(0.0, 0.0, size.x, size.y));
+            }
+        }
         // Ordinary drawing nodes inherit TransformComponent's zero measurer.
         // Concrete measured hosts need their own contract instead of a walk.
         if object.as_text_mut().is_some()

@@ -1,6 +1,6 @@
 //! Original 17 cases plus the seven alignment cases added by 7098a7c8.
-//! Authority: Rive 4ac7b32798da0482e441ef09304dc3b480ed3ee5. The last case
-//! covers invalidate_shape, a Nuxie addition.
+//! Authority: Rive 4ac7b32798da0482e441ef09304dc3b480ed3ee5. The font size
+//! reflow and invalidate_shape cases cover Nuxie additions.
 //!
 //! RawTextInput's upstream TESTING measure counter is exposed by the native
 //! tools feature. Text shaping, cursor editing, and history use the live owners.
@@ -454,6 +454,89 @@ fn obscured_toggle_re_resolves_cursor_lines() {
     input.update(&factory);
     assert_eq!(input.cursor().end().line_index(), 1);
     assert!(input.cursor_visual_position().found());
+}
+
+// Nuxie addition: a font size change reflows a wrapped field, as a bound or
+// animated size does through TextInput's style sync. The cursor, a selection
+// and the edit history keep their code points and find their lines again, as
+// they do after an obscured toggle.
+#[test]
+fn font_size_reflow_re_resolves_cursor_and_history_lines() {
+    let factory = retained_factory();
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(72.0);
+    // At 72 no two of these words fit in 230 points, so each takes a line of
+    // its own. At 24 the whole text fits on one line.
+    input.set_sizing(TextSizing::AutoHeight);
+    input.set_max_width(230.0);
+    input.insert("one two three");
+    input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(10)));
+    input.update(&factory);
+    assert_eq!(input.shape().line_count(), 3);
+    assert!(input.cursor().end() == CursorPosition::new(2, 10));
+    assert_caret_on_line(&input, 2);
+    // An edit on the third line records the cursor resolved there.
+    input.insert("i");
+    input.update(&factory);
+    assert_eq!(input.text(), "one two thiree");
+    assert!(input.cursor().end() == CursorPosition::new(2, 11));
+
+    input.set_font_size(24.0);
+    input.update(&factory);
+    assert_eq!(input.shape().line_count(), 1);
+    assert!(input.cursor().end() == CursorPosition::new(0, 11));
+    assert_caret_on_line(&input, 0);
+
+    // Undo restores the cursor from before the edit, on its new line.
+    input.undo();
+    input.update(&factory);
+    assert_eq!(input.text(), "one two three");
+    assert_eq!(input.shape().line_count(), 1);
+    assert!(input.cursor().end() == CursorPosition::new(0, 10));
+    assert_caret_on_line(&input, 0);
+
+    // A selection resolved on the one line spans all three once the text
+    // grows again.
+    input.set_cursor(Cursor::new(
+        CursorPosition::unresolved(2),
+        CursorPosition::unresolved(10),
+    ));
+    input.update(&factory);
+    assert!(input.cursor().end() == CursorPosition::new(0, 10));
+    input.set_font_size(72.0);
+    input.update(&factory);
+    assert_eq!(input.shape().line_count(), 3);
+    assert!(input.cursor().start() == CursorPosition::new(0, 2));
+    assert!(input.cursor().end() == CursorPosition::new(2, 10));
+    assert_caret_on_line(&input, 2);
+    let mut rects = Vec::new();
+    input
+        .cursor()
+        .selection_rects(&mut rects, &input.shape().layout_view());
+    for (index, line) in input.shape().ordered_lines().iter().enumerate() {
+        let baseline = line.y();
+        assert!(
+            rects
+                .iter()
+                .any(|rect| rect.top() < baseline && baseline < rect.bottom()),
+            "the selection has no rectangle on line {index}: {rects:?}"
+        );
+    }
+}
+
+// The caret has a visual position, and it spans the given line's baseline.
+#[track_caller]
+fn assert_caret_on_line(input: &RawTextInput, line: usize) {
+    let caret = input.cursor_visual_position();
+    assert!(caret.found(), "the caret has no visual position");
+    let baseline = input.shape().ordered_lines()[line].y();
+    assert!(
+        caret.top() < baseline && baseline < caret.bottom(),
+        "the caret spans {}..{}, not line {line} at baseline {baseline}",
+        caret.top(),
+        caret.bottom()
+    );
 }
 
 // Nuxie addition: a host whose font fallbacks changed asks for shaping again

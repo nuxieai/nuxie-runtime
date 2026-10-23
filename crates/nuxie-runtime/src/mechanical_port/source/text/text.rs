@@ -1398,7 +1398,7 @@ impl Text {
         )
     }
     #[allow(clippy::too_many_arguments)]
-    fn break_lines_with_strut(
+    pub(crate) fn break_lines_with_strut(
         paragraphs: &[Paragraph],
         width: f32,
         align: TextAlign,

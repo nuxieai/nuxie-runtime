@@ -2485,6 +2485,41 @@ fn line_box_fixture_with_host(
     }
 }
 
+/// A placeholder Text centred in the same content box as an input.
+pub(super) fn placeholder_line(size: f32, line_height: f32, height: f32) -> (f32, f32, f32) {
+    let f = line_box_fixture_with_font(
+        true,
+        &[("Hi", size, line_height)],
+        include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+    );
+    let record = f
+        .label
+        .with_downcast::<LayoutComponent, _>(|layout| layout.css_record().unwrap())
+        .unwrap();
+    CssTextLeaf::write(
+        &record,
+        &[(61021, 1), (61024, 1), (61017, 5)],
+        &[(61022, 200.0), (61025, height)],
+    );
+    LayoutComponent::sync_style_occurrence(&f.label);
+    LayoutComponent::sync_style_occurrence(&f.root);
+    f.solve();
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+            let line = &text.ordered_lines()[0];
+            let geometry = line.glyph_line();
+            let offset = text.base.layout_content_offset().y;
+            (
+                offset + line.y() - geometry.baseline + geometry.top,
+                geometry.bottom - geometry.top,
+                offset + line.y(),
+            )
+        })
+        .unwrap()
+}
+
 fn assert_line_box(f: &Fixture, height: f32, baselines: &[f32]) {
     use crate::source::component_dirt::ComponentDirt;
     let measured = f.solve();

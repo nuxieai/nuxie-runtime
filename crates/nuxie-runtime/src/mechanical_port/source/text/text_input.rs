@@ -778,6 +778,21 @@ impl TextInput {
         }
         true
     }
+
+    pub fn blurs_on_outside_press(&self) -> bool {
+        true
+    }
+
+    pub fn hit_test_focusable(&mut self, position: Vec2D) -> bool {
+        let Some(local) = self
+            .base
+            .with_artboard_mut(|artboard| artboard.root_to_local(position))
+            .flatten()
+        else {
+            return false;
+        };
+        self.hit_test_point(local, true, true)
+    }
     fn edge_scroll_speed_for_distance(&self, d: f32) -> f32 {
         const EDGE_SCROLL_BASE_SPEED: f32 = 45.0;
         const EDGE_SCROLL_MAX_SPEED: f32 = 400.0;

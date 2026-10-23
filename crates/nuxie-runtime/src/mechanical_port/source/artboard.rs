@@ -3771,6 +3771,26 @@ impl Artboard {
         point
     }
 
+    pub fn root_to_local(&mut self, position: Vec2D) -> Option<Vec2D> {
+        let origin = self.root_transform(Vec2D::new(0.0, 0.0));
+        let x = self.root_transform(Vec2D::new(1.0, 0.0)) - origin;
+        let y = self.root_transform(Vec2D::new(0.0, 1.0)) - origin;
+        let to_root = Mat2D::new(x.x, x.y, y.x, y.y, origin.x, origin.y);
+        let mut to_local = Mat2D::default();
+        to_root.invert(&mut to_local).then(|| to_local * position)
+    }
+
+    pub fn is_root(&self) -> bool {
+        if self.host().is_some() {
+            return false;
+        }
+        #[cfg(feature = "tools")]
+        if self.root_transform_callback.is_some() {
+            return false;
+        }
+        true
+    }
+
     /// Project semantic geometry through the transforms used by drawing.
     /// The legacy root_transform contract omits frame origins and list scaling.
     pub(crate) fn semantic_root_transform(&mut self, point: Vec2D) -> Vec2D {

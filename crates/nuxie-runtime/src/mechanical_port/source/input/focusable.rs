@@ -349,4 +349,18 @@ pub trait Focusable {
     fn accepts_keyboard_input(&self) -> bool {
         false
     }
+    fn blurs_on_outside_press(&self) -> bool {
+        false
+    }
+    fn hit_test_focusable(
+        &mut self,
+        position: crate::mechanical_port::source::math::vec2d::Vec2D,
+    ) -> bool {
+        self.world_bounds().is_some_and(|bounds| {
+            position.x >= bounds.min_x
+                && position.x <= bounds.max_x
+                && position.y >= bounds.min_y
+                && position.y <= bounds.max_y
+        })
+    }
 }

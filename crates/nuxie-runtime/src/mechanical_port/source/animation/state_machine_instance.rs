@@ -4587,6 +4587,20 @@ impl StateMachineInstance {
                 component.prepare_event(position, hit_type, pointer_id);
             }
         }
+        let press_focus_manager = if hit_type == ListenerType::Down
+            && button == PointerButton::Primary
+            && self
+                .artboard_instance
+                .with_artboard(|artboard| artboard.is_root())
+                .unwrap_or(false)
+        {
+            self.focus_manager()
+        } else {
+            None
+        };
+        if let Some(manager) = &press_focus_manager {
+            manager.with_focus_manager_mut(FocusManager::press_began);
+        }
         let mut hit_something = false;
         let mut hit_opaque = false;
         // A new press starts a new drag (docs/CSS_LAYOUT.md, 4.5).
@@ -4677,6 +4691,9 @@ impl StateMachineInstance {
         }
         for (ended_pointer_id, ended_button) in drag_ended {
             self.drag_end(position, timestamp, ended_pointer_id, ended_button);
+        }
+        if let Some(manager) = press_focus_manager {
+            manager.with_focus_manager_mut(|manager| manager.press_ended(position));
         }
         if hit_type == ListenerType::Exit {
             for group in &self.listener_groups {
@@ -5741,15 +5758,13 @@ impl StateMachineInstance {
             };
             b.change_searched = b.change_baseline;
             if reads_pending && !self.layers.is_empty() {
-                b.layer_changes = Some(
-                    vec![
+                b.layer_changes = Some(vec![
                         super::state_machine_instance_clusters::SMILayerChangeWindow {
                             baseline: b.change_baseline,
                             searched: b.change_baseline,
                         };
                         self.layers.len()
-                    ],
-                );
+                    ]);
             }
             b.listener_baseline.set(sequence);
             b.changes_used.get_mut().clear();

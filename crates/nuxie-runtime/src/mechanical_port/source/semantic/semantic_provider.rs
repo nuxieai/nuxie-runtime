@@ -185,11 +185,12 @@ fn geometry_with_rendered_clips(component: &CoreHandle, polygon: &[Vec2D]) -> Re
     geometry.finish(complete)
 }
 
-/// Full bounds for outlines and semantic frames, plus the effective visible
-/// region for visibility and hits. Both answers come from one clip walk.
+/// Full bounds for outlines and semantic frames, the visible intersection,
+/// and normalized clips for point tests. All come from one clip walk.
 pub(crate) struct RenderedGeometry {
     pub bounds: Bounds,
     visible_region: SemanticClipRegion,
+    clips: Vec<GeometryClip>,
 }
 
 impl RenderedGeometry {
@@ -201,11 +202,14 @@ impl RenderedGeometry {
         Self {
             bounds,
             visible_region: SemanticClipRegion::from_polygon(polygon),
+            clips: Vec::new(),
         }
     }
 
     fn intersect(&mut self, clip: RenderedClip) -> bool {
-        clip.intersect(&mut self.visible_region);
+        let clip = clip.into_geometry_clip();
+        self.visible_region.intersect_region(&clip.region);
+        self.clips.push(clip);
         self.is_visible()
     }
 
@@ -221,7 +225,45 @@ impl RenderedGeometry {
     }
 
     pub(crate) fn contains_point(&self, point: Vec2D) -> bool {
-        self.visible_region.contains(point)
+        // Text selection uses its inclusive transformed AABB, as before the
+        // clip walk. Its empty rotated corners are not additional clips.
+        point.x >= self.bounds.min_x
+            && point.x <= self.bounds.max_x
+            && point.y >= self.bounds.min_y
+            && point.y <= self.bounds.max_y
+            && self.is_visible()
+            && self.clips.iter().all(|clip| clip.contains_point(point))
+    }
+}
+
+struct GeometryClip {
+    region: SemanticClipRegion,
+    frame: Option<[Vec2D; 4]>,
+}
+
+impl GeometryClip {
+    fn contains_point(&self, point: Vec2D) -> bool {
+        if let Some(corners) = self.frame {
+            // Solve in the frame's unit square so right and bottom stay
+            // exclusive through origins, rotations and hosting transforms.
+            let delta = |a: Vec2D, b: Vec2D| {
+                [
+                    f64::from(a.x) - f64::from(b.x),
+                    f64::from(a.y) - f64::from(b.y),
+                ]
+            };
+            let cross = |a: [f64; 2], b: [f64; 2]| a[0] * b[1] - a[1] * b[0];
+            let x = delta(corners[1], corners[0]);
+            let y = delta(corners[3], corners[0]);
+            let p = delta(point, corners[0]);
+            let determinant = cross(x, y);
+            if !(0.0..1.0).contains(&(cross(p, y) / determinant))
+                || !(0.0..1.0).contains(&(cross(x, p) / determinant))
+            {
+                return false;
+            }
+        }
+        self.region.contains(point)
     }
 }
 
@@ -230,6 +272,10 @@ impl RenderedGeometry {
 enum RenderedClip {
     Path(RawPath, nuxie_render_api::FillRule),
     Polygon([Vec2D; 4]),
+    Frame {
+        corners: [Vec2D; 4],
+        path: Option<(RawPath, nuxie_render_api::FillRule)>,
+    },
 }
 
 impl RenderedClip {
@@ -237,13 +283,30 @@ impl RenderedClip {
         match self {
             Self::Path(path, rule) => Self::Path(path.morph(map), rule),
             Self::Polygon(corners) => Self::Polygon(corners.map(&mut map)),
+            Self::Frame { corners, path } => Self::Frame {
+                corners: corners.map(&mut map),
+                path: path.map(|(path, rule)| (path.morph(map), rule)),
+            },
         }
     }
 
-    fn intersect(&self, region: &mut SemanticClipRegion) {
+    fn into_geometry_clip(self) -> GeometryClip {
         match self {
-            Self::Path(path, rule) => region.intersect_path(path, *rule),
-            Self::Polygon(corners) => region.intersect_polygon(corners),
+            Self::Path(path, rule) => GeometryClip {
+                region: SemanticClipRegion::from_path(&path, rule),
+                frame: None,
+            },
+            Self::Polygon(corners) => GeometryClip {
+                region: SemanticClipRegion::from_polygon(&corners),
+                frame: None,
+            },
+            Self::Frame { corners, path } => GeometryClip {
+                region: path.map_or_else(
+                    || SemanticClipRegion::from_polygon(&corners),
+                    |(path, rule)| SemanticClipRegion::from_path(&path, rule),
+                ),
+                frame: Some(corners),
+            },
         }
     }
 }
@@ -346,7 +409,7 @@ fn host_spaces(spaces: &[(CoreHandle, Mat2D)]) -> Vec<(CoreHandle, Mat2D)> {
 }
 
 /// A full host geometry polygon and its visible region in root space.
-/// Its own content clip is left out; an artboard's frame stays.
+/// Its own content clip is left out; CSS artboard frame clips stay.
 pub(crate) fn rendered_geometry_projection(
     component: &CoreHandle,
     polygon: [Vec2D; 4],
@@ -359,7 +422,8 @@ pub(crate) fn rendered_geometry_projection(
 
 /// Yield each rendered clip once, crossing hosts into their parent
 /// artboards. Own paint precedes the owner's content clip, but stays
-/// inside an artboard's frame and any clipping shapes that cover it.
+/// inside CSS artboard frames and any clipping shapes that cover it.
+/// Translated artboard draw frames do not clip native picking.
 fn walk_rendered_clips(
     component: &CoreHandle,
     own_clip: bool,
@@ -389,7 +453,7 @@ fn walk_rendered_clips(
                 .component_parent_handle()
                 .or_else(|| object.as_artboard().and_then(Artboard::host));
             let fallback = if let Some(artboard) = object.as_artboard() {
-                artboard.clip().then(|| {
+                (artboard.base.base.is_css_mode() && artboard.clip()).then(|| {
                     let bounds = Aabb::from_ltwh(
                         -artboard.layout_width() * artboard.origin_x(),
                         -artboard.layout_height() * artboard.origin_y(),
@@ -422,7 +486,15 @@ fn walk_rendered_clips(
                     layout.clip_world_path()
                 };
                 let path = path.map(|path| (path.raw_path().clone(), path.fill_rule()));
-                (corners, artboard, path)
+                let clip = if is_artboard {
+                    RenderedClip::Frame { corners, path }
+                } else {
+                    path.map_or_else(
+                        || RenderedClip::Polygon(corners),
+                        |(path, rule)| RenderedClip::Path(path, rule),
+                    )
+                };
+                (artboard, clip)
             });
             (clip, parent, css_artboard_clip)
         }) else {
@@ -473,11 +545,7 @@ fn walk_rendered_clips(
                 return false;
             }
         }
-        if let Some((corners, artboard, path)) = clip {
-            let clip = path.map_or_else(
-                || RenderedClip::Polygon(corners),
-                |(path, rule)| RenderedClip::Path(path, rule),
-            );
+        if let Some((artboard, clip)) = clip {
             if !visit(artboard.as_ref(), clip) {
                 return false;
             }

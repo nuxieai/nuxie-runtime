@@ -952,9 +952,8 @@ fn nested_layout_geometry_preserves_the_child_occurrence_path() {
     assert_eq!(occurrences.len(), 1);
     assert!(occurrences[0].is_current());
 
-    // The child artboard clips to the zero height its styleless layout
-    // solves it to, so only the retained catalogue holds its shape
-    // (nested_layout_geometry_follows_the_child_artboards_frame_clip).
+    // Keep the exact mounted path even when the translated child overflows
+    // the zero height its styleless layout solves it to.
     let geometry = artboard.retained_geometry_with_bounds();
     let child = geometry
         .iter()
@@ -974,7 +973,7 @@ fn nested_layout_geometry_preserves_the_child_occurrence_path() {
 }
 
 #[test]
-fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
+fn translated_nested_layout_geometry_ignores_artboard_draw_frame_clips() {
     let bytes = nested_artboard_layout_fixture();
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
@@ -1012,21 +1011,23 @@ fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
     let near = |got: Option<[f32; 4]>, expected: [f32; 4]| {
         got.is_some_and(|got| got.iter().zip(expected).all(|(a, b)| (a - b).abs() < 0.01))
     };
-    // The styleless nested layout solves its child artboard to 100 by 0, and
-    // that artboard clips, so drawing puts its content in a zero-height clip.
-    // Visible geometry and hits follow drawing; the retained catalogue keeps it.
+    // The translated native picker does not apply the child's zero-height
+    // draw clip or the outer artboard's frame clip.
     assert!(near(
         nested_child(&artboard.retained_geometry_with_bounds()),
         [85.0, 3.0, 105.0, 13.0]
     ));
-    assert_eq!(nested_child(&artboard.visible_geometry_with_bounds()), None);
-    for x in [90.0, 97.0] {
+    assert!(near(
+        nested_child(&artboard.visible_geometry_with_bounds()),
+        [85.0, 3.0, 105.0, 13.0]
+    ));
+    for x in [90.0, 97.0, 102.0] {
         assert!(
-            nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(x, 8.0))).is_none()
+            nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(x, 8.0))).is_some()
         );
     }
 
-    // Unclipped, the child shows within the root's frame, and hits agree.
+    // Changing a translated draw clip does not change its pick geometry.
     assert!(CoreRegistry::set_bool_handle(
         &child.core_handle(),
         i32::from(schema_property_key("LayoutComponent", "clip")),
@@ -1037,17 +1038,12 @@ fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
         nested_child(&artboard.visible_geometry_with_bounds()),
         [85.0, 3.0, 105.0, 13.0]
     ));
-    for x in [90.0, 97.0] {
+    for x in [90.0, 97.0, 102.0] {
         assert!(
             nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(x, 8.0))).is_some()
         );
     }
-    assert!(
-        nested_child(&artboard.hit_test_segments_with_bounds(Vec2D::new(102.0, 8.0))).is_none()
-    );
-
-    // Queried from the hosted artboard itself, its host's frame still clips
-    // it, mapped into the child's own space.
+    // A direct hosted query also retains points beyond the translated host.
     let mut hosted = ArtboardInstance::from_native_handle(file, 0, child);
     let hosted_shape = hosted
         .visible_geometry_with_bounds()
@@ -1065,13 +1061,126 @@ fn nested_layout_geometry_follows_the_child_artboards_frame_clip() {
         near(hosted_shape, [-10.0, -5.0, 10.0, 5.0]),
         "{hosted_shape:?}"
     );
-    for (x, expected) in [(0.0, true), (7.0, false)] {
+    for (x, expected) in [(0.0, true), (7.0, true)] {
         assert_eq!(
             hosted
                 .hit_test_segments_with_bounds(Vec2D::new(x, 0.0))
                 .iter()
                 .any(|hit| hit.path.len() == 1 && hit.path[0].local_id == 1),
             expected
+        );
+    }
+}
+
+#[test]
+fn translated_text_hits_use_inclusive_transformed_aabb_across_root_and_hosted_frames() {
+    for nested in [false, true] {
+        let mut bytes = b"RIVE".to_vec();
+        for value in [7, 0, 9_659, 0] {
+            push_var_uint(&mut bytes, value);
+        }
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "FontAsset", |bytes| {
+            push_uint(bytes, "FontAsset", "assetId", 1);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "Artboard", "width", 120.0);
+            push_f32(bytes, "Artboard", "height", 40.0);
+        });
+        push_object(&mut bytes, "Text", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(
+                bytes,
+                "TransformComponent",
+                "rotation",
+                std::f32::consts::FRAC_PI_4,
+            );
+            push_f32(bytes, "TransformComponent", "scaleX", 1.5);
+            push_f32(bytes, "TransformComponent", "scaleY", 0.5);
+            push_f32(bytes, "Text", "width", 120.0);
+            push_f32(bytes, "Text", "height", 30.0);
+            push_uint(bytes, "Text", "sizingValue", 2);
+            push_uint(bytes, "Text", "wrapValue", 1);
+        });
+        push_object(&mut bytes, "TextStylePaint", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_uint(bytes, "TextStyle", "fontAssetId", 0);
+            push_f32(bytes, "TextStyle", "fontSize", 18.0);
+            push_f32(bytes, "TextStyle", "lineHeight", 22.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Node", "parentId", 2);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_color(bytes, "SolidColor", "colorValue", 0xffab_cdef);
+        });
+        push_object(&mut bytes, "TextValueRun", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_uint(bytes, "TextValueRun", "styleId", 2);
+            push_string(bytes, "TextValueRun", "text", "a");
+        });
+        if nested {
+            push_object(&mut bytes, "Artboard", |bytes| {
+                push_f32(bytes, "Artboard", "width", 120.0);
+                push_f32(bytes, "Artboard", "height", 40.0);
+            });
+            push_object(&mut bytes, "NestedArtboard", |bytes| {
+                push_uint(bytes, "Node", "parentId", 0);
+                push_uint(bytes, "NestedArtboard", "artboardId", 0);
+            });
+        }
+        let mut factory = PersistentFactory::new(RecordingFactory::default());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let file = File::import(
+            &bytes,
+            retained,
+            None,
+            Some(FileAssetLoaderRef::new(Box::new(
+                ComponentListHostTransformAssetLoader,
+            ))),
+            None,
+        )
+        .unwrap();
+        let mut artboard = ArtboardInstance::from_native(file, usize::from(nested)).unwrap();
+        artboard.advance(0.0).unwrap();
+        let text = artboard
+            .retained_geometry_with_bounds()
+            .into_iter()
+            .find(|hit| {
+                hit.path.len() == if nested { 2 } else { 1 }
+                    && hit.path.last().unwrap().local_id == 1
+            })
+            .unwrap();
+        for point in [
+            Vec2D::new(120.0, 5.0),
+            Vec2D::new(120.01, 5.0),
+            Vec2D::new(100.0, 5.0),
+            Vec2D::new(text.bounds.max_x, 5.0),
+        ] {
+            assert!(
+                text.bounds.contains(point),
+                "fixture's transformed Text AABB must include {point:?}"
+            );
+            assert!(
+                artboard
+                    .hit_test_segments_with_bounds(point)
+                    .iter()
+                    .any(|hit| hit.path == text.path),
+                "translated Text must accept {point:?}, nested={nested}"
+            );
+        }
+        assert!(
+            artboard
+                .hit_test_segments_with_bounds(Vec2D::new(text.bounds.max_x + 0.01, 5.0))
+                .iter()
+                .all(|hit| hit.path != text.path)
+        );
+        assert!(
+            artboard
+                .visible_geometry_with_bounds()
+                .iter()
+                .any(|hit| hit.path == text.path && hit.bounds == text.bounds)
         );
     }
 }
@@ -1131,11 +1240,18 @@ fn component_geometry_keeps_full_bounds_while_frame_clips_visibility_and_hits() 
     push_object(&mut bytes, "Artboard", |bytes| {
         push_f32(bytes, "Artboard", "width", 402.0);
         push_f32(bytes, "Artboard", "height", 100.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 3);
     });
     push_object(&mut bytes, "NestedArtboard", |bytes| {
         push_uint(bytes, "Node", "parentId", 0);
         push_uint(bytes, "NestedArtboard", "artboardId", 0);
         push_f32(bytes, "Node", "x", 400.0);
+    });
+    push_object(&mut bytes, "LayoutCssStyle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
     });
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
@@ -1461,15 +1577,22 @@ fn directly_queried_list_artboard_geometry_follows_its_hosts_clip() {
             file.artboard_count(),
         )
     });
-    // Keep the list's authored layout and scaling, with an outer frame
+    // Keep the list's authored layout and scaling, with an outer CSS frame
     // crossing its third item at x=370.
     push_object(&mut bytes, "Artboard", |bytes| {
         push_f32(bytes, "Artboard", "width", 370.0);
         push_f32(bytes, "Artboard", "height", 1000.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 3);
     });
     push_object(&mut bytes, "NestedArtboard", |bytes| {
         push_uint(bytes, "Node", "parentId", 0);
         push_uint(bytes, "NestedArtboard", "artboardId", source_index as u64);
+    });
+    push_object(&mut bytes, "LayoutCssStyle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
     });
     let file = import(&bytes);
     let mut wrapper = ArtboardInstance::from_native(file.clone(), wrapper_index)

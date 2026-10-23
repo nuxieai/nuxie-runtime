@@ -1259,7 +1259,7 @@ fn collect_geometry(
             continue;
         };
         let root_transform = drawing_to_root * world;
-        // The visible region takes drawing's frame, host and shape clips.
+        // The visible region takes CSS frames and the host and shape clips.
         // Outlines and hit observations keep the full transformed box.
         let Some(bounds) = geometry_bounds(
             &handle,

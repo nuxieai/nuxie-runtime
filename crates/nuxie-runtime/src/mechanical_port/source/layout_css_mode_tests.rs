@@ -3200,6 +3200,37 @@ fn css_rounded_side_border_reaches_into_its_corners() {
     assert_eq!(f.css_paints("Edge")[0].1, Some(aabb(0.0, 0.0, 100.0, 40.0)));
 }
 
+#[test]
+fn css_clip_artboard_frame_is_half_open_for_host_geometry() {
+    let f = try_scene_spec(
+        (120.0, 40.0),
+        ArtboardSpec {
+            css: Some(vec![]),
+            ..ArtboardSpec::default()
+        },
+        Some(painted("Card", 0xff11_2233, sized_to(140.0, 60.0))),
+    )
+    .unwrap();
+    let mut host = f.host();
+    for (point, expected) in [
+        ((119.99, 5.0), true),
+        ((120.0, 5.0), false),
+        ((120.01, 5.0), false),
+        ((5.0, 39.99), true),
+        ((5.0, 40.0), false),
+        ((0.0, 5.0), true),
+        ((5.0, 0.0), true),
+    ] {
+        let hits =
+            host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.0, point.1));
+        assert_eq!(
+            f.geometry_names(&hits).contains(&"Card".to_owned()),
+            expected,
+            "{point:?}"
+        );
+    }
+}
+
 /// Hit testing through a CSS box's clip uses its padding box and inner
 /// radii, as its children are drawn; the box itself keeps its border box.
 #[test]

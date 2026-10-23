@@ -56,12 +56,16 @@ impl SemanticClipRegion {
             .collect();
     }
     pub fn intersect_path(&mut self, path: &RawPath, rule: nuxie_render_api::FillRule) {
+        self.intersect_region(&Self::from_path(path, rule));
+    }
+    pub fn from_path(path: &RawPath, rule: nuxie_render_api::FillRule) -> Self {
         let contours = match flatten_path(path) {
             Ok(contours) => contours,
             Err(error) => {
-                self.error = Some(error);
-                self.contours.clear();
-                return;
+                return Self {
+                    contours: Vec::new(),
+                    error: Some(error),
+                };
             }
         };
         let rule = match rule {
@@ -70,11 +74,24 @@ impl SemanticClipRegion {
         };
         // Normalize each clip with its own fill rule. The intersection then uses
         // nonzero contours for both inputs, preserving holes across mixed rules.
-        let clip =
-            FloatOverlay::<Point, i64>::from_subj(&contours).overlay(OverlayRule::Subject, rule);
+        Self {
+            contours: FloatOverlay::<Point, i64>::from_subj(&contours)
+                .overlay(OverlayRule::Subject, rule)
+                .into_iter()
+                .flatten()
+                .collect(),
+            error: None,
+        }
+    }
+    pub fn intersect_region(&mut self, clip: &Self) {
+        if let Some(error) = clip.error {
+            self.error = Some(error);
+            self.contours.clear();
+            return;
+        }
         self.contours = self
             .contours
-            .overlay_as::<i64>(&clip, OverlayRule::Intersect, FillRule::NonZero)
+            .overlay_as::<i64>(&clip.contours, OverlayRule::Intersect, FillRule::NonZero)
             .into_iter()
             .flatten()
             .collect();

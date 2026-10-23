@@ -18,6 +18,96 @@ use nuxie_runtime::source::{
 };
 use nuxie_runtime::{Artboard, File, RuntimeFactoryHandle};
 
+#[path = "support/riv_bytes.rs"]
+mod riv_bytes;
+
+#[test]
+fn native_area_hits_do_not_clip_root_or_nested_artboard_frames() {
+    use nuxie_runtime::source::{
+        generated::{
+            artboard_base::ArtboardBase,
+            backboard_base::BackboardBase,
+            nested_artboard_base::NestedArtboardBase,
+            node_base::NodeBase,
+            shapes::{
+                paint::{fill_base::FillBase, solid_color_base::SolidColorBase},
+                parametric_path_base::ParametricPathBase,
+                rectangle_base::RectangleBase,
+                shape_base::ShapeBase,
+            },
+        },
+        hit_info::HitInfo,
+    };
+    for nested in [false, true] {
+        let mut riv = riv_bytes::RivBytes::default();
+        riv.object(BackboardBase::TYPE_KEY);
+        riv.end();
+        let artboard = |riv: &mut riv_bytes::RivBytes| {
+            riv.object(ArtboardBase::TYPE_KEY);
+            riv.prop_float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 120.0);
+            riv.prop_float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0);
+            riv.end();
+        };
+        artboard(&mut riv);
+        riv.object(ShapeBase::TYPE_KEY);
+        riv.prop_uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0);
+        riv.prop_float(NodeBase::X_PROPERTY_KEY, 125.0);
+        riv.prop_float(NodeBase::Y_PROPERTY_KEY, 5.0);
+        riv.end();
+        riv.object(RectangleBase::TYPE_KEY);
+        riv.prop_uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1);
+        riv.prop_float(ParametricPathBase::WIDTH_PROPERTY_KEY, 20.0);
+        riv.prop_float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0);
+        riv.end();
+        riv.object(FillBase::TYPE_KEY);
+        riv.prop_uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1);
+        riv.end();
+        riv.object(SolidColorBase::TYPE_KEY);
+        riv.prop_uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3);
+        riv.end();
+        if nested {
+            artboard(&mut riv);
+            riv.object(NestedArtboardBase::TYPE_KEY);
+            riv.prop_uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0);
+            riv.prop_uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 0);
+            riv.end();
+        }
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &riv.bytes(),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let source = file
+            .with_file(|file| file.artboard_at_source(usize::from(nested)))
+            .unwrap();
+        let instance = Artboard::instance_from_handle(&source).unwrap();
+        instance.advance_default(0.0);
+        assert!(instance.with_artboard(|artboard| artboard.clip()));
+        // The native area picker does not add either artboard's draw clip.
+        for (x, expected) in [(119, true), (120, true), (121, true), (140, false)] {
+            let mut info = HitInfo {
+                area: IAabb {
+                    left: x,
+                    top: 4,
+                    right: x + 1,
+                    bottom: 6,
+                },
+                mounts: Vec::new(),
+            };
+            let hit = instance
+                .with_artboard_mut(|artboard| artboard.hit_test(&mut info, &Mat2D::identity()));
+            assert_eq!(hit.is_some(), expected, "nested={nested}, x={x}");
+            if expected {
+                assert_eq!(info.mounts.len(), usize::from(nested));
+            }
+        }
+    }
+}
+
 // Supplemental branch coverage for 6a8cf4a3's scripted hit component. These
 // direct owners do not substitute for nested scene/state-machine coverage.
 // Since upstream e54bc92a a hit, bounded or not, lands only on a drawable

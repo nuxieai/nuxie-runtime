@@ -1853,6 +1853,14 @@ impl ArtboardComponentList {
         Some(host_transform * artboard_transform)
     }
 
+    pub(crate) fn draw_transform_for_artboard(
+        &self,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+    ) -> Option<Mat2D> {
+        let instance = artboard.upgrade()?;
+        self.draw_transform_for_index(self.index_of_artboard_instance(&instance))
+    }
+
     pub(crate) fn update_after_transform_occurrence(owner: &CoreHandle, value: ComponentDirt) {
         if owner
             .with_downcast::<Self, _>(Self::artboard_count)

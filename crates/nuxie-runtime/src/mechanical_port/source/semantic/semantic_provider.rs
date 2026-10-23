@@ -1,6 +1,7 @@
 pub use super::semantic_clip::SemanticGeometryError;
 use crate::mechanical_port::source::{
     artboard::Artboard,
+    artboard_component_list::ArtboardComponentList,
     core::CoreHandle,
     generated::{container_component_base::ContainerComponentBase, node_base::NodeBase},
     math::{aabb::Aabb, mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
@@ -281,9 +282,14 @@ fn host_spaces(spaces: &[(CoreHandle, Mat2D)]) -> Vec<(CoreHandle, Mat2D)> {
         };
         let Some((parent, host_world)) = host
             .with(|object| {
-                let world = object
-                    .as_artboard_host()?
-                    .world_transform_for_artboard(weak);
+                let world =
+                    if let Some(list) = object.as_any().downcast_ref::<ArtboardComponentList>() {
+                        list.draw_transform_for_artboard(weak)?
+                    } else {
+                        object
+                            .as_artboard_host()?
+                            .world_transform_for_artboard(weak)
+                    };
                 Some((object.component_artboard_handle()?, world))
             })
             .flatten()

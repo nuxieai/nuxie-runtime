@@ -1117,6 +1117,152 @@ fn component_list_geometry_uses_the_same_transform_as_exact_draw() {
 }
 
 #[test]
+fn directly_queried_list_artboard_geometry_follows_its_hosts_clip() {
+    use nuxie_runtime::source::math::{mat2d::Mat2D, vec2d::Vec2D as NativeVec2D};
+
+    let mut bytes = decode_base64_fixture(COMPONENT_LIST_HOST_TRANSFORM_FIXTURE);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let import = |bytes: &[u8]| {
+        File::import(
+            bytes,
+            retained.clone(),
+            None,
+            Some(FileAssetLoaderRef::new(Box::new(
+                ComponentListHostTransformAssetLoader,
+            ))),
+            None,
+        )
+        .expect("fixture imports")
+    };
+    let original = import(&bytes);
+    let (source_index, wrapper_index) = original.with_file(|file| {
+        (
+            (0..file.artboard_count())
+                .find(|&index| file.artboard_name_at(index) == "Projection corpus")
+                .expect("publisher-named source artboard"),
+            file.artboard_count(),
+        )
+    });
+    // Keep the list's authored layout and scaling, with an outer frame
+    // crossing its third item at x=370.
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 370.0);
+        push_f32(bytes, "Artboard", "height", 1000.0);
+    });
+    push_object(&mut bytes, "NestedArtboard", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_uint(bytes, "NestedArtboard", "artboardId", source_index as u64);
+    });
+    let file = import(&bytes);
+    let mut wrapper = ArtboardInstance::from_native(file.clone(), wrapper_index)
+        .expect("clipping wrapper artboard");
+    let nested = wrapper
+        .native_handle()
+        .with_artboard(|artboard| artboard.base.resolve_handle(1))
+        .and_then(|host| {
+            host.with(|host| host.nested_artboard_instance_handle())
+                .flatten()
+        })
+        .expect("hosted projection corpus");
+    let mut artboard = ArtboardInstance::from_native_handle(file.clone(), source_index, nested);
+    let source = file
+        .with_file(|file| file.artboard_at_source(source_index))
+        .expect("source artboard");
+    let view_model = file
+        .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+        .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
+        .expect("default view model");
+    artboard.bind_owned_view_model_handle(view_model.clone());
+    let mut machine = artboard
+        .state_machine_instance_named("Generated Nuxie Interaction")
+        .expect("generated interaction state machine");
+    machine.bind_owned_view_model_handle(view_model);
+    wrapper.advance(0.0).expect("list defaults materialize");
+    wrapper.advance(0.0).expect("list occurrences settle");
+    artboard
+        .advance_state_machine_instance(&mut machine, 0.0)
+        .expect("generated interaction state machine settles");
+
+    let root_hit = artboard
+        .hit_test_segments_with_bounds(Vec2D::new(369.0, 114.0))
+        .into_iter()
+        .find(|hit| {
+            hit.path.len() == 2
+                && hit
+                    .occurrence
+                    .first()
+                    .is_some_and(|item| item.item_index == 2)
+        })
+        .expect("third list item paints just inside the wrapper clip");
+    let shape_id = root_hit.path[1].local_id;
+    assert!((root_hit.bounds.max_x - 370.0).abs() < 0.01);
+    assert!(
+        artboard
+            .hit_test_segments_with_bounds(Vec2D::new(371.0, 114.0))
+            .iter()
+            .all(|hit| hit.path != root_hit.path || hit.occurrence != root_hit.occurrence)
+    );
+    let host = artboard
+        .object_handle(root_hit.occurrence[0].host_local_id)
+        .expect("component list host");
+    let (child, draw, world) = host
+        .with_downcast::<ArtboardComponentList, _>(|list| {
+            let child = list.artboard_instance(2).expect("third list artboard");
+            let draw = list
+                .draw_transform_for_index(2)
+                .expect("list draw transform");
+            let world = list.world_transform_for_artboard(&child);
+            (child, draw, world)
+        })
+        .expect("live component list");
+    assert_ne!(draw, world, "fixture must exercise occurrence scaling");
+    let mut inverse = Mat2D::identity();
+    assert!(draw.invert(&mut inverse));
+    let local_point = |x, y| {
+        let point = inverse * NativeVec2D::new(x, y);
+        Vec2D::new(point.x, point.y)
+    };
+    let mut hosted = ArtboardInstance::from_native_handle(file, 0, child);
+    let is_shape = |hit: &nuxie_runtime::RuntimeGeometryHit| {
+        hit.path.len() == 1 && hit.path[0].local_id == shape_id
+    };
+    let visible = hosted
+        .visible_geometry_with_bounds()
+        .into_iter()
+        .find(is_shape)
+        .expect("direct query retains the visible part of the list item");
+    let expected_min = local_point(root_hit.bounds.min_x, root_hit.bounds.min_y);
+    let expected_max = local_point(root_hit.bounds.max_x, root_hit.bounds.max_y);
+    for (got, expected) in [
+        (visible.bounds.min_x, expected_min.x),
+        (visible.bounds.min_y, expected_min.y),
+        (visible.bounds.max_x, expected_max.x),
+        (visible.bounds.max_y, expected_max.y),
+    ] {
+        assert!((got - expected).abs() < 0.01, "{got} != {expected}");
+    }
+    let clipped = local_point(371.0, 114.0);
+    assert!(
+        hosted
+            .retained_geometry_with_bounds()
+            .iter()
+            .any(|hit| is_shape(hit) && hit.bounds.contains(clipped)),
+        "the rejected point must lie on retained geometry"
+    );
+    for (point, expected) in [(local_point(369.0, 114.0), true), (clipped, false)] {
+        assert_eq!(
+            hosted
+                .hit_test_segments_with_bounds(point)
+                .iter()
+                .any(is_shape),
+            expected,
+            "direct list-artboard hit at {point:?}"
+        );
+    }
+}
+
+#[test]
 fn authored_source_global_ids_survive_runtime_synthetic_core_owners() {
     let bytes = decode_base64_fixture(PROJECTION_CORPUS_AUTHORED_RUNTIME_FIXTURE);
     let mut factory = PersistentFactory::new(RecordingFactory::default());

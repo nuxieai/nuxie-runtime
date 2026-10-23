@@ -3790,8 +3790,7 @@ impl Artboard {
             let mapped = host.with(|object| {
                 let host = object.as_artboard_host()?;
                 let transform = if let Some(list) = object.as_any().downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
-                    let instance = runtime.upgrade()?;
-                    list.draw_transform_for_index(list.index_of_artboard_instance(&instance))?
+                    list.draw_transform_for_artboard(runtime)?
                 } else {
                     host.world_transform_for_artboard(runtime)
                 };

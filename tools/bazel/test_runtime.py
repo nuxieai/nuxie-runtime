@@ -91,6 +91,20 @@ class RuntimeBuildTest(unittest.TestCase):
         options = runtime.command_options(["run","-p","pixel-compare","--bin","capture-riv-corpus"])
         self.assertEqual(set(runtime.run_io(options,[])["inputs"]),{str(runner),str(scripted)})
 
+    def test_platform_qualification_and_null_outputs_preserve_their_semantics(self):
+        options = runtime.command_options(["run","-p","video-qualification"])
+        with patch.dict(os.environ,{"LLVM_PROFILE_FILE":os.devnull},clear=True):
+            value = runtime.run_io(options,["--output",os.devnull])
+        self.assertEqual(value["platform"],"macos")
+        self.assertEqual(value["outputs"],[])
+
+    def test_llvm_temporary_directory_expansion_matches_the_declared_destination(self):
+        options = runtime.command_options(["run","-p","rust-golden-runner"])
+        with patch.dict(os.environ,{"LLVM_PROFILE_FILE":"%t/run-%p.profraw","TMPDIR":str(self.root)},clear=True):
+            flags = runtime.run_environment()
+            output = runtime.run_io(options,[])["outputs"][0]
+        self.assertIn("--action_env=LLVM_PROFILE_FILE=" + output["path"], flags)
+
     def test_run_io_distinguishes_converter_inputs_and_profile_patterns(self):
         artifact = self.root / "frame.rgba"; artifact.write_bytes(b"frame")
         options = runtime.command_options(["run","-p","pixel-compare","--bin","riveabl-to-png"])
@@ -111,7 +125,7 @@ class RuntimeBuildTest(unittest.TestCase):
     def test_pool_capability_checks_the_actual_startup_arguments(self):
         router = self.root / ".local/share/nuxie-homelab/rust/route.py"
         router.parent.mkdir(parents=True)
-        router.write_text("runtime_run_supported=3\ndef runtime_run_compatible(args): return '--custom' not in args\n")
+        router.write_text("runtime_run_supported=4\ndef runtime_run_compatible(args): return '--custom' not in args\n")
         settings = self.root / ".config/nuxie/homelab-cluster.json"
         settings.parent.mkdir(parents=True); settings.write_text('{}')
         with patch.object(Path, "home", return_value=self.root), patch.dict(os.environ, {}, clear=True):

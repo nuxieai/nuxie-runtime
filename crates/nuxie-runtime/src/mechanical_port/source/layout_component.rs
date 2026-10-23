@@ -3538,9 +3538,9 @@ impl LayoutComponent {
             .as_ref()
             .and_then(|record| {
                 record::with_values(record, |css| {
-                    [keys::WIDTH_KIND, keys::HEIGHT_KIND].into_iter().all(|key| {
-                        matches!(css.choice(key), 1 | 7) && css.number(key + 2) == 100.0
-                    })
+                    [keys::WIDTH_KIND, keys::HEIGHT_KIND]
+                        .into_iter()
+                        .all(|key| matches!(css.choice(key), 1 | 7) && css.number(key + 2) == 100.0)
                 })
             })
             .unwrap_or(false);

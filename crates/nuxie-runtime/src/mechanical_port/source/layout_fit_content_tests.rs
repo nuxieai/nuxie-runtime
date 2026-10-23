@@ -1856,10 +1856,11 @@ fn css_container_around_a_picture_box_is_not_replaced() {
     let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
     attach(&arena, &container, &record);
     CssTextLeaf::write(&record, &[(61021, 1)], &[(61022, 402.0)]);
-    container.with_downcast_mut::<LayoutComponent, _>(|container| {
-        container.add_layout_style_applier(record);
-    })
-    .unwrap();
+    container
+        .with_downcast_mut::<LayoutComponent, _>(|container| {
+            container.add_layout_style_applier(record);
+        })
+        .unwrap();
     attach(&arena, &container, &root);
     LayoutComponent::sync_style_occurrence(&container);
     LayoutComponent::sync_style_occurrence(&root);

@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `868da86cad936d50b2a760e63e0808c77b687df2`
+- LAST_SYNCED_SHA: `80d76ee6b940f92cbced9d49b01fc3d6afe59fd6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `3ec7ef079f569a5f378f964008794ac30e348a56` (refreshed 2026-10-23).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  46 upstream commits remain after this checkpoint at the fetched target.
-  All 262 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (284 after `5892bb05`); this
+  45 upstream commits remain after this checkpoint at the fetched target.
+  All 263 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (285 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `80d76ee6`: C++ kit-build-only change adds `_nx_platform` to HarfBuzz's
+  warning-diagnostic filter. Shipped Rust uses harfrust; no runtime translation
+  is needed. Pinned native oracles inherit upstream's Premake file. `.rive_head`
+  is private provenance only. Active pins advance without relabeling historical
+  results. Silver manifest checks pass (30); no runtime/hardware rerun for this
+  build-only change.
 - Validation at `868da86c`, integrated atop downstream `50bf96810b`:
   ported per-layer view-model pending-change windows, pending-reader classification,
   layer-aware trigger comparisons and frozen-layer searched marks. Independent

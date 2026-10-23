@@ -93,18 +93,42 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `0026fac6b818e7efbca89d1d92d5f50eef8f3da8`
+- LAST_SYNCED_SHA: `8920a6b03e202086408f596fc4a317df07763440`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `3ec7ef079f569a5f378f964008794ac30e348a56` (refreshed 2026-10-23).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  44 upstream commits remain after this checkpoint at the fetched target.
-  All 264 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (286 after `5892bb05`); this
+  43 upstream commits remain after this checkpoint at the fetched target.
+  All 265 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (287 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `8920a6b0`: per-entry shader binding metadata, narrowed automatic layouts,
+  actual-layout slot validation and retained draw binding validation translated
+  through shared ORE, deferred recording/replay, Luau and live renderer adapters.
+  Independent source and Rust-integration reviews passed, including correction
+  rereviews. All eleven upstream entry-layout tests pass. Pool validation:
+  renderer 261 passed/5 ignored; runtime 806/2; scripting with authored Metal
+  359/1; tools-enabled ORE 125/0; recording 9/0; render API 39/0. All 51
+  provenance/manifest/pipeline metadata checks pass. Native Metal and both
+  wasm32-unknown-unknown browser configurations compile on builder-mac.
+  The Linux WebGPU attempt failed before renderer compilation because a
+  rules_rust CopyFile action had no available remote execution strategy; no
+  Linux pass is claimed. Browser checks used the unchanged pool client's
+  platform constraint with the same Wasm target and panic flags, not local
+  compilation or a changed execution policy. Initial test failures were Rust
+  fixture setup/projection errors, corrected without weakening upstream assertions.
+  Browser pixels, Vulkan/device execution and Golden/Silver execution were not
+  rerun. Some earlier failed/completed jobs reported pending scratch cleanup;
+  successful browser and native Metal jobs report verified cleanup.
+  RSTB section 2 now carries upstream entry metadata; private authenticated
+  Metal reflection moves to section 128, while Metal target 2 is unchanged.
+  The authorized editor/compiler coordination and artifact recompilation are
+  tracked in [UNIV-5495](https://universe.basis.dev/issue/UNIV-5495).
+  Its compiler suite passes 135 tests; this does not claim private upstream
+  compiler code was imported. Guest Wasm bindings remain excluded under UNIV-3728.
 - `0026fac6`: outside-primary-press text-input blur, retained focus identity,
   root-space affine mapping and FocusData forwarding translated. Existing CSS
   dispatch remains intact. Independent source and Rust-integration reviews passed.
@@ -1368,6 +1392,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `8920a6b03e202086408f596fc4a317df07763440` | Translate public per-entry binding wire metadata, shader/module retention and physical-name mapping, selected-entry layout derivation, actual native-slot collision checks, draw-group validation and 136-byte deferred shader descriptors. Port all eleven entry-layout tests and changed recording/layout/asset cases. Update Luau and live Metal/WebGPU/WebGL2/Vulkan adapter owners; reserve section 2 for upstream metadata and move private Metal reflection to 128 with coordinated editor compilation. Guest Wasm IDL/VM/web proxy changes are excluded; private `.rive_head` compiler implementation is not claimed. | [UNIV-5495](https://universe.basis.dev/issue/UNIV-5495), [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5551696a826ff546775fffe46ca78824b1f1dc51` | Translate measurement/shape keys with exact bit packing, wrapping arithmetic, initial inequality and font identity; avoid redundant post-shape layout dirt while preserving paragraph-spacing/origin invalidation. Retain variable fonts only for identical base identity and ordered options/coordinates. Preserve stable coordinate-map iteration across Rust styling passes without sorting. Port all five text regressions and the changed component-list assertion; pin the new variation fixture and consume the updated rewards Silver recording. CSS/Taffy layout semantics remain unchanged; private .rive_head contents and reported upstream benchmark speedups are not claimed. | — |
 | `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` | Translate AngularGradient type 1089 with complete LinearGradient inheritance, registry, clone/import and paint dispatch. Add transform keys 1103–1107 with exact defaults and notification-only equality-guarded setters; assign the angular shader followed by left-associated translation × rotation × scale. Linear/radial rendering stays unchanged. Reconcile publicly evidenced schema metadata and preserve Nuxie Video hooks. Add labeled supplemental coverage; no public tests/assets or private editor/Dart/protocol/RML contents are claimed imported. | — |
 | `269ebcab3016e68340bb1427b720712213066eaf` | Use exact two-call SUCCESS-only instance extension/layer enumeration and stop before using failed counts; treat INCOMPLETE as failure. Device enumeration failures log and continue with an empty list, retaining headless creation and rejecting required missing swapchains. Preserve existing offscreen startup and optional Android presentation. Port all public loader cases through production helpers with scoped thread-local fake dispatch and initialized Rust counts. Stack poisoning/environment mutation are unnecessary at this Rust boundary. No new fallback or private .rive_head contents imported. | — |

@@ -1,0 +1,1427 @@
+<!doctype html><meta charset="utf-8"><title>CSS replaced picture sizing oracle</title>
+<style>body{margin:0} .parent{width:1000px} img{display:block}</style>
+<div id="fixtures"></div><pre id="results"></pre>
+<script id="cases" type="application/json">[
+  {
+    "name": "natural",
+    "css": "",
+    "enums": [],
+    "numbers": [],
+    "rule": "Natural dimensions, CSS 2.1 10.3.2",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "max-width",
+    "css": "max-width:100px",
+    "enums": [
+      [
+        61033,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61034,
+        100
+      ]
+    ],
+    "rule": "Ratio constraint table, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "max-height",
+    "css": "max-height:100px",
+    "enums": [
+      [
+        61036,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61037,
+        100
+      ]
+    ],
+    "rule": "Ratio constraint table, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "min-width",
+    "css": "min-width:600px",
+    "enums": [
+      [
+        61027,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61028,
+        600
+      ]
+    ],
+    "rule": "Ratio constraint table, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "min-height",
+    "css": "min-height:400px",
+    "enums": [
+      [
+        61030,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61031,
+        400
+      ]
+    ],
+    "rule": "Ratio constraint table, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "conflict",
+    "css": "min-width:600px;max-height:100px",
+    "enums": [
+      [
+        61027,
+        1
+      ],
+      [
+        61036,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61028,
+        600
+      ],
+      [
+        61037,
+        100
+      ]
+    ],
+    "rule": "Conflicting constraints break ratio, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "same-axis-conflict",
+    "css": "min-width:600px;max-width:100px",
+    "enums": [
+      [
+        61027,
+        1
+      ],
+      [
+        61033,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61028,
+        600
+      ],
+      [
+        61034,
+        100
+      ]
+    ],
+    "rule": "Minimum wins, CSS sizing 3",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored",
+    "css": "aspect-ratio:2;",
+    "enums": [],
+    "numbers": [
+      [
+        61020,
+        2
+      ]
+    ],
+    "rule": "Authored preferred ratio, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored-max-width",
+    "css": "aspect-ratio:2;max-width:100px",
+    "enums": [
+      [
+        61033,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61020,
+        2
+      ],
+      [
+        61034,
+        100
+      ]
+    ],
+    "rule": "Authored preferred ratio, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored-max-height",
+    "css": "aspect-ratio:2;max-height:100px",
+    "enums": [
+      [
+        61036,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61020,
+        2
+      ],
+      [
+        61037,
+        100
+      ]
+    ],
+    "rule": "Authored preferred ratio, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "natural-border-padding",
+    "css": "width:100px;box-sizing:border-box;padding:10px",
+    "enums": [
+      [
+        61021,
+        1
+      ],
+      [
+        61001,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61063,
+        10
+      ],
+      [
+        61065,
+        10
+      ],
+      [
+        61067,
+        10
+      ],
+      [
+        61069,
+        10
+      ]
+    ],
+    "rule": "Natural ratio uses content box; authored ratio uses box-sizing box, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored-border-padding",
+    "css": "width:100px;aspect-ratio:2;box-sizing:border-box;padding:10px",
+    "enums": [
+      [
+        61021,
+        1
+      ],
+      [
+        61001,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61020,
+        2
+      ],
+      [
+        61063,
+        10
+      ],
+      [
+        61065,
+        10
+      ],
+      [
+        61067,
+        10
+      ],
+      [
+        61069,
+        10
+      ]
+    ],
+    "rule": "Natural ratio uses content box; authored ratio uses box-sizing box, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored-border-padding-max",
+    "css": "max-width:100px;aspect-ratio:2;box-sizing:border-box;padding:10px",
+    "enums": [
+      [
+        61033,
+        1
+      ],
+      [
+        61001,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61034,
+        100
+      ],
+      [
+        61020,
+        2
+      ],
+      [
+        61063,
+        10
+      ],
+      [
+        61065,
+        10
+      ],
+      [
+        61067,
+        10
+      ],
+      [
+        61069,
+        10
+      ]
+    ],
+    "rule": "Natural ratio uses content box; authored ratio uses box-sizing box, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored-content-padding",
+    "css": "width:100px;aspect-ratio:2;padding:10px",
+    "enums": [
+      [
+        61021,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61020,
+        2
+      ],
+      [
+        61063,
+        10
+      ],
+      [
+        61065,
+        10
+      ],
+      [
+        61067,
+        10
+      ],
+      [
+        61069,
+        10
+      ]
+    ],
+    "rule": "Authored ratio in content box, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "min-content-cross",
+    "css": "width:min-content;height:540px",
+    "enums": [
+      [
+        61021,
+        2
+      ],
+      [
+        61024,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61025,
+        540
+      ]
+    ],
+    "rule": "Intrinsic sizes transfer definite cross size, CSS sizing 3",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "min",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "max-content-cross",
+    "css": "width:max-content;height:540px",
+    "enums": [
+      [
+        61021,
+        3
+      ],
+      [
+        61024,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61025,
+        540
+      ]
+    ],
+    "rule": "Intrinsic sizes transfer definite cross size, CSS sizing 3",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "ratio-only",
+    "css": "aspect-ratio:1",
+    "enums": [],
+    "numbers": [
+      [
+        61020,
+        1
+      ]
+    ],
+    "rule": "No intrinsic dimensions; empty image",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      0,
+      0
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": null
+  },
+  {
+    "name": "missing-natural-fixed",
+    "css": "width:100px;aspect-ratio:2",
+    "enums": [
+      [
+        61021,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61020,
+        2
+      ]
+    ],
+    "rule": "Preferred ratio without natural ratio, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      0,
+      0
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": null
+  },
+  {
+    "name": "row-shrink",
+    "css": "height:540px",
+    "enums": [
+      [
+        61024,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61025,
+        540
+      ]
+    ],
+    "rule": "Definite cross size transfers to intrinsic automatic minimum, Chrome 151/156",
+    "parent": "display:flex;width:600px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61022,
+        600
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      600,
+      540
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "column-shrink",
+    "css": "width:960px",
+    "enums": [
+      [
+        61021,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        960
+      ]
+    ],
+    "rule": "Definite cross size transfers to intrinsic automatic minimum, Chrome 151/156",
+    "parent": "display:flex;flex-direction:column;width:960px;height:337.5px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ],
+      [
+        61006,
+        2
+      ],
+      [
+        61024,
+        1
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61022,
+        960
+      ],
+      [
+        61025,
+        337.5
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      960,
+      337.5
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "column-stretch",
+    "css": "",
+    "enums": [],
+    "numbers": [],
+    "rule": "Cross-axis stretch transfers size, flexbox 9.4",
+    "parent": "display:flex;flex-direction:column;width:328px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ],
+      [
+        61006,
+        2
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61022,
+        328
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      328,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "row-stretch",
+    "css": "",
+    "enums": [],
+    "numbers": [],
+    "rule": "Cross-axis stretch transfers size, flexbox 9.4",
+    "parent": "display:flex;width:1000px;height:360px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ],
+      [
+        61024,
+        1
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61025,
+        360
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      360
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "column-start",
+    "css": "",
+    "enums": [],
+    "numbers": [],
+    "rule": "Flex-start preserves natural size, flexbox 9.4",
+    "parent": "display:flex;flex-direction:column;align-items:flex-start;width:328px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ],
+      [
+        61006,
+        2
+      ],
+      [
+        61013,
+        4
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61022,
+        328
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "definite-width-row",
+    "css": "width:100px",
+    "enums": [
+      [
+        61021,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ]
+    ],
+    "rule": "Definite main size transfers ratio, CSS sizing 4",
+    "parent": "display:flex;width:1000px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ]
+    ],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "declared-large",
+    "css": "",
+    "enums": [],
+    "numbers": [],
+    "rule": "CSS natural dimensions use original declared asset size",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      6000,
+      4000
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": [
+      4096,
+      2731
+    ],
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAF3AAAA+gAQAAAACNIHRoAAALdklEQVR4nO3BMQEAAADCoPVPbQsvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICXAdkDAAEdhVyvAAAAAElFTkSuQmCC"
+  },
+  {
+    "name": "declared-percent",
+    "css": "width:100%",
+    "enums": [
+      [
+        61021,
+        7
+      ]
+    ],
+    "numbers": [
+      [
+        61023,
+        100
+      ]
+    ],
+    "rule": "Definite percent width transfers declared natural ratio, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      6000,
+      4000
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": [
+      4096,
+      2731
+    ],
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAF3AAAA+gAQAAAACNIHRoAAALdklEQVR4nO3BMQEAAADCoPVPbQsvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICXAdkDAAEdhVyvAAAAAElFTkSuQmCC"
+  },
+  {
+    "name": "row-shrink-zero",
+    "css": "height:540px;min-width:0",
+    "enums": [
+      [
+        61024,
+        1
+      ],
+      [
+        61027,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61025,
+        540
+      ],
+      [
+        61028,
+        0
+      ]
+    ],
+    "rule": "Explicit zero minimum permits shrinking, flexbox 4.5",
+    "parent": "display:flex;width:600px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61022,
+        600
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      600,
+      540
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "column-shrink-zero",
+    "css": "width:960px;min-height:0",
+    "enums": [
+      [
+        61021,
+        1
+      ],
+      [
+        61030,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        960
+      ],
+      [
+        61031,
+        0
+      ]
+    ],
+    "rule": "Explicit zero minimum permits shrinking, flexbox 4.5",
+    "parent": "display:flex;flex-direction:column;width:960px;height:337.5px",
+    "parent_enums": [
+      [
+        61000,
+        1
+      ],
+      [
+        61006,
+        2
+      ],
+      [
+        61024,
+        1
+      ]
+    ],
+    "parent_numbers": [
+      [
+        61022,
+        960
+      ],
+      [
+        61025,
+        337.5
+      ]
+    ],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      960,
+      337.5
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "opposing-conflict",
+    "css": "max-width:100px;min-height:400px",
+    "enums": [
+      [
+        61033,
+        1
+      ],
+      [
+        61030,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61034,
+        100
+      ],
+      [
+        61031,
+        400
+      ]
+    ],
+    "rule": "Opposing constraints break ratio, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "both-max",
+    "css": "max-width:100px;max-height:30px",
+    "enums": [
+      [
+        61033,
+        1
+      ],
+      [
+        61036,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61034,
+        100
+      ],
+      [
+        61037,
+        30
+      ]
+    ],
+    "rule": "Smaller maximum scale, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "both-min",
+    "css": "min-width:600px;min-height:400px",
+    "enums": [
+      [
+        61027,
+        1
+      ],
+      [
+        61030,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61028,
+        600
+      ],
+      [
+        61031,
+        400
+      ]
+    ],
+    "rule": "Larger minimum scale, CSS 2.1 10.4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "no-natural-content-padding",
+    "css": "width:100px;aspect-ratio:2;padding:10px",
+    "enums": [
+      [
+        61021,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61020,
+        2
+      ],
+      [
+        61063,
+        10
+      ],
+      [
+        61065,
+        10
+      ],
+      [
+        61067,
+        10
+      ],
+      [
+        61069,
+        10
+      ]
+    ],
+    "rule": "Authored ratio without natural ratio in box-sizing box, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      0,
+      0
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": null
+  },
+  {
+    "name": "no-natural-border-padding",
+    "css": "width:100px;aspect-ratio:2;padding:10px;box-sizing:border-box",
+    "enums": [
+      [
+        61021,
+        1
+      ],
+      [
+        61001,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61020,
+        2
+      ],
+      [
+        61063,
+        10
+      ],
+      [
+        61065,
+        10
+      ],
+      [
+        61067,
+        10
+      ],
+      [
+        61069,
+        10
+      ]
+    ],
+    "rule": "Authored ratio without natural ratio in box-sizing box, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      0,
+      0
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": null
+  },
+  {
+    "name": "border-and-padding",
+    "css": "width:100px;box-sizing:border-box;padding:6px;border:4px solid",
+    "enums": [
+      [
+        61021,
+        1
+      ],
+      [
+        61001,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61022,
+        100
+      ],
+      [
+        61063,
+        6
+      ],
+      [
+        61065,
+        6
+      ],
+      [
+        61067,
+        6
+      ],
+      [
+        61069,
+        6
+      ],
+      [
+        61071,
+        4
+      ],
+      [
+        61072,
+        4
+      ],
+      [
+        61073,
+        4
+      ],
+      [
+        61074,
+        4
+      ]
+    ],
+    "rule": "Natural ratio inside padding and border, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  },
+  {
+    "name": "authored-min-height",
+    "css": "aspect-ratio:2;min-height:400px",
+    "enums": [
+      [
+        61030,
+        1
+      ]
+    ],
+    "numbers": [
+      [
+        61020,
+        2
+      ],
+      [
+        61031,
+        400
+      ]
+    ],
+    "rule": "Transfer minimum through preferred ratio, CSS sizing 4",
+    "parent": "",
+    "parent_enums": [],
+    "parent_numbers": [],
+    "natural": [
+      480,
+      270
+    ],
+    "known": [
+      null,
+      null
+    ],
+    "query": "max",
+    "decode": null,
+    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEOAQAAAAB54fnKAAAAJklEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAPBpQFYAAeotSOUAAAAASUVORK5CYII="
+  }
+]</script>
+<script>
+// Run in headless Chrome with --dump-dom --virtual-time-budget=2000.
+// No remote resources are needed. Rectangles are border boxes in CSS pixels.
+const cases = JSON.parse(document.getElementById('cases').textContent);
+for (const row of cases) {
+  const parent = document.createElement('div');
+  parent.className = 'parent'; parent.style = row.parent;
+  const image = document.createElement('img');
+  image.id = row.name; image.style = row.css;
+  if (row.natural.every(value => value > 0)) {
+    image.src = row.src;
+  }
+  parent.append(image); fixtures.append(parent);
+}
+window.onload = () => {
+  for (const row of cases) {
+    const image = document.getElementById(row.name);
+    if (row.src && (image.naturalWidth !== row.natural[0] || image.naturalHeight !== row.natural[1])) {
+      throw new Error(`PNG failed to decode: ${row.name}`);
+    }
+  }
+  results.textContent = JSON.stringify({userAgent:navigator.userAgent,cases:cases.map(row => {
+    const rect = document.getElementById(row.name).getBoundingClientRect();
+    const {src, ...input} = row;
+    return {...input, expected:[rect.width, rect.height]};
+  })});
+};
+</script>

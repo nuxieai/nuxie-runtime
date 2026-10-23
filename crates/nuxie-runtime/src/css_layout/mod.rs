@@ -6,6 +6,7 @@ pub mod paint;
 pub(crate) mod paint_order;
 pub(crate) mod pointer;
 pub mod record;
+pub(crate) mod replaced;
 pub mod style;
 
 pub use record::{BoxBorder, BoxGradient, BoxPaint, BoxShadow, CssRecord, LayoutCssStyle};

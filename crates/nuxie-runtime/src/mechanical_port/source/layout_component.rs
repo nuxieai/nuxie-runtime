@@ -5103,12 +5103,21 @@ impl LayoutComponent {
                     .is_some_and(LayoutComponent::is_css_mode)
             })
             .unwrap_or(false);
-        let css_text_owner = css_owner
+        let css_mode = css_owner
             || owner
                 .with_downcast::<LayoutParticipant, _>(|participant| {
                     participant.css_record().is_some()
                 })
                 .unwrap_or(false);
+        // Picture participants use replaced minima. Other participant hosts
+        // keep their existing minimum contracts.
+        let css_minimum = |host: &CoreHandle| {
+            css_owner
+                || (css_mode
+                    && host.is_type_of(
+                        crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY,
+                    ))
+        };
         let measure_host = |host: &CoreHandle,
                             width: f32,
                             width_mode: LayoutMeasureMode,
@@ -5120,7 +5129,7 @@ impl LayoutComponent {
             // A CSS box or participant owns its text's width and line boxes.
             host.with_mut(|object| {
                 if let Some(text) = object.as_text_mut() {
-                    text.set_owned_by_css_layout(css_text_owner);
+                    text.set_owned_by_css_layout(css_mode);
                 }
             });
             // Image already measures exact offers as exact sizes. Preserve that
@@ -5176,7 +5185,7 @@ impl LayoutComponent {
                 && available.height == taffy::prelude::AvailableSpace::MinContent
             {
                 if let Some(minimum) =
-                    host_min_content_height(host, known.width, width_limits, css_owner)
+                    host_min_content_height(host, known.width, width_limits, css_minimum(host))
                 {
                     measured.y = minimum;
                 }
@@ -5283,7 +5292,7 @@ impl LayoutComponent {
                     return taffy::prelude::Size::ZERO;
                 };
                 host.map(|host| {
-                    let supports = host_supports_min_content_width(&host, css_text_owner);
+                    let supports = host_supports_min_content_width(&host, css_mode);
                     minimum_contract(
                         measure_fit_content(
                             (offer(width, width_mode), width_mode),
@@ -5296,7 +5305,7 @@ impl LayoutComponent {
                                     &host,
                                     known.height,
                                     height_limits,
-                                    css_owner,
+                                    css_minimum(&host),
                                 )
                             },
                             |width, width_mode, height, height_mode| {

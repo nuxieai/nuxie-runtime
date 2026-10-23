@@ -1026,6 +1026,10 @@ pub struct Component {
     // only while the owning Artboard's collapsed-runs dirty flag is clear.
     pub(crate) collapsed_run_skip: u16,
     runtime_occurrence: Option<ComponentOccurrenceHandle>,
+    // Runtime layout context, inherited by drawing groups and pictures.
+    // A box or participant host starts a new context, even in translated mode.
+    picture_css_layout: bool,
+    owns_picture_layout_mode: bool,
 }
 
 impl Default for Component {
@@ -1041,6 +1045,8 @@ impl Default for Component {
             dirt: ComponentDirtStorage::Inline(ComponentDirt::FILTHY),
             collapsed_run_skip: 0,
             runtime_occurrence: None,
+            picture_css_layout: false,
+            owns_picture_layout_mode: false,
         }
     }
 }
@@ -1052,6 +1058,28 @@ impl ComponentBaseCallbacks for Component {
 }
 
 impl Component {
+    pub(crate) fn picture_uses_css_layout(&self) -> bool {
+        self.picture_css_layout
+    }
+
+    pub(crate) fn set_picture_layout_mode(&mut self, css: bool) {
+        self.owns_picture_layout_mode = true;
+        self.picture_css_layout = css;
+    }
+
+    pub(crate) fn inherit_picture_layout_mode(&mut self, css: bool) -> bool {
+        if self.owns_picture_layout_mode {
+            return false;
+        }
+        let changed = self.picture_css_layout != css;
+        self.picture_css_layout = css;
+        changed
+    }
+
+    pub(crate) fn owns_picture_layout_mode(&self) -> bool {
+        self.owns_picture_layout_mode
+    }
+
     pub(crate) fn text_style_parent_weak(&mut self) -> Weak<RefCell<Option<CoreHandle>>> {
         if let ComponentParentStorage::Inline(parent) = &mut self.parent {
             self.parent =
@@ -1281,6 +1309,12 @@ impl Component {
                 .resolve(self.base.parent_id())
                 .filter(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY)),
         );
+        if !self.owns_picture_layout_mode && self.parent_handle().as_ref() != Some(&this) {
+            let css = self
+                .with_parent(|parent| parent.picture_uses_css_layout())
+                .unwrap_or(false);
+            self.inherit_picture_layout_mode(css);
+        }
         self.parent
             .with(|parent| {
                 // The CoreObject lifecycle wrapper has already performed this virtual

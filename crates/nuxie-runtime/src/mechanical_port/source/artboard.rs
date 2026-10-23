@@ -3725,21 +3725,7 @@ impl Artboard {
         let mut drawable = last;
         while let Some(current) = drawable {
             if !current.is_hidden() {
-                let hit = if let RuntimeDrawableOccurrence::Authored(handle) = &current
-                    && handle.core_type() == Some(crate::source::shapes::image::Image::TYPE_KEY)
-                {
-                    handle
-                        .with_downcast::<crate::source::shapes::image::Image, _>(|image| {
-                            image
-                                .hit_test_with_layout_root(info, matrix, Some(self))
-                                .is_some()
-                        })
-                        .unwrap_or(false)
-                        .then(|| handle.clone())
-                } else {
-                    current.hit_test(info, &matrix)
-                };
-                if let Some(core) = hit {
+                if let Some(core) = current.hit_test(info, &matrix) {
                     return Some(core);
                 }
             }

@@ -370,7 +370,6 @@ impl IntrinsicallySizeable for Joystick {
         _width_scale_type: LayoutScaleType,
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
-        _css: bool,
     ) {
         let current = Vec2D::new(self.base.width(), self.base.height());
         self.base.layout_natural.begin_control(current);

@@ -1,9 +1,9 @@
 //! renderer/cmd/deferred_replayer.hpp through 39afeca4.
 use super::{
-    canvas_schedule::schedule_canvases,
+    canvas_schedule::{live_segments, schedule_canvases},
     deferred_cmd::replay_render_commands_with_optional_factory,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{take_gpu_census, GpuCensus},
+    gpu_census::{GpuCensus, take_gpu_census},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE},
     render_replay::*,
 };
@@ -12,7 +12,7 @@ use nuxie_ore_metal::context::{RenderTargetInfo, ReplayCaps};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer::OreCommandReader,
-    ore_commands::{packTargetSize, CommandType, DestroyResourcePOD},
+    ore_commands::{CommandType, DestroyResourcePOD, packTargetSize},
 };
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -268,9 +268,10 @@ impl DeferredReplayer {
             &mut hooks,
         );
         hooks.filter = ReplayFilter::Draws;
+        let live = live_segments(segments);
         let mut screens = Vec::new();
         let mut canvas_ranges: HashMap<u64, Vec<&DeferredSegment>> = HashMap::new();
-        for segment in segments {
+        for segment in &live {
             if segment.target == SegmentTarget::Screen {
                 screens.push(segment);
             } else {
@@ -280,7 +281,7 @@ impl DeferredReplayer {
                     .push(segment);
             }
         }
-        let schedule = schedule_canvases(commands, segments);
+        let schedule = schedule_canvases(commands, &live);
         if schedule.had_cycle {
             static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             if COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 120 == 0 {

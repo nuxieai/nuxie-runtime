@@ -31,6 +31,7 @@ impl StreamBuilder {
             target_id: id,
             begin,
             end: self.bytes.len() as u32,
+            starts_frame: false,
         });
     }
     fn schedule(&self) -> CanvasSchedule {
@@ -50,6 +51,7 @@ impl StreamBuilder {
             target_id: id,
             begin,
             end: self.bytes.len() as u32,
+            starts_frame: false,
         });
     }
 }
@@ -241,6 +243,7 @@ fn unwritten_id_adds_no_edge() {
         target_id: 1,
         begin,
         end: b.bytes.len() as u32,
+        starts_frame: false,
     });
     b.canvas_range(2, &[]);
     let s = b.schedule();
@@ -273,6 +276,7 @@ fn image_mesh_creates_edges() {
         target_id: 2,
         begin,
         end: b.bytes.len() as u32,
+        starts_frame: false,
     });
     b.canvas_range(1, &[]);
     assert_eq!(b.schedule().order, [1, 2]);

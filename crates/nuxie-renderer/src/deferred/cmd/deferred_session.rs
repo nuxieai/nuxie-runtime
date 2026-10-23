@@ -6,7 +6,7 @@ use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
-use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
+use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;
@@ -28,6 +28,8 @@ pub struct DeferredSegment {
     pub target_id: u64,
     pub begin: u32,
     pub end: u32,
+    // Opened by begin_canvas_content. Replay keeps a canvas's last frame only.
+    pub starts_frame: bool,
 }
 
 pub struct PendingDestroyBytes {
@@ -64,6 +66,7 @@ pub struct SessionRouting {
     active_target: u64,
     active_routed: bool,
     active_begin: u32,
+    active_starts_frame: bool,
     open_screen: u64,
     has_open_screen: bool,
     canvas_stack: Vec<u64>,
@@ -83,6 +86,7 @@ impl SessionRouting {
             active_target: SCREEN_TARGET,
             active_routed: false,
             active_begin: 0,
+            active_starts_frame: false,
             open_screen: 0,
             has_open_screen: false,
             canvas_stack: Vec::new(),
@@ -121,6 +125,7 @@ impl SessionRouting {
                     target_id: screen_target_id(self.active_target),
                     begin: self.active_begin,
                     end: self.stream_size(),
+                    starts_frame: false,
                 });
             }
             return;
@@ -137,6 +142,7 @@ impl SessionRouting {
             target_id: self.active_target,
             begin: self.active_begin,
             end: self.stream_size(),
+            starts_frame: self.active_starts_frame,
         });
     }
     pub fn close_open_range(&mut self) {
@@ -164,9 +170,18 @@ impl SessionRouting {
     }
     pub fn begin_canvas_content(&mut self, canvas: RenderCanvasHandle, clear_color: u32) -> u32 {
         let id = self.register_canvas(canvas);
+        assert!(
+            !self.canvas_stack.contains(&u64::from(id)),
+            "a canvas frame cannot open inside itself"
+        );
         self.canvas_clear.insert(u64::from(id), clear_color);
         self.canvas_stack.push(u64::from(id));
+        if self.active_routed && self.active_target == u64::from(id) {
+            self.close_active_range();
+            self.active_routed = false;
+        }
         self.route_to(u64::from(id));
+        self.active_starts_frame = true;
         id
     }
     pub fn scheduler_segments(&self) -> Vec<DeferredSegment> {
@@ -180,6 +195,7 @@ impl SessionRouting {
                 target_id: screen_target_id(self.active_target),
                 begin: self.active_begin,
                 end: self.stream_size(),
+                starts_frame: false,
             });
         }
         all
@@ -220,6 +236,7 @@ impl DeferredRouteHost for SessionRouting {
                 clear_color,
             },
         );
+        self.active_starts_frame = false;
     }
 }
 
@@ -239,7 +256,7 @@ pub struct DeferredSession {
     pub ore_context: Rc<RefCell<DeferredOreContext>>,
     pub routing: Rc<RefCell<SessionRouting>>,
     render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
-    canvas_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
+    canvas_renderers: Rc<RefCell<HashMap<u64, (RendererOwner, TransformShadow)>>>,
     screen_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
     // The CTM shadow of each retained screen recorder, reset at the frame
     // boundary. Held beside the owner because the owner is type-erased.
@@ -671,19 +688,26 @@ impl DeferredCanvasHost for DeferredSession {
             .routing
             .borrow_mut()
             .begin_canvas_content(canvas, clear_color);
-        let renderer = self
+        let (renderer, transform) = self
             .canvas_renderers
             .borrow_mut()
             .entry(u64::from(id))
             .or_insert_with(|| {
-                Rc::new(RefCell::new(Box::new(DeferredRenderer::new(
+                let renderer = DeferredRenderer::new(
                     self.command_buffer(),
                     Some(self.canvases()),
                     Some(self.routing.clone()),
                     u64::from(id),
-                )) as Box<dyn Renderer>))
+                );
+                let transform = renderer.transform_shadow();
+                (
+                    Rc::new(RefCell::new(Box::new(renderer) as Box<dyn Renderer>)),
+                    transform,
+                )
             })
             .clone();
+        // A new frame starts at identity; resuming a nested range does not.
+        reset_transform_shadow(&transform);
         Some(Box::new(ScopedRenderer(renderer)))
     }
     fn end_canvas_content(&mut self, _canvas: &RenderCanvasHandle) {

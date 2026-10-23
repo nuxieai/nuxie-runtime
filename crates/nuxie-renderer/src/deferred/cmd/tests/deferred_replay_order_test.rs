@@ -126,18 +126,21 @@ fn frame(factory: &DeferredFactory, begin: u32, end: u32, canvas: u64) -> Deferr
                 target_id: 0,
                 begin: 0,
                 end: begin,
+                starts_frame: false,
             },
             DeferredSegment {
                 target: SegmentTarget::Canvas,
                 target_id: canvas,
                 begin,
                 end,
+                starts_frame: false,
             },
             DeferredSegment {
                 target: SegmentTarget::Screen,
                 target_id: 0,
                 begin: end,
                 end: b.command_bytes().len() as u32,
+                starts_frame: false,
             },
         ],
         ..Default::default()

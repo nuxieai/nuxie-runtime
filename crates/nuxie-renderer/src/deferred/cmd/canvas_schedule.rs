@@ -1,7 +1,8 @@
 //! renderer/cmd/canvas_schedule.hpp at e949498e.
 use super::deferred_session::{DeferredSegment, SegmentTarget};
-use super::render_commands::{payload_size_of, RenderCmd};
+use super::render_commands::{RenderCmd, payload_size_of};
 use super::render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE};
+use std::collections::HashMap;
 
 #[derive(Default, Debug)]
 pub struct CanvasSchedule {
@@ -12,6 +13,28 @@ pub struct CanvasSchedule {
 
 pub fn drawn_image_handle(pod: &[u8]) -> u32 {
     u32::from_ne_bytes(pod[..4].try_into().expect("recorded image handle"))
+}
+
+// Readers only see a canvas's last frame: discard replaced frames before
+// scheduling so their writes cannot impose phantom dependencies.
+pub fn live_segments(segments: &[DeferredSegment]) -> Vec<DeferredSegment> {
+    let mut last_frame = HashMap::new();
+    for (index, segment) in segments.iter().enumerate() {
+        if segment.target == SegmentTarget::Canvas && segment.starts_frame {
+            last_frame.insert(segment.target_id, index);
+        }
+    }
+    segments
+        .iter()
+        .enumerate()
+        .filter(|(index, segment)| {
+            segment.target != SegmentTarget::Canvas
+                || !last_frame
+                    .get(&segment.target_id)
+                    .is_some_and(|last| index < last)
+        })
+        .map(|(_, segment)| *segment)
+        .collect()
 }
 
 pub fn schedule_canvases(commands: &[u8], segments: &[DeferredSegment]) -> CanvasSchedule {

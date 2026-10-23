@@ -155,7 +155,9 @@ qualification work.
   tests lacked fixture files; supplying the exact pinned upstream assets resolved
   that infrastructure failure. No assertions or tolerances changed. Stack grid
   semantics, layout benchmarks and layout-only fixtures are explicitly excluded
-  under the October 23 CSS policy. `.rive_head` is private provenance, not ported
+  under the October 23 CSS policy. The matrix keeps pre-change expectations for
+  those stack-cell cases through `fixtures/sync/layout/matrix_overrides.json`
+  under that policy. `.rive_head` is private provenance, not ported
   functionality. Renderer sources are unchanged. Golden/Silver execution, browser
   compilation and hardware qualification were not rerun for this change.
 - Validation at `5551696a`, integrated atop downstream `d714f3f22c`:
@@ -1872,6 +1874,8 @@ Luau remains our scripting direction. Browser renderer Wasm remains in scope.
 Split mixed commits and port applicable portions without blocking on exclusions.
 Upstream 868da86c's stack-layout portion is explicitly skipped by this decision;
 its independent state-machine portion is translated and reviewed at the checkpoint above.
+The matrix keeps pre-change expectations for those stack-cell cases through
+`fixtures/sync/layout/matrix_overrides.json` under that policy.
 Never patch Taffy toward Yoga. Non-layout behavior around layout (dirt,
 callbacks, participant lifecycle, scroll/virtualization models) stays a normal
 translation. When a translated non-layout change moves a golden/Silver/probe

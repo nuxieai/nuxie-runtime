@@ -20,6 +20,7 @@ use nuxie_runtime::source::{
 use nuxie_runtime::{CoreHandle, File, RuntimeFactoryHandle};
 use std::{
     cell::Cell,
+    collections::BTreeMap,
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -76,6 +77,80 @@ fn parse_manifests(path: &Path) -> Vec<Manifest> {
         }
     }
     out
+}
+
+#[derive(serde::Deserialize)]
+struct MatrixOverrides {
+    overrides: Vec<CaseOverride>,
+}
+
+#[derive(serde::Deserialize)]
+struct CaseOverride {
+    id: String,
+    fields: BTreeMap<String, BTreeMap<usize, f32>>,
+}
+
+fn apply_overrides(
+    matrices: &mut [Vec<Manifest>],
+    overrides: &[CaseOverride],
+) -> Result<(), String> {
+    for entry in overrides {
+        let manifest = matrices
+            .iter_mut()
+            .flatten()
+            .find(|manifest| manifest.fixture == entry.id)
+            .ok_or_else(|| format!("stale matrix override: missing case {}", entry.id))?;
+        for (field, values) in &entry.fields {
+            let check = manifest
+                .checks
+                .iter_mut()
+                .find(|check| format!("{}.{}", check.component, check.field) == *field)
+                .ok_or_else(|| {
+                    format!("stale matrix override: missing field {} {field}", entry.id)
+                })?;
+            for (&index, &value) in values {
+                let slot = check.values.get_mut(index).ok_or_else(|| {
+                    format!(
+                        "stale matrix override: missing value {} {field}[{index}]",
+                        entry.id
+                    )
+                })?;
+                *slot = value;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn matrix_overrides_reject_missing_cases_and_fields() {
+    let entry = CaseOverride {
+        id: "stack-case".into(),
+        fields: BTreeMap::from([("Subject.world".into(), BTreeMap::from([(4, 130.0)]))]),
+    };
+    let mut matrices = vec![vec![]];
+    assert_eq!(
+        apply_overrides(&mut matrices, std::slice::from_ref(&entry)),
+        Err("stale matrix override: missing case stack-case".into())
+    );
+    matrices[0].push(Manifest {
+        fixture: entry.id.clone(),
+        ..Default::default()
+    });
+    assert_eq!(
+        apply_overrides(&mut matrices, std::slice::from_ref(&entry)),
+        Err("stale matrix override: missing field stack-case Subject.world".into())
+    );
+    matrices[0][0].checks.push(Check {
+        component: "Subject".into(),
+        field: "world".into(),
+        values: vec![1.0],
+        ..Default::default()
+    });
+    assert_eq!(
+        apply_overrides(&mut matrices, &[entry]),
+        Err("stale matrix override: missing value stack-case Subject.world[4]".into())
+    );
 }
 
 const MARGIN: f32 = 1e-3;
@@ -343,7 +418,8 @@ impl FileAssetLoader for MatrixAssetLoader {
 
 #[test]
 fn the_generated_layout_matrix_conforms() {
-    let (dir, assets) = std::env::var_os("RIVE_RUNTIME_DIR").map_or_else(
+    let upstream = std::env::var_os("RIVE_RUNTIME_DIR");
+    let (dir, assets) = upstream.as_ref().map_or_else(
         || {
             let root = PathBuf::from(
                 option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
@@ -363,6 +439,15 @@ fn the_generated_layout_matrix_conforms() {
         .collect();
     paths.sort();
     assert!(!paths.is_empty());
+    let mut matrices: Vec<_> = paths.iter().map(|path| parse_manifests(path)).collect();
+    if upstream.is_some() {
+        let overrides: MatrixOverrides = serde_json::from_str(include_str!(
+            "../../../fixtures/sync/layout/matrix_overrides.json"
+        ))
+        .expect("parse matrix overrides");
+        apply_overrides(&mut matrices, &overrides.overrides)
+            .unwrap_or_else(|message| panic!("{message}"));
+    }
     let mut checked = 0;
     let mut known_defects_confirmed = 0;
     let mut layout_divergences_seen = 0;
@@ -370,7 +455,7 @@ fn the_generated_layout_matrix_conforms() {
     let mut assets_resolved = 0;
     let mut unknown_fields = Vec::new();
     let mut failures = Vec::new();
-    for path in &paths {
+    for (path, manifests) in paths.iter().zip(matrices) {
         let riv_path = path.with_extension("riv");
         let attempted = Rc::new(Cell::new(0));
         let resolved = Rc::new(Cell::new(0));
@@ -395,7 +480,7 @@ fn the_generated_layout_matrix_conforms() {
         }
         assets_attempted += attempted.get();
         assets_resolved += resolved.get();
-        for manifest in parse_manifests(path) {
+        for manifest in manifests {
             let artboard = file
                 .with_file(|f| f.artboard_named(&manifest.artboard))
                 .expect("named matrix artboard");

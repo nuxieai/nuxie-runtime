@@ -159,7 +159,8 @@ fn natural_bounds_for_layout_host(
         // A host's rectangle sits about its origin, as it draws, so a group
         // places it where it is.
         if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            let (width, height) = (image.width(), image.height());
+            let size = image.natural_size_for_layout(css);
+            let (width, height) = (size.x, size.y);
             return Content::Rect(Aabb::from_ltwh(
                 -width * image.base.origin_x(),
                 -height * image.base.origin_y(),

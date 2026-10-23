@@ -82,7 +82,7 @@ pub(crate) fn picture_natural_size(host: &CoreHandle, css: bool) -> Option<Vec2D
         return None;
     }
     let picture = MeshHost::from_handle(Some(host.clone()))?;
-    Some(Vec2D::new(picture.width(), picture.height()))
+    picture.natural_size_for_layout(css)
 }
 
 /// Called after the unbounded measure populated Text's measured-shape cache.
@@ -283,7 +283,7 @@ impl LayoutParticipant {
         // transformComponent's stricter host type check.
         Self::owning_layout_from(self.base.parent_handle())
     }
-    fn owning_layout_from(mut current: Option<CoreHandle>) -> Option<CoreHandle> {
+    pub(crate) fn owning_layout_from(mut current: Option<CoreHandle>) -> Option<CoreHandle> {
         while let Some(owner) = current {
             if owner
                 .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)

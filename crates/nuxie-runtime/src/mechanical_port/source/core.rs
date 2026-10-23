@@ -619,6 +619,21 @@ impl CoreArena {
     }
 
     pub fn remove(&self, handle: &CoreHandle) -> Option<Box<dyn CoreObject>> {
+        self.remove_with_notifications(handle, true)
+    }
+
+    pub(crate) fn remove_for_artboard_drop(
+        &self,
+        handle: &CoreHandle,
+    ) -> Option<Box<dyn CoreObject>> {
+        self.remove_with_notifications(handle, false)
+    }
+
+    fn remove_with_notifications(
+        &self,
+        handle: &CoreHandle,
+        notify: bool,
+    ) -> Option<Box<dyn CoreObject>> {
         if !handle.belongs_to(self) {
             return None;
         }
@@ -632,20 +647,13 @@ impl CoreArena {
             return None;
         }
         let mut value = slot.object.borrow_mut().take()?;
-        if let Some(input) = value.as_text_input_mut() {
-            input.detach_css_registration();
+        if let Some(style) = value.as_text_style_mut() {
+            style.file_asset_referencer_mut().detach(handle.clone());
         }
-        if let Some(axis) = value
-            .as_any_mut()
-            .downcast_mut::<crate::source::text::text_style_axis::TextStyleAxis>()
-        {
-            axis.base.detach_css_input_options_generation();
-        }
-        if let Some(feature) = value
-            .as_any_mut()
-            .downcast_mut::<crate::source::text::text_style_feature::TextStyleFeature>(
-        ) {
-            feature.base.detach_css_input_options_generation();
+        if notify {
+            if let Some(parent) = value.component_parent_handle() {
+                crate::source::component::Component::detach_css_child(&parent, handle);
+            }
         }
         // Intrusive links must be spliced while this generation is still
         // resolvable. The removed box can outlive its arena identity.

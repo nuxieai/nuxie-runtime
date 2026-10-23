@@ -1165,6 +1165,10 @@ impl LayoutComponent {
         StatusCode::Ok
     }
 
+    pub(crate) fn forget_css_natural_measure(&mut self, child: &CoreHandle) {
+        self.measured_natural.get_mut().retain(|(h, _)| h != child);
+    }
+
     pub fn mark_layout_node_dirty_occurrence(owner: &CoreHandle, force: bool) {
         Self::mark_layout_node_dirty_with_host_occurrence(owner, force, None);
     }

@@ -26,25 +26,34 @@ pub struct TextStyleAxis {
 }
 
 impl TextStyleAxis {
+    pub fn parent_id_changed(&mut self) {
+        if self.base.reparent_css_input_child() {
+            if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
+                parent.with_mut(|o| {
+                    if let Some(style) = o.as_text_style_mut() {
+                        style.add_variation(this);
+                    }
+                });
+            }
+        }
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code == StatusCode::Ok {
             let (Some(style), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
                 return StatusCode::InvalidObject;
             };
-            let Some(generation) = style
+            let added = style
                 .with_mut(|style| {
-                    let style = style.as_text_style_mut()?;
-                    style.add_variation(this);
-                    Some(style.css_input_options_generation())
+                    style
+                        .as_text_style_mut()
+                        .map(|style| style.add_variation(this))
                 })
                 .flatten()
-            else {
+                .is_some();
+            if !added {
                 return StatusCode::InvalidObject;
-            };
-            // This axis or feature is already borrowed by onAddedDirty.
-            if let Some(generation) = generation {
-                self.base.bind_css_input_options_generation(generation);
             }
         }
         code
@@ -52,7 +61,12 @@ impl TextStyleAxis {
     pub fn tag_changed(&mut self) {
         if let Some(parent) = self.base.parent_handle() {
             parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_component_mut() {
+                if let Some(style) = parent
+                    .as_text_style_mut()
+                    .filter(|s| s.has_css_input_parent())
+                {
+                    style.css_options_changed();
+                } else if let Some(parent) = parent.as_component_mut() {
                     parent.add_dirt(ComponentDirt::TEXT_SHAPE, false);
                 }
             });
@@ -61,7 +75,12 @@ impl TextStyleAxis {
     pub fn axis_value_changed(&mut self) {
         if let Some(parent) = self.base.parent_handle() {
             parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_component_mut() {
+                if let Some(style) = parent
+                    .as_text_style_mut()
+                    .filter(|s| s.has_css_input_parent())
+                {
+                    style.css_options_changed();
+                } else if let Some(parent) = parent.as_component_mut() {
                     parent.add_dirt(ComponentDirt::TEXT_SHAPE, false);
                 }
             });

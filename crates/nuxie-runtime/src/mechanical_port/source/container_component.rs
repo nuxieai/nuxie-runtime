@@ -39,6 +39,18 @@ impl ContainerComponent {
         self.children.push(component);
     }
 
+    pub(crate) fn add_css_child(&mut self, component: CoreHandle) {
+        if !self.children.contains(&component) {
+            self.add_child(component);
+        }
+    }
+
+    pub(crate) fn remove_child(&mut self, child: &CoreHandle) {
+        self.children.retain(|h| h != child);
+        self.component_children
+            .retain(|h| h.authored() != Some(child));
+    }
+
     pub(crate) fn add_runtime_child(&mut self, component: ComponentOccurrenceHandle) {
         assert!(component.authored().is_none());
         self.component_children.push(component);

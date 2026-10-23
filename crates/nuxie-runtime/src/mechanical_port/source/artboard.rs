@@ -362,68 +362,6 @@ impl DrawRangeState {
     }
 }
 
-// Registration owns no input payload. Tokens erase their occurrence even when
-// an arena removal returns a box which is kept alive outside the artboard.
-#[derive(Clone)]
-struct CssInputRegistry(Rc<RefCell<CssInputRegistryState>>);
-struct CssInputRegistryState {
-    attached: bool,
-    inputs: crate::source::lazy_vector::LazyVector<CoreHandle>,
-    detached: crate::source::lazy_vector::LazyVector<CoreHandle>,
-}
-
-pub(crate) struct CssInputRegistration {
-    registry: Weak<RefCell<CssInputRegistryState>>,
-    pub(crate) artboard: CoreHandle,
-    input: CoreHandle,
-}
-
-impl Drop for CssInputRegistration {
-    fn drop(&mut self) {
-        if let Some(registry) = self.registry.upgrade() {
-            let mut registry = registry.borrow_mut();
-            registry.inputs.erase_all(&self.input);
-            registry.detached.erase_all(&self.input);
-        }
-    }
-}
-
-impl CssInputRegistry {
-    fn new() -> Self {
-        Self(Rc::new(RefCell::new(CssInputRegistryState {
-            attached: true,
-            inputs: Default::default(),
-            detached: Default::default(),
-        })))
-    }
-    fn register(&self, artboard: CoreHandle, input: CoreHandle) -> CssInputRegistration {
-        let mut registry = self.0.borrow_mut();
-        if registry.attached {
-            registry.inputs.push_unique(input.clone());
-        } else {
-            registry.detached.push_unique(input.clone());
-        }
-        CssInputRegistration {
-            registry: Rc::downgrade(&self.0),
-            artboard,
-            input,
-        }
-    }
-    fn snapshot(&self) -> crate::source::lazy_vector::LazyVectorSnapshot<CoreHandle> {
-        self.0.borrow().inputs.snapshot()
-    }
-    fn set_attached(&self, attached: bool) {
-        let mut registry = self.0.borrow_mut();
-        if registry.attached != attached {
-            let CssInputRegistryState {
-                inputs, detached, ..
-            } = &mut *registry;
-            std::mem::swap(inputs, detached);
-            registry.attached = attached;
-        }
-    }
-}
-
 pub struct Artboard {
     pub base: ArtboardBase,
     core_arena: CoreArena,
@@ -480,11 +418,6 @@ pub struct Artboard {
     is_instance: bool,
     frame_origin: bool,
     dirty_layout: HashSet<CoreHandle>,
-    css_inputs: Option<CssInputRegistry>,
-    #[cfg(test)]
-    css_input_scan_visits: Cell<u64>,
-    #[cfg(test)]
-    css_input_check_visits: Cell<u64>,
     is_cleaning_dirty_layouts: bool,
     owned_inherited_interpolator: Option<
         Box<crate::mechanical_port::source::animation::keyframe_interpolator::KeyFrameInterpolator>,
@@ -577,11 +510,6 @@ impl Default for Artboard {
             is_instance: false,
             frame_origin: true,
             dirty_layout: HashSet::new(),
-            css_inputs: None,
-            #[cfg(test)]
-            css_input_scan_visits: Cell::new(0),
-            #[cfg(test)]
-            css_input_check_visits: Cell::new(0),
             is_cleaning_dirty_layouts: false,
             owned_inherited_interpolator: None,
             original_width: 0.0,
@@ -960,29 +888,6 @@ impl Artboard {
 
     pub fn set_core_arena(&mut self, arena: CoreArena) {
         self.core_arena = arena.weak_handle();
-    }
-
-    pub(crate) fn register_css_input(&mut self, input: CoreHandle) -> CssInputRegistration {
-        let owner = crate::source::core::CoreObject::core(self)
-            .handle()
-            .expect("registered Artboard");
-        self.css_inputs
-            .get_or_insert_with(CssInputRegistry::new)
-            .register(owner, input)
-    }
-
-    pub(crate) fn set_css_inputs_attached(&self, attached: bool) {
-        if let Some(registry) = &self.css_inputs {
-            registry.set_attached(attached);
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn take_css_input_check_visits(&self) -> (u64, u64) {
-        (
-            self.css_input_scan_visits.replace(0),
-            self.css_input_check_visits.replace(0),
-        )
     }
 
     pub fn objects(&self) -> &[Option<CoreHandle>] {
@@ -2919,11 +2824,6 @@ impl Artboard {
             crate::mechanical_port::source::artboard_host::InactiveChangeMark,
         >,
     ) -> Option<CoreHandle> {
-        if host.is_some() {
-            self.set_css_inputs_attached(true);
-        } else if self.host().is_some() {
-            self.set_css_inputs_attached(false);
-        }
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             inactive_change_sequence: inactive_change_sequence
@@ -3616,34 +3516,6 @@ impl Artboard {
         }
     }
 
-    fn check_css_input_layouts_handle(root: &CoreHandle) {
-        // Validate CSS input keys before either the dirty-root fast path or
-        // Taffy's own cached measurements can skip the solve.
-        let inputs = root
-            .with_downcast::<Artboard, _>(|a| {
-                a.css_inputs
-                    .as_ref()
-                    .map(CssInputRegistry::snapshot)
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default();
-        if inputs.len() == 0 {
-            return;
-        }
-        #[cfg(test)]
-        root.with_downcast::<Artboard, _>(|a| {
-            a.css_input_check_visits
-                .set(a.css_input_check_visits.get() + inputs.len() as u64)
-        });
-        for input in inputs {
-            input.with_mut(|o| {
-                o.as_text_input_mut()
-                    .expect("TextInput")
-                    .check_css_layout_before_solve()
-            });
-        }
-    }
-
     pub fn sync_style_changes_handle(root: &CoreHandle) -> bool {
         Self::sync_style_changes_with_parent_style_handle(root, None)
     }
@@ -3652,7 +3524,6 @@ impl Artboard {
         root: &CoreHandle,
         parent_style: Option<&LayoutParentStyleSnapshot>,
     ) -> bool {
-        Self::check_css_input_layouts_handle(root);
         let dirty = root
             .with_downcast_mut::<Artboard, _>(|artboard| {
                 artboard.is_cleaning_dirty_layouts = true;
@@ -6685,11 +6556,6 @@ impl Artboard {
     pub fn find_all_handles<T: crate::mechanical_port::source::core::CoreType>(
         &self,
     ) -> Vec<CoreHandle> {
-        #[cfg(test)]
-        if T::TYPE_KEY == crate::source::text::text_input::TextInput::TYPE_KEY {
-            self.css_input_scan_visits
-                .set(self.css_input_scan_visits.get() + self.objects.len() as u64);
-        }
         self.objects
             .iter()
             .flatten()
@@ -7075,7 +6941,6 @@ impl AdvancingComponent for Artboard {
 
 impl Drop for Artboard {
     fn drop(&mut self) {
-        self.css_inputs.take();
         // Retained instances clean up before their final Rc release so blur
         // callbacks can still resolve the root. This also covers unretained
         // source artboards on which a caller explicitly allocated a manager.
@@ -7160,7 +7025,7 @@ impl Drop for Artboard {
                 .flatten()
             {
                 if !vm_objects.contains(object) {
-                    drop(self.core_arena.remove(object));
+                    drop(self.core_arena.remove_for_artboard_drop(object));
                 }
             }
             if self.is_instance {
@@ -7174,7 +7039,7 @@ impl Drop for Artboard {
                     .flatten()
                 {
                     if vm_objects.contains(object) {
-                        drop(self.core_arena.remove(object));
+                        drop(self.core_arena.remove_for_artboard_drop(object));
                     }
                 }
             }

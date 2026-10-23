@@ -338,16 +338,31 @@ impl ArtboardComponentList {
         });
     }
 
+    fn detach_instance(artboard: &RuntimeArtboardInstanceHandle) {
+        // Blur callbacks can dirty the old child's layout. Retire its host
+        // before those callbacks so they cannot re-enter this active list.
+        artboard.with_artboard_mut(|a| {
+            a.set_host_state(None, None, None);
+        });
+        artboard.cleanup_semantic_tree();
+        artboard.cleanup_focus_tree();
+    }
+
     pub fn clear(&mut self) {
-        self.reset_quiet_rows(0);
-        for artboard in self.artboard_instances_map.values() {
-            artboard.cleanup_semantic_tree();
+        for instance in self.artboard_instances_map.values() {
+            Self::detach_instance(instance);
         }
+        for instance in self
+            .resource_pool
+            .values()
+            .flat_map(|pool| pool.iter())
+            .flatten()
+        {
+            Self::detach_instance(instance);
+        }
+        self.reset_quiet_rows(0);
         self.clear_draw_index_listeners();
         self.invalidate_ordered_list_indices_cache();
-        for artboard in self.artboard_instances_map.values() {
-            artboard.cleanup_focus_tree();
-        }
         self.remove_list_scope_focus_node();
         self.list_row_focus_nodes.clear();
         self.state_machines_map.clear();
@@ -2218,8 +2233,14 @@ impl ArtboardComponentList {
         active_scroll: Option<&ScrollConstraint>,
     ) -> Option<(CoreHandle, bool)> {
         let item = self.list_item(index)?;
-        self.artboard_instances_map
-            .insert(item.clone(), artboard.clone());
+        if let Some(old) = self
+            .artboard_instances_map
+            .insert(item.clone(), artboard.clone())
+        {
+            if old.core_handle() != artboard.core_handle() {
+                Self::detach_instance(&old);
+            }
+        }
         let virtualized = self.virtualization_enabled_with_scroll(active_scroll);
         if virtualized {
             self.set_rows_for_item(index, &item, Some(artboard.clone()), None);
@@ -2337,10 +2358,8 @@ impl ArtboardComponentList {
         self.remove_draw_index_listener_for_item(&item);
         let artboard = self.artboard_instances_map.get(&item).cloned();
         if let Some(artboard) = artboard.as_ref() {
-            artboard.with_artboard(|a| a.set_css_inputs_attached(false));
-            artboard.cleanup_semantic_tree();
-            artboard.cleanup_focus_tree();
             self.clear_artboard_override(artboard);
+            Self::detach_instance(artboard);
         }
         self.state_machines_map.remove(&item);
         self.artboard_instances_map.remove(&item);
@@ -2514,6 +2533,9 @@ impl ArtboardComponentList {
             self.set_rows_for_item(index, &list_item, None, None);
             let artboard = self.find_artboard(&list_item);
             let artboard_instance = self.artboard_instances_map.remove(&list_item);
+            if let Some(instance) = &artboard_instance {
+                Self::detach_instance(instance);
+            }
             if let (Some(artboard), Some(artboard_instance)) =
                 (artboard.as_ref(), artboard_instance)
             {
@@ -2523,7 +2545,6 @@ impl ArtboardComponentList {
                     -1,
                     self,
                 );
-                artboard_instance.with_artboard(|a| a.set_css_inputs_attached(false));
                 self.resource_pool
                     .entry(artboard.clone())
                     .or_default()

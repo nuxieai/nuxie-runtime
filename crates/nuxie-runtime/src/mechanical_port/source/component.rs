@@ -1272,6 +1272,12 @@ impl Component {
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
+        if let Some(old) = self.parent_handle() {
+            let next = context.resolve(self.base.parent_id());
+            if next.as_ref() != Some(&old) {
+                Self::detach_css_child(&old, &this);
+            }
+        }
         self.artboard = context.resolve_handle(0);
         if self.artboard.as_ref() == Some(&this) {
             return StatusCode::Ok;
@@ -1296,9 +1302,83 @@ impl Component {
             .unwrap_or(StatusCode::MissingObject)
     }
 
-    pub(crate) fn add_child_to_parent(parent: &CoreHandle, child: CoreHandle) -> bool {
+    fn is_css_input_parent(parent: &CoreHandle) -> bool {
         parent
+            .with(|o| {
+                o.as_text_input().is_some_and(|i| i.has_css_layout_parent())
+                    || o.as_text_style().is_some_and(|s| s.has_css_input_parent())
+                    || o.as_layout_component().is_some_and(|l| l.is_css_mode())
+            })
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn reparent_css_input_child(&mut self) -> bool {
+        let Some(this) = self.handle() else {
+            return false;
+        };
+        let next = self.artboard_handle().and_then(|root| {
+            root.with_downcast::<crate::source::artboard::Artboard, _>(|a| {
+                a.resolve_handle(self.base.parent_id())
+            })
+            .flatten()
+        });
+        let old = self.parent_handle();
+        if old == next || !old.iter().chain(next.iter()).any(Self::is_css_input_parent) {
+            return false;
+        }
+        if let Some(old) = old {
+            Self::detach_css_child(&old, &this);
+        }
+        self.parent.set(next.clone());
+        if let Some(next) = next {
+            Self::add_child_to_parent(&next, this);
+        }
+        true
+    }
+
+    pub(crate) fn detach_css_child(parent: &CoreHandle, child: &CoreHandle) {
+        let layout = parent
+            .with_mut(|o| {
+                if let Some(input) = o.as_text_input_mut() {
+                    if input.has_css_layout_parent() {
+                        input.base.remove_child(child);
+                        input.css_style_link_changed();
+                    }
+                } else if let Some(style) = o.as_text_style_mut() {
+                    style.base.remove_child(child);
+                    style.remove_css_option(child);
+                } else if let Some(layout) = o.as_layout_component_mut() {
+                    if layout.is_css_mode() {
+                        layout.base.remove_child(child);
+                        layout.forget_css_natural_measure(child);
+                        return true;
+                    }
+                }
+                false
+            })
+            .unwrap_or(false);
+        if layout {
+            crate::source::layout_component::LayoutComponent::mark_layout_style_dirty_occurrence(
+                parent,
+            );
+            crate::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(
+                parent, false,
+            );
+        }
+    }
+
+    pub(crate) fn add_child_to_parent(parent: &CoreHandle, child: CoreHandle) -> bool {
+        let added = parent
             .with_mut(|parent| {
+                let css_input_parent = parent
+                    .as_text_input()
+                    .is_some_and(|i| i.has_css_layout_parent())
+                    || parent
+                        .as_text_style()
+                        .is_some_and(|s| s.has_css_input_parent())
+                    || parent
+                        .as_layout_component()
+                        .is_some_and(|l| l.is_css_mode());
                 if let Some(range) = parent.as_any_mut().downcast_mut::<TextModifierRange>() {
                     range.add_child(child);
                     true
@@ -1306,13 +1386,34 @@ impl Component {
                     shape.add_child(child);
                     true
                 } else if let Some(parent) = parent.as_container_component_mut() {
-                    parent.add_child(child);
+                    if css_input_parent {
+                        parent.add_css_child(child);
+                    } else {
+                        parent.add_child(child);
+                    }
                     true
                 } else {
                     false
                 }
             })
-            .unwrap_or(false)
+            .unwrap_or(false);
+        if added {
+            let layout = parent
+                .with_mut(|o| {
+                    if let Some(input) = o.as_text_input_mut() {
+                        input.css_style_link_changed();
+                    }
+                    o.as_layout_component().is_some_and(|l| l.is_css_mode())
+                })
+                .unwrap_or(false);
+            if layout {
+                crate::source::layout_component::LayoutComponent::mark_layout_style_dirty_occurrence(parent);
+                crate::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(
+                    parent, false,
+                );
+            }
+        }
+        added
     }
 
     pub fn add_collapsable(&mut self, collapsable: CoreHandle) {

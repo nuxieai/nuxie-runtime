@@ -11791,13 +11791,8 @@ fn css_input_scroll_fixture(multiline: bool, text: &'static str) -> Scene {
     )
 }
 
-fn take_css_input_check_visits(f: &Scene) -> (u64, u64) {
-    f.artboard
-        .with_artboard(|a| a.take_css_input_check_visits())
-}
-
 #[test]
-fn css_input_registry_clean_translated_artboard_does_not_scan_objects() {
+fn css_input_clean_translated_artboard_keeps_layout_settled() {
     let f = scene(
         (400.0, 300.0),
         B {
@@ -11806,24 +11801,32 @@ fn css_input_registry_clean_translated_artboard_does_not_scan_objects() {
         },
     );
     f.advance(4);
-    take_css_input_check_visits(&f);
+    let before = crate::source::artboard::Artboard::layout_pass_count();
     f.advance(1);
-    assert_eq!(take_css_input_check_visits(&f), (0, 0));
+    assert_eq!(
+        crate::source::artboard::Artboard::layout_pass_count(),
+        before
+    );
 }
 
 #[test]
-fn css_input_registry_does_not_visit_translated_inputs() {
+fn translated_input_clean_frame_keeps_upstream_geometry() {
     let f = input_scene(false, true, None, -1.0, None);
     f.advance(4);
-    take_css_input_check_visits(&f);
+    let before = input_line(&f);
+    let passes = crate::source::artboard::Artboard::layout_pass_count();
     f.advance(1);
-    assert_eq!(take_css_input_check_visits(&f), (0, 0));
+    assert_eq!(input_line(&f), before);
+    assert_eq!(
+        crate::source::artboard::Artboard::layout_pass_count(),
+        passes
+    );
 }
 
 // The late input is in the arena and hierarchy, not in the authored objects
-// table. Its normal attachment lifecycle must put it on the check list.
+// table. Its attachment callback must dirty the existing layout owner.
 #[test]
-fn css_input_registry_checks_an_input_attached_after_the_first_frame() {
+fn css_input_attached_after_the_first_frame_is_measured() {
     use crate::source::{
         core::CoreArena,
         core_context::CoreContext,
@@ -11851,7 +11854,6 @@ fn css_input_registry_checks_an_input_attached_after_the_first_frame() {
         },
     );
     f.advance(4);
-    take_css_input_check_visits(&f);
     let root = f.artboard.core_handle();
     let input = root.insert_sibling(TextInput::default()).unwrap();
     let style = root.insert_sibling(TextStylePaint::default()).unwrap();
@@ -11877,50 +11879,35 @@ fn css_input_registry_checks_an_input_attached_after_the_first_frame() {
         object.with_mut(|o| assert_eq!(o.on_added_clean(&mut context), StatusCode::Ok));
     }
     crate::source::artboard::Artboard::sync_style_changes_handle(&root);
-    assert_eq!(take_css_input_check_visits(&f), (0, 1));
+    CoreRegistry::set_bool_handle(&input, 979, true);
+    CoreRegistry::set_uint_handle(&input, i32::from(INPUT_ROWS), 4);
+    CoreRegistry::set_double_handle(&style, 370, 20.0);
+    f.advance(1);
+    assert_eq!(
+        f.named("control").with_downcast::<LayoutComponent, _>(|l| l
+            .layout_style()
+            .item_is_compressible_replaced),
+        Some(true)
+    );
+    assert_eq!(
+        input.with_mut(|o| o.as_text_input_mut().unwrap().css_natural_size().y),
+        Some(80.0)
+    );
 }
 
 #[test]
-fn css_input_registry_removes_retired_inputs_before_their_payload_is_dropped() {
+fn css_input_removed_payload_can_outlive_its_layout() {
     let f = input_scene(true, true, None, 20.0, None);
     f.advance(4);
-    let input = input_handle(&f);
     let arena = f.artboard.with_artboard(|a| a.core_arena().clone());
-    let retained_payload = arena.remove(&input).unwrap();
-    take_css_input_check_visits(&f);
-    crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
-    assert_eq!(take_css_input_check_visits(&f), (0, 0));
-    drop(retained_payload);
+    let payload = arena.remove(&input_handle(&f)).unwrap();
+    f.advance(1);
+    assert_eq!(f.bounds("control")[3], 0.0);
+    drop(payload);
 }
 
 #[test]
-fn css_input_registry_suspends_and_restores_recycled_artboards() {
-    let f = input_scene(true, true, None, 20.0, None);
-    f.advance(4);
-    for attached in [false, true, false, true] {
-        f.artboard
-            .with_artboard(|a| a.set_css_inputs_attached(attached));
-        take_css_input_check_visits(&f);
-        crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
-        assert_eq!(take_css_input_check_visits(&f), (0, u64::from(attached)));
-    }
-}
-
-#[test]
-fn css_input_registry_removes_and_reattaches_a_live_input() {
-    let f = input_scene(true, true, None, 20.0, None);
-    f.advance(4);
-    let input = input_handle(&f);
-    for css in [false, true, false, true] {
-        input.with_mut(|o| o.as_text_input_mut().unwrap().set_owned_by_css_layout(css));
-        take_css_input_check_visits(&f);
-        crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
-        assert_eq!(take_css_input_check_visits(&f), (0, u64::from(css)));
-    }
-}
-
-#[test]
-fn css_input_registry_instance_replacement_has_its_own_registrations() {
+fn css_input_instance_replacement_keeps_its_own_shape() {
     use crate::source::text::text_input::TextInput;
     let f = input_scene(true, true, None, 20.0, None);
     let old = f.artboard.instance().unwrap();
@@ -11932,39 +11919,37 @@ fn css_input_registry_instance_replacement_has_its_own_registrations() {
     replacement.advance_default(FRAME);
     drop(old);
     assert!(!input.is_alive());
-    replacement.with_artboard(|a| a.take_css_input_check_visits());
+    let input = replacement
+        .with_artboard(|a| a.find_handle::<TextInput>("Field"))
+        .unwrap();
+    CoreRegistry::set_uint_handle(&input, i32::from(INPUT_ROWS), 4);
     replacement.advance_default(FRAME);
     assert_eq!(
-        replacement.with_artboard(|a| a.take_css_input_check_visits()),
-        (0, 1)
+        input.with_mut(|o| o.as_text_input_mut().unwrap().css_natural_size().y),
+        Some(80.0)
     );
 }
 
 #[test]
-fn css_input_clean_key_check_does_not_encode_or_reshape_text() {
+fn css_input_clean_frame_keeps_the_same_font_instance_and_geometry() {
     let f = css_input_variable_scene(25.0);
-    f.advance(4);
-    let input = input_handle(&f);
-    let style = css_input_style_handle(&f);
-    let font_before = style
-        .with(|o| o.as_text_style().unwrap().css_input_font_refresh_count)
+    let before = input_line(&f);
+    let font = css_input_style_handle(&f)
+        .with_mut(|o| o.as_text_style_mut().unwrap().font())
+        .flatten()
         .unwrap();
-    let before = input
-        .with(|o| o.as_text_input().unwrap().css_input_text_work_for_test())
-        .unwrap();
-    take_css_input_check_visits(&f);
-    crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
-    let after = input
-        .with(|o| o.as_text_input().unwrap().css_input_text_work_for_test())
-        .unwrap();
-    assert_eq!(after, before);
+    let passes = crate::source::artboard::Artboard::layout_pass_count();
+    f.advance(1);
+    assert_eq!(input_line(&f), before);
     assert_eq!(
-        style
-            .with(|o| o.as_text_style().unwrap().css_input_font_refresh_count)
-            .unwrap(),
-        font_before
+        crate::source::artboard::Artboard::layout_pass_count(),
+        passes
     );
-    assert_eq!(take_css_input_check_visits(&f), (0, 1));
+    let after = css_input_style_handle(&f)
+        .with_mut(|o| o.as_text_style_mut().unwrap().font())
+        .flatten()
+        .unwrap();
+    assert!(std::sync::Arc::ptr_eq(&font, &after));
 }
 
 fn css_input_style_handle(f: &Scene) -> CoreHandle {
@@ -12088,192 +12073,127 @@ fn css_input_axis_change_wraps_and_scrolls_in_the_same_frame() {
     assert_eq!(f.max_offsets(), wide.max_offsets());
 }
 
-// Each mutation bypasses its authored changed callback. Also remove raw shape
-// dirt so the next read must validate the layout inputs rather than a sender.
-fn css_input_key_read_without_dirty(input: &str) {
+// These are real property/asset writes, including the late arrival of a font.
+fn css_input_sender_updates_layout(property: &str) {
     use crate::source::{
         assets::font_asset::FontAsset,
-        math::vec2d::Vec2D,
         text::{text_style_axis::TextStyleAxis, text_style_feature::TextStyleFeature},
     };
     let f = css_input_variable_scene(25.0);
-    let handle = input_handle(&f);
-    let before = handle
-        .with_mut(|o| {
-            o.as_text_input_mut()
-                .unwrap()
-                .raw_text_input()
-                .css_layout_build_count
-        })
-        .unwrap();
+    let input = input_handle(&f);
     let style = css_input_style_handle(&f);
-    let original_font = css_input_font_asset(&f)
+    let asset = css_input_font_asset(&f);
+    let font = asset
         .with_downcast::<FontAsset, _>(FontAsset::font)
         .flatten()
         .unwrap();
-    let original_range = f.max_offsets();
     let original_lines = css_input_line_count(&f);
-    match input {
+    let original_range = f.max_offsets();
+    let before = style
+        .with_mut(|o| o.as_text_style_mut().unwrap().font())
+        .flatten()
+        .unwrap();
+    match property {
         "text" => {
-            handle.with_mut(|o| {
-                o.as_text_input_mut()
-                    .unwrap()
-                    .base
-                    .set_text_value("one\ntwo\nthree".into())
-            });
+            CoreRegistry::set_string_handle(&input, 817, "one\ntwo\nthree".into());
         }
         "axis" => {
-            f.artboard
+            let axis = f
+                .artboard
                 .with_artboard(|a| a.find_all_handles::<TextStyleAxis>())
-                .remove(0)
-                .with_downcast_mut::<TextStyleAxis, _>(|a| a.base.set_axis_value_value(151.0));
+                .remove(0);
+            CoreRegistry::set_double_handle(&axis, 288, 151.0);
         }
-        "font_asset" => {
-            css_input_font_asset(&f)
-                .with_downcast_mut::<FontAsset, _>(|a| a.restore_host_font(None));
-        }
+        "font_asset" => FontAsset::set_font_occurrence(&asset, None),
         "font_size" => {
-            style.with_mut(|o| {
-                o.as_text_style_mut()
-                    .unwrap()
-                    .base
-                    .set_font_size_value(32.0)
-            });
+            CoreRegistry::set_double_handle(&style, 274, 32.0);
         }
         "line_height" => {
-            style.with_mut(|o| {
-                o.as_text_style_mut()
-                    .unwrap()
-                    .base
-                    .set_line_height_value(40.0)
-            });
+            CoreRegistry::set_double_handle(&style, 370, 40.0);
         }
         "feature" => {
-            f.artboard
+            let feature = f
+                .artboard
                 .with_artboard(|a| a.find_all_handles::<TextStyleFeature>())
-                .remove(0)
-                .with_downcast_mut::<TextStyleFeature, _>(|v| v.base.set_feature_value_value(0));
+                .remove(0);
+            CoreRegistry::set_uint_handle(&feature, 357, 0);
         }
         "rows" => {
-            handle.with_mut(|o| o.as_text_input_mut().unwrap().base.set_rows_value(4));
+            CoreRegistry::set_uint_handle(&input, i32::from(INPUT_ROWS), 4);
         }
         "width" => {
-            handle.with_mut(|o| {
-                o.as_text_input_mut().unwrap().control_size(
-                    Vec2D::new(50.0, 40.0),
-                    LayoutScaleType::Fixed,
-                    LayoutScaleType::Fixed,
-                    crate::source::layout::layout_enums::LayoutDirection::Ltr,
-                )
-            });
+            CoreRegistry::set_double_handle(&f.record("Input layout"), WIDTH.into(), 50.0);
         }
         _ => unreachable!(),
     }
-    handle.with_mut(|o| {
-        o.as_text_input_mut()
-            .unwrap()
-            .clear_css_input_shape_dirty_for_test()
-    });
-    let bounds = handle
-        .with(|o| o.as_text_input().unwrap().local_bounds())
-        .unwrap();
-    if input == "text" {
-        assert_eq!(bounds.height(), 60.0);
-    }
-    if input == "font_asset" {
-        assert_eq!(bounds.height(), 0.0);
-    }
-    let after = handle
-        .with_mut(|o| {
-            let raw = o.as_text_input_mut().unwrap().raw_text_input();
-            // Reading the shape, before update, must be sufficient.
-            let _ = raw.shape().line_count();
-            raw.css_layout_build_count
-        })
-        .unwrap();
-    assert!(after > before, "{input} left the positioned layout stale");
-    let again = handle
-        .with_mut(|o| {
-            o.as_text_input_mut()
-                .unwrap()
-                .raw_text_input()
-                .css_layout_build_count
-        })
-        .unwrap();
-    assert_eq!(
-        again, after,
-        "an unchanged key should reuse the positioned layout"
-    );
-    if input == "text" {
-        assert_eq!(css_input_line_count(&f), 3);
-    }
-    if input == "line_height" {
-        assert_eq!(input_line(&f).1, 40.0);
-    }
-    if input == "font_asset" {
-        assert!(
-            handle
-                .with_mut(|o| o
-                    .as_text_input_mut()
-                    .unwrap()
-                    .raw_text_input()
-                    .font()
-                    .is_none())
-                .unwrap()
-        );
-        assert_eq!(css_input_line_count(&f), 0);
-        f.advance(1);
-        assert_eq!(f.max_offsets(), (0.0, 0.0));
-        // The late arrival bypasses the asset notification too. The first
-        // solve must read through the key even though the style had no font.
-        css_input_font_asset(&f)
-            .with_downcast_mut::<FontAsset, _>(|a| a.restore_host_font(Some(original_font)));
-        f.advance(1);
-        assert_eq!(css_input_line_count(&f), original_lines);
-        assert_eq!(f.max_offsets(), original_range);
-    } else if input != "width" {
-        // A read which already rebuilt must still invalidate the cached solve.
-        f.advance(1);
-        if input == "text" {
+    f.advance(1);
+    match property {
+        "text" => {
+            assert_eq!(css_input_line_count(&f), 3);
             assert_eq!(f.max_offsets().1, -20.0);
         }
-        if input == "rows" {
-            assert_eq!(f.bounds("Input layout")[3], 80.0);
+        "font_asset" => {
+            assert_eq!(css_input_line_count(&f), 0);
+            assert_eq!(f.max_offsets(), (0.0, 0.0));
+            FontAsset::set_font_occurrence(&asset, Some(font));
+            f.advance(1);
+            assert_eq!(css_input_line_count(&f), original_lines);
+            assert_eq!(f.max_offsets(), original_range);
         }
+        "font_size" => {
+            assert_eq!(
+                input.with_mut(|o| o.as_text_input_mut().unwrap().raw_text_input().font_size()),
+                Some(32.0)
+            );
+        }
+        "line_height" => assert_eq!(input_line(&f).1, 40.0),
+        "rows" => assert_eq!(f.bounds("Input layout")[3], 80.0),
+        "width" => {
+            assert_eq!(f.bounds("Input layout")[2], 50.0);
+            assert!(css_input_line_count(&f) > original_lines);
+        }
+        "axis" | "feature" => {
+            let after = style
+                .with_mut(|o| o.as_text_style_mut().unwrap().font())
+                .flatten()
+                .unwrap();
+            assert!(!std::sync::Arc::ptr_eq(&before, &after));
+        }
+        _ => unreachable!(),
     }
 }
 
 #[test]
-fn css_input_key_text_without_dirty() {
-    css_input_key_read_without_dirty("text");
+fn css_input_text_setter_updates_layout() {
+    css_input_sender_updates_layout("text");
 }
 #[test]
-fn css_input_key_axis_without_dirty() {
-    css_input_key_read_without_dirty("axis");
+fn css_input_axis_setter_updates_layout() {
+    css_input_sender_updates_layout("axis");
 }
 #[test]
-fn css_input_key_font_asset_without_dirty() {
-    css_input_key_read_without_dirty("font_asset");
+fn css_input_late_font_asset_updates_layout() {
+    css_input_sender_updates_layout("font_asset");
 }
 #[test]
-fn css_input_key_font_size_without_dirty() {
-    css_input_key_read_without_dirty("font_size");
+fn css_input_font_size_setter_updates_layout() {
+    css_input_sender_updates_layout("font_size");
 }
 #[test]
-fn css_input_key_line_height_without_dirty() {
-    css_input_key_read_without_dirty("line_height");
+fn css_input_line_height_setter_updates_layout() {
+    css_input_sender_updates_layout("line_height");
 }
 #[test]
-fn css_input_key_feature_without_dirty() {
-    css_input_key_read_without_dirty("feature");
+fn css_input_feature_setter_updates_layout() {
+    css_input_sender_updates_layout("feature");
 }
 #[test]
-fn css_input_key_rows_without_dirty() {
-    css_input_key_read_without_dirty("rows");
+fn css_input_rows_setter_updates_layout() {
+    css_input_sender_updates_layout("rows");
 }
 #[test]
-fn css_input_key_width_without_dirty() {
-    css_input_key_read_without_dirty("width");
+fn css_input_available_width_setter_updates_layout() {
+    css_input_sender_updates_layout("width");
 }
 
 #[test]
@@ -12384,8 +12304,17 @@ fn css_input_edit_before_selection(select_all: bool, deleting: bool) {
         } else {
             raw.cursor_right(CursorBoundary::Character, false);
         }
+        assert_eq!(raw.shape().line_count(), if deleting { 2 } else { 6 });
+        // Selection has consumed shape dirt, but paths still belong to the
+        // previous text until update. Keep their independent pending bit.
+        let old_ink = raw.text_path().raw_path().bounds().height();
+        assert!(if deleting {
+            old_ink > 80.0
+        } else {
+            old_ink < 40.0
+        });
     });
-    f.advance(4);
+    f.advance(1);
     assert_eq!(f.bounds("Input layout")[3], 40.0);
     assert_eq!(f.max_offsets().1, if deleting { 0.0 } else { -80.0 });
     let ink_height = input_handle(&f)
@@ -12484,15 +12413,20 @@ fn css_input_scroll_includes_the_positioned_caret() {
 
 #[test]
 fn css_input_click_at_wrapped_line_start_keeps_caret_affinity() {
-    css_input_wrapped_line_start_caret(0.0);
+    css_input_wrapped_line_start_caret(0.0, false);
 }
 
 #[test]
 fn css_input_fractional_padding_keeps_wrapped_caret_after_layout() {
-    css_input_wrapped_line_start_caret(0.3);
+    css_input_wrapped_line_start_caret(0.3, false);
 }
 
-fn css_input_wrapped_line_start_caret(padding: f32) {
+#[test]
+fn css_input_rows_in_a_fixed_height_box_preserve_wrapped_caret_affinity() {
+    css_input_wrapped_line_start_caret(0.3, true);
+}
+
+fn css_input_wrapped_line_start_caret(padding: f32, change_rows: bool) {
     use crate::source::{
         input::focusable::{Key, KeyModifiers},
         math::vec2d::Vec2D,
@@ -12510,6 +12444,10 @@ fn css_input_wrapped_line_start_caret(padding: f32) {
             key.into(),
             padding
         ));
+    }
+    if change_rows {
+        CoreRegistry::set_uint_handle(&control, HEIGHT_KIND.into(), 1);
+        CoreRegistry::set_double_handle(&control, HEIGHT.into(), 40.0);
     }
     f.advance(4);
     scroll_input_by(&f, 0.0, -20.0);
@@ -12541,6 +12479,9 @@ fn css_input_wrapped_line_start_caret(padding: f32) {
         let caret = raw.cursor_visual_position();
         assert_eq!((caret.x(), caret.top(), caret.bottom()), (0.0, 20.0, 40.0));
     });
+    if change_rows {
+        CoreRegistry::set_uint_handle(&input, INPUT_ROWS.into(), 4);
+    }
     f.advance(4);
     assert_eq!(f.scroll_offset("Scroll content").1, -20.0);
     input.with_mut(|object| {
@@ -12690,5 +12631,315 @@ fn css_input_rtl_overflow_uses_the_padding_box_scroll_origin() {
             assert_eq!(f.scroll_offset("Scroll content").0, 0.0);
             assert_eq!(f.world_origin("Input layout").0, start);
         }
+    }
+}
+
+#[test]
+fn css_input_removed_options_refresh_the_font_without_retaining_dead_handles() {
+    use crate::source::text::{
+        text_style_axis::TextStyleAxis, text_style_feature::TextStyleFeature,
+    };
+    let f = css_input_variable_scene(25.0);
+    let arena = f.artboard.with_artboard(|a| a.core_arena().clone());
+    let axis = f
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<TextStyleAxis>())
+        .remove(0);
+    let feature = f
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<TextStyleFeature>())
+        .remove(0);
+    // Keep the payloads alive, as editor retirement and list recycling can do.
+    let old_axis = arena.remove(&axis).unwrap();
+    f.advance(1);
+    let old_feature = arena.remove(&feature).unwrap();
+    f.advance(1);
+    let font = css_input_style_handle(&f)
+        .with_mut(|o| o.as_text_style_mut().unwrap().font())
+        .flatten()
+        .unwrap();
+    let base = css_input_font_asset(&f)
+        .with_downcast::<crate::source::assets::font_asset::FontAsset, _>(|a| a.font())
+        .flatten()
+        .unwrap();
+    assert!(std::sync::Arc::ptr_eq(&font, &base));
+    drop((old_axis, old_feature));
+}
+
+#[test]
+fn css_input_removing_a_settled_scroller_input_retires_its_overflow() {
+    let f = css_input_scroll_fixture(true, "one\ntwo\nthree\nfour\nfive\nsix");
+    f.advance(4);
+    assert_eq!(f.max_offsets(), (0.0, -80.0));
+    let arena = f.artboard.with_artboard(|a| a.core_arena().clone());
+    let payload = arena.remove(&input_handle(&f)).unwrap();
+    f.advance(1);
+    assert_eq!(f.max_offsets(), (0.0, 0.0));
+    assert_eq!(f.bounds("Input layout")[3], 0.0);
+    assert_eq!(
+        f.named("Input layout")
+            .with_downcast::<LayoutComponent, _>(|l| l
+                .layout_style()
+                .item_is_compressible_replaced),
+        Some(false)
+    );
+    drop(payload);
+}
+
+#[test]
+fn css_input_options_moved_between_styles_leave_the_old_style() {
+    use crate::source::text::{
+        text_style_axis::TextStyleAxis, text_style_feature::TextStyleFeature,
+    };
+    for feature in [false, true] {
+        let f = scene(
+            (400.0, 300.0),
+            B {
+                css: Some(vec![]),
+                children: vec![
+                    B {
+                        name: "first",
+                        css: Some(width(100.0).to_vec()),
+                        text_input: true,
+                        text: "office",
+                        input_axes: if feature {
+                            vec![]
+                        } else {
+                            vec![(u32::from_be_bytes(*b"wdth"), 151.0)]
+                        },
+                        input_features: if feature {
+                            vec![(u32::from_be_bytes(*b"liga"), 0)]
+                        } else {
+                            vec![]
+                        },
+                        ..B::default()
+                    },
+                    B {
+                        name: "second",
+                        css: Some(width(100.0).to_vec()),
+                        text_input: true,
+                        text: "office",
+                        ..B::default()
+                    },
+                ],
+                ..B::default()
+            },
+        );
+        f.advance(4);
+        let styles = f
+            .artboard
+            .with_artboard(|a| a.find_all_handles::<crate::source::text::text_style::TextStyle>());
+        let option = if feature {
+            f.artboard
+                .with_artboard(|a| a.find_all_handles::<TextStyleFeature>())
+                .remove(0)
+        } else {
+            f.artboard
+                .with_artboard(|a| a.find_all_handles::<TextStyleAxis>())
+                .remove(0)
+        };
+        let new_parent = f.artboard.with_artboard(|a| a.id_of(&styles[1]));
+        assert!(CoreRegistry::set_uint_handle(&option, 5, new_parent));
+        f.advance(1);
+        assert_eq!(
+            option.with(|o| o.component_parent_handle()).flatten(),
+            Some(styles[1].clone())
+        );
+        let base = css_input_font_asset(&f)
+            .with_downcast::<crate::source::assets::font_asset::FontAsset, _>(|a| a.font())
+            .flatten()
+            .unwrap();
+        let old = styles[0]
+            .with_mut(|o| o.as_text_style_mut().unwrap().font())
+            .flatten()
+            .unwrap();
+        assert!(
+            std::sync::Arc::ptr_eq(&base, &old),
+            "the old style still owns its moved option"
+        );
+        let new = styles[1]
+            .with_mut(|o| o.as_text_style_mut().unwrap().font())
+            .flatten()
+            .unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&base, &new));
+        // Returning it also exercises repeated registration without duplicates.
+        let old_parent = f.artboard.with_artboard(|a| a.id_of(&styles[0]));
+        CoreRegistry::set_uint_handle(&option, 5, old_parent);
+        f.advance(1);
+        let new = styles[1]
+            .with_mut(|o| o.as_text_style_mut().unwrap().font())
+            .flatten()
+            .unwrap();
+        assert!(std::sync::Arc::ptr_eq(&base, &new));
+    }
+}
+
+#[test]
+fn css_input_replaced_style_is_found_before_the_next_solve() {
+    use crate::source::{
+        core::{CoreArena, CoreHandle},
+        core_context::CoreContext,
+        status_code::StatusCode,
+        text::{text_style::TextStyle, text_style_paint::TextStylePaint},
+    };
+    struct Context {
+        arena: CoreArena,
+        objects: Vec<CoreHandle>,
+    }
+    impl CoreContext for Context {
+        fn core_arena(&self) -> &CoreArena {
+            &self.arena
+        }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            self.objects.get(id as usize).cloned()
+        }
+    }
+    let f = input_scene(true, true, Some(2), 20.0, None);
+    f.advance(4);
+    let old = css_input_style_handle(&f);
+    let arena = f.artboard.with_artboard(|a| a.core_arena().clone());
+    let payload = arena.remove(&old).unwrap();
+    let replacement = arena.insert(TextStylePaint::default());
+    let mut context = Context {
+        arena,
+        objects: vec![f.artboard.core_handle(), input_handle(&f)],
+    };
+    replacement.with_mut(|o| {
+        o.as_component_mut().unwrap().base.set_parent_id_value(1);
+        assert_eq!(o.on_added_dirty(&mut context), StatusCode::Ok);
+        assert_eq!(o.on_added_clean(&mut context), StatusCode::Ok);
+    });
+    TextStyle::set_asset_occurrence(&replacement, Some(css_input_font_asset(&f)));
+    CoreRegistry::set_double_handle(&replacement, 370, 40.0);
+    f.advance(1);
+    assert_eq!(f.bounds("control")[3], 80.0);
+    assert_eq!(input_line(&f).1, 40.0);
+    // A font update must not attempt to notify the retired but retained style.
+    let font = css_input_font_asset(&f)
+        .with_downcast::<crate::source::assets::font_asset::FontAsset, _>(|a| a.font())
+        .flatten();
+    css_input_font_asset(&f)
+        .with_downcast_mut::<crate::source::assets::font_asset::FontAsset, _>(|a| a.set_font(font));
+    f.advance(1);
+    assert_eq!(input_line(&f).1, 40.0);
+    drop(payload);
+}
+
+#[test]
+fn css_input_css_to_translated_to_css_restores_the_authored_line_height() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            css: Some(vec![]),
+            children: vec![
+                B {
+                    name: "css control",
+                    css: Some([width(100.0).to_vec(), height(60.0).to_vec()].concat()),
+                    text_input: true,
+                    text: "Hi",
+                    input_properties: vec![U(979, 0)],
+                    input_style: vec![F(370, 40.0)],
+                    ..B::default()
+                },
+                B {
+                    name: "translated control",
+                    component: vec![
+                        F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0),
+                    ],
+                    ..B::default()
+                },
+            ],
+            ..B::default()
+        },
+    );
+    f.advance(4);
+    let input = input_handle(&f);
+    for target in [
+        "translated control",
+        "css control",
+        "translated control",
+        "css control",
+    ] {
+        let id = f.artboard.with_artboard(|a| a.id_of(&f.named(target)));
+        CoreRegistry::set_uint_handle(&input, 5, id);
+        f.advance(1);
+        let line = input_line(&f);
+        if target == "css control" {
+            assert_eq!((line.0, line.1), (10.0, 40.0));
+        } else {
+            assert_ne!(line.1, 40.0);
+        }
+    }
+}
+
+#[test]
+fn css_input_natural_measure_does_not_shape_text() {
+    let f = css_input_scroll_fixture(true, "one\ntwo");
+    f.advance(4);
+    let input = input_handle(&f);
+    CoreRegistry::set_string_handle(&input, 817, "one\ntwo\nthree\nfour\nfive\nsix".into());
+    input.with_mut(|o| {
+        let input = o.as_text_input_mut().unwrap();
+        assert_eq!(input.raw_text_input().shape().line_count(), 2);
+        assert_eq!(input.css_natural_size().y, 40.0);
+        assert_eq!(input.raw_text_input().shape().line_count(), 2);
+    });
+    f.advance(1);
+    assert_eq!(css_input_line_count(&f), 6);
+    assert_eq!(f.max_offsets(), (0.0, -80.0));
+}
+
+#[test]
+fn css_input_font_asset_id_setter_resolves_the_new_asset() {
+    let f = css_input_variable_scene(25.0);
+    let style = css_input_style_handle(&f);
+    let original = css_input_line_count(&f);
+    let id = style
+        .with(|o| o.as_text_style().unwrap().base.font_asset_id())
+        .unwrap();
+    CoreRegistry::set_uint_handle(&style, 279, u32::MAX);
+    f.advance(1);
+    assert_eq!(css_input_line_count(&f), 0);
+    assert_eq!(f.max_offsets(), (0.0, 0.0));
+    CoreRegistry::set_uint_handle(&style, 279, id);
+    f.advance(1);
+    assert_eq!(css_input_line_count(&f), original);
+}
+
+#[test]
+fn css_input_option_tag_setters_refresh_the_live_font() {
+    use crate::source::text::{
+        text_style_axis::TextStyleAxis, text_style_feature::TextStyleFeature,
+    };
+    let f = css_input_variable_scene(25.0);
+    let style = css_input_style_handle(&f);
+    for (option, key, tag) in [
+        (
+            f.artboard
+                .with_artboard(|a| a.find_all_handles::<TextStyleAxis>())
+                .remove(0),
+            289,
+            u32::from_be_bytes(*b"wght"),
+        ),
+        (
+            f.artboard
+                .with_artboard(|a| a.find_all_handles::<TextStyleFeature>())
+                .remove(0),
+            356,
+            u32::from_be_bytes(*b"kern"),
+        ),
+    ] {
+        let before = style
+            .with_mut(|o| o.as_text_style_mut().unwrap().font())
+            .flatten()
+            .unwrap();
+        CoreRegistry::set_uint_handle(&option, key, tag);
+        f.advance(1);
+        let after = style
+            .with_mut(|o| o.as_text_style_mut().unwrap().font())
+            .flatten()
+            .unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&before, &after));
     }
 }

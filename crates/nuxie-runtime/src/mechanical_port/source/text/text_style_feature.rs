@@ -26,25 +26,47 @@ pub struct TextStyleFeature {
 }
 
 impl TextStyleFeature {
+    pub fn parent_id_changed(&mut self) {
+        if self.base.reparent_css_input_child() {
+            if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
+                parent.with_mut(|o| {
+                    if let Some(style) = o.as_text_style_mut() {
+                        style.add_feature(this);
+                    }
+                });
+            }
+        }
+    }
+
+    pub fn tag_changed(&mut self) {
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|o| {
+                if let Some(style) = o.as_text_style_mut() {
+                    style.css_options_changed();
+                }
+            });
+        }
+    }
+    pub fn feature_value_changed(&mut self) {
+        self.tag_changed();
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code == StatusCode::Ok {
             let (Some(style), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
                 return StatusCode::InvalidObject;
             };
-            let Some(generation) = style
+            let added = style
                 .with_mut(|style| {
-                    let style = style.as_text_style_mut()?;
-                    style.add_feature(this);
-                    Some(style.css_input_options_generation())
+                    style
+                        .as_text_style_mut()
+                        .map(|style| style.add_feature(this))
                 })
                 .flatten()
-            else {
+                .is_some();
+            if !added {
                 return StatusCode::InvalidObject;
-            };
-            // This axis or feature is already borrowed by onAddedDirty.
-            if let Some(generation) = generation {
-                self.base.bind_css_input_options_generation(generation);
             }
         }
         code

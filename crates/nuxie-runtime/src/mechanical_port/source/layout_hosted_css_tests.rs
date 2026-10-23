@@ -634,3 +634,82 @@ fn css_nested_copy_uses_flex_basis_grow_and_self_alignment() {
     });
     assert_eq!(geometry, (150.0, 240.0, 150.0, 10.0));
 }
+
+#[test]
+fn css_input_list_clear_detaches_retained_rows() {
+    let scene = list_scene(true, false);
+    let list = scene
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<ArtboardComponentList>()[0].clone());
+    let rows: Vec<_> = (0..3)
+        .map(|i| {
+            list.with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(i))
+                .flatten()
+                .unwrap()
+        })
+        .collect();
+    list.with_downcast_mut::<ArtboardComponentList, _>(ArtboardComponentList::clear);
+    for row in rows {
+        assert!(row.with_artboard(|a| a.host().is_none() && a.parent_artboard().is_none()));
+        row.advance_default(1.0 / 60.0);
+    }
+}
+
+#[test]
+fn css_input_list_replacement_detaches_the_retained_old_row() {
+    let scene = list_scene(true, false);
+    let list = scene
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<ArtboardComponentList>()[0].clone());
+    let old = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
+        .flatten()
+        .unwrap();
+    let source = scene.file.with_file(|f| f.artboard_at_source(1)).unwrap();
+    let replacement = Artboard::nested_instance_from_handle(&source).unwrap();
+    ArtboardComponentList::add_artboard_at_occurrence(&list, replacement.clone(), 0, true);
+    assert!(old.with_artboard(|a| a.host().is_none() && a.parent_artboard().is_none()));
+    assert_eq!(replacement.with_artboard(|a| a.host()), Some(list));
+    old.advance_default(1.0 / 60.0);
+}
+
+#[test]
+fn css_input_nested_replacement_detaches_the_retained_old_instance() {
+    let scene = nested_scene(true, true);
+    let nested = scene
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<NestedArtboardLayout>()[0].clone());
+    let old = nested
+        .with(|o| o.nested_artboard_instance_handle())
+        .flatten()
+        .unwrap();
+    let source = scene.file.with_file(|f| f.artboard_at_source(1)).unwrap();
+    let replacement = Artboard::nested_instance_from_handle(&source).unwrap();
+    nested.with_mut(|o| {
+        o.as_nested_artboard_mut()
+            .unwrap()
+            .referenced_artboard_instance(replacement.clone())
+    });
+    assert!(old.with_artboard(|a| a.host().is_none() && a.parent_artboard().is_none()));
+    assert_eq!(replacement.with_artboard(|a| a.host()), Some(nested));
+    old.advance_default(1.0 / 60.0);
+}
+
+#[test]
+fn css_input_list_recycling_detaches_and_remounts_the_retained_row() {
+    let scene = list_scene(true, false);
+    let list = scene
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<ArtboardComponentList>()[0].clone());
+    let row = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
+        .flatten()
+        .unwrap();
+    list.with_downcast_mut::<ArtboardComponentList, _>(|l| l.remove_virtualizable(0));
+    assert!(row.with_artboard(|a| a.host().is_none() && a.parent_artboard().is_none()));
+    ArtboardComponentList::add_artboard_at_occurrence(&list, row.clone(), 0, true);
+    scene.advance();
+    assert_eq!(row.with_artboard(|a| a.host()), Some(list));
+    let bounds = row.with_artboard(|a| a.layout_bounds());
+    assert_eq!((bounds.width(), bounds.height()), (300.0, 80.0));
+}

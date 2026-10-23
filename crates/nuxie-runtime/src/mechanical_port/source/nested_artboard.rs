@@ -379,7 +379,17 @@ impl NestedArtboard {
             let volume = instance.volume();
             instance.set_volume(volume);
         });
-        self.instance = None;
+        if let Some(old) = self.instance.take() {
+            if old.core_handle() != instance.core_handle() {
+                // Focus cleanup can dirty the old layout. End its host link
+                // before callbacks can reach this actively borrowed owner.
+                old.with_artboard_mut(|a| {
+                    a.set_host_state(None, None, None);
+                });
+                old.cleanup_semantic_tree();
+                old.cleanup_focus_tree();
+            }
+        }
         self.reset_mesh_raster();
         self.instance = Some(instance.clone());
         let inactive_change_sequence = self.inactive_change_sequence.clone();

@@ -5,7 +5,8 @@ use nuxie_ore_metal::{
     binding_map::{BindingMap, Entry, ResourceKind, TextureSampleType, TextureViewDim},
     context::ContextApi,
     draw_bindings::DrawBindings,
-    gpu_resource::{AnyResourceHandle, ResourceHandle},
+    gpu_resource::{AnyResourceHandle, GPUResource, GpuResourcePayload, ResourceHandle},
+    pipeline::Pipeline,
     rstb_entry_bindings::*,
     rstb_entry_container::RstbEntryView,
     shader_module::{ShaderModule, TextureSamplerPair},
@@ -13,6 +14,26 @@ use nuxie_ore_metal::{
 };
 
 const ALL: u32 = BindingMap::kStageVertex | BindingMap::kStageFragment | BindingMap::kStageCompute;
+// Mirrors upstream's concrete TestPipeline subclass, including its base projection.
+#[repr(C)]
+struct TestPipeline(Pipeline);
+impl TestPipeline {
+    fn new(desc: &PipelineDesc<'_>) -> Self {
+        Self(nuxie_ore_metal::new_pipeline_backend_base_without_manager(desc).unwrap())
+    }
+}
+// SAFETY: the repr(C) first field is the Pipeline base, beginning with GPUResource.
+unsafe impl GpuResourcePayload for TestPipeline {
+    fn gpu_resource(&self) -> &GPUResource {
+        self.0.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.0.gpu_resource_mut()
+    }
+    fn pipeline_base(&self) -> Option<&Pipeline> {
+        Some(&self.0)
+    }
+}
 fn row(group: u8, binding: u8, kind: ResourceKind, stage_mask: u32) -> Entry {
     let mut e = Entry::default();
     e.group = group;
@@ -412,11 +433,7 @@ fn draw_needs_groups_matching_pipeline_layouts() {
         bindGroupLayoutCount: 1,
         ..Default::default()
     };
-    let pipeline = ResourceHandle::new(
-        None,
-        nuxie_ore_metal::new_pipeline_backend_base_without_manager(&desc).unwrap(),
-    )
-    .erase();
+    let pipeline = ResourceHandle::new(None, TestPipeline::new(&desc)).erase();
     let view = texture_view(&mut ctx);
     let buffer = ctx
         .makeBuffer(&BufferDesc {
@@ -506,11 +523,7 @@ fn draw_needs_groups_matching_pipeline_layouts() {
         bindGroupLayoutCount: 0,
         ..desc
     };
-    let flat = ResourceHandle::new(
-        None,
-        nuxie_ore_metal::new_pipeline_backend_base_without_manager(&flat).unwrap(),
-    )
-    .erase();
+    let flat = ResourceHandle::new(None, TestPipeline::new(&flat)).erase();
     let mut none = DrawBindings::default();
     none.setPipeline(Some(&flat));
     assert!(none.validate(Some(&mut error)));
@@ -525,11 +538,7 @@ fn draw_needs_groups_matching_pipeline_layouts() {
         bindGroupLayouts: Some(&old_layouts),
         ..desc
     };
-    let old_pipeline = ResourceHandle::new(
-        None,
-        nuxie_ore_metal::new_pipeline_backend_base_without_manager(&old_desc).unwrap(),
-    )
-    .erase();
+    let old_pipeline = ResourceHandle::new(None, TestPipeline::new(&old_desc)).erase();
     let mut older = DrawBindings::default();
     older.setPipeline(Some(&old_pipeline));
     assert!(older.validate(Some(&mut error)));

@@ -255,12 +255,15 @@ pub trait IntrinsicallySizeable {
         Vec2D::default()
     }
 
+    /// The caller captures CSS mode before entering host size control. A host
+    /// must not resolve the layout owner or participant to discover it here.
     fn control_size(
         &mut self,
         _size: Vec2D,
         _width_scale_type: LayoutScaleType,
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
+        _css: bool,
     ) {
     }
 
@@ -272,9 +275,10 @@ pub trait IntrinsicallySizeable {
         width: LayoutScaleType,
         height: LayoutScaleType,
         direction: LayoutDirection,
+        css: bool,
         _participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
     ) {
-        self.control_size(size, width, height, direction);
+        self.control_size(size, width, height, direction, css);
     }
 
     fn should_propagate_size_to_children(&self) -> bool {
@@ -295,12 +299,13 @@ pub fn control_size_handle(
     width: LayoutScaleType,
     height: LayoutScaleType,
     direction: LayoutDirection,
+    css: bool,
 ) -> bool {
     if owner.is_type_of(
         crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY,
     ) {
         crate::mechanical_port::source::shapes::shape::Shape::control_size_occurrence(
-            owner, size, width, height, direction,
+            owner, size, width, height, direction, css,
         );
         return true;
     }
@@ -309,14 +314,20 @@ pub fn control_size_handle(
             let Some(sizeable) = owner.as_intrinsically_sizeable_mut() else {
                 return false;
             };
-            sizeable.control_size(size, width, height, direction);
+            sizeable.control_size(size, width, height, direction, css);
             true
         })
         .unwrap_or(false)
 }
 
 macro_rules! intrinsic_owner {
-    ($owner:path $(, $natural:ident)? $(; $($extra:item)*)?) => {
+    (@control $owner:path, $this:ident, $size:ident, $width:ident, $height:ident, $direction:ident, $css:ident, css) => {
+        <$owner>::control_size($this, $size, $width, $height, $direction, $css)
+    };
+    (@control $owner:path, $this:ident, $size:ident, $width:ident, $height:ident, $direction:ident, $css:ident) => {
+        <$owner>::control_size($this, $size, $width, $height, $direction)
+    };
+    ($owner:path $(, $natural:ident)? $(=> $mode:ident)? $(; $($extra:item)*)?) => {
         impl IntrinsicallySizeable for $owner {
             $(
             fn natural_size_for_layout(&self) -> Option<Vec2D> {
@@ -338,29 +349,23 @@ macro_rules! intrinsic_owner {
                 width: LayoutScaleType,
                 height: LayoutScaleType,
                 direction: LayoutDirection,
+                _css: bool,
             ) {
-                <$owner>::control_size(self, size, width, height, direction)
+                intrinsic_owner!(@control $owner, self, size, width, height, direction, _css $(, $mode)?);
             }
             $($($extra)*)?
         }
     };
 }
-intrinsic_owner!(crate::mechanical_port::source::shapes::shape::Shape, natural_size_for_layout;
+intrinsic_owner!(crate::mechanical_port::source::shapes::shape::Shape, natural_size_for_layout => css;
     fn control_size_from_participant(
         &mut self, size: Vec2D, _width: LayoutScaleType, _height: LayoutScaleType,
-        _direction: LayoutDirection, participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
+        _direction: LayoutDirection, css: bool, participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
     ) {
-        self.control_size_with_participant(size, participant);
+        self.control_size_with_participant(size, participant, css);
     }
 );
-intrinsic_owner!(crate::mechanical_port::source::shapes::image::Image;
-    fn control_size_from_participant(
-        &mut self, size: Vec2D, _width: LayoutScaleType, _height: LayoutScaleType,
-        _direction: LayoutDirection, participant: &mut crate::source::layout::layout_participant::LayoutParticipant,
-    ) {
-        self.control_size_with_css(size, participant.css_record().is_some());
-    }
-);
+intrinsic_owner!(crate::mechanical_port::source::shapes::image::Image => css);
 intrinsic_owner!(
     crate::mechanical_port::source::shapes::parametric_path::ParametricPath,
     natural_size_for_layout
@@ -415,6 +420,7 @@ impl IntrinsicallySizeable for crate::mechanical_port::source::layout::n_sliced_
         width: LayoutScaleType,
         height: LayoutScaleType,
         direction: LayoutDirection,
+        _css: bool,
     ) {
         Self::control_size(self, size, width, height, direction);
     }

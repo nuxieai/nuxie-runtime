@@ -4090,7 +4090,7 @@ impl LayoutComponent {
                 });
                 let controlled =
                     crate::mechanical_port::source::intrinsically_sizeable::control_size_handle(
-                        &child, size, width, height, direction,
+                        &child, size, width, height, direction, css,
                     );
                 !controlled
                     || child

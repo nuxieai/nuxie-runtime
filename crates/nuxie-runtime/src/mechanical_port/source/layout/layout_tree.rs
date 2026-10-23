@@ -378,7 +378,7 @@ pub(crate) fn compute_picture_leaf(
         });
     let width_limits = content_width_limits(style, inputs.parent_size);
     let height_limits = content_height_limits(style, inputs.parent_size);
-    taffy::compute_leaf_layout(inputs, style, calc, |_, _| {
+    taffy::compute_leaf_layout(inputs, style, calc, |_, available| {
         let clamp = |value: f32, limits: (Option<f32>, Option<f32>)| {
             value
                 .min(limits.1.unwrap_or(f32::INFINITY))
@@ -390,7 +390,7 @@ pub(crate) fn compute_picture_leaf(
             .is_finite()
             .then_some(natural.x / natural.y)
             .filter(|ratio| *ratio > 0.0);
-        let size = match (width, height, ratio) {
+        let mut size = match (width, height, ratio) {
             (Some(width), Some(height), _) => Size { width, height },
             (Some(width), None, Some(ratio)) => Size {
                 width,
@@ -429,6 +429,25 @@ pub(crate) fn compute_picture_leaf(
                 height: height.unwrap_or(natural.y),
             },
         };
+        // Replaced flex minima use the smaller content or transferred
+        // suggestion. A larger cross size may grow max-content, not the
+        // automatic minimum on the queried axis.
+        if known.width.is_none() && available.width == AvailableSpace::MinContent {
+            size.width = super::layout_participant::transferred_image_minimum(
+                natural.x,
+                natural.y,
+                height,
+                height_limits,
+            );
+        }
+        if known.height.is_none() && available.height == AvailableSpace::MinContent {
+            size.height = super::layout_participant::transferred_image_minimum(
+                natural.y,
+                natural.x,
+                width,
+                width_limits,
+            );
+        }
         Size {
             width: clamp(size.width, width_limits),
             height: clamp(size.height, height_limits),

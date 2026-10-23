@@ -369,8 +369,11 @@ fn apply_container(values: CssValues<'_>, style: &mut Style, ltr: bool) {
 }
 
 /// A hosted occurrence supplies item properties without replacing the
-/// artboard's container properties, including its display type.
+/// artboard's container properties. Only display none overrides its display.
 pub(crate) fn apply_hosted_item(values: CssValues<'_>, style: &mut Style) {
+    if values.display_none() {
+        style.display = Display::None;
+    }
     style.box_sizing = match values.choice(keys::BOX_SIZING) {
         1 => BoxSizing::BorderBox,
         _ => BoxSizing::ContentBox,

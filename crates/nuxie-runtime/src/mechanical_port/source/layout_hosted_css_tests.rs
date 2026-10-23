@@ -18,7 +18,9 @@ use crate::source::{
     nested_artboard_leaf::NestedArtboardLeaf,
     viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
-use crate::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
+use crate::{
+    CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 
 const WIDTH: u16 = WIDTH_KIND + 1;
@@ -173,6 +175,10 @@ fn nested_scene(host_css: bool, root_css: bool) -> Scene {
 }
 
 fn nested_copies_scene(host_css: bool, root_css: bool, copies: u64) -> Scene {
+    nested_display_scene(host_css, root_css, copies, false)
+}
+
+fn nested_display_scene(host_css: bool, root_css: bool, copies: u64, hidden: bool) -> Scene {
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
     // The outer style follows all host and CSS record pairs.
@@ -196,6 +202,7 @@ fn nested_copies_scene(host_css: bool, root_css: bool, copies: u64) -> Scene {
         if host_css {
             riv.object(LAYOUT_CSS_STYLE)
                 .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+                .uint(DISPLAY, if hidden && index == 0 { 3 } else { 0 })
                 .uint(WIDTH_KIND, 7)
                 .float(WIDTH_PERCENT, 50.0)
                 .float(MARGIN_TOP, 10.0)
@@ -633,4 +640,343 @@ fn css_nested_copy_uses_flex_basis_grow_and_self_alignment() {
         )
     });
     assert_eq!(geometry, (150.0, 240.0, 150.0, 10.0));
+}
+
+#[test]
+fn css_nested_item_display_none_removes_only_its_copy_from_flow() {
+    let scene = nested_display_scene(true, true, 2, true);
+    let hosts = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>());
+    let row = |index: usize| {
+        hosts[index]
+            .with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap()
+    };
+    assert_eq!(row(1).with_artboard(|board| board.layout_y()), 10.0);
+    assert_eq!(
+        row(0).with_artboard(|board| board.layout_bounds().height()),
+        0.0
+    );
+    assert_eq!(
+        row(1).with_artboard(|board| board.layout_bounds().height()),
+        40.0
+    );
+}
+// Two copies of one painted, clickable CSS component. Only the first copy
+// optionally owns an item record; the second always participates in CSS sizing.
+fn interactive_display_scene(item_record: bool, root_css: bool, bound: bool) -> Scene {
+    use crate::source::generated::{
+        animation::{
+            any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+            exit_state_base::ExitStateBase, listener_fire_event_base::ListenerFireEventBase,
+            listener_types::listener_input_type_base::ListenerInputTypeBase,
+            nested_state_machine_base::NestedStateMachineBase,
+            state_machine_base::StateMachineBase, state_machine_layer_base::StateMachineLayerBase,
+            state_machine_listener_base::StateMachineListenerBase,
+        },
+        data_bind::{data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase},
+        event_base::EventBase,
+        nested_animation_base::NestedAnimationBase,
+        shapes::paint::{fill_base::FillBase, solid_color_base::SolidColorBase},
+        viewmodel::{
+            viewmodel_base::ViewModelBase,
+            viewmodel_property_number_base::ViewModelPropertyNumberBase,
+        },
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    if bound {
+        riv.object(ViewModelBase::TYPE_KEY).end();
+        riv.object(ViewModelPropertyNumberBase::TYPE_KEY).end();
+    }
+    // Root 0, CSS 1, copies (host, optional record, nested machine), root style.
+    let first_slots = if item_record { 3 } else { 2 };
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 300.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(
+            LayoutComponentBase::STYLE_ID_PROPERTY_KEY,
+            2 + first_slots + 3,
+        );
+    if bound {
+        riv.uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0);
+    }
+    riv.end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 2)
+        .end();
+    for index in 0..2 {
+        let host = if index == 0 { 2 } else { 2 + first_slots };
+        riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+            .end();
+        if index == 1 || item_record {
+            riv.object(LAYOUT_CSS_STYLE)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+                .uint(DISPLAY, if index == 0 { 3 } else { 0 })
+                .uint(WIDTH_KIND, 1)
+                .float(WIDTH, 100.0)
+                .uint(HEIGHT_KIND, 1)
+                .float(HEIGHT, 40.0)
+                .end();
+            if index == 0 && bound {
+                riv.object(DataBindContextBase::TYPE_KEY)
+                    .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, DISPLAY.into())
+                    .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+                    .end();
+            }
+        }
+        riv.object(NestedStateMachineBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+            .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
+            .end();
+    }
+    style(&mut riv, 0);
+    riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineLayerBase::TYPE_KEY).end();
+    for state in [
+        EntryStateBase::TYPE_KEY,
+        AnyStateBase::TYPE_KEY,
+        ExitStateBase::TYPE_KEY,
+    ] {
+        riv.object(state).end();
+    }
+    // Component root, optional CSS record, fill, solid, event, style.
+    let fill = if root_css { 2 } else { 1 };
+    board(&mut riv, 100.0, 40.0, fill + 7);
+    if root_css {
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            // A flex row: the item's block/flex/grid must never replace it.
+            .uint(DISPLAY, 1)
+            .end();
+    }
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, fill)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff112233)
+        .end();
+    riv.object(EventBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "tap")
+        .end();
+    for index in 0..2 {
+        let child = fill + 3 + index * 2;
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, fill + 8 + index)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, child)
+            .uint(WIDTH_KIND, 1)
+            .float(WIDTH, 10.0)
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT, 10.0)
+            .end();
+    }
+    style(&mut riv, 0);
+    style(&mut riv, fill + 3);
+    style(&mut riv, fill + 5);
+    riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineListenerBase::TYPE_KEY)
+        .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(ListenerInputTypeBase::TYPE_KEY)
+        .uint(
+            ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+            crate::source::listener_type::ListenerType::Click as u64,
+        )
+        .end();
+    riv.object(ListenerFireEventBase::TYPE_KEY)
+        .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, fill + 2)
+        .end();
+    riv.object(StateMachineLayerBase::TYPE_KEY).end();
+    for state in [
+        EntryStateBase::TYPE_KEY,
+        AnyStateBase::TYPE_KEY,
+        ExitStateBase::TYPE_KEY,
+    ] {
+        riv.object(state).end();
+    }
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+fn display_copies(scene: &Scene) -> Vec<RuntimeArtboardInstanceHandle> {
+    scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>())
+        .iter()
+        .map(|host| {
+            host.with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap()
+        })
+        .collect()
+}
+
+fn display_draw_count(scene: &Scene) -> usize {
+    let before = scene._factory.borrow().stream().lines().count();
+    let mut renderer = scene._factory.borrow().make_renderer();
+    scene.artboard.draw(&mut renderer);
+    scene
+        ._factory
+        .borrow()
+        .stream()
+        .lines()
+        .skip(before)
+        .filter(|line| line.starts_with("drawPath") && line.contains("color=0xff112233"))
+        .count()
+}
+
+fn display_click(
+    machine: &crate::RuntimeStateMachineInstanceHandle,
+    y: f32,
+) -> (bool, Vec<CoreHandle>) {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    machine.with_instance_mut(|machine| {
+        let point = Vec2D::new(10.0, y);
+        let listens = machine.listens_to_button_at(point, PointerButton::Primary);
+        let before = machine.reported_event_count();
+        machine.pointer_down(point, 0, PointerButton::Primary);
+        machine.pointer_up(point, 0, PointerButton::Primary);
+        let targets = (before..machine.reported_event_count())
+            .filter_map(|index| machine.reported_event_at(index).event)
+            .map(|event| {
+                event
+                    .with(|event| event.component_artboard_handle())
+                    .flatten()
+                    .unwrap()
+            })
+            .collect();
+        (listens, targets)
+    })
+}
+
+#[test]
+fn css_nested_item_display_none_hides_paint_and_taps() {
+    let scene = interactive_display_scene(true, true, false);
+    let machine = scene.artboard.state_machine_at(0).unwrap();
+    machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+    scene.advance();
+    assert_eq!(display_draw_count(&scene), 1);
+    let copies = display_copies(&scene);
+    assert_eq!(
+        display_click(&machine, 10.0),
+        (true, vec![copies[1].core_handle()]),
+        "visible sibling receives taps"
+    );
+    assert_eq!(
+        display_click(&machine, 50.0),
+        (false, vec![]),
+        "hidden copy has no tap target"
+    );
+}
+
+#[test]
+fn css_nested_bound_item_display_toggles_and_relayouts() {
+    use crate::source::{
+        generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+        viewmodel::viewmodel_instance::ViewModelInstance,
+    };
+    let scene = interactive_display_scene(true, true, true);
+    let instance = scene
+        .file
+        .with_file(|file| {
+            file.create_view_model_instance_for_artboard(scene.artboard.core_handle())
+        })
+        .unwrap();
+    let number = instance
+        .with_downcast::<ViewModelInstance, _>(|instance| instance.property_values()[0].clone())
+        .unwrap();
+    scene.artboard.bind_view_model_instance(Some(instance));
+    let machine = scene.artboard.state_machine_at(0).unwrap();
+    machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+    let copies = display_copies(&scene);
+    for display in [3, 0, 1, 2, 3, 0] {
+        CoreRegistry::set_double_handle(
+            &number,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            display as f32,
+        );
+        scene.advance();
+        machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+        let hidden = display == 3;
+        assert_eq!(
+            copies[1].with_artboard(|board| board.layout_y()),
+            if hidden { 0.0 } else { 40.0 },
+            "display {display}"
+        );
+        assert_eq!(
+            display_draw_count(&scene),
+            if hidden { 1 } else { 2 },
+            "display {display}"
+        );
+        assert_eq!(
+            display_click(&machine, 50.0),
+            (
+                !hidden,
+                if hidden {
+                    vec![]
+                } else {
+                    vec![copies[1].core_handle()]
+                }
+            ),
+            "display {display}"
+        );
+        assert_eq!(
+            display_click(&machine, 10.0),
+            (true, vec![copies[usize::from(hidden)].core_handle()]),
+            "tap reaches the visible copy, display {display}"
+        );
+        if !hidden {
+            let children =
+                copies[0].with_artboard(|board| board.find_all_handles::<LayoutComponent>());
+            let second = children
+                .last()
+                .unwrap()
+                .with_downcast::<LayoutComponent, _>(|child| (child.layout_x(), child.layout_y()))
+                .unwrap();
+            assert_eq!(
+                second,
+                (10.0, 0.0),
+                "container stays a flex row, item display {display}"
+            );
+        }
+        assert_eq!(
+            copies[1].with_artboard(|board| board.layout_bounds().height()),
+            40.0
+        );
+    }
+}
+
+#[test]
+fn css_nested_display_without_item_record_keeps_existing_behavior() {
+    let scene = interactive_display_scene(false, true, false);
+    let copies = display_copies(&scene);
+    assert_eq!(copies[1].with_artboard(|board| board.layout_y()), 40.0);
+    assert_eq!(display_draw_count(&scene), 2);
+}
+
+#[test]
+fn css_nested_item_display_on_a_translated_artboard_keeps_existing_behavior() {
+    let scene = interactive_display_scene(true, false, false);
+    let copies = display_copies(&scene);
+    assert_eq!(
+        copies[0].with_artboard(|board| board.layout_bounds().height()),
+        40.0
+    );
+    assert_eq!(copies[1].with_artboard(|board| board.layout_y()), 40.0);
 }

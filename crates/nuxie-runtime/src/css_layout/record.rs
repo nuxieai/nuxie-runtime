@@ -144,6 +144,9 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                         LayoutComponent::css_paint_changed_occurrence(&parent);
                     }
                 }
+                if key == keys::DISPLAY {
+                    self.hosted_display_changed(&parent);
+                }
                 // CSS painting order reads these, for a box or a
                 // participant (docs/CSS_LAYOUT.md, 4.4).
                 if matches!(
@@ -175,6 +178,19 @@ impl<const TYPE: u16> CssRecord<TYPE> {
             // A BoxPaint sizes only its box's paint: nothing reflows.
             keys::BOX_PAINT => LayoutComponent::css_paint_changed_occurrence(&parent),
             _ => {}
+        }
+    }
+    fn hosted_display_changed(&self, parent: &CoreHandle) {
+        let root = parent
+            .with_downcast::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
+                |host| host.base.base.artboard_instance_handle(0),
+            )
+            .flatten();
+        if let Some(root) = root {
+            LayoutComponent::hosted_css_display_changed_occurrence(
+                &root.core_handle(),
+                self.values().display_none(),
+            );
         }
     }
     /// Parent kinds each record type accepts (docs/CSS_LAYOUT.md, 1.1).
@@ -254,6 +270,7 @@ impl<const TYPE: u16> CssRecord<TYPE> {
             layout_node_provider::with_mut(&parent, |provider| {
                 provider.add_layout_style_applier(this.clone())
             });
+            self.hosted_display_changed(&parent);
         }
         mark_owner_dirty(&parent);
         StatusCode::Ok

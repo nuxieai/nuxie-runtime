@@ -2213,19 +2213,25 @@ impl LayoutComponent {
         record: Option<CoreHandle>,
         host: Option<&mut dyn crate::source::artboard_host::ArtboardHost>,
     ) {
-        let changed = owner
+        let (changed, hidden) = owner
             .with_mut(|object| {
                 let layout = object
                     .as_layout_component_mut()
                     .expect("hosted layout root");
                 if layout.hosted_css_item == record {
-                    // The carrier's values may have changed in place.
-                    return record.is_some();
+                    // The carrier may be borrowed by its live setter. Display
+                    // changes arrive separately with the already-read value.
+                    return (record.is_some(), None);
                 }
                 layout.hosted_css_item = record;
-                true
+                let hidden = layout
+                    .with_css(|css| css.display_none() || layout.hosted_item_display_hidden());
+                (true, hidden)
             })
-            .unwrap_or(false);
+            .unwrap_or((false, None));
+        if let Some(hidden) = hidden {
+            Self::set_css_display_hidden_occurrence(owner, hidden);
+        }
         if changed {
             Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
         }
@@ -3225,6 +3231,35 @@ impl LayoutComponent {
     /// `display: none` hides the box as the style's display none does. The
     /// record passes its value, since it is borrowed while it calls.
     pub(crate) fn css_display_changed_occurrence(owner: &CoreHandle, hidden: bool) {
+        let hidden = hidden
+            || owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .unwrap()
+                        .hosted_item_display_hidden()
+                })
+                .unwrap_or(false);
+        if Self::set_css_display_hidden_occurrence(owner, hidden) {
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+        }
+    }
+    /// A copy's item record is borrowed by its setter, so use the passed
+    /// value and read only the hosted root's separate container record.
+    pub(crate) fn hosted_css_display_changed_occurrence(owner: &CoreHandle, hidden: bool) {
+        let hidden = owner
+            .with(|object| {
+                let layout = object.as_layout_component().unwrap();
+                layout.with_css(|css| hidden || css.display_none())
+            })
+            .flatten();
+        if let Some(hidden) = hidden {
+            if Self::set_css_display_hidden_occurrence(owner, hidden) {
+                Self::mark_layout_node_dirty_occurrence(owner, false);
+            }
+        }
+    }
+    fn set_css_display_hidden_occurrence(owner: &CoreHandle, hidden: bool) -> bool {
         let changed = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().expect("layout component");
@@ -3234,7 +3269,7 @@ impl LayoutComponent {
             })
             .unwrap_or(false);
         if !changed {
-            return;
+            return false;
         }
         let collapsed = owner
             .with(|object| {
@@ -3246,7 +3281,7 @@ impl LayoutComponent {
             })
             .expect("live layout owner");
         Self::propagate_resolved_collapse_occurrence(owner, collapsed, None, None);
-        Self::mark_layout_node_dirty_occurrence(owner, false);
+        true
     }
     /// A CSS box's display, flex direction or justify-items changed. Its
     /// children's styles read its main axis, whether it is a grid and how
@@ -5602,9 +5637,20 @@ impl LayoutComponent {
     pub fn solved_border(&self) -> [f32; 4] {
         self.solved_border
     }
+    fn hosted_item_display_hidden(&self) -> bool {
+        let Some(own) = self.css_record() else {
+            return false;
+        };
+        self.hosted_css_item
+            .as_ref()
+            // A list row uses its own record, which may be the active setter.
+            .filter(|item| **item != own)
+            .and_then(|item| crate::css_layout::record::with_values(item, |css| css.display_none()))
+            .unwrap_or(false)
+    }
     fn refresh_style_display_hidden(&mut self) {
         let hidden = self
-            .with_css(|css| css.display_none())
+            .with_css(|css| css.display_none() || self.hosted_item_display_hidden())
             .or_else(|| self.with_style(|style| style.display() == YGDisplay::None))
             .unwrap_or(false);
         self.set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, hidden);

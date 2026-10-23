@@ -14,7 +14,7 @@ fn compute_line_metrics(
 ) -> LineMetrics {
     if let Some(metrics) = css {
         let height = if custom_line_height < 0.0 {
-            metrics.ascent + metrics.descent + metrics.line_gap
+            metrics.normal_line_height()
         } else {
             custom_line_height
         };

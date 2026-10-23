@@ -11980,16 +11980,47 @@ fn css_input_scroll_includes_the_positioned_caret() {
 
 #[test]
 fn css_input_click_at_wrapped_line_start_keeps_caret_affinity() {
+    css_input_wrapped_line_start_caret(0.0);
+}
+
+#[test]
+fn css_input_fractional_padding_keeps_wrapped_caret_after_layout() {
+    css_input_wrapped_line_start_caret(0.3);
+}
+
+fn css_input_wrapped_line_start_caret(padding: f32) {
     use crate::source::{
         input::focusable::{Key, KeyModifiers},
         math::vec2d::Vec2D,
     };
     let f = css_input_scroll_fixture(true, "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz");
+    let control = f.record("Input layout");
+    assert!(CoreRegistry::set_uint_handle(
+        &control,
+        BOX_SIZING.into(),
+        1
+    ));
+    for key in [PADDING_LEFT, PADDING_RIGHT] {
+        assert!(CoreRegistry::set_double_handle(
+            &control,
+            key.into(),
+            padding
+        ));
+    }
     f.advance(4);
     scroll_input_by(&f, 0.0, -20.0);
     f.advance(2);
     assert_eq!(f.scroll_offset("Scroll content").1, -20.0);
     let input = input_handle(&f);
+    let width = input
+        .with_mut(|object| {
+            object
+                .as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .max_width()
+        })
+        .unwrap();
     input.with_mut(|object| {
         let input = object.as_text_input_mut().unwrap();
         let world = input.base.world_transform() * Vec2D::new(0.0, 30.0);
@@ -12010,6 +12041,12 @@ fn css_input_click_at_wrapped_line_start_keeps_caret_affinity() {
     assert_eq!(f.scroll_offset("Scroll content").1, -20.0);
     input.with_mut(|object| {
         let raw = object.as_text_input_mut().unwrap().raw_text_input();
+        assert_eq!(
+            raw.max_width(),
+            width,
+            "a click keeps the same content width"
+        );
+        assert_eq!(raw.cursor().end().line_index(), 1);
         let drawn = raw.cursor_path().raw_path().bounds();
         assert_eq!(
             (drawn.left(), drawn.top(), drawn.bottom()),

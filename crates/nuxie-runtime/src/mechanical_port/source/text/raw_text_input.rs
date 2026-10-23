@@ -180,7 +180,16 @@ impl Default for RawTextInput {
 }
 
 impl RawTextInput {
-    const CARET_WIDTH: f32 = 1.0;
+    pub(crate) const CARET_WIDTH: f32 = 1.0;
+
+    fn caret_bounds(caret: CursorVisualPosition) -> Aabb {
+        Aabb::new(
+            caret.x(),
+            caret.top(),
+            caret.x() + Self::CARET_WIDTH,
+            caret.bottom(),
+        )
+    }
 
     pub fn new() -> Self {
         Self {
@@ -529,12 +538,7 @@ impl RawTextInput {
         let mut bounds = self.shape.bounds();
         let caret = self.cursor_visual_position();
         if caret.found() {
-            bounds.expand(Aabb::new(
-                caret.x(),
-                caret.top(),
-                caret.x() + Self::CARET_WIDTH,
-                caret.bottom(),
-            ));
+            bounds.expand(Self::caret_bounds(caret));
         }
         bounds
     }
@@ -647,13 +651,12 @@ impl RawTextInput {
             self.selection_path
                 .update(&self.selection_rects, self.selection_corner_radius);
             self.cursor_path.rewind();
-            let caret_width = Self::CARET_WIDTH;
-            let caret = self.cursor_visual_position();
+            let caret = Self::caret_bounds(self.cursor_visual_position());
             let mut rectangle = RawPath::default();
-            rectangle.move_to(caret.x(), caret.top());
-            rectangle.line_to(caret.x() + caret_width, caret.top());
-            rectangle.line_to(caret.x() + caret_width, caret.bottom());
-            rectangle.line_to(caret.x(), caret.bottom());
+            rectangle.move_to(caret.left(), caret.top());
+            rectangle.line_to(caret.right(), caret.top());
+            rectangle.line_to(caret.right(), caret.bottom());
+            rectangle.line_to(caret.left(), caret.bottom());
             rectangle.close();
             self.cursor_path.add_path_clockwise(&rectangle, None);
         }

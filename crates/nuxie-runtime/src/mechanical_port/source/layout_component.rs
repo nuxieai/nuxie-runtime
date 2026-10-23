@@ -137,6 +137,18 @@ impl Layout {
     pub fn height(self) -> f32 {
         self.height
     }
+
+    /// The CSS content box in local coordinates. Keep its dimensions directly;
+    /// forming bounds and subtracting their edges could round the size again.
+    fn css_content_box(self, padding: LayoutPadding, border: [f32; 4]) -> Self {
+        let [top, right, bottom, left] = border;
+        Self::new(
+            left + padding.left(),
+            top + padding.top(),
+            (self.width - padding.left() - padding.right() - left - right).max(0.0),
+            (self.height - padding.top() - padding.bottom() - top - bottom).max(0.0),
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -3271,14 +3283,13 @@ impl LayoutComponent {
         if !self.is_leaf() {
             return Vec2D::default();
         }
-        let [top, _, _, left] = self.solved_border;
-        let padding = self.solved_padding;
-        let item = self.current_css_content_layout();
+        let content = self.current_css_content_layout().unwrap_or_else(|| {
+            self.layout
+                .css_content_box(self.solved_padding, self.solved_border)
+        });
         Vec2D::new(
-            -self.layout.width() * self.css_content_origin.x
-                + item.map_or(left + padding.left(), |item| item.left()),
-            -self.layout.height() * self.css_content_origin.y
-                + item.map_or(top + padding.top(), |item| item.top()),
+            -self.layout.width() * self.css_content_origin.x + content.left(),
+            -self.layout.height() * self.css_content_origin.y + content.top(),
         )
     }
     fn set_css_content_offsets(children: Vec<CoreHandle>, offset: Vec2D) -> bool {
@@ -3884,22 +3895,21 @@ impl LayoutComponent {
         if let Some(item) = self.current_css_content_layout() {
             return Vec2D::new(item.width(), item.height());
         }
-        let [top, right, bottom, left] = self.solved_border;
-        let padding = self.layout_padding;
-        Vec2D::new(
-            (width - padding.left() - padding.right() - left - right).max(0.0),
-            (height - padding.top() - padding.bottom() - top - bottom).max(0.0),
-        )
+        let content = self
+            .layout
+            .css_content_box(self.layout_padding, self.solved_border);
+        Vec2D::new(content.width(), content.height())
     }
     /// The physical content box, independent of the anonymous content item.
     pub(crate) fn css_content_box(&self) -> Aabb {
-        let [top, right, bottom, left] = self.solved_border;
-        let padding = self.solved_padding;
+        let content = self
+            .layout
+            .css_content_box(self.solved_padding, self.solved_border);
         Aabb::from_ltwh(
-            left + padding.left(),
-            top + padding.top(),
-            (self.layout.width() - padding.left() - padding.right() - left - right).max(0.0),
-            (self.layout.height() - padding.top() - padding.bottom() - top - bottom).max(0.0),
+            content.left(),
+            content.top(),
+            content.width(),
+            content.height(),
         )
     }
     /// Compare with the size actually given to content. The solved item
@@ -5119,11 +5129,11 @@ impl LayoutComponent {
             .padding
             .resolve_or_zero(inputs.parent_size.width, calc);
         let border = style.border.resolve_or_zero(inputs.parent_size.width, calc);
-        let inset = padding + border;
-        let size = Vec2D::new(
-            (output.size.width - inset.horizontal_axis_sum()).max(0.0),
-            (output.size.height - inset.vertical_axis_sum()).max(0.0),
+        let content = Layout::new(0.0, 0.0, output.size.width, output.size.height).css_content_box(
+            LayoutPadding::new(padding.left, padding.top, padding.right, padding.bottom),
+            [border.top, border.right, border.bottom, border.left],
         );
+        let size = Vec2D::new(content.width(), content.height());
         let scroll_container =
             style.overflow.x.is_scroll_container() || style.overflow.y.is_scroll_container();
         let rtl = style.direction.is_rtl();

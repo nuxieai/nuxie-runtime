@@ -214,6 +214,12 @@ pub struct CssLineMetrics {
     pub line_gap: f32,
 }
 
+impl CssLineMetrics {
+    pub(crate) fn normal_line_height(self) -> f32 {
+        self.ascent + self.descent + self.line_gap
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Axis {
     pub tag: u32,

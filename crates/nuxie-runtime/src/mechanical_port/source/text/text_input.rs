@@ -158,7 +158,7 @@ impl TextInput {
                             return Some(authored);
                         }
                         let metrics = style.font()?.css_line_metrics(style.base.font_size());
-                        Some(metrics.ascent + metrics.descent + metrics.line_gap)
+                        Some(metrics.normal_line_height())
                     })
                     .flatten()
             })
@@ -558,15 +558,16 @@ impl TextInput {
             let viewport_x = cursor.x() + scroll.authored_scroll_offset_x();
             let viewport_top = cursor.top() + scroll.authored_scroll_offset_y();
             let viewport_bottom = cursor.bottom() + scroll.authored_scroll_offset_y();
+            let caret_width = RawTextInput::CARET_WIDTH;
             let horizontal = !multiline && scroll.base.constrains_horizontal();
             let vertical = multiline && scroll.base.constrains_vertical();
             if horizontal && viewport_x < 0.0 {
                 scroll.stop_physics();
                 scroll.set_authored_scroll_offset_x(scroll.authored_scroll_offset_x() - viewport_x);
-            } else if horizontal && viewport_x > viewport_width - 1.0 {
+            } else if horizontal && viewport_x > viewport_width - caret_width {
                 scroll.stop_physics();
                 scroll.set_authored_scroll_offset_x(
-                    scroll.authored_scroll_offset_x() - (viewport_x - viewport_width + 1.0),
+                    scroll.authored_scroll_offset_x() - (viewport_x - viewport_width + caret_width),
                 );
             }
             if vertical && viewport_top < 0.0 {

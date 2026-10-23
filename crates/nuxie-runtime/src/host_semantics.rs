@@ -1257,15 +1257,14 @@ fn collect_geometry(
             continue;
         };
         let root_transform = drawing_to_root * world;
-        // Keep the ordinary catalogue's bounds within its artboard, including
-        // overflow and styleless layout children. Clip those bounds from the
-        // host outward, using the rendered occurrence transforms.
-        let host = artboard.with_artboard(|artboard| artboard.base.host());
+        // Visible bounds take the same clips, from the drawable outward, as
+        // the point test below and as drawing: its artboard's frame when that
+        // artboard clips, its hosts' clips, and any clipping shapes.
         let Some(bounds) = geometry_visible_bounds(
-            host.as_ref().unwrap_or(&handle),
+            &handle,
             local_bounds,
             root_transform,
-            visibility == GeometryVisibility::Visible && host.is_some(),
+            visibility == GeometryVisibility::Visible,
             &spaces,
         )
         .filter(|bounds| !bounds.is_empty_or_nan())

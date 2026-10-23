@@ -109,12 +109,15 @@ impl Drop for TextSelectionController {
     }
 }
 
-fn source_position(text: &Text, display: CursorPosition) -> CursorPosition {
-    CursorPosition::new(
-        display.line_index(),
-        text.styled_text
-            .display_to_source(display.code_point_index()),
-    )
+fn source_position(
+    text: &Text,
+    display: CursorPosition,
+    point: Vec2D,
+    layout: &TextLayoutView<'_>,
+) -> CursorPosition {
+    text.styled_text
+        .css_indices()
+        .map_or(display, |map| map.hit_position(display, point, layout))
 }
 
 fn finite(p: Vec2D) -> bool {
@@ -411,14 +414,14 @@ impl TextSelectionController {
                     let distance = delta.x * delta.x + delta.y * delta.y;
                     if distance < *distance_squared {
                         *distance_squared = distance;
-                        *offset = text.styled_text.display_to_source(
-                            CursorPosition::from_line_x(
-                                index as u32,
-                                local.x,
-                                &state.participants[i].layout(text),
-                            )
-                            .code_point_index(),
-                        );
+                        let layout = state.participants[i].layout(text);
+                        *offset = source_position(
+                            text,
+                            CursorPosition::from_line_x(index as u32, local.x, &layout),
+                            local,
+                            &layout,
+                        )
+                        .code_point_index();
                         found = true;
                     }
                 }
@@ -655,11 +658,14 @@ impl SelectionState {
                 if !finite(local) {
                     return None;
                 }
+                let layout = self.participants[i].layout(text);
                 Some(Endpoint {
                     participant: i,
                     position: source_position(
                         text,
-                        CursorPosition::from_translation(local, &self.participants[i].layout(text)),
+                        CursorPosition::from_translation(local, &layout),
+                        local,
+                        &layout,
                     ),
                 })
             })
@@ -696,15 +702,14 @@ impl SelectionState {
                     let distance = delta.x * delta.x + delta.y * delta.y;
                     if distance < best {
                         best = distance;
+                        let layout = self.participants[i].layout(text);
                         result = Some(Endpoint {
                             participant: i,
                             position: source_position(
                                 text,
-                                CursorPosition::from_line_x(
-                                    line_index as u32,
-                                    local.x,
-                                    &self.participants[i].layout(text),
-                                ),
+                                CursorPosition::from_line_x(line_index as u32, local.x, &layout),
+                                local,
+                                &layout,
                             ),
                         });
                     }

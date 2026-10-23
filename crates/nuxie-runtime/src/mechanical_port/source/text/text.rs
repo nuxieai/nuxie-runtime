@@ -345,9 +345,63 @@ impl StyledText {
         std::mem::swap(&mut self.runs, other);
     }
 
+    fn preserved_tabs(&self) -> &[u32] {
+        self.css_indices
+            .as_ref()
+            .map_or(&[], |map| map.preserved_tabs())
+    }
+    fn shape(&self) -> Vec<Paragraph> {
+        let font = self.runs[0]
+            .font
+            .as_ref()
+            .expect("shaped text retains its font");
+        if self.preserved_tabs().is_empty() {
+            return font.shape_text(self.unichars(), self.runs(), 0);
+        }
+        let mut shaping_text = self.value.clone();
+        for &tab in self.preserved_tabs() {
+            shaping_text[tab as usize] = 32;
+        }
+        // A tab is an isolated gap, so font features and kerning cannot join
+        // it to either adjacent cluster when it is shaped as a space.
+        let mut shaping_runs = Vec::new();
+        let mut offset = 0;
+        for run in &self.runs {
+            let end = offset + run.unichar_count;
+            let first = self.preserved_tabs().partition_point(|&tab| tab < offset);
+            let last = self.preserved_tabs().partition_point(|&tab| tab < end);
+            for &tab in &self.preserved_tabs()[first..last] {
+                if tab > offset {
+                    shaping_runs.push(TextRun {
+                        unichar_count: tab - offset,
+                        ..run.clone()
+                    });
+                }
+                shaping_runs.push(TextRun {
+                    unichar_count: 1,
+                    ..run.clone()
+                });
+                offset = tab + 1;
+            }
+            if offset < end {
+                shaping_runs.push(TextRun {
+                    unichar_count: end - offset,
+                    ..run.clone()
+                });
+            }
+            offset = end;
+        }
+        let mut paragraphs = font.shape_text(&shaping_text, &shaping_runs, 0);
+        crate::css_text::prepare_tabs(&mut paragraphs, self.css_indices.as_ref().unwrap());
+        paragraphs
+    }
+
     /// Whether shaping this reads exactly what shaping `unichars` over `runs`
     /// reads: the same code points and runs, fonts by identity and sizes by bits.
-    fn shapes_like(&self, unichars: &[u32], runs: &[TextRun]) -> bool {
+    fn shapes_like(&self, unichars: &[u32], runs: &[TextRun], tabs: &[u32]) -> bool {
+        if self.preserved_tabs() != tabs {
+            return false;
+        }
         self.value == unichars
             && self.runs.len() == runs.len()
             && self.runs.iter().zip(runs).all(|(a, b)| {
@@ -373,6 +427,7 @@ impl StyledText {
 /// reshaping it would produce these same paragraphs.
 struct MeasuredShape {
     unichars: Vec<u32>,
+    css_tabs: Vec<u32>,
     runs: Vec<TextRun>,
     // fallback_state() when shaped. A shaping that called the fallback is not
     // kept: what the callback returns may change.
@@ -1352,13 +1407,11 @@ impl Text {
         css_strut: Option<&TextRun>,
         css_indices: Option<&crate::css_text::TextIndexMap>,
     ) -> Vec<Vec<GlyphLine>> {
-        let auto_width = width == -1.0;
-        let mut paragraph_width = width;
         let mut lines = Vec::with_capacity(paragraphs.len());
         for paragraph in paragraphs {
             let mut paragraph_lines = GlyphLine::break_lines_with_word_break(
                 &paragraph.runs,
-                if auto_width || wrap == TextWrap::NoWrap {
+                if width == -1.0 || wrap == TextWrap::NoWrap {
                     -1.0
                 } else {
                     width
@@ -1370,19 +1423,77 @@ impl Text {
                     crate::css_text::trim_line(line, &paragraph.runs, map);
                 }
             }
-            if auto_width {
-                paragraph_width = paragraph_width.max(GlyphLine::compute_max_width(
-                    &paragraph_lines,
-                    &paragraph.runs,
-                ));
+            lines.push(paragraph_lines);
+        }
+        Self::space_lines(paragraphs, lines, width, align, min_align_width, css_strut)
+    }
+    fn break_styled_lines(
+        width: f32,
+        align: TextAlign,
+        wrap: TextWrap,
+        word_break: TextWordBreak,
+        styled: &StyledText,
+        paragraphs: &mut [Paragraph],
+    ) -> Vec<Vec<GlyphLine>> {
+        if styled.preserved_tabs().is_empty() {
+            return Self::break_lines_with_strut(
+                paragraphs,
+                width,
+                align,
+                wrap,
+                word_break,
+                0.0,
+                styled.css_strut.as_ref(),
+                styled.css_indices.as_ref(),
+            );
+        }
+        let mut lines = Vec::with_capacity(paragraphs.len());
+        for paragraph in paragraphs.iter_mut() {
+            let mut paragraph_lines = GlyphLine::break_lines_with_tabs(
+                &mut paragraph.runs,
+                if width == -1.0 || wrap == TextWrap::NoWrap {
+                    -1.0
+                } else {
+                    width
+                },
+                word_break,
+            );
+            if let Some(map) = &styled.css_indices {
+                for line in &mut paragraph_lines {
+                    crate::css_text::trim_line(line, &paragraph.runs, map);
+                }
             }
             lines.push(paragraph_lines);
         }
+        Self::space_lines(
+            paragraphs,
+            lines,
+            width,
+            align,
+            0.0,
+            styled.css_strut.as_ref(),
+        )
+    }
+    fn space_lines(
+        paragraphs: &[Paragraph],
+        mut lines: Vec<Vec<GlyphLine>>,
+        width: f32,
+        align: TextAlign,
+        min_align_width: f32,
+        css_strut: Option<&TextRun>,
+    ) -> Vec<Vec<GlyphLine>> {
+        let mut paragraph_width = width;
+        if width == -1.0 {
+            for (paragraph, lines) in paragraphs.iter().zip(&lines) {
+                paragraph_width =
+                    paragraph_width.max(GlyphLine::compute_max_width(lines, &paragraph.runs));
+            }
+        }
         paragraph_width = paragraph_width.max(min_align_width);
-        for (paragraph_index, paragraph) in paragraphs.iter().enumerate() {
+        for (index, paragraph) in paragraphs.iter().enumerate() {
             if let Some(strut) = css_strut {
                 GlyphLine::compute_css_line_spacing(
-                    &mut lines[paragraph_index],
+                    &mut lines[index],
                     &paragraph.runs,
                     paragraph_width,
                     align,
@@ -1390,8 +1501,8 @@ impl Text {
                 );
             } else {
                 GlyphLine::compute_line_spacing(
-                    paragraph_index == 0,
-                    &mut lines[paragraph_index],
+                    index == 0,
+                    &mut lines[index],
                     &paragraph.runs,
                     paragraph_width,
                     align,
@@ -1429,14 +1540,8 @@ impl Text {
             if precompute_modifier_coverage {
                 let mut styled = std::mem::take(&mut self.modifier_styled_text);
                 if self.make_styled(&mut styled, false, font_scale) {
-                    let runs = styled.runs();
-                    self.modifier_shape = runs[0]
-                        .font
-                        .as_ref()
-                        .expect("shaped text retains its font")
-                        .shape_text(styled.unichars(), runs, 0);
-                    self.modifier_lines = Self::break_lines_with_strut(
-                        &self.modifier_shape,
+                    self.modifier_shape = styled.shape();
+                    self.modifier_lines = Self::break_styled_lines(
                         if self.effective_sizing() == TextSizing::AutoWidth
                             && !parent_is_layout_not_artboard
                         {
@@ -1447,9 +1552,8 @@ impl Text {
                         self.align(),
                         self.wrap(),
                         self.word_break(),
-                        0.0,
-                        styled.css_strut.as_ref(),
-                        styled.css_indices.as_ref(),
+                        &styled,
+                        &mut self.modifier_shape,
                     );
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
@@ -1478,17 +1582,9 @@ impl Text {
             if has_styled {
                 self.shape = match self.take_measured_shape(&styled) {
                     Some(shape) => shape,
-                    None => {
-                        let runs = styled.runs();
-                        runs[0]
-                            .font
-                            .as_ref()
-                            .expect("shaped text retains its font")
-                            .shape_text(styled.unichars(), runs, 0)
-                    }
+                    None => styled.shape(),
                 };
-                self.lines = Self::break_lines_with_strut(
-                    &self.shape,
+                self.lines = Self::break_styled_lines(
                     if self.effective_sizing() == TextSizing::AutoWidth
                         && !parent_is_layout_not_artboard
                     {
@@ -1499,9 +1595,8 @@ impl Text {
                     self.align(),
                     self.wrap(),
                     self.word_break(),
-                    0.0,
-                    styled.css_strut.as_ref(),
-                    styled.css_indices.as_ref(),
+                    &styled,
+                    &mut self.shape,
                 );
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
@@ -1769,21 +1864,14 @@ impl Text {
             if !this.make_styled(&mut styled, true, scale) {
                 return true;
             }
-            let runs = styled.runs();
-            let shape = runs[0]
-                .font
-                .as_ref()
-                .expect("shaped text retains its font")
-                .shape_text(styled.unichars(), runs, 0);
-            let lines = Text::break_lines_with_strut(
-                &shape,
+            let mut shape = styled.shape();
+            let lines = Text::break_styled_lines(
                 box_width,
                 this.align(),
                 this.wrap(),
                 this.word_break(),
-                0.0,
-                styled.css_strut.as_ref(),
-                styled.css_indices.as_ref(),
+                &styled,
+                &mut shape,
             );
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
@@ -2082,8 +2170,8 @@ impl Text {
                         }
                         }
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Suppressed => {
-                            // Drawn by its cluster's colour picture.
-                            inked = true;
+                            // Cluster pictures carry ink; CSS tabs carry only a gap.
+                            inked = !run.is_css_tab(index);
                         }
                     }
                     // Nuxie addition: the run style's underline/line-through.
@@ -2527,7 +2615,7 @@ impl Text {
     fn take_measured_shape(&mut self, styled: &StyledText) -> Option<Vec<Paragraph>> {
         let measured = self.measured_shape.take()?;
         if measured.fallback == fallback_state()
-            && styled.shapes_like(&measured.unichars, &measured.runs)
+            && styled.shapes_like(&measured.unichars, &measured.runs, &measured.css_tabs)
         {
             return Some(measured.shape);
         }
@@ -2543,42 +2631,34 @@ impl Text {
         if self.styled_text.empty() {
             return Some(0.0);
         }
-        let temporary = if self.measured_shape.is_none() {
+        let mut temporary = if self.measured_shape.is_none() {
             let mut styled = StyledText::default();
             if !self.make_styled(&mut styled, true, 1.0) {
                 return Some(0.0);
             }
-            let runs = styled.runs();
-            Some(
-                runs[0]
-                    .font
-                    .as_ref()
-                    .expect("shaped text retains its font")
-                    .shape_text(styled.unichars(), runs, 0),
-            )
+            Some(styled.shape())
         } else {
             None
         };
-        let shape = self
-            .measured_shape
-            .as_ref()
-            .map(|measured| &measured.shape)
-            .or(temporary.as_ref())?;
         // CSS break-word emergency breaks do not reduce min-content.
         let word_break = if self.word_break() == TextWordBreak::BreakAll {
             TextWordBreak::BreakAll
         } else {
             TextWordBreak::Normal
         };
-        let lines = Self::break_lines_with_strut(
-            shape,
+        let wrap = self.wrap();
+        let shape = self
+            .measured_shape
+            .as_mut()
+            .map(|measured| &mut measured.shape)
+            .or(temporary.as_mut())?;
+        let lines = Self::break_styled_lines(
             0.0,
             TextAlign::Left,
-            self.wrap(),
+            wrap,
             word_break,
-            0.0,
-            self.styled_text.css_strut.as_ref(),
-            self.styled_text.css_indices.as_ref(),
+            &self.styled_text,
+            shape,
         );
         Some(
             shape
@@ -2623,7 +2703,8 @@ impl Text {
         if let Some(map) = &styled.css_indices {
             mix(2);
             for i in 0..styled.value.len() {
-                mix(u64::from(map.is_collapsible(i as u32)));
+                mix(u64::from(map.is_collapsible(i as u32))
+                    | (u64::from(map.is_tab(i as u32)) << 1));
             }
         }
         for run in styled.runs() {
@@ -2683,25 +2764,26 @@ impl Text {
         let paragraph_space = self.base.paragraph_spacing() * font_scale;
         // Shape only what the last measure didn't already shape.
         let fallback = fallback_state();
-        let (measured, keep) = match self.measured_shape.take() {
+        let (mut measured, keep) = match self.measured_shape.take() {
             Some(measured)
                 if measured.fallback == fallback
-                    && styled.shapes_like(&measured.unichars, &measured.runs) =>
+                    && styled.shapes_like(
+                        &measured.unichars,
+                        &measured.runs,
+                        &measured.css_tabs,
+                    ) =>
             {
                 (measured, true)
             }
             previous => {
                 let calls = fallback_calls();
                 let runs = styled.runs();
-                let shape = runs[0]
-                    .font
-                    .as_ref()
-                    .expect("shaped text retains its font")
-                    .shape_text(styled.unichars(), runs, 0);
+                let shape = styled.shape();
                 // Refill the previous record's storage rather than allocating.
                 let mut measured = previous.unwrap_or_else(|| {
                     Box::new(MeasuredShape {
                         unichars: Vec::new(),
+                        css_tabs: Vec::new(),
                         runs: Vec::new(),
                         fallback,
                         shape: Vec::new(),
@@ -2709,6 +2791,8 @@ impl Text {
                 });
                 measured.unichars.clear();
                 measured.unichars.extend_from_slice(styled.unichars());
+                measured.css_tabs.clear();
+                measured.css_tabs.extend_from_slice(styled.preserved_tabs());
                 measured.runs.clear();
                 measured.runs.extend_from_slice(runs);
                 measured.fallback = fallback;
@@ -2716,22 +2800,20 @@ impl Text {
                 (measured, fallback_calls() == calls)
             }
         };
-        let shape = &measured.shape;
+        let shape = &mut measured.shape;
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
                 TextWrap::NoWrap
             } else {
                 self.wrap()
             };
-        let lines = Self::break_lines_with_strut(
-            shape,
+        let lines = Self::break_styled_lines(
             fit_width,
             self.align(),
             measuring_wrap,
             self.word_break(),
-            0.0,
-            styled.css_strut.as_ref(),
-            styled.css_indices.as_ref(),
+            &styled,
+            shape,
         );
         let mut y = 0.0f32;
         let mut computed_height = 0.0f32;

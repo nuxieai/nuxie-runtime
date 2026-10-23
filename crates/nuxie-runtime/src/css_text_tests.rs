@@ -831,3 +831,202 @@ fn css_text_tabs_without_a_css_owner_or_record_keep_upstream_shaping() {
         });
     }
 }
+
+#[test]
+fn css_text_wrapped_hits_and_selection_drags_keep_line_affinity() {
+    use crate::source::text::{
+        cursor::CursorPosition, glyph_lookup::GlyphLookup, text_layout_view::TextLayoutView,
+    };
+    for (source, transform, display_end, source_end) in [("abx", 0, 2, 2), ("aßx", 1, 3, 2)] {
+        let reference = Scene::new(
+            &[(source, Some((transform, 0)))],
+            true,
+            300.0,
+            false,
+            false,
+            false,
+        );
+        let width = reference
+            .text()
+            .with_downcast::<Text, _>(|text| {
+                text.ordered_lines()[0]
+                    .into_iter()
+                    .filter(|(run, glyph)| run.text_indices[*glyph as usize] < display_end)
+                    .map(|(run, glyph)| run.advances[glyph as usize])
+                    .sum::<f32>()
+                    + 0.1
+            })
+            .unwrap();
+        let mut scene = Scene::new(
+            &[(source, Some((transform, 0)))],
+            true,
+            width,
+            true,
+            false,
+            false,
+        );
+        let text = scene.text();
+        // Exercise an interior expansion hit and an exact display boundary at
+        // the wrap. Both retain the line chosen by the original hit.
+        let points = text
+            .with_downcast::<Text, _>(|text| {
+                assert_eq!(text.ordered_lines().len(), 2);
+                let line = &text.ordered_lines()[0];
+                let glyphs: Vec<_> = line.into_iter().collect();
+                let &(last_run, last_glyph) = glyphs.last().unwrap();
+                assert_eq!(last_run.text_indices[last_glyph as usize] + 1, display_end);
+                let last_width = last_run.advances[last_glyph as usize];
+                let end_x = line.glyph_line().start_x
+                    + glyphs
+                        .iter()
+                        .map(|(run, glyph)| run.advances[*glyph as usize])
+                        .sum::<f32>();
+                let fractions = if transform == 1 {
+                    [0.4, 0.9]
+                } else {
+                    [0.6, 0.9]
+                };
+                let points = fractions.map(|fraction| {
+                    Vec2D::new(
+                        end_x - last_width * (1.0 - fraction),
+                        (line.top() + line.bottom()) / 2.0,
+                    )
+                });
+                let lines = vec![
+                    text.ordered_lines()
+                        .iter()
+                        .map(|line| line.glyph_line().clone())
+                        .collect(),
+                ];
+                let mut lookup = GlyphLookup::default();
+                lookup.compute(text.unichars(), text.shape());
+                let layout = TextLayoutView::new(
+                    text.shape(),
+                    &lines,
+                    text.ordered_lines(),
+                    &lookup,
+                    text.unichars().len() as u32,
+                );
+                let map = text.styled_text().css_indices().unwrap();
+                for (i, point) in points.into_iter().enumerate() {
+                    let display = CursorPosition::from_translation(point, &layout);
+                    assert_eq!(display.line_index(), 0);
+                    assert_eq!(
+                        display.code_point_index(),
+                        if transform == 1 && i == 0 {
+                            display_end - 1
+                        } else {
+                            display_end
+                        }
+                    );
+                    let source = map.hit_position(display, point, &layout);
+                    assert_eq!(source.code_point_index(), source_end);
+                    assert_eq!(source.line_index(), 0);
+                }
+                points.map(|point| text.shape_world_transform() * point)
+            })
+            .unwrap();
+        let id = scene.board.native_handle().with_artboard(|a| {
+            a.objects()
+                .iter()
+                .position(|h| h.as_ref() == Some(&text))
+                .unwrap()
+        });
+        let expected_byte = source.char_indices().nth(source_end as usize).unwrap().0;
+        let mut selection = TextSelectionController::new();
+        assert!(selection.add(&text, ""));
+        for (i, point) in points.into_iter().enumerate() {
+            assert_eq!(
+                scene
+                    .board
+                    .text_hit(id, nuxie_render_api::Vec2D::new(point.x, point.y)),
+                Some(expected_byte)
+            );
+            let mut offset = u32::MAX;
+            let mut distance = 0.0;
+            assert!(selection.hit_test(&text, point, true, &mut offset, &mut distance));
+            assert_eq!(offset, source_end);
+            let start = Vec2D::new(0.0, point.y);
+            assert!(selection.pointer_down(Some(&text), start, i as i32, false));
+            assert!(selection.pointer_move(point, i as i32));
+            assert_eq!(
+                selection.selection(&text).last().code_point_index(),
+                source_end
+            );
+            assert_eq!(selection.selected_text(), &source[..expected_byte]);
+            assert!(selection.pointer_up(point, i as i32));
+        }
+    }
+}
+
+#[test]
+fn css_text_pre_wrap_tab_positioning_visits_each_glyph_once() {
+    use crate::source::text_engine::{GlyphLine, TextWordBreak};
+    for length in [4096, 8192] {
+        let source = format!("{}\tb", "a".repeat(length));
+        let scene = Scene::new(&[(&source, Some((0, 2)))], true, 450.0, true, false, false);
+        scene.text().with_downcast::<Text, _>(|text| {
+            let mut runs = text.shape()[0].runs.clone();
+            let glyph_count: usize = runs.iter().map(|run| run.glyphs.len()).sum();
+            let a_width = runs[0].advances[0];
+            // Reuse the shape at different widths, as intrinsic measurement
+            // and final layout do. Tab advances must be placed afresh each time.
+            for columns in [40, 21] {
+                take_tab_layout_glyph_visits();
+                let lines = GlyphLine::break_lines_with_tabs(
+                    &mut runs,
+                    a_width * columns as f32 + 0.1,
+                    TextWordBreak::BreakWord,
+                );
+                assert_eq!(take_tab_layout_glyph_visits(), glyph_count);
+                assert!(lines.len() > length / columns);
+                let mut found = false;
+                for line in &lines {
+                    let origin =
+                        runs[line.start_run_index as usize].xpos[line.start_glyph_index as usize];
+                    for run_index in line.start_run_index..=line.end_run_index {
+                        let run = &runs[run_index as usize];
+                        for &(glyph, interval) in &run.css_tabs {
+                            if (run_index, glyph as u32)
+                                < (line.start_run_index, line.start_glyph_index)
+                                || (run_index, glyph as u32)
+                                    >= (line.end_run_index, line.end_glyph_index)
+                            {
+                                continue;
+                            }
+                            let x = run.xpos[glyph] - origin;
+                            let next = ((x / interval).floor() + 1.0) * interval;
+                            assert!((x + run.advances[glyph] - next).abs() < 0.01);
+                            found = true;
+                        }
+                    }
+                }
+                assert!(found);
+            }
+        });
+    }
+}
+
+#[test]
+fn css_text_trailing_tab_lookahead_restarts_at_the_wrapped_line_origin() {
+    use crate::source::text_engine::{GlyphLine, TextWordBreak};
+    let scene = Scene::new(&[("a\t", Some((0, 2)))], true, 300.0, true, false, false);
+    scene.text().with_downcast::<Text, _>(|text| {
+        let mut runs = text.shape()[0].runs.clone();
+        let width = runs[0].advances[0] + 0.1;
+        let glyph_count: usize = runs.iter().map(|run| run.glyphs.len()).sum();
+        take_tab_layout_glyph_visits();
+        let lines = GlyphLine::break_lines_with_tabs(&mut runs, width, TextWordBreak::BreakWord);
+        assert_eq!(lines.len(), 2);
+        assert!(take_tab_layout_glyph_visits() <= glyph_count + 1);
+        let (run, glyph, interval) = runs
+            .iter()
+            .find_map(|run| {
+                run.css_tabs
+                    .first()
+                    .map(|&(glyph, interval)| (run, glyph, interval))
+            })
+            .unwrap();
+        assert!((run.advances[glyph] - interval).abs() < 0.01);
+    });
+}

@@ -4,21 +4,77 @@ use super::super::text_engine::{
 
 enum LineRuns<'a> {
     Fixed(&'a [GlyphRun]),
-    Tabs(&'a mut [GlyphRun]),
+    Tabs {
+        runs: &'a mut [GlyphRun],
+        run: usize,
+        glyph: usize,
+        x: f32,
+        origin: f32,
+        tabs: Vec<(usize, usize)>,
+    },
 }
 impl std::ops::Deref for LineRuns<'_> {
     type Target = [GlyphRun];
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Fixed(runs) => runs,
-            Self::Tabs(runs) => runs,
+            Self::Tabs { runs, .. } => runs,
         }
     }
 }
 impl LineRuns<'_> {
+    fn position_to(&mut self, end_run: usize, end_glyph: usize) {
+        if let Self::Tabs {
+            runs,
+            run,
+            glyph,
+            x,
+            origin,
+            tabs,
+        } = self
+        {
+            while *run < runs.len() && (*run, *glyph) <= (end_run, end_glyph) {
+                runs[*run].xpos[*glyph] = *x;
+                if (*run, *glyph) == (end_run, end_glyph) {
+                    break;
+                }
+                if *glyph == runs[*run].glyphs.len() {
+                    *run += 1;
+                    *glyph = 0;
+                    continue;
+                }
+                if runs[*run].is_css_tab(*glyph) {
+                    tabs.push((*run, *glyph));
+                }
+                crate::css_text::layout_tab(&mut runs[*run], *glyph, *x - *origin);
+                *x += runs[*run].advances[*glyph];
+                *glyph += 1;
+            }
+        }
+    }
+
     fn start_line(&mut self, run: usize, glyph: usize) {
-        if let Self::Tabs(runs) = self {
-            crate::css_text::layout_tabs(runs, run, glyph);
+        self.position_to(run, glyph);
+        if let Self::Tabs {
+            runs,
+            run: next_run,
+            glyph: next_glyph,
+            x,
+            origin,
+            tabs,
+        } = self
+        {
+            *origin = runs[run].xpos[glyph];
+            // Words end before tabs. Each tab has its own shaping run, so
+            // only the final tab can be inside the synthetic trailing word.
+            // Invalidate that one glyph of lookahead if it wraps.
+            let first = tabs.partition_point(|&position| position < (run, glyph));
+            if let Some(&(run, glyph)) = tabs.get(first) {
+                *next_run = run;
+                *next_glyph = glyph;
+                *x = runs[run].xpos[glyph];
+                tabs.truncate(first);
+            }
         }
     }
 }
@@ -203,7 +259,19 @@ impl GlyphLine {
         width: f32,
         word_break: TextWordBreak,
     ) -> Vec<GlyphLine> {
-        Self::break_lines_impl(&mut LineRuns::Tabs(runs), width, word_break)
+        let x = runs.first().map_or(0.0, |run| run.xpos[0]);
+        Self::break_lines_impl(
+            &mut LineRuns::Tabs {
+                runs,
+                run: 0,
+                glyph: 0,
+                x,
+                origin: x,
+                tabs: Vec::new(),
+            },
+            width,
+            word_break,
+        )
     }
 
     fn break_lines_impl(
@@ -238,6 +306,7 @@ impl GlyphLine {
         let mut last_end_glyph_index = end.index;
         let mut start_break_index = runs[start.run].breaks[start.index as usize];
         let mut start_break_run = start.run;
+        runs.position_to(break_run, break_index as usize);
         let mut x = runs[end.run].xpos[break_index as usize];
 
         loop {
@@ -254,6 +323,7 @@ impl GlyphLine {
                 break_run = end.run;
                 start_break_index = runs[start.run].breaks[start.index as usize];
                 start_break_run = start.run;
+                runs.position_to(break_run, break_index as usize);
                 x = runs[end.run].xpos[break_index as usize];
             }
 
@@ -312,6 +382,7 @@ impl GlyphLine {
                                 line.start_run_index as usize,
                                 line.start_glyph_index as usize,
                             );
+                            runs.position_to(break_run, break_index as usize);
                             x = runs[break_run].xpos[break_index as usize];
                         }
                     }
@@ -324,6 +395,7 @@ impl GlyphLine {
                     }
                     line = GlyphLine::at(start_run_index, start_break_index);
                     runs.start_line(start_run_index as usize, start_break_index as usize);
+                    runs.position_to(break_run, break_index as usize);
                     x = runs[break_run].xpos[break_index as usize];
                 }
             } else {
@@ -332,8 +404,8 @@ impl GlyphLine {
                 advance_word = true;
                 if is_forced_break {
                     lines.push(line.clone());
-                    let start_x = runs[start.run].xpos
-                        [(runs[start.run].breaks[start.index as usize] + 1) as usize];
+                    runs.position_to(start.run, (start_break_index + 1) as usize);
+                    let start_x = runs[start.run].xpos[(start_break_index + 1) as usize];
                     limit = start_x + max_line_width;
                     line = GlyphLine::at(start.run as u32, start_break_index + 1);
                     runs.start_line(start.run, (start_break_index + 1) as usize);
@@ -344,6 +416,8 @@ impl GlyphLine {
         if !line.empty() {
             lines.push(line);
         }
+        let last = runs.len() - 1;
+        runs.position_to(last, runs[last].glyphs.len());
         lines
     }
 }

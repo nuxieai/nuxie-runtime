@@ -338,43 +338,31 @@ impl TextIndexMap {
     ) -> crate::source::text::cursor::CursorPosition {
         use crate::source::text::cursor::CursorPosition;
         let index = display.code_point_index();
-        let lower = self
-            .boundaries
-            .partition_point(|&boundary| boundary < index);
         let upper = self
             .boundaries
             .partition_point(|&boundary| boundary <= index);
+        let before = upper.saturating_sub(1);
         let mut result = CursorPosition::new(display.line_index(), self.to_source(index));
+        // Upstream has already chosen a caret and its line affinity. Only a
+        // caret inside a source character's expansion needs another decision.
+        if self.boundaries.get(before) == Some(&index) {
+            return result;
+        }
         let mut distance = f32::INFINITY;
-        // Include both intervals beside an exact display boundary. The rounded
-        // display hit is only a search hint; the pointer itself decides the hit.
-        for candidate in [lower.checked_sub(1), upper.checked_sub(1), Some(upper)]
-            .into_iter()
-            .flatten()
-        {
+        for candidate in [before, upper] {
             let Some(&boundary) = self.boundaries.get(candidate) else {
                 continue;
             };
             let source = self.boundaries.partition_point(|&value| value <= boundary) - 1;
-            let caret = CursorPosition::at_index(boundary, layout);
+            let caret = CursorPosition::new(display.line_index(), boundary);
             let visual = caret.visual_position(layout);
-            if !visual.found()
-                || ![visual.x(), visual.top(), visual.bottom()]
-                    .into_iter()
-                    .all(f32::is_finite)
-            {
+            if !visual.found() || !visual.x().is_finite() {
                 continue;
             }
-            let dx = visual.x() - point.x;
-            let dy = point.y
-                - point.y.clamp(
-                    visual.top().min(visual.bottom()),
-                    visual.top().max(visual.bottom()),
-                );
-            let next_distance = dx * dx + dy * dy;
+            let next_distance = (visual.x() - point.x).abs();
             if next_distance < distance {
                 distance = next_distance;
-                result = CursorPosition::new(caret.line_index(), source as u32);
+                result = CursorPosition::new(display.line_index(), source as u32);
             }
         }
         result
@@ -520,48 +508,36 @@ pub(crate) fn prepare_tabs(
     }
 }
 
-/// Recompute the remaining advances from a new line's origin. Tab intervals
-/// were measured by shaping a space in the tab's own font and style.
-pub(crate) fn layout_tabs(
-    runs: &mut [crate::source::text_engine::GlyphRun],
-    start_run: usize,
-    start_glyph: usize,
+#[cfg(test)]
+std::thread_local! {
+    static TAB_LAYOUT_GLYPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_tab_layout_glyph_visits() -> usize {
+    TAB_LAYOUT_GLYPH_VISITS.with(|visits| visits.replace(0))
+}
+
+/// Place a preserved tab at the next stop in its own font and style.
+/// The line breaker calls this as it advances through the glyphs of a line.
+pub(crate) fn layout_tab(
+    run: &mut crate::source::text_engine::GlyphRun,
+    glyph: usize,
+    line_x: f32,
 ) {
-    if !runs.iter().enumerate().skip(start_run).any(|(index, run)| {
-        run.css_tabs
-            .last()
-            .is_some_and(|&(glyph, _)| index != start_run || glyph >= start_glyph)
-    }) {
-        return;
-    }
-    let origin = runs[start_run].xpos[start_glyph];
-    let mut x = 0.0;
-    for (run_index, run) in runs.iter_mut().enumerate().skip(start_run) {
-        let first = if run_index == start_run {
-            start_glyph
+    #[cfg(test)]
+    TAB_LAYOUT_GLYPH_VISITS.with(|visits| visits.set(visits.get() + 1));
+    if let Ok(tab) = run
+        .css_tabs
+        .binary_search_by_key(&glyph, |&(index, _)| index)
+    {
+        let interval = run.css_tabs[tab].1;
+        let next = if interval > 0.0 && interval.is_finite() {
+            ((line_x / interval).floor() + 1.0) * interval
         } else {
-            0
+            line_x
         };
-        for glyph in first..run.glyphs.len() {
-            run.xpos[glyph] = origin + x;
-            if let Ok(tab) = run
-                .css_tabs
-                .binary_search_by_key(&glyph, |&(index, _)| index)
-            {
-                let interval = run.css_tabs[tab].1;
-                let next = if interval > 0.0 && interval.is_finite() {
-                    ((x / interval).floor() + 1.0) * interval
-                } else {
-                    x
-                };
-                run.advances[glyph] = next - x;
-                x = next;
-            } else {
-                x += run.advances[glyph];
-            }
-        }
-        let last = run.glyphs.len();
-        run.xpos[last] = origin + x;
+        run.advances[glyph] = next - line_x;
     }
 }
 

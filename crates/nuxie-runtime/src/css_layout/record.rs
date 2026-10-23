@@ -308,6 +308,12 @@ fn mark_owner_dirty(parent: &CoreHandle) {
 impl LayoutStyleApplier for LayoutCssStyle {
     fn apply_css_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         super::style::apply(self.values(), style, context.css_role, context.is_ltr);
+        // Video inherits Image's type. Only picture participants are replaced;
+        // boxes containing pictures keep their ordinary container behavior.
+        style.item_is_replaced = context.css_role == CssRole::Participant
+            && self.component.parent_handle().is_some_and(|host| {
+                host.is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+            });
     }
 }
 

@@ -74,25 +74,35 @@ fn natural_for_minimum(host: &CoreHandle, css: bool) -> Option<Vec2D> {
     }
 }
 
+/// Image and CSS Video share the Image that holds their natural dimensions.
+/// Video starts with its VideoAsset's declared size, then uses decoded frames.
+fn picture_natural_size(host: &CoreHandle, css: bool) -> Option<Vec2D> {
+    use crate::source::shapes::{image::Image, mesh_host::MeshHost};
+    if !host.is_type_of(Image::TYPE_KEY) || (!css && host.core_type() != Some(Image::TYPE_KEY)) {
+        return None;
+    }
+    let picture = MeshHost::from_handle(Some(host.clone()))?;
+    Some(Vec2D::new(picture.width(), picture.height()))
+}
+
 /// Called after the unbounded measure populated Text's measured-shape cache.
-/// `css`: the measuring box is a CSS box.
+/// `css`: the measuring box or participant is in CSS mode.
 pub(crate) fn host_min_content_width(
     host: &CoreHandle,
     known_height: Option<f32>,
     cross_limits: (Option<f32>, Option<f32>),
     css: bool,
 ) -> Option<f32> {
-    use crate::mechanical_port::source::shapes::image::Image;
+    if let Some(size) = picture_natural_size(host, css) {
+        return Some(transferred_image_minimum(
+            size.x,
+            size.y,
+            known_height,
+            cross_limits,
+        ));
+    }
     let natural = natural_for_minimum(host, css);
     host.with_mut(|object| {
-        if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Some(transferred_image_minimum(
-                image.width(),
-                image.height(),
-                known_height,
-                cross_limits,
-            ));
-        }
         if let Some(size) = natural {
             return Some(size.x);
         }
@@ -138,20 +148,16 @@ pub(crate) fn host_min_content_height(
     cross_limits: (Option<f32>, Option<f32>),
     css: bool,
 ) -> Option<f32> {
-    use crate::source::shapes::image::Image;
+    if let Some(size) = picture_natural_size(host, css) {
+        return Some(transferred_image_minimum(
+            size.y,
+            size.x,
+            known_width,
+            cross_limits,
+        ));
+    }
     let natural = natural_for_minimum(host, css);
-    host.with_mut(|object| {
-        if let Some(image) = object.as_any().downcast_ref::<Image>() {
-            return Some(transferred_image_minimum(
-                image.height(),
-                image.width(),
-                known_width,
-                cross_limits,
-            ));
-        }
-        natural.map(|size| size.y)
-    })
-    .flatten()
+    natural.map(|size| size.y)
 }
 
 struct ParticipantAnimation {

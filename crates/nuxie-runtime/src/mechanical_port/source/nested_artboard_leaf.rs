@@ -78,9 +78,13 @@ impl NestedArtboardLeaf {
                     .with(|parent| {
                         parent.as_layout_component().map(|layout| {
                             if layout.is_css_mode() {
-                                // CSS already moves content by border and padding.
-                                let size = layout.propagated_size();
-                                Aabb::from_ltwh(0.0, 0.0, size.x, size.y)
+                                let content = layout.css_content_box();
+                                if layout.is_leaf() {
+                                    // CSS has already placed this drawing content.
+                                    Aabb::from_ltwh(0.0, 0.0, content.width(), content.height())
+                                } else {
+                                    content
+                                }
                             } else {
                                 layout.local_bounds()
                             }

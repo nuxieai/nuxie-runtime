@@ -1542,6 +1542,7 @@ impl LayoutComponent {
         }
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().unwrap();
+            layout.apply_css_picture_style(&mut style);
             layout.apply_css_scroll_thumb_size(&mut style);
             layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
@@ -3510,6 +3511,45 @@ impl LayoutComponent {
             css: self.is_css_mode(),
         })
     }
+    /// A CSS picture's authored box owns paint and clipping, with a single
+    /// Image or Video participant filling its content box. Its parent sees a
+    /// replaced element. A container holding child boxes remains a container.
+    fn apply_css_picture_style(&self, style: &mut Style) {
+        use crate::{
+            css_layout::{keys, record},
+            source::layout::layout_participant::{LayoutParticipant, apply_picture_natural_ratio},
+        };
+        if !self.is_css_mode() || self.is_artboard() {
+            return;
+        }
+        let providers = Self::layout_providers_children(self.base.children(), false);
+        let [(host, provider)] = providers.as_slice() else {
+            return;
+        };
+        if !host.is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+            || !provider.is_type_of(LayoutParticipant::TYPE_KEY)
+        {
+            return;
+        }
+        let record = host
+            .with(|host| record::find_in(host.as_container_component()?.children()))
+            .flatten();
+        let fills = record
+            .as_ref()
+            .and_then(|record| {
+                record::with_values(record, |css| {
+                    [keys::WIDTH_KIND, keys::HEIGHT_KIND].into_iter().all(|key| {
+                        matches!(css.choice(key), 1 | 7) && css.number(key + 2) == 100.0
+                    })
+                })
+            })
+            .unwrap_or(false);
+        if fills {
+            style.item_is_replaced = true;
+            apply_picture_natural_ratio(style, host);
+        }
+    }
+
     pub fn sync_style(&mut self) {
         let Some(context) = self.style_sync_context(None) else {
             return;
@@ -3543,6 +3583,7 @@ impl LayoutComponent {
                 }
             }
         }
+        self.apply_css_picture_style(&mut taffy_style);
         self.apply_css_scroll_thumb_size(&mut taffy_style);
         self.apply_hosted_css_item(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);

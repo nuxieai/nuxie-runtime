@@ -1658,17 +1658,26 @@ fn css_draw_clip_keeps_the_word_minimum() {
     assert_width(&f, 145.4414);
 }
 
-/// Picture fixtures author aspect-ratio but leave width and height auto.
+/// Picture fixtures leave aspect-ratio, width and height at their CSS defaults.
 fn picture_participant_fixture(
     video: bool,
     container_enums: &[(u16, u32)],
     item_enums: &[(u16, u32)],
     item_numbers: &[(u16, f32)],
 ) -> (CoreArena, CoreHandle, CoreHandle) {
-    use crate::source::{
-        generated::core_registry::{CoreField, CoreRegistry},
-        shapes::image::Image,
-    };
+    let (arena, root, _, participant) =
+        picture_layout_fixture(video, false, container_enums, item_enums, item_numbers);
+    (arena, root, participant)
+}
+
+fn picture_layout_fixture(
+    video: bool,
+    wrapped: bool,
+    container_enums: &[(u16, u32)],
+    item_enums: &[(u16, u32)],
+    item_numbers: &[(u16, f32)],
+) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
+    use crate::source::{generated::core_registry::CoreField, shapes::image::Image};
     let arena = CoreArena::default();
     let root = layout(&arena, None, Some(328.0), false);
     let root_record = arena.insert(crate::css_layout::LayoutCssStyle::default());
@@ -1679,11 +1688,31 @@ fn picture_participant_fixture(
         root.add_layout_style_applier(root_record);
     })
     .unwrap();
+    let item = if wrapped {
+        // The compiler puts authored CSS and box paint on a LayoutComponent,
+        // with a filling picture participant as its only layout child.
+        let item = layout(&arena, Some(&root), None, false);
+        let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+        attach(&arena, &item, &record);
+        CssTextLeaf::write(&record, item_enums, item_numbers);
+        item.with_downcast_mut::<LayoutComponent, _>(|item| {
+            item.add_layout_style_applier(record);
+        })
+        .unwrap();
+        Some(item)
+    } else {
+        None
+    };
+    let (width, height) = if wrapped {
+        (1200.0, 675.0)
+    } else {
+        (480.0, 270.0)
+    };
     let host = if video {
         let asset = arena.insert(crate::video::VideoAsset::default());
         asset.with_mut(|asset| {
-            asset.set_double(CoreField::DrawableAssetWidth, 480.0);
-            asset.set_double(CoreField::DrawableAssetHeight, 270.0);
+            asset.set_double(CoreField::DrawableAssetWidth, width);
+            asset.set_double(CoreField::DrawableAssetHeight, height);
         });
         let host = arena.insert(crate::video::Video::default());
         assert_eq!(
@@ -1692,11 +1721,20 @@ fn picture_participant_fixture(
         );
         host
     } else {
-        let mut image = Image::default();
-        image.set_runtime_size(480.0, 270.0);
-        arena.insert(image)
+        // Referenced images declare their dimensions before a host bitmap arrives.
+        let asset = arena.insert(crate::source::assets::image_asset::ImageAsset::default());
+        asset.with_mut(|asset| {
+            asset.set_double(CoreField::DrawableAssetWidth, width);
+            asset.set_double(CoreField::DrawableAssetHeight, height);
+        });
+        let host = arena.insert(Image::default());
+        assert_eq!(
+            host.with_mut(|host| host.file_asset_referencer_set_asset(asset)),
+            Some(true)
+        );
+        host
     };
-    attach(&arena, &root, &host);
+    attach(&arena, item.as_ref().unwrap_or(&root), &host);
     let mut participant = LayoutParticipant::default();
     participant
         .base
@@ -1722,12 +1760,15 @@ fn picture_participant_fixture(
     );
     let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
     attach(&arena, &host, &record);
-    assert!(CoreRegistry::set_double_handle(
-        &record,
-        61020,
-        480.0 / 270.0
-    ));
-    CssTextLeaf::write(&record, item_enums, item_numbers);
+    if wrapped {
+        CssTextLeaf::write(
+            &record,
+            &[(61021, 7), (61024, 7)],
+            &[(61023, 100.0), (61026, 100.0)],
+        );
+    } else {
+        CssTextLeaf::write(&record, item_enums, item_numbers);
+    }
     participant
         .with_downcast_mut::<LayoutParticipant, _>(|participant| {
             participant.add_layout_style_applier(record);
@@ -1735,8 +1776,17 @@ fn picture_participant_fixture(
         .unwrap();
     LayoutComponent::sync_style_occurrence(&root);
     LayoutParticipant::sync_style_changes_occurrence(&participant, None);
+    if let Some(item) = &item {
+        LayoutComponent::sync_style_occurrence(item);
+        LayoutComponent::sync_layout_children_occurrence(item);
+    }
     LayoutComponent::sync_layout_children_occurrence(&root);
-    (arena, root, participant)
+    (
+        arena,
+        root,
+        item.unwrap_or_else(|| participant.clone()),
+        participant,
+    )
 }
 
 fn assert_picture_size(root: &CoreHandle, participant: &CoreHandle, width: f32, height: f32) {
@@ -1744,6 +1794,80 @@ fn assert_picture_size(root: &CoreHandle, participant: &CoreHandle, width: f32, 
     let bounds = solved(participant);
     near(bounds.width(), width);
     near(bounds.height(), height);
+}
+
+#[test]
+fn css_picture_box_block_uses_natural_size_past_the_screen() {
+    for video in [false, true] {
+        let (_arena, root, item, participant) = picture_layout_fixture(video, true, &[], &[], &[]);
+        let record = root
+            .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+            .unwrap();
+        CssTextLeaf::write(&record, &[], &[(61022, 402.0)]);
+        LayoutComponent::sync_style_occurrence(&root);
+        assert_picture_size(&root, &item, 1200.0, 675.0);
+        near(solved(&participant).width(), 1200.0);
+        near(solved(&participant).height(), 675.0);
+    }
+}
+
+#[test]
+fn css_picture_box_column_stretches_with_its_natural_ratio() {
+    for video in [false, true] {
+        let (_arena, root, item, participant) =
+            picture_layout_fixture(video, true, &[(61000, 1), (61006, 2)], &[], &[]);
+        assert_picture_size(&root, &item, 328.0, 184.5);
+        near(solved(&participant).width(), 328.0);
+        near(solved(&participant).height(), 184.5);
+    }
+}
+
+#[test]
+fn css_picture_box_column_flex_start_keeps_natural_size() {
+    for video in [false, true] {
+        let (_arena, root, item, _) =
+            picture_layout_fixture(video, true, &[(61000, 1), (61006, 2), (61013, 4)], &[], &[]);
+        assert_picture_size(&root, &item, 1200.0, 675.0);
+    }
+}
+
+#[test]
+fn css_picture_box_authored_width_and_ratio_win() {
+    for video in [false, true] {
+        let (_arena, root, item, _) = picture_layout_fixture(
+            video,
+            true,
+            &[],
+            &[(61021, 1)],
+            &[(61022, 100.0), (61020, 2.0)],
+        );
+        assert_picture_size(&root, &item, 100.0, 50.0);
+    }
+}
+
+#[test]
+fn css_container_around_a_picture_box_is_not_replaced() {
+    let (arena, root, item, _) = picture_layout_fixture(false, true, &[], &[], &[]);
+    let root_record = root
+        .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+        .unwrap();
+    CssTextLeaf::write(&root_record, &[(61021, 0)], &[(61022, 0.0)]);
+    let container = layout(&arena, None, Some(402.0), false);
+    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+    attach(&arena, &container, &record);
+    CssTextLeaf::write(&record, &[(61021, 1)], &[(61022, 402.0)]);
+    container.with_downcast_mut::<LayoutComponent, _>(|container| {
+        container.add_layout_style_applier(record);
+    })
+    .unwrap();
+    attach(&arena, &container, &root);
+    LayoutComponent::sync_style_occurrence(&container);
+    LayoutComponent::sync_style_occurrence(&root);
+    LayoutComponent::sync_layout_children_occurrence(&container);
+    LayoutComponent::calculate_layout_occurrence(&container, f32::NAN, f32::NAN);
+    // The ordinary block fills the screen while its replaced child overflows.
+    near(solved(&root).width(), 402.0);
+    near(solved(&item).width(), 1200.0);
 }
 
 #[test]
@@ -1779,6 +1903,19 @@ fn css_picture_participant_authored_width_wins() {
         let (_arena, root, participant) =
             picture_participant_fixture(video, &[], &[(61021, 1)], &[(61022, 100.0)]);
         assert_picture_size(&root, &participant, 100.0, 56.25);
+    }
+}
+
+#[test]
+fn css_picture_participant_authored_dimensions_win() {
+    for video in [false, true] {
+        let (_arena, root, participant) = picture_participant_fixture(
+            video,
+            &[],
+            &[(61021, 1), (61024, 1)],
+            &[(61022, 100.0), (61025, 40.0)],
+        );
+        assert_picture_size(&root, &participant, 100.0, 40.0);
     }
 }
 
@@ -1843,24 +1980,17 @@ fn css_picture_participant_video_uses_declared_default_before_a_frame() {
     assert_picture_size(&root, &participant, 300.0, 150.0);
 }
 
-#[test]
-fn css_picture_participant_video_uses_decoded_frame_size() {
+fn present_picture_frame(host: &CoreHandle, width: u32, height: u32) {
     use nuxie_render_api::{Factory, RecordingFactory};
-    let (_arena, root, participant) = picture_participant_fixture(true, &[], &[], &[]);
-    assert_picture_size(&root, &participant, 480.0, 270.0);
-    let host = participant
-        .with_downcast::<LayoutParticipant, _>(LayoutParticipant::measurement_host_handle)
-        .flatten()
-        .unwrap();
     let mut bytes = Vec::new();
     {
-        let mut encoder = png::Encoder::new(&mut bytes, 640, 360);
+        let mut encoder = png::Encoder::new(&mut bytes, width, height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
         encoder
             .write_header()
             .unwrap()
-            .write_image_data(&vec![255; 640 * 360 * 4])
+            .write_image_data(&vec![255; width as usize * height as usize * 4])
             .unwrap();
     }
     let mut factory = RecordingFactory::new();
@@ -1871,9 +2001,38 @@ fn css_picture_participant_video_uses_decoded_frame_size() {
         }),
         Some(true)
     );
-    // This arena fixture has no artboard update pass to publish frame dirt.
+}
+
+#[test]
+fn css_picture_participant_video_uses_decoded_frame_size() {
+    let (_arena, root, participant) = picture_participant_fixture(true, &[], &[], &[]);
+    assert_picture_size(&root, &participant, 480.0, 270.0);
+    let host = participant
+        .with_downcast::<LayoutParticipant, _>(LayoutParticipant::measurement_host_handle)
+        .flatten()
+        .unwrap();
+    present_picture_frame(&host, 640, 320);
+    // This arena fixture has no artboard update pass to sync styles and frame dirt.
+    LayoutComponent::sync_style_occurrence(&root);
     LayoutParticipant::mark_layout_node_dirty_occurrence(&participant, true);
-    assert_picture_size(&root, &participant, 640.0, 360.0);
+    assert_picture_size(&root, &participant, 640.0, 320.0);
+}
+
+#[test]
+fn css_picture_box_video_frame_updates_its_natural_ratio() {
+    let (_arena, root, item, participant) =
+        picture_layout_fixture(true, true, &[(61000, 1), (61006, 2)], &[], &[]);
+    assert_picture_size(&root, &item, 328.0, 184.5);
+    let host = participant
+        .with_downcast::<LayoutParticipant, _>(LayoutParticipant::measurement_host_handle)
+        .flatten()
+        .unwrap();
+    present_picture_frame(&host, 640, 320);
+    // Simulate the artboard's style pass for the dirty picture box.
+    LayoutComponent::sync_style_occurrence(&item);
+    LayoutComponent::mark_layout_node_dirty_occurrence(&item, true);
+    assert_picture_size(&root, &item, 328.0, 164.0);
+    near(solved(&participant).height(), 164.0);
 }
 
 #[test]

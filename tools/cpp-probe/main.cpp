@@ -17061,8 +17061,115 @@ int text_selection_samples(const char* filePath)
     return 0;
 }
 
+// UNIV-5403: observe cached render lines after direct and data-bound wrap writes.
+// Match upstream_text_measure_width.rs, including the width-change controls.
+int text_wrap_change_samples(const char* filePath)
+{
+    std::cout << "[";
+    for (int mode = 0; mode < 2; ++mode)
+    {
+        rive::ImportResult result;
+        auto file = open_file(filePath, &result, false);
+        if (!file || result != rive::ImportResult::success || !file->artboard())
+        {
+            return 2;
+        }
+        auto board = file->artboard()->instance();
+        auto texts = board->find<rive::Text>();
+        if (texts.empty() || texts.front()->runs().empty())
+        {
+            return 2;
+        }
+        auto* text = texts.front();
+        auto runs = text->runs();
+        for (size_t i = 0; i < runs.size(); ++i)
+        {
+            runs[i]->text(i == 0 ? "Choose what deserves your attention." : "");
+        }
+        for (auto* style : board->find<rive::TextStyle>())
+        {
+            style->fontSize(24.0f);
+        }
+        text->sizingValue(1);
+        text->overflowValue(0);
+        text->wrapValue(0);
+        text->width(80.0f);
+
+        auto number = rive::make_rcp<rive::ViewModelInstanceNumber>();
+        if (mode == 1)
+        {
+            // The artboard owns the binding. Source changes go through its
+            // normal binding queue and DataBindContextValueNumber::apply.
+            auto* bind = new rive::DataBind();
+            bind->flags(0);
+            bind->propertyKey(rive::TextBase::wrapValuePropertyKey);
+            bind->target(text);
+            bind->source(number);
+            board->addDataBind(bind);
+            bind->bind();
+        }
+        auto wrap = [&](uint8_t value) {
+            if (mode == 1)
+            {
+                number->propertyValue(static_cast<float>(value));
+            }
+            else
+            {
+                text->wrapValue(value);
+            }
+        };
+        std::vector<unsigned int> wrapValues;
+        std::vector<size_t> lineCounts;
+        auto observe = [&]() {
+            board->advance(0);
+            wrapValues.push_back(text->wrapValue());
+            lineCounts.push_back(text->orderedLines().size());
+        };
+        board->advance(0); // First shape/layout, then a quiet frame.
+        observe();
+        wrap(1);
+        observe();
+        text->width(81.0f);
+        observe();
+        wrap(0);
+        observe();
+        text->width(80.0f);
+        observe();
+        if (mode != 0)
+        {
+            std::cout << ",";
+        }
+        std::cout << "{\"binding\":" << (mode == 1 ? "true" : "false")
+                  << ",\"wrapValues\":[";
+        for (size_t i = 0; i < wrapValues.size(); ++i)
+        {
+            if (i != 0)
+            {
+                std::cout << ",";
+            }
+            std::cout << wrapValues[i];
+        }
+        std::cout << "],\"lineCounts\":[";
+        for (size_t i = 0; i < lineCounts.size(); ++i)
+        {
+            if (i != 0)
+            {
+                std::cout << ",";
+            }
+            std::cout << lineCounts[i];
+        }
+        std::cout << "]}";
+    }
+    std::cout << "]\n";
+    return 0;
+}
+
 int main(int argc, const char* argv[])
 {
+    if (argc == 3 && std::strcmp(argv[1], "--text-wrap-change-samples") == 0)
+    {
+        return text_wrap_change_samples(argv[2]);
+    }
     if (argc == 4 && std::strcmp(argv[1], "--text-measure-width-samples") == 0)
     {
         return text_measure_width_samples(argv[2], argv[3]);

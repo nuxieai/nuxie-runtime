@@ -9,8 +9,9 @@
 // These assertions pin heights only, not that existing width-return difference:
 // https://universe.basis.dev/issue/UNIV-3932.
 
-use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_render_api::{Mat2D, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
+    data_bind::{data_bind::DataBind, data_bind_container::DataBindContainerOwner},
     generated::{
         core_registry::CoreRegistry,
         text::{
@@ -20,9 +21,18 @@ use nuxie_runtime::source::{
     },
     layout::{layout_enums::LayoutScaleType, layout_measure_mode::LayoutMeasureMode},
     math::vec2d::Vec2D,
-    text::text::{Text, TextValueRunHandle},
+    text::{
+        text::{Text, TextValueRunHandle},
+        text_style::TextStyle,
+    },
+    viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
 };
-use nuxie_runtime::{CoreHandle, File, RuntimeFactoryHandle};
+use nuxie_runtime::{Artboard, CoreHandle, File, RuntimeFactoryHandle};
+
+// Reuse the repository's mandatory fingerprint check for the live C++ oracle.
+type CppProbeFile = serde_json::Value;
+#[allow(dead_code)]
+mod cpp_probe_support;
 
 fn set_text(owner: &CoreHandle, content: &str) {
     let runs = owner
@@ -161,5 +171,163 @@ fn upstream_fill_and_fixed_participants_wrap_the_headline_at_the_offered_width()
         let unbounded = measure(Some(width), content, f32::MAX);
         assert!((bounded.y - 135.521591).abs() < 0.001, "{bounded:?}");
         assert!((unbounded.y - 47.5215874).abs() < 0.001, "{unbounded:?}");
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WrapChangeSample {
+    binding: bool,
+    wrap_values: Vec<u8>,
+    line_counts: Vec<usize>,
+}
+
+fn wrap_change_sample(binding: bool) -> WrapChangeSample {
+    let bytes = std::fs::read(cpp_probe_support::cpp_runtime_fixture("new_text.riv")).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let source = file.with_file(|file| file.artboard()).unwrap();
+    let board = Artboard::instance_from_handle(&source).unwrap();
+    let text = board.with_artboard(|board| board.find_all_handles::<Text>())[0].clone();
+    set_text(&text, "Choose what deserves your attention.");
+    for style in board.with_artboard(|board| board.find_all_handles::<TextStyle>()) {
+        assert!(CoreRegistry::set_double_handle(
+            &style,
+            TextStyleBase::FONT_SIZE_PROPERTY_KEY.into(),
+            24.0,
+        ));
+    }
+    for (key, value) in [
+        (TextBase::SIZING_VALUE_PROPERTY_KEY, 1), // AutoHeight, fixed authored width.
+        (TextBase::OVERFLOW_VALUE_PROPERTY_KEY, 0), // Visible, no clipping/ellipsis.
+        (TextBase::WRAP_VALUE_PROPERTY_KEY, 0),
+    ] {
+        assert!(CoreRegistry::set_uint_handle(&text, key.into(), value));
+    }
+    let width = |value| {
+        assert!(CoreRegistry::set_double_handle(
+            &text,
+            TextBase::WIDTH_PROPERTY_KEY.into(),
+            value,
+        ));
+    };
+    width(80.0);
+
+    // An actual source-to-target numeric binding, including context conversion
+    // and the artboard's normal dirty-binding queue. No mock setter or shaper.
+    let number = binding.then(|| {
+        let number = text
+            .insert_sibling(ViewModelInstanceNumber::default())
+            .unwrap();
+        let bind = text
+            .insert_sibling(DataBind::new(
+                0,
+                TextBase::WRAP_VALUE_PROPERTY_KEY.into(),
+                0,
+            ))
+            .unwrap();
+        bind.with_downcast_mut::<DataBind, _>(|bind| {
+            bind.set_target(Some(text.clone()));
+            bind.set_source(number.clone());
+        })
+        .unwrap();
+        DataBindContainerOwner::Authored(board.core_handle()).add_data_bind(bind.clone());
+        DataBind::bind_handle(&bind);
+        number
+    });
+    let wrap = |value: u8| {
+        if let Some(number) = &number {
+            assert!(ViewModelInstanceNumber::set_value_handle(
+                number,
+                f32::from(value)
+            ));
+        } else {
+            assert!(CoreRegistry::set_uint_handle(
+                &text,
+                TextBase::WRAP_VALUE_PROPERTY_KEY.into(),
+                value.into(),
+            ));
+        }
+    };
+    let mut sample = WrapChangeSample {
+        binding,
+        wrap_values: Vec::new(),
+        line_counts: Vec::new(),
+    };
+    let mut observe = || {
+        board.advance_default(0.0);
+        // Count the engine's already-shaped visual lines, never recompute them
+        // by calling measure_layout (which would conceal stale render lines).
+        text.with_downcast::<Text, _>(|text| {
+            sample.wrap_values.push(text.base.wrap_value());
+            sample.line_counts.push(text.ordered_lines().len());
+        })
+        .unwrap();
+    };
+    board.advance_default(0.0); // First shape/layout, then a quiet frame.
+    observe();
+    wrap(1);
+    observe();
+    width(81.0); // Positive control: an unrelated width change dirties Path.
+    observe();
+    wrap(0);
+    observe();
+    width(80.0);
+    observe();
+    sample
+}
+
+fn assert_current_wrap_behavior(sample: &WrapChangeSample) {
+    assert_eq!(sample.wrap_values, [0, 1, 1, 0, 0], "{sample:?}");
+    assert_eq!(sample.line_counts.len(), 5);
+    let lines = &sample.line_counts;
+    assert!(lines[0] > 1, "fixture must wrap: {sample:?}");
+    // UNIV-5403: upstream and our generated wrapValue setter omit shape/layout
+    // invalidation. Pin the current bug in BOTH directions. An additive Nuxie
+    // binding extension can invalidate shape/layout separately from the setter.
+    // Width changes prove the property was accepted and that the engine can
+    // produce each requested wrapping mode.
+    assert_eq!(
+        lines[1], lines[0],
+        "no-wrap leaves stale wrapped lines: {sample:?}"
+    );
+    assert_eq!(lines[2], 1, "width change applies no-wrap: {sample:?}");
+    assert_eq!(lines[3], 1, "wrap leaves stale unwrapped lines: {sample:?}");
+    assert_eq!(lines[4], lines[0], "width change applies wrap: {sample:?}");
+}
+
+#[test]
+fn wrap_value_changes_keep_stale_lines_until_width_changes_univ_5403() {
+    for binding in [false, true] {
+        assert_current_wrap_behavior(&wrap_change_sample(binding));
+    }
+}
+
+#[test]
+fn wrap_value_changes_match_cpp_univ_5403() {
+    let output = std::process::Command::new(cpp_probe_support::probe_path())
+        .arg("--text-wrap-change-samples")
+        .arg(cpp_probe_support::cpp_runtime_fixture("new_text.riv"))
+        .output()
+        .expect("run pinned C++ text wrap oracle");
+    assert!(
+        output.status.success(),
+        "C++ text wrap oracle failed: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let upstream: Vec<WrapChangeSample> = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(upstream.len(), 2);
+    for (sample, binding) in upstream.iter().zip([false, true]) {
+        assert_eq!(sample.binding, binding);
+        assert_current_wrap_behavior(sample);
+        assert_eq!(&wrap_change_sample(binding), sample);
     }
 }

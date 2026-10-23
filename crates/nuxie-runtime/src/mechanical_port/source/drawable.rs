@@ -48,7 +48,6 @@ impl DrawableCells {
 pub struct Drawable {
     pub base: DrawableBase,
     clipping_shapes: Vec<CoreHandle>,
-    css_clip_list: crate::css_layout::clip::ClipList,
     layer_masks: Vec<CoreHandle>,
     source_of_layer_masks: Vec<CoreHandle>,
     pub(crate) flattened_draw_rules: Option<CoreHandle>,
@@ -64,7 +63,6 @@ impl Default for Drawable {
         Self {
             base: DrawableBase::default(),
             clipping_shapes: Vec::new(),
-            css_clip_list: crate::css_layout::clip::ClipList::default(),
             layer_masks: Vec::new(),
             source_of_layer_masks: Vec::new(),
             flattened_draw_rules: None,
@@ -270,11 +268,12 @@ impl Drawable {
     }
 
     pub(crate) fn css_clip_list(&self) -> &crate::css_layout::clip::ClipList {
-        &self.css_clip_list
+        &self.base.base.base.base.base.css_clip_list
     }
 
-    pub(crate) fn set_css_clip_list(&mut self, list: crate::css_layout::clip::ClipList) {
-        self.css_clip_list = list;
+    pub(crate) fn set_css_clip_list(&mut self, mut list: crate::css_layout::clip::ClipList) {
+        list.set_full_chain(crate::css_layout::clip::keeps_full_chain(self));
+        self.base.base.base.base.base.css_clip_list = list;
     }
 
     pub(crate) fn set_clipping_shapes(&mut self, shapes: &[CoreHandle]) {

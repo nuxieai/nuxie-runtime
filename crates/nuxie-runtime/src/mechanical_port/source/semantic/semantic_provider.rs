@@ -449,7 +449,7 @@ fn walk_rendered_clips(
     mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip) -> bool,
 ) -> bool {
     let paint_owner = crate::css_layout::clip::paint_owner(component);
-    let mut filter = crate::css_layout::clip::OverflowFilter::default();
+    let mut read_list = true;
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     let mut applied_shapes = std::collections::HashSet::new();
@@ -458,30 +458,74 @@ fn walk_rendered_clips(
             return false;
         }
         let skip_own = !own_clip && (&owner == component || owner == paint_owner);
-        let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
+        // Read CSS membership once per artboard, then keep Rive's frame,
+        // translated clips and host traversal below. Ancestors never decide
+        // which CSS overflow clips apply to this paint owner.
+        let mut list_shapes = Vec::new();
+        if read_list {
+            let chain = owner
+                .with(|object| {
+                    if skip_own && object.as_artboard().is_some() {
+                        return Vec::new();
+                    }
+                    object
+                        .as_drawable()
+                        .map(|drawable| {
+                            drawable
+                                .css_clip_list()
+                                .chain(crate::css_layout::clip::keeps_full_chain(drawable), &[])
+                                .0
+                        })
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default();
+            for entry in chain {
+                match entry {
+                    crate::css_layout::clip::DrawClip::Shape(shape) => list_shapes.push(shape),
+                    crate::css_layout::clip::DrawClip::Overflow(clip_owner) => {
+                        let Some((artboard, clip)) = clip_owner
+                            .with_mut(|object| {
+                                let artboard = object.component_artboard_handle();
+                                let is_artboard = object.as_artboard().is_some();
+                                let layout = object.as_layout_component_mut()?;
+                                let corners = bounds_corners(layout.clip_local_bounds())
+                                    .map(|point| layout.shape_world_transform() * point);
+                                let path = if is_artboard {
+                                    layout.render_paths_handle().map(|paths| {
+                                        let paths = paths.borrow();
+                                        (paths.clip.raw_path().clone(), paths.clip.fill_rule())
+                                    })
+                                } else {
+                                    layout
+                                        .clip_world_path()
+                                        .map(|path| (path.raw_path().clone(), path.fill_rule()))
+                                };
+                                let clip = path.map_or_else(
+                                    || RenderedClip::Polygon(corners),
+                                    |(path, rule)| RenderedClip::Path(path, rule),
+                                );
+                                Some((
+                                    if is_artboard {
+                                        Some(clip_owner.clone())
+                                    } else {
+                                        artboard
+                                    },
+                                    clip,
+                                ))
+                            })
+                            .flatten()
+                        else {
+                            return false;
+                        };
+                        if !visit(artboard.as_ref(), clip) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        let Some((clip, parent, is_artboard)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
-            if object
-                .as_drawable()
-                .is_some_and(crate::css_layout::clip::keeps_full_chain)
-            {
-                filter.keep_full_chain();
-            }
-            let position = crate::css_layout::clip::object_position(&*object);
-            let include_overflow = filter.enter(position, is_artboard);
-            filter.leave(position);
-            if is_artboard {
-                filter = crate::css_layout::clip::OverflowFilter::default();
-            }
-            // A CSS artboard's record clips its content at its padding box,
-            // inside its own clip (docs/CSS_LAYOUT.md, 4.2).
-            let css_artboard_clip = object
-                .as_artboard()
-                .filter(|artboard| include_overflow && artboard.css_clips())
-                .and_then(|artboard| artboard.base.base.render_paths_handle())
-                .map(|paths| {
-                    let paths = paths.borrow();
-                    (paths.clip.raw_path().clone(), paths.clip.fill_rule())
-                });
             let parent = object
                 .component_parent_handle()
                 .or_else(|| object.as_artboard().and_then(Artboard::host));
@@ -501,11 +545,10 @@ fn walk_rendered_clips(
             } else if skip_own {
                 None
             } else {
-                // A CSS box clips by its computed overflow, at its padding
-                // box (docs/CSS_LAYOUT.md, 4.2).
+                // Translated layout clips retain Rive's ancestor behavior.
                 object
                     .as_layout_component()
-                    .filter(|layout| layout.clips() && (!layout.is_css_mode() || include_overflow))
+                    .filter(|layout| !layout.is_css_mode() && layout.clips())
                     .map(|layout| {
                         (
                             bounds_corners(layout.clip_local_bounds())
@@ -532,15 +575,10 @@ fn walk_rendered_clips(
                 };
                 (artboard, clip)
             });
-            (clip, parent, css_artboard_clip)
+            (clip, parent, is_artboard)
         }) else {
             return false;
         };
-        if let Some((path, rule)) = css_artboard_clip.filter(|_| !skip_own) {
-            if !visit(Some(&owner), RenderedClip::Path(path, rule)) {
-                return false;
-            }
-        }
         let shapes = owner
             .with(|object| {
                 // Artboard own paint precedes the drawable list's shape
@@ -554,7 +592,7 @@ fn walk_rendered_clips(
             })
             .flatten()
             .unwrap_or_default();
-        for shape in shapes {
+        for shape in list_shapes.into_iter().chain(shapes) {
             if !applied_shapes.insert(shape.clone()) {
                 continue;
             }
@@ -586,6 +624,7 @@ fn walk_rendered_clips(
                 return false;
             }
         }
+        read_list = is_artboard;
         current = parent;
     }
     true

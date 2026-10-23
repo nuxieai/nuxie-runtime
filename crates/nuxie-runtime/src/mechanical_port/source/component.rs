@@ -1015,6 +1015,9 @@ impl ComponentParentStorage {
 }
 
 pub struct Component {
+    // Stored here so native leaf hit tests can read their drawable's list
+    // while the most-derived owner is already borrowed.
+    pub(crate) css_clip_list: crate::css_layout::clip::ClipList,
     pub base: ComponentBase,
     dependency_helper: DependencyHelper<Component>,
     parent: ComponentParentStorage,
@@ -1034,6 +1037,7 @@ pub struct Component {
 impl Default for Component {
     fn default() -> Self {
         Self {
+            css_clip_list: crate::css_layout::clip::ClipList::default(),
             base: ComponentBase::default(),
             dependency_helper: DependencyHelper::default(),
             parent: ComponentParentStorage::Inline(None),
@@ -1489,6 +1493,10 @@ impl Component {
         skip_on_unclipped: bool,
         _is_primary_hit: bool,
     ) -> bool {
+        if self.css_clip_list.is_css_context() {
+            return self.css_clip_list.contains(position)
+                && crate::css_layout::clip::hit_test_ancestors(self.parent_handle(), position);
+        }
         self.parent
             .with(|parent| {
                 parent

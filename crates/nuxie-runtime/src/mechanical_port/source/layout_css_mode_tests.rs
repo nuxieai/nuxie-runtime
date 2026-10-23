@@ -36,6 +36,9 @@ use crate::{
 };
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 
+#[path = "../../../tests/support/css_clip_fixture.rs"]
+mod css_clip_fixture;
+
 const FRAME: f32 = 1.0 / 60.0;
 
 /// The record type and the keys these tests write (defs/nuxie/layout_css_style.json).
@@ -3018,7 +3021,13 @@ fn css_hit_test_follows_the_clipped_axes() {
     let hits = |x: f32, y: f32| {
         f.named("Strip")
             .with_downcast_mut::<LayoutComponent, _>(|layout| {
-                layout.hit_test_point(&crate::source::math::vec2d::Vec2D::new(x, y), true, false)
+                layout.hit_test_contains(
+                    &crate::source::math::vec2d::Vec2D::new(x, y),
+                    true,
+                    false,
+                    None,
+                    true,
+                )
             })
             .unwrap()
     };
@@ -3266,7 +3275,13 @@ fn css_clip_hit_test_uses_the_padding_box() {
     let hits = |x: f32, y: f32, primary: bool| {
         f.named("Frame")
             .with_downcast_mut::<LayoutComponent, _>(|layout| {
-                layout.hit_test_point(&crate::source::math::vec2d::Vec2D::new(x, y), true, primary)
+                layout.hit_test_contains(
+                    &crate::source::math::vec2d::Vec2D::new(x, y),
+                    true,
+                    primary,
+                    None,
+                    true,
+                )
             })
             .unwrap()
     };
@@ -7479,6 +7494,180 @@ fn css_clip_lists_resolve_parents_before_out_of_order_proxy_owners() {
         .collect::<Vec<_>>();
     assert!(before == after, "membership is independent of object order");
     assert_badge_clip_case(&f, true);
+}
+
+fn absolute_text_clip_scene(parent_position: u64) -> Scene {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &css_clip_fixture::absolute_text(parent_position),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("positioned text imports");
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    let scene = Scene {
+        _file: file,
+        artboard,
+        factory,
+    };
+    scene.advance(3);
+    scene
+}
+
+#[test]
+fn css_absolute_text_participant_taps_follow_its_drawn_clips() {
+    for (position, escaped) in [(0, true), (1, false)] {
+        let f = absolute_text_clip_scene(position);
+        let machine = f.machine();
+        let lines = f.draw_lines();
+        let clips = clips_active_at(&lines, 0xff44_5566);
+        assert_eq!(clips.iter().any(|clip| clip.contains("(100,60)")), !escaped);
+        assert_eq!(tapped(&f, "Escaped text", (120.0, 20.0)), escaped);
+        let (_, events) = click(&machine, 120.0, 20.0);
+        assert_eq!(
+            events,
+            if escaped {
+                vec!["text clicked".to_owned()]
+            } else {
+                vec![]
+            }
+        );
+        assert!(tapped(&f, "Escaped text", (90.0, 20.0)));
+    }
+}
+
+#[test]
+fn css_tap_passes_an_ancestor_borrowed_during_hit_testing() {
+    let f = absolute_text_clip_scene(1);
+    let machine = f.machine();
+    let ancestor = f.named("Clip");
+    ancestor
+        .with_mut(|_| {
+            assert!(tapped(&f, "Escaped text", (90.0, 20.0)));
+            assert_eq!(click(&machine, 90.0, 20.0).1, ["text clicked"]);
+        })
+        .expect("the ancestor is borrowed throughout the tap");
+}
+
+#[test]
+fn css_clip_list_unresolved_parent_keeps_root_overflow_and_shapes() {
+    use crate::{
+        css_layout::clip::{self, DrawClip},
+        source::drawable::RuntimeDrawableOccurrence,
+    };
+    let f = try_scene_spec(
+        (240.0, 120.0),
+        ArtboardSpec {
+            css: Some(vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)]),
+            clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 280.0, 80.0)]),
+            ..ArtboardSpec::default()
+        },
+        Some(css(
+            "Parent",
+            sized_to(100.0, 60.0),
+            vec![painted(
+                "Child",
+                BADGE.1,
+                [sized_to(300.0, 120.0), vec![U(POSITION, 2)]].concat(),
+            )],
+        )),
+    )
+    .unwrap();
+    let root = f.artboard.core_handle();
+    let list = f
+        .artboard
+        .with_artboard(|artboard| artboard.base.base.css_clip_list().clone());
+    let child = f.named("Child");
+    let drawable = RuntimeDrawableOccurrence::Authored(child.clone());
+    f.named("Parent")
+        .with_mut(|_| {
+            clip::build_lists(
+                &root,
+                &list,
+                &[Some(child.clone())],
+                std::slice::from_ref(&drawable),
+            );
+        })
+        .unwrap();
+    let (chain, _) = clip::read_chain(&drawable, &root, &list);
+    assert!(
+        chain
+            .iter()
+            .any(|clip| matches!(clip, DrawClip::Overflow(owner) if owner == &root))
+    );
+    assert!(chain.iter().any(|clip| matches!(clip, DrawClip::Shape(_))));
+    assert!(
+        chain == list.chain(false, &[]).0,
+        "an absolute child keeps the entire root list"
+    );
+    assert!(tapped(&f, "Child", (100.0, 20.0)));
+    assert!(
+        !tapped(&f, "Child", (190.0, 100.0)),
+        "the root shape clips the child"
+    );
+    assert!(
+        !tapped(&f, "Child", (250.0, 20.0)),
+        "the root overflow remains"
+    );
+}
+
+#[test]
+fn css_scoped_drawable_closes_an_inner_shape_that_shared_an_outer_save() {
+    const INSIDE: u32 = 0xff22_3344;
+    const AFTER: u32 = 0xff55_6677;
+    let f = scene(
+        (300.0, 240.0),
+        B {
+            name: "Outer",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 200.0),
+            ],
+            clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 180.0, 180.0)]),
+            children: vec![
+                B {
+                    name: "Inner",
+                    component: vec![
+                        F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                        F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0),
+                    ],
+                    clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 80.0, 180.0)]),
+                    paints: vec![Paint::Fill(INSIDE)],
+                    ..B::default()
+                },
+                painted(
+                    "After",
+                    AFTER,
+                    [
+                        sized_to(160.0, 40.0),
+                        vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                    ]
+                    .concat(),
+                ),
+            ],
+            ..B::default()
+        },
+    );
+    let lines = f.draw_lines();
+    assert!(draw_at(&lines, INSIDE) < draw_at(&lines, AFTER));
+    let outer = |clip: &String| clip.contains("(180,180)");
+    let inner = |clip: &String| clip.contains("(80,180)");
+    let inside = clips_active_at(&lines, INSIDE);
+    assert!(
+        inside.iter().any(outer) && inside.iter().any(inner),
+        "{lines:#?}"
+    );
+    let after = clips_active_at(&lines, AFTER);
+    assert!(
+        after.iter().any(outer),
+        "the outer clip stays active: {lines:#?}"
+    );
+    assert!(
+        !after.iter().any(inner),
+        "the inner clip is restored before CSS paint: {lines:#?}"
+    );
 }
 
 /// An overflow clip's path is made through the factory the artboard has when
@@ -13595,8 +13784,7 @@ fn clips_active_at(lines: &[String], color: u32) -> Vec<String> {
 }
 
 /// A draw rule can move a clipping box's layout drawable ahead of its proxy.
-/// The proxy's clip scope then never opens, so the box's clipping shape does
-/// not stay on for the drawables after it.
+/// Its clipping shape must still close before later siblings draw.
 #[test]
 fn css_clip_scope_closes_when_a_draw_rule_moves_the_box_before_its_proxy() {
     const FRONT: u32 = 0xff11_1111;
@@ -13640,6 +13828,8 @@ fn css_clip_scope_closes_when_a_draw_rule_moves_the_box_before_its_proxy() {
         "the card's clipping shape stays on for After:\n{}",
         lines.join("\n")
     );
+}
+
 /// The fill colours a draw paints, in order.
 fn painted_colors(lines: &[String]) -> Vec<String> {
     lines

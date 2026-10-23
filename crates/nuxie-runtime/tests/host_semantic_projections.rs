@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
 
+#[path = "support/css_clip_fixture.rs"]
+mod css_clip_fixture;
+
 use nuxie_render_api::{PersistentFactory, RecordingFactory, Vec2D};
 use nuxie_runtime::{
     ArtboardInstance, File, FileAssetLoader, FileAssetLoaderRef, RuntimeArtboardOccurrenceSegment,
@@ -30,6 +33,74 @@ const PROJECTION_CORPUS_AUTHORED_RUNTIME_FIXTURE: &str =
     include_str!("../../../fixtures/parity/projection-corpus-authored-runtime.riv.b64");
 const COMPONENT_LIST_HOST_TRANSFORM_FONT: &[u8] =
     include_bytes!("../../../fixtures/fonts/roboto-a.ttf");
+
+#[test]
+fn absolute_text_participant_bounds_and_hits_follow_the_drawn_clip_list() {
+    for (position, escaped) in [(0, true), (1, false)] {
+        let mut factory = PersistentFactory::new(RecordingFactory::default());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let file = File::import(
+            &css_clip_fixture::absolute_text(position),
+            retained,
+            None,
+            None,
+            None,
+        )
+        .expect("positioned text imports");
+        let mut artboard = ArtboardInstance::from_native(file, 0).unwrap();
+        for _ in 0..3 {
+            artboard.advance(0.0).unwrap();
+        }
+        let is_text = |hit: &&nuxie_runtime::RuntimeGeometryHit| {
+            hit.path.last().is_some_and(|segment| segment.local_id == 4)
+        };
+        let retained = artboard.retained_geometry_with_bounds();
+        let raw = retained.iter().find(is_text).expect("retained text").bounds;
+        assert!(
+            raw.max_x > 120.0,
+            "the participant extends beyond its static parent"
+        );
+        let visible = artboard.visible_geometry_with_bounds();
+        let bounds = visible.iter().find(is_text).expect("visible text").bounds;
+        let right = raw.max_x.min(if escaped { 240.0 } else { 100.0 });
+        for (got, expected) in [
+            (bounds.min_x, raw.min_x),
+            (bounds.max_x, right),
+            (bounds.min_y, raw.min_y),
+            (
+                bounds.max_y,
+                raw.max_y.min(if escaped { 120.0 } else { 60.0 }),
+            ),
+        ] {
+            assert!(
+                (got - expected).abs() < 0.01,
+                "{bounds:?} versus {raw:?}, position={position}"
+            );
+        }
+        for (x, expected) in [(90.0, true), (120.0, escaped), (250.0, false)] {
+            let hits = artboard.hit_test_segments_with_bounds(Vec2D::new(x, 20.0));
+            assert_eq!(
+                hits.iter().any(|hit| is_text(&hit)),
+                expected,
+                "x={x}, position={position}"
+            );
+            let text = artboard
+                .native_handle()
+                .with_artboard(|artboard| artboard.objects()[4].clone().unwrap());
+            let hit = text
+                .with_mut(|text| {
+                    text.component_hit_test_point(
+                        &nuxie_runtime::source::math::vec2d::Vec2D::new(x, 20.0),
+                        false,
+                        true,
+                    )
+                })
+                .flatten()
+                .unwrap();
+            assert_eq!(hit, expected, "native tap at x={x}, position={position}");
+        }
+    }
+}
 
 fn fixture_path(name: &str) -> PathBuf {
     let runtime_dir = std::env::var_os("RIVE_RUNTIME_DIR")

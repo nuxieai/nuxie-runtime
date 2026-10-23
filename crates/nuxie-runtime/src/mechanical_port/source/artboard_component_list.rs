@@ -1755,6 +1755,13 @@ impl ArtboardComponentList {
         } else {
             self.transform().world_transform()
         };
+        if self.drawable().css_clip_list().is_css_context() {
+            return self.drawable_mut().hit_test_point(
+                &(transform * offset),
+                skip_on_unclipped,
+                false,
+            );
+        }
         self.component()
             .with_parent(|parent| {
                 parent.hit_test_point(&(transform * offset), skip_on_unclipped, false)

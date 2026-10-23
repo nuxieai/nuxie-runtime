@@ -1890,8 +1890,27 @@ impl Artboard {
 
         use crate::css_layout::clip::{self, DrawClip};
         self.css_clip_operations.clear();
+        let root = crate::source::core::CoreObject::core(self)
+            .handle()
+            .expect("artboard owner");
+        // A shape can first open in a translated chain, then be retained
+        // while an inner shape closes for a CSS drawable. Protect its save
+        // by owner identity even before that CSS drawable is reached.
+        let mut css_shape_owners = HashSet::new();
+        let mut current = self.first_drawable.clone();
+        while let Some(drawable) = current {
+            let (chain, scope) = clip::read_chain(&drawable, &root, self.base.base.css_clip_list());
+            if scope {
+                for entry in chain {
+                    if let DrawClip::Shape(owner) = entry {
+                        css_shape_owners.insert(owner);
+                    }
+                }
+            }
+            current = drawable.with(Drawable::prev_drawable).flatten();
+        }
         let mut css_operations = HashSet::new();
-        let mut create_clipping_proxy = |clip: &DrawClip, is_start: bool, css_scope: bool| {
+        let mut create_clipping_proxy = |clip: &DrawClip, is_start: bool| {
             let clipping_shape = match clip {
                 DrawClip::Overflow(owner) => {
                     let operation = clip::operation(owner.clone(), is_start);
@@ -1913,7 +1932,7 @@ impl Artboard {
                     shape.create_proxy_drawable(operation)
                 })
                 .flatten();
-            if css_scope
+            if css_shape_owners.contains(clipping_shape)
                 && is_start
                 && let Some(proxy) = &proxy
             {
@@ -1924,14 +1943,10 @@ impl Artboard {
 
         let mut next_drawable = None::<RuntimeDrawableOccurrence>;
         let mut clipping_stack = Vec::<DrawClip>::new();
-        let root = crate::source::core::CoreObject::core(self)
-            .handle()
-            .expect("artboard owner");
         let mut current_drawable = self.first_drawable.clone();
         while let Some(current) = current_drawable {
             current.with_mut(|current| current.set_needs_save_operation(true));
-            let (chain, css_scope) =
-                clip::read_chain(&current, &root, self.base.base.css_clip_list());
+            let (chain, _) = clip::read_chain(&current, &root, self.base.base.css_clip_list());
             let css_chain = chain
                 .iter()
                 .chain(&clipping_stack)
@@ -1954,7 +1969,7 @@ impl Artboard {
                 let mut i = clipping_stack.len() - 1;
                 loop {
                     let clipping_shape = &clipping_stack[i];
-                    let Some(proxy) = create_clipping_proxy(clipping_shape, false, false) else {
+                    let Some(proxy) = create_clipping_proxy(clipping_shape, false) else {
                         break;
                     };
                     if let Some(next) = next_drawable.as_ref() {
@@ -1983,8 +1998,7 @@ impl Artboard {
             }
             for clipping_shape in chain {
                 if !clipping_stack.contains(&clipping_shape) {
-                    let Some(proxy) = create_clipping_proxy(&clipping_shape, true, css_scope)
-                    else {
+                    let Some(proxy) = create_clipping_proxy(&clipping_shape, true) else {
                         continue;
                     };
                     if let Some(next) = next_drawable.as_ref() {
@@ -2012,7 +2026,7 @@ impl Artboard {
         }
         if !clipping_stack.is_empty() {
             for i in (0..clipping_stack.len()).rev() {
-                let Some(proxy) = create_clipping_proxy(&clipping_stack[i], false, false) else {
+                let Some(proxy) = create_clipping_proxy(&clipping_stack[i], false) else {
                     continue;
                 };
                 if let Some(next) = next_drawable.as_ref() {

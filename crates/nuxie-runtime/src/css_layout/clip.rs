@@ -12,43 +12,6 @@ use std::{
     rc::Rc,
 };
 
-/// State while walking from a painted box towards the root. An absolute
-/// box outside a masked subtree skips overflow until its containing block.
-#[derive(Default)]
-pub(crate) struct OverflowFilter {
-    position: u8,
-    full_chain: bool,
-}
-
-impl OverflowFilter {
-    pub(crate) fn for_layout(layout: &LayoutComponent) -> Self {
-        let mut filter = Self {
-            full_chain: keeps_full_chain(layout),
-            ..Self::default()
-        };
-        filter.leave(position(layout));
-        filter
-    }
-
-    pub(crate) fn keep_full_chain(&mut self) {
-        self.full_chain = true;
-        self.position = 0;
-    }
-
-    pub(crate) fn enter(&mut self, position: u8, artboard: bool) -> bool {
-        if self.position == 2 && (position != 0 || artboard) {
-            self.position = 0;
-        }
-        self.position == 0
-    }
-
-    pub(crate) fn leave(&mut self, position: u8) {
-        if !self.full_chain && position == 2 {
-            self.position = position;
-        }
-    }
-}
-
 /// Masked content keeps ancestor overflow outside its cached canvas.
 pub(crate) fn keeps_full_chain(drawable: &Drawable) -> bool {
     !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty()
@@ -77,29 +40,23 @@ pub(crate) fn position(layout: &LayoutComponent) -> u8 {
         .unwrap_or(1)
 }
 
-/// Keep interaction's own targets and artboard host mapping, filtering
-/// only the CSS overflow tests along the parent chain.
+/// Keep interaction targets, translated clips and artboard host mapping.
+/// CSS overflow has already been tested from the hit owner's clip list.
 pub(crate) fn hit_test_ancestors(
     mut parent: Option<CoreHandle>,
     point: &crate::source::math::vec2d::Vec2D,
-    mut filter: OverflowFilter,
 ) -> bool {
     while let Some(owner) = parent {
         let Some((hit, next)) = owner.with_mut(|object| {
             let next = object.component_parent_handle();
-            if object.as_drawable().is_some_and(keeps_full_chain) {
-                filter.keep_full_chain();
-            }
-            let position = object_position(&*object);
-            let include = filter.enter(position, object.as_artboard().is_some());
             if let Some(artboard) = object.as_artboard_mut() {
                 return (
-                    artboard.hit_test_point_filtered(point, true, false, include),
+                    artboard.hit_test_point_filtered(point, true, false, false),
                     None,
                 );
             }
             let hit = if let Some(layout) = object.as_layout_component() {
-                !layout.is_hidden() && layout.hit_test_contains(point, true, false, None, include)
+                !layout.is_hidden() && layout.hit_test_contains(point, true, false, None, false)
             } else {
                 let visible = object
                     .as_drawable()
@@ -111,10 +68,10 @@ pub(crate) fn hit_test_ancestors(
                         .as_text_input_mut()
                         .is_none_or(|input| input.contains_point(*point))
             };
-            filter.leave(position);
             (hit, next)
         }) else {
-            return false;
+            // Match Component's parent chain during a reentrant borrow.
+            return true;
         };
         if !hit {
             return false;
@@ -157,6 +114,8 @@ pub(crate) fn paint_owner(component: &CoreHandle) -> CoreHandle {
 pub(crate) struct ClipList {
     entries: Vec<ClipEntry>,
     scope: bool,
+    css_context: bool,
+    full_chain: bool,
 }
 
 #[derive(Clone)]
@@ -175,27 +134,73 @@ impl ClipList {
         }
     }
 
+    pub(crate) fn set_full_chain(&mut self, full: bool) {
+        self.full_chain = full;
+    }
+
+    pub(crate) fn is_css_context(&self) -> bool {
+        self.css_context
+    }
+
+    /// Read the same absolute-escape marks as drawing. A clip owner may
+    /// already be borrowed by scrolling or text input, as in the hit chain.
+    pub(crate) fn contains(&self, point: &crate::source::math::vec2d::Vec2D) -> bool {
+        self.applicable(false).all(|clip| match clip {
+            DrawClip::Overflow(owner) => owner
+                .with(|object| {
+                    let Some(layout) = object.as_layout_component() else {
+                        return true;
+                    };
+                    let origin = object.as_artboard().map(|artboard| {
+                        crate::source::math::vec2d::Vec2D::new(
+                            artboard.origin_x() * artboard.layout_width(),
+                            artboard.origin_y() * artboard.layout_height(),
+                        )
+                    });
+                    layout.hit_test_contains(point, true, false, origin, true)
+                })
+                .unwrap_or(true),
+            DrawClip::Shape(owner) => owner
+                .with_downcast_mut::<crate::source::shapes::clipping_shape::ClippingShape, _>(
+                    |shape| {
+                        !shape.base.is_visible()
+                            || shape.path().is_some_and(|path| {
+                                crate::source::semantic::semantic_clip::path_contains(
+                                    path.raw_path(),
+                                    path.fill_rule(),
+                                    *point,
+                                )
+                            })
+                    },
+                )
+                .unwrap_or(true),
+        })
+    }
+
     pub(crate) fn root(root: &CoreHandle, overflow: bool, shapes: &[CoreHandle]) -> Self {
         let mut list = Self {
             scope: overflow,
+            css_context: overflow,
             ..Self::default()
         };
+        for shape in shapes {
+            list.push(DrawClip::Shape(shape.clone()));
+        }
         if overflow {
-            for shape in shapes {
-                list.push(DrawClip::Shape(shape.clone()));
-            }
             list.push(DrawClip::Overflow(root.clone()));
         }
         list
     }
 
-    fn chain(&self, full: bool, shapes: &[CoreHandle]) -> (Vec<DrawClip>, bool) {
-        let mut chain = self
-            .entries
+    fn applicable(&self, full: bool) -> impl Iterator<Item = &DrawClip> {
+        self.entries
             .iter()
-            .filter(|entry| full || !entry.skipped)
-            .map(|entry| entry.clip.clone())
-            .collect::<Vec<_>>();
+            .filter(move |entry| full || self.full_chain || !entry.skipped)
+            .map(|entry| &entry.clip)
+    }
+
+    pub(crate) fn chain(&self, full: bool, shapes: &[CoreHandle]) -> (Vec<DrawClip>, bool) {
+        let mut chain = self.applicable(full).cloned().collect::<Vec<_>>();
         for shape in shapes {
             let clip = DrawClip::Shape(shape.clone());
             if !chain.contains(&clip) {
@@ -292,11 +297,10 @@ pub(crate) fn build_lists(
                 BuildStep::Store(owner, node) => {
                     let parent = node.parent.as_ref().and_then(|parent| states.get(parent));
                     let mut state = parent.cloned().unwrap_or_else(|| BuildState {
-                        children: ClipList {
-                            scope: root_list.scope,
-                            ..ClipList::default()
-                        },
-                        ..BuildState::default()
+                        paint: root_list.clone(),
+                        children: root_list.clone(),
+                        positioned_end: root_list.entries.len(),
+                        css_box: false,
                     });
                     if node.position == 2 {
                         for entry in &mut state.children.entries[state.positioned_end..] {
@@ -306,6 +310,7 @@ pub(crate) fn build_lists(
                         }
                     }
                     state.children.scope |= node.clips;
+                    state.children.css_context |= node.css_box;
                     state.paint = if node.foreground && parent.is_some_and(|parent| parent.css_box)
                     {
                         parent.unwrap().paint.clone()
@@ -361,13 +366,7 @@ pub(crate) fn read_chain(
                 .map(|drawable| drawable.css_clip_list().chain(full, &shapes))
         })
         .flatten()
-        .unwrap_or_else(|| {
-            ClipList {
-                scope: root_list.scope,
-                ..ClipList::default()
-            }
-            .chain(full, &shapes)
-        })
+        .unwrap_or_else(|| root_list.chain(full, &shapes))
 }
 
 struct OverflowOperation {

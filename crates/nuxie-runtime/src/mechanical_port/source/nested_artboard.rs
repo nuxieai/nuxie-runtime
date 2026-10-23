@@ -998,6 +998,12 @@ impl NestedArtboard {
         _artboard: RuntimeArtboardInstanceWeakHandle,
     ) -> bool {
         let mounted_position = self.world_transform() * *position;
+        if self.base.base.css_clip_list().is_css_context() {
+            return self
+                .base
+                .base
+                .hit_test_point(&mounted_position, skip_on_unclipped, false);
+        }
         self.parent().is_some_and(|parent| {
             parent
                 .with_mut(|parent| {

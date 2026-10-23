@@ -2057,7 +2057,7 @@ impl LayoutComponent {
             skip_on_unclipped,
             primary,
             root_origin,
-            apply_overflow,
+            apply_overflow && !self.is_css_mode(),
         ) {
             return false;
         }
@@ -2065,11 +2065,10 @@ impl LayoutComponent {
             if self.base.is_hidden() {
                 return false;
             }
-            return crate::css_layout::clip::hit_test_ancestors(
-                self.parent_handle(),
-                position,
-                crate::css_layout::clip::OverflowFilter::for_layout(self),
-            );
+            return (!apply_overflow
+                || self.is_artboard()
+                || self.css_clip_list().contains(position))
+                && crate::css_layout::clip::hit_test_ancestors(self.parent_handle(), position);
         }
         self.base.base.hit_test_point(position, true, primary)
     }
@@ -2087,7 +2086,7 @@ impl LayoutComponent {
         }
         // A CSS artboard keeps its own clip around its record's.
         let artboard_clip = self.is_css_mode() && self.is_artboard() && self.base.clip();
-        let overflow = self.clips() && (!self.is_css_mode() || apply_overflow);
+        let overflow = (!self.is_css_mode() || apply_overflow) && self.clips();
         if !(skip_on_unclipped && !overflow && !artboard_clip) {
             let mut local = inverse * *position;
             if let Some(origin) = root_origin {

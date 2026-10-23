@@ -74,6 +74,23 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertEqual(result["outputs"],[{"path":str(Path("/tmp/runtime-probe.riv").resolve()),"directory":False}])
         self.assertEqual(runtime.run_io(options,["--replay","another-replay"])["inputs"],[])
 
+    def test_run_io_classifies_inputs_and_outputs_by_program(self):
+        report = self.root / "reports/input.json"; report.parent.mkdir(); report.write_text("{}")
+        data = self.root / "target/silver-inputs"; data.mkdir(parents=True)
+        (data / "case.sriv").write_bytes(b"sriv")
+        runner = self.root / "tools/golden-runner/build/macosx/bin/release/rive_golden_runner"
+        runner.parent.mkdir(parents=True); runner.write_bytes(b"oracle")
+        scripted = runner.with_name("rive_golden_runner_scripted"); scripted.write_bytes(b"scripted")
+        with patch.dict(os.environ, {"NUXIE_COMPONENT_GRAPH_TRACE":str(self.root.parent / "trace.json")}, clear=True):
+            options = runtime.command_options(["run","-p","perf-compare","--bin","renderer-perf-parity-gate"])
+            value = runtime.run_io(options,["--report",str(report),"--markdown",str(self.root.parent / "report.md")])
+            self.assertEqual(value["inputs"],[str(report)])
+            self.assertEqual({Path(item["path"]).name for item in value["outputs"]},{"report.md","trace.json"})
+        options = runtime.command_options(["run","-p","silver-corpus"])
+        self.assertEqual(runtime.run_io(options,["--rust-output-dir",str(data)])["inputs"],[str(data)])
+        options = runtime.command_options(["run","-p","pixel-compare","--bin","capture-riv-corpus"])
+        self.assertEqual(set(runtime.run_io(options,[])["inputs"]),{str(runner),str(scripted)})
+
     def test_remote_run_preserves_runtime_trace_and_profiling_environment(self):
         with patch.dict(os.environ, {"NUXIE_COMPONENT_GRAPH_TRACE":"target/trace.json",
                                     "RENDERER_PERF_BASELINE_SOURCE_ID":"baseline",

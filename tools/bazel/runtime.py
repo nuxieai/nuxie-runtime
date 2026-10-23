@@ -302,26 +302,42 @@ def run_io(options, arguments):
     inputs = []
     def existing(relative):
         path = (ROOT / relative).resolve()
-        if path.is_file(): inputs.append(str(path))
+        if path.exists(): inputs.append(str(path))
     if program in ("corpus-r", "capture-riv-corpus", "capture-corpus-r-references") and "--replay" not in flags:
         existing("target/debug/renderer-replay")
+    if program == "capture-riv-corpus":
+        for flag, binary in (("--runner", "rive_golden_runner"), ("--scripted-runner", "rive_golden_runner_scripted")):
+            if flag not in flags: existing("tools/golden-runner/build/macosx/bin/release/" + binary)
     if program in ("golden-compare", "perf-compare"):
         if "--cpp-runner" not in flags and "GOLDEN_RUNNER" not in os.environ:
             os_name = "macosx" if sys.platform == "darwin" else "linux"
             existing(f"tools/golden-runner/build/{os_name}/bin/debug/rive_golden_runner")
         if program == "perf-compare" and "--rust-runner" not in flags and "RUST_GOLDEN_RUNNER" not in os.environ:
             existing("target/debug/rust-golden-runner")
-    output_options = {"--out":False, "--output":False, "--json":False, "--report":False,
+    output_options = {"--out":False, "--output":False, "--json":False, "--markdown":False, "--artifact":False,
                       "--output-dir":True, "--out-dir":True, "--destination":False}
+    input_options = {"--defs", "--headers", "--extensions", "--assets-dir", "--rust-output-dir", "--reference-dir"}
+    if program == "renderer-perf-parity-gate": input_options.add("--report")
+    if program == "capture-riv-corpus":
+        output_options.update({"--stream-dir":True, "--reference-dir":True})
+        input_options.discard("--reference-dir")
     outputs = []
     args = iter(arguments)
     for argument in args:
         key, separator, value = argument.partition("=")
-        if key not in output_options: continue
+        if key not in output_options and key not in input_options: continue
         if not separator: value = next(args)
         path = Path(value)
         if not path.is_absolute(): path = ROOT / path
-        outputs.append({"path": str(path.resolve()), "directory": output_options[key]})
+        if key in input_options:
+            if path.exists(): inputs.append(str(path.resolve()))
+        else:
+            outputs.append({"path": str(path.resolve()), "directory": output_options[key]})
+    for name in ("NUXIE_COMPONENT_GRAPH_TRACE", "LLVM_PROFILE_FILE"):
+        if os.environ.get(name):
+            path = Path(os.environ[name])
+            if not path.is_absolute(): path = ROOT / path
+            outputs.append({"path": str(path.resolve()), "directory":False})
     return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs}
 
 

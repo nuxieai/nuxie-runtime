@@ -5095,6 +5095,7 @@ impl LayoutComponent {
         style: &Style,
         mut output: taffy::tree::LayoutOutput,
     ) -> taffy::tree::LayoutOutput {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
         use taffy::util::ResolveOrZero;
         if inputs.run_mode != taffy::tree::RunMode::PerformLayout {
             return output;
@@ -5125,6 +5126,12 @@ impl LayoutComponent {
         );
         let scroll_container =
             style.overflow.x.is_scroll_container() || style.overflow.y.is_scroll_container();
+        let rtl = style.direction.is_rtl();
+        let (start_padding, end_padding) = if rtl {
+            (padding.right, padding.left)
+        } else {
+            (padding.left, padding.right)
+        };
         output.scrollable_overflow_rect = taffy::geometry::Rect::ZERO;
         for child in children {
             let extent = child
@@ -5141,11 +5148,16 @@ impl LayoutComponent {
                 })
                 .flatten();
             if let Some(extent) = extent {
-                let left = padding.left + extent.left();
+                let left = start_padding
+                    + ScrollConstraint::css_axis_start(
+                        extent,
+                        true,
+                        rtl,
+                        if rtl { size.x } else { 0.0 },
+                    );
                 let top = padding.top + extent.top();
-                let right = padding.left
-                    + extent.right()
-                    + if scroll_container { padding.right } else { 0.0 };
+                let right =
+                    left + extent.width() + if scroll_container { end_padding } else { 0.0 };
                 let bottom = padding.top
                     + extent.bottom()
                     + if scroll_container {

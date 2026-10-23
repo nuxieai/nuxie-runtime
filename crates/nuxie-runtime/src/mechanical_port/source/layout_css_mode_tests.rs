@@ -11977,3 +11977,177 @@ fn css_input_scroll_includes_the_positioned_caret() {
     f.advance(4);
     assert_eq!(f.max_offsets().0, -1.0);
 }
+
+#[test]
+fn css_input_click_at_wrapped_line_start_keeps_caret_affinity() {
+    use crate::source::{
+        input::focusable::{Key, KeyModifiers},
+        math::vec2d::Vec2D,
+    };
+    let f = css_input_scroll_fixture(true, "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz");
+    f.advance(4);
+    scroll_input_by(&f, 0.0, -20.0);
+    f.advance(2);
+    assert_eq!(f.scroll_offset("Scroll content").1, -20.0);
+    let input = input_handle(&f);
+    input.with_mut(|object| {
+        let input = object.as_text_input_mut().unwrap();
+        let world = input.base.world_transform() * Vec2D::new(0.0, 30.0);
+        input.start_drag(world);
+        input.end_drag(world);
+        let raw = input.raw_text_input();
+        let lookup = raw.shape().glyph_lookup();
+        let lines = raw.shape().ordered_lines();
+        assert!(lines.len() >= 3);
+        let start = lines[1].first_code_point_index(lookup);
+        assert!(lines[0].contains_code_point_index(lookup, start));
+        assert_eq!(raw.cursor().end().line_index(), 1);
+        assert_eq!(raw.cursor().end().code_point_index(), start);
+        let caret = raw.cursor_visual_position();
+        assert_eq!((caret.x(), caret.top(), caret.bottom()), (0.0, 20.0, 40.0));
+    });
+    f.advance(4);
+    assert_eq!(f.scroll_offset("Scroll content").1, -20.0);
+    input.with_mut(|object| {
+        let raw = object.as_text_input_mut().unwrap().raw_text_input();
+        let drawn = raw.cursor_path().raw_path().bounds();
+        assert_eq!(
+            (drawn.left(), drawn.top(), drawn.bottom()),
+            (0.0, 20.0, 40.0)
+        );
+    });
+    // Up retains the clicked column on the first line; down returns to the
+    // second line and then reaches the third line at that same column.
+    for (key, line, top, scroll) in [
+        (Key::UP, 0, 0.0, 0.0),
+        (Key::DOWN, 1, 20.0, 0.0),
+        (Key::DOWN, 2, 40.0, -20.0),
+    ] {
+        input.with_mut(|object| {
+            let input = object.as_text_input_mut().unwrap();
+            if line == 2 {
+                // Click again so down starts with a fresh navigation target.
+                let world = input.base.world_transform() * Vec2D::new(0.0, 30.0);
+                input.start_drag(world);
+                input.end_drag(world);
+            }
+            assert!(input.key_input(key, KeyModifiers(0), true, false));
+        });
+        f.advance(4);
+        input.with_mut(|object| {
+            let raw = object.as_text_input_mut().unwrap().raw_text_input();
+            assert_eq!(raw.cursor().end().line_index(), line);
+            let caret = raw.cursor_visual_position();
+            assert_eq!((caret.x(), caret.top()), (0.0, top));
+            let drawn = raw.cursor_path().raw_path().bounds();
+            assert_eq!((drawn.left(), drawn.top()), (0.0, top));
+        });
+        assert_eq!(f.scroll_offset("Scroll content").1, scroll);
+    }
+}
+
+#[test]
+fn css_input_rtl_overflow_uses_the_padding_box_scroll_origin() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        layout::layout_enums::LayoutDirection, math::vec2d::Vec2D,
+    };
+    for width in [100.0, 200.0] {
+        for (left, right) in [(0.0, 0.0), (7.0, 19.0)] {
+            let f = css_input_scroll_fixture(
+                false,
+                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+            );
+            assert!(CoreRegistry::set_uint_handle(
+                &f.record("Viewport"),
+                DIRECTION.into(),
+                2
+            ));
+            let control = f.named("Input layout");
+            let record = f.record("Input layout");
+            assert!(CoreRegistry::set_double_handle(
+                &record,
+                WIDTH.into(),
+                width
+            ));
+            assert!(CoreRegistry::set_double_handle(
+                &record,
+                PADDING_LEFT.into(),
+                left
+            ));
+            assert!(CoreRegistry::set_double_handle(
+                &record,
+                PADDING_RIGHT.into(),
+                right
+            ));
+            f.advance(4);
+            assert!(
+                control.with_downcast::<LayoutComponent, _>(LayoutComponent::actual_direction)
+                    == Some(LayoutDirection::Rtl)
+            );
+            let text = input_handle(&f)
+                .with_mut(|object| {
+                    object
+                        .as_text_input_mut()
+                        .unwrap()
+                        .raw_text_input()
+                        .bounds()
+                })
+                .unwrap();
+            assert_eq!(text.left(), 0.0);
+            assert!(text.right() > width);
+            // The text beyond the physical right edge is before the RTL
+            // scroll origin. Only the control's leftward extent is reachable.
+            let range = width + left + right - 100.0;
+            assert_eq!(f.max_offsets(), (-range, 0.0));
+            assert_eq!(
+                control.with_downcast::<LayoutComponent, _>(|layout| layout.scroll_range().x),
+                Some(0.0)
+            );
+            // Keep the extent before the origin in Taffy's rectangle. Dropping
+            // all RTL text overflow would hide this case rather than map it.
+            let style = control
+                .with_downcast::<LayoutComponent, _>(|layout| layout.layout_style().clone())
+                .unwrap();
+            let bounds = f.bounds("Input layout");
+            let output = LayoutComponent::with_css_input_overflow(
+                Some(&(
+                    control.clone(),
+                    crate::source::layout::layout_tree::LayoutNodeKind::Layout,
+                )),
+                taffy::tree::LayoutInput {
+                    run_mode: taffy::tree::RunMode::PerformLayout,
+                    ..taffy::tree::LayoutInput::HIDDEN
+                },
+                &style,
+                taffy::tree::LayoutOutput {
+                    size: taffy::geometry::Size {
+                        width: bounds[2],
+                        height: bounds[3],
+                    },
+                    ..taffy::tree::LayoutOutput::DEFAULT
+                },
+            );
+            assert!(output.scrollable_overflow_rect.left < 0.0);
+            assert_eq!(output.scrollable_overflow_rect.right, width + right);
+            f.advance(2);
+            let start = f.world_origin("Input layout").0;
+            assert_eq!(start, -range);
+            css_axis_scroll(&f).with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                scroll.drag_view(Vec2D::new(1000.0, 0.0), 0.0, false);
+            });
+            f.advance(2);
+            assert_eq!(f.scroll_offset("Scroll content").0, -range);
+            assert_eq!(f.world_origin("Input layout").0, 0.0);
+            assert!(f.world_origin("Input layout").0 >= start);
+            // A drag toward the right reveals the control's physical left
+            // edge. Reversing it returns to the right-hand scroll origin.
+            css_axis_scroll(&f).with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                scroll.drag_view(Vec2D::new(-1000.0, 0.0), 0.0, false);
+            });
+            f.advance(2);
+            assert_eq!(f.scroll_offset("Scroll content").0, 0.0);
+            assert_eq!(f.world_origin("Input layout").0, start);
+        }
+    }
+}

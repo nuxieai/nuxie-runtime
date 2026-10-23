@@ -511,7 +511,9 @@ impl RawTextInput {
     pub fn cursor_visual_position(&self) -> CursorVisualPosition {
         if self.css_line_box {
             let mut end = self.cursor.end();
-            end.resolve_line(&self.shape.layout_view());
+            if !end.has_line_index() {
+                end.resolve_line(&self.shape.layout_view());
+            }
             return end.visual_position(&self.shape.layout_view());
         }
         self.cursor_visual_position

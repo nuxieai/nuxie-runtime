@@ -97,13 +97,7 @@ struct CssScrollAxis {
 
 impl CssScrollAxis {
     fn start(self, bounds: Aabb) -> f32 {
-        if self.rtl {
-            self.origin - bounds.right()
-        } else if self.horizontal {
-            bounds.left() - self.origin
-        } else {
-            bounds.top() - self.origin
-        }
+        ScrollConstraint::css_axis_start(bounds, self.horizontal, self.rtl, self.origin)
     }
 
     fn step(self, bounds: Aabb, next: Option<Aabb>) -> f32 {
@@ -505,6 +499,18 @@ impl ScrollConstraint {
             return false;
         }
         self.base.set_infinite_value(value)
+    }
+
+    /// Map physical bounds from a CSS scroll axis origin. Input overflow and
+    /// solved scroll axes use the same coordinate mapping.
+    pub(crate) fn css_axis_start(bounds: Aabb, horizontal: bool, rtl: bool, origin: f32) -> f32 {
+        if rtl {
+            origin - bounds.right()
+        } else if horizontal {
+            bounds.left() - origin
+        } else {
+            bounds.top() - origin
+        }
     }
 
     fn css_scroll_axis(&self, horizontal: bool) -> Option<CssScrollAxis> {

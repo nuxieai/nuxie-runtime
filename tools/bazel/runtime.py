@@ -295,6 +295,36 @@ def run_environment():
             if name in RUN_ENVIRONMENT or name.startswith(("RENDERER_", "BENCH_", "MTL_", "LLVM_PROFILE_"))]
 
 
+def run_io(options, arguments):
+    """Declare runtime tool defaults and caller-visible destinations explicitly."""
+    program = options["selector"] or (options["packages"][0] if len(options["packages"]) == 1 else None)
+    flags = {argument.split("=",1)[0] for argument in arguments if argument.startswith("--")}
+    inputs = []
+    def existing(relative):
+        path = (ROOT / relative).resolve()
+        if path.is_file(): inputs.append(str(path))
+    if program in ("corpus-r", "capture-riv-corpus", "capture-corpus-r-references") and "--replay" not in flags:
+        existing("target/debug/renderer-replay")
+    if program in ("golden-compare", "perf-compare"):
+        if "--cpp-runner" not in flags and "GOLDEN_RUNNER" not in os.environ:
+            os_name = "macosx" if sys.platform == "darwin" else "linux"
+            existing(f"tools/golden-runner/build/{os_name}/bin/debug/rive_golden_runner")
+        if program == "perf-compare" and "--rust-runner" not in flags and "RUST_GOLDEN_RUNNER" not in os.environ:
+            existing("target/debug/rust-golden-runner")
+    output_options = {"--out":False, "--output":False, "--json":False, "--report":False,
+                      "--output-dir":True, "--out-dir":True, "--destination":False}
+    outputs = []
+    args = iter(arguments)
+    for argument in args:
+        key, separator, value = argument.partition("=")
+        if key not in output_options: continue
+        if not separator: value = next(args)
+        path = Path(value)
+        if not path.is_absolute(): path = ROOT / path
+        outputs.append({"path": str(path.resolve()), "directory": output_options[key]})
+    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs}
+
+
 def pool_run_enabled(bazel):
     """Use remote run only with a client implementing its product contract."""
     if (any(os.environ.get(key) == value for key, value in
@@ -308,7 +338,7 @@ def pool_run_enabled(bazel):
     spec = importlib.util.spec_from_file_location("nuxie_installed_pool_route", router)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return (getattr(module, "runtime_run_supported", False) is True
+    return (getattr(module, "runtime_run_supported", 0) >= 2
             and module.runtime_run_compatible(bazel[1:]))
 
 
@@ -371,6 +401,7 @@ def main():
         selected_bazel = ([sys.executable, "-I", str(Path.home() / ".local/share/nuxie-homelab/rust/route.py"), *bazel]
                           if remote_run else bazel)
         if remote_run:
+            os.environ["NUXIE_HOMELAB_RUNTIME_IO"] = json.dumps(run_io(options, runtime_args))
             # Bazel's installed launcher sends this complete invocation to a
             # compatible pool host. Keeping execution with the build preserves
             # runfiles/oracle paths and avoids a caller-side compilation tree.

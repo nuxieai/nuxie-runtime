@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/stencil_draw.glsl.
  *
- * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
+ * Upstream source revision: ada892f37808e289e716d29010b7e79d0656f79d
  */
 
 #![allow(dead_code)]
@@ -10,17 +10,20 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "ada892f37808e289e716d29010b7e79d0656f79d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/stencil_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "f05d05ee97d8bcb65284e92a9b102ea6fc8e494dee5575a73a0e733cb5684202";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 31;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 772;
+    "32c231d28cf7a606755725c4187c29a4d8237da88ab1ee3a069bf329ac78be6c";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 34;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 811;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_STENCIL_DRAW_GLSL_SOURCE: &str = r###"/*
  * Copyright 2024 Rive
  */
+
+VARYING_BLOCK_BEGIN
+VARYING_BLOCK_END
 
 #ifdef @VERTEX
 ATTR_BLOCK_BEGIN(Attrs)

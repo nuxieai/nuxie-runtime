@@ -296,10 +296,6 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
     }
     match role {
         CssRole::Box => {
-            style.box_sizing = match values.choice(keys::BOX_SIZING) {
-                1 => BoxSizing::BorderBox,
-                _ => BoxSizing::ContentBox,
-            };
             style.display = values.display();
             apply_item(values, style);
         }
@@ -328,6 +324,7 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
 }
 
 fn apply_container(values: CssValues<'_>, style: &mut Style, ltr: bool) {
+    apply_box_metrics(values, style);
     style.direction = if ltr { Direction::Ltr } else { Direction::Rtl };
     style.overflow = values.overflow();
     style.scrollbar_width = 0.0;
@@ -354,10 +351,6 @@ fn apply_container(values: CssValues<'_>, style: &mut Style, ltr: bool) {
         3 => GridAutoFlow::ColumnDense,
         _ => GridAutoFlow::Row,
     };
-    style.padding = values.sides(keys::PADDING_TOP, 2, |key| values.padding(key));
-    style.border = values.sides(keys::BORDER_TOP, 1, |key| {
-        LengthPercentage::length(values.number(key).max(0.0))
-    });
     let gap = |key: u16| {
         let (length, percent) = non_negative(values.parts(key));
         length_percentage(length, percent)
@@ -366,6 +359,18 @@ fn apply_container(values: CssValues<'_>, style: &mut Style, ltr: bool) {
         width: gap(keys::COLUMN_GAP),
         height: gap(keys::ROW_GAP),
     };
+}
+
+/// Pictures size their content inside the same padding and border as a box.
+pub(crate) fn apply_box_metrics(values: CssValues<'_>, style: &mut Style) {
+    style.box_sizing = match values.choice(keys::BOX_SIZING) {
+        1 => BoxSizing::BorderBox,
+        _ => BoxSizing::ContentBox,
+    };
+    style.padding = values.sides(keys::PADDING_TOP, 2, |key| values.padding(key));
+    style.border = values.sides(keys::BORDER_TOP, 1, |key| {
+        LengthPercentage::length(values.number(key).max(0.0))
+    });
 }
 
 /// A hosted occurrence supplies item properties without replacing the

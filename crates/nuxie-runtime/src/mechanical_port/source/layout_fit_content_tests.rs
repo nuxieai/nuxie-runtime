@@ -1954,6 +1954,104 @@ fn css_picture_participant_min_and_max_width_win() {
 }
 
 #[test]
+fn css_picture_natural_ratio_respects_max_height() {
+    for video in [false, true] {
+        for wrapped in [false, true] {
+            let (_arena, root, item, _) =
+                picture_layout_fixture(video, wrapped, &[], &[(61036, 1)], &[(61037, 100.0)]);
+            let record = root
+                .with_downcast::<LayoutComponent, _>(|root| root.css_record().unwrap())
+                .unwrap();
+            CssTextLeaf::write(&record, &[], &[(61022, 1000.0)]);
+            LayoutComponent::sync_style_occurrence(&root);
+            assert_picture_size(&root, &item, 177.77778, 100.0);
+        }
+    }
+}
+
+#[test]
+fn css_picture_natural_ratio_respects_min_height() {
+    for video in [false, true] {
+        let (_arena, root, item) =
+            picture_participant_fixture(video, &[], &[(61030, 1)], &[(61031, 400.0)]);
+        assert_picture_size(&root, &item, 711.1111, 400.0);
+    }
+}
+
+#[test]
+fn css_picture_natural_ratio_conflicting_limits_break_the_ratio() {
+    let (_arena, root, item) = picture_participant_fixture(
+        false,
+        &[],
+        &[(61027, 1), (61036, 1)],
+        &[(61028, 600.0), (61037, 300.0)],
+    );
+    assert_picture_size(&root, &item, 600.0, 300.0);
+}
+
+#[test]
+fn css_picture_natural_ratio_uses_padded_content_box() {
+    for video in [false, true] {
+        for wrapped in [true, false] {
+            let (_arena, root, item, _) = picture_layout_fixture(
+                video,
+                wrapped,
+                &[],
+                &[(61001, 1), (61021, 1)],
+                &[
+                    (61022, 100.0),
+                    (61063, 10.0),
+                    (61065, 10.0),
+                    (61067, 10.0),
+                    (61069, 10.0),
+                ],
+            );
+            assert_picture_size(&root, &item, 100.0, 65.0);
+        }
+    }
+}
+
+#[test]
+fn css_picture_natural_ratio_definite_width_in_flex_row() {
+    for video in [false, true] {
+        for wrapped in [false, true] {
+            let (_arena, root, item, _) = picture_layout_fixture(
+                video,
+                wrapped,
+                &[(61000, 1), (61013, 4)],
+                &[(61001, 1), (61021, 1)],
+                &[
+                    (61022, 100.0),
+                    (61063, 10.0),
+                    (61065, 10.0),
+                    (61067, 10.0),
+                    (61069, 10.0),
+                ],
+            );
+            assert_picture_size(&root, &item, 100.0, 65.0);
+        }
+    }
+}
+
+#[test]
+fn translated_picture_fixed_width_keeps_its_natural_height() {
+    let (_arena, root, item) = image_transfer_fixture(true, false);
+    root.with_downcast_mut::<LayoutComponent, _>(|root| root.base.set_height_value(800.0));
+    LayoutComponent::sync_style_occurrence(&root);
+    item.with_downcast_mut::<LayoutParticipant, _>(|item| {
+        item.base
+            .set_layout_width_scale_type_value(LayoutScaleType::Fixed as u8);
+        item.base.set_width_units_value_value(YGUnit::Point as u8);
+        item.base.set_width_value(100.0);
+        item.base
+            .set_layout_height_scale_type_value(LayoutScaleType::Hug as u8);
+        item.base.set_height_units_value_value(YGUnit::Auto as u8);
+    });
+    LayoutParticipant::sync_style_changes_occurrence(&item, None);
+    assert_picture_size(&root, &item, 100.0, 412.0);
+}
+
+#[test]
 fn css_picture_participant_video_uses_declared_default_before_a_frame() {
     use crate::source::generated::core_registry::CoreField;
     let (arena, root, participant) = picture_participant_fixture(true, &[], &[], &[(61020, 2.0)]);
@@ -2013,9 +2111,6 @@ fn css_picture_participant_video_uses_decoded_frame_size() {
         .flatten()
         .unwrap();
     present_picture_frame(&host, 640, 320);
-    // This arena fixture has no artboard update pass to sync styles and frame dirt.
-    LayoutComponent::sync_style_occurrence(&root);
-    LayoutParticipant::mark_layout_node_dirty_occurrence(&participant, true);
     assert_picture_size(&root, &participant, 640.0, 320.0);
 }
 
@@ -2029,9 +2124,6 @@ fn css_picture_box_video_frame_updates_its_natural_ratio() {
         .flatten()
         .unwrap();
     present_picture_frame(&host, 640, 320);
-    // Simulate the artboard's style pass for the dirty picture box.
-    LayoutComponent::sync_style_occurrence(&item);
-    LayoutComponent::mark_layout_node_dirty_occurrence(&item, true);
     assert_picture_size(&root, &item, 328.0, 164.0);
     near(solved(&participant).height(), 164.0);
 }

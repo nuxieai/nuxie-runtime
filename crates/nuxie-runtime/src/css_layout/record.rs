@@ -316,8 +316,8 @@ impl LayoutStyleApplier for LayoutCssStyle {
                     .is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
         });
         style.item_is_replaced = picture.is_some();
-        if let Some(picture) = picture {
-            crate::source::layout::layout_participant::apply_picture_natural_ratio(style, &picture);
+        if picture.is_some() {
+            super::style::apply_box_metrics(self.values(), style);
         }
     }
 }

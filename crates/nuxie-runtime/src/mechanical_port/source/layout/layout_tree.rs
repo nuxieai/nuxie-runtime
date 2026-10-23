@@ -339,6 +339,103 @@ pub fn measure_axis(known: Option<f32>, available: AvailableSpace) -> (f32, Layo
     }
 }
 
+/// Resolve a replaced picture at measurement time. The natural ratio belongs
+/// to its content box; Style::aspect_ratio remains the authored CSS property.
+pub(crate) fn compute_picture_leaf(
+    inputs: taffy::tree::LayoutInput,
+    style: &Style,
+    natural: Vec2D,
+) -> taffy::tree::LayoutOutput {
+    use taffy::{
+        tree::SizingMode,
+        util::{MaybeMath, MaybeResolve, ResolveOrZero},
+    };
+    let calc = |_: *const (), _: f32| 0.0;
+    let padding_border = style
+        .padding
+        .resolve_or_zero(inputs.parent_size.width, calc)
+        + style.border.resolve_or_zero(inputs.parent_size.width, calc);
+    let inset = padding_border.sum_axes();
+    let authored = if inputs.sizing_mode == SizingMode::InherentSize {
+        let adjustment = if style.box_sizing == taffy::BoxSizing::ContentBox {
+            inset
+        } else {
+            Size::ZERO
+        };
+        style
+            .size
+            .maybe_resolve(inputs.parent_size, calc)
+            .maybe_apply_aspect_ratio(style.aspect_ratio)
+            .maybe_add(adjustment)
+    } else {
+        Size::NONE
+    };
+    let known = inputs
+        .known_dimensions
+        .or(authored)
+        .zip_map(inset, |value, inset| {
+            value.map(|value| (value - inset).max(0.0))
+        });
+    let width_limits = content_width_limits(style, inputs.parent_size);
+    let height_limits = content_height_limits(style, inputs.parent_size);
+    taffy::compute_leaf_layout(inputs, style, calc, |_, _| {
+        let clamp = |value: f32, limits: (Option<f32>, Option<f32>)| {
+            value
+                .min(limits.1.unwrap_or(f32::INFINITY))
+                .max(limits.0.unwrap_or(0.0))
+        };
+        let width = known.width.map(|value| clamp(value, width_limits));
+        let height = known.height.map(|value| clamp(value, height_limits));
+        let ratio = (natural.x / natural.y)
+            .is_finite()
+            .then_some(natural.x / natural.y)
+            .filter(|ratio| *ratio > 0.0);
+        let size = match (width, height, ratio) {
+            (Some(width), Some(height), _) => Size { width, height },
+            (Some(width), None, Some(ratio)) => Size {
+                width,
+                height: width / ratio,
+            },
+            (None, Some(height), Some(ratio)) => Size {
+                width: height * ratio,
+                height,
+            },
+            (None, None, Some(_)) => {
+                // CSS 2.1 section 10.4: scale both auto axes together when
+                // their limits allow it. Conflicting limits break the ratio.
+                let minimum_scale = (width_limits.0.unwrap_or(0.0) / natural.x)
+                    .max(height_limits.0.unwrap_or(0.0) / natural.y);
+                let maximum_width = width_limits
+                    .1
+                    .unwrap_or(f32::INFINITY)
+                    .max(width_limits.0.unwrap_or(0.0));
+                let maximum_height = height_limits
+                    .1
+                    .unwrap_or(f32::INFINITY)
+                    .max(height_limits.0.unwrap_or(0.0));
+                let maximum_scale = (maximum_width / natural.x).min(maximum_height / natural.y);
+                let scale = if minimum_scale <= maximum_scale {
+                    1.0f32.clamp(minimum_scale, maximum_scale)
+                } else {
+                    minimum_scale
+                };
+                Size {
+                    width: natural.x * scale,
+                    height: natural.y * scale,
+                }
+            }
+            _ => Size {
+                width: width.unwrap_or(natural.x),
+                height: height.unwrap_or(natural.y),
+            },
+        };
+        Size {
+            width: clamp(size.width, width_limits),
+            height: clamp(size.height, height_limits),
+        }
+    })
+}
+
 /// Resolve width limits even during ContentSize, where Taffy defers these
 /// clamps. Height must already reflect the final content-box width.
 pub(crate) fn content_width_limits(

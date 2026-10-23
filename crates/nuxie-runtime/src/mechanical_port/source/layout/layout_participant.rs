@@ -76,27 +76,13 @@ fn natural_for_minimum(host: &CoreHandle, css: bool) -> Option<Vec2D> {
 
 /// Image and CSS Video share the Image that holds their natural dimensions.
 /// Video starts with its VideoAsset's declared size, then uses decoded frames.
-fn picture_natural_size(host: &CoreHandle, css: bool) -> Option<Vec2D> {
+pub(crate) fn picture_natural_size(host: &CoreHandle, css: bool) -> Option<Vec2D> {
     use crate::source::shapes::{image::Image, mesh_host::MeshHost};
     if !host.is_type_of(Image::TYPE_KEY) || (!css && host.core_type() != Some(Image::TYPE_KEY)) {
         return None;
     }
     let picture = MeshHost::from_handle(Some(host.clone()))?;
     Some(Vec2D::new(picture.width(), picture.height()))
-}
-
-/// Taffy transfers a definite axis to an auto axis through this picture ratio.
-/// Authored dimensions and aspect-ratio take precedence over the natural ratio.
-pub(crate) fn apply_picture_natural_ratio(style: &mut Style, host: &CoreHandle) {
-    if style.aspect_ratio.is_some() || (!style.size.width.is_auto() && !style.size.height.is_auto())
-    {
-        return;
-    }
-    if let Some(size) = picture_natural_size(host, true)
-        .filter(|size| size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0)
-    {
-        style.aspect_ratio = Some(size.x / size.y);
-    }
 }
 
 /// Called after the unbounded measure populated Text's measured-shape cache.

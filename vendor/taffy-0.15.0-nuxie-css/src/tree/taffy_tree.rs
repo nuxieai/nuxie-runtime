@@ -309,6 +309,23 @@ where
             debug_log!(display_mode);
             debug_log_node!(inputs);
 
+            // nuxie-css: a replaced wrapper is measured as one object, then its
+            // implementation children are placed inside the measured size.
+            // The measure callback owns natural sizing, not Style::aspect_ratio.
+            let inputs = if has_children
+                && display_mode != Display::None
+                && tree.taffy.nodes[node_id.into()].has_context
+                && tree.taffy.nodes[node_id.into()].style.item_is_replaced
+            {
+                let node_key = node_id.into();
+                let style = &tree.taffy.nodes[node_key].style;
+                let node_context = tree.taffy.node_context_data.get_mut(node_key);
+                let measured = (tree.measure_function)(inputs, node_id, node_context, style);
+                LayoutInput { known_dimensions: measured.size.map(Some), ..inputs }
+            } else {
+                inputs
+            };
+
             // Dispatch to a layout algorithm based on the node's display style and whether the node has children or not.
             let mut output = match (display_mode, has_children) {
                 (Display::None, _) => compute_hidden_layout(tree, node_id),

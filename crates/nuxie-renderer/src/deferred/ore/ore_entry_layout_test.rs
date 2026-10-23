@@ -12,13 +12,13 @@ use nuxie_ore_metal::{
     types::*,
 };
 
-const ALL: u8 = BindingMap::kStageVertex | BindingMap::kStageFragment | BindingMap::kStageCompute;
-fn row(group: u8, binding: u8, kind: ResourceKind, stage_mask: u8) -> Entry {
+const ALL: u32 = BindingMap::kStageVertex | BindingMap::kStageFragment | BindingMap::kStageCompute;
+fn row(group: u8, binding: u8, kind: ResourceKind, stage_mask: u32) -> Entry {
     let mut e = Entry::default();
     e.group = group;
     e.binding = binding;
     e.kind = kind;
-    e.stageMask = stage_mask;
+    e.stageMask = stage_mask as u8;
     e.backendSlot[0] = binding.into();
     e.backendSlot[1] = binding.into();
     if kind == ResourceKind::SampledTexture {
@@ -41,10 +41,10 @@ fn shader(with_use: bool) -> ShaderModule {
     let mut shader = nuxie_ore_metal::new_shader_module_backend_base();
     shader
         .m_bindingMap
-        .push(row(0, 0, ResourceKind::UniformBuffer, ALL));
+        .push(&row(0, 0, ResourceKind::UniformBuffer, ALL));
     shader
         .m_bindingMap
-        .push(row(0, 1, ResourceKind::SampledTexture, ALL));
+        .push(&row(0, 1, ResourceKind::SampledTexture, ALL));
     shader.m_bindingMap.finalize();
     shader.m_bindingMap.computeLayoutIds();
     if with_use {
@@ -109,7 +109,7 @@ fn narrowing_keeps_rows_the_entry_points_use() {
     let narrowed = map(&shader, "fs_picture");
     assert_eq!(narrowed.size(), 1);
     assert_eq!(narrowed.at(0).binding, 1);
-    assert_eq!(narrowed.at(0).stageMask, ALL);
+    assert_eq!(narrowed.at(0).stageMask, ALL as u8);
     assert_ne!(narrowed.layoutIdForGroup(0), BindingMap::kNoLayoutId);
     assert_ne!(
         narrowed.layoutIdForGroup(0),
@@ -144,7 +144,7 @@ fn keeping_every_row_keeps_module_layout() {
 #[test]
 fn narrowing_follows_each_stages_own_module() {
     let mut vertex = nuxie_ore_metal::new_shader_module_backend_base();
-    vertex.m_bindingMap.push(row(
+    vertex.m_bindingMap.push(&row(
         0,
         0,
         ResourceKind::UniformBuffer,
@@ -153,7 +153,7 @@ fn narrowing_follows_each_stages_own_module() {
     vertex.m_bindingMap.finalize();
     vertex.m_entryBindings = vec![uses(0, "vs_main", &[0])];
     let mut fragment = nuxie_ore_metal::new_shader_module_backend_base();
-    fragment.m_bindingMap.push(row(
+    fragment.m_bindingMap.push(&row(
         0,
         1,
         ResourceKind::SampledTexture,
@@ -180,7 +180,7 @@ fn narrowing_follows_each_stages_own_module() {
     assert_eq!(flat.size(), 1);
     assert_eq!(flat.at(0).binding, 0);
     let mut unused = nuxie_ore_metal::new_shader_module_backend_base();
-    unused.m_bindingMap.push(row(
+    unused.m_bindingMap.push(&row(
         0,
         1,
         ResourceKind::UniformBuffer,
@@ -224,27 +224,27 @@ fn sampler_narrowed_to_depth_texture_is_non_filtering() {
     let mut shader = nuxie_ore_metal::new_shader_module_backend_base();
     let mut depth = row(0, 0, ResourceKind::SampledTexture, ALL);
     depth.textureSampleType = TextureSampleType::Depth;
-    shader.m_bindingMap.push(depth);
+    shader.m_bindingMap.push(&depth);
     shader
         .m_bindingMap
-        .push(row(0, 1, ResourceKind::SampledTexture, ALL));
+        .push(&row(0, 1, ResourceKind::SampledTexture, ALL));
     shader
         .m_bindingMap
-        .push(row(0, 2, ResourceKind::Sampler, ALL));
+        .push(&row(0, 2, ResourceKind::Sampler, ALL));
     shader.m_bindingMap.finalize();
     shader.m_bindingMap.computeLayoutIds();
     shader.m_textureSamplerPairs = vec![
         TextureSamplerPair {
-            texGroup: 0,
-            texBinding: 0,
-            sampGroup: 0,
-            sampBinding: 2,
+            textureGroup: 0,
+            textureBinding: 0,
+            samplerGroup: 0,
+            samplerBinding: 2,
         },
         TextureSamplerPair {
-            texGroup: 0,
-            texBinding: 1,
-            sampGroup: 0,
-            sampBinding: 2,
+            textureGroup: 0,
+            textureBinding: 1,
+            samplerGroup: 0,
+            samplerBinding: 2,
         },
     ];
     shader.m_entryBindings = vec![
@@ -422,7 +422,9 @@ fn draw_needs_groups_matching_pipeline_layouts() {
         .makeBuffer(&BufferDesc {
             usage: BufferUsage::uniform,
             size: 16,
-            ..Default::default()
+            data: None,
+            immutable: false,
+            label: None,
         })
         .unwrap();
     let mut group_of = |layout: &AnyResourceHandle| {
@@ -548,7 +550,7 @@ fn split_files_check_slot_clashes_over_actual_bindings() {
             e.backendSlot[0] = BindingMap::kAbsent;
             e.backendSlot[1] = BindingMap::kAbsent;
             e.backendSlot[stage] = if binding == 0 { 0 } else { 1 };
-            module.m_bindingMap.push(e);
+            module.m_bindingMap.push(&e);
         }
         module.m_bindingMap.finalize();
         module.m_entryBindings = vec![uses(stage as u8, "main", used)];

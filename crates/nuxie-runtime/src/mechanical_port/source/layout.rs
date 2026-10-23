@@ -68,3 +68,5 @@ pub mod n_slicer;
 pub mod n_slicer_details;
 pub mod n_slicer_tile_mode;
 pub mod style_overrider;
+
+pub(crate) mod picture_layout_mode;

@@ -34,14 +34,18 @@ impl ContainerComponent {
 
     /// Attachment can move an existing drawing group, not only an empty one.
     pub(crate) fn refresh_attached_picture_layout_mode(&mut self) {
-        Self::refresh_picture_children(
-            &self.children,
+        crate::source::layout::picture_layout_mode::children(
+            self.children.clone(),
             self.picture_uses_css_layout(),
-            self.base.base.base.handle().as_ref(),
+            self.base.base.base.handle(),
         );
     }
 
-    fn refresh_picture_children(children: &[CoreHandle], css: bool, parent: Option<&CoreHandle>) {
+    pub(crate) fn refresh_picture_children(
+        children: &[CoreHandle],
+        css: bool,
+        parent: Option<&CoreHandle>,
+    ) {
         for child in children {
             if Some(child) == parent
                 || !child.is_type_of(ContainerComponentBase::TYPE_KEY)

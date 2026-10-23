@@ -1310,10 +1310,10 @@ impl Component {
                 .filter(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY)),
         );
         if !self.owns_picture_layout_mode && self.parent_handle().as_ref() != Some(&this) {
-            let css = self
-                .with_parent(|parent| parent.picture_uses_css_layout())
-                .unwrap_or(false);
-            self.inherit_picture_layout_mode(css);
+            crate::source::layout::picture_layout_mode::inherited(
+                this.clone(),
+                self.parent_handle(),
+            );
         }
         self.parent
             .with(|parent| {

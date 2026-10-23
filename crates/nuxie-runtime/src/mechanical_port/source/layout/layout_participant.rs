@@ -319,22 +319,18 @@ impl LayoutParticipant {
         self.owner_handle()
     }
     pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
-        if let Some(data) = self.layout_data.as_deref_mut() {
-            data.add_applier(applier);
-        }
+        let Some(data) = self.layout_data.as_deref_mut() else {
+            return;
+        };
+        data.add_applier(applier);
         self.refresh_picture_layout_mode();
     }
 
     fn refresh_picture_layout_mode(&self) {
         let css = self.css_record().is_some();
-        self.with_host_mut(|host| {
-            if let Some(container) = host.as_container_component_mut() {
-                container.refresh_picture_layout_mode(css);
-            }
-            if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
-                sizeable.layout_mode_changed();
-            }
-        });
+        if let Some(host) = self.owner_handle() {
+            crate::source::layout::picture_layout_mode::boundary(host, css);
+        }
     }
 
     fn owner_handle(&self) -> Option<CoreHandle> {
@@ -783,10 +779,10 @@ impl LayoutParticipant {
         &mut self,
         active_parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
     ) -> bool {
-        self.refresh_picture_layout_mode();
         if self.layout_data.is_none() {
             return false;
         }
+        self.refresh_picture_layout_mode();
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let layout = self.owning_layout_handle();
         let (parent_is_row, parent_is_grid, parent_is_stack, justify, direction_ltr) = active_parent_style.filter(|snapshot| layout.as_ref() == Some(&snapshot.owner)).map(|snapshot| (snapshot.is_row, snapshot.is_grid, snapshot.is_stack, snapshot.justify_items as u8, snapshot.is_ltr)).or_else(|| layout

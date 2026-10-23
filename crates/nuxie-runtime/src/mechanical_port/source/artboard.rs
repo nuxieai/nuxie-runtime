@@ -7464,10 +7464,12 @@ impl RuntimeArtboardInstanceHandle {
     }
 
     pub fn with_artboard<R>(&self, f: impl FnOnce(&ArtboardInstance) -> R) -> R {
+        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         f(&self.0.borrow())
     }
 
     pub fn with_artboard_mut<R>(&self, f: impl FnOnce(&mut ArtboardInstance) -> R) -> R {
+        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         f(&mut self.0.borrow_mut())
     }
 }

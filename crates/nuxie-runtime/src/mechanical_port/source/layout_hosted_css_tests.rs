@@ -841,28 +841,57 @@ fn display_draw_count(scene: &Scene) -> usize {
         .count()
 }
 
+// Pointer delivery goes through the host, but each nested machine reports
+// the events fired by its own listeners in its own queue.
 fn display_click(
+    scene: &Scene,
     machine: &crate::RuntimeStateMachineInstanceHandle,
     y: f32,
 ) -> (bool, Vec<CoreHandle>) {
-    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
-    machine.with_instance_mut(|machine| {
+    use crate::source::{
+        animation::nested_state_machine::NestedStateMachine, math::vec2d::Vec2D,
+        pointer_button::PointerButton,
+    };
+    let nested: Vec<_> = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<NestedStateMachine>())
+        .iter()
+        .map(|animation| {
+            animation
+                .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+                .flatten()
+                .expect("copy state machine")
+        })
+        .collect();
+    let before: Vec<_> = nested
+        .iter()
+        .map(|machine| machine.with_instance(|machine| machine.reported_event_count()))
+        .collect();
+    let listens = machine.with_instance_mut(|machine| {
         let point = Vec2D::new(10.0, y);
         let listens = machine.listens_to_button_at(point, PointerButton::Primary);
-        let before = machine.reported_event_count();
         machine.pointer_down(point, 0, PointerButton::Primary);
         machine.pointer_up(point, 0, PointerButton::Primary);
-        let targets = (before..machine.reported_event_count())
-            .filter_map(|index| machine.reported_event_at(index).event)
-            .map(|event| {
-                event
-                    .with(|event| event.component_artboard_handle())
-                    .flatten()
-                    .unwrap()
+        listens
+    });
+    let targets = nested
+        .iter()
+        .zip(before)
+        .flat_map(|(machine, before)| {
+            machine.with_instance(|machine| {
+                (before..machine.reported_event_count())
+                    .filter_map(|index| machine.reported_event_at(index).event)
+                    .map(|event| {
+                        event
+                            .with(|event| event.component_artboard_handle())
+                            .flatten()
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>()
             })
-            .collect();
-        (listens, targets)
-    })
+        })
+        .collect();
+    (listens, targets)
 }
 
 #[test]
@@ -874,12 +903,12 @@ fn css_nested_item_display_none_hides_paint_and_taps() {
     assert_eq!(display_draw_count(&scene), 1);
     let copies = display_copies(&scene);
     assert_eq!(
-        display_click(&machine, 10.0),
+        display_click(&scene, &machine, 10.0),
         (true, vec![copies[1].core_handle()]),
         "visible sibling receives taps"
     );
     assert_eq!(
-        display_click(&machine, 50.0),
+        display_click(&scene, &machine, 50.0),
         (false, vec![]),
         "hidden copy has no tap target"
     );
@@ -925,7 +954,7 @@ fn css_nested_bound_item_display_toggles_and_relayouts() {
             "display {display}"
         );
         assert_eq!(
-            display_click(&machine, 50.0),
+            display_click(&scene, &machine, 50.0),
             (
                 !hidden,
                 if hidden {
@@ -937,7 +966,7 @@ fn css_nested_bound_item_display_toggles_and_relayouts() {
             "display {display}"
         );
         assert_eq!(
-            display_click(&machine, 10.0),
+            display_click(&scene, &machine, 10.0),
             (true, vec![copies[usize::from(hidden)].core_handle()]),
             "tap reaches the visible copy, display {display}"
         );
@@ -968,6 +997,17 @@ fn css_nested_display_without_item_record_keeps_existing_behavior() {
     let copies = display_copies(&scene);
     assert_eq!(copies[1].with_artboard(|board| board.layout_y()), 40.0);
     assert_eq!(display_draw_count(&scene), 2);
+    let machine = scene.artboard.state_machine_at(0).unwrap();
+    machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+    scene.advance();
+    assert_eq!(
+        display_click(&scene, &machine, 10.0),
+        (true, vec![copies[0].core_handle()])
+    );
+    assert_eq!(
+        display_click(&scene, &machine, 50.0),
+        (true, vec![copies[1].core_handle()])
+    );
 }
 
 #[test]

@@ -9,7 +9,9 @@
 //!
 //! The baseline entry points enforce the resource ceilings below. Product and
 //! platform admission may add stricter limits with [`ImageAdmissionPolicy`],
-//! but cannot relax those baseline ceilings. The explicitly named
+//! but cannot relax those baseline ceilings. Editor hosts can explicitly set
+//! a larger decoded-byte ceiling with [`decode_image_rgba_with_max_decoded_bytes`],
+//! while retaining the encoded-byte and dimension ceilings. The explicitly named
 //! [`decode_image_rgba_unbounded`] entry point exists only for pinned low-level
 //! runtime compatibility and must not be used for untrusted product admission.
 
@@ -281,6 +283,41 @@ pub fn decode_apple_bitmap(data: &[u8]) -> Option<DecodedBitmap> {
 #[must_use]
 pub fn decode_image_rgba(data: &[u8]) -> Option<DecodedImageRgba> {
     decode_image_rgba_with_limit(data, Some(MAX_DECODED_IMAGE_BYTES))
+}
+
+/// Decode with a host-selected RGBA allocation ceiling. Encoded byte and
+/// per-side limits remain unchanged. Ordinary runtime callers use 64 MiB.
+#[must_use]
+pub fn decode_image_rgba_with_max_decoded_bytes(
+    data: &[u8],
+    max_decoded_bytes: usize,
+) -> Option<DecodedImageRgba> {
+    decode_image_rgba_with_limit(data, Some(max_decoded_bytes))
+}
+
+/// Fully validate using the same explicit ceiling as the host's renderer.
+#[must_use]
+pub fn validate_encoded_image_with_max_decoded_bytes(
+    data: &[u8],
+    max_decoded_bytes: usize,
+) -> Option<DecodedImageDimensions> {
+    let image = decode_image_rgba_with_max_decoded_bytes(data, max_decoded_bytes)?;
+    Some(DecodedImageDimensions {
+        width: image.width,
+        height: image.height,
+    })
+}
+
+/// Read dimensions with the host's explicit RGBA ceiling before allocation.
+#[must_use]
+pub fn preflight_encoded_image_with_max_decoded_bytes(
+    data: &[u8],
+    max_decoded_bytes: usize,
+) -> Option<DecodedImageDimensions> {
+    if data.len() > MAX_ENCODED_IMAGE_BYTES {
+        return None;
+    }
+    preflight_encoded_image_with_limit(data, Some(max_decoded_bytes))
 }
 
 /// Decode for pinned low-level compatibility surfaces, which do not impose
@@ -1200,5 +1237,36 @@ mod tests {
         assert!(portable.decode().is_ok());
         assert!(super::decode_macos_image_rgba(&encoded, None).is_none());
         assert!(decode_image_rgba(&encoded).is_none());
+    }
+}
+
+#[cfg(test)]
+mod host_decode_limit_tests {
+    use super::*;
+
+    #[test]
+    fn a_host_ceiling_is_explicit_and_does_not_relax_the_baseline_policy() {
+        let photo = include_bytes!("../../../fixtures/editor-original-6000x4000.webp");
+        assert!(validate_encoded_image(photo).is_none());
+        assert!(
+            validate_encoded_image_with_policy(
+                photo,
+                ImageAdmissionPolicy {
+                    max_decoded_bytes: 256 * 1024 * 1024,
+                    ..ImageAdmissionPolicy::BASELINE
+                }
+            )
+            .is_none()
+        );
+        assert_eq!(
+            validate_encoded_image_with_max_decoded_bytes(photo, 256 * 1024 * 1024),
+            Some(DecodedImageDimensions {
+                width: 6000,
+                height: 4000
+            })
+        );
+        assert!(
+            preflight_encoded_image_with_max_decoded_bytes(photo, 6000 * 4000 * 4 - 1).is_none()
+        );
     }
 }

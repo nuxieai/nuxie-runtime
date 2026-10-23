@@ -135,13 +135,21 @@ fn source_context_options(options: NativeMetalContextOptions) -> SourceContextOp
 }
 
 #[cfg(feature = "rive-decoders")]
-struct MechanicalBitmapDecoder;
+struct MechanicalBitmapDecoder {
+    max_decoded_bytes: usize,
+}
 
 #[cfg(feature = "rive-decoders")]
 impl BitmapDecoderContract for MechanicalBitmapDecoder {
     fn decodeBitmap(&mut self, encoded: &[u8]) -> Option<BitmapDecodeResult> {
-        let dimensions = nuxie_image_codec::preflight_encoded_image(encoded)?;
-        let decoded = nuxie_image_codec::decode_image_rgba(encoded)?;
+        let dimensions = nuxie_image_codec::preflight_encoded_image_with_max_decoded_bytes(
+            encoded,
+            self.max_decoded_bytes,
+        )?;
+        let decoded = nuxie_image_codec::decode_image_rgba_with_max_decoded_bytes(
+            encoded,
+            self.max_decoded_bytes,
+        )?;
         if decoded.width != dimensions.width || decoded.height != dimensions.height {
             return None;
         }
@@ -1047,8 +1055,11 @@ impl MechanicalRenderContext {
         let mut render_context = RenderContext::from_impl(implementation);
         #[cfg(feature = "rive-decoders")]
         unsafe {
-            Pin::get_unchecked_mut(render_context.as_mut())
-                .installBitmapDecoder(Box::new(MechanicalBitmapDecoder));
+            Pin::get_unchecked_mut(render_context.as_mut()).installBitmapDecoder(Box::new(
+                MechanicalBitmapDecoder {
+                    max_decoded_bytes: nuxie_image_codec::MAX_DECODED_IMAGE_BYTES,
+                },
+            ));
         }
         Ok(Self {
             render_context,
@@ -1132,6 +1143,12 @@ impl MechanicalRenderContext {
         if self.active_frame {
             self.frame_queue = queue;
         }
+    }
+
+    #[cfg(feature = "rive-decoders")]
+    pub(super) fn set_image_decode_limit(&mut self, max_decoded_bytes: usize) {
+        unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) }
+            .installBitmapDecoder(Box::new(MechanicalBitmapDecoder { max_decoded_bytes }));
     }
 
     pub(super) fn render_context_mut(&mut self) -> Pin<&mut RenderContext> {
@@ -1759,5 +1776,29 @@ impl MechanicalRenderContext {
         self.in_flight.push((command_wait, completion.clone()));
         source_guard.disarm();
         Ok(completion)
+    }
+}
+
+#[cfg(all(test, feature = "rive-decoders"))]
+mod image_decode_limit_tests {
+    use super::*;
+
+    #[test]
+    fn metal_editor_decodes_a_6000_by_4000_original_with_the_host_limit() {
+        let photo = include_bytes!("../../../../fixtures/editor-original-6000x4000.webp");
+        let mut runtime = MechanicalBitmapDecoder {
+            max_decoded_bytes: nuxie_image_codec::MAX_DECODED_IMAGE_BYTES,
+        };
+        assert!(runtime.decodeBitmap(photo).is_none());
+        let mut editor = MechanicalBitmapDecoder {
+            max_decoded_bytes: 256 * 1024 * 1024,
+        };
+        let image = editor
+            .decodeBitmap(photo)
+            .expect("the editor admits the stored original");
+        assert_eq!((image.width, image.height), (6000, 4000));
+        assert_eq!(image.bytes.len(), 6000 * 4000 * 4);
+        assert_eq!(&image.bytes[..4], &[51, 102, 153, 255]);
+        assert_eq!(&image.bytes[image.bytes.len() - 4..], &[51, 102, 153, 255]);
     }
 }

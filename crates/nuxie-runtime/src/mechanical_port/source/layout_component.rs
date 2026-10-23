@@ -3685,10 +3685,14 @@ impl LayoutComponent {
             },
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
-            css_role: crate::css_layout::record::role(
-                self.is_artboard() && self.hosted_css_record.is_none(),
-                false,
-            ),
+            css_role: if self.is_artboard() && self.hosted_css_record.is_none() {
+                crate::css_layout::CssRole::Artboard {
+                    width_hugs: width_scale == LayoutScaleType::Hug,
+                    height_hugs: self.effective_height_scale_type() == LayoutScaleType::Hug,
+                }
+            } else {
+                crate::css_layout::CssRole::Box
+            },
             css: self.is_css_mode(),
         })
     }
@@ -4307,6 +4311,23 @@ impl LayoutComponent {
         let intrinsically_sized = self
             .with_style(|style| style.intrinsically_sized())
             .unwrap_or(false);
+        // A CSS canvas's frame markers are authoritative, independently of
+        // Rive's separate intrinsic flag. A copy with a carrier is a CSS box
+        // in its host's tree and keeps the existing hosted solve path.
+        if self.is_css_mode() && self.is_artboard() && self.hosted_css_record.is_none() {
+            return Vec2D::new(
+                if self.effective_width_scale_type() == LayoutScaleType::Hug {
+                    f32::NAN
+                } else {
+                    self.base.width()
+                },
+                if self.effective_height_scale_type() == LayoutScaleType::Hug {
+                    f32::NAN
+                } else {
+                    self.base.height()
+                },
+            );
+        }
         Vec2D::new(
             if available_width.is_nan() && intrinsically_sized {
                 available_width

@@ -4,7 +4,7 @@
 //! one slot per property key, outside the mechanical upstream registry.
 use super::{
     keys::{self, Field},
-    style::{CssRole, CssValues},
+    style::CssValues,
 };
 use crate::source::{
     component::Component,
@@ -631,15 +631,4 @@ pub(crate) fn box_paint_size(children: &[CoreHandle], size: (f32, f32)) -> Optio
                 axis(keys::PAINT_HEIGHT, keys::PAINT_HEIGHT_PERCENT, size.1),
             )
         })
-}
-
-/// The role a sync context gives a node's record.
-pub fn role(is_artboard: bool, is_participant: bool) -> CssRole {
-    if is_participant {
-        CssRole::Participant
-    } else if is_artboard {
-        CssRole::Artboard
-    } else {
-        CssRole::Box
-    }
 }

@@ -6,7 +6,7 @@ use taffy::prelude::{
     AlignContent, AlignItems, Dimension, Display, FlexDirection, FlexWrap, LengthPercentage,
     LengthPercentageAuto, Position, Rect, Size, Style,
 };
-use taffy::style::{BoxSizing, Direction, GridAutoFlow, Overflow};
+use taffy::style::{BoxSizing, Direction, ExpandedDimension, GridAutoFlow, Overflow};
 
 /// Which properties a record contributes, by what it is attached to.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -14,9 +14,9 @@ pub enum CssRole {
     /// A `LayoutComponent`: every property.
     #[default]
     Box,
-    /// An artboard without a hosted CSS item carrier: its own width and
-    /// height define the root box, so only container properties apply.
-    Artboard,
+    /// An artboard without a hosted CSS item carrier: frame sizes win on
+    /// closed axes; open (Hug) axes read the root record's size and limits.
+    Artboard { width_hugs: bool, height_hugs: bool },
     /// A `LayoutParticipant`'s host: only item properties apply.
     Participant,
 }
@@ -313,16 +313,53 @@ pub fn apply(values: CssValues<'_>, style: &mut Style, role: CssRole, inherited_
             };
             apply_item(values, style);
         }
-        CssRole::Artboard => {
-            // The artboard's width and height are its border box, and its
-            // Rive style's item limits do not apply.
+        CssRole::Artboard {
+            width_hugs,
+            height_hugs,
+        } => {
+            // Stored frame dimensions are border-box sizes. Only open axes
+            // take CSS sizes/limits; Rive item limits never apply here.
             style.box_sizing = BoxSizing::BorderBox;
             style.display = values.display();
             style.min_size = Size::auto();
             style.max_size = Size::auto();
+            if width_hugs {
+                style.size.width = values.size(keys::WIDTH_KIND);
+                style.min_size.width = values.limit(keys::MIN_WIDTH_KIND);
+                style.max_size.width = values.limit(keys::MAX_WIDTH_KIND);
+            }
+            if height_hugs {
+                style.size.height = values.size(keys::HEIGHT_KIND);
+                style.min_size.height = values.limit(keys::MIN_HEIGHT_KIND);
+                style.max_size.height = values.limit(keys::MAX_HEIGHT_KIND);
+            }
             style.margin = Rect::zero();
             style.inset = Rect::auto();
+            let ratio = values.number(keys::ASPECT_RATIO);
             style.aspect_ratio = None;
+            if ratio.is_finite() && ratio > 0.0 {
+                if width_hugs && height_hugs {
+                    style.aspect_ratio = Some(ratio);
+                } else {
+                    // Taffy also transfers min/max through a ratio. With one
+                    // frame axis, derive only the open auto axis here so its
+                    // CSS limits cannot enlarge/shrink the fixed frame axis.
+                    let from_frame = |open: &mut Dimension, fixed: Dimension, scale: f32| {
+                        if matches!(
+                            open.expand(),
+                            ExpandedDimension::Auto | ExpandedDimension::Percent(_)
+                        ) && let ExpandedDimension::Length(frame) = fixed.expand()
+                        {
+                            *open = Dimension::length(frame * scale);
+                        }
+                    };
+                    if width_hugs {
+                        from_frame(&mut style.size.width, style.size.height, ratio);
+                    } else if height_hugs {
+                        from_frame(&mut style.size.height, style.size.width, 1.0 / ratio);
+                    }
+                }
+            }
         }
     }
 }

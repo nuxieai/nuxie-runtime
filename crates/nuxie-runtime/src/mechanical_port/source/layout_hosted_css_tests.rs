@@ -5,10 +5,17 @@ use crate::source::{
     artboard::Artboard,
     artboard_component_list::ArtboardComponentList,
     generated::{
-        artboard_base::ArtboardBase, artboard_component_list_base::ArtboardComponentListBase,
-        backboard_base::BackboardBase, component_base::ComponentBase, core_registry::CoreRegistry,
-        layout::layout_component_style_base::LayoutComponentStyleBase,
-        layout_component_base::LayoutComponentBase, nested_artboard_base::NestedArtboardBase,
+        artboard_base::ArtboardBase,
+        artboard_component_list_base::ArtboardComponentListBase,
+        backboard_base::BackboardBase,
+        component_base::ComponentBase,
+        core_registry::CoreRegistry,
+        layout::{
+            layout_component_style_base::LayoutComponentStyleBase,
+            layout_sizing_style_base::LayoutSizingStyleBase,
+        },
+        layout_component_base::LayoutComponentBase,
+        nested_artboard_base::NestedArtboardBase,
         nested_artboard_layout_base::NestedArtboardLayoutBase,
         nested_artboard_leaf_base::NestedArtboardLeafBase,
     },
@@ -607,6 +614,299 @@ fn css_row_record_on_a_top_level_artboard_keeps_the_root_size() {
     }
     let bounds = artboard.with_artboard(|artboard| artboard.layout_bounds());
     assert_eq!((bounds.width(), bounds.height()), (200.0, 46.0));
+}
+
+/// Match the compiler's frame encoding: missing axes are Hug/Auto/zero;
+/// supplied axes are Fixed/Point. Deliberately leave intrinsicallySized false.
+fn css_sized_artboard(
+    riv: &mut Riv,
+    width_hugs: bool,
+    height_hugs: bool,
+    root_record: impl FnOnce(&mut Riv),
+    percent_child: bool,
+) {
+    // Root 0, CSS 1, child 2, CSS 3, styles 4 and 5.
+    board(
+        riv,
+        if width_hugs { 0.0 } else { 300.0 },
+        if height_hugs { 0.0 } else { 160.0 },
+        4,
+    );
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0);
+    root_record(riv);
+    riv.end();
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Sizing content")
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(WIDTH_KIND, if percent_child { 7 } else { 1 })
+        .float(
+            if percent_child { WIDTH_PERCENT } else { WIDTH },
+            if percent_child { 50.0 } else { 60.0 },
+        )
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 40.0)
+        .end();
+    riv.object(LayoutComponentStyleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+            if width_hugs { 2 } else { 0 },
+        )
+        .uint(
+            LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY,
+            if width_hugs { 3 } else { 1 },
+        )
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+            if height_hugs { 2 } else { 0 },
+        )
+        .uint(
+            LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY,
+            if height_hugs { 3 } else { 1 },
+        )
+        .bool(
+            LayoutComponentStyleBase::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY,
+            false,
+        )
+        .end();
+    style(riv, 2);
+}
+
+fn css_artboard_sizing_scene(
+    width_hugs: bool,
+    height_hugs: bool,
+    root_record: impl FnOnce(&mut Riv),
+    percent_child: bool,
+) -> Scene {
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    css_sized_artboard(
+        &mut riv,
+        width_hugs,
+        height_hugs,
+        root_record,
+        percent_child,
+    );
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+fn root_size(scene: &Scene) -> (f32, f32) {
+    scene.artboard.with_artboard(|artboard| {
+        let bounds = artboard.layout_bounds();
+        (bounds.width(), bounds.height())
+    })
+}
+
+#[test]
+fn css_artboard_hug_uses_root_min_height_without_intrinsic_flag() {
+    let scene = css_artboard_sizing_scene(
+        true,
+        true,
+        |riv| {
+            riv.uint(MIN_HEIGHT_KIND, 1).float(MIN_HEIGHT, 80.0);
+        },
+        false,
+    );
+    assert_eq!(root_size(&scene), (60.0, 80.0));
+}
+
+#[test]
+fn css_artboard_hug_uses_root_width() {
+    let scene = css_artboard_sizing_scene(
+        true,
+        true,
+        |riv| {
+            riv.uint(WIDTH_KIND, 1)
+                .float(WIDTH, 200.0)
+                .float(MARGIN_TOP, 30.0)
+                .uint(INSET_TOP_KIND, 1)
+                .float(INSET_TOP_KIND + 1, 25.0)
+                .uint(POSITION, 2);
+        },
+        false,
+    );
+    assert_eq!(root_size(&scene), (200.0, 40.0));
+    assert_eq!(
+        scene
+            .artboard
+            .with_artboard(|board| (board.layout_x(), board.layout_y())),
+        (0.0, 0.0)
+    );
+}
+
+#[test]
+fn css_artboard_hug_uses_root_limits_on_both_axes() {
+    for (min, max, expected) in [
+        (MIN_WIDTH_KIND, MAX_HEIGHT_KIND, (100.0, 20.0)),
+        (MIN_HEIGHT_KIND, MAX_WIDTH_KIND, (20.0, 100.0)),
+    ] {
+        let scene = css_artboard_sizing_scene(
+            true,
+            true,
+            |riv| {
+                riv.uint(min, 1)
+                    .float(min + 1, 100.0)
+                    .uint(max, 1)
+                    .float(max + 1, 20.0);
+            },
+            false,
+        );
+        assert_eq!(root_size(&scene), expected, "minimum key {min}");
+    }
+}
+
+#[test]
+fn css_artboard_fixed_frame_wins_and_is_the_child_percentage_basis() {
+    let scene = css_artboard_sizing_scene(
+        false,
+        false,
+        |riv| {
+            riv.uint(WIDTH_KIND, 7)
+                .float(WIDTH_PERCENT, 50.0)
+                .uint(HEIGHT_KIND, 1)
+                .float(HEIGHT, 20.0)
+                .uint(MIN_WIDTH_KIND, 1)
+                .float(MIN_WIDTH_KIND + 1, 500.0)
+                .uint(MAX_HEIGHT_KIND, 1)
+                .float(MAX_HEIGHT_KIND + 1, 10.0)
+                .float(ASPECT_RATIO, 2.0);
+        },
+        true,
+    );
+    assert_eq!(root_size(&scene), (300.0, 160.0));
+    let child = scene.artboard.with_artboard(|board| {
+        board
+            .find_handle::<LayoutComponent>("Sizing content")
+            .unwrap()
+    });
+    assert_eq!(
+        child.with_downcast::<LayoutComponent, _>(|child| child.layout_bounds().width()),
+        Some(150.0)
+    );
+}
+
+#[test]
+fn css_artboard_hug_percentages_are_auto_without_a_frame_basis() {
+    for width_kind in [1, 7] {
+        let scene = css_artboard_sizing_scene(
+            true,
+            true,
+            |riv| {
+                riv.uint(WIDTH_KIND, width_kind)
+                    .float(WIDTH_PERCENT, 50.0)
+                    .uint(HEIGHT_KIND, 7)
+                    .float(HEIGHT_KIND + 2, 50.0)
+                    .uint(MIN_WIDTH_KIND, 2)
+                    .float(MIN_WIDTH_KIND + 2, 90.0)
+                    .uint(MAX_WIDTH_KIND, 2)
+                    .float(MAX_WIDTH_KIND + 2, 10.0)
+                    .uint(MIN_HEIGHT_KIND, 2)
+                    .float(MIN_HEIGHT_KIND + 2, 90.0)
+                    .uint(MAX_HEIGHT_KIND, 2)
+                    .float(MAX_HEIGHT_KIND + 2, 10.0);
+            },
+            false,
+        );
+        assert_eq!(root_size(&scene), (60.0, 40.0), "width kind {width_kind}");
+    }
+}
+
+#[test]
+fn css_artboard_explicit_ratio_can_size_an_open_axis() {
+    for (width_hugs, height_hugs, expected) in
+        [(false, true, (300.0, 150.0)), (true, false, (320.0, 160.0))]
+    {
+        let scene = css_artboard_sizing_scene(
+            width_hugs,
+            height_hugs,
+            |riv| {
+                riv.float(ASPECT_RATIO, 2.0);
+            },
+            false,
+        );
+        assert_eq!(root_size(&scene), expected);
+    }
+}
+
+#[test]
+fn css_artboard_ratio_respects_open_axis_sizes_and_keeps_frame_axes_fixed() {
+    for (width_hugs, height_hugs, key, value, expected) in [
+        (false, true, MIN_HEIGHT_KIND, 400.0, (300.0, 400.0)),
+        (true, false, MIN_WIDTH_KIND, 400.0, (400.0, 160.0)),
+        (false, true, HEIGHT_KIND, 40.0, (300.0, 40.0)),
+        (true, false, WIDTH_KIND, 60.0, (60.0, 160.0)),
+    ] {
+        let scene = css_artboard_sizing_scene(
+            width_hugs,
+            height_hugs,
+            |riv| {
+                riv.float(ASPECT_RATIO, 2.0)
+                    .uint(key, 1)
+                    .float(key + 1, value);
+            },
+            false,
+        );
+        assert_eq!(root_size(&scene), expected, "size/limit key {key}");
+    }
+}
+
+#[test]
+fn css_nested_leaf_fits_the_root_css_solved_size() {
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // The fitting box is 200 x 100. The source has stored dimensions 0 x 0,
+    // but solves to 200 x 80, so contain has unit scale and 10px top offset.
+    board(&mut riv, 300.0, 300.0, 3);
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4)
+        .end();
+    riv.object(NestedArtboardLeafBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .uint(NestedArtboardLeafBase::FIT_PROPERTY_KEY, 1)
+        .end();
+    style(&mut riv, 0);
+    style(&mut riv, 1);
+    css_sized_artboard(
+        &mut riv,
+        true,
+        true,
+        |riv| {
+            riv.uint(WIDTH_KIND, 1)
+                .float(WIDTH, 200.0)
+                .uint(MIN_HEIGHT_KIND, 1)
+                .float(MIN_HEIGHT, 80.0);
+        },
+        false,
+    );
+    let scene = Scene::import(riv);
+    scene.advance();
+    let leaf = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<NestedArtboardLeaf>()[0].clone());
+    let source = leaf
+        .with_downcast::<NestedArtboardLeaf, _>(|leaf| leaf.base.base.artboard_instance_handle(0))
+        .flatten()
+        .unwrap();
+    assert_eq!(
+        source.with_artboard(|board| (board.layout_width(), board.layout_height())),
+        (200.0, 80.0)
+    );
+    let world = scene_leaf_transform(&scene);
+    assert_eq!(
+        (world[0], world[3], world[4], world[5]),
+        (1.0, 1.0, 0.0, 10.0)
+    );
 }
 
 #[test]

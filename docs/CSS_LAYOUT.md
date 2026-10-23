@@ -185,7 +185,7 @@ In CSS mode the runtime builds the node's whole Taffy style from the record (fie
 - its layout animation settings (animation style, interpolation, interpolator and time);
 - `GridTrack` and `GridItemPlacement`.
 
-On a top-level `Artboard`, its own width and height define the root box, with its existing intrinsic sizing behaviour. Its record contributes container properties: display, padding, border, gap, direction, container alignment, wrap, overflow and grid flow. Its item sizes, limits, margins, insets and aspect ratio do not apply.
+On an `Artboard`'s own canvas (including as the source fitted by a `NestedArtboardLeaf`), each axis takes the size supplied by `frame.json` first: a Fixed axis keeps its stored frame size. An open axis, encoded as Hug with Auto units and stored zero, instead takes its record's CSS width or height, minimum and maximum, falling back to its content. A Hug axis has indefinite available size regardless of the separate Rive intrinsic-sizing flag. A percentage on that axis has no frame basis and acts as auto; children's percentages resolve against the root's solved content box, including a supplied frame size on a Fixed axis. The root retains border-box sizing. An explicit, positive CSS aspect ratio applies when at least one axis is open; it cannot replace a Fixed frame dimension. Margins and insets do not apply because the root has no parent placing it. Its record also contributes container properties: display, padding, border, gap, direction, container alignment, wrap, overflow and grid flow.
 
 A hosted artboard with a record can instead be a CSS box in its host's layout:
 
@@ -194,7 +194,7 @@ A hosted artboard with a record can instead be a CSS box in its host's layout:
 
 Item properties are box-sizing, position, insets, size kinds, minimum and maximum sizes, margins, flex-grow, flex-shrink, flex-basis, align-self, justify-self and aspect-ratio. Omitted fields take their CSS initial values, including on a nested copy's whole-box record. These hosted roots size from CSS and their content, ignoring stored artboard width and height and Rive instance widths, heights, units and scale types. Grid placement records still apply. Lists estimate rows not yet built from stored artboard sizes.
 
-A hosted artboard without its own record, or a `NestedArtboardLayout` without a child record, keeps its existing sizing. A CSS artboard hosted by a `NestedArtboardLayout` without that child record still contributes only container properties.
+A hosted artboard without its own record keeps its existing sizing. A CSS artboard hosted by a `NestedArtboardLayout` without a child record retains the host's sizing overrides: Fixed axes keep those dimensions, and Hug axes use the artboard's own record as above.
 
 On a participant the record contributes only item properties: display none, position, insets, size, minimum, maximum, aspect ratio, margins, flex-grow, flex-shrink, flex-basis, align-self and justify-self. Participants have no children to lay out.
 

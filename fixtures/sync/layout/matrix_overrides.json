@@ -1,0 +1,254 @@
+{
+  "upstream_commit": "868da86cad936d50b2a760e63e0808c77b687df2",
+  "parent_commit": "5551696a826ff546775fffe46ca78824b1f1dc51",
+  "reason": "Specifically, skip upstream 868da86c's stack-layout change and retain its independent state-machine fix as in scope.",
+  "policy": "docs/PARITY_WORKFLOW.md",
+  "added_cases": "The 20 s22 cases were added by this commit; none were removed. Their retained 1fr track grows to the 260 x 180 min-content size, so alignment offsets within that cell are zero and fill uses that cell size. Values are derived from the equivalent parent s21 stack subject checks, not historical s22 rows. Only changed scalars are overridden. With no RIVE_RUNTIME_DIR, the older vendored matrix is used without these overrides.",
+  "overrides": [
+    {
+      "id": "s21__stack__none__layout-component__hug__leaf-content__over",
+      "fields": {
+        "Subject.layoutBounds": {"2": 260.0, "3": 180.0},
+        "Subject.localBounds": {"2": 260.0, "3": 180.0},
+        "Subject.worldBounds": {"2": 260.0, "3": 180.0},
+        "Subject.computedSize": {"0": 260.0, "1": 180.0}
+      }
+    },
+    {
+      "id": "s21__stack__none__shape__participant__hug__over",
+      "fields": {
+        "Subject.world": {"0": 1.0, "3": 1.0, "4": 130.0, "5": 90.0},
+        "Subject.worldBounds": {"2": 260.0, "3": 180.0},
+        "Subject.computedWorld": {"0": 130.0, "1": 90.0},
+        "Subject.computedRoot": {"0": 130.0, "1": 90.0},
+        "Subject.computedLocal": {"0": 130.0, "1": 90.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__hug__al-top-right__leaf-content__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 0.0},
+        "Subject.layoutBounds": {"0": 0.0},
+        "Subject.worldBounds": {"0": 0.0},
+        "Subject.computedWorld": {"0": 0.0},
+        "Subject.computedRoot": {"0": 0.0},
+        "Subject.computedLocal": {"0": 0.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__hug__al-center__leaf-content__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 0.0, "5": 0.0},
+        "Subject.layoutBounds": {"0": 0.0, "1": 0.0},
+        "Subject.worldBounds": {"0": 0.0, "1": 0.0},
+        "Subject.computedWorld": {"0": 0.0, "1": 0.0},
+        "Subject.computedRoot": {"0": 0.0, "1": 0.0},
+        "Subject.computedLocal": {"0": 0.0, "1": 0.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__hug__al-bottom-left__leaf-content__over__unbounded",
+      "fields": {
+        "Subject.world": {"5": 0.0},
+        "Subject.layoutBounds": {"1": 0.0},
+        "Subject.worldBounds": {"1": 0.0},
+        "Subject.computedWorld": {"1": 0.0},
+        "Subject.computedRoot": {"1": 0.0},
+        "Subject.computedLocal": {"1": 0.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__fill__y-hug__al-top-left__leaf-content__over__unbounded",
+      "fields": {
+        "Subject.layoutBounds": {"2": 260.0},
+        "Subject.localBounds": {"2": 260.0},
+        "Subject.worldBounds": {"2": 260.0},
+        "Subject.computedSize": {"0": 260.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__fill__y-hug__al-center__leaf-content__over__unbounded",
+      "fields": {
+        "Subject.world": {"5": 0.0},
+        "Subject.layoutBounds": {"1": 0.0, "2": 260.0},
+        "Subject.localBounds": {"2": 260.0},
+        "Subject.worldBounds": {"1": 0.0, "2": 260.0},
+        "Subject.computedWorld": {"1": 0.0},
+        "Subject.computedRoot": {"1": 0.0},
+        "Subject.computedLocal": {"1": 0.0},
+        "Subject.computedSize": {"0": 260.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__shape__participant__hug__al-top-right__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 130.0},
+        "Subject.worldBounds": {"0": 0.0},
+        "Subject.computedWorld": {"0": 130.0},
+        "Subject.computedRoot": {"0": 130.0},
+        "Subject.computedLocal": {"0": 130.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__shape__participant__hug__al-center__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 130.0, "5": 90.0},
+        "Subject.worldBounds": {"0": 0.0, "1": 0.0},
+        "Subject.computedWorld": {"0": 130.0, "1": 90.0},
+        "Subject.computedRoot": {"0": 130.0, "1": 90.0},
+        "Subject.computedLocal": {"0": 130.0, "1": 90.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__shape__participant__hug__al-bottom-left__over__unbounded",
+      "fields": {
+        "Subject.world": {"5": 90.0},
+        "Subject.worldBounds": {"1": 0.0},
+        "Subject.computedWorld": {"1": 90.0},
+        "Subject.computedRoot": {"1": 90.0},
+        "Subject.computedLocal": {"1": 90.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__shape__participant__fill__y-hug__al-top-left__over__unbounded",
+      "fields": {
+        "Subject.world": {"0": 1.0, "4": 130.0},
+        "Subject.worldBounds": {"2": 260.0},
+        "Subject.computedWorld": {"0": 130.0},
+        "Subject.computedRoot": {"0": 130.0},
+        "Subject.computedLocal": {"0": 130.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__shape__participant__fill__y-hug__al-center__over__unbounded",
+      "fields": {
+        "Subject.world": {"0": 1.0, "4": 130.0, "5": 90.0},
+        "Subject.worldBounds": {"1": 0.0, "2": 260.0},
+        "Subject.computedWorld": {"0": 130.0, "1": 90.0},
+        "Subject.computedRoot": {"0": 130.0, "1": 90.0},
+        "Subject.computedLocal": {"0": 130.0, "1": 90.0}
+      }
+    },
+    {
+      "id": "s21__stack__none__layout-component__hug__k-max-over-host__leaf-text__over",
+      "fields": {
+        "Subject.layoutBounds": {"2": 260.0, "3": 180.0},
+        "Subject.localBounds": {"2": 260.0, "3": 180.0},
+        "Subject.worldBounds": {"2": 260.0, "3": 180.0},
+        "Subject.computedSize": {"0": 260.0, "1": 180.0}
+      }
+    },
+    {
+      "id": "s21__stack__none__text__participant__hug__k-max-over-host__over",
+      "fields": {
+        "Subject.world": {"4": 65.0, "5": 135.0},
+        "Subject.computedWorld": {"0": 65.0, "1": 135.0},
+        "Subject.computedRoot": {"0": 65.0, "1": 135.0},
+        "Subject.computedLocal": {"0": 65.0, "1": 135.0},
+        "Subject.computedSize": {"0": 260.0, "1": 180.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__hug__al-top-right__k-max-over-host__leaf-text__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 0.0},
+        "Subject.layoutBounds": {"0": 0.0},
+        "Subject.worldBounds": {"0": 0.0},
+        "Subject.computedWorld": {"0": 0.0},
+        "Subject.computedRoot": {"0": 0.0},
+        "Subject.computedLocal": {"0": 0.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__hug__al-center__k-max-over-host__leaf-text__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 0.0, "5": 0.0},
+        "Subject.layoutBounds": {"0": 0.0, "1": 0.0},
+        "Subject.worldBounds": {"0": 0.0, "1": 0.0},
+        "Subject.computedWorld": {"0": 0.0, "1": 0.0},
+        "Subject.computedRoot": {"0": 0.0, "1": 0.0},
+        "Subject.computedLocal": {"0": 0.0, "1": 0.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__hug__al-bottom-left__k-max-over-host__leaf-text__over__unbounded",
+      "fields": {
+        "Subject.world": {"5": 0.0},
+        "Subject.layoutBounds": {"1": 0.0},
+        "Subject.worldBounds": {"1": 0.0},
+        "Subject.computedWorld": {"1": 0.0},
+        "Subject.computedRoot": {"1": 0.0},
+        "Subject.computedLocal": {"1": 0.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__fill__y-hug__al-top-left__k-max-over-host__leaf-text__over__unbounded",
+      "fields": {
+        "Subject.layoutBounds": {"2": 260.0},
+        "Subject.localBounds": {"2": 260.0},
+        "Subject.worldBounds": {"2": 260.0},
+        "Subject.computedSize": {"0": 260.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__layout-component__fill__y-hug__al-center__k-max-over-host__leaf-text__over__unbounded",
+      "fields": {
+        "Subject.world": {"5": 0.0},
+        "Subject.layoutBounds": {"1": 0.0, "2": 260.0},
+        "Subject.localBounds": {"2": 260.0},
+        "Subject.worldBounds": {"1": 0.0, "2": 260.0},
+        "Subject.computedWorld": {"1": 0.0},
+        "Subject.computedRoot": {"1": 0.0},
+        "Subject.computedLocal": {"1": 0.0},
+        "Subject.computedSize": {"0": 260.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__text__participant__hug__al-top-right__k-max-over-host__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 65.0},
+        "Subject.computedWorld": {"0": 65.0},
+        "Subject.computedRoot": {"0": 65.0},
+        "Subject.computedLocal": {"0": 65.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__text__participant__hug__al-center__k-max-over-host__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 65.0, "5": 135.0},
+        "Subject.computedWorld": {"0": 65.0, "1": 135.0},
+        "Subject.computedRoot": {"0": 65.0, "1": 135.0},
+        "Subject.computedLocal": {"0": 65.0, "1": 135.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__text__participant__hug__al-bottom-left__k-max-over-host__over__unbounded",
+      "fields": {
+        "Subject.world": {"5": 135.0},
+        "Subject.computedWorld": {"1": 135.0},
+        "Subject.computedRoot": {"1": 135.0},
+        "Subject.computedLocal": {"1": 135.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__text__participant__fill__y-hug__al-top-left__k-max-over-host__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 65.0},
+        "Subject.computedWorld": {"0": 65.0},
+        "Subject.computedRoot": {"0": 65.0},
+        "Subject.computedLocal": {"0": 65.0},
+        "Subject.computedSize": {"0": 260.0}
+      }
+    },
+    {
+      "id": "s22__stack__none__text__participant__fill__y-hug__al-center__k-max-over-host__over__unbounded",
+      "fields": {
+        "Subject.world": {"4": 65.0, "5": 135.0},
+        "Subject.computedWorld": {"0": 65.0, "1": 135.0},
+        "Subject.computedRoot": {"0": 65.0, "1": 135.0},
+        "Subject.computedLocal": {"0": 65.0, "1": 135.0},
+        "Subject.computedSize": {"0": 260.0}
+      }
+    }
+  ]
+}

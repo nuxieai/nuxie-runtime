@@ -38,6 +38,14 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
             .with_artboard(|artboard| artboard.css_record())
             .and_then(|_| provider.css_item_record(artboard));
         let css = record.is_some();
+        if css {
+            // Parent context applies even when CSS owns instance sizing.
+            LayoutComponent::set_parent_is_row_with_host_occurrence(
+                &artboard.core_handle(),
+                provider.is_row(),
+                provider.borrowed_artboard_host(),
+            );
+        }
         LayoutComponent::set_hosted_css_item_occurrence(
             &artboard.core_handle(),
             record,
@@ -50,15 +58,15 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
     }
 
     pub fn update_height_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
-        if Self::update_css_override(provider, artboard) {
-            return;
-        }
         let is_row = provider.is_row();
         LayoutComponent::set_parent_is_stack_with_host_occurrence(
             &artboard.core_handle(),
             provider.is_stack(),
             provider.borrowed_artboard_host(),
         );
+        if Self::update_css_override(provider, artboard) {
+            return;
+        }
         if provider.instance_height_scale_type() == 0 {
             LayoutComponent::set_height_intrinsically_size_override_occurrence(
                 &artboard.core_handle(),
@@ -101,15 +109,15 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
         provider.mark_hosting_layout_dirty(artboard);
     }
     pub fn update_width_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
-        if Self::update_css_override(provider, artboard) {
-            return;
-        }
         let is_row = provider.is_row();
         LayoutComponent::set_parent_is_stack_with_host_occurrence(
             &artboard.core_handle(),
             provider.is_stack(),
             provider.borrowed_artboard_host(),
         );
+        if Self::update_css_override(provider, artboard) {
+            return;
+        }
         if provider.instance_width_scale_type() == 0 {
             LayoutComponent::set_width_intrinsically_size_override_occurrence(
                 &artboard.core_handle(),

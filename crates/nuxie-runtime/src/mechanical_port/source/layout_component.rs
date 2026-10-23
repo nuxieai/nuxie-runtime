@@ -1209,7 +1209,7 @@ impl LayoutComponent {
     pub(crate) fn set_parent_is_row_with_host_occurrence(
         owner: &CoreHandle,
         row: bool,
-        host: &mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
     ) {
         owner.with_mut(|object| {
             object
@@ -1217,7 +1217,7 @@ impl LayoutComponent {
                 .expect("Layout owner")
                 .set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         });
-        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, Some(host));
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
     }
 
     pub(crate) fn set_parent_is_stack_with_host_occurrence(

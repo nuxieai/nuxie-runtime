@@ -263,6 +263,71 @@ fn css_nested_copy_without_either_record_keeps_instance_sizing() {
     }
 }
 
+#[test]
+fn css_nested_copies_overlap_in_a_translated_stack_like_translated_copies() {
+    for css in [false, true] {
+        let mut riv = Riv::default();
+        riv.object(BackboardBase::TYPE_KEY).end();
+        // The root's stack style follows two host and optional CSS record pairs.
+        board(&mut riv, 300.0, 300.0, if css { 5 } else { 3 });
+        for index in 0..2 {
+            let host = 1 + index * if css { 2 } else { 1 };
+            riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+                .end();
+            if css {
+                riv.object(LAYOUT_CSS_STYLE)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+                    .uint(WIDTH_KIND, 1)
+                    .float(WIDTH, 200.0)
+                    .uint(HEIGHT_KIND, 1)
+                    .float(HEIGHT, 100.0)
+                    .end();
+            }
+        }
+        riv.object(LayoutComponentStyleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentStyleBase::LAYOUT_TYPE_VALUE_PROPERTY_KEY, 2)
+            .end();
+        board(&mut riv, 200.0, 100.0, if css { 2 } else { 1 });
+        if css {
+            riv.object(LAYOUT_CSS_STYLE)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                .end();
+        }
+        style(&mut riv, 0);
+        let scene = Scene::import(riv);
+        scene.advance();
+        let hosts = scene
+            .artboard
+            .with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>());
+        assert_eq!(hosts.len(), 2);
+        for (index, host) in hosts.iter().enumerate() {
+            let row = host
+                .with_downcast::<NestedArtboardLayout, _>(|host| {
+                    host.base.base.artboard_instance_handle(0)
+                })
+                .flatten()
+                .expect("stack copy");
+            let geometry = row.with_artboard(|row| {
+                let bounds = row.layout_bounds();
+                (
+                    row.layout_x(),
+                    row.layout_y(),
+                    bounds.width(),
+                    bounds.height(),
+                )
+            });
+            assert_eq!(
+                geometry,
+                (0.0, 0.0, 200.0, 100.0),
+                "copy {index}, CSS {css}"
+            );
+        }
+    }
+}
+
 fn leaf_scene(
     css: bool,
     fit_to_layout_parent: bool,

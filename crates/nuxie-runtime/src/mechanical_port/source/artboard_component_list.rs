@@ -456,7 +456,7 @@ impl ArtboardComponentList {
                 LayoutComponent::set_parent_is_row_with_host_occurrence(
                     &artboard.core_handle(),
                     parent_is_row,
-                    self,
+                    Some(self),
                 );
                 LayoutComponent::set_parent_is_stack_with_host_occurrence(
                     &artboard.core_handle(),
@@ -2196,7 +2196,7 @@ impl ArtboardComponentList {
                 LayoutComponent::set_parent_is_row_with_host_occurrence(
                     &artboard.core_handle(),
                     parent_is_row,
-                    owner,
+                    Some(owner),
                 );
                 LayoutComponent::set_parent_is_stack_with_host_occurrence(
                     &artboard.core_handle(),

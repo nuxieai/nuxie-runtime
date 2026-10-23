@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import uuid
 
 try:
     from .bazel_cache import startup_options
@@ -51,6 +52,7 @@ def tree_digest(root):
 class BazelRuntime:
     def __init__(self, repo_root):
         self.root = Path(repo_root).resolve()
+        self.pool_invocation = str(uuid.uuid4())
         if os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2" and os.environ.get("NUXIE_BAZEL_OUTPUT_BASE"):
             raise ValueError("Output isolation is constrained by installed runner policy")
         configured = os.environ.get("NUXIE_BAZEL_BIN")
@@ -89,7 +91,10 @@ class BazelRuntime:
             environment = dict(os.environ, NUXIE_BAZEL_BIN=str(self.executable))
         else:
             invocation = [str(self.executable), *self.startup, command, *arguments]
-            environment = None
+            environment = dict(os.environ)
+        if not hasattr(self, "pool_invocation"):
+            self.pool_invocation = str(uuid.uuid4())
+        environment["NUXIE_HOMELAB_RUNTIME_INVOCATION"] = self.pool_invocation
         result = subprocess.run(invocation, env=environment, cwd=self.root,
                                 capture_output=True, text=True, check=False)
         if result.returncode:

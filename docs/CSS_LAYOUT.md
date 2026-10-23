@@ -418,6 +418,8 @@ Flex, grid and block alignment apply to that item, including block `align-conten
 
 A CSS box's automatic minimum is the largest of its contents' own: content with a zero minimum (the rows above that say so) adds nothing, and the rest still count. A translated box keeps a zero automatic minimum when any of its measured content has none, as today.
 
+A CSS picture box with a single Image or Video participant filling both axes is itself a replaced element. The box owns the authored CSS, paint and clip; the participant fills its content box and applies Rive's fit. Both the box and a direct picture participant supply Taffy with the picture's natural aspect ratio for an auto axis unless CSS authors one. A container around child layout boxes keeps ordinary container sizing.
+
 A CSS Video participant shares Image's natural-size measurement. Its decoded frame supplies the natural size once known. Before that, the size comes from the VideoAsset's inherited `DrawableAsset.width` (208) and `height` (207) fields; the compiler writes 300 by 150, Chrome's default object size, when it does not know a frame size.
 
 **The update-pass check stays.** It keeps these natural sizes current. The component graph's update loop queues the measured host of each member that recomputes:

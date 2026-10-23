@@ -308,12 +308,16 @@ fn mark_owner_dirty(parent: &CoreHandle) {
 impl LayoutStyleApplier for LayoutCssStyle {
     fn apply_css_style(&self, style: &mut Style, context: &LayoutSyncContext) {
         super::style::apply(self.values(), style, context.css_role, context.is_ltr);
-        // Video inherits Image's type. Only picture participants are replaced;
-        // boxes containing pictures keep their ordinary container behavior.
-        style.item_is_replaced = context.css_role == CssRole::Participant
-            && self.component.parent_handle().is_some_and(|host| {
-                host.is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
-            });
+        // Video inherits Image's type. A direct picture participant owns
+        // replaced sizing; a box applies it to its filling picture separately.
+        let picture = self.component.parent_handle().filter(|host| {
+            context.css_role == CssRole::Participant
+                && host.is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+        });
+        style.item_is_replaced = picture.is_some();
+        if let Some(picture) = picture {
+            crate::source::layout::layout_participant::apply_picture_natural_ratio(style, &picture);
+        }
     }
 }
 

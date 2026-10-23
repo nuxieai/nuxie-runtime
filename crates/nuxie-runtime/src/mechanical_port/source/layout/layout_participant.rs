@@ -85,6 +85,21 @@ fn picture_natural_size(host: &CoreHandle, css: bool) -> Option<Vec2D> {
     Some(Vec2D::new(picture.width(), picture.height()))
 }
 
+/// Taffy transfers a definite axis to an auto axis through this picture ratio.
+/// Authored dimensions and aspect-ratio take precedence over the natural ratio.
+pub(crate) fn apply_picture_natural_ratio(style: &mut Style, host: &CoreHandle) {
+    if style.aspect_ratio.is_some()
+        || (!style.size.width.is_auto() && !style.size.height.is_auto())
+    {
+        return;
+    }
+    if let Some(size) = picture_natural_size(host, true)
+        .filter(|size| size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0)
+    {
+        style.aspect_ratio = Some(size.x / size.y);
+    }
+}
+
 /// Called after the unbounded measure populated Text's measured-shape cache.
 /// `css`: the measuring box or participant is in CSS mode.
 pub(crate) fn host_min_content_width(

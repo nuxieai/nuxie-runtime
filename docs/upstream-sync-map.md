@@ -93,18 +93,28 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `80d76ee6b940f92cbced9d49b01fc3d6afe59fd6`
+- LAST_SYNCED_SHA: `0026fac6b818e7efbca89d1d92d5f50eef8f3da8`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `3ec7ef079f569a5f378f964008794ac30e348a56` (refreshed 2026-10-23).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  45 upstream commits remain after this checkpoint at the fetched target.
-  All 263 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (285 after `5892bb05`); this
+  44 upstream commits remain after this checkpoint at the fetched target.
+  All 264 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (286 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `0026fac6`: outside-primary-press text-input blur, retained focus identity,
+  root-space affine mapping and FocusData forwarding translated. Existing CSS
+  dispatch remains intact. Independent source and Rust-integration reviews passed.
+  Linux pool validation passes all three viewport/focus regressions and 806
+  runtime units, with two existing ignores. Pinned fixtures were bundled by pool
+  tooling. All 30 Silver-manifest checks pass after regenerating one producer-line
+  reference (53 to 54); no expected behavior or tolerances changed. Private Dart
+  controller/bindings mentioned in the commit message are absent from the public
+  delta and are not claimed ported. Golden/Silver execution, browser compilation,
+  Apple hardware and tools root-transform callback cases were not rerun.
 - `80d76ee6`: C++ kit-build-only change adds `_nx_platform` to HarfBuzz's
   warning-diagnostic filter. Shipped Rust uses harfrust; no runtime translation
   is needed. Pinned native oracles inherit upstream's Premake file. `.rive_head`

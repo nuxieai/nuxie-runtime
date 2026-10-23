@@ -91,6 +91,15 @@ class RuntimeBuildTest(unittest.TestCase):
         options = runtime.command_options(["run","-p","pixel-compare","--bin","capture-riv-corpus"])
         self.assertEqual(set(runtime.run_io(options,[])["inputs"]),{str(runner),str(scripted)})
 
+    def test_run_io_distinguishes_converter_inputs_and_profile_patterns(self):
+        artifact = self.root / "frame.rgba"; artifact.write_bytes(b"frame")
+        options = runtime.command_options(["run","-p","pixel-compare","--bin","riveabl-to-png"])
+        with patch.dict(os.environ, {"NUXIE_LAYOUT_VERIFY":"/tmp/layout.txt", "LLVM_PROFILE_FILE":"/tmp/run-%p.profraw"}, clear=True):
+            value = runtime.run_io(options,["--artifact",str(artifact)])
+        self.assertEqual(value["inputs"],[str(artifact)])
+        self.assertEqual({Path(item["path"]).name for item in value["outputs"]},{"layout.txt","run-%p.profraw"})
+        self.assertTrue(next(item for item in value["outputs"] if item["path"].endswith("profraw"))["pattern"])
+
     def test_remote_run_preserves_runtime_trace_and_profiling_environment(self):
         with patch.dict(os.environ, {"NUXIE_COMPONENT_GRAPH_TRACE":"target/trace.json",
                                     "RENDERER_PERF_BASELINE_SOURCE_ID":"baseline",
@@ -102,7 +111,7 @@ class RuntimeBuildTest(unittest.TestCase):
     def test_pool_capability_checks_the_actual_startup_arguments(self):
         router = self.root / ".local/share/nuxie-homelab/rust/route.py"
         router.parent.mkdir(parents=True)
-        router.write_text("runtime_run_supported=2\ndef runtime_run_compatible(args): return '--custom' not in args\n")
+        router.write_text("runtime_run_supported=3\ndef runtime_run_compatible(args): return '--custom' not in args\n")
         settings = self.root / ".config/nuxie/homelab-cluster.json"
         settings.parent.mkdir(parents=True); settings.write_text('{}')
         with patch.object(Path, "home", return_value=self.root), patch.dict(os.environ, {}, clear=True):

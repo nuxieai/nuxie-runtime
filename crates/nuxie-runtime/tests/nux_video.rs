@@ -1144,6 +1144,98 @@ fn video_visibility_respects_artboard_clipping_before_decoding() {
 }
 
 #[test]
+fn translated_artboard_frame_clips_video_visibility_but_not_host_hits() {
+    use nuxie_runtime::{
+        ArtboardInstance, source::semantic::semantic_snapshot::Bounds,
+        video::visibility::is_visible_in,
+    };
+    for clip in [false, true] {
+        let mut records = scene_records(false);
+        records[2]
+            .properties
+            .push(property("Artboard", "clip", FixtureValue::Bool(clip)));
+        let x = property("Video", "x", FixtureValue::Double(300.0));
+        let video = records.last_mut().unwrap();
+        video.properties.retain(|p| p.key != x.key);
+        video
+            .properties
+            .extend([x, property("Video", "y", FixtureValue::Double(80.0))]);
+        records.extend([
+            record(
+                "Shape",
+                vec![
+                    property("Shape", "parentId", FixtureValue::Uint(0)),
+                    property("Shape", "x", FixtureValue::Double(200.0)),
+                    property("Shape", "y", FixtureValue::Double(80.0)),
+                ],
+            ),
+            record(
+                "Rectangle",
+                vec![
+                    property("Rectangle", "parentId", FixtureValue::Uint(2)),
+                    property("Rectangle", "width", FixtureValue::Double(20.0)),
+                    property("Rectangle", "height", FixtureValue::Double(20.0)),
+                ],
+            ),
+            record(
+                "Fill",
+                vec![property("Fill", "parentId", FixtureValue::Uint(2))],
+            ),
+            record(
+                "SolidColor",
+                vec![property("SolidColor", "parentId", FixtureValue::Uint(4))],
+            ),
+        ]);
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let mut host = ArtboardInstance::from_native(file, 0).unwrap();
+        host.advance(0.0).unwrap();
+        let video = host
+            .native_handle()
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                    .cloned()
+            })
+            .unwrap();
+        // Drawing clips the video even though the host viewport includes it.
+        assert_eq!(
+            is_visible_in(
+                &video,
+                Bounds {
+                    min_x: 0.0,
+                    min_y: 0.0,
+                    max_x: 400.0,
+                    max_y: 200.0,
+                },
+            )
+            .unwrap(),
+            !clip,
+        );
+        // Translated picking keeps the shape at and beyond the frame edge.
+        for x in [200.0, 200.01] {
+            assert!(
+                host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, 80.0))
+                    .iter()
+                    .any(|hit| hit.path.len() == 1 && hit.path[0].local_id == 2),
+                "clip={clip}, x={x}",
+            );
+        }
+    }
+}
+
+#[test]
 fn video_visibility_intersects_the_transformed_polygon_not_its_bounding_box() {
     use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
     use nuxie_runtime::video::visibility::is_visible_in;

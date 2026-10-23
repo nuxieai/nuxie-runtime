@@ -396,7 +396,7 @@ A CSS box or CSS artboard whose own paints include a visible one is host geometr
 - translated content keeps Rive's hit testing and gestures, as upstream has them: an opaque child blocks its parents' listeners, a field takes a drag whether it is focused or not and focuses on the press, and every scroll under a press tracks it, clicking what is under the release;
 - retained geometry: every CSS box with paints.
 
-Translated boxes keep today's catalogue, which counts painted shapes, text and text fields. A translated artboard's drawing frame does not clip host picking or visibility, whether the artboard is the root or is hosted: upstream's area picker does not apply that frame clip. Text keeps its inclusive transformed AABB for selection. A CSS artboard's frame clip still filters visibility and hits, with its right and bottom edges excluded. The native `hitTestPoint` interaction chain remains separate and unchanged.
+Translated boxes keep today's catalogue, which counts painted shapes, text and text fields. A translated artboard's drawing frame does not clip host picking or catalogue visibility, whether the artboard is the root or is hosted: upstream's area picker does not apply that frame clip. Text keeps its inclusive transformed AABB for selection. A CSS artboard's frame clip still filters catalogue visibility and hits, with its right and bottom edges excluded. Drawing visibility, including video decoder demand, applies rendered frame clips in both modes. The native `hitTestPoint` interaction chain remains separate and unchanged.
 
 ## 5. Leaf measurement
 

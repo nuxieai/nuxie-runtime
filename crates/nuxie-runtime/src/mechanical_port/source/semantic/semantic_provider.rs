@@ -162,14 +162,27 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
 fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
     let geometry = semantic_geometry(component);
     !geometry.is_empty()
-        && geometry
-            .into_iter()
-            .all(|(owner, polygon)| !geometry_with_rendered_clips(&owner, &polygon).is_visible())
+        && geometry.into_iter().all(|(owner, polygon)| {
+            !geometry_with_rendered_clips(&owner, &polygon, GeometryClipMode::HostQuery)
+                .is_visible()
+        })
 }
 
-fn geometry_with_rendered_clips(component: &CoreHandle, polygon: &[Vec2D]) -> RenderedGeometry {
+#[derive(Clone, Copy)]
+enum GeometryClipMode {
+    /// Picking, catalogues and selection preserve translated native hits.
+    HostQuery,
+    /// Drawing visibility includes every rendered artboard frame clip.
+    Drawing,
+}
+
+fn geometry_with_rendered_clips(
+    component: &CoreHandle,
+    polygon: &[Vec2D],
+    mode: GeometryClipMode,
+) -> RenderedGeometry {
     let mut geometry = RenderedGeometry::unclipped(polygon);
-    let complete = walk_rendered_clips(component, true, |artboard, clip| {
+    let complete = walk_rendered_clips(component, mode, true, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
             let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
                 clip.mapped(|point| artboard.semantic_root_transform(point))
@@ -319,25 +332,30 @@ fn walk_geometry_clips(
     mut visit: impl FnMut(RenderedClip) -> bool,
 ) -> bool {
     let mut hosts = None;
-    walk_rendered_clips(component, false, |artboard, clip| {
-        let clip = if let Some(artboard) = artboard {
-            let find = |spaces: &[(CoreHandle, Mat2D)]| {
-                spaces
-                    .iter()
-                    .find(|(owner, _)| owner == artboard)
-                    .map(|(_, transform)| *transform)
+    walk_rendered_clips(
+        component,
+        GeometryClipMode::HostQuery,
+        false,
+        |artboard, clip| {
+            let clip = if let Some(artboard) = artboard {
+                let find = |spaces: &[(CoreHandle, Mat2D)]| {
+                    spaces
+                        .iter()
+                        .find(|(owner, _)| owner == artboard)
+                        .map(|(_, transform)| *transform)
+                };
+                let Some(transform) =
+                    find(spaces).or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces))))
+                else {
+                    return false;
+                };
+                clip.mapped(|point| transform * point)
+            } else {
+                clip
             };
-            let Some(transform) =
-                find(spaces).or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces))))
-            else {
-                return false;
-            };
-            clip.mapped(|point| transform * point)
-        } else {
-            clip
-        };
-        visit(clip)
-    })
+            visit(clip)
+        },
+    )
 }
 
 /// The drawing spaces of the artboards hosting the query's root (the first
@@ -422,10 +440,11 @@ pub(crate) fn rendered_geometry_projection(
 
 /// Yield each rendered clip once, crossing hosts into their parent
 /// artboards. Own paint precedes the owner's content clip, but stays
-/// inside CSS artboard frames and any clipping shapes that cover it.
-/// Translated artboard draw frames do not clip native picking.
+/// inside any clipping shapes that cover it. The caller chooses whether
+/// translated artboard draw frames apply, independently of CSS frame clips.
 fn walk_rendered_clips(
     component: &CoreHandle,
+    mode: GeometryClipMode,
     own_clip: bool,
     mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip) -> bool,
 ) -> bool {
@@ -453,7 +472,10 @@ fn walk_rendered_clips(
                 .component_parent_handle()
                 .or_else(|| object.as_artboard().and_then(Artboard::host));
             let fallback = if let Some(artboard) = object.as_artboard() {
-                (artboard.base.base.is_css_mode() && artboard.clip()).then(|| {
+                (artboard.clip()
+                    && (matches!(mode, GeometryClipMode::Drawing)
+                        || artboard.base.base.is_css_mode()))
+                .then(|| {
                     let bounds = Aabb::from_ltwh(
                         -artboard.layout_width() * artboard.origin_x(),
                         -artboard.layout_height() * artboard.origin_y(),
@@ -665,7 +687,8 @@ pub fn rendered_geometry_bounds(component: Option<&CoreHandle>) -> Bounds {
         let mut result = Bounds::for_expansion();
         let mut visible = false;
         for (owner, polygon) in geometry {
-            let geometry = geometry_with_rendered_clips(&owner, &polygon);
+            let geometry =
+                geometry_with_rendered_clips(&owner, &polygon, GeometryClipMode::HostQuery);
             visible |= geometry.is_visible();
             let bounds = geometry.bounds;
             result.expand((bounds.min_x, bounds.min_y));
@@ -723,6 +746,8 @@ pub fn rendered_geometry_intersects_viewport(
 
 /// Intersect scene geometry with an additional host-owned clip in root space.
 /// The host must provide the same path and fill rule used while drawing.
+/// This drawing query includes translated artboard frame clips, unlike picking
+/// and catalogue queries.
 pub fn rendered_geometry_intersects_host_clip(
     component: &CoreHandle,
     viewport: Bounds,
@@ -791,7 +816,8 @@ pub fn rendered_geometry_intersects_host_clip(
         {
             return Err(SemanticGeometryError::InvalidPath);
         }
-        let mut region = geometry_with_rendered_clips(&owner, &polygon).visible_region;
+        let mut region = geometry_with_rendered_clips(&owner, &polygon, GeometryClipMode::Drawing)
+            .visible_region;
         region.status()?;
         region.intersect_polygon(&corners);
         if let Some((path, fill_rule)) = host_clip {
@@ -886,7 +912,7 @@ pub fn validate_semantic_geometry(root: &CoreHandle) -> Result<(), SemanticGeome
             .flatten();
         if let Some(parent) = parent {
             for (owner, polygon) in semantic_geometry(&parent) {
-                geometry_with_rendered_clips(&owner, &polygon)
+                geometry_with_rendered_clips(&owner, &polygon, GeometryClipMode::HostQuery)
                     .visible_region
                     .status()?;
             }

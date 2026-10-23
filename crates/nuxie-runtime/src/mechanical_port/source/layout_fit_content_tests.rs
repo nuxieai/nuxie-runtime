@@ -1816,6 +1816,8 @@ fn picture_layout_child(
             participant.add_layout_style_applier(record);
         })
         .unwrap();
+    // The standalone fixture completes dirty attachment before caching mode.
+    crate::source::layout::picture_layout_mode::attached(host);
     LayoutComponent::sync_style_occurrence(root);
     LayoutParticipant::sync_style_changes_occurrence(&participant, None);
     if let Some(item) = &item {

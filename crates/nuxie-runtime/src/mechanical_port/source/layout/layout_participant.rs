@@ -323,14 +323,6 @@ impl LayoutParticipant {
             return;
         };
         data.add_applier(applier);
-        self.refresh_picture_layout_mode();
-    }
-
-    fn refresh_picture_layout_mode(&self) {
-        let css = self.css_record().is_some();
-        if let Some(host) = self.owner_handle() {
-            crate::source::layout::picture_layout_mode::boundary(host, css);
-        }
     }
 
     fn owner_handle(&self) -> Option<CoreHandle> {
@@ -782,7 +774,6 @@ impl LayoutParticipant {
         if self.layout_data.is_none() {
             return false;
         }
-        self.refresh_picture_layout_mode();
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
         let layout = self.owning_layout_handle();
         let (parent_is_row, parent_is_grid, parent_is_stack, justify, direction_ltr) = active_parent_style.filter(|snapshot| layout.as_ref() == Some(&snapshot.owner)).map(|snapshot| (snapshot.is_row, snapshot.is_grid, snapshot.is_stack, snapshot.justify_items as u8, snapshot.is_ltr)).or_else(|| layout

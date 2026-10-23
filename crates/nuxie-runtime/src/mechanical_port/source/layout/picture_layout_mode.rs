@@ -1,7 +1,10 @@
-//! Complete picture cache changes after the enclosing arena borrows end.
-use std::{cell::RefCell, collections::VecDeque};
+//! Record picture modes during attachment, after the enclosing arena borrows end.
+use std::{
+    cell::RefCell,
+    collections::{HashSet, VecDeque},
+};
 
-use crate::source::{container_component::ContainerComponent, core::CoreHandle};
+use crate::source::core::CoreHandle;
 
 #[derive(Default)]
 struct Pending {
@@ -15,10 +18,45 @@ thread_local! {
 }
 
 enum Refresh {
-    Inherited(CoreHandle, Option<CoreHandle>),
-    Boundary(CoreHandle, bool),
-    Children(Vec<CoreHandle>, bool, Option<CoreHandle>),
+    Attached(CoreHandle),
     Geometry(CoreHandle),
+}
+
+// Only attachment consults the fixed hierarchy. CSS record presence, rather
+// than registration order, decides the mode of the nearest box or participant.
+// Malformed parent cycles have no enclosing layout context.
+fn attachment_mode(host: &CoreHandle) -> bool {
+    let mut visited = HashSet::new();
+    let mut current = Some(host.clone());
+    while let Some(object) = current {
+        if !visited.insert(object.clone()) {
+            return false;
+        }
+        let Some((mode, parent)) = object.with(|object| {
+            let container = object.as_container_component();
+            let boundary = object.as_layout_component().is_some()
+                || container.is_some_and(|container| {
+                    container.children().iter().any(|child| {
+                        child.is_type_of(
+                            crate::source::layout::layout_participant::LayoutParticipant::TYPE_KEY,
+                        )
+                    })
+                });
+            let mode = boundary.then(|| {
+                container.is_some_and(|container| {
+                    crate::css_layout::record::find_in(container.children()).is_some()
+                })
+            });
+            (mode, object.component_parent_handle())
+        }) else {
+            return false;
+        };
+        if let Some(mode) = mode {
+            return mode;
+        }
+        current = parent;
+    }
+    false
 }
 
 /// Both arena handles and runtime artboard handles lend RefCell receivers.
@@ -112,47 +150,24 @@ fn complete_pending() {
     loop {
         let request = PENDING.with(|pending| pending.borrow_mut().requests.pop_front());
         match request {
-            Some(Refresh::Inherited(host, parent)) => {
-                let css = parent
-                    .as_ref()
-                    .and_then(|parent| {
-                        parent.with(|parent| {
-                            parent
-                                .as_component()
-                                .map(|component| component.picture_uses_css_layout())
-                        })
-                    })
-                    .flatten()
+            Some(Refresh::Attached(host)) => {
+                let sizeable = host
+                    .with_mut(|host| host.as_intrinsically_sizeable_mut().is_some())
                     .unwrap_or(false);
+                if !sizeable {
+                    continue;
+                }
+                let css = attachment_mode(&host);
                 host.with_mut(|host| {
-                    let Some(component) = host.as_component_mut() else {
-                        return;
-                    };
-                    if component.parent_handle() != parent
-                        || !component.inherit_picture_layout_mode(css)
+                    if host
+                        .as_component_mut()
+                        .is_some_and(|component| component.record_picture_layout_mode(css))
                     {
-                        return;
-                    }
-                    if let Some(container) = host.as_container_component_mut() {
-                        container.refresh_attached_picture_layout_mode();
-                    }
-                    if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
-                        sizeable.layout_mode_changed();
+                        if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
+                            sizeable.layout_mode_changed();
+                        }
                     }
                 });
-            }
-            Some(Refresh::Boundary(host, css)) => {
-                host.with_mut(|host| {
-                    if let Some(container) = host.as_container_component_mut() {
-                        container.refresh_picture_layout_mode(css);
-                    }
-                    if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
-                        sizeable.layout_mode_changed();
-                    }
-                });
-            }
-            Some(Refresh::Children(children, css, parent)) => {
-                ContainerComponent::refresh_picture_children(&children, css, parent.as_ref());
             }
             Some(Refresh::Geometry(host)) => {
                 host.with_mut(|host| {
@@ -166,18 +181,8 @@ fn complete_pending() {
     }
 }
 
-pub(crate) fn inherited(host: CoreHandle, parent: Option<CoreHandle>) {
-    collect(Refresh::Inherited(host, parent));
-}
-
-pub(crate) fn boundary(host: CoreHandle, css: bool) {
-    collect(Refresh::Boundary(host, css));
-}
-
-pub(crate) fn children(children: Vec<CoreHandle>, css: bool, parent: Option<CoreHandle>) {
-    if !children.is_empty() {
-        collect(Refresh::Children(children, css, parent));
-    }
+pub(crate) fn attached(host: CoreHandle) {
+    collect(Refresh::Attached(host));
 }
 
 pub(crate) fn geometry(host: CoreHandle) {

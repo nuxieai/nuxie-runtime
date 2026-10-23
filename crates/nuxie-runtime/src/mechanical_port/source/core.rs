@@ -141,11 +141,6 @@ pub trait CoreObject: CoreRegistryObject + Any {
         )
         .unwrap_or_else(|| self.core_mut().on_added_dirty(context));
         if code == StatusCode::Ok {
-            // Collect descendant and fitted geometry refreshes while the
-            // concrete receiver is available, then complete them after borrow.
-            if let Some(container) = self.as_container_component_mut() {
-                container.refresh_attached_picture_layout_mode();
-            }
             if self.as_intrinsically_sizeable_mut().is_some() {
                 if let Some(host) = self.core().handle() {
                     crate::source::layout::picture_layout_mode::geometry(host);
@@ -155,11 +150,17 @@ pub trait CoreObject: CoreRegistryObject + Any {
         code
     }
     fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_clean(
+        let code = crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_clean(
             self,
             context,
         )
-        .unwrap_or_else(|| self.core_mut().on_added_clean(context))
+        .unwrap_or_else(|| self.core_mut().on_added_clean(context));
+        if code == StatusCode::Ok && self.as_intrinsically_sizeable_mut().is_some() {
+            if let Some(host) = self.core().handle() {
+                crate::source::layout::picture_layout_mode::attached(host);
+            }
+        }
+        code
     }
     fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_import(

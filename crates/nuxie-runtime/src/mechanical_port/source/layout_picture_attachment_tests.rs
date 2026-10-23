@@ -1,33 +1,26 @@
 //! Picture measurement across lifecycle attachment and hosted instance reuse.
 use super::*;
 
-fn reattach(arena: &CoreArena, parent: &CoreHandle, child: &CoreHandle) {
-    let mut context = ObjectContext {
-        arena: arena.clone(),
-        objects: vec![
-            Some(arena.insert(Artboard::default())),
-            None,
-            Some(parent.clone()),
-        ],
-    };
-    let previous = child
-        .with(|child| child.component_parent_handle())
-        .flatten();
-    assert!(CoreRegistry::set_uint_handle(
-        child,
-        ComponentBase::PARENT_ID_PROPERTY_KEY.into(),
-        2
-    ));
-    assert_eq!(
-        child
-            .with(|child| child.component_parent_handle())
-            .flatten(),
-        previous
-    );
-    assert_eq!(
-        child.with_mut(|object| object.on_added_dirty(&mut context)),
-        Some(StatusCode::Ok)
-    );
+#[test]
+fn same_mode_attachment_does_not_visit_picture_descendants() {
+    for css in [false, true] {
+        let (arena, root, image) = content_picture_fixture(false, css, true);
+        let group = image
+            .with(|image| image.component_parent_handle())
+            .flatten()
+            .unwrap();
+        let mut context = ObjectContext {
+            arena,
+            objects: vec![Some(root.clone()), Some(root)],
+        };
+        image.with_mut(|_| {
+            assert_eq!(
+                group.with_mut(|group| group.on_added_dirty(&mut context)),
+                Some(StatusCode::Ok)
+            );
+        });
+        measured_picture(&image, css);
+    }
 }
 
 fn measured_picture(image: &CoreHandle, css: bool) {
@@ -48,51 +41,12 @@ fn measured_picture(image: &CoreHandle, css: bool) {
     near(size.y, if css { 270.0 } else { 90.0 });
 }
 
-#[test]
-fn picture_reattachment_refreshes_descendants_and_fit_in_both_directions() {
-    use crate::source::layout::layout_enums::LayoutDirection;
-    for group in [false, true] {
-        let (arena, native, image) = content_picture_fixture(false, false, group);
-        let subject = if group {
-            image
-                .with(|image| image.as_component().unwrap().parent_handle())
-                .flatten()
-                .unwrap()
-        } else {
-            image.clone()
-        };
-        let css = layout(&arena, None, Some(200.0), true);
-        let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-        attach(&arena, &css, &record);
-        css.with_downcast_mut::<LayoutComponent, _>(|css| css.add_layout_style_applier(record));
-        image.with_downcast_mut::<Image, _>(|image| {
-            image.base.set_fit_value(7);
-            image.control_size(
-                Vec2D::new(200.0, 200.0),
-                LayoutScaleType::Fixed,
-                LayoutScaleType::Fixed,
-                LayoutDirection::Ltr,
-            );
-        });
-        let original = draw(&image, true);
-        for (parent, old_parent, mode) in [(&css, &native, true), (&native, &css, false)] {
-            reattach(&arena, parent, &subject);
-            measured_picture(&image, mode);
-            close(draw(&image, true), original);
-            // Reattachment changes the resolved parent. A previous parent's
-            // retained child entry must not restore its old layout context.
-            LayoutComponent::sync_style_occurrence(old_parent);
-            measured_picture(&image, mode);
-        }
-    }
-}
-
 use crate::source::{
     artboard_component_list::ArtboardComponentList,
     data_bind::data_bind::DataBind,
     generated::{
         artboard_base::ArtboardBase, backboard_base::BackboardBase, component_base::ComponentBase,
-        core_registry::CoreRegistry, layout::layout_component_style_base::LayoutComponentStyleBase,
+        layout::layout_component_style_base::LayoutComponentStyleBase,
         layout_component_base::LayoutComponentBase, nested_artboard_base::NestedArtboardBase,
         nested_artboard_layout_base::NestedArtboardLayoutBase,
         nested_artboard_leaf_base::NestedArtboardLeafBase,
@@ -388,58 +342,7 @@ fn picture_mode_follows_data_bound_nested_swaps_and_component_copies() {
 }
 
 #[test]
-fn picture_refresh_waits_for_borrowed_host_or_content() {
-    for mutable in [false, true] {
-        for participant in [false, true] {
-            let (arena, root, host, provider) = if participant {
-                let (arena, root, provider, host) = receiver_picture_fixture(false);
-                (arena, root, host, Some(provider))
-            } else {
-                let (arena, root, host) = content_picture_fixture(false, false, false);
-                (arena, root, host, None)
-            };
-            let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-            attach(&arena, if participant { &host } else { &root }, &record);
-            let register = || {
-                if let Some(provider) = provider.as_ref() {
-                    provider.with_downcast_mut::<LayoutParticipant, _>(|provider| {
-                        provider.add_layout_style_applier(record.clone())
-                    });
-                } else {
-                    root.with_downcast_mut::<LayoutComponent, _>(|root| {
-                        root.add_layout_style_applier(record.clone())
-                    });
-                }
-            };
-            if mutable {
-                host.with_mut(|_| register());
-            } else {
-                host.with(|_| register());
-            }
-            measured_picture(&host, true);
-        }
-    }
-}
-
-#[test]
-fn picture_refresh_reattachment_waits_for_borrowed_descendant() {
-    let (arena, native, image) = content_picture_fixture(false, false, true);
-    let group = image
-        .with(|image| image.component_parent_handle())
-        .flatten()
-        .unwrap();
-    let css = layout(&arena, None, Some(200.0), true);
-    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&arena, &css, &record);
-    css.with_downcast_mut::<LayoutComponent, _>(|css| css.add_layout_style_applier(record));
-    for (parent, mode) in [(&css, true), (&native, false)] {
-        image.with_mut(|_| reattach(&arena, parent, &group));
-        measured_picture(&image, mode);
-    }
-}
-
-#[test]
-fn picture_refresh_completes_after_runtime_artboard_receiver_borrow() {
+fn same_mode_artboard_attachment_preserves_picture_measurement() {
     let file = nested_sources_file();
     let root = file.with_file(|file| file.artboard_named("CSS")).unwrap();
     let mut context = root.with_artboard(|root| ObjectContext {
@@ -456,27 +359,24 @@ fn picture_refresh_completes_after_runtime_artboard_receiver_borrow() {
 }
 
 #[test]
-fn picture_refresh_unwind_discards_pending_work_and_recovers() {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-    let (arena, _root, participant, image) = receiver_picture_fixture(false);
-    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&arena, &image, &record);
-    let failure = catch_unwind(AssertUnwindSafe(|| {
-        image.with_mut(|_| {
-            participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
-                participant.add_layout_style_applier(record.clone());
-            });
-            panic!("abort picture refresh callback");
+fn two_container_parent_cycle_completes_attachment() {
+    let arena = CoreArena::default();
+    let root = arena.insert(Artboard::default());
+    let a = arena.insert(crate::source::node::Node::default());
+    let b = arena.insert(crate::source::node::Node::default());
+    let mut context = ObjectContext {
+        arena,
+        objects: vec![Some(root), Some(a.clone()), Some(b.clone())],
+    };
+    for (object, parent_id) in [(&a, 2), (&b, 1)] {
+        object.with_mut(|object| {
+            object
+                .as_component_mut()
+                .unwrap()
+                .base
+                .set_parent_id_value(parent_id);
+            assert!(object.validate(&mut context));
+            assert_eq!(object.on_added_dirty(&mut context), StatusCode::Ok);
         });
-    }))
-    .unwrap_err();
-    assert_eq!(
-        failure.downcast_ref::<&str>(),
-        Some(&"abort picture refresh callback")
-    );
-    measured_picture(&image, false);
-    participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
-        participant.add_layout_style_applier(record);
-    });
-    measured_picture(&image, true);
+    }
 }

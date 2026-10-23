@@ -131,11 +131,25 @@ fn close(actual: [f32; 4], expected: [f32; 4]) {
 }
 
 fn receiver_picture_fixture(css: bool) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
+    receiver_picture_fixture_with_parent_mode(css, false)
+}
+
+fn receiver_picture_fixture_with_parent_mode(
+    css: bool,
+    parent_css: bool,
+) -> (CoreArena, CoreHandle, CoreHandle, CoreHandle) {
     let (arena, root, participant) = if css {
         picture_participant_fixture(false, &[], &[(61021, 1)], &[(61022, 100.0)])
     } else {
         let arena = CoreArena::default();
         let root = layout(&arena, None, Some(200.0), true);
+        if parent_css {
+            let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
+            attach(&arena, &root, &record);
+            root.with_downcast_mut::<LayoutComponent, _>(|root| {
+                root.add_layout_style_applier(record)
+            });
+        }
         let image = arena.insert(Image::default());
         attach(&arena, &root, &image);
         let mut participant = LayoutParticipant::default();
@@ -160,6 +174,7 @@ fn receiver_picture_fixture(css: bool) -> (CoreArena, CoreHandle, CoreHandle, Co
         (arena, root, participant)
     };
     let image = host(&participant);
+    crate::source::layout::picture_layout_mode::attached(image.clone());
     if !css {
         Image::set_asset_occurrence(&image, Some(arena.insert(ImageAsset::default())));
     }
@@ -460,6 +475,7 @@ fn css_declared_picture_content_measures_and_draws_declared_size() {
             image.base.set_origin_x_value(0.0);
             image.base.set_origin_y_value(0.0);
         });
+        crate::source::layout::picture_layout_mode::attached(image.clone());
         let asset = arena.insert(ImageAsset::default());
         Image::set_asset_occurrence(&image, Some(asset));
         declare(&image, 6000.0, 4000.0);
@@ -551,6 +567,7 @@ fn declared_picture_hit_area_uses_the_active_artboards_mode() {
             image.base.set_origin_x_value(0.0);
             image.base.set_origin_y_value(0.0);
         });
+        crate::source::layout::picture_layout_mode::attached(image.clone());
         let asset = arena.insert(ImageAsset::default());
         Image::set_asset_occurrence(&image, Some(asset));
         declare(&image, 6000.0, 4000.0);
@@ -820,6 +837,11 @@ fn content_picture_fixture(
         CssTextLeaf::write(&record, &[(61021, 1)], &[(61022, 200.0)]);
         root.with_downcast_mut::<LayoutComponent, _>(|root| root.add_layout_style_applier(record));
     }
+    // Mirror the load boundary after all children and records are attached.
+    crate::source::layout::picture_layout_mode::attached(image.clone());
+    if nested {
+        crate::source::layout::picture_layout_mode::attached(parent);
+    }
     LayoutComponent::sync_style_occurrence(&root);
     LayoutComponent::sync_layout_children_occurrence(&root);
     (arena, root, image)
@@ -852,58 +874,14 @@ fn picture_content_receiver_measure_does_not_reborrow_owner() {
 }
 
 #[test]
-fn picture_mode_refresh_preserves_fit_after_late_css_registration() {
-    use crate::source::layout::layout_enums::LayoutDirection;
-    for nested in [false, true] {
-        let (arena, root, image) = content_picture_fixture(false, false, nested);
-        image.with_downcast_mut::<Image, _>(|image| {
-            image.base.set_fit_value(7);
-            image.control_size(
-                Vec2D::new(200.0, 200.0),
-                LayoutScaleType::Fixed,
-                LayoutScaleType::Fixed,
-                LayoutDirection::Ltr,
-            );
-        });
-        let before = draw(&image, true);
-        let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-        attach(&arena, &root, &record);
-        root.with_downcast_mut::<LayoutComponent, _>(|root| {
-            root.add_layout_style_applier(record);
-        });
-        near(
-            image
-                .with_downcast::<Image, _>(|image| image.geometry_size().x)
-                .unwrap(),
-            480.0,
-        );
-        close(draw(&image, true), before);
-    }
-}
-
-#[test]
 fn picture_participant_mode_is_independent_of_ancestor_mode() {
-    let (arena, root, participant, image) = receiver_picture_fixture(false);
-    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&arena, &root, &record);
-    root.with_downcast_mut::<LayoutComponent, _>(|root| root.add_layout_style_applier(record));
+    let (_arena, _root, _participant, image) =
+        receiver_picture_fixture_with_parent_mode(false, true);
     near(
         image
             .with_downcast::<Image, _>(|image| image.geometry_size().x)
             .unwrap(),
         160.0,
-    );
-
-    let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-    attach(&arena, &image, &record);
-    participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
-        participant.add_layout_style_applier(record);
-    });
-    near(
-        image
-            .with_downcast::<Image, _>(|image| image.geometry_size().x)
-            .unwrap(),
-        480.0,
     );
 }
 
@@ -917,27 +895,19 @@ fn picture_nested_box_keeps_its_own_mode() {
     declare(&image, 480.0, 270.0);
     decode(&image, 160, 90);
     LayoutComponent::sync_style_occurrence(&root);
-    for css in [false, true] {
-        if css {
-            let record = arena.insert(crate::css_layout::LayoutCssStyle::default());
-            attach(&arena, &nested, &record);
-            nested.with_downcast_mut::<LayoutComponent, _>(|nested| {
-                nested.add_layout_style_applier(record);
-            });
-        }
-        let size = nested
-            .with_downcast_mut::<LayoutComponent, _>(|nested| {
-                nested.measure_layout(
-                    f32::NAN,
-                    LayoutMeasureMode::Undefined,
-                    f32::NAN,
-                    LayoutMeasureMode::Undefined,
-                )
-            })
-            .unwrap();
-        near(size.x, if css { 480.0 } else { 160.0 });
-        near(size.y, if css { 270.0 } else { 90.0 });
-    }
+    crate::source::layout::picture_layout_mode::attached(image);
+    let size = nested
+        .with_downcast_mut::<LayoutComponent, _>(|nested| {
+            nested.measure_layout(
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+            )
+        })
+        .unwrap();
+    near(size.x, 160.0);
+    near(size.y, 90.0);
 }
 
 #[test]

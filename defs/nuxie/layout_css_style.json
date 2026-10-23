@@ -856,6 +856,16 @@
       "description": "CSS z-index integer, read when zIndexKind is 1; a fraction rounds to the nearest integer.",
       "bindable": true,
       "animates": true
+    },
+    "generatedListRow": {
+      "type": "uint8",
+      "key": {
+        "int": 61106
+      },
+      "initialValue": "0",
+      "description": "Compiler-only generated list binding row: 0 ordinary box, 1 use its single hosted CSS copy as the list item. Not authored CSS display: contents.",
+      "bindable": false,
+      "animates": false
     }
   }
 }

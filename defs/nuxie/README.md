@@ -13,7 +13,7 @@ resolved explicitly.
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
-- LayoutCssStyle: type 61000; properties 61000–61082 and 61099–61100.
+- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106 (`generatedListRow`, compiler-only).
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.

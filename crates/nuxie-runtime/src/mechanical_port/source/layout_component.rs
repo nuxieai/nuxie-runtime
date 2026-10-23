@@ -496,6 +496,10 @@ pub struct LayoutComponent {
     /// The whole-box CSS record for this hosted occurrence. List rows use
     /// their own record; nested copies replace it with the host's record.
     hosted_css_record: Option<CoreHandle>,
+    /// Compiler binding row: retain the scene host, but contribute its copy's
+    /// node instead of a wrapper node to the list's layout tree.
+    css_list_row_host: Option<CoreHandle>,
+    css_list_row_hoisted: bool,
     forced_width: f32,
     css_scroll_thumb_size: bool,
     forced_height: f32,
@@ -564,6 +568,8 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             hosted_css_record: None,
+            css_list_row_host: None,
+            css_list_row_hoisted: false,
             forced_width: f32::NAN,
             css_scroll_thumb_size: false,
             forced_height: f32::NAN,
@@ -1345,7 +1351,19 @@ impl LayoutComponent {
             .expect("live Layout owner");
         Self::clear_detached_layout_ownership(Some(owner), &detached);
         let mut nodes = Vec::new();
-        for (_, provider) in Self::layout_providers_nested_with_solo(owner, false, active_solo) {
+        let contents = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .unwrap()
+                    .css_list_row_host
+                    .is_some()
+            })
+            .unwrap_or(false);
+        for (_, provider) in Self::layout_providers_nested_with_solo(owner, false, active_solo)
+            .into_iter()
+            .filter(|_| !contents)
+        {
             let active = active_participant
                 .filter(|participant| participant.base.handle().as_ref() == Some(&provider));
             if let Some(participant) = active {
@@ -1541,6 +1559,26 @@ impl LayoutComponent {
             layout.apply_virtual_grid_placement(&mut style);
             layout.layout_data.set_style(style);
         });
+        if let Some(copy) = Self::css_list_row_copy_occurrence(owner) {
+            let cell = owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .unwrap()
+                        .virtual_grid
+                        .as_ref()
+                        .map(|cell| (cell.column, cell.row))
+                })
+                .flatten()
+                .unwrap_or((-1, -1));
+            copy.with_mut(|object| {
+                object
+                    .as_layout_component_mut()
+                    .unwrap()
+                    .update_virtual_grid_cell(cell.0, cell.1);
+            });
+            Self::sync_style_with_parent_style_occurrence(&copy, parent_style);
+        }
         for (child, provider) in Self::layout_providers_occurrence(owner) {
             let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
             if !excluded {
@@ -1609,6 +1647,9 @@ impl LayoutComponent {
     }
 
     fn layout_parent_handle(&self) -> Option<CoreHandle> {
+        if self.css_list_row_hoisted {
+            return self.layout_node_key(0)?.owner.borrow().clone();
+        }
         let mut parent = self.base.base.base.base.base.parent_handle();
         while let Some(value) = parent {
             if value
@@ -3189,6 +3230,122 @@ impl LayoutComponent {
             .find(|applier| applier.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE))?;
         Some(self.hosted_css_record.as_ref().unwrap_or(own).clone())
     }
+    /// The generated-row marker is interpreted only when mounted by a list.
+    /// An unexpected shape keeps its ordinary wrapper box.
+    pub(crate) fn configure_css_list_row_occurrence(owner: &CoreHandle) {
+        use crate::css_layout::keys::GENERATED_LIST_ROW;
+        use crate::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase;
+
+        let host = owner
+            .with(|object| {
+                let layout = object.as_layout_component()?;
+                if layout.with_css(|css| css.choice(GENERATED_LIST_ROW)) != Some(1) {
+                    return None;
+                }
+                let providers = Self::layout_providers_children(layout.base.children(), false);
+                let [(_, host)] = providers.as_slice() else {
+                    return None;
+                };
+                host.is_type_of(NestedArtboardLayoutBase::TYPE_KEY)
+                    .then(|| host.clone())
+            })
+            .flatten();
+        let Some(host) = host else {
+            return;
+        };
+        if host
+            .with(|object| object.component_parent_handle())
+            .flatten()
+            .as_ref()
+            != Some(owner)
+        {
+            return;
+        }
+        let copy = host
+            .with(|object| object.as_nested_artboard()?.artboard_instance_default())
+            .flatten();
+        let Some(copy) = copy else {
+            return;
+        };
+        if !copy.with_artboard(|board| board.is_css_mode())
+            || host
+                .with(|object| {
+                    crate::css_layout::record::find_in(
+                        object.as_container_component().unwrap().children(),
+                    )
+                })
+                .flatten()
+                .is_none()
+        {
+            return;
+        }
+        let old_tree = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.clear_layout_children();
+                layout.css_list_row_host = Some(host);
+                layout.layout_tree.take()
+            })
+            .flatten();
+        drop(old_tree);
+        copy.core_handle().with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .unwrap()
+                .css_list_row_hoisted = true;
+        });
+    }
+
+    pub(crate) fn css_list_row_copy_occurrence(owner: &CoreHandle) -> Option<CoreHandle> {
+        let host = owner
+            .with(|object| object.as_layout_component()?.css_list_row_host.clone())
+            .flatten()?;
+        host.with(|object| {
+            object
+                .as_nested_artboard()?
+                .artboard_instance_default()
+                .map(|copy| copy.core_handle())
+        })
+        .flatten()
+    }
+
+    /// A row has no container box. Its copy inherits the list's orientation.
+    pub(crate) fn css_list_row_context(&self) -> Option<(bool, bool)> {
+        self.css_list_row_host.as_ref().map(|_| {
+            (
+                self.has_layout_flag(LayoutComponentFlags::ParentIsRow),
+                self.has_layout_flag(LayoutComponentFlags::ParentIsStack),
+            )
+        })
+    }
+
+    pub(crate) fn prepare_css_list_row_bounds(owner: &CoreHandle) -> bool {
+        let Some(copy) = Self::css_list_row_copy_occurrence(owner) else {
+            return true;
+        };
+        let (bounds, hidden) = copy
+            .with(|object| {
+                let layout = object.as_layout_component().unwrap();
+                (
+                    layout.layout_data.solved_layout,
+                    layout.style_display_hidden(),
+                )
+            })
+            .unwrap();
+        // A newly realized copy keeps the list's estimate until its first solve.
+        if !bounds.width().is_finite() || !bounds.height().is_finite() {
+            return false;
+        }
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().unwrap();
+            layout.set_solved_layout(bounds, LayoutPadding::default());
+            layout.layout_data.solved_content_layout = None;
+            layout.solved_border = [0.0; 4];
+        });
+        Self::set_css_display_hidden_occurrence(owner, hidden);
+        true
+    }
+
     fn style_appliers(&self) -> Vec<CoreHandle> {
         self.layout_data
             .appliers
@@ -3459,6 +3616,21 @@ impl LayoutComponent {
                 })
                 .flatten()
         });
+        if self.css_list_row_hoisted {
+            if let Some((row, stack)) = active_parent_style
+                .map(|style| (style.is_row, style.is_stack))
+                .or_else(|| {
+                    parent.as_ref()?.with(|object| {
+                        object
+                            .as_layout_component()
+                            .map(|layout| (layout.main_axis_is_row(), layout.is_stack_container()))
+                    })?
+                })
+            {
+                self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
+                self.set_layout_flag(LayoutComponentFlags::ParentIsStack, stack);
+            }
+        }
         let css_parent = parent
             .as_ref()
             .and_then(|parent| {
@@ -3821,6 +3993,10 @@ impl LayoutComponent {
 
     pub fn sync_layout_children(&mut self) {
         self.clear_layout_children();
+        if self.css_list_row_host.is_some() {
+            self.mark_layout_node_dirty(false);
+            return;
+        }
         for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
             let count = provider
                 .with_mut(|object| {
@@ -5711,6 +5887,7 @@ impl LayoutComponent {
             let has_virtual_window = is_list && provider.with_downcast::<crate::source::artboard_component_list::ArtboardComponentList, _>(|list| list.has_visible_virtual_window()).unwrap();
             for index in roots {
                 let Some(root) = Self::hosted_layout_root(provider, index) else { continue; };
+                if is_list && !Self::prepare_css_list_row_bounds(&root) { continue; }
                 Self::update_layout_bounds_occurrence(&root, animate);
                 if is_list && (!has_virtual_window || provider.with_downcast::<crate::source::artboard_component_list::ArtboardComponentList, _>(|list| list.is_within_visible_window(index)).unwrap()) {
                     let bounds = root
@@ -5728,6 +5905,9 @@ impl LayoutComponent {
     }
 
     pub fn update_layout_bounds_occurrence(owner: &CoreHandle, animate: bool) {
+        if !Self::prepare_css_list_row_bounds(owner) {
+            return;
+        }
         let updated = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();

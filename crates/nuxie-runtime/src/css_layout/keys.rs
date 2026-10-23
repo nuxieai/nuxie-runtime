@@ -1,22 +1,26 @@
 //! Keys, value kinds and defaults of the CSS layout records, as
 //! defs/nuxie/*.json allocate them (docs/CSS_LAYOUT.md, section 1).
 //!
-//! The five record types share one contiguous property band, 61000 to
-//! 61103, so a key alone names its owner type and its slot.
+//! The five record types use property keys 61000 to 61106, with 61104 and
+//! 61105 belonging to CSS text. A key names its owner type and its slot.
 //! `LayoutCssStyle`'s z-index keys (61099 and 61100), `BoxPaint`'s
-//! percentages (61101 and 61102) and `BoxBorder`'s style (61103) came after
+//! percentages (61101 and 61102), `BoxBorder`'s style (61103) and the
+//! generated list-row marker (61106) came after
 //! the band filled; a type's slots span from its first key to its last, and
 //! only its own keys are its.
 
 /// The first and last property keys of the CSS record band.
 pub const FIRST_KEY: u16 = 61000;
-pub const LAST_KEY: u16 = 61103;
+pub const LAST_KEY: u16 = 61106;
 
 pub const LAYOUT_CSS_STYLE: u16 = 61000;
 pub const BOX_BORDER: u16 = 61001;
 pub const BOX_GRADIENT: u16 = 61002;
 pub const BOX_SHADOW: u16 = 61003;
 pub const BOX_PAINT: u16 = 61004;
+
+/// Compiler-only binding-row wrapper, not authored CSS display.
+pub const GENERATED_LIST_ROW: u16 = 61106;
 
 // LayoutCssStyle.
 pub const DISPLAY: u16 = 61000;
@@ -201,6 +205,9 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     n(100.0), // 61101 BoxPaint widthPercent
     n(100.0), // 61102 heightPercent
     e(2),   // 61103 BoxBorder style
+    N,      // 61104 belongs to TextStyleCssText, outside these records
+    N,      // 61105 belongs to TextStyleCssText
+    e(1),   // 61106 LayoutCssStyle generatedListRow
 ];
 
 /// The type that owns `key`, and its first property key.
@@ -213,7 +220,7 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
         PAINT_WIDTH..=PAINT_HEIGHT | PAINT_WIDTH_PERCENT..=PAINT_HEIGHT_PERCENT => {
             Some((BOX_PAINT, PAINT_WIDTH))
         }
-        Z_INDEX_KIND..=Z_INDEX => Some((LAYOUT_CSS_STYLE, 61000)),
+        Z_INDEX_KIND..=Z_INDEX | GENERATED_LIST_ROW => Some((LAYOUT_CSS_STYLE, 61000)),
         _ => None,
     }
 }
@@ -221,8 +228,8 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
 /// The property range of a record type, as (first key, count).
 pub fn range(type_key: u16) -> Option<(u16, usize)> {
     match type_key {
-        // Its slots span the band to its z-index keys.
-        LAYOUT_CSS_STYLE => Some((61000, 101)),
+        // Its slots span the band to the generated list-row marker.
+        LAYOUT_CSS_STYLE => Some((61000, 107)),
         // Its slots span to its style.
         BOX_BORDER => Some((BORDER_SIDES, 21)),
         BOX_GRADIENT => Some((GRADIENT_ANGLE, 12)),
@@ -291,6 +298,11 @@ mod tests {
             let (first, count) = range(type_key).unwrap();
             assert!(owner(first).is_some() && owner(first + count as u16 - 1).is_some());
         }
-        assert_eq!(seen, usize::from(LAST_KEY - FIRST_KEY + 1));
+        assert_eq!(
+            seen,
+            (FIRST_KEY..=LAST_KEY)
+                .filter(|key| owner(*key).is_some())
+                .count()
+        );
     }
 }

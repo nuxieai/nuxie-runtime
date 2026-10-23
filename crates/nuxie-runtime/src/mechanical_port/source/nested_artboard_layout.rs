@@ -101,12 +101,23 @@ impl NestedArtboardLayout {
         let mut base = instance.with_artboard(|instance| {
             Vec2D::new(instance.layout_x(), instance.layout_y()) - instance.origin()
         });
-        if let Some(origin) = self.base.base.parent_handle().and_then(|parent| {
+        if let Some((origin, row_offset)) = self.base.base.parent_handle().and_then(|parent| {
             parent
-                .with(|parent| parent.as_artboard().map(Artboard::origin))
+                .with(|parent| {
+                    parent.as_artboard().map(|board| {
+                        (
+                            board.origin(),
+                            if board.css_list_row_context().is_some() {
+                                Vec2D::new(board.layout_x(), board.layout_y())
+                            } else {
+                                Vec2D::default()
+                            },
+                        )
+                    })
+                })
                 .flatten()
         }) {
-            base += origin;
+            base += origin - row_offset;
         }
         let parent_world = self
             .base
@@ -230,9 +241,11 @@ impl NestedArtboardLayout {
             .and_then(|parent| {
                 parent
                     .with(|parent| {
-                        parent
-                            .as_layout_component()
-                            .map(|layout| layout.main_axis_is_row())
+                        parent.as_layout_component().map(|layout| {
+                            layout
+                                .css_list_row_context()
+                                .map_or_else(|| layout.main_axis_is_row(), |context| context.0)
+                        })
                     })
                     .flatten()
             })
@@ -243,9 +256,11 @@ impl NestedArtboardLayout {
         owning_layout(self.base.base.parent_handle())
             .and_then(|parent| {
                 parent.with(|parent| {
-                    parent
-                        .as_layout_component()
-                        .map(LayoutComponent::is_stack_container)
+                    parent.as_layout_component().map(|layout| {
+                        layout
+                            .css_list_row_context()
+                            .map_or_else(|| layout.is_stack_container(), |context| context.1)
+                    })
                 })
             })
             .flatten()

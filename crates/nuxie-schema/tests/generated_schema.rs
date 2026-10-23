@@ -45,10 +45,10 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // (487) from upstream's artboard paint sources; LinearGradient's
     // transform (1103 to 1107) from upstream's angular gradients; Video's
     // paused, position, duration, ended, state and drawnByScript (60016 to
-    // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 106
-    // (61000 to 61105): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
+    // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 107
+    // (61000 to 61106): LayoutCssStyle's 86, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
-    assert_eq!(runtime_property_count, 798);
+    assert_eq!(runtime_property_count, 799);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -82,8 +82,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .count();
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
-    // layout's 104 and CSS text's 2.
-    assert_eq!(described_property_count, 581);
+    // layout's 105 (including the generated-row marker) and CSS text's 2.
+    assert_eq!(described_property_count, 582);
 }
 
 #[test]
@@ -1278,4 +1278,25 @@ fn css_text_definition_has_bindable_non_animating_uint8_properties() {
             Some(CoreRegistryFieldKind::Uint)
         );
     }
+}
+
+#[test]
+fn generated_list_row_is_compiler_metadata() {
+    let definition = definition_by_type_key(61000).expect("LayoutCssStyle");
+    let property = definition
+        .property_by_key(61106)
+        .expect("generated row marker");
+    assert_eq!(property.name, "generatedListRow");
+    assert_eq!(property.runtime_type, FieldKind::Uint);
+    assert_eq!(property.uint_storage(), Some(UintStorage::Uint8));
+    assert_eq!(
+        property.stored_field_initializer(),
+        Some(StoredFieldInitializer::Uint(0))
+    );
+    assert!(!property.bindable);
+    assert!(!property.animates);
+    assert_eq!(
+        core_registry_field_kind_by_property_key(61106),
+        Some(CoreRegistryFieldKind::Uint)
+    );
 }

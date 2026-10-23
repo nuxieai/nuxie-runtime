@@ -1476,3 +1476,504 @@ fn css_nested_copy_record_accepts_batched_registry_writes() {
         (100.0, 67.0)
     );
 }
+
+// A compiler-generated binding row deliberately has different box declarations
+// from its copy. Only the copy is an item when generatedListRow is set.
+fn contents_list_scene(flagged: bool, percent: bool, copies: u64) -> Scene {
+    contents_list_scene_with_virtualization(flagged, percent, copies, false)
+}
+
+fn contents_list_scene_with_virtualization(
+    flagged: bool,
+    percent: bool,
+    copies: u64,
+    virtualized: bool,
+) -> Scene {
+    use crate::source::generated::{
+        animation::nested_state_machine_base::NestedStateMachineBase,
+        constraints::{
+            draggable_constraint_base::DraggableConstraintBase,
+            scrolling::scroll_constraint_base::ScrollConstraintBase,
+        },
+        nested_animation_base::NestedAnimationBase,
+        viewmodel::viewmodel_base::ViewModelBase,
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(ViewModelBase::TYPE_KEY).end();
+    board(
+        &mut riv,
+        300.0,
+        if virtualized { 100.0 } else { 300.0 },
+        if virtualized { 6 } else { 3 },
+    );
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .uint(FLEX_DIRECTION, 2)
+        .float(PADDING_LEFT, 20.0)
+        .float(PADDING_RIGHT, 20.0)
+        .float(PADDING_TOP, 7.0)
+        .float(ROW_GAP, 8.0)
+        .end();
+    if virtualized {
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 7)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .uint(DISPLAY, 1)
+            .uint(FLEX_DIRECTION, 2)
+            .uint(WIDTH_KIND, 7)
+            .float(WIDTH_PERCENT, 100.0)
+            .uint(HEIGHT_KIND, 7)
+            .float(HEIGHT_KIND + 2, 100.0)
+            .float(FLEX_SHRINK, 0.0)
+            .float(ROW_GAP, 8.0)
+            .end();
+    }
+    riv.object(ArtboardComponentListBase::TYPE_KEY)
+        .uint(
+            ComponentBase::PARENT_ID_PROPERTY_KEY,
+            if virtualized { 2 } else { 0 },
+        )
+        .end();
+    if virtualized {
+        riv.object(ScrollConstraintBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+            .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, 1)
+            .bool(ScrollConstraintBase::VIRTUALIZE_PROPERTY_KEY, true)
+            .end();
+    }
+    style(&mut riv, 0);
+    if virtualized {
+        style(&mut riv, 2);
+    }
+    contents_empty_machine(&mut riv);
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 60.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 20.0)
+        .uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 2 + copies * 3)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        // Wire key kept literal so the fixture can run as a red test before
+        // the runtime knows about generatedListRow.
+        .uint(61106, u64::from(flagged))
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 60.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 20.0)
+        .float(PADDING_LEFT, 10.0)
+        .float(PADDING_RIGHT, 10.0)
+        .float(PADDING_TOP, 10.0)
+        .float(PADDING_BOTTOM, 10.0)
+        .end();
+    for index in 0..copies {
+        let host = 2 + index * 3;
+        riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 2)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+            .uint(WIDTH_KIND, if percent { 7 } else { 1 })
+            .float(
+                if percent { WIDTH_PERCENT } else { WIDTH },
+                if percent { 50.0 } else { 100.0 },
+            )
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT, 20.0)
+            .float(PADDING_LEFT, 10.0)
+            .float(PADDING_RIGHT, 10.0)
+            .float(PADDING_TOP, 10.0)
+            .float(PADDING_BOTTOM, 10.0)
+            // Native virtual scrolling estimates a long, non-shrinking list.
+            .float(FLEX_SHRINK, 0.0)
+            .end();
+        riv.object(NestedStateMachineBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+            .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
+            .end();
+    }
+    style(&mut riv, 0);
+    contents_empty_machine(&mut riv);
+    contents_interactive_component(&mut riv);
+    let scene = Scene::import(riv);
+    let list = contents_list(&scene);
+    let arena = list.retain_arena().unwrap();
+    let source = scene
+        .file
+        .with_file(|file| file.artboard_at_source(1))
+        .unwrap();
+    let items: Vec<_> = (0..if virtualized { 40 } else { 3 })
+        .map(|_| {
+            let model = scene
+                .file
+                .with_file(|file| file.create_view_model_instance_for_artboard(source.clone()))
+                .unwrap();
+            let mut item = ViewModelInstanceListItem::default();
+            item.set_view_model_instance(Some(model));
+            arena.insert(item)
+        })
+        .collect();
+    ArtboardComponentList::update_list_occurrence(&list, &items);
+    for _ in 0..4 {
+        scene.advance();
+    }
+    scene
+}
+
+fn contents_empty_machine(riv: &mut Riv) {
+    use crate::source::generated::animation::{
+        any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+        exit_state_base::ExitStateBase, state_machine_base::StateMachineBase,
+        state_machine_layer_base::StateMachineLayerBase,
+    };
+    riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineLayerBase::TYPE_KEY).end();
+    for state in [
+        EntryStateBase::TYPE_KEY,
+        AnyStateBase::TYPE_KEY,
+        ExitStateBase::TYPE_KEY,
+    ] {
+        riv.object(state).end();
+    }
+}
+
+fn contents_interactive_component(riv: &mut Riv) {
+    use crate::source::generated::{
+        animation::{
+            any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+            exit_state_base::ExitStateBase, listener_fire_event_base::ListenerFireEventBase,
+            listener_types::listener_input_type_base::ListenerInputTypeBase,
+            state_machine_base::StateMachineBase, state_machine_layer_base::StateMachineLayerBase,
+            state_machine_listener_base::StateMachineListenerBase,
+        },
+        event_base::EventBase,
+        semantic::semantic_data_base::SemanticDataBase,
+        shapes::paint::{fill_base::FillBase, solid_color_base::SolidColorBase},
+    };
+    board(riv, 10.0, 10.0, 6);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff112233)
+        .end();
+    riv.object(EventBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(SemanticDataBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(
+            SemanticDataBase::ROLE_PROPERTY_KEY,
+            crate::source::semantic::semantic_role::SemanticRole::Button as u64,
+        )
+        .string(SemanticDataBase::LABEL_PROPERTY_KEY, "copy")
+        .end();
+    style(riv, 0);
+    riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineListenerBase::TYPE_KEY)
+        .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(ListenerInputTypeBase::TYPE_KEY)
+        .uint(
+            ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+            crate::source::listener_type::ListenerType::Click as u64,
+        )
+        .end();
+    riv.object(ListenerFireEventBase::TYPE_KEY)
+        .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, 4)
+        .end();
+    riv.object(StateMachineLayerBase::TYPE_KEY).end();
+    for state in [
+        EntryStateBase::TYPE_KEY,
+        AnyStateBase::TYPE_KEY,
+        ExitStateBase::TYPE_KEY,
+    ] {
+        riv.object(state).end();
+    }
+}
+
+fn contents_list(scene: &Scene) -> CoreHandle {
+    scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<ArtboardComponentList>()[0].clone())
+}
+fn contents_rows(scene: &Scene) -> Vec<RuntimeArtboardInstanceHandle> {
+    contents_list(scene)
+        .with_downcast::<ArtboardComponentList, _>(|list| {
+            (0..3).map(|i| list.artboard_instance(i).unwrap()).collect()
+        })
+        .unwrap()
+}
+fn contents_copy(row: &RuntimeArtboardInstanceHandle) -> RuntimeArtboardInstanceHandle {
+    nested_copy_children(row).remove(0)
+}
+
+#[test]
+fn css_list_contents_rows_use_the_copys_content_box_size_and_padding() {
+    let scene = contents_list_scene(true, false, 1);
+    for (i, row) in contents_rows(&scene).iter().enumerate() {
+        let copy = contents_copy(row);
+        assert_eq!(
+            row.with_artboard(|board| board.layout_bounds()),
+            crate::source::math::aabb::Aabb::new(
+                20.0,
+                7.0 + i as f32 * 48.0,
+                140.0,
+                47.0 + i as f32 * 48.0
+            )
+        );
+        assert_eq!(
+            copy.with_artboard(|board| (
+                board.layout_bounds().width(),
+                board.layout_bounds().height()
+            )),
+            (120.0, 40.0)
+        );
+    }
+}
+
+#[test]
+fn css_list_contents_copy_percentages_use_the_lists_content_box() {
+    let scene = contents_list_scene(true, true, 1);
+    for row in contents_rows(&scene) {
+        assert_eq!(
+            row.with_artboard(|board| board.layout_bounds().width()),
+            150.0
+        );
+        assert_eq!(
+            contents_copy(&row).with_artboard(|board| board.layout_bounds().width()),
+            150.0
+        );
+    }
+}
+
+#[test]
+fn css_list_contents_unflagged_and_multiple_copy_rows_keep_their_boxes() {
+    for (flag, copies) in [(false, 1), (true, 2)] {
+        let scene = contents_list_scene(flag, false, copies);
+        for row in contents_rows(&scene) {
+            assert_eq!(
+                row.with_artboard(|board| (
+                    board.layout_bounds().width(),
+                    board.layout_bounds().height()
+                )),
+                (80.0, 40.0)
+            );
+        }
+    }
+}
+
+#[test]
+fn css_list_contents_hidden_copy_collapses_the_row_and_relayouts_siblings() {
+    let scene = contents_list_scene(true, false, 1);
+    let rows = contents_rows(&scene);
+    let record = contents_copy(&rows[0])
+        .with_artboard(|board| board.css_record())
+        .unwrap();
+    CoreRegistry::set_uint_handle(&record, DISPLAY.into(), 3);
+    scene.advance();
+    assert_eq!(
+        rows[0].with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (0.0, 0.0)
+    );
+    assert_eq!(rows[1].with_artboard(|board| board.layout_y()), 7.0);
+    CoreRegistry::set_uint_handle(&record, DISPLAY.into(), 0);
+    scene.advance();
+    assert_eq!(rows[1].with_artboard(|board| board.layout_y()), 55.0);
+}
+
+#[test]
+fn css_list_contents_taps_and_semantics_follow_the_copy_box() {
+    use crate::source::{
+        animation::nested_state_machine::NestedStateMachine, math::vec2d::Vec2D,
+        pointer_button::PointerButton,
+    };
+    let scene = contents_list_scene(true, false, 1);
+    let machine = scene.artboard.state_machine_instance_handle(0).unwrap();
+    machine.with_instance_mut(|machine| machine.enable_semantics());
+    for _ in 0..3 {
+        machine.advance_and_apply(1.0 / 60.0);
+    }
+    let rows = contents_rows(&scene);
+    let copies: Vec<_> = rows.iter().map(contents_copy).collect();
+    let nested_machines: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            let host = row
+                .with_artboard(|board| board.find_all_handles::<NestedStateMachine>()[0].clone());
+            host.with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+                .flatten()
+                .unwrap()
+        })
+        .collect();
+    let manager = machine
+        .with_instance(|machine| machine.semantic_manager())
+        .unwrap();
+    let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let mut buttons: Vec<_> = nodes.iter().filter(|node| node.label == "copy").collect();
+    buttons.sort_by(|a, b| a.min_y.total_cmp(&b.min_y));
+    assert_eq!(buttons.len(), 3);
+    for (i, node) in buttons.iter().enumerate() {
+        assert_eq!(
+            (node.min_x, node.min_y, node.max_x, node.max_y),
+            (20.0, 7.0 + i as f32 * 48.0, 140.0, 47.0 + i as f32 * 48.0)
+        );
+    }
+    let click = || {
+        let before: Vec<_> = nested_machines
+            .iter()
+            .map(|machine| machine.with_instance(|machine| machine.reported_event_count()))
+            .collect();
+        machine.with_instance_mut(|machine| {
+            let point = Vec2D::new(25.0, 60.0);
+            assert!(machine.listens_to_button_at(point, PointerButton::Primary));
+            machine.pointer_down(point, 0, PointerButton::Primary);
+            machine.pointer_up(point, 0, PointerButton::Primary);
+        });
+        nested_machines
+            .iter()
+            .zip(before)
+            .flat_map(|(machine, before)| {
+                machine.with_instance(|machine| {
+                    (before..machine.reported_event_count())
+                        .filter_map(|i| machine.reported_event_at(i).event)
+                        .filter_map(|event| {
+                            event
+                                .with(|event| event.component_artboard_handle())
+                                .flatten()
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(click(), vec![copies[1].core_handle()]);
+    assert_eq!(display_draw_count(&scene), 3);
+    let record = copies[1].with_artboard(|board| board.css_record()).unwrap();
+    CoreRegistry::set_uint_handle(&record, DISPLAY.into(), 3);
+    for _ in 0..3 {
+        machine.advance_and_apply(1.0 / 60.0);
+    }
+    assert_eq!(display_draw_count(&scene), 2);
+    let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    assert_eq!(nodes.iter().filter(|node| node.label == "copy").count(), 2);
+    assert_eq!(click(), vec![copies[2].core_handle()]);
+}
+
+#[test]
+fn css_list_contents_virtualized_rows_realize_measure_and_recycle() {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint,
+        generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+    };
+    let scene = contents_list_scene_with_virtualization(true, false, 1, true);
+    let list = contents_list(&scene);
+    let visible = || {
+        list.with_downcast::<ArtboardComponentList, _>(|list| {
+            assert!(list.virtualization_enabled());
+            let mut realized = Vec::new();
+            list.realized_indices(&mut realized);
+            assert!(!realized.is_empty());
+            assert!(
+                realized.len() < 40,
+                "virtualization must not realize the entire list"
+            );
+            let mut visible = Vec::new();
+            for index in realized {
+                let row = list.artboard_instance(index).unwrap();
+                if list.is_within_visible_window(index) {
+                    assert_eq!(
+                        list.item_size(index),
+                        crate::source::math::vec2d::Vec2D::new(120.0, 40.0)
+                    );
+                    assert_eq!(
+                        row.with_artboard(|board| (
+                            board.layout_bounds().width(),
+                            board.layout_bounds().height()
+                        )),
+                        (120.0, 40.0)
+                    );
+                    visible.push(index);
+                }
+            }
+            assert!(!visible.is_empty());
+            visible
+        })
+        .unwrap()
+    };
+    let before = visible();
+    let scroll = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<ScrollConstraint>()[0].clone());
+    CoreRegistry::set_double_handle(
+        &scroll,
+        ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY.into(),
+        -300.0,
+    );
+    for _ in 0..5 {
+        scene.advance();
+    }
+    let after = visible();
+    assert!(
+        after[0] > before[0],
+        "scrolling must realize a later set of rows"
+    );
+}
+
+#[test]
+fn css_list_contents_margins_flex_and_live_parent_axis_apply_to_the_copy() {
+    let scene = contents_list_scene(true, false, 1);
+    let rows = contents_rows(&scene);
+    for row in &rows {
+        let record = contents_copy(row)
+            .with_artboard(|board| board.css_record())
+            .unwrap();
+        CoreRegistry::set_double_handle(&record, FLEX_GROW.into(), 1.0);
+        CoreRegistry::set_double_handle(&record, MARGIN_TOP.into(), 3.0);
+    }
+    scene.advance();
+    // 293 content height - 16 gaps - 9 margins = 268, split three ways.
+    for row in &rows {
+        assert!(
+            (row.with_artboard(|board| board.layout_bounds().height()) - 268.0 / 3.0).abs() < 0.001
+        );
+    }
+    assert_eq!(rows[0].with_artboard(|board| board.layout_y()), 10.0);
+    let parent = scene
+        .artboard
+        .with_artboard(|board| board.css_record())
+        .unwrap();
+    CoreRegistry::set_uint_handle(&parent, FLEX_DIRECTION.into(), 0);
+    // Fixed widths must share the parent's available inline space after the
+    // parent changes from a column to a row, not the wrapper's 60px box.
+    for row in &rows {
+        let record = contents_copy(row)
+            .with_artboard(|board| board.css_record())
+            .unwrap();
+        CoreRegistry::set_uint_handle(&record, WIDTH_KIND.into(), 0);
+        CoreRegistry::set_double_handle(&record, MARGIN_TOP.into(), 0.0);
+    }
+    scene.advance();
+    for row in &rows {
+        assert!(
+            (row.with_artboard(|board| board.layout_bounds().width()) - 260.0 / 3.0).abs() < 0.001
+        );
+        assert_eq!(
+            row.with_artboard(|board| board.layout_bounds().height()),
+            40.0
+        );
+    }
+}

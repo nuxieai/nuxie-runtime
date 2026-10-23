@@ -372,10 +372,23 @@ impl ArtboardComponentList {
         index: i32,
     ) -> Option<crate::mechanical_port::source::layout::layout_node_provider::LayoutNodeKey> {
         let artboard = self.artboard_instance(index)?;
-        artboard.with_artboard_mut(|artboard| {
-            artboard.take_layout_data();
-            artboard.layout_node_key(0)
-        })
+        if let Some(copy) = LayoutComponent::css_list_row_copy_occurrence(&artboard.core_handle()) {
+            // Keep the row as a scene boundary, but give its copy's node to
+            // the list. Neither hosted artboard runs an independent solve.
+            artboard.with_artboard_mut(|artboard| {
+                artboard.take_layout_data();
+            });
+            copy.with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.take_layout_data();
+                artboard.layout_node_key(0)
+            })
+            .flatten()
+        } else {
+            artboard.with_artboard_mut(|artboard| {
+                artboard.take_layout_data();
+                artboard.layout_node_key(0)
+            })
+        }
     }
 
     pub fn list_item(&self, index: i32) -> Option<CoreHandle> {
@@ -477,10 +490,25 @@ impl ArtboardComponentList {
         let mut k = 0;
         while let Some(&index) = self.realized_indices.get(k) {
             if let Some(artboard) = self.artboard_instance(index) {
-                let bounds = artboard.with_artboard_mut(|artboard| {
-                    artboard.update_layout_bounds(animate);
-                    artboard.layout_bounds()
-                });
+                if !LayoutComponent::prepare_css_list_row_bounds(&artboard.core_handle()) {
+                    k += 1;
+                    continue;
+                }
+                let bounds =
+                    if LayoutComponent::css_list_row_copy_occurrence(&artboard.core_handle())
+                        .is_some()
+                    {
+                        LayoutComponent::update_layout_bounds_occurrence(
+                            &artboard.core_handle(),
+                            animate,
+                        );
+                        artboard.with_artboard(|artboard| artboard.layout_bounds())
+                    } else {
+                        artboard.with_artboard_mut(|artboard| {
+                            artboard.update_layout_bounds(animate);
+                            artboard.layout_bounds()
+                        })
+                    };
                 if !has_virtual_window || self.is_within_visible_window(index) {
                     self.set_item_size(Vec2D::new(bounds.width(), bounds.height()), index);
                 }
@@ -2183,6 +2211,7 @@ impl ArtboardComponentList {
             .expect("live ArtboardComponentList");
         Artboard::set_host_occurrence(&artboard.core_handle(), Some(owner.clone()), parent);
         artboard.with_artboard_mut(|artboard| artboard.set_frame_origin(false));
+        LayoutComponent::configure_css_list_row_occurrence(&artboard.core_handle());
         let css_item = artboard.with_artboard(|artboard| artboard.css_record());
         owner
             .with_downcast_mut::<Self, _>(|owner| {

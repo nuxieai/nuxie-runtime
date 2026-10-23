@@ -2420,6 +2420,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         61103 => Some(CoreRegistryFieldKind::Uint),
         61104 => Some(CoreRegistryFieldKind::Uint),
         61105 => Some(CoreRegistryFieldKind::Uint),
+        61106 => Some(CoreRegistryFieldKind::Uint),
         _ => None,
     }
 }
@@ -3227,6 +3228,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         61103 => Some(FieldKind::Uint),
         61104 => Some(FieldKind::Uint),
         61105 => Some(FieldKind::Uint),
+        61106 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -4021,6 +4023,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         61103 => Some(FieldKind::Uint),
         61104 => Some(FieldKind::Uint),
         61105 => Some(FieldKind::Uint),
+        61106 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -34213,6 +34216,44 @@ static DEF_364_PROPERTIES: &[Property] = &[
         passthrough: false,
         bitmask_passthrough: None,
     },
+    Property {
+        name: "generatedListRow",
+        key: Key {
+            int: 61106,
+            name: "generatedListRow",
+        },
+        alternates: &[],
+        declared_type: "uint8",
+        runtime_type: FieldKind::Uint,
+        description: Some(
+            "Compiler-only generated list binding row: 0 ordinary box, 1 use its single hosted CSS copy as the list item. Not authored CSS display: contents.",
+        ),
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        sidecar: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
 ];
 
 static DEF_365_ANCESTORS: &[&str] = &["Component"];
@@ -37507,6 +37548,7 @@ pub fn property_by_key_in_hierarchy(
         (61000, 61082) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[82])),
         (61000, 61099) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[83])),
         (61000, 61100) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[84])),
+        (61000, 61106) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[85])),
         (61001, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61001, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (61001, 61083) => Some(("BoxBorder", &DEF_365_PROPERTIES[0])),

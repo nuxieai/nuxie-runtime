@@ -3515,21 +3515,27 @@ impl LayoutComponent {
     /// Image or Video participant filling its content box. Its parent sees a
     /// replaced element. A container holding child boxes remains a container.
     fn apply_css_picture_style(&self, style: &mut Style) {
+        if self.css_picture_host().is_some() {
+            style.item_is_replaced = true;
+        }
+    }
+
+    fn css_picture_host(&self) -> Option<CoreHandle> {
         use crate::{
             css_layout::{keys, record},
-            source::layout::layout_participant::{LayoutParticipant, apply_picture_natural_ratio},
+            source::layout::layout_participant::LayoutParticipant,
         };
         if !self.is_css_mode() || self.is_artboard() {
-            return;
+            return None;
         }
         let providers = Self::layout_providers_children(self.base.children(), false);
         let [(host, provider)] = providers.as_slice() else {
-            return;
+            return None;
         };
         if !host.is_type_of(crate::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
             || !provider.is_type_of(LayoutParticipant::TYPE_KEY)
         {
-            return;
+            return None;
         }
         let record = host
             .with(|host| record::find_in(host.as_container_component()?.children()))
@@ -3544,10 +3550,7 @@ impl LayoutComponent {
                 })
             })
             .unwrap_or(false);
-        if fills {
-            style.item_is_replaced = true;
-            apply_picture_natural_ratio(style, host);
-        }
+        fills.then(|| host.clone())
     }
 
     pub fn sync_style(&mut self) {
@@ -4258,6 +4261,11 @@ impl LayoutComponent {
                     height: space(size.y),
                 },
                 |inputs, _node, context, style| {
+                    if let Some(output) = context.as_ref().and_then(|context| {
+                        Self::measure_picture_node(&context.owner, inputs, style)
+                    }) {
+                        return output;
+                    }
                     let measured = context
                         .filter(|context| context.measured)
                         .map(|context| (context.owner.clone(), context.kind));
@@ -4425,6 +4433,12 @@ impl LayoutComponent {
                     height: space(available.1),
                 },
                 |inputs, _node, context, style| {
+                    if let Some(output) = context
+                        .as_ref()
+                        .and_then(|context| Self::measure_picture_node(&context.0, inputs, style))
+                    {
+                        return output;
+                    }
                     let measured = context
                         .filter(|context| context.2)
                         .map(|context| (context.0.clone(), context.1));
@@ -5118,6 +5132,37 @@ impl LayoutComponent {
                 touched.push(root);
             }
         }
+    }
+
+    fn measure_picture_node(
+        owner: &CoreHandle,
+        inputs: taffy::tree::LayoutInput,
+        style: &Style,
+    ) -> Option<taffy::tree::LayoutOutput> {
+        use crate::source::layout::{
+            layout_participant::{LayoutParticipant, picture_natural_size},
+            layout_tree::compute_picture_leaf,
+        };
+        if !style.item_is_replaced {
+            return None;
+        }
+        let host = owner
+            .with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    layout.css_picture_host()
+                } else {
+                    object
+                        .as_any()
+                        .downcast_ref::<LayoutParticipant>()?
+                        .measurement_host_handle()
+                }
+            })
+            .flatten()?;
+        Some(compute_picture_leaf(
+            inputs,
+            style,
+            picture_natural_size(&host, true)?,
+        ))
     }
 
     fn measure_layout_node(

@@ -731,6 +731,17 @@ impl Image {
         if changed {
             self.update_image_scale();
             self.base.mark_world_transform_dirty();
+            // Wrappers have layout children, so their measured-content check
+            // cannot notice a new frame size. Invalidate the participant and
+            // its owning box directly, without borrowing this active host again.
+            for child in self.base.children().to_vec() {
+                child.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                    if participant.css_record().is_some() {
+                        participant.mark_layout_node_dirty_from_host(self, false);
+                    }
+                });
+            }
+            self.measured_geometry_changed();
         }
     }
     pub(crate) fn set_runtime_size(&mut self, width: f32, height: f32) {

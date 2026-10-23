@@ -3,6 +3,27 @@
 Every changed site in `src` carries a `// nuxie-css:` comment. Everything
 else is the published package unchanged.
 
+## Measure replaced wrappers before placing their children
+
+`src/tree/taffy_tree.rs`, `TaffyView::compute_child_layout`: a visible replaced
+node with children and a measurement context calls the measurement callback
+before container layout. Its measured border-box size becomes the known size
+for placing those children. Hidden nodes and ordinary containers keep their
+existing dispatch.
+
+The runtime uses this for a CSS picture box with a filling Image or Video
+participant. The ordinary leaf callback cannot size that box because Taffy
+dispatches nodes with children straight to block, flex or grid layout. This
+hook lets the runtime use the same measurement resolver as a direct picture
+participant, then preserve the child's layout, paint and fit. No natural
+ratio is stored in Style::aspect_ratio or in a separate style field. The
+runtime reads current picture dimensions whenever invalidated layout measures
+the node, and authored aspect-ratio stays in its existing style field.
+
+Runtime guards in `layout_fit_content_tests.rs` cover natural block size,
+column stretching, definite width in a flex row, padding with border-box
+sizing, height constraints and frame changes without manual invalidation.
+
 ## In-flow children count their margin boxes in scrollable overflow
 
 Stock 0.15.0 counts a child's border box (and the descendant overflow it

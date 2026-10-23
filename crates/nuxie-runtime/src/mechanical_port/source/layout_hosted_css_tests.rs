@@ -718,6 +718,137 @@ fn css_artboard_hug_uses_root_min_height_without_intrinsic_flag() {
 }
 
 #[test]
+fn css_artboard_hug_cloned_instance_keeps_its_host_size() {
+    let scene = css_artboard_sizing_scene(true, true, |_| {}, false);
+    assert_eq!(root_size(&scene), (60.0, 40.0));
+    scene.artboard.set_size(300.0, 160.0);
+    scene.advance();
+    let clone = scene.artboard.instance().expect("clone resized occurrence");
+    for _ in 0..3 {
+        clone.advance_default(1.0 / 60.0);
+    }
+    assert_eq!(
+        clone.with_artboard(|board| (board.layout_width(), board.layout_height())),
+        (300.0, 160.0)
+    );
+    clone.reset_size();
+    for _ in 0..3 {
+        clone.advance_default(1.0 / 60.0);
+    }
+    assert_eq!(
+        clone.with_artboard(|board| (board.layout_width(), board.layout_height())),
+        (60.0, 40.0)
+    );
+    assert_eq!(root_size(&scene), (300.0, 160.0), "reset is per occurrence");
+}
+
+#[test]
+fn css_artboard_zero_weight_size_animation_keeps_hug_axes_open() {
+    use crate::source::animation::keyframe_double::KeyFrameDouble;
+    for key in [
+        LayoutComponentBase::WIDTH_PROPERTY_KEY,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY,
+    ] {
+        let scene = css_artboard_sizing_scene(true, true, |_| {}, false);
+        let mut frame = KeyFrameDouble::default();
+        frame.base.set_value_value(300.0);
+        assert!(frame.apply(&scene.artboard.core_handle(), key.into(), 0.0, None));
+        scene.advance();
+        assert_eq!(
+            root_size(&scene),
+            (60.0, 40.0),
+            "zero-weight property {key}"
+        );
+    }
+}
+
+#[test]
+fn css_artboard_nonzero_size_animation_still_animates_fixed_axes() {
+    use crate::source::animation::keyframe_double::KeyFrameDouble;
+    let scene = css_artboard_sizing_scene(false, false, |_| {}, false);
+    let mut width = KeyFrameDouble::default();
+    width.base.set_value_value(500.0);
+    let mut height = KeyFrameDouble::default();
+    height.base.set_value_value(240.0);
+    for (mix, expected) in [(0.5, (400.0, 200.0)), (1.0, (500.0, 240.0))] {
+        assert!(width.apply(
+            &scene.artboard.core_handle(),
+            LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
+            mix,
+            None
+        ));
+        assert!(height.apply(
+            &scene.artboard.core_handle(),
+            LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+            mix,
+            None
+        ));
+        scene.advance();
+        assert_eq!(root_size(&scene), expected);
+    }
+}
+
+#[test]
+fn css_artboard_host_size_is_independent_of_stored_properties() {
+    use crate::source::animation::keyframe_double::KeyFrameDouble;
+    let scene = css_artboard_sizing_scene(false, false, |_| {}, false);
+    let root = scene.artboard.core_handle();
+    scene.artboard.set_size(420.0, 220.0);
+    assert_eq!(
+        CoreRegistry::get_double_handle(&root, LayoutComponentBase::WIDTH_PROPERTY_KEY.into()),
+        Some(300.0)
+    );
+    let mut frame = KeyFrameDouble::default();
+    frame.base.set_value_value(500.0);
+    assert!(frame.apply(
+        &root,
+        LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
+        1.0,
+        None
+    ));
+    CoreRegistry::set_double_handle(
+        &root,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+        240.0,
+    );
+    scene.advance();
+    assert_eq!(root_size(&scene), (420.0, 220.0));
+    assert_eq!(
+        CoreRegistry::get_double_handle(&root, LayoutComponentBase::WIDTH_PROPERTY_KEY.into()),
+        Some(500.0)
+    );
+    scene.artboard.reset_size();
+    scene.advance();
+    assert_eq!(
+        root_size(&scene),
+        (500.0, 240.0),
+        "reset reveals current stored values"
+    );
+}
+
+#[test]
+fn css_artboard_stored_dimension_writes_leave_hug_axes_open() {
+    let scene = css_artboard_sizing_scene(true, true, |_| {}, false);
+    let root = scene.artboard.core_handle();
+    CoreRegistry::set_double_handle(&root, LayoutComponentBase::WIDTH_PROPERTY_KEY.into(), 300.0);
+    CoreRegistry::set_double_handle(
+        &root,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+        160.0,
+    );
+    scene.advance();
+    assert_eq!(root_size(&scene), (60.0, 40.0));
+    let clone = scene.artboard.instance().unwrap();
+    for _ in 0..3 {
+        clone.advance_default(1.0 / 60.0);
+    }
+    assert_eq!(
+        clone.with_artboard(|board| (board.layout_width(), board.layout_height())),
+        (60.0, 40.0)
+    );
+}
+
+#[test]
 fn css_artboard_hug_runtime_size_wins_and_reset_restores_open_axes() {
     let scene = css_artboard_sizing_scene(
         true,
@@ -750,11 +881,7 @@ fn css_artboard_hug_runtime_width_leaves_height_open_even_for_stored_zero() {
             },
             false,
         );
-        CoreRegistry::set_double_handle(
-            &scene.artboard.core_handle(),
-            LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
-            width,
-        );
+        scene.artboard.set_width(width);
         scene.advance();
         assert_eq!(root_size(&scene), (width, 80.0));
     }

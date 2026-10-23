@@ -496,9 +496,10 @@ pub struct LayoutComponent {
     /// The whole-box CSS record for this hosted occurrence. List rows use
     /// their own record; nested copies replace it with the host's record.
     hosted_css_record: Option<CoreHandle>,
-    /// Runtime setters size an occurrence independently of its authored Hug
-    /// markers, including a write equal to the stored value (notably zero).
-    explicitly_sized: [bool; 2],
+    /// Host sizing belongs to this occurrence, independently of the stored
+    /// width/height properties read and written by animations and bindings.
+    host_width: Option<f32>,
+    host_height: Option<f32>,
     /// Compiler binding row: retain the scene host, but contribute its copy's
     /// node instead of a wrapper node to the list's layout tree.
     css_list_row_host: Option<CoreHandle>,
@@ -574,7 +575,8 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             hosted_css_record: None,
-            explicitly_sized: [false; 2],
+            host_width: None,
+            host_height: None,
             css_list_row_host: None,
             css_list_row_copy: None,
             css_list_row_hoisted: false,
@@ -1065,6 +1067,7 @@ impl LayoutComponent {
             self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy),
         );
         twin.css_transform_authored = self.css_transform_authored;
+        twin.copy_host_size_from(self);
         twin
     }
 
@@ -1276,58 +1279,92 @@ impl LayoutComponent {
     }
 
     pub(crate) fn set_dimension_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
-        Self::set_dimension_with_sizing_occurrence(owner, key, value, true).is_some()
-    }
-
-    /// Return whether the layout changed; property dispatch separately needs
-    /// to know whether this was a supported dimension, even for a no-op.
-    pub(crate) fn set_dimension_with_sizing_occurrence(
-        owner: &CoreHandle,
-        key: u16,
-        value: f32,
-        explicit: bool,
-    ) -> Option<bool> {
         let changed = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut()?;
-                layout.write_dimension(key, value, explicit)
+                match key {
+                    LayoutComponentBase::WIDTH_PROPERTY_KEY => {
+                        Some(layout.base.set_width_value(value))
+                    }
+                    LayoutComponentBase::HEIGHT_PROPERTY_KEY => {
+                        Some(layout.base.set_height_value(value))
+                    }
+                    _ => None,
+                }
             })
             .flatten();
-        let (value_changed, layout_changed) = changed?;
-        if layout_changed {
+        let Some(changed) = changed else {
+            return false;
+        };
+        if changed {
             // The generated setter invokes width/heightChanged before the
             // property notification. Release the owner for its root-layout
             // callback; for an Artboard, that root is this same occurrence.
             Self::mark_layout_node_dirty_occurrence(owner, false);
-        }
-        if value_changed {
             owner.notify_property_changed(key);
         }
-        Some(layout_changed)
+        true
     }
 
-    fn write_dimension(&mut self, key: u16, value: f32, explicit: bool) -> Option<(bool, bool)> {
-        let axis = match key {
-            LayoutComponentBase::WIDTH_PROPERTY_KEY => 0,
-            LayoutComponentBase::HEIGHT_PROPERTY_KEY => 1,
-            _ => return None,
-        };
-        let sizing_changed = self.explicitly_sized[axis] != explicit
-            && self.is_artboard()
-            && self.is_css_mode()
-            && self.hosted_css_record.is_none()
-            && if axis == 0 {
-                self.effective_width_scale_type() == LayoutScaleType::Hug
-            } else {
-                self.effective_height_scale_type() == LayoutScaleType::Hug
-            };
-        self.explicitly_sized[axis] = explicit;
-        let value_changed = if axis == 0 {
-            self.base.set_width_value(value)
-        } else {
-            self.base.set_height_value(value)
-        };
-        Some((value_changed, value_changed || sizing_changed))
+    pub(crate) fn host_size(&self) -> (Option<f32>, Option<f32>) {
+        (self.host_width, self.host_height)
+    }
+
+    pub(crate) fn copy_host_size_from(&mut self, source: &Self) {
+        self.host_width = source.host_width;
+        self.host_height = source.host_height;
+    }
+
+    /// Write the host's size, never the animatable stored dimensions. None
+    /// clears an axis; the occurrence setter preserves axes it wasn't given.
+    pub(crate) fn write_host_size(&mut self, width: Option<f32>, height: Option<f32>) -> bool {
+        if (self.host_width, self.host_height) == (width, height) {
+            return false;
+        }
+        let changed = self.host_width.unwrap_or(self.base.width())
+            != width.unwrap_or(self.base.width())
+            || self.host_height.unwrap_or(self.base.height())
+                != height.unwrap_or(self.base.height())
+            || (self.is_css_mode()
+                && self.hosted_css_record.is_none()
+                && ((self.effective_width_scale_type() == LayoutScaleType::Hug
+                    && self.host_width.is_some() != width.is_some())
+                    || (self.effective_height_scale_type() == LayoutScaleType::Hug
+                        && self.host_height.is_some() != height.is_some())));
+        self.host_width = width;
+        self.host_height = height;
+        changed
+    }
+
+    pub(crate) fn set_host_size_occurrence(
+        owner: &CoreHandle,
+        width: Option<f32>,
+        height: Option<f32>,
+    ) -> bool {
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Artboard layout");
+                layout.write_host_size(width.or(layout.host_width), height.or(layout.host_height))
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+        }
+        changed
+    }
+
+    pub(crate) fn clear_host_size_occurrence(owner: &CoreHandle) {
+        let changed = owner
+            .with_mut(|object| {
+                object
+                    .as_layout_component_mut()
+                    .expect("Artboard layout")
+                    .write_host_size(None, None)
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+        }
     }
 
     pub fn mark_layout_style_dirty_occurrence(owner: &CoreHandle) {
@@ -3786,9 +3823,9 @@ impl LayoutComponent {
             has_layout_parent: parent.is_some(),
             css_role: if self.is_artboard() && self.hosted_css_record.is_none() {
                 crate::css_layout::CssRole::Artboard {
-                    width_hugs: width_scale == LayoutScaleType::Hug && !self.explicitly_sized[0],
+                    width_hugs: width_scale == LayoutScaleType::Hug && self.host_width.is_none(),
                     height_hugs: self.effective_height_scale_type() == LayoutScaleType::Hug
-                        && !self.explicitly_sized[1],
+                        && self.host_height.is_none(),
                 }
             } else {
                 crate::css_layout::CssRole::Box
@@ -4417,18 +4454,18 @@ impl LayoutComponent {
         if self.is_css_mode() && self.is_artboard() && self.hosted_css_record.is_none() {
             return Vec2D::new(
                 if self.effective_width_scale_type() == LayoutScaleType::Hug
-                    && !self.explicitly_sized[0]
+                    && self.host_width.is_none()
                 {
                     f32::NAN
                 } else {
-                    self.base.width()
+                    self.host_width.unwrap_or(self.base.width())
                 },
                 if self.effective_height_scale_type() == LayoutScaleType::Hug
-                    && !self.explicitly_sized[1]
+                    && self.host_height.is_none()
                 {
                     f32::NAN
                 } else {
-                    self.base.height()
+                    self.host_height.unwrap_or(self.base.height())
                 },
             );
         }
@@ -4436,12 +4473,12 @@ impl LayoutComponent {
             if available_width.is_nan() && intrinsically_sized {
                 available_width
             } else {
-                self.base.width()
+                self.host_width.unwrap_or(self.base.width())
             },
             if available_height.is_nan() && intrinsically_sized {
                 available_height
             } else {
-                self.base.height()
+                self.host_height.unwrap_or(self.base.height())
             },
         )
     }
@@ -6908,16 +6945,8 @@ impl LayoutComponent {
         }
     }
     pub fn set_width(&mut self, value: f32) {
-        self.set_width_with_sizing(value, true);
-    }
-    pub(crate) fn set_width_with_sizing(&mut self, value: f32, explicit: bool) {
-        let (value_changed, layout_changed) = self
-            .write_dimension(LayoutComponentBase::WIDTH_PROPERTY_KEY, value, explicit)
-            .unwrap();
-        if layout_changed {
-            self.mark_layout_node_dirty(false);
-        }
-        if value_changed {
+        if self.base.set_width_value(value) {
+            self.width_changed();
             LayoutComponentBaseCallbacks::notify_property_changed(
                 self,
                 LayoutComponentBase::WIDTH_PROPERTY_KEY,
@@ -6925,16 +6954,8 @@ impl LayoutComponent {
         }
     }
     pub fn set_height(&mut self, value: f32) {
-        self.set_height_with_sizing(value, true);
-    }
-    pub(crate) fn set_height_with_sizing(&mut self, value: f32, explicit: bool) {
-        let (value_changed, layout_changed) = self
-            .write_dimension(LayoutComponentBase::HEIGHT_PROPERTY_KEY, value, explicit)
-            .unwrap();
-        if layout_changed {
-            self.mark_layout_node_dirty(false);
-        }
-        if value_changed {
+        if self.base.set_height_value(value) {
+            self.height_changed();
             LayoutComponentBaseCallbacks::notify_property_changed(
                 self,
                 LayoutComponentBase::HEIGHT_PROPERTY_KEY,
@@ -6942,13 +6963,9 @@ impl LayoutComponent {
         }
     }
     pub fn width_changed(&mut self) {
-        // Generated field setters can write directly to the base before
-        // invoking this callback, instead of using set_width().
-        self.explicitly_sized[0] = true;
         self.mark_layout_node_dirty(false);
     }
     pub fn height_changed(&mut self) {
-        self.explicitly_sized[1] = true;
         self.mark_layout_node_dirty(false);
     }
     pub fn style_id_changed(&mut self) {
@@ -7193,8 +7210,8 @@ impl LayoutComponent {
                 YGUnit::Point
             }
         };
-        let mut width = self.base.width();
-        let mut height = self.base.height();
+        let mut width = self.host_width.unwrap_or(self.base.width());
+        let mut height = self.host_height.unwrap_or(self.base.height());
         let mut width_scale = stored_width_scale;
         let mut height_scale = stored_height_scale;
         let mut width_units = units(width_scale, stored_width_units);
@@ -7234,11 +7251,11 @@ impl LayoutComponent {
         style.size.width = size(self.forced_width, width, width_units, width_scale);
         style.size.height = size(self.forced_height, height, height_units, height_scale);
         if context.css && self.is_artboard() && self.hosted_css_record.is_none() {
-            if self.explicitly_sized[0] {
-                style.size.width = Dimension::length(self.base.width().max(0.0));
+            if let Some(width) = self.host_width {
+                style.size.width = Dimension::length(width.max(0.0));
             }
-            if self.explicitly_sized[1] {
-                style.size.height = Dimension::length(self.base.height().max(0.0));
+            if let Some(height) = self.host_height {
+                style.size.height = Dimension::length(height.max(0.0));
             }
         }
         let grow = |fraction: f32| if fraction.is_nan() { 0.0 } else { fraction };

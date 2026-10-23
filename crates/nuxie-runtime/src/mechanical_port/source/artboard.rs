@@ -994,12 +994,12 @@ impl Artboard {
     }
 
     pub fn reset_size(&mut self) {
-        self.base
-            .base
-            .set_width_with_sizing(self.original_width, false);
-        self.base
-            .base
-            .set_height_with_sizing(self.original_height, false);
+        if self.base.base.write_host_size(None, None) {
+            self.base.base.layout_data.mark_dirty();
+            if let Some(owner) = crate::source::core::CoreObject::core(self).handle() {
+                self.mark_layout_dirty(owner);
+            }
+        }
     }
 
     pub fn animation_count(&self) -> usize {
@@ -5274,10 +5274,10 @@ impl Artboard {
         let result = base.deserialize(property_key, reader, self);
         self.base = base;
         match property_key {
-            crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::WIDTH_PROPERTY_KEY => {
+            LayoutComponentBase::WIDTH_PROPERTY_KEY => {
                 self.original_width = self.width();
             }
-            crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::HEIGHT_PROPERTY_KEY => {
+            LayoutComponentBase::HEIGHT_PROPERTY_KEY => {
                 self.original_height = self.height();
             }
             _ => {}
@@ -6573,6 +6573,7 @@ impl Artboard {
         let mut base = clone.base.take_base_for_callbacks();
         base.copy(&self.base, &mut clone.base);
         clone.base.base = base;
+        clone.base.base.base.copy_host_size_from(&self.base.base);
         clone.base.factory = self.factory.clone();
         clone.base.file = self.file.clone();
         clone.base.scripting_vm = self.scripting_vm.clone();
@@ -6735,17 +6736,27 @@ impl Artboard {
     }
 
     pub fn width(&self) -> f32 {
-        self.base.base.width()
+        self.base
+            .base
+            .host_size()
+            .0
+            .unwrap_or(self.base.base.width())
     }
 
     pub fn height(&self) -> f32 {
-        self.base.base.height()
+        self.base
+            .base
+            .host_size()
+            .1
+            .unwrap_or(self.base.base.height())
     }
 
+    /// Write the stored property. Host sizing uses the runtime handle's setter.
     pub fn set_width(&mut self, value: f32) {
         self.base.base.set_width(value);
     }
 
+    /// Write the stored property. Host sizing uses the runtime handle's setter.
     pub fn set_height(&mut self, value: f32) {
         self.base.base.set_height(value);
     }
@@ -7215,42 +7226,25 @@ impl RuntimeArtboardInstanceHandle {
         })
     }
 
-    /// Apply the pinned ArtboardInstance width/height setters without retaining
-    /// the Rust occurrence borrow across their synchronous layout callbacks.
+    /// Set this occurrence's host size independently of its animated properties.
     pub fn set_size(&self, width: f32, height: f32) {
-        self.set_size_axes(Some(width), Some(height), true);
+        self.set_host_size_axes(Some(width), Some(height));
     }
 
-    pub(crate) fn set_size_axes(
-        &self,
-        width: Option<f32>,
-        height: Option<f32>,
-        explicit: bool,
-    ) -> bool {
-        let root = self.core_handle();
-        let mut changed = false;
-        for (key, value) in [
-            (LayoutComponentBase::WIDTH_PROPERTY_KEY, width),
-            (LayoutComponentBase::HEIGHT_PROPERTY_KEY, height),
-        ] {
-            if let Some(value) = value {
-                changed |= LayoutComponent::set_dimension_with_sizing_occurrence(
-                    &root, key, value, explicit,
-                )
-                .unwrap_or(false);
-            }
-        }
-        changed
+    pub fn set_width(&self, width: f32) {
+        self.set_host_size_axes(Some(width), None);
+    }
+
+    pub fn set_height(&self, height: f32) {
+        self.set_host_size_axes(None, Some(height));
+    }
+
+    pub(crate) fn set_host_size_axes(&self, width: Option<f32>, height: Option<f32>) -> bool {
+        LayoutComponent::set_host_size_occurrence(&self.core_handle(), width, height)
     }
 
     pub fn reset_size(&self) {
-        let (width, height) = self.with_artboard(|artboard| {
-            (
-                artboard.base.original_width(),
-                artboard.base.original_height(),
-            )
-        });
-        self.set_size_axes(Some(width), Some(height), false);
+        LayoutComponent::clear_host_size_occurrence(&self.core_handle());
     }
     pub fn instance(&self) -> Option<Self> {
         Artboard::instance_from_handle(&self.core_handle())

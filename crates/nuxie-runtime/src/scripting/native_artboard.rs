@@ -11,10 +11,7 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_context::{DataContext, RuntimeDataContextHandle},
     file::RuntimeFileHandle,
-    generated::{
-        core_registry::{CoreField, CoreRegistry},
-        layout_component_base::LayoutComponentBase,
-    },
+    generated::core_registry::{CoreField, CoreRegistry},
     input::{
         gamepad_snapshot::{
             GamepadInputChange, GamepadInputChangeKind, GamepadMappingKind, GamepadSnapshot,
@@ -118,18 +115,10 @@ impl ScriptArtboard for NativeScriptArtboard {
             .with_artboard(|artboard| artboard.base.frame_origin())
     }
     fn set_width(&mut self, value: f32) {
-        CoreRegistry::set_double_handle(
-            &self.owner.artboard.core_handle(),
-            LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
-            value,
-        );
+        self.owner.artboard.set_width(value);
     }
     fn set_height(&mut self, value: f32) {
-        CoreRegistry::set_double_handle(
-            &self.owner.artboard.core_handle(),
-            LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
-            value,
-        );
+        self.owner.artboard.set_height(value);
     }
     fn set_frame_origin(&mut self, value: bool) {
         self.owner

@@ -78,8 +78,8 @@ impl TextInput {
 /// unspecified (NaN) size stable until the solver supplies the content box.
 #[derive(Clone, PartialEq)]
 pub(super) struct CssInputLayoutKey {
-    authored_text: String,
-    text: String,
+    authored_text_generation: u64,
+    text_generation: u64,
     font: Option<super::text_style::CssInputFontKey>,
     font_size: u32,
     line_height: u32,
@@ -107,6 +107,7 @@ pub struct TextInput {
     layout_width: f32,
     layout_height: f32,
     css_owned: bool,
+    css_registration: Option<crate::source::artboard::CssInputRegistration>,
     raw_text_input: RefCell<RawTextInput>,
 }
 
@@ -128,6 +129,7 @@ impl Default for TextInput {
             layout_width: f32::NAN,
             layout_height: f32::NAN,
             css_owned: false,
+            css_registration: None,
             raw_text_input: RefCell::new(RawTextInput::default()),
         }
     }
@@ -153,6 +155,19 @@ impl TextInput {
     }
 
     pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
+        if owned {
+            if self.css_registration.as_ref().map(|r| &r.artboard)
+                != self.base.artboard_handle().as_ref()
+            {
+                self.css_registration.take();
+                if let Some(input) = self.base.handle() {
+                    self.css_registration =
+                        self.base.with_artboard_mut(|a| a.register_css_input(input));
+                }
+            }
+        } else {
+            self.detach_css_registration();
+        }
         if self.css_owned != owned {
             self.css_owned = owned;
             self.raw_text_input.get_mut().set_css_line_box(owned);
@@ -160,6 +175,10 @@ impl TextInput {
             // progress. Reshape drawing without invalidating that solve.
             self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         }
+    }
+
+    pub(crate) fn detach_css_registration(&mut self) {
+        self.css_registration.take();
     }
 
     /// Validate even when a changed callback or an update dirt was missed.
@@ -186,22 +205,13 @@ impl TextInput {
             None => (None, 16.0, -1.0),
         };
         let mut raw = self.raw_text_input.borrow_mut();
-        let authored_text = self.base.text().to_owned();
         let authored_changed = raw.css_layout_key.as_ref().is_none_or(|key| {
-            key.authored_text != authored_text || key.multiline != self.base.multiline()
+            key.authored_text_generation != self.base.text_generation()
+                || key.multiline != self.base.multiline()
         });
-        let text = if authored_changed {
-            if self.base.multiline() {
-                authored_text.clone()
-            } else {
-                Self::stripped_line_breaks(&authored_text)
-            }
-        } else {
-            raw.text()
-        };
-        let key = CssInputLayoutKey {
-            authored_text,
-            text,
+        let mut key = CssInputLayoutKey {
+            authored_text_generation: self.base.text_generation(),
+            text_generation: raw.text_generation(),
             font,
             font_size: font_size.to_bits(),
             line_height: line_height.to_bits(),
@@ -216,8 +226,15 @@ impl TextInput {
             raw.set_font(key.font.as_ref().and_then(|font| font.font.clone()));
             raw.set_font_size(font_size);
             raw.set_line_height(line_height);
-            if raw.text() != key.text {
-                raw.set_text_preserve_cursor(key.text.clone());
+            if authored_changed {
+                let text = if key.multiline {
+                    self.base.text().to_owned()
+                } else {
+                    Self::stripped_line_breaks(self.base.text())
+                };
+                if raw.text() != text {
+                    raw.set_text_preserve_cursor(text);
+                }
             }
             raw.set_obscured(key.obscured);
             raw.set_max_width(if key.multiline {
@@ -232,8 +249,12 @@ impl TextInput {
             });
             Self::apply_alignment(&mut raw, self.alignment());
             raw.invalidate_shape();
+            key.text_generation = raw.text_generation();
             raw.css_layout_key = Some(key);
             raw.css_layout_needs_solve = true;
+        }
+        if !raw.css_layout_has_pending_work() {
+            return;
         }
         // A selection read may have consumed shape dirt. Keep painting and all
         // subsequent readers on this same layout, including an absent font.
@@ -420,6 +441,12 @@ impl TextInput {
         }
         self.base.base.hit_test_point(&position, skip, primary)
     }
+    #[cfg(test)]
+    pub(crate) fn css_input_text_work_for_test(&self) -> (u64, u32) {
+        let raw = self.raw_text_input.borrow();
+        (raw.text_encode_count.get(), raw.css_layout_build_count)
+    }
+
     #[cfg(test)]
     pub(crate) fn clear_css_input_shape_dirty_for_test(&mut self) {
         self.raw_text_input.get_mut().clear_shape_dirty_for_test();
@@ -634,6 +661,12 @@ impl TextInput {
             });
         self.update_multiline(false);
         self.update_alignment();
+        let css = self
+            .base
+            .parent_handle()
+            .and_then(|p| p.with(|p| p.as_layout_component().is_some_and(|p| p.is_css_mode())))
+            .unwrap_or(false);
+        self.set_owned_by_css_layout(css);
         if self.text_style.is_none() {
             StatusCode::MissingObject
         } else {

@@ -632,6 +632,21 @@ impl CoreArena {
             return None;
         }
         let mut value = slot.object.borrow_mut().take()?;
+        if let Some(input) = value.as_text_input_mut() {
+            input.detach_css_registration();
+        }
+        if let Some(axis) = value
+            .as_any_mut()
+            .downcast_mut::<crate::source::text::text_style_axis::TextStyleAxis>()
+        {
+            axis.base.detach_css_input_options_generation();
+        }
+        if let Some(feature) = value
+            .as_any_mut()
+            .downcast_mut::<crate::source::text::text_style_feature::TextStyleFeature>(
+        ) {
+            feature.base.detach_css_input_options_generation();
+        }
         // Intrusive links must be spliced while this generation is still
         // resolvable. The removed box can outlive its arena identity.
         if let Some(bind) = value.as_data_bind_mut() {

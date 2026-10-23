@@ -14,6 +14,8 @@ pub struct TextStyleAxisBase {
     pub base: Component,
     tag: u32,
     axis_value: f32,
+    // Runtime freshness only, bound for CSS input styles.
+    css_input_options_generation: Option<std::rc::Rc<std::cell::Cell<u64>>>,
 }
 
 impl Default for TextStyleAxisBase {
@@ -22,11 +24,37 @@ impl Default for TextStyleAxisBase {
             base: Component::default(),
             tag: 0,
             axis_value: 0.0,
+            css_input_options_generation: None,
         }
     }
 }
 
 impl TextStyleAxisBase {
+    pub(crate) fn bind_css_input_options_generation(
+        &mut self,
+        generation: std::rc::Rc<std::cell::Cell<u64>>,
+    ) {
+        if self
+            .css_input_options_generation
+            .as_ref()
+            .is_some_and(|current| std::rc::Rc::ptr_eq(current, &generation))
+        {
+            return;
+        }
+        self.bump_css_input_options_generation();
+        generation.set(generation.get().wrapping_add(1));
+        self.css_input_options_generation = Some(generation);
+    }
+    pub(crate) fn detach_css_input_options_generation(&mut self) {
+        self.bump_css_input_options_generation();
+        self.css_input_options_generation = None;
+    }
+    fn bump_css_input_options_generation(&self) {
+        if let Some(generation) = &self.css_input_options_generation {
+            generation.set(generation.get().wrapping_add(1));
+        }
+    }
+
     pub const TYPE_KEY: u16 = 144;
     pub const TAG_PROPERTY_KEY: u16 = 289;
     pub const AXIS_VALUE_PROPERTY_KEY: u16 = 288;
@@ -57,6 +85,7 @@ impl TextStyleAxisBase {
             return false;
         }
         self.tag = value;
+        self.bump_css_input_options_generation();
         true
     }
     pub fn axis_value(&self) -> f32 {
@@ -78,6 +107,7 @@ impl TextStyleAxisBase {
             return false;
         }
         self.axis_value = value;
+        self.bump_css_input_options_generation();
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl TextStyleAxisBaseCallbacks) -> TextStyleAxis {
@@ -88,6 +118,7 @@ impl TextStyleAxisBase {
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextStyleAxisBaseCallbacks) {
         self.tag = object.tag;
         self.axis_value = object.axis_value;
+        self.bump_css_input_options_generation();
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -98,11 +129,11 @@ impl TextStyleAxisBase {
     ) -> bool {
         match property_key {
             Self::TAG_PROPERTY_KEY => {
-                self.tag = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.set_tag_value(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::AXIS_VALUE_PROPERTY_KEY => {
-                self.axis_value = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.set_axis_value_value(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
@@ -121,5 +152,11 @@ impl std::ops::Deref for TextStyleAxisBase {
 impl std::ops::DerefMut for TextStyleAxisBase {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+impl Drop for TextStyleAxisBase {
+    fn drop(&mut self) {
+        self.bump_css_input_options_generation();
     }
 }

@@ -11791,6 +11791,182 @@ fn css_input_scroll_fixture(multiline: bool, text: &'static str) -> Scene {
     )
 }
 
+fn take_css_input_check_visits(f: &Scene) -> (u64, u64) {
+    f.artboard
+        .with_artboard(|a| a.take_css_input_check_visits())
+}
+
+#[test]
+fn css_input_registry_clean_translated_artboard_does_not_scan_objects() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            children: vec![B::default(); 1000],
+            ..B::default()
+        },
+    );
+    f.advance(4);
+    take_css_input_check_visits(&f);
+    f.advance(1);
+    assert_eq!(take_css_input_check_visits(&f), (0, 0));
+}
+
+#[test]
+fn css_input_registry_does_not_visit_translated_inputs() {
+    let f = input_scene(false, true, None, -1.0, None);
+    f.advance(4);
+    take_css_input_check_visits(&f);
+    f.advance(1);
+    assert_eq!(take_css_input_check_visits(&f), (0, 0));
+}
+
+// The late input is in the arena and hierarchy, not in the authored objects
+// table. Its normal attachment lifecycle must put it on the check list.
+#[test]
+fn css_input_registry_checks_an_input_attached_after_the_first_frame() {
+    use crate::source::{
+        core::CoreArena,
+        core_context::CoreContext,
+        status_code::StatusCode,
+        text::{text_input::TextInput, text_style_paint::TextStylePaint},
+    };
+    struct Context {
+        arena: CoreArena,
+        objects: Vec<CoreHandle>,
+    }
+    impl CoreContext for Context {
+        fn core_arena(&self) -> &CoreArena {
+            &self.arena
+        }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            self.objects.get(id as usize).cloned()
+        }
+    }
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            name: "control",
+            css: Some([width(100.0).to_vec(), height(40.0).to_vec()].concat()),
+            ..B::default()
+        },
+    );
+    f.advance(4);
+    take_css_input_check_visits(&f);
+    let root = f.artboard.core_handle();
+    let input = root.insert_sibling(TextInput::default()).unwrap();
+    let style = root.insert_sibling(TextStylePaint::default()).unwrap();
+    let mut context = Context {
+        arena: f.artboard.with_artboard(|a| a.core_arena().clone()),
+        objects: vec![
+            root.clone(),
+            f.named("control"),
+            input.clone(),
+            style.clone(),
+        ],
+    };
+    for (object, parent) in [(&input, 1), (&style, 2)] {
+        object.with_mut(|o| {
+            o.as_component_mut()
+                .unwrap()
+                .base
+                .set_parent_id_value(parent);
+            assert_eq!(o.on_added_dirty(&mut context), StatusCode::Ok);
+        });
+    }
+    for object in [&input, &style] {
+        object.with_mut(|o| assert_eq!(o.on_added_clean(&mut context), StatusCode::Ok));
+    }
+    crate::source::artboard::Artboard::sync_style_changes_handle(&root);
+    assert_eq!(take_css_input_check_visits(&f), (0, 1));
+}
+
+#[test]
+fn css_input_registry_removes_retired_inputs_before_their_payload_is_dropped() {
+    let f = input_scene(true, true, None, 20.0, None);
+    f.advance(4);
+    let input = input_handle(&f);
+    let arena = f.artboard.with_artboard(|a| a.core_arena().clone());
+    let retained_payload = arena.remove(&input).unwrap();
+    take_css_input_check_visits(&f);
+    crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
+    assert_eq!(take_css_input_check_visits(&f), (0, 0));
+    drop(retained_payload);
+}
+
+#[test]
+fn css_input_registry_suspends_and_restores_recycled_artboards() {
+    let f = input_scene(true, true, None, 20.0, None);
+    f.advance(4);
+    for attached in [false, true, false, true] {
+        f.artboard
+            .with_artboard(|a| a.set_css_inputs_attached(attached));
+        take_css_input_check_visits(&f);
+        crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
+        assert_eq!(take_css_input_check_visits(&f), (0, u64::from(attached)));
+    }
+}
+
+#[test]
+fn css_input_registry_removes_and_reattaches_a_live_input() {
+    let f = input_scene(true, true, None, 20.0, None);
+    f.advance(4);
+    let input = input_handle(&f);
+    for css in [false, true, false, true] {
+        input.with_mut(|o| o.as_text_input_mut().unwrap().set_owned_by_css_layout(css));
+        take_css_input_check_visits(&f);
+        crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
+        assert_eq!(take_css_input_check_visits(&f), (0, u64::from(css)));
+    }
+}
+
+#[test]
+fn css_input_registry_instance_replacement_has_its_own_registrations() {
+    use crate::source::text::text_input::TextInput;
+    let f = input_scene(true, true, None, 20.0, None);
+    let old = f.artboard.instance().unwrap();
+    old.advance_default(FRAME);
+    let input = old
+        .with_artboard(|a| a.find_handle::<TextInput>("Field"))
+        .unwrap();
+    let replacement = old.instance().unwrap();
+    replacement.advance_default(FRAME);
+    drop(old);
+    assert!(!input.is_alive());
+    replacement.with_artboard(|a| a.take_css_input_check_visits());
+    replacement.advance_default(FRAME);
+    assert_eq!(
+        replacement.with_artboard(|a| a.take_css_input_check_visits()),
+        (0, 1)
+    );
+}
+
+#[test]
+fn css_input_clean_key_check_does_not_encode_or_reshape_text() {
+    let f = css_input_variable_scene(25.0);
+    f.advance(4);
+    let input = input_handle(&f);
+    let style = css_input_style_handle(&f);
+    let font_before = style
+        .with(|o| o.as_text_style().unwrap().css_input_font_refresh_count)
+        .unwrap();
+    let before = input
+        .with(|o| o.as_text_input().unwrap().css_input_text_work_for_test())
+        .unwrap();
+    take_css_input_check_visits(&f);
+    crate::source::artboard::Artboard::sync_style_changes_handle(&f.artboard.core_handle());
+    let after = input
+        .with(|o| o.as_text_input().unwrap().css_input_text_work_for_test())
+        .unwrap();
+    assert_eq!(after, before);
+    assert_eq!(
+        style
+            .with(|o| o.as_text_style().unwrap().css_input_font_refresh_count)
+            .unwrap(),
+        font_before
+    );
+    assert_eq!(take_css_input_check_visits(&f), (0, 1));
+}
+
 fn css_input_style_handle(f: &Scene) -> CoreHandle {
     f.artboard
         .with_artboard(|a| a.find_all_handles::<crate::source::text::text_style::TextStyle>())

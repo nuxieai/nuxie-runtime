@@ -40,18 +40,22 @@ pub struct TextStyle {
     style_features: Vec<CoreHandle>,
     features: Vec<FontFeature>,
     text: Option<CoreHandle>,
+    css_input_options_generation: Option<std::rc::Rc<std::cell::Cell<u64>>>,
+    css_input_font_key: Option<CssInputFontKey>,
+    #[cfg(test)]
+    pub(crate) css_input_font_refresh_count: u64,
 }
 
 // Retain the font instances, rather than pointer integers which an allocator
-// could reuse after an asset replacement. Options include tags as well as values.
+// could reuse after an asset replacement. The options generation covers tags
+// and values, including changes which bypass component dirt.
 #[derive(Clone)]
 pub(super) struct CssInputFontKey {
     asset: Option<CoreHandle>,
     asset_id: u32,
     base_font: Option<FontRef>,
     pub(super) font: Option<FontRef>,
-    axes: Vec<(u32, u32)>,
-    features: Vec<(u32, u32)>,
+    options_generation: u64,
 }
 
 impl PartialEq for CssInputFontKey {
@@ -65,8 +69,7 @@ impl PartialEq for CssInputFontKey {
             && self.asset_id == other.asset_id
             && same_font(&self.base_font, &other.base_font)
             && same_font(&self.font, &other.font)
-            && self.axes == other.axes
-            && self.features == other.features
+            && self.options_generation == other.options_generation
     }
 }
 
@@ -83,6 +86,10 @@ impl Default for TextStyle {
             style_features: Vec::new(),
             features: Vec::new(),
             text: None,
+            css_input_options_generation: None,
+            css_input_font_key: None,
+            #[cfg(test)]
+            css_input_font_refresh_count: 0,
         }
     }
 }
@@ -98,10 +105,19 @@ impl TextStyle {
         self.variation_helper.as_ref()
     }
 
+    pub(super) fn css_input_options_generation(&self) -> Option<std::rc::Rc<std::cell::Cell<u64>>> {
+        self.css_input_options_generation.clone()
+    }
     pub fn add_variation(&mut self, axis: CoreHandle) {
+        if let Some(generation) = &self.css_input_options_generation {
+            generation.set(generation.get().wrapping_add(1));
+        }
         self.variations.push(axis);
     }
     pub fn add_feature(&mut self, feature: CoreHandle) {
+        if let Some(generation) = &self.css_input_options_generation {
+            generation.set(generation.get().wrapping_add(1));
+        }
         self.style_features.push(feature);
     }
     pub fn on_dirty(&mut self, dirt: ComponentDirt) {
@@ -182,35 +198,47 @@ impl TextStyle {
     /// CSS reads through current variation inputs before any layout solve.
     /// The translated font() entry retains upstream's helper update order.
     pub(super) fn css_input_font_key(&mut self) -> CssInputFontKey {
-        self.update_variable_font();
+        let generation = self
+            .css_input_options_generation
+            .get_or_insert_with(|| {
+                let generation = std::rc::Rc::new(std::cell::Cell::new(0u64));
+                for axis in &self.variations {
+                    axis.with_downcast_mut::<TextStyleAxis, _>(|a| {
+                        a.base.bind_css_input_options_generation(generation.clone())
+                    });
+                }
+                for feature in &self.style_features {
+                    feature.with_downcast_mut::<TextStyleFeature, _>(|f| {
+                        f.base.bind_css_input_options_generation(generation.clone())
+                    });
+                }
+                generation
+            })
+            .get();
         let asset = self.font_asset();
-        CssInputFontKey {
-            base_font: asset
-                .as_ref()
-                .and_then(|a| a.with_downcast::<FontAsset, _>(FontAsset::font))
-                .flatten(),
+        let base_font = asset
+            .as_ref()
+            .and_then(|a| a.with_downcast::<FontAsset, _>(FontAsset::font))
+            .flatten();
+        // The helper can replace this font without going through our setters.
+        let font = self.variable_font.clone().or_else(|| base_font.clone());
+        let mut key = CssInputFontKey {
             asset,
             asset_id: self.base.font_asset_id(),
-            font: self.font(),
-            axes: self
-                .variations
-                .iter()
-                .filter_map(|a| {
-                    a.with_downcast::<TextStyleAxis, _>(|a| {
-                        (a.base.tag(), a.base.axis_value().to_bits())
-                    })
-                })
-                .collect(),
-            features: self
-                .style_features
-                .iter()
-                .filter_map(|f| {
-                    f.with_downcast::<TextStyleFeature, _>(|f| {
-                        (f.base.tag(), f.base.feature_value())
-                    })
-                })
-                .collect(),
+            base_font,
+            font,
+            options_generation: generation,
+        };
+        if self.css_input_font_key.as_ref() != Some(&key) {
+            #[cfg(test)]
+            {
+                self.css_input_font_refresh_count += 1;
+            }
+            self.update_variable_font();
+            key.font = self.font();
+            self.css_input_font_key = Some(key.clone());
         }
+        key
     }
     pub fn font(&mut self) -> Option<FontRef> {
         if self.variable_font.is_some() {

@@ -18,6 +18,8 @@ pub trait TextInputBaseCallbacks:
 pub struct TextInputBase {
     pub base: Drawable,
     text: String,
+    // Runtime freshness only. This is not a serialized property.
+    text_generation: u64,
     selection_radius: f32,
     rows: u32,
     multiline: bool,
@@ -32,6 +34,7 @@ impl Default for TextInputBase {
         Self {
             base: Drawable::default(),
             text: "".to_owned(),
+            text_generation: 0,
             selection_radius: 5.0,
             rows: 2,
             multiline: true,
@@ -107,6 +110,10 @@ impl TextInputBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
+    pub(crate) fn text_generation(&self) -> u64 {
+        self.text_generation
+    }
+
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -123,6 +130,7 @@ impl TextInputBase {
             return false;
         }
         self.text = value;
+        self.text_generation = self.text_generation.wrapping_add(1);
         true
     }
     pub fn selection_radius(&self) -> f32 {
@@ -229,6 +237,7 @@ impl TextInputBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextInputBaseCallbacks) {
         self.text.clone_from(&object.text);
+        self.text_generation = self.text_generation.wrapping_add(1);
         self.selection_radius = object.selection_radius;
         self.rows = object.rows;
         self.multiline = object.multiline;
@@ -266,7 +275,7 @@ impl TextInputBase {
                 true
             }
             Self::TEXT_PROPERTY_KEY => {
-                self.text = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
+                self.set_text_value(crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader));
                 true
             }
             Self::SELECTION_RADIUS_PROPERTY_KEY => {

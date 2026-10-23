@@ -14,6 +14,8 @@ pub struct TextStyleFeatureBase {
     pub base: Component,
     tag: u32,
     feature_value: u32,
+    // Runtime freshness only, bound for CSS input styles.
+    css_input_options_generation: Option<std::rc::Rc<std::cell::Cell<u64>>>,
 }
 
 impl Default for TextStyleFeatureBase {
@@ -22,11 +24,37 @@ impl Default for TextStyleFeatureBase {
             base: Component::default(),
             tag: 0,
             feature_value: 1,
+            css_input_options_generation: None,
         }
     }
 }
 
 impl TextStyleFeatureBase {
+    pub(crate) fn bind_css_input_options_generation(
+        &mut self,
+        generation: std::rc::Rc<std::cell::Cell<u64>>,
+    ) {
+        if self
+            .css_input_options_generation
+            .as_ref()
+            .is_some_and(|current| std::rc::Rc::ptr_eq(current, &generation))
+        {
+            return;
+        }
+        self.bump_css_input_options_generation();
+        generation.set(generation.get().wrapping_add(1));
+        self.css_input_options_generation = Some(generation);
+    }
+    pub(crate) fn detach_css_input_options_generation(&mut self) {
+        self.bump_css_input_options_generation();
+        self.css_input_options_generation = None;
+    }
+    fn bump_css_input_options_generation(&self) {
+        if let Some(generation) = &self.css_input_options_generation {
+            generation.set(generation.get().wrapping_add(1));
+        }
+    }
+
     pub const TYPE_KEY: u16 = 164;
     pub const TAG_PROPERTY_KEY: u16 = 356;
     pub const FEATURE_VALUE_PROPERTY_KEY: u16 = 357;
@@ -57,6 +85,7 @@ impl TextStyleFeatureBase {
             return false;
         }
         self.tag = value;
+        self.bump_css_input_options_generation();
         true
     }
     pub fn feature_value(&self) -> u32 {
@@ -81,6 +110,7 @@ impl TextStyleFeatureBase {
             return false;
         }
         self.feature_value = value;
+        self.bump_css_input_options_generation();
         true
     }
     pub fn clone_into(
@@ -94,6 +124,7 @@ impl TextStyleFeatureBase {
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextStyleFeatureBaseCallbacks) {
         self.tag = object.tag;
         self.feature_value = object.feature_value;
+        self.bump_css_input_options_generation();
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -104,11 +135,11 @@ impl TextStyleFeatureBase {
     ) -> bool {
         match property_key {
             Self::TAG_PROPERTY_KEY => {
-                self.tag = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.set_tag_value(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             Self::FEATURE_VALUE_PROPERTY_KEY => {
-                self.feature_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.set_feature_value_value(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
@@ -127,5 +158,11 @@ impl std::ops::Deref for TextStyleFeatureBase {
 impl std::ops::DerefMut for TextStyleFeatureBase {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+impl Drop for TextStyleFeatureBase {
+    fn drop(&mut self) {
+        self.bump_css_input_options_generation();
     }
 }

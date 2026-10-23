@@ -32,16 +32,19 @@ impl TextStyleAxis {
             let (Some(style), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
                 return StatusCode::InvalidObject;
             };
-            let added = style
+            let Some(generation) = style
                 .with_mut(|style| {
-                    style
-                        .as_text_style_mut()
-                        .map(|style| style.add_variation(this))
+                    let style = style.as_text_style_mut()?;
+                    style.add_variation(this);
+                    Some(style.css_input_options_generation())
                 })
                 .flatten()
-                .is_some();
-            if !added {
+            else {
                 return StatusCode::InvalidObject;
+            };
+            // This axis or feature is already borrowed by onAddedDirty.
+            if let Some(generation) = generation {
+                self.base.bind_css_input_options_generation(generation);
             }
         }
         code

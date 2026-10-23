@@ -2337,6 +2337,7 @@ impl ArtboardComponentList {
         self.remove_draw_index_listener_for_item(&item);
         let artboard = self.artboard_instances_map.get(&item).cloned();
         if let Some(artboard) = artboard.as_ref() {
+            artboard.with_artboard(|a| a.set_css_inputs_attached(false));
             artboard.cleanup_semantic_tree();
             artboard.cleanup_focus_tree();
             self.clear_artboard_override(artboard);
@@ -2522,6 +2523,7 @@ impl ArtboardComponentList {
                     -1,
                     self,
                 );
+                artboard_instance.with_artboard(|a| a.set_css_inputs_attached(false));
                 self.resource_pool
                     .entry(artboard.clone())
                     .or_default()

@@ -138,6 +138,8 @@ pub struct RawTextInput {
     pub measure_count: u32,
     #[cfg(test)]
     pub(crate) css_layout_build_count: u32,
+    #[cfg(test)]
+    pub(crate) text_encode_count: std::cell::Cell<u64>,
     cursor: Cursor,
     text_run: TextRun,
     css_line_box: bool,
@@ -151,6 +153,7 @@ pub struct RawTextInput {
     cursor_path: ShapePaintPath,
     selection_path: TextSelectionPath,
     text: Vec<Unichar>,
+    text_generation: u64,
     obscured_text: Vec<Unichar>,
     shape: FullyShapedText,
     // Upstream measurement only. CSS uses the primary positioned layout.
@@ -202,6 +205,8 @@ impl RawTextInput {
             measure_count: 0,
             #[cfg(test)]
             css_layout_build_count: 0,
+            #[cfg(test)]
+            text_encode_count: std::cell::Cell::new(0),
             cursor: Cursor::at_start(),
             css_line_box: false,
             css_layout_key: None,
@@ -224,6 +229,7 @@ impl RawTextInput {
             cursor_path: ShapePaintPath::default(),
             selection_path: TextSelectionPath::default(),
             text: vec![ZERO_WIDTH_SPACE],
+            text_generation: 0,
             obscured_text: Vec::new(),
             shape: FullyShapedText::default(),
             measuring_shape: None,
@@ -559,6 +565,7 @@ impl RawTextInput {
         assert!(self.cursor.is_collapsed());
         let index = self.cursor.start().code_point_index() as usize;
         self.text.insert(index, code_point);
+        self.text_generation = self.text_generation.wrapping_add(1);
         let position = CursorPosition::unresolved(self.cursor.first().code_point_index_offset(1));
         self.cursor = Cursor::collapsed(position);
         self.capture_journal_entry(starting_cursor);
@@ -575,6 +582,7 @@ impl RawTextInput {
             self.text.insert(code_point_index as usize, code_point);
             code_point_index += 1;
         }
+        self.text_generation = self.text_generation.wrapping_add(1);
         self.cursor = Cursor::collapsed(CursorPosition::unresolved(code_point_index));
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
         self.capture_journal_entry(starting_cursor);
@@ -590,6 +598,7 @@ impl RawTextInput {
         let start = self.cursor.first().code_point_index();
         let end = self.cursor.last().code_point_index();
         self.text.drain(start as usize..end as usize);
+        self.text_generation = self.text_generation.wrapping_add(1);
         self.cursor = Cursor::collapsed(CursorPosition::unresolved(start));
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
@@ -624,6 +633,7 @@ impl RawTextInput {
                 .drain(cluster_start as usize..(cluster_start + cluster_count) as usize);
             self.cursor = Cursor::collapsed(CursorPosition::unresolved(cluster_start));
         }
+        self.text_generation = self.text_generation.wrapping_add(1);
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
         self.capture_journal_entry(starting_cursor);
     }
@@ -1205,7 +1215,17 @@ impl RawTextInput {
         &self.shape
     }
 
+    pub(super) fn text_generation(&self) -> u64 {
+        self.text_generation
+    }
+
+    pub(super) fn css_layout_has_pending_work(&self) -> bool {
+        self.flagged(Flags::ShapeDirty | Flags::SelectionDirty | Flags::TextPathDirty)
+    }
+
     pub fn text(&self) -> String {
+        #[cfg(test)]
+        self.text_encode_count.set(self.text_encode_count.get() + 1);
         let size = self.text.len();
         if size == 0 {
             return String::new();
@@ -1228,6 +1248,7 @@ impl RawTextInput {
     }
 
     fn set_text_private(&mut self, value: String) {
+        self.text_generation = self.text_generation.wrapping_add(1);
         let mut bytes = value.as_bytes();
         self.text.clear();
         while bytes.first().is_some_and(|byte| *byte != 0) {

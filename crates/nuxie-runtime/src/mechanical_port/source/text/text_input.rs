@@ -174,6 +174,28 @@ impl TextInput {
         Vec2D::new(0.0, height * rows as f32)
     }
 
+    /// The text's extent is independent of the form control's intrinsic size.
+    /// Read the live style here too, since layout can run before the shape pass.
+    pub(crate) fn css_text_extent(&mut self, width: f32) -> Vec2D {
+        if let Some((font, size, height)) = self.text_style.as_ref().and_then(|style| {
+            style
+                .with_mut(|object| {
+                    let style = object.as_text_style_mut()?;
+                    Some((
+                        style.font(),
+                        style.base.font_size(),
+                        style.base.line_height(),
+                    ))
+                })
+                .flatten()
+        }) {
+            self.raw_text_input.set_font(font);
+            self.raw_text_input.set_font_size(size);
+            self.raw_text_input.set_line_height(height);
+        }
+        self.raw_text_input.measure(width, f32::MAX).size()
+    }
+
     pub fn rows_changed(&mut self) {
         if self.css_owned {
             self.mark_shape_dirty();
@@ -484,8 +506,14 @@ impl TextInput {
             self.raw_text_input
                 .set_line_height(if self.css_owned { line_height } else { -1.0 });
             self.update_alignment();
+            let previous_extent = self.raw_text_input.bounds().size();
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
+                // Rows keep the natural size stable while typing. The leaf's
+                // cached scrollable overflow still needs the new text extent.
+                if self.css_owned && previous_extent != self.raw_text_input.bounds().size() {
+                    self.base.mark_layout_node_dirty();
+                }
                 self.world_bounds = self
                     .base
                     .world_transform()

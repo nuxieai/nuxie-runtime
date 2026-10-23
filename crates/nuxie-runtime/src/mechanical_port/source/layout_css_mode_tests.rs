@@ -11589,3 +11589,138 @@ fn css_input_auto_width_uses_its_replaced_intrinsic_width() {
     assert_eq!(f.bounds("control")[2], 0.0);
     assert_eq!(f.bounds("control")[3], input_normal(&f, 16.0));
 }
+
+// Match the compiler and upstream viewport fixture: the constraint belongs
+// to movable content, with a separate layout box directly hosting the input.
+fn css_input_scroll_fixture(multiline: bool, text: &'static str) -> Scene {
+    scene(
+        (400.0, 300.0),
+        B {
+            name: "Viewport",
+            css: Some(
+                [
+                    width(100.0).to_vec(),
+                    height(40.0).to_vec(),
+                    vec![
+                        U(OVERFLOW_X, if multiline { 2 } else { 3 }),
+                        U(OVERFLOW_Y, if multiline { 3 } else { 2 }),
+                        U(POSITION, 1),
+                    ],
+                ]
+                .concat(),
+            ),
+            children: vec![B {
+                name: "Scroll content",
+                scroll: Some(u64::from(multiline)),
+                css: Some(
+                    [
+                        width(100.0).to_vec(),
+                        height(40.0).to_vec(),
+                        vec![U(POSITION, 2)],
+                    ]
+                    .concat(),
+                ),
+                children: vec![B {
+                    name: "Input layout",
+                    css: Some(width(100.0).to_vec()),
+                    text_input: true,
+                    text,
+                    input_properties: vec![U(979, u64::from(multiline)), U(INPUT_ROWS, 2)],
+                    input_style: vec![F(370, 20.0)],
+                    ..B::default()
+                }],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    )
+}
+
+#[test]
+fn css_input_scroll_textarea_keeps_rows_and_scrolls_all_lines() {
+    let f = css_input_scroll_fixture(true, "one\ntwo\nthree\nfour\nfive\nsix");
+    f.advance(4);
+    assert_eq!(f.bounds("Input layout")[3], 40.0);
+    assert_eq!(f.max_offsets(), (0.0, -80.0));
+    scroll_input_by(&f, 0.0, -1000.0);
+    f.advance(2);
+    assert_eq!(f.scroll_offset("Scroll content"), (0.0, -80.0));
+    CoreRegistry::set_string_handle(&input_handle(&f), 817, "one\ntwo".to_owned());
+    f.advance(4);
+    assert_eq!(f.bounds("Input layout")[3], 40.0);
+    assert_eq!(f.max_offsets(), (0.0, 0.0));
+    CoreRegistry::set_string_handle(
+        &input_handle(&f),
+        817,
+        "one\ntwo\nthree\nfour\nfive\nsix".to_owned(),
+    );
+    f.advance(4);
+    assert_eq!(f.bounds("Input layout")[3], 40.0);
+    assert_eq!(f.max_offsets(), (0.0, -80.0));
+}
+
+fn scroll_input_by(f: &Scene, x: f32, y: f32) {
+    use crate::source::{
+        constraints::scrolling::scroll_constraint::ScrollConstraint, math::vec2d::Vec2D,
+    };
+    f.artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .next()
+        .unwrap()
+        .with_downcast_mut::<ScrollConstraint, _>(|scroll| scroll.scroll_by(Vec2D::new(x, y)))
+        .unwrap();
+}
+
+#[test]
+fn css_input_scroll_single_line_keeps_width_and_scrolls_horizontally() {
+    let f = css_input_scroll_fixture(
+        false,
+        "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+    );
+    f.advance(4);
+    assert_eq!(f.bounds("Input layout")[2], 100.0);
+    let text_width = input_handle(&f)
+        .with_mut(|object| {
+            object
+                .as_text_input_mut()
+                .unwrap()
+                .raw_text_input()
+                .bounds()
+                .width()
+        })
+        .unwrap();
+    assert!(text_width > 100.0);
+    let range = f.max_offsets();
+    assert!(
+        (range.0 - (100.0 - text_width)).abs() < 0.01,
+        "{range:?} vs text {text_width}"
+    );
+    assert_eq!(range.1, 0.0);
+    scroll_input_by(&f, -1000.0, 0.0);
+    f.advance(2);
+    assert!((f.scroll_offset("Scroll content").0 - range.0).abs() < 0.01);
+}
+
+#[test]
+fn css_input_scroll_authored_height_does_not_scroll_empty_rows() {
+    let f = css_input_scroll_fixture(true, "one");
+    assert!(CoreRegistry::set_uint_handle(
+        &input_handle(&f),
+        INPUT_ROWS.into(),
+        4
+    ));
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record("Input layout"),
+        HEIGHT_KIND.into(),
+        1
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("Input layout"),
+        HEIGHT.into(),
+        40.0
+    ));
+    f.advance(4);
+    assert_eq!(f.bounds("Input layout")[3], 40.0);
+    assert_eq!(f.max_offsets(), (0.0, 0.0));
+}

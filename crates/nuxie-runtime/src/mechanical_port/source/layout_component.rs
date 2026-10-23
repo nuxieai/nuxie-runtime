@@ -4240,7 +4240,7 @@ impl LayoutComponent {
                             style,
                             inputs.parent_size,
                         );
-                    taffy::compute_leaf_layout(
+                    let output = taffy::compute_leaf_layout(
                         inputs,
                         style,
                         |_, _| 0.0,
@@ -4256,7 +4256,8 @@ impl LayoutComponent {
                             ),
                             None => taffy::prelude::Size::ZERO,
                         },
-                    )
+                    );
+                    Self::with_css_input_overflow(measured.as_ref(), inputs, style, output)
                 },
             )
             .expect("valid layout calculation");
@@ -4407,7 +4408,7 @@ impl LayoutComponent {
                             style,
                             inputs.parent_size,
                         );
-                    taffy::compute_leaf_layout(
+                    let output = taffy::compute_leaf_layout(
                         inputs,
                         style,
                         |_, _| 0.0,
@@ -4423,7 +4424,8 @@ impl LayoutComponent {
                             ),
                             None => Size::ZERO,
                         },
-                    )
+                    );
+                    Self::with_css_input_overflow(measured.as_ref(), inputs, style, output)
                 },
             )
             .expect("fresh layout");
@@ -5083,6 +5085,78 @@ impl LayoutComponent {
                 touched.push(root);
             }
         }
+    }
+
+    /// Keep the replaced control's intrinsic size, but let Taffy's ordinary
+    /// leaf overflow and ancestor propagation see all of its editable text.
+    fn with_css_input_overflow(
+        measured: Option<&(CoreHandle, LayoutNodeKind)>,
+        inputs: taffy::tree::LayoutInput,
+        style: &Style,
+        mut output: taffy::tree::LayoutOutput,
+    ) -> taffy::tree::LayoutOutput {
+        use taffy::util::ResolveOrZero;
+        if inputs.run_mode != taffy::tree::RunMode::PerformLayout {
+            return output;
+        }
+        let Some((owner, LayoutNodeKind::Layout)) = measured else {
+            return output;
+        };
+        let Some(children) = owner
+            .with(|object| {
+                let layout = object.as_layout_component()?;
+                layout
+                    .is_css_text_input()
+                    .then(|| layout.children().to_vec())
+            })
+            .flatten()
+        else {
+            return output;
+        };
+        let calc = |_: *const (), _: f32| 0.0;
+        let padding = style
+            .padding
+            .resolve_or_zero(inputs.parent_size.width, calc);
+        let border = style.border.resolve_or_zero(inputs.parent_size.width, calc);
+        let width = (output.size.width - (padding + border).horizontal_axis_sum()).max(0.0);
+        let scroll_container =
+            style.overflow.x.is_scroll_container() || style.overflow.y.is_scroll_container();
+        let (start, end) = if style.direction.is_rtl() {
+            (padding.right, padding.left)
+        } else {
+            (padding.left, padding.right)
+        };
+        output.scrollable_overflow_rect = taffy::geometry::Rect::ZERO;
+        for child in children {
+            let extent = child
+                .with_mut(|object| {
+                    if object
+                        .as_component()
+                        .is_some_and(|component| component.is_collapsed())
+                    {
+                        return None;
+                    }
+                    let input = object.as_text_input_mut()?;
+                    input.set_owned_by_css_layout(true);
+                    Some(input.css_text_extent(width))
+                })
+                .flatten();
+            if let Some(extent) = extent {
+                let right = start + extent.x + if scroll_container { end } else { 0.0 };
+                let bottom = padding.top
+                    + extent.y
+                    + if scroll_container {
+                        padding.bottom
+                    } else {
+                        0.0
+                    };
+                output.scrollable_overflow_rect.right =
+                    output.scrollable_overflow_rect.right.max(right);
+                output.scrollable_overflow_rect.bottom =
+                    output.scrollable_overflow_rect.bottom.max(bottom);
+            }
+        }
+        output
     }
 
     fn measure_layout_node(

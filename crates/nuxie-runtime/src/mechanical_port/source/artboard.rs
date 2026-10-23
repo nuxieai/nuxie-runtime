@@ -994,8 +994,12 @@ impl Artboard {
     }
 
     pub fn reset_size(&mut self) {
-        self.set_width(self.original_width);
-        self.set_height(self.original_height);
+        self.base
+            .base
+            .set_width_with_sizing(self.original_width, false);
+        self.base
+            .base
+            .set_height_with_sizing(self.original_height, false);
     }
 
     pub fn animation_count(&self) -> usize {
@@ -7214,17 +7218,29 @@ impl RuntimeArtboardInstanceHandle {
     /// Apply the pinned ArtboardInstance width/height setters without retaining
     /// the Rust occurrence borrow across their synchronous layout callbacks.
     pub fn set_size(&self, width: f32, height: f32) {
+        self.set_size_axes(Some(width), Some(height), true);
+    }
+
+    pub(crate) fn set_size_axes(
+        &self,
+        width: Option<f32>,
+        height: Option<f32>,
+        explicit: bool,
+    ) -> bool {
         let root = self.core_handle();
-        LayoutComponent::set_dimension_occurrence(
-            &root,
-            LayoutComponentBase::WIDTH_PROPERTY_KEY,
-            width,
-        );
-        LayoutComponent::set_dimension_occurrence(
-            &root,
-            LayoutComponentBase::HEIGHT_PROPERTY_KEY,
-            height,
-        );
+        let mut changed = false;
+        for (key, value) in [
+            (LayoutComponentBase::WIDTH_PROPERTY_KEY, width),
+            (LayoutComponentBase::HEIGHT_PROPERTY_KEY, height),
+        ] {
+            if let Some(value) = value {
+                changed |= LayoutComponent::set_dimension_with_sizing_occurrence(
+                    &root, key, value, explicit,
+                )
+                .unwrap_or(false);
+            }
+        }
+        changed
     }
 
     pub fn reset_size(&self) {
@@ -7234,7 +7250,7 @@ impl RuntimeArtboardInstanceHandle {
                 artboard.base.original_height(),
             )
         });
-        self.set_size(width, height);
+        self.set_size_axes(Some(width), Some(height), false);
     }
     pub fn instance(&self) -> Option<Self> {
         Artboard::instance_from_handle(&self.core_handle())

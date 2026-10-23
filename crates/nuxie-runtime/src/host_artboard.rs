@@ -123,22 +123,13 @@ impl ArtboardInstance {
             .with_artboard_mut(|a| a.base.set_frame_origin(value));
     }
     pub fn set_width(&mut self, value: f32) {
-        let height = self.native.with_artboard(|artboard| artboard.height());
-        self.set_artboard_dimensions(value, height);
+        self.native.set_size_axes(Some(value), None, true);
     }
     pub fn set_height(&mut self, value: f32) {
-        let width = self.native.with_artboard(|artboard| artboard.width());
-        self.set_artboard_dimensions(width, value);
+        self.native.set_size_axes(None, Some(value), true);
     }
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
-        let unchanged = self
-            .native
-            .with_artboard(|artboard| artboard.width() == width && artboard.height() == height);
-        if unchanged {
-            return false;
-        }
-        self.native.set_size(width, height);
-        true
+        self.native.set_size_axes(Some(width), Some(height), true)
     }
     pub fn object_handle(&self, local_id: usize) -> Option<CoreHandle> {
         let id = u32::try_from(local_id).ok()?;

@@ -12,7 +12,10 @@ struct LayoutHandles {
 
 impl LayoutHandles {
     fn new() -> Self {
-        let bytes = layout::layout_artboard();
+        Self::from_bytes(layout::layout_artboard())
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> Self {
         let mut file = ptr::null_mut();
         let mut artboard = ptr::null_mut();
         let mut player = ptr::null_mut();
@@ -133,6 +136,18 @@ fn layout_size_reflows_percentage_width_through_c() {
         assert_eq!(scene.size(), (width, 600.0));
         assert_eq!(scene.child_width(), width);
     }
+}
+
+#[test]
+fn layout_size_explicitly_sizes_a_css_hug_artboard_through_c() {
+    let scene = LayoutHandles::from_bytes(layout::css_hug_artboard());
+    scene.step();
+    assert_eq!(scene.size(), (60.0, 40.0));
+    assert_eq!(scene.set(300.0, 160.0), NuxStatus::Ok);
+    let revision = scene.step().render_revision;
+    assert_eq!(scene.size(), (300.0, 160.0));
+    assert_eq!(scene.set(300.0, 160.0), NuxStatus::Ok);
+    assert_eq!(scene.step().render_revision, revision);
 }
 
 #[test]

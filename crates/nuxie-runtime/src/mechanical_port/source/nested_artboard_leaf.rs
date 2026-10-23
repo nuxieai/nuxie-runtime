@@ -109,18 +109,9 @@ impl NestedArtboardLeaf {
             value => panic!("invalid fit {value}"),
         };
         if fit == Fit::Layout {
-            let resized = artboard.with_artboard_mut(|artboard| {
-                let mut resized = false;
-                if artboard.width() != bounds.width() {
-                    artboard.set_width(bounds.width());
-                    resized = true;
-                }
-                if artboard.height() != bounds.height() {
-                    artboard.set_height(bounds.height());
-                    resized = true;
-                }
-                resized
-            });
+            // Layout fit is explicit host sizing even when the supplied
+            // dimensions equal the stored values of an authored Hug axis.
+            let resized = artboard.set_size_axes(Some(bounds.width()), Some(bounds.height()), true);
             if resized {
                 artboard.update_pass(false);
             }

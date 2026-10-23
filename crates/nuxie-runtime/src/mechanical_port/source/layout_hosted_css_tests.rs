@@ -718,6 +718,49 @@ fn css_artboard_hug_uses_root_min_height_without_intrinsic_flag() {
 }
 
 #[test]
+fn css_artboard_hug_runtime_size_wins_and_reset_restores_open_axes() {
+    let scene = css_artboard_sizing_scene(
+        true,
+        true,
+        |riv| {
+            riv.uint(MIN_HEIGHT_KIND, 1)
+                .float(MIN_HEIGHT, 80.0)
+                .uint(WIDTH_KIND, 1)
+                .float(WIDTH, 60.0);
+        },
+        false,
+    );
+    assert_eq!(root_size(&scene), (60.0, 80.0));
+    scene.artboard.set_size(300.0, 160.0);
+    scene.advance();
+    assert_eq!(root_size(&scene), (300.0, 160.0));
+    scene.artboard.reset_size();
+    scene.advance();
+    assert_eq!(root_size(&scene), (60.0, 80.0));
+}
+
+#[test]
+fn css_artboard_hug_runtime_width_leaves_height_open_even_for_stored_zero() {
+    for width in [300.0, 0.0] {
+        let scene = css_artboard_sizing_scene(
+            true,
+            true,
+            |riv| {
+                riv.uint(MIN_HEIGHT_KIND, 1).float(MIN_HEIGHT, 80.0);
+            },
+            false,
+        );
+        CoreRegistry::set_double_handle(
+            &scene.artboard.core_handle(),
+            LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
+            width,
+        );
+        scene.advance();
+        assert_eq!(root_size(&scene), (width, 80.0));
+    }
+}
+
+#[test]
 fn css_artboard_hug_uses_root_width() {
     let scene = css_artboard_sizing_scene(
         true,
@@ -857,8 +900,7 @@ fn css_artboard_ratio_respects_open_axis_sizes_and_keeps_frame_axes_fixed() {
     }
 }
 
-#[test]
-fn css_nested_leaf_fits_the_root_css_solved_size() {
+fn css_sized_leaf_scene(fit: u64) -> Scene {
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
     // The fitting box is 200 x 100. The source has stored dimensions 0 x 0,
@@ -866,6 +908,7 @@ fn css_nested_leaf_fits_the_root_css_solved_size() {
     board(&mut riv, 300.0, 300.0, 3);
     riv.object(LayoutComponentBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Root fit box")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
         .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
         .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4)
@@ -873,7 +916,7 @@ fn css_nested_leaf_fits_the_root_css_solved_size() {
     riv.object(NestedArtboardLeafBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
         .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
-        .uint(NestedArtboardLeafBase::FIT_PROPERTY_KEY, 1)
+        .uint(NestedArtboardLeafBase::FIT_PROPERTY_KEY, fit)
         .end();
     style(&mut riv, 0);
     style(&mut riv, 1);
@@ -891,6 +934,12 @@ fn css_nested_leaf_fits_the_root_css_solved_size() {
     );
     let scene = Scene::import(riv);
     scene.advance();
+    scene
+}
+
+#[test]
+fn css_nested_leaf_fits_the_root_css_solved_size() {
+    let scene = css_sized_leaf_scene(1);
     let leaf = scene
         .artboard
         .with_artboard(|board| board.find_all_handles::<NestedArtboardLeaf>()[0].clone());
@@ -907,6 +956,73 @@ fn css_nested_leaf_fits_the_root_css_solved_size() {
         (world[0], world[3], world[4], world[5]),
         (1.0, 1.0, 0.0, 10.0)
     );
+}
+
+#[test]
+fn css_nested_leaf_layout_fit_explicitly_sizes_a_hug_root() {
+    let scene = css_sized_leaf_scene(7);
+    let leaf = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<NestedArtboardLeaf>()[0].clone());
+    let source = leaf
+        .with_downcast::<NestedArtboardLeaf, _>(|leaf| leaf.base.base.artboard_instance_handle(0))
+        .flatten()
+        .unwrap();
+    assert_eq!(
+        source.with_artboard(|board| (board.layout_width(), board.layout_height())),
+        (200.0, 100.0)
+    );
+    let parent = scene.artboard.with_artboard(|board| {
+        board
+            .find_handle::<LayoutComponent>("Root fit box")
+            .unwrap()
+    });
+    CoreRegistry::set_double_handle(
+        &parent,
+        LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
+        240.0,
+    );
+    CoreRegistry::set_double_handle(
+        &parent,
+        LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+        120.0,
+    );
+    scene.advance();
+    assert_eq!(
+        source.with_artboard(|board| (board.layout_width(), board.layout_height())),
+        (240.0, 120.0)
+    );
+    let world = scene_leaf_transform(&scene);
+    assert_eq!(
+        (world[0], world[3], world[4], world[5]),
+        (1.0, 1.0, 0.0, 0.0)
+    );
+}
+
+#[test]
+fn css_artboard_host_single_axis_setter_keeps_the_other_axis_open() {
+    for (width, expected) in [(true, (300.0, 80.0)), (false, (60.0, 160.0))] {
+        let scene = css_artboard_sizing_scene(
+            true,
+            true,
+            |riv| {
+                riv.uint(MIN_HEIGHT_KIND, 1).float(MIN_HEIGHT, 80.0);
+            },
+            false,
+        );
+        let mut host = crate::ArtboardInstance::from_native_handle(
+            scene.file.clone(),
+            0,
+            scene.artboard.clone(),
+        );
+        if width {
+            host.set_width(300.0);
+        } else {
+            host.set_height(160.0);
+        }
+        scene.advance();
+        assert_eq!(root_size(&scene), expected);
+    }
 }
 
 #[test]
@@ -1789,18 +1905,35 @@ fn contents_list_scene_with_virtualization(
     copies: u64,
     virtualized: bool,
 ) -> Scene {
+    contents_list_scene_with_binding(flagged, percent, copies, virtualized, false)
+}
+
+fn contents_list_scene_with_binding(
+    flagged: bool,
+    percent: bool,
+    copies: u64,
+    virtualized: bool,
+    bound_copy: bool,
+) -> Scene {
     use crate::source::generated::{
         animation::nested_state_machine_base::NestedStateMachineBase,
         constraints::{
             draggable_constraint_base::DraggableConstraintBase,
             scrolling::scroll_constraint_base::ScrollConstraintBase,
         },
+        data_bind::{data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase},
         nested_animation_base::NestedAnimationBase,
-        viewmodel::viewmodel_base::ViewModelBase,
+        viewmodel::{
+            viewmodel_base::ViewModelBase,
+            viewmodel_property_artboard_base::ViewModelPropertyArtboardBase,
+        },
     };
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
     riv.object(ViewModelBase::TYPE_KEY).end();
+    if bound_copy {
+        riv.object(ViewModelPropertyArtboardBase::TYPE_KEY).end();
+    }
     board(
         &mut riv,
         300.0,
@@ -1877,6 +2010,15 @@ fn contents_list_scene_with_virtualization(
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
             .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 2)
             .end();
+        if bound_copy {
+            riv.object(DataBindContextBase::TYPE_KEY)
+                .uint(
+                    DataBindBase::PROPERTY_KEY_PROPERTY_KEY,
+                    NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY.into(),
+                )
+                .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+                .end();
+        }
         riv.object(LAYOUT_CSS_STYLE)
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
             .uint(WIDTH_KIND, if percent { 7 } else { 1 })
@@ -1901,6 +2043,9 @@ fn contents_list_scene_with_virtualization(
     style(&mut riv, 0);
     contents_empty_machine(&mut riv);
     contents_interactive_component(&mut riv);
+    if bound_copy {
+        contents_interactive_component(&mut riv);
+    }
     let scene = Scene::import(riv);
     let list = contents_list(&scene);
     let arena = list.retain_arena().unwrap();
@@ -1914,6 +2059,19 @@ fn contents_list_scene_with_virtualization(
                 .file
                 .with_file(|file| file.create_view_model_instance_for_artboard(source.clone()))
                 .unwrap();
+            if bound_copy {
+                use crate::source::viewmodel::{
+                    viewmodel_instance::ViewModelInstance,
+                    viewmodel_instance_artboard::ViewModelInstanceArtboard,
+                };
+                let property = model
+                    .with_downcast::<ViewModelInstance, _>(|model| model.property_value_by_id(0))
+                    .flatten()
+                    .unwrap();
+                property.with_downcast_mut::<ViewModelInstanceArtboard, _>(|property| {
+                    property.set_property_value(2)
+                });
+            }
             let mut item = ViewModelInstanceListItem::default();
             item.set_view_model_instance(Some(model));
             arena.insert(item)
@@ -2016,6 +2174,224 @@ fn contents_rows(scene: &Scene) -> Vec<RuntimeArtboardInstanceHandle> {
 }
 fn contents_copy(row: &RuntimeArtboardInstanceHandle) -> RuntimeArtboardInstanceHandle {
     nested_copy_children(row).remove(0)
+}
+
+fn contents_bound_copy_property(scene: &Scene, index: i32) -> CoreHandle {
+    use crate::source::viewmodel::viewmodel_instance::ViewModelInstance;
+    let item = contents_list(scene)
+        .with_downcast::<ArtboardComponentList, _>(|list| list.list_item(index))
+        .flatten()
+        .unwrap();
+    let model = item
+        .with_downcast::<ViewModelInstanceListItem, _>(
+            ViewModelInstanceListItem::view_model_instance,
+        )
+        .flatten()
+        .unwrap();
+    model
+        .with_downcast::<ViewModelInstance, _>(|model| model.property_value_by_id(0))
+        .flatten()
+        .unwrap()
+}
+
+fn set_contents_bound_copy(scene: &Scene, index: i32, source: Option<u32>) {
+    use crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
+    contents_bound_copy_property(scene, index).with_downcast_mut::<ViewModelInstanceArtboard, _>(
+        |property| {
+            if let Some(source) = source {
+                property.set_property_value(source);
+            } else {
+                property.set_asset(None);
+            }
+        },
+    );
+}
+
+fn contents_tap_targets(
+    scene: &Scene,
+    machine: &crate::RuntimeStateMachineInstanceHandle,
+    x: f32,
+    y: f32,
+) -> Vec<CoreHandle> {
+    use crate::source::{
+        animation::nested_state_machine::NestedStateMachine, math::vec2d::Vec2D,
+        pointer_button::PointerButton,
+    };
+    for _ in 0..3 {
+        machine.advance_and_apply(1.0 / 60.0);
+    }
+    let machines: Vec<_> = contents_rows(scene)
+        .iter()
+        .flat_map(|row| {
+            let host = row
+                .with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>()[0].clone());
+            // A binding replaces the host's active machine. Authored object slots
+            // can still contain an inactive machine from the outgoing copy.
+            let animations = host
+                .with(|object| {
+                    object
+                        .as_nested_artboard()
+                        .unwrap()
+                        .nested_animations()
+                        .to_vec()
+                })
+                .unwrap();
+            animations
+                .into_iter()
+                .filter_map(|animation| {
+                    animation
+                        .with_downcast::<NestedStateMachine, _>(
+                            NestedStateMachine::state_machine_instance,
+                        )
+                        .flatten()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let before: Vec<_> = machines
+        .iter()
+        .map(|machine| machine.with_instance(|machine| machine.reported_event_count()))
+        .collect();
+    machine.with_instance_mut(|machine| {
+        let point = Vec2D::new(x, y);
+        assert!(machine.listens_to_button_at(point, PointerButton::Primary));
+        machine.pointer_down(point, 0, PointerButton::Primary);
+        machine.pointer_up(point, 0, PointerButton::Primary);
+    });
+    machines
+        .iter()
+        .zip(before)
+        .flat_map(|(machine, before)| {
+            machine.with_instance(|machine| {
+                (before..machine.reported_event_count())
+                    .filter_map(|i| machine.reported_event_at(i).event)
+                    .filter_map(|event| {
+                        event
+                            .with(|object| object.component_artboard_handle())
+                            .flatten()
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn css_list_contents_artboard_binding_replaces_the_hoisted_copy_and_tap_target() {
+    let scene = contents_list_scene_with_binding(true, false, 1, false, true);
+    let machine = scene.artboard.state_machine_instance_handle(0).unwrap();
+    machine.advance_and_apply(0.0);
+    let rows = contents_rows(&scene);
+    let outgoing = contents_copy(&rows[0]);
+    let record = outgoing.with_artboard(|board| board.css_record()).unwrap();
+    CoreRegistry::set_double_handle(&record, WIDTH.into(), 180.0);
+    CoreRegistry::set_double_handle(&record, HEIGHT.into(), 60.0);
+    set_contents_bound_copy(&scene, 0, Some(3));
+    scene.advance();
+    let replacement = contents_copy(&rows[0]);
+    assert_ne!(replacement.core_handle(), outgoing.core_handle());
+    assert_eq!(
+        replacement.with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (200.0, 80.0)
+    );
+    assert_eq!(
+        rows[0].with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (200.0, 80.0)
+    );
+    assert_eq!(rows[1].with_artboard(|board| board.layout_y()), 95.0);
+    assert_eq!(
+        contents_tap_targets(&scene, &machine, 180.0, 10.0),
+        vec![replacement.core_handle()]
+    );
+}
+
+#[test]
+fn css_list_contents_null_artboard_binding_removes_flow_and_can_restore_a_copy() {
+    let scene = contents_list_scene_with_binding(true, false, 1, false, true);
+    let machine = scene.artboard.state_machine_instance_handle(0).unwrap();
+    machine.advance_and_apply(0.0);
+    let rows = contents_rows(&scene);
+    set_contents_bound_copy(&scene, 0, None);
+    scene.advance();
+    let host =
+        rows[0].with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>()[0].clone());
+    assert!(
+        host.with_downcast::<NestedArtboardLayout, _>(|host| host
+            .base
+            .base
+            .artboard_instance_handle(0))
+            .flatten()
+            .is_none()
+    );
+    assert_eq!(
+        rows[0].with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (0.0, 0.0)
+    );
+    assert_eq!(rows[1].with_artboard(|board| board.layout_y()), 7.0);
+    assert_eq!(
+        contents_tap_targets(&scene, &machine, 25.0, 10.0),
+        vec![contents_copy(&rows[1]).core_handle()]
+    );
+    set_contents_bound_copy(&scene, 0, Some(3));
+    scene.advance();
+    let restored = host
+        .with_downcast::<NestedArtboardLayout, _>(|host| host.base.base.artboard_instance_handle(0))
+        .flatten()
+        .expect("an empty contents row must keep evaluating its artboard binding");
+    assert_eq!(
+        restored.with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (120.0, 40.0)
+    );
+    assert_eq!(rows[1].with_artboard(|board| board.layout_y()), 55.0);
+    assert_eq!(
+        contents_tap_targets(&scene, &machine, 25.0, 10.0),
+        vec![restored.core_handle()]
+    );
+}
+
+#[test]
+fn css_list_contents_recycled_row_rebinds_to_a_different_copy() {
+    let scene = contents_list_scene_with_binding(true, false, 1, false, true);
+    let machine = scene.artboard.state_machine_instance_handle(0).unwrap();
+    machine.advance_and_apply(0.0);
+    let list = contents_list(&scene);
+    let row = contents_rows(&scene).remove(0);
+    let outgoing = contents_copy(&row);
+    list.with_downcast_mut::<ArtboardComponentList, _>(|list| list.remove_virtualizable(0));
+    set_contents_bound_copy(&scene, 0, Some(3));
+    ArtboardComponentList::add_virtualizable_occurrence(&list, 0);
+    scene.advance();
+    let recycled = contents_rows(&scene).remove(0);
+    assert_eq!(
+        recycled.core_handle(),
+        row.core_handle(),
+        "reuse the pooled row"
+    );
+    let replacement = contents_copy(&recycled);
+    assert_ne!(replacement.core_handle(), outgoing.core_handle());
+    assert_eq!(
+        replacement.with_artboard(|board| (
+            board.layout_bounds().width(),
+            board.layout_bounds().height()
+        )),
+        (120.0, 40.0)
+    );
+    assert_eq!(
+        contents_tap_targets(&scene, &machine, 25.0, 10.0),
+        vec![replacement.core_handle()]
+    );
 }
 
 #[test]

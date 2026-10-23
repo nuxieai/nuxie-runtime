@@ -372,7 +372,8 @@ impl ArtboardComponentList {
         index: i32,
     ) -> Option<crate::mechanical_port::source::layout::layout_node_provider::LayoutNodeKey> {
         let artboard = self.artboard_instance(index)?;
-        if let Some(copy) = LayoutComponent::css_list_row_copy_occurrence(&artboard.core_handle()) {
+        if artboard.with_artboard(|artboard| artboard.css_list_row_context().is_some()) {
+            let copy = LayoutComponent::css_list_row_copy_occurrence(&artboard.core_handle())?;
             // Keep the row as a scene boundary, but give its copy's node to
             // the list. Neither hosted artboard runs an independent solve.
             artboard.with_artboard_mut(|artboard| {

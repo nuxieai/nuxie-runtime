@@ -188,20 +188,15 @@ impl RuntimeNestedArtboardOccurrence {
     }
 
     /// Set the translated Artboard's width and height through its generated
-    /// callbacks. The result reports whether either exact value changed.
+    /// callbacks. The result includes a newly explicit size on a CSS Hug axis.
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
         let Some(native) = self.current_native() else {
             return false;
         };
-        let (current_width, current_height) =
-            native.with_artboard(|artboard| (artboard.base.width(), artboard.base.height()));
-        let width_changed = current_width != width;
-        let height_changed = current_height != height;
-        // `set_size` uses the translated occurrence setter, which releases
-        // the Artboard borrow before synchronous root-layout callbacks re-enter
+        // The occurrence setter releases the Artboard borrow before synchronous
+        // root-layout callbacks re-enter
         // this same owner.
-        native.set_size(width, height);
-        width_changed || height_changed
+        native.set_size_axes(Some(width), Some(height), true)
     }
 
     /// Read a string from this exact, still-mounted occurrence.

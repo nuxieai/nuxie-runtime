@@ -93,3 +93,43 @@ pub fn layout_artboard() -> Vec<u8> {
     });
     bytes
 }
+
+pub fn css_hug_artboard() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 4, 9_641, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 0.0);
+        push_f32(bytes, "Artboard", "height", 0.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 1);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+        for key in ["layoutWidthScaleType", "layoutHeightScaleType"] {
+            push_uint(bytes, "LayoutComponentStyle", key, 2);
+        }
+        for key in ["widthUnitsValue", "heightUnitsValue"] {
+            push_uint(bytes, "LayoutComponentStyle", key, 3);
+        }
+        // intrinsicallySized is false by default.
+    });
+    push_object(&mut bytes, "LayoutCssStyle", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+    });
+    push_object(&mut bytes, "LayoutComponent", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+        push_uint(bytes, "LayoutComponent", "styleId", 4);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+        push_uint(bytes, "Component", "parentId", 3);
+    });
+    push_object(&mut bytes, "LayoutCssStyle", |bytes| {
+        push_uint(bytes, "Component", "parentId", 3);
+        push_uint(bytes, "LayoutCssStyle", "widthKind", 1);
+        push_f32(bytes, "LayoutCssStyle", "width", 60.0);
+        push_uint(bytes, "LayoutCssStyle", "heightKind", 1);
+        push_f32(bytes, "LayoutCssStyle", "height", 40.0);
+    });
+    bytes
+}

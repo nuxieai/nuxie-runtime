@@ -635,23 +635,24 @@ fn css_text_tabs_collapse_but_nonbreaking_spaces_are_preserved() {
 }
 
 #[test]
-fn css_text_preserved_tabs_use_eight_space_stops_without_missing_glyphs() {
+fn css_text_preserved_tabs_use_fixed_eight_space_advances_without_missing_glyphs() {
     use crate::source::text_engine::GlyphRenderKind;
     let spaces = Scene::new(&[("a b", Some((0, 1)))], true, 300.0, false, false, false);
-    let space_advance = spaces
+    let (a_advance, space_advance) = spaces
         .text()
         .with_downcast::<Text, _>(|text| {
             let run = &text.shape()[0].runs[0];
-            run.advances[run
-                .text_indices
-                .iter()
-                .position(|&index| index == 1)
-                .unwrap()]
+            (run.advances[0], run.advances[1])
         })
         .unwrap();
-    let stop = 8.0 * space_advance;
+    let tab_advance = 8.0 * space_advance;
     for mode in [1, 2] {
-        for (source, tabs) in [("a\tb", 1), ("a\t\tb", 2)] {
+        for (source, prefix, tabs) in [
+            ("\tb", 0, 1),
+            ("\t\tb", 0, 2),
+            ("a\tb", 1, 1),
+            ("a\t\tb", 1, 2),
+        ] {
             let mut scene = Scene::new(
                 &[(source, Some((0, mode)))],
                 true,
@@ -663,6 +664,7 @@ fn css_text_preserved_tabs_use_eight_space_stops_without_missing_glyphs() {
             assert_eq!(scene.display(), source);
             scene.text().with_downcast::<Text, _>(|text| {
                 let mut x = text.ordered_lines()[0].glyph_line().start_x;
+                let prefix_advance = a_advance * prefix as f32;
                 let mut seen = 0;
                 for (run, glyph) in &text.ordered_lines()[0] {
                     let glyph = glyph as usize;
@@ -670,17 +672,25 @@ fn css_text_preserved_tabs_use_eight_space_stops_without_missing_glyphs() {
                     let index = run.text_indices[glyph] as usize;
                     if text.unichars()[index] == 9 {
                         assert_eq!(run.glyph_render_kind(glyph), GlyphRenderKind::Suppressed);
+                        assert!((run.advances[glyph] - tab_advance).abs() < 0.01);
                         seen += 1;
-                        assert!((x + run.advances[glyph] - stop * seen as f32).abs() < 0.01);
+                        assert!(
+                            (x + run.advances[glyph] - prefix_advance - tab_advance * seen as f32)
+                                .abs()
+                                < 0.01
+                        );
                     }
                     if text.unichars()[index] == u32::from('b') {
-                        assert!((x - stop * tabs as f32).abs() < 0.01);
+                        assert!((x - prefix_advance - tab_advance * tabs as f32).abs() < 0.01);
                     }
                     x += run.advances[glyph];
                 }
                 assert_eq!(seen, tabs);
                 let styled = text.styled_text();
-                assert_eq!(styled.source_to_display(tabs + 1), tabs + 1);
+                for index in 0..=source.chars().count() as u32 {
+                    assert_eq!(styled.source_to_display(index), index);
+                    assert_eq!(styled.display_to_source(index), index);
+                }
             });
             let text = scene.text();
             let id = scene.board.native_handle().with_artboard(|a| {
@@ -689,52 +699,18 @@ fn css_text_preserved_tabs_use_eight_space_stops_without_missing_glyphs() {
                     .position(|h| h.as_ref() == Some(&text))
                     .unwrap()
             });
-            let first = scene.board.text_caret(id, 0).unwrap();
-            let b = scene.board.text_caret(id, tabs as usize + 1).unwrap();
-            assert!((b.top.x - first.top.x - stop * tabs as f32).abs() < 0.01);
+            let before = scene.board.text_caret(id, prefix).unwrap();
+            let after = scene.board.text_caret(id, prefix + tabs as usize).unwrap();
+            assert!((after.top.x - before.top.x - tab_advance * tabs as f32).abs() < 0.01);
         }
     }
-    let normal = Scene::new(&[("a\tb", Some((0, 0)))], true, 300.0, true, false, false);
-    assert_eq!(normal.display(), "a b");
-    normal.text().with_downcast::<Text, _>(|text| {
-        let run = &text.shape()[0].runs[0];
-        assert!((run.advances[1] - space_advance).abs() < 0.01);
-    });
-}
-
-#[test]
-fn css_text_preserved_tab_stops_restart_after_soft_wraps_and_newlines() {
-    let reference = Scene::new(&[("a b", Some((0, 2)))], true, 300.0, true, false, false);
-    let (stop, b_width) = reference
-        .text()
-        .with_downcast::<Text, _>(|text| {
+    for source in ["a\tb", "a\t\tb"] {
+        let normal = Scene::new(&[(source, Some((0, 0)))], true, 300.0, true, false, false);
+        assert_eq!(normal.display(), "a b");
+        normal.text().with_downcast::<Text, _>(|text| {
             let run = &text.shape()[0].runs[0];
-            (8.0 * run.advances[1], run.advances[2])
-        })
-        .unwrap();
-    for source in ["aaaa a\tb", "aaaa\na\tb"] {
-        let scene = Scene::new(
-            &[(source, Some((0, 2)))],
-            true,
-            stop + b_width + 0.5,
-            true,
-            false,
-            false,
-        );
-        scene.text().with_downcast::<Text, _>(|text| {
-            assert_eq!(text.ordered_lines().len(), 2);
-            let line = text.ordered_lines().last().unwrap();
-            let mut x = line.glyph_line().start_x;
-            let mut found = false;
-            for (run, glyph) in line {
-                let glyph = glyph as usize;
-                if text.unichars()[run.text_indices[glyph] as usize] == u32::from('b') {
-                    assert!((x - stop).abs() < 0.01);
-                    found = true;
-                }
-                x += run.advances[glyph];
-            }
-            assert!(found);
+            assert!((run.advances[1] - space_advance).abs() < 0.01);
+            assert_ne!(run.glyph_render_kind(1), GlyphRenderKind::Suppressed);
         });
     }
 }
@@ -784,41 +760,48 @@ fn css_text_expansion_hits_and_selection_drags_use_source_caret_geometry() {
 }
 
 #[test]
-fn css_text_preserved_tabs_measure_stops_in_the_tabs_own_style() {
+fn css_text_preserved_tabs_measure_fixed_advances_in_the_tabs_own_style() {
     use crate::source::text::text_style_paint::TextStylePaint;
     let mut reference = Scene::new(&[("a b", Some((0, 1)))], true, 300.0, false, false, false);
     let style = reference.handles::<TextStylePaint>().remove(0);
     CoreRegistry::set_double_handle(&style, 274, 40.0);
     reference.advance();
-    let stop = reference
+    let tab_advance = reference
         .text()
         .with_downcast::<Text, _>(|text| 8.0 * text.shape()[0].runs[0].advances[1])
         .unwrap();
-    let mut scene = Scene::new(
-        &[("a", Some((0, 1))), ("\tb", Some((0, 1)))],
-        true,
-        300.0,
-        false,
-        false,
-        false,
-    );
-    let style = scene.handles::<TextStylePaint>().remove(1);
-    CoreRegistry::set_double_handle(&style, 274, 40.0);
-    scene.advance();
-    scene.text().with_downcast::<Text, _>(|text| {
-        let line = &text.ordered_lines()[0];
-        let mut x = line.glyph_line().start_x;
-        let mut found = false;
-        for (run, glyph) in line {
-            let glyph = glyph as usize;
-            if text.unichars()[run.text_indices[glyph] as usize] == u32::from('b') {
-                assert!((x - stop).abs() < 0.01);
-                found = true;
+    for mode in [1, 2] {
+        let mut scene = Scene::new(
+            &[("a", Some((0, mode))), ("\tb", Some((0, mode)))],
+            true,
+            300.0,
+            mode == 2,
+            false,
+            false,
+        );
+        let style = scene.handles::<TextStylePaint>().remove(1);
+        CoreRegistry::set_double_handle(&style, 274, 40.0);
+        scene.advance();
+        scene.text().with_downcast::<Text, _>(|text| {
+            let line = &text.ordered_lines()[0];
+            let prefix_advance = text.shape()[0].runs[0].advances[0];
+            let mut x = line.glyph_line().start_x;
+            let mut found = false;
+            for (run, glyph) in line {
+                let glyph = glyph as usize;
+                let index = text.unichars()[run.text_indices[glyph] as usize];
+                if index == 9 {
+                    assert!((run.advances[glyph] - tab_advance).abs() < 0.01);
+                }
+                if index == u32::from('b') {
+                    assert!((x - prefix_advance - tab_advance).abs() < 0.01);
+                    found = true;
+                }
+                x += run.advances[glyph];
             }
-            x += run.advances[glyph];
-        }
-        assert!(found);
-    });
+            assert!(found);
+        });
+    }
 }
 
 #[test]
@@ -957,76 +940,4 @@ fn css_text_wrapped_hits_and_selection_drags_keep_line_affinity() {
             assert!(selection.pointer_up(point, i as i32));
         }
     }
-}
-
-#[test]
-fn css_text_pre_wrap_tab_positioning_visits_each_glyph_once() {
-    use crate::source::text_engine::{GlyphLine, TextWordBreak};
-    for length in [4096, 8192] {
-        let source = format!("{}\tb", "a".repeat(length));
-        let scene = Scene::new(&[(&source, Some((0, 2)))], true, 450.0, true, false, false);
-        scene.text().with_downcast::<Text, _>(|text| {
-            let mut runs = text.shape()[0].runs.clone();
-            let glyph_count: usize = runs.iter().map(|run| run.glyphs.len()).sum();
-            let a_width = runs[0].advances[0];
-            // Reuse the shape at different widths, as intrinsic measurement
-            // and final layout do. Tab advances must be placed afresh each time.
-            for columns in [40, 21] {
-                take_tab_layout_glyph_visits();
-                let lines = GlyphLine::break_lines_with_tabs(
-                    &mut runs,
-                    a_width * columns as f32 + 0.1,
-                    TextWordBreak::BreakWord,
-                );
-                assert_eq!(take_tab_layout_glyph_visits(), glyph_count);
-                assert!(lines.len() > length / columns);
-                let mut found = false;
-                for line in &lines {
-                    let origin =
-                        runs[line.start_run_index as usize].xpos[line.start_glyph_index as usize];
-                    for run_index in line.start_run_index..=line.end_run_index {
-                        let run = &runs[run_index as usize];
-                        for &(glyph, interval) in &run.css_tabs {
-                            if (run_index, glyph as u32)
-                                < (line.start_run_index, line.start_glyph_index)
-                                || (run_index, glyph as u32)
-                                    >= (line.end_run_index, line.end_glyph_index)
-                            {
-                                continue;
-                            }
-                            let x = run.xpos[glyph] - origin;
-                            let next = ((x / interval).floor() + 1.0) * interval;
-                            assert!((x + run.advances[glyph] - next).abs() < 0.01);
-                            found = true;
-                        }
-                    }
-                }
-                assert!(found);
-            }
-        });
-    }
-}
-
-#[test]
-fn css_text_trailing_tab_lookahead_restarts_at_the_wrapped_line_origin() {
-    use crate::source::text_engine::{GlyphLine, TextWordBreak};
-    let scene = Scene::new(&[("a\t", Some((0, 2)))], true, 300.0, true, false, false);
-    scene.text().with_downcast::<Text, _>(|text| {
-        let mut runs = text.shape()[0].runs.clone();
-        let width = runs[0].advances[0] + 0.1;
-        let glyph_count: usize = runs.iter().map(|run| run.glyphs.len()).sum();
-        take_tab_layout_glyph_visits();
-        let lines = GlyphLine::break_lines_with_tabs(&mut runs, width, TextWordBreak::BreakWord);
-        assert_eq!(lines.len(), 2);
-        assert!(take_tab_layout_glyph_visits() <= glyph_count + 1);
-        let (run, glyph, interval) = runs
-            .iter()
-            .find_map(|run| {
-                run.css_tabs
-                    .first()
-                    .map(|&(glyph, interval)| (run, glyph, interval))
-            })
-            .unwrap();
-        assert!((run.advances[glyph] - interval).abs() < 0.01);
-    });
 }

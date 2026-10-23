@@ -282,11 +282,25 @@ def check_upstream_checkout():
             raise ValueError(f"RIVE_RUNTIME_DIR {checkout} has tracked changes; the tests need the pinned upstream as committed")
 
 
+RUN_ENVIRONMENT = {
+    "GOLDEN_RUNNER", "RUST_GOLDEN_RUNNER", "NUXIE_CPP_PROMISE_ORACLE", "NUXIE_CPP_BLOB_ORACLE",
+    "NUXIE_COMPONENT_GRAPH_TRACE", "NUXIE_LAYOUT_VERIFY", "NUXIE_REQUIRE_LIVE_METAL_TESTS",
+    "NUXIE_REQUIRE_LIVE_VULKAN_TESTS", "NUXIE_MOLTENVK_LIBRARY", "NUX_CAPI_UPDATE_HEADER",
+    "NUX_PROBE_RIV", "NUX_RUNTIME_DIR", "EMPTY_TEXT_BINDING_EVIDENCE_RIV", "P2D_SCRIPTED_INTERPOLATOR_FIXTURE",
+}
+
+
+def run_environment():
+    return ["--action_env=" + name for name in sorted(os.environ)
+            if name in RUN_ENVIRONMENT or name.startswith(("RENDERER_", "BENCH_", "MTL_", "LLVM_PROFILE_"))]
+
+
 def pool_run_enabled(bazel):
     """Use remote run only with a client implementing its product contract."""
     if (any(os.environ.get(key) == value for key, value in
             (("NUXIE_EXECUTION", "local"), ("NUXIE_HOMELAB", "0"), ("_NUXIE_POOL_NESTED", "1"), ("BUILDKITE", "true")))
-            or os.environ.get("BUILDKITE_JOB_ID")):
+            or os.environ.get("BUILDKITE_JOB_ID")
+            or os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") == "2"):
         return False
     router = Path.home() / ".local/share/nuxie-homelab/rust/route.py"
     if not router.is_file() or not (Path.home() / ".config/nuxie/homelab-cluster.json").is_file():
@@ -354,14 +368,14 @@ def main():
             flags += ["--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect", "--output_groups=clippy_checks"]
         remote_run = options["command"] == "run" and pool_run_enabled(bazel)
         run_status = 0
+        selected_bazel = ([sys.executable, "-I", str(Path.home() / ".local/share/nuxie-homelab/rust/route.py"), *bazel]
+                          if remote_run else bazel)
         if remote_run:
             # Bazel's installed launcher sends this complete invocation to a
             # compatible pool host. Keeping execution with the build preserves
             # runfiles/oracle paths and avoids a caller-side compilation tree.
-            for name in ("GOLDEN_RUNNER", "RUST_GOLDEN_RUNNER", "NUXIE_CPP_PROMISE_ORACLE", "NUXIE_CPP_CONTEXT_BLOB_ORACLE"):
-                if name in os.environ:
-                    flags.append("--action_env=" + name)
-            result = subprocess.run([*bazel, "run", *flags, *labels, "--", *runtime_args], cwd=ROOT)
+            flags += run_environment()
+            result = subprocess.run([*selected_bazel, "run", *flags, *labels, "--", *runtime_args], cwd=ROOT)
             run_status = result.returncode
         command = "test" if options["command"] == "test" and not options["no_run"] else "build"
         if not remote_run:
@@ -369,7 +383,7 @@ def main():
         if command == "test" or options["command"] == "clippy":
             return 0
         try:
-            output = subprocess.check_output([*bazel, "cquery", *flags, "set(" + " ".join(labels) + ")", "--output=files"], cwd=ROOT, text=True)
+            output = subprocess.check_output([*selected_bazel, "cquery", *flags, "set(" + " ".join(labels) + ")", "--output=files"], cwd=ROOT, text=True)
         except subprocess.CalledProcessError:
             if remote_run and run_status: return run_status
             raise

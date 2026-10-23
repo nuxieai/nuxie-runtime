@@ -902,7 +902,10 @@ fn css_text_wrapped_hits_and_selection_drags_keep_line_affinity() {
                 let points = fractions.map(|fraction| {
                     Vec2D::new(
                         end_x - last_width * (1.0 - fraction),
-                        (line.top() + line.bottom()) / 2.0,
+                        (line.y() - line.glyph_line().baseline
+                            + line.glyph_line().top
+                            + line.bottom())
+                            / 2.0,
                     )
                 });
                 let lines = vec![

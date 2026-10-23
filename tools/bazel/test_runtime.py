@@ -20,6 +20,9 @@ class RuntimeBuildTest(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.root_patch = patch.object(runtime, "ROOT", self.root)
         self.root_patch.start()
+        self.pool_patch = patch.object(runtime, "pool_run_enabled", return_value=False)
+        self.pool_patch.start()
+        self.addCleanup(self.pool_patch.stop)
         self.addCleanup(self.root_patch.stop)
 
     def package(self, name, extra="", library=True):
@@ -35,6 +38,7 @@ class RuntimeBuildTest(unittest.TestCase):
         packages = collect_packages([manifest])
         with patch.object(runtime, "packages_from_workspace", return_value=packages), \
                 patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+                patch.object(runtime, "pool_run_enabled", return_value=True), \
                 patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run, \
                 patch.object(runtime.subprocess, "check_output", side_effect=AssertionError("local cquery")), \
                 patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "probe", "--", "--help"]):
@@ -42,6 +46,22 @@ class RuntimeBuildTest(unittest.TestCase):
             args = run.call_args.args[0]
             self.assertEqual(args[:2], ["bazel", "run"])
             self.assertEqual(args[-2:], ["--", "--help"])
+
+    def test_remote_run_publishes_the_executed_binary_for_following_reports(self):
+        retained = self.root / "retained/silver-corpus__bin"
+        retained.parent.mkdir(); retained.write_bytes(b"remote executable"); retained.chmod(0o755)
+        with patch.object(runtime, "packages_from_workspace", return_value={}), \
+                patch.object(runtime, "materialize", return_value=["//silver:lib", "//silver:bin"]), \
+                patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+                patch.object(runtime, "pool_run_enabled", return_value=True), \
+                patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+                patch.object(runtime.subprocess, "check_output", return_value=str(retained)), \
+                patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["runtime.py", "run", "-p", "silver-corpus"]):
+            self.assertEqual(runtime.main(), 0)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.args[0][1], "run")
+        self.assertEqual((self.root / "target/debug/silver-corpus__bin").read_bytes(), b"remote executable")
+        self.assertTrue(os.access(self.root / "target/debug/silver-corpus__bin", os.X_OK))
 
     def test_v2_routes_through_installed_guard_and_rejects_caller_jobs(self):
         with patch.dict(os.environ, {"NUXIE_CI_RUNNER_POLICY_VERSION": "2"}, clear=True):

@@ -34,6 +34,7 @@ mod canvas_schedule_test;
 ))]
 mod deferred_canvas_backing_test;
 mod deferred_canvas_import_test;
+mod deferred_canvas_reframe_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(

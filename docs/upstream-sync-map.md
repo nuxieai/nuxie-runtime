@@ -93,18 +93,29 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8920a6b03e202086408f596fc4a317df07763440`
+- LAST_SYNCED_SHA: `12e5327ba8cb4346155010d34584cb4dab640d51`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `3ec7ef079f569a5f378f964008794ac30e348a56` (refreshed 2026-10-23).
+- Current target: `48b8c0ba160586078c9e40eaa2e9ef2f17ac496f` (refreshed 2026-10-23).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  43 upstream commits remain after this checkpoint at the fetched target.
-  All 265 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (287 after `5892bb05`); this
+  44 upstream commits remain after this checkpoint at the fetched target.
+  All 266 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (288 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `12e5327b`: replay only each canvas's last frame, discard replaced ranges
+  before dependency scheduling, close stale same-canvas ranges on explicit
+  begin, and reset new-frame recorder transforms without resetting nested
+  resumes. All four public upstream regression cases are translated.
+  Independent source-equivalence and Rust-integration reviews passed. Pool
+  renderer validation (`--no-default-features --features with-rive-tools --lib`)
+  against the pinned upstream fixtures passed: 265 passed, 0 failed, 5 ignored,
+  including all four new regressions. Job `28028624-f5f7-4703-b8f9-8f4d929a97b0`
+  completed successfully; its downloaded evidence contains no cleanup receipt,
+  so cleanup is unverified. No hardware coverage is claimed. Prior checkpoint
+  results below are historical.
 - `8920a6b0`: per-entry shader binding metadata, narrowed automatic layouts,
   actual-layout slot validation and retained draw binding validation translated
   through shared ORE, deferred recording/replay, Luau and live renderer adapters.
@@ -127,6 +138,9 @@ qualification work.
   Metal reflection moves to section 128, while Metal target 2 is unchanged.
   The authorized editor/compiler coordination and artifact recompilation are
   tracked in [UNIV-5495](https://universe.basis.dev/issue/UNIV-5495).
+  By explicit user decision, the editor/compiler branch remains parked and
+  unmerged because the current iOS release still uses the old format. Its rollout
+  requires separate authorization under UNIV-5495; no release is claimed complete.
   Its compiler suite passes 135 tests; this does not claim private upstream
   compiler code was imported. Guest Wasm bindings remain excluded under UNIV-3728.
 - `0026fac6`: outside-primary-press text-input blur, retained focus identity,
@@ -1392,6 +1406,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `12e5327ba8cb4346155010d34584cb4dab640d51` | Translate the complete public deferred-canvas delta: mark frame-starting ranges, retain only each canvas's last frame before grouping and dependency scheduling, close stale same-canvas ranges on begin, prohibit self-nesting, and reset retained recorder transforms for new frames while preserving nested resume state. Port all four public canvas-reframe regressions. The `.rive_head` update is provenance only; no private source changes are claimed. Both independent reviews pass; pool renderer suite passes 265 tests with 5 ignored, including all four new cases. | — |
 | `8920a6b03e202086408f596fc4a317df07763440` | Translate public per-entry binding wire metadata, shader/module retention and physical-name mapping, selected-entry layout derivation, actual native-slot collision checks, draw-group validation and 136-byte deferred shader descriptors. Port all eleven entry-layout tests and changed recording/layout/asset cases. Update Luau and live Metal/WebGPU/WebGL2/Vulkan adapter owners; reserve section 2 for upstream metadata and move private Metal reflection to 128 with coordinated editor compilation. Guest Wasm IDL/VM/web proxy changes are excluded; private `.rive_head` compiler implementation is not claimed. | [UNIV-5495](https://universe.basis.dev/issue/UNIV-5495), [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5551696a826ff546775fffe46ca78824b1f1dc51` | Translate measurement/shape keys with exact bit packing, wrapping arithmetic, initial inequality and font identity; avoid redundant post-shape layout dirt while preserving paragraph-spacing/origin invalidation. Retain variable fonts only for identical base identity and ordered options/coordinates. Preserve stable coordinate-map iteration across Rust styling passes without sorting. Port all five text regressions and the changed component-list assertion; pin the new variation fixture and consume the updated rewards Silver recording. CSS/Taffy layout semantics remain unchanged; private .rive_head contents and reported upstream benchmark speedups are not claimed. | — |
 | `16332c8ef763b118b3e2b53d73ce29ca3b1218e1` | Translate AngularGradient type 1089 with complete LinearGradient inheritance, registry, clone/import and paint dispatch. Add transform keys 1103–1107 with exact defaults and notification-only equality-guarded setters; assign the angular shader followed by left-associated translation × rotation × scale. Linear/radial rendering stays unchanged. Reconcile publicly evidenced schema metadata and preserve Nuxie Video hooks. Add labeled supplemental coverage; no public tests/assets or private editor/Dart/protocol/RML contents are claimed imported. | — |

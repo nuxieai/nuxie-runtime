@@ -1,5 +1,23 @@
 # Source parity workflow
 
+## Product scope (2026-10-23)
+
+Nuxie is a web-like engine with Taffy/CSS layout, CSS-oriented text behavior,
+and Luau scripting. These are intentional product differences, not parity defects.
+Upstream is authoritative only outside these approved differences.
+
+Exclude upstream-specific layout semantics and Wasm/AssemblyScript/AnimaScript
+guest execution and dependent engine work. Browser renderer Wasm compilation
+remains in scope. Consider small layout optimizations and clear fixes only when
+compatible with our CSS contract; never restore Yoga/Rive semantics. Text fixes
+outside the deliberate CSS divergence remain eligible.
+
+For mixed commits, translate and review applicable portions and explicitly record
+excluded portions in the existing sync map. Do not stall unrelated fixes or ask
+again about settled exclusions. Ask only about genuinely new product tradeoffs.
+Specifically, skip upstream 868da86c's stack-layout change and retain its independent
+state-machine fix as in scope. This supersedes older ask-before-layout wording.
+
 The single mechanical translation method is
 [runtime-bun-style-source-port-plan.md](runtime-bun-style-source-port-plan.md).
 Apply it to the upstream files being changed; the completed port is not an

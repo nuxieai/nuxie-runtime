@@ -354,8 +354,15 @@ def run_io(options, arguments):
             if not path.is_absolute(): path = ROOT / path
             outputs.append({"path": str(path.resolve()), "directory":False,
                             **({"pattern":True} if name == "LLVM_PROFILE_FILE" else {})})
-    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs,
-            **({"platform":"macos"} if program == "video-qualification" else {})}
+    # Native diagnostics/qualification programs can have successful no-op mains
+    # on other operating systems. Preserve their caller OS unless the program
+    # declares a platform-independent CLI contract here.
+    portable = {"nuxie-codegen", "silver-corpus", "pixel-compare", "riveabl-to-png",
+                "generate-corpus", "generate-corpus-r", "densify-corpus",
+                "renderer-timing-compare", "renderer-perf-parity-gate"}
+    platform = "portable" if program in portable else ("macos" if sys.platform == "darwin" else "linux")
+    if program == "video-qualification": platform = "macos"
+    return {"schema":"nuxie-runtime-io.v1", "inputs":inputs, "outputs":outputs, "platform":platform}
 
 
 def pool_run_enabled(bazel):

@@ -97,6 +97,12 @@ class RuntimeBuildTest(unittest.TestCase):
             value = runtime.run_io(options,["--output",os.devnull])
         self.assertEqual(value["platform"],"macos")
         self.assertEqual(value["outputs"],[])
+        for program in ("native_metal_tracer_root", "ffi_metal_draw", "video_apple"):
+            options = runtime.command_options(["run","-p","nux-capi","--example",program])
+            with patch.object(sys,"platform","darwin"):
+                self.assertEqual(runtime.run_io(options,[])["platform"],"macos")
+        options = runtime.command_options(["run","-p","nuxie-codegen"])
+        self.assertEqual(runtime.run_io(options,[])["platform"],"portable")
 
     def test_llvm_temporary_directory_expansion_matches_the_declared_destination(self):
         options = runtime.command_options(["run","-p","rust-golden-runner"])

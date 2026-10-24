@@ -53,6 +53,7 @@ selected_toolchain="$(python3 "${script_dir}/bazel_runtime_build.py" toolchain \
     --repo-root "${repo_root}" \
     --label //crates/nux-apple-product-extension:nux-apple-product-extension__apple__staticlib \
     --target aarch64-apple-ios \
+    --output "${output_root}/build/toolchain/llvm-objcopy" \
     --minimum-ios-version "${deployment_target}" \
     --minimum-macos-version "${macos_deployment_target}")"
 rust_llvm_objcopy="$(printf '%s' "${selected_toolchain}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["objcopy"])')"

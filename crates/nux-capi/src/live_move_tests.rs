@@ -2797,3 +2797,130 @@ fn live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer() {
         nux_view_model_instance_free(shared);
     }
 }
+
+#[test]
+fn row_evaluation_c_api_repeated_arrival_after_cut_without_ordinary_step() {
+    use crate::data_binding::*;
+    unsafe {
+        let scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
+        let mut a = ptr::null_mut();
+        let mut b = ptr::null_mut();
+        for (index, row) in [(0, &mut a), (1, &mut b)] {
+            assert_eq!(
+                nux_view_model_instance_list_item_acquire(scene.vm, view("screens"), index, row),
+                NuxStatus::Ok
+            );
+        }
+        let phase = |row, phase: &str, transition: &str| {
+            for (path, value) in [("screen/phase", phase), ("screen/transition", transition)] {
+                let path = std::ffi::CString::new(path).unwrap();
+                let value = std::ffi::CString::new(value).unwrap();
+                assert_eq!(
+                    nux_view_model_instance_set_string(row, path.as_ptr(), value.as_ptr()),
+                    NuxStatus::Ok
+                );
+            }
+        };
+        let move_first = || {
+            let mutation = NuxViewModelMutation {
+                kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE,
+                instance: scene.vm,
+                path: view("screens"),
+                index: 0,
+                second_index: 1,
+                ..Default::default()
+            };
+            let batch = NuxViewModelMutationBatch {
+                mutations: &mutation,
+                mutation_count: 1,
+                ..Default::default()
+            };
+            let mut result = ptr::null_mut();
+            assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+            nux_view_model_mutation_result_free(result);
+        };
+        let arrival = |label| {
+            let mut events = 0;
+            for frame in 0..=75 {
+                let mut result = ptr::null_mut();
+                assert_eq!(
+                    step_status(
+                        scene.player,
+                        &NuxPlayerStep {
+                            elapsed_seconds: if frame == 0 { 0.0 } else { 1.0 / 60.0 },
+                            ..Default::default()
+                        },
+                        &mut result
+                    ),
+                    NuxStatus::Ok
+                );
+                events += (&(*result).events)
+                    .iter()
+                    .filter(|event| event.name.as_deref() == Some(b"nx_enter_done:t1"))
+                    .count();
+                nux_player_step_result_free(result);
+            }
+            assert_eq!(events, 1, "{label}: completion missing or repeated");
+        };
+        let t = view("t1");
+        phase(a, "exiting", "t1");
+        phase(b, "entering", "t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        arrival("first forward");
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
+            NuxStatus::Ok
+        );
+        phase(a, "hidden", "");
+        phase(b, "active", "");
+
+        phase(b, "exiting", "");
+        move_first(); // [B, A]
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 0),
+            NuxStatus::Ok
+        );
+        phase(a, "entering", "");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("A"), ptr::null()),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
+            NuxStatus::Ok
+        );
+        phase(b, "hidden", "");
+        assert_eq!(
+            nux_player_step_end(scene.player, view("A"), ptr::null()),
+            NuxStatus::Ok
+        );
+        phase(a, "active", "");
+
+        move_first(); // [A, B], wake before writing entering/t1 again.
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 0),
+            NuxStatus::Ok
+        );
+        phase(a, "exiting", "t1");
+        phase(b, "entering", "t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        arrival("second forward after cut");
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        nux_view_model_instance_free(a);
+        nux_view_model_instance_free(b);
+    }
+}

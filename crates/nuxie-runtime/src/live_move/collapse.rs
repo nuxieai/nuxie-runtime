@@ -77,6 +77,21 @@ impl ArtboardComponentList {
     }
 }
 pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Result<()> {
+    set_row_collapsed_inner(list, index, collapsed, false).map(|_| ())
+}
+pub(crate) fn set_row_collapsed_for_player(
+    list: &CoreHandle,
+    index: i32,
+    collapsed: bool,
+) -> Result<Vec<crate::StateMachineReportedEvent>> {
+    set_row_collapsed_inner(list, index, collapsed, true)
+}
+fn set_row_collapsed_inner(
+    list: &CoreHandle,
+    index: i32,
+    collapsed: bool,
+    evaluate: bool,
+) -> Result<Vec<crate::StateMachineReportedEvent>> {
     let scene = crate::hosted_scene::scene_for_operation(list)
         .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
     ensure!(
@@ -85,15 +100,32 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
     );
     // Apply list insertions, removals and moves before interpreting the row
     // index. This flush runs inside the caller's transaction, without playback.
-    if let Some(root) = list
+    let root = list
         .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
         .flatten()
-        .and_then(|b| b.runtime_arena_owner())
-    {
+        .and_then(|b| b.runtime_arena_owner());
+    if let Some(root) = &root {
         root.update_data_binds(false);
         root.update_pass(false);
     }
     scene.prepare()?;
+    // Refuse invalid rows before evaluation can run callbacks or change state.
+    let was_collapsed = list
+        .with_downcast::<ArtboardComponentList, _>(|l| -> Result<_> {
+            ensure!(
+                !l.virtualization_enabled(),
+                "cannot collapse a virtualised row"
+            );
+            ensure!(l.list_item(index).is_some(), "row not found");
+            Ok(l.live_move_row_collapsed(index))
+        })
+        .ok_or_else(|| anyhow::anyhow!("expected a list"))??;
+    let mut events = Vec::new();
+    if evaluate && collapsed && !was_collapsed {
+        if let Some(root) = &root {
+            events.extend(evaluate_row(root, list, index));
+        }
+    }
     let (row, parent, changed) = list
         .with_downcast_mut::<ArtboardComponentList, _>(|l| -> Result<_> {
             ensure!(
@@ -128,7 +160,7 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         })
         .ok_or_else(|| anyhow::anyhow!("expected a list"))??;
     if !changed {
-        return Ok(());
+        return Ok(events);
     }
     if let Some(row) = row {
         let hidden = ArtboardComponentList::reconcile_row_collapse_occurrence(list, index, &row);
@@ -138,11 +170,45 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
             row.update_data_binds(true);
         }
     }
+    if evaluate && !collapsed {
+        if let Some(root) = &root {
+            events.extend(evaluate_row(root, list, index));
+        }
+    }
     if let Some(parent) = parent {
         LayoutComponent::sync_layout_children_occurrence(&parent);
         LayoutComponent::mark_layout_style_dirty_occurrence(&parent);
     }
-    Ok(())
+    Ok(events)
+}
+
+/// Evaluate only this row's native machine and subtree, using the ordinary
+/// advanceAndApply path with no elapsed time. The page/root never advances.
+pub(crate) fn evaluate_row(
+    root: &crate::RuntimeArtboardInstanceHandle,
+    list: &CoreHandle,
+    index: i32,
+) -> Vec<crate::StateMachineReportedEvent> {
+    let playback = list
+        .with_downcast::<ArtboardComponentList, _>(|l| {
+            Some((
+                l.artboard_instance(index)?,
+                l.state_machine_instance(index)?,
+            ))
+        })
+        .flatten();
+    let Some((row, machine)) = playback else {
+        return Vec::new();
+    };
+    let mut events = crate::host_state_machine::take_nested_reported_events(root);
+    crate::host_state_machine::advance_native_state_machines(
+        &row,
+        std::slice::from_ref(&machine),
+        0.0,
+        true,
+    );
+    events.extend(crate::host_state_machine::take_nested_reported_events(root));
+    events
 }
 
 /// Extend upstream list collapse only after the host opts into row sleep.

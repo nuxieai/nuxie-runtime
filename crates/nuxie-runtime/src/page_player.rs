@@ -77,6 +77,7 @@ impl Drop for Guard {
 #[derive(Default)]
 pub struct PagePlayer {
     pending_commands: Rc<RefCell<Vec<HostCommand>>>,
+    pending_events: Rc<RefCell<Vec<StateMachineReportedEvent>>>,
 }
 #[derive(Debug)]
 pub struct StateChange {
@@ -108,6 +109,8 @@ pub struct PendingStep<'a, G = ()> {
     policy: Option<&'a RuntimeValuePolicy>,
     commands: Rc<RefCell<Vec<HostCommand>>>,
     deferred: Vec<HostCommand>,
+    events: Rc<RefCell<Vec<StateMachineReportedEvent>>>,
+    deferred_events: Vec<StateMachineReportedEvent>,
     guard: Guard,
 }
 impl<G> PendingStep<'_, G> {
@@ -122,6 +125,7 @@ impl<G> PendingStep<'_, G> {
             rules.borrow_mut().commit_groups(policy);
         }
         *self.commands.borrow_mut() = std::mem::take(&mut self.deferred);
+        *self.events.borrow_mut() = std::mem::take(&mut self.deferred_events);
         self.guard.committed = true;
     }
 }
@@ -132,11 +136,18 @@ pub enum Operation {
     Row(String, i32, bool),
 }
 impl Operation {
-    fn apply(self, root: &RuntimeArtboardInstanceHandle) -> Result<(), ErrorKind> {
+    fn apply(
+        self,
+        root: &RuntimeArtboardInstanceHandle,
+    ) -> Result<Vec<StateMachineReportedEvent>, ErrorKind> {
         let mut moves = live_move::LiveMoves::default();
         let result = match self {
-            Self::Begin(incoming, name) => moves.step_begin(root, &incoming, name.as_deref()),
-            Self::End(incoming, name) => moves.step_end(root, &incoming, name.as_deref()),
+            Self::Begin(incoming, name) => moves
+                .step_begin(root, &incoming, name.as_deref())
+                .and_then(|_| moves.evaluate_step_rows(root, &incoming, name.as_deref())),
+            Self::End(incoming, name) => moves
+                .step_end(root, &incoming, name.as_deref())
+                .and_then(|_| moves.evaluate_step_rows(root, &incoming, name.as_deref())),
             Self::Row(name, index, collapsed) => {
                 moves
                     .prepare(root)
@@ -148,14 +159,16 @@ impl Operation {
                         )
                     })
                     .ok_or(ErrorKind::InvalidArgument)?;
-                live_move::set_row_collapsed(&list, index, collapsed)
-                    .map_err(|_| ErrorKind::InvalidArgument)?;
-                moves.prepare(root)
+                let events =
+                    live_move::collapse::set_row_collapsed_for_player(&list, index, collapsed)
+                        .map_err(|_| ErrorKind::InvalidArgument)?;
+                moves.prepare(root).map(|_| events)
             }
         };
         result.map_err(|_| ErrorKind::InvalidArgument)
     }
 }
+
 pub enum Playback {
     StaticArtboard,
     StateMachine(Box<StateMachineInstance>),
@@ -421,7 +434,7 @@ impl PagePlayer {
                 let membership = crate::hosted_scene::membership_revision(&root.core_handle());
                 let serial = root.with_artboard(|b| b.change_serial());
                 let applied = operation.apply(&root);
-                if let Err(status) = applied {
+                if let Err(status) = &applied {
                     // Caller preflight refusals leave the occurrence usable. A failure
                     // after ownership, component or VM mutation uses the step's poison
                     // policy; dropping the checkpoint alone cannot undo those effects.
@@ -434,8 +447,9 @@ impl PagePlayer {
                         boundary.poisoned.set(true);
                     }
                     guard.committed = !boundary.poisoned.get();
-                    return failure(status, "live move operation refused");
+                    return failure(*status, "live move operation refused");
                 }
+                reported_events = applied.expect("successful status evaluation");
                 (false, true, true)
             } else {
                 match playback {
@@ -582,6 +596,18 @@ impl PagePlayer {
                 "live frame checkpoint exceeds its bound",
             );
         }
+        let reported_events = self
+            .pending_events
+            .borrow()
+            .iter()
+            .cloned()
+            .chain(reported_events)
+            .collect::<Vec<_>>();
+        let deferred_events = if advances {
+            Vec::new()
+        } else {
+            reported_events.clone()
+        };
         let events = own_reported_events(
             reported_events,
             pointer_results.len(),
@@ -607,6 +633,13 @@ impl PagePlayer {
             .chain(commands)
             .collect::<Vec<_>>();
         let deferred_commands = (!advances).then(|| commands.clone());
+        // Status APIs publish neither queue. Both are replaced only at commit,
+        // and the next ordinary step owns their one delivery, even for sleepers.
+        let (events, commands) = if advances {
+            (events, commands)
+        } else {
+            (Vec::new(), Vec::new())
+        };
         if initial_groups_changed {
             runtime_dirty = true;
             keep_going = true;
@@ -840,6 +873,8 @@ impl PagePlayer {
             policy,
             commands: self.pending_commands.clone(),
             deferred: deferred_commands.unwrap_or_default(),
+            events: self.pending_events.clone(),
+            deferred_events,
             guard,
         })
     }

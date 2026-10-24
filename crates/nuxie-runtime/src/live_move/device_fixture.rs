@@ -129,7 +129,7 @@ fn lifecycle_condition(b: &mut Vec<u8>, model: u8, phase: bool, op: u64, step: &
         &[("value", S(if phase { "entering" } else { step }))],
     );
 }
-fn arrival_machine(b: &mut Vec<u8>, model: u8, step: &str) {
+fn arrival_machine(b: &mut Vec<u8>, model: u8, step: &str, start_event: Option<u64>) {
     use V::*;
     machine(b, false);
     obj(
@@ -144,6 +144,9 @@ fn arrival_machine(b: &mut Vec<u8>, model: u8, step: &str) {
     lifecycle_condition(b, model, true, 0, step);
     lifecycle_condition(b, model, false, 0, step);
     obj(b, "AnimationState", &[("animationId", U(0))]); // 2, one-shot holds its last pose
+    if let Some(event) = start_event {
+        obj(b, "StateMachineFireEvent", &[("eventId", U(event))]);
+    }
     obj(b, "StateTransition", &[("stateToId", U(1))]);
     lifecycle_condition(b, model, true, 1, step);
     obj(b, "StateTransition", &[("stateToId", U(1))]);
@@ -284,7 +287,13 @@ fn video_element(artboard: usize, owner: &str, view: &str, component: u64) -> se
         "readinessTimeoutSeconds": 5.0, "optional": false
     })
 }
+pub fn status_event_fixture() -> Vec<u8> {
+    build_with_start_event(2, true).0
+}
 fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
+    build_with_start_event(rows, false)
+}
+fn build_with_start_event(rows: usize, start_event: bool) -> (Vec<u8>, serde_json::Value) {
     use V::*;
     assert!(rows >= 1);
     let mut b = b"RIVE".to_vec();
@@ -592,7 +601,7 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 ],
             );
             arrival_timeline(&mut b, step, flight_layer + 9, event);
-            arrival_machine(&mut b, i as u8 + 1, step);
+            arrival_machine(&mut b, i as u8 + 1, step, start_event.then_some(event));
         } else {
             machine(&mut b, false);
         }

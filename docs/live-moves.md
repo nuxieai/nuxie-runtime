@@ -764,3 +764,7 @@ The first focused C API run (`importreadonlycapi`) passed 19 cases and failed on
 | `importreadonlycheck` | `check -p nux-capi --all-targets` | 26 targets built, exit 0. |
 
 Only the five touched Rust files were formatted with `rustfmt --edition 2024`. Formatting and whitespace checks pass. No generated files changed, no pool failure occurred, and nothing was committed.
+
+### Preserve authored prop binding order during live moves (UNIV-5289)
+
+Departure transferred slot prop bindings through import initialization, which changed two-way, target-first bindings to source-first. Ownership transfer now uses `retain_existing_value_data_bind` to preserve the authored flags; import initialization still normalizes them. The `nuxie-runtime` regression `a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home` in `tests/live_moves.rs` checks the core's derived binding flags after landing and returning home, plus a target write reaching the destination Screen's source after landing. The test has been added but not run in this sandbox.

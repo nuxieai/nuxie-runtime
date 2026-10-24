@@ -17,6 +17,7 @@ pub struct ScriptedLayout {
     pub base: ScriptedLayoutBase,
     size: Vec2,
     size_known: bool,
+    natural_measure: Option<Vec2>,
 }
 
 impl Drop for ScriptedLayout {
@@ -90,22 +91,36 @@ impl ScriptedLayout {
         if !self.base.base.scripted.measures() {
             return Vec2::default();
         }
-        let Some(instance) = self.base.base.scripted.runtime_instance() else {
-            return Vec2::default();
-        };
-        let mut host = ScriptUpdateRequestHost::default();
-        let result =
-            instance
-                .borrow_mut()
-                .call_optional_method(ScriptMethod::Measure, &[], &mut host);
-        if host.take_requested() {
-            self.base.base.mark_needs_update();
-        }
-        let measured = match result {
-            Ok(ScriptOptionalMethodResult::Missing) => return Vec2::default(),
-            Ok(ScriptOptionalMethodResult::Returned(ScriptValue::Vec2 { x, y })) => Vec2::new(x, y),
-            // Callback errors and non-vector results keep C++'s initial maxima.
-            _ => Vec2::new(f32::MAX, f32::MAX),
+        let measured = if crate::page_player::IntrinsicProbe::active() {
+            match self.natural_measure {
+                Some(size) => size,
+                None => {
+                    crate::page_player::IntrinsicProbe::unavailable();
+                    Vec2::default()
+                }
+            }
+        } else {
+            let Some(instance) = self.base.base.scripted.runtime_instance() else {
+                return Vec2::default();
+            };
+            let mut host = ScriptUpdateRequestHost::default();
+            let result =
+                instance
+                    .borrow_mut()
+                    .call_optional_method(ScriptMethod::Measure, &[], &mut host);
+            if host.take_requested() {
+                self.base.base.mark_needs_update();
+            }
+            let measured = match result {
+                Ok(ScriptOptionalMethodResult::Missing) => return Vec2::default(),
+                Ok(ScriptOptionalMethodResult::Returned(ScriptValue::Vec2 { x, y })) => {
+                    Vec2::new(x, y)
+                }
+                // Callback errors and non-vector results keep C++'s initial maxima.
+                _ => Vec2::new(f32::MAX, f32::MAX),
+            };
+            self.natural_measure = Some(measured);
+            measured
         };
         let width_limit = if width_mode == LayoutMeasureMode::Undefined {
             f32::MAX

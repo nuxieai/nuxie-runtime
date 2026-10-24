@@ -24,8 +24,10 @@ use taffy::{
 };
 
 /// Nodes queued for a tree by their owners since its last solve.
-#[derive(Default)]
-struct DirtyQueue(RefCell<Vec<NodeId>>);
+struct DirtyQueue {
+    nodes: RefCell<Vec<NodeId>>,
+    owner: CoreHandle,
+}
 
 /// An owner's stable node: the tree identity (its queue) and the node id.
 #[derive(Clone)]
@@ -41,11 +43,14 @@ impl PartialEq for LayoutNodeLink {
 }
 
 impl LayoutNodeLink {
+    pub(crate) fn root_owner(&self) -> CoreHandle {
+        self.queue.owner.clone()
+    }
     pub(crate) fn id(&self) -> NodeId {
         self.id
     }
     pub(crate) fn enqueue(&self) {
-        self.queue.0.borrow_mut().push(self.id);
+        self.queue.nodes.borrow_mut().push(self.id);
     }
 }
 
@@ -57,6 +62,7 @@ pub(crate) enum LayoutNodeKind {
     Content,
 }
 
+#[derive(Clone)]
 pub(crate) struct LayoutNodeContext {
     pub(crate) owner: CoreHandle,
     pub(crate) kind: LayoutNodeKind,
@@ -79,6 +85,7 @@ pub(crate) struct LayoutTree {
     pub(crate) root: NodeId,
     /// Available size of the last root style resolution (NaN: unbounded).
     pub(crate) root_available: (f32, f32),
+    pub(crate) intrinsic_height: Option<(NodeId, u32, f32)>,
 }
 
 impl LayoutTree {
@@ -89,7 +96,7 @@ impl LayoutTree {
             .new_leaf_with_context(
                 Style::default(),
                 LayoutNodeContext {
-                    owner: root_owner,
+                    owner: root_owner.clone(),
                     kind,
                     measured: false,
                     minimum_supported: [true; 2],
@@ -101,7 +108,11 @@ impl LayoutTree {
             .expect("new layout root");
         Self {
             taffy,
-            queue: Rc::default(),
+            queue: Rc::new(DirtyQueue {
+                nodes: RefCell::default(),
+                owner: root_owner,
+            }),
+            intrinsic_height: None,
             root,
             root_available: (f32::NAN, f32::NAN),
         }
@@ -141,7 +152,7 @@ impl LayoutTree {
     }
 
     pub(crate) fn take_queue(&self) -> Vec<NodeId> {
-        std::mem::take(&mut *self.queue.0.borrow_mut())
+        std::mem::take(&mut *self.queue.nodes.borrow_mut())
     }
 
     /// Replace `node`'s style only if it differs; returns whether it did.

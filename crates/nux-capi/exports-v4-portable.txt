@@ -41,6 +41,7 @@ nux_font_probe_make_font
 nux_font_set_fallback_proc
 nux_font_with_weight
 nux_player_acknowledge_presented
+nux_player_content_height
 nux_player_enable_semantics
 nux_player_field_string_copy
 nux_player_field_string_set

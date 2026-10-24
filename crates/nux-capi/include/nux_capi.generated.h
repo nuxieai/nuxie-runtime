@@ -2591,6 +2591,12 @@ NuxStatus nux_font_with_weight(const struct NuxFont *font,
 NuxStatus nux_player_acknowledge_presented(struct NuxPlayer *player, uint64_t render_revision);
 
 /**
+ * Read the top expanded Screen's intrinsic content height in points at the
+ * page width, after a step. Does not advance playback or change drawn layout.
+ */
+NuxStatus nux_player_content_height(const struct NuxPlayer *player, float *out_height);
+
+/**
  * Enable semantic tracking for the player's shared artboard occurrence.
  * Call before advancing/presenting. Static, animation, and state-machine
  * players sharing this occurrence observe the same tree.

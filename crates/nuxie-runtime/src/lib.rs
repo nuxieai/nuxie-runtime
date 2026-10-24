@@ -22,6 +22,7 @@ pub mod hosted_scene;
 pub mod live_move;
 #[cfg(feature = "test-support")]
 pub mod live_move_fixture;
+pub mod page_player;
 pub mod text_decoration;
 pub mod utils;
 pub mod video;

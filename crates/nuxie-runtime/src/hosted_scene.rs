@@ -468,13 +468,18 @@ pub(crate) fn root_scene(root: &RuntimeArtboardInstanceHandle) -> Option<std::rc
     // Decide once for this occurrence, including a negative answer. Native
     // hooks only read the decision; explicit entry points initialize it here.
     // A Screen used by paint or an ordinary nested host gets no scene state.
-    let declared = source.1.as_ref().is_some_and(definition_has_records)
-        && root.with_artboard(|b| {
-            b.find_handle::<ArtboardComponentList>("screens").is_some()
-                && !b
-                    .find_all_handles::<crate::live_move::records::LiveStep>()
-                    .is_empty()
-        });
+    let records = source.1.as_ref().is_some_and(definition_has_records);
+    // Only a root with a screens list opts in: a $nuxie.page by shape, or a
+    // root whose file declares live-move steps. Misplaced steps elsewhere
+    // stay ignored.
+    let declared = root.with_artboard(|b| {
+        b.find_handle::<ArtboardComponentList>("screens").is_some()
+            && (b.name() == "$nuxie.page"
+                || (records
+                    && !b
+                        .find_all_handles::<crate::live_move::records::LiveStep>()
+                        .is_empty()))
+    });
     let scene = declared.then(|| SceneState::new(root.core_handle()));
     root.with_artboard_mut(|b| b.live_move_scene = Some(scene.clone()));
     scene
@@ -490,6 +495,7 @@ pub(crate) fn is_active_artboard(board: &CoreHandle) -> bool {
 #[derive(Clone, Copy)]
 pub enum Walk {
     CapabilityScan,
+    IntrinsicMeasure,
     IndexBuild,
     Advance,
     Layout,
@@ -508,6 +514,7 @@ pub enum Walk {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WalkCounts {
     pub capability_scan: u64,
+    pub intrinsic_measure: u64,
     pub index_build: u64,
     pub advance: u64,
     pub layout: u64,
@@ -540,6 +547,7 @@ pub fn record_walk(walk: Walk) {
         if let Some(mut c) = v.get() {
             let target = match walk {
                 Walk::CapabilityScan => &mut c.capability_scan,
+                Walk::IntrinsicMeasure => &mut c.intrinsic_measure,
                 Walk::IndexBuild => &mut c.index_build,
                 Walk::Advance => &mut c.advance,
                 Walk::Layout => &mut c.layout,

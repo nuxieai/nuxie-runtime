@@ -61,7 +61,12 @@ impl Scene {
             None,
         )
         .expect("fixture imports");
-        let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+        let root = file
+            .with_file(|f| {
+                f.artboard_named("Page")
+                    .or_else(|| f.artboard_named("$nuxie.page"))
+            })
+            .unwrap();
         let vm = file
             .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
             .unwrap();
@@ -75,7 +80,7 @@ impl Scene {
         let hs = b.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
         let d = hs[0].clone();
         let f = hs[1].clone();
-        if hosted_scene::enabled(&root) {
+        if root.with_artboard(|b| !b.find_all_handles::<records::LiveStep>().is_empty()) {
             empty_slot(&f).unwrap();
             let af = a.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[1].clone();
             empty_slot(&af).unwrap();
@@ -3101,4 +3106,230 @@ fn import_validation_preserves_and_ignores_steps_without_screens() {
     moves.prepare(&root).unwrap();
     assert!(moves.frame_scope(&root, &[]).unwrap().is_none());
     assert!(moves.step_begin(&root, "B", Some("t1")).is_err());
+}
+
+#[test]
+fn record_free_page_sleeps_wakes_and_cuts() {
+    let mut s = Scene::load(&fixture::record_free_page_fixture(), false);
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let original = child(&s.s).unwrap().core_handle();
+    set_row_collapsed(&list, 0, true).expect("record-free page can sleep");
+    assert!(s.moves.step_begin(&s.root, "A", None).is_err());
+    set_row_collapsed(&list, 0, false).expect("record-free page can wake");
+    s.moves
+        .step_begin(&s.root, "A", None)
+        .expect("record-free cut begins");
+    s.moves
+        .step_end(&s.root, "A", None)
+        .expect("record-free cut ends");
+    assert_eq!(child(&s.s).unwrap().core_handle(), original);
+}
+
+#[test]
+fn record_free_nonpage_refuses_sleep_and_cut_without_allocating() {
+    let mut s = Scene::load(&fixture::ordinary_fixture(2), false);
+    let before = hosted_scene::bookkeeping_counts();
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    assert!(set_row_collapsed(&list, 0, true).is_err());
+    assert!(s.moves.step_begin(&s.root, "A", None).is_err());
+    assert_eq!(hosted_scene::bookkeeping_counts(), before);
+}
+
+fn page_model(s: &Scene) -> RuntimeOwnedViewModelHandle {
+    let model = s
+        .root
+        .data_context()
+        .unwrap()
+        .with_context(|c| c.main_view_model_instance())
+        .unwrap();
+    RuntimeOwnedViewModelHandle::from_native(s._file.clone(), model).unwrap()
+}
+
+#[test]
+fn pending_insert_is_applied_before_takeoff() {
+    let mut s = Scene::new();
+    let page = page_model(&s);
+    let incoming = page.list_item_by_property_name_path("screens", 1).unwrap();
+    assert!(page.remove_list_item_by_property_name_path("screens", 1));
+    s.advance(0.0);
+    assert!(!screens(&s.root).unwrap().contains_key("B"));
+    assert!(page.insert_list_item_by_property_name_path("screens", 1, &incoming));
+    // No advance or draw is allowed between insertion and take-off.
+    s.moves.step_begin(&s.root, "B", Some("t1")).unwrap();
+    let b = screens(&s.root).unwrap()["B"].clone();
+    let slots = b.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
+    assert!(
+        child(&slots[0]).is_none(),
+        "fresh incoming unit must not draw before take-off"
+    );
+    assert_eq!(drawn_bounds(&mut s).len(), 1);
+}
+
+#[test]
+fn pending_move_preserves_awake_and_sleeping_rows() {
+    for asleep in [false, true] {
+        let mut s = Scene::new();
+        let page = page_model(&s);
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        let board = s.b.core_handle();
+        let unit = child(&s.d).unwrap().core_handle();
+        let playback = machine(&s.d);
+        let model =
+            s.b.data_context()
+                .unwrap()
+                .with_context(|c| c.main_view_model_instance())
+                .unwrap();
+        if asleep {
+            set_row_collapsed(&list, 1, true).unwrap();
+        }
+        assert!(page.move_list_item_by_property_name_path("screens", 1, 0));
+        // A status operation must settle membership without a playback advance.
+        s.moves.step_begin(&s.root, "A", None).unwrap();
+        s.moves.step_end(&s.root, "A", None).unwrap();
+        let first = list
+            .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
+            .flatten()
+            .unwrap();
+        assert_eq!(first.core_handle(), board);
+        assert_eq!(child(&s.d).unwrap().core_handle(), unit);
+        assert!(playback.downgrade().ptr_eq(&machine(&s.d).downgrade()));
+        assert_eq!(
+            first
+                .data_context()
+                .unwrap()
+                .with_context(|c| c.main_view_model_instance())
+                .unwrap(),
+            model
+        );
+        if asleep {
+            assert!(s.moves.step_begin(&s.root, "B", Some("t1")).is_err());
+            set_row_collapsed(&list, 0, false).unwrap();
+        }
+        assert!(page.move_list_item_by_property_name_path("screens", 0, 1));
+        let outgoing = child(&s.s).unwrap().core_handle();
+        s.moves.step_begin(&s.root, "B", Some("t1")).unwrap();
+        assert_eq!(child(&s.f).unwrap().core_handle(), outgoing);
+        s.moves.step_end(&s.root, "B", Some("t1")).unwrap();
+    }
+}
+
+#[test]
+fn page_content_height_tracks_top_row_and_bound_text_without_drawing_changes() {
+    use page_player::{PagePlayer, Playback, Step};
+    use source::layout_component::LayoutComponent;
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::fit_content_page_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let mut board = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+    let root = board.native_handle();
+    let vm = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let vm = RuntimeOwnedViewModelHandle::from_native(file, vm).unwrap();
+    board.bind_owned_view_model_handle(vm.clone());
+    let mut machine = board.default_state_machine_instance().unwrap();
+    machine.bind_owned_view_model_handle(vm.clone());
+    let mut playback = Playback::StateMachine(Box::new(machine));
+    let player = PagePlayer::default();
+    let roots = std::slice::from_ref(&vm);
+    player
+        .step(&mut board, &mut playback, Step::default(), roots, None)
+        .unwrap();
+    let measure = |board: &ArtboardInstance, factory: &PersistentFactory<RecordingFactory>| {
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        board.draw(&mut renderer);
+        let before = factory.borrow().canonical_recording().stream().to_owned();
+        let serial = root.with_artboard(|b| b.change_serial());
+        hosted_scene::measure_walks(true);
+        let height = player.content_height(board).unwrap();
+        assert_eq!(root.with_artboard(|b| b.change_serial()), serial);
+        assert_eq!(height, player.content_height(board).unwrap());
+        let walks = hosted_scene::measure_walks(false);
+        assert_eq!(
+            walks.intrinsic_measure, 1,
+            "second measurement must use the cache"
+        );
+        assert_eq!(walks.advance, 0);
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        board.draw(&mut renderer);
+        assert_eq!(factory.borrow().canonical_recording().stream(), before);
+        height
+    };
+    let label_height = |name: &str| {
+        screens(&root).unwrap()[name]
+            .with_artboard(|b| b.find_handle::<LayoutComponent>("labelBox"))
+            .unwrap()
+            .with_downcast::<LayoutComponent, _>(|l| l.layout_height())
+            .unwrap()
+    };
+    let b_height = measure(&board, &factory);
+    assert!(label_height("B") > 0.0, "fixture must lay out real text");
+    close(b_height, 160.0 + label_height("B"));
+    assert!(vm.move_list_item_by_property_name_path("screens", 0, 1));
+    player
+        .step(&mut board, &mut playback, Step::default(), roots, None)
+        .unwrap();
+    let a_height = measure(&board, &factory);
+    close(a_height, 80.0 + label_height("A"));
+    close(b_height - a_height, 80.0);
+    let row = vm.list_item_by_property_name_path("screens", 1).unwrap();
+    assert!(row.borrow_mut().set_string_by_property_name(
+        "label",
+        "More wrapping text for the sheet. ".repeat(30).as_bytes()
+    ));
+    player
+        .step(&mut board, &mut playback, Step::default(), roots, None)
+        .unwrap();
+    let grown = measure(&board, &factory);
+    assert!(
+        grown > a_height + 24.0,
+        "bound text must grow intrinsic height"
+    );
+    let output = player
+        .step(&mut board, &mut playback, Step::default(), roots, None)
+        .unwrap();
+    assert!(output.events.is_empty());
+    assert!(output.commands.is_empty());
+    assert!(output.changes.is_empty());
+}
+
+#[test]
+fn pending_remove_is_applied_before_row_sleep() {
+    let mut s = Scene::new();
+    let page = page_model(&s);
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let incoming = s.b.core_handle();
+    assert!(page.remove_list_item_by_property_name_path("screens", 0));
+    set_row_collapsed(&list, 0, true).unwrap();
+    assert_eq!(
+        list.with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
+            .flatten()
+            .unwrap()
+            .core_handle(),
+        incoming
+    );
+    assert!(s.moves.step_begin(&s.root, "B", None).is_err());
+    set_row_collapsed(&list, 0, false).unwrap();
+    s.moves.step_begin(&s.root, "B", None).unwrap();
+    s.moves.step_end(&s.root, "B", None).unwrap();
 }

@@ -7,11 +7,7 @@ pub(super) enum Request {
     End(NuxStringView, *const NuxStringView),
     Row(NuxStringView, u32, u8),
 }
-pub(super) enum Prepared {
-    Begin(String, Option<String>),
-    End(String, Option<String>),
-    Row(String, i32, bool),
-}
+use nuxie::page_player::Operation as Prepared;
 impl Request {
     pub(super) fn prepare(self) -> Result<Prepared, NuxStatus> {
         fn names(
@@ -47,24 +43,6 @@ impl Request {
                 )
             }
         })
-    }
-}
-impl Prepared {
-    pub(super) fn apply(
-        self,
-        moves: &mut nuxie::live_move::LiveMoves,
-        root: &nuxie::RuntimeArtboardInstanceHandle,
-    ) -> Result<(), NuxStatus> {
-        match self {
-            Self::Begin(incoming, name) => moves.step_begin(root, &incoming, name.as_deref()),
-            Self::End(incoming, name) => moves.step_end(root, &incoming, name.as_deref()),
-            Self::Row(name, index, collapsed) => {
-                moves.prepare(root).map_err(|_| NuxStatus::InvalidArgument)?;
-                let list = root.with_artboard(|b| b.find_handle::<nuxie::runtime::artboard_component_list::ArtboardComponentList>(&name)).ok_or(NuxStatus::InvalidArgument)?;
-                nuxie::live_move::set_row_collapsed(&list, index, collapsed).map_err(|_| NuxStatus::InvalidArgument)?;
-                moves.prepare(root)
-            }
-        }.map_err(|_| NuxStatus::InvalidArgument)
     }
 }
 /// Take off units from a published LiveStep. incoming_screen names the mounted,

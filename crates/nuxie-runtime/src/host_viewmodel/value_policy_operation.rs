@@ -701,6 +701,14 @@ impl RuntimeValuePolicyOperation {
                     .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
                     .ok_or(RuntimeValuePolicyError::BorrowConflict)?;
                 for parent in parents {
+                    // A retained child may still name a retired native parent.
+                    // Match observable-mutation propagation and skip that edge.
+                    if parent
+                        .with_downcast::<ViewModelInstance, _>(|_| ())
+                        .is_none()
+                    {
+                        continue;
+                    }
                     pending.push(
                         RuntimeOwnedViewModelHandle::from_native(policy.file.clone(), parent)
                             .ok_or(RuntimeValuePolicyError::BorrowConflict)?,

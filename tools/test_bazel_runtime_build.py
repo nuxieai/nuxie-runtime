@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.bazel_runtime_build import BazelRuntime, canonical, digest
+from tools.bazel_runtime_build import BazelRuntime, canonical, digest, retain_packaging_tool
 
 
 TARGET = "aarch64-linux-android"
@@ -16,6 +16,21 @@ LABEL = "//crates/shipping:shipping__android__cdylib"
 
 
 class CacheFrontendTests(unittest.TestCase):
+    def test_packaging_tool_survives_bazel_repository_eviction(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = root / "bazel/external/rust-toolchain"
+            repository.mkdir(parents=True)
+            source = repository / "llvm-objcopy"
+            source.write_text("#!/bin/sh\nprintf '%s\\n' pinned-packaging-tool\n")
+            source.chmod(0o755)
+            destination = root / "distribution/build/toolchain/llvm-objcopy"
+            selected = retain_packaging_tool(source, destination)
+            self.assertEqual(digest(selected), digest(source))
+            shutil.rmtree(root / "bazel")
+            self.assertEqual(subprocess.check_output([selected], text=True).strip(), "pinned-packaging-tool")
+
     def test_v2_distribution_rejects_a_caller_output_base_before_tool_invocation(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
                 "NUXIE_CI_RUNNER_POLICY_VERSION": "2", "NUXIE_BAZEL_OUTPUT_BASE": directory}, clear=True), \

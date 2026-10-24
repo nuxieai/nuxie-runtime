@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 import uuid
 
@@ -37,6 +38,31 @@ def canonical(document):
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def retain_packaging_tool(source, destination):
+    """A distribution owns tools it uses after its pool builds return."""
+    source, destination = Path(source), Path(destination)
+    if not source.is_file() or not os.access(source, os.X_OK):
+        raise ValueError(f"selected packaging tool is not executable: {source}")
+    expected = digest(source)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
+            pending = Path(stream.name)
+            with source.open("rb") as tool:
+                shutil.copyfileobj(tool, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        pending.chmod(0o755)
+        if digest(pending) != expected:
+            raise ValueError("selected packaging tool changed while being retained")
+        pending.replace(destination)
+        return destination
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
 
 
 def tree_digest(root):
@@ -303,6 +329,8 @@ def main():
         _, compiler, version = runtime.toolchain(args.label, args.target, **versions)
         host = re.search(r" host: (\S+)", version).group(1)
         objcopy = compiler.parent.parent / "lib/rustlib" / host / "bin/llvm-objcopy"
+        if args.output is not None:
+            objcopy = retain_packaging_tool(objcopy, args.output.absolute())
         print(json.dumps({"rustc": str(compiler), "version": version, "objcopy": str(objcopy)}))
 
 

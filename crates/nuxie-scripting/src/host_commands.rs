@@ -172,23 +172,7 @@ impl Default for HostCommandLimits {
     }
 }
 
-/// A deterministic value detached from the script VM.
-#[derive(Debug, Clone, PartialEq)]
-pub enum HostValue {
-    Null,
-    Bool(bool),
-    Number(f64),
-    String(String),
-    List(Vec<HostValue>),
-    Object(BTreeMap<String, HostValue>),
-}
-
-/// One product-neutral command emitted by authored script.
-#[derive(Debug, Clone, PartialEq)]
-pub struct HostCommand {
-    pub name: String,
-    pub payload: HostValue,
-}
+pub use nuxie_runtime::page_player::{HostCommand, HostValue};
 
 #[derive(Clone)]
 pub struct HostCommandHost {

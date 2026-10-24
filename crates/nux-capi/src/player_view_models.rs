@@ -1,6 +1,6 @@
 //! The mutation scope is the active occurrence index plus explicitly subscribed
 //! roots. Nuxie row collapse uses the same index for every host frame path.
-use crate::{NuxPlayer, NuxStatus};
+use crate::NuxStatus;
 use nuxie::{ArtboardInstance, RuntimeOwnedViewModelHandle};
 use std::collections::HashSet;
 pub(super) fn scene_roots(
@@ -21,19 +21,6 @@ pub(super) fn scene_roots_across(
         subscribed,
         limit,
         &index.active(&artboard.native_handle()),
-    )
-}
-pub(super) fn for_player(
-    _player: &NuxPlayer,
-    artboard: &ArtboardInstance,
-    subscribed: &[RuntimeOwnedViewModelHandle],
-    limit: usize,
-) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
-    collect(
-        artboard,
-        subscribed,
-        limit,
-        &nuxie::hosted_scene::HostedIndex::default().active(&artboard.native_handle()),
     )
 }
 fn collect(

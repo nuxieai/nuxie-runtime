@@ -72,11 +72,6 @@ impl Plan {
             self.revision = Some(revision);
             return Ok(());
         }
-        if self.steps.is_empty() {
-            self.rows.clear();
-            self.revision = Some(revision);
-            return Ok(());
-        }
         self.rows = screen_rows(root)?;
         let mounted = self
             .rows
@@ -626,7 +621,9 @@ impl LiveMoves {
         name: Option<&str>,
     ) -> Result<()> {
         let scene = crate::hosted_scene::root_scene(root)
-            .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
+            .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
+        root.update_data_binds(false);
+        root.update_pass(false);
         scene.plan.borrow_mut().step_begin(root, incoming, name)
     }
     pub fn step_end(
@@ -636,7 +633,9 @@ impl LiveMoves {
         name: Option<&str>,
     ) -> Result<()> {
         let scene = crate::hosted_scene::root_scene(root)
-            .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
+            .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
+        root.update_data_binds(false);
+        root.update_pass(false);
         scene.plan.borrow_mut().step_end(root, incoming, name)
     }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {

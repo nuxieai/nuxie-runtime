@@ -94,3 +94,40 @@ pub unsafe extern "C" fn nux_player_layout_size(
             .map_or_else(|status| status, |()| NuxStatus::Ok)
     })
 }
+
+/// Read the top expanded Screen's intrinsic content height in points at the
+/// page width, after a step. Does not advance playback or change drawn layout.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_content_height(
+    player: *const NuxPlayer,
+    out_height: *mut f32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_height.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let _player_call = match enter_handle(player, HandleKind::Player) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
+        let Some(player) = (unsafe { player.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let _occurrence_call = match enter_occurrence(&player.artboard) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
+        let Ok(artboard) = player.artboard.instance.try_borrow() else {
+            return NuxStatus::ReentrantCall;
+        };
+        match player.page_player.content_height(&artboard) {
+            Ok(height) => {
+                unsafe {
+                    *out_height = height;
+                }
+                NuxStatus::Ok
+            }
+            Err(error) => super::page_status(error.kind),
+        }
+    })
+}

@@ -250,6 +250,7 @@ pub fn global_fixture() -> Vec<u8> {
 }
 #[derive(Default)]
 struct Options {
+    parity_counter: bool,
     controls: bool,
     playing_video: bool,
     semantics: bool,
@@ -257,6 +258,7 @@ struct Options {
     keyed: bool,
     two_versions: bool,
     ordinary: bool,
+    page_shape: bool,
     scale: bool,
     invalid_plan: u8,
     incoming_away: bool,
@@ -352,6 +354,17 @@ pub fn two_version_mixed_size_fixture() -> Vec<u8> {
         },
     )
 }
+/// Record-free page using the SDK root naming contract.
+pub fn record_free_page_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            ordinary: true,
+            page_shape: true,
+            ..Options::default()
+        },
+    )
+}
 pub fn ordinary_fixture(rows: usize) -> Vec<u8> {
     build(
         rows,
@@ -393,6 +406,16 @@ pub fn endpoint_shape_fixture(empty_screens: bool) -> Vec<u8> {
 }
 pub fn command_fixture(payload: &[u8]) -> Vec<u8> {
     build_with_script(2, Options::default(), Some(payload))
+}
+pub fn command_parity_fixture(payload: &[u8]) -> Vec<u8> {
+    build_with_script(
+        2,
+        Options {
+            parity_counter: true,
+            ..Options::default()
+        },
+        Some(payload),
+    )
 }
 fn build(rows: usize, options: Options) -> Vec<u8> {
     build_with_script(rows, options, None)
@@ -465,11 +488,22 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     }
     obj(&mut b, "ViewModel", &page);
     obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    if options.parity_counter {
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("counter"))]);
+    }
+
     obj(
         &mut b,
         "ViewModelInstance",
         &[("viewModelId", U(rows as u64 + 1))],
     );
+    if options.parity_counter {
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(1)), ("propertyValue", F(0.0))],
+        );
+    }
     obj(
         &mut b,
         "ViewModelInstanceList",
@@ -489,7 +523,14 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         &mut b,
         "Artboard",
         &[
-            ("name", S("Page")),
+            (
+                "name",
+                S(if options.page_shape {
+                    "$nuxie.page"
+                } else {
+                    "Page"
+                }),
+            ),
             ("width", F(800.0)),
             ("height", F(600.0)),
             ("viewModelId", U(rows as u64 + 1)),
@@ -502,6 +543,17 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         "Node",
         &[("name", S("overlap")), ("parentId", U(0))],
     ); // 1
+    if options.parity_counter {
+        obj(
+            &mut b,
+            "DataBindContext",
+            &[
+                ("propertyKey", U(13)),
+                ("sourcePathIds", Bytes(&[rows as u8 + 1, 1])),
+                ("flags", U(1)),
+            ],
+        );
+    }
     obj(
         &mut b,
         "ArtboardComponentList",
@@ -713,7 +765,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             ],
         );
     }
-    machine(&mut b, false);
+    if options.parity_counter {
+        timeline(&mut b, "counter", 1, 13, 0.0, 100.0);
+    }
+    machine(&mut b, options.parity_counter);
     for i in 0..rows {
         let name = if i == 0 {
             "A".to_owned()
@@ -1484,5 +1539,164 @@ pub fn ordinary_list_fixture(rows: usize) -> Vec<u8> {
     );
     obj(&mut b, "Node", &[("parentId", U(0))]);
     machine(&mut b, false);
+    b
+}
+
+/// Two full-height Screen rows with different intrinsic content and bound text.
+pub fn fit_content_page_fixture() -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    obj(
+        &mut b,
+        "FontAsset",
+        &[("assetId", U(0)), ("name", S("Roboto"))],
+    );
+    obj(
+        &mut b,
+        "FileAssetContents",
+        &[(
+            "bytes",
+            Bytes(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
+        )],
+    );
+    for (id, name) in [(0, "A"), (1, "B")] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+        obj(&mut b, "ViewModelPropertyString", &[("name", S("label"))]);
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(id))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[
+                ("viewModelPropertyId", U(0)),
+                ("propertyValue", S("Short label")),
+            ],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for id in [0, 1] {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(id)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("$nuxie.page")),
+            ("width", F(320.0)),
+            ("height", F(600.0)),
+            ("viewModelId", U(2)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    );
+    bind(&mut b, 800, &[2, 0]);
+    machine(&mut b, false);
+    for (id, name, height) in [(0, "A", 80.0), (1, "B", 160.0)] {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(name)),
+                ("width", F(320.0)),
+                ("height", F(600.0)),
+                ("viewModelId", U(id)),
+                ("styleId", U(1)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "LayoutComponentStyle",
+            &[("parentId", U(0)), ("flexDirectionValue", U(0))],
+        ); // 1
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("spacer")),
+                ("parentId", U(0)),
+                ("width", F(320.0)),
+                ("height", F(height)),
+                ("styleId", U(3)),
+            ],
+        ); // 2
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(2))]); // 3
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("labelBox")),
+                ("parentId", U(0)),
+                ("width", F(320.0)),
+                ("styleId", U(5)),
+            ],
+        ); // 4
+        obj(
+            &mut b,
+            "LayoutComponentStyle",
+            &[
+                ("parentId", U(4)),
+                ("layoutHeightScaleType", U(2)),
+                ("intrinsicallySizedValue", B(true)),
+                ("heightUnitsValue", U(3)),
+            ],
+        ); // 5
+        obj(
+            &mut b,
+            "Text",
+            &[
+                ("parentId", U(4)),
+                ("sizingValue", U(1)),
+                ("width", F(320.0)),
+                ("wrapValue", U(0)),
+            ],
+        ); // 6
+        obj(
+            &mut b,
+            "TextStylePaint",
+            &[
+                ("parentId", U(6)),
+                ("fontAssetId", U(0)),
+                ("fontSize", F(20.0)),
+                ("lineHeight", F(24.0)),
+            ],
+        ); // 7
+        obj(&mut b, "Fill", &[("parentId", U(7))]); // 8
+        obj(
+            &mut b,
+            "SolidColor",
+            &[("parentId", U(8)), ("colorValue", Color(0xff000000))],
+        ); // 9
+        obj(
+            &mut b,
+            "TextValueRun",
+            &[
+                ("name", S("label")),
+                ("parentId", U(6)),
+                ("styleId", U(7)),
+                ("text", S("Short label")),
+            ],
+        ); // 10
+        bind(&mut b, key("TextValueRun", "text").into(), &[id as u8, 0]);
+        machine(&mut b, false);
+    }
     b
 }

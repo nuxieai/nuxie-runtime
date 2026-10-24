@@ -23,6 +23,7 @@ use std::{any::Any, cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc};
 /// The native File plus the one VM and host extension installed before import.
 /// Cloning its native File handle also retains that installed host through the
 /// runtime's VM handle; dropping this wrapper cannot strand live callbacks.
+#[derive(Clone)]
 pub struct ScriptedFile {
     file: RuntimeFileHandle,
     installed: Rc<InstalledScripts>,
@@ -837,5 +838,90 @@ mod registration_tests {
             assert_eq!(actual, expected, "adapter routes: {handled:?}");
             assert!(installed.register_script_assets(&[]).is_empty());
         }
+    }
+}
+
+struct ScriptEffectTransaction {
+    scripted: Rc<ScriptedFile>,
+    checkpoint: Option<Box<dyn std::any::Any>>,
+    script_cycle_active: bool,
+}
+
+impl ScriptEffectTransaction {
+    fn begin(scripted: Rc<ScriptedFile>) -> Self {
+        scripted.begin_script_cycle();
+        let checkpoint = scripted.host().begin_cycle();
+        Self {
+            scripted,
+            checkpoint: Some(checkpoint),
+            script_cycle_active: true,
+        }
+    }
+
+    fn commit_host_commands(mut self) -> Result<Vec<HostCommand>, nuxie_runtime::ScriptError> {
+        let result = {
+            let host = self.scripted.host();
+            if let Some(error) = host.commit_error() {
+                Err(error)
+            } else {
+                let expected = host.effects_type_id();
+                let effects = host.drain_effects();
+                if expected == std::any::TypeId::of::<()>() {
+                    if effects.type_id() != expected || effects.downcast::<()>().is_err() {
+                        Err(nuxie_runtime::ScriptError::new(
+                            "script host effect type mismatch",
+                        ))
+                    } else {
+                        Ok(Vec::new())
+                    }
+                } else if expected == std::any::TypeId::of::<Vec<HostCommand>>() {
+                    if effects.type_id() != expected {
+                        Err(nuxie_runtime::ScriptError::new(
+                            "script host effect type mismatch",
+                        ))
+                    } else {
+                        effects.downcast::<Vec<HostCommand>>().map_err(|_| {
+                            nuxie_runtime::ScriptError::new("script host effect type mismatch")
+                        })
+                    }
+                } else {
+                    Err(nuxie_runtime::ScriptError::new(
+                        "script host effects are not portable C commands",
+                    ))
+                }
+            }
+        };
+        if result.is_ok() {
+            self.checkpoint = None;
+        }
+        self.finish_script_cycle();
+        result
+    }
+
+    fn finish_script_cycle(&mut self) {
+        if self.script_cycle_active {
+            self.scripted.end_script_cycle();
+            self.script_cycle_active = false;
+        }
+    }
+}
+
+impl Drop for ScriptEffectTransaction {
+    fn drop(&mut self) {
+        if let Some(checkpoint) = self.checkpoint.take() {
+            let _ = self.scripted.host().rollback_cycle(checkpoint);
+        }
+        self.finish_script_cycle();
+    }
+}
+
+impl nuxie_runtime::page_player::Effects for ScriptedFile {
+    fn begin(&self) -> Box<dyn nuxie_runtime::page_player::EffectTransaction> {
+        Box::new(ScriptEffectTransaction::begin(Rc::new(self.clone())))
+    }
+}
+impl nuxie_runtime::page_player::EffectTransaction for ScriptEffectTransaction {
+    fn finish(self: Box<Self>) -> Result<Vec<HostCommand>, nuxie_runtime::ScriptError> {
+        (*self).commit_host_commands()
     }
 }

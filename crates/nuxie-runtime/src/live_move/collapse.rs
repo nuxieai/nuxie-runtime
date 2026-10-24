@@ -83,6 +83,16 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         crate::hosted_scene::is_screen_list(list),
         "row sleep requires Page.screens"
     );
+    // Apply list insertions, removals and moves before interpreting the row
+    // index. This flush runs inside the caller's transaction, without playback.
+    if let Some(root) = list
+        .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
+        .flatten()
+        .and_then(|b| b.runtime_arena_owner())
+    {
+        root.update_data_binds(false);
+        root.update_pass(false);
+    }
     scene.prepare()?;
     let (row, parent, changed) = list
         .with_downcast_mut::<ArtboardComponentList, _>(|l| -> Result<_> {

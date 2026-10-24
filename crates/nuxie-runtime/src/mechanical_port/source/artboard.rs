@@ -365,6 +365,7 @@ impl DrawRangeState {
 pub struct Artboard {
     // Nuxie: unchecked, checked ordinary root, or checked live-move Page.
     // Definition replacement creates a fresh occurrence and a fresh decision.
+    pub(crate) page_boundary: Option<Rc<crate::page_player::Boundary>>,
     pub(crate) live_move_scene: Option<Option<Rc<crate::hosted_scene::SceneState>>>,
     pub base: ArtboardBase,
     core_arena: CoreArena,
@@ -502,6 +503,7 @@ impl Default for Artboard {
             key_frame_source_binds: RefCell::new(HashMap::new()),
             key_frame_source_binds_built: Cell::new(false),
             scripting_vm: None,
+            page_boundary: None,
             live_move_scene: None,
             file: RuntimeFileWeakHandle::default(),
             draw_visitor: None,

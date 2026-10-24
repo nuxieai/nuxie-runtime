@@ -4,6 +4,8 @@ UNIV-5289. Core PR, sections 1 to 7 of the runtime design. Section 8 is not impl
 
 The plan is in the RIV file. There is no JSON move-list API. A player takes units into the exact flight slots named by its file records, follows the two endpoints after its normal advance, and lands the same instances. A cut returns borrowed instances to the incoming Screen immediately. A two-version incoming instance that is still held on a third Screen also comes home before taking off from its incoming slot. All planned returns and flights are checked before changing ownership.
 
+The shared Rust page-player follow-up, record-free page opt-in, pending list edits and content-height query are documented in [page-player.md](page-player.md).
+
 ## Owners and integration
 
 | Owner | Work |

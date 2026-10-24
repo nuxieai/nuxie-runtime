@@ -4261,49 +4261,10 @@ impl LayoutComponent {
                     width: space(size.x),
                     height: space(size.y),
                 },
-                |inputs, _node, context, style| {
-                    if let Some(output) = context.as_ref().and_then(|context| {
-                        Self::measure_picture_node(&context.owner, inputs, style)
-                    }) {
-                        return output;
-                    }
-                    let measured = context
-                        .filter(|context| context.measured)
-                        .map(|context| (context.owner.clone(), context.kind));
-                    // PerformLayout omits known dimensions in the leaf callback,
-                    // even when the solver has already fixed the inline slot.
-                    let intrinsic_width = inputs.known_dimensions.width.is_none()
-                        && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
-                    let width_limits =
-                        crate::mechanical_port::source::layout::layout_tree::content_width_limits(
-                            style,
-                            inputs.parent_size,
-                        );
-                    let height_limits =
-                        crate::mechanical_port::source::layout::layout_tree::content_height_limits(
-                            style,
-                            inputs.parent_size,
-                        );
-                    taffy::compute_leaf_layout(
-                        inputs,
-                        style,
-                        |_, _| 0.0,
-                        |known, available| match &measured {
-                            Some((owner, kind)) => Self::measure_layout_node(
-                                owner,
-                                *kind,
-                                known,
-                                available,
-                                intrinsic_width,
-                                width_limits,
-                                height_limits,
-                            ),
-                            None => taffy::prelude::Size::ZERO,
-                        },
-                    )
-                },
+                Self::measure_tree_node,
             )
             .expect("valid layout calculation");
+        tree.intrinsic_height = None;
         Self::publish_layout_tree(&tree, &touched);
         #[cfg(debug_assertions)]
         Self::verify_layout_against_fresh_solve(owner, (size.x, size.y));
@@ -4314,6 +4275,152 @@ impl LayoutComponent {
             layout.layout_tree = Some(tree);
             layout.layout_solving = false;
         });
+    }
+
+    fn measure_tree_node(
+        inputs: taffy::tree::LayoutInput,
+        _node: taffy::prelude::NodeId,
+        context: Option<&mut crate::source::layout::layout_tree::LayoutNodeContext>,
+        style: &taffy::prelude::Style,
+    ) -> taffy::tree::LayoutOutput {
+        if let Some(output) = context
+            .as_ref()
+            .and_then(|context| Self::measure_picture_node(&context.owner, inputs, style))
+        {
+            return output;
+        }
+        let measured = context
+            .filter(|context| context.measured)
+            .map(|context| (context.owner.clone(), context.kind));
+        // PerformLayout omits known dimensions in the leaf callback,
+        // even when the solver has already fixed the inline slot.
+        let intrinsic_width = inputs.known_dimensions.width.is_none()
+            && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
+        let width_limits =
+            crate::mechanical_port::source::layout::layout_tree::content_width_limits(
+                style,
+                inputs.parent_size,
+            );
+        let height_limits =
+            crate::mechanical_port::source::layout::layout_tree::content_height_limits(
+                style,
+                inputs.parent_size,
+            );
+        taffy::compute_leaf_layout(
+            inputs,
+            style,
+            |_, _| 0.0,
+            |known, available| match &measured {
+                Some((owner, kind)) => Self::measure_layout_node(
+                    owner,
+                    *kind,
+                    known,
+                    available,
+                    intrinsic_width,
+                    width_limits,
+                    height_limits,
+                ),
+                None => taffy::prelude::Size::ZERO,
+            },
+        )
+    }
+
+    /// Measure a settled subtree with the same engine and leaf measurers, but
+    /// never publish its scratch tree. Only this Screen's nodes are copied.
+    /// Repeated reads reuse the answer until the owning tree next solves.
+    pub(crate) fn intrinsic_height_occurrence(owner: &CoreHandle, width: f32) -> Option<f32> {
+        use crate::source::layout::layout_tree::LayoutNodeContext;
+        use taffy::prelude::{
+            AvailableSpace, Dimension, LengthPercentageAuto, NodeId, Size, TaffyTree,
+        };
+        let link = owner
+            .with(|o| o.as_layout_component()?.layout_data.node().cloned())
+            .flatten()?;
+        let root = link.root_owner();
+        let cached = root
+            .with(|o| {
+                let tree = o.as_layout_component()?.layout_tree.as_ref()?;
+                tree.intrinsic_height
+                    .filter(|(id, w, _)| *id == link.id() && *w == width.to_bits())
+                    .map(|(_, _, h)| h)
+            })
+            .flatten();
+        if cached.is_some() {
+            return cached;
+        }
+        fn copy(
+            tree: &TaffyTree<LayoutNodeContext>,
+            id: NodeId,
+            scratch: &mut TaffyTree<LayoutNodeContext>,
+        ) -> Option<NodeId> {
+            let style = tree.style(id).ok()?.clone();
+            let new = match tree.get_node_context(id) {
+                Some(context) => scratch.new_leaf_with_context(style, context.clone()).ok()?,
+                None => scratch.new_leaf(style).ok()?,
+            };
+            let children = tree
+                .children(id)
+                .ok()?
+                .into_iter()
+                .map(|child| copy(tree, child, scratch))
+                .collect::<Option<Vec<_>>>()?;
+            scratch.set_children(new, &children).ok()?;
+            Some(new)
+        }
+        let mut scratch = TaffyTree::new();
+        scratch.disable_rounding();
+        let node = root
+            .with(|o| {
+                let tree = o.as_layout_component()?.layout_tree.as_ref()?;
+                if !tree.owns(&link, owner) {
+                    return None;
+                }
+                copy(&tree.taffy, link.id(), &mut scratch)
+            })
+            .flatten()?;
+        let mut style = scratch.style(node).ok()?.clone();
+        style.size.width = Dimension::length(width);
+        style.size.height = Dimension::auto();
+        style.min_size.width = LengthPercentageAuto::length(width);
+        style.max_size.width = LengthPercentageAuto::length(width);
+        style.min_size.height = LengthPercentageAuto::length(0.0);
+        style.max_size.height = LengthPercentageAuto::auto();
+        style.margin = taffy::geometry::Rect {
+            left: LengthPercentageAuto::length(0.0),
+            right: LengthPercentageAuto::length(0.0),
+            top: LengthPercentageAuto::length(0.0),
+            bottom: LengthPercentageAuto::length(0.0),
+        };
+        scratch.set_style(node, style).ok()?;
+        let probe = crate::page_player::IntrinsicProbe::enter();
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::IntrinsicMeasure);
+        scratch
+            .compute_layout_with_measure(
+                node,
+                Size {
+                    width: AvailableSpace::Definite(width),
+                    height: AvailableSpace::MaxContent,
+                },
+                Self::measure_tree_node,
+            )
+            .ok()?;
+        if probe.failed() {
+            return None;
+        }
+        let height = scratch.layout(node).ok()?.size.height;
+        if !height.is_finite() {
+            return None;
+        }
+        root.with_mut(|o| {
+            if let Some(tree) = o
+                .as_layout_component_mut()
+                .and_then(|l| l.layout_tree.as_mut())
+            {
+                tree.intrinsic_height = Some((link.id(), width.to_bits(), height));
+            }
+        });
+        Some(height)
     }
 
     /// Diagnostic (debug builds, `NUXIE_LAYOUT_VERIFY=<file>`): re-solve the

@@ -2169,3 +2169,307 @@ fn live_moves_native_typing_requires_a_fresh_presented_snapshot() {
         nux_semantic_snapshot_free(snapshot);
     }
 }
+
+unsafe fn page_player_command_scene() -> LiveScene {
+    unsafe {
+        let _flags = luaur_common::ScopedAllFlags::enter(true);
+        let source = br#"local bridge=require('bridge')
+local function update(self)
+ if self.value == 10 then self.atSource=true end
+ if self.atSource and self.value >= 200 and self.last ~= self.value then
+  self.last=self.value
+  bridge.command('moved', {value=self.value})
+ end
+end
+return function() return {value=0,last=0,atSource=false,update=update} end"#;
+        let mut size = 0;
+        let code = luaur_compiler::functions::luau_compile::luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            ptr::null_mut(),
+            &mut size,
+        );
+        assert!(!code.is_null());
+        let payload = [
+            vec![0],
+            std::slice::from_raw_parts(code.cast::<u8>(), size).to_vec(),
+        ]
+        .concat();
+        unsafe extern "C" {
+            fn free(p: *mut c_void);
+        }
+        free(code.cast());
+        let bytes = fixture::command_parity_fixture(&payload);
+        let mut scene = LiveScene {
+            file: ptr::null_mut(),
+            artboard: ptr::null_mut(),
+            vm: ptr::null_mut(),
+            player: ptr::null_mut(),
+        };
+        let config = NuxHostCommandImportConfig {
+            module_name: view("bridge"),
+            ..Default::default()
+        };
+        let mut imported = ptr::null_mut();
+        let status = nux_file_import_trusted_with_host_commands(
+            bytes.as_ptr(),
+            bytes.len(),
+            &NuxRenderCallbacks::default(),
+            &config,
+            &mut scene.file,
+            &mut imported,
+        );
+        if !imported.is_null() {
+            eprintln!(
+                "script import: {}",
+                String::from_utf8_lossy(&(*imported).message)
+            );
+            nux_capi_result_free(imported);
+        }
+        assert_eq!(status, NuxStatus::Ok);
+        assert_eq!(
+            nux_artboard_instance_new(scene.file, 0, &mut scene.artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_default(scene.artboard, &mut scene.vm),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(scene.artboard, scene.vm),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_new_default(scene.artboard, &mut scene.player),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        scene
+    }
+}
+
+unsafe fn page_player_parity_step(
+    rust: &LiveScene,
+    native: &nuxie::page_player::PagePlayer,
+    c: &LiveScene,
+    elapsed_seconds: f32,
+) -> (usize, usize, usize) {
+    unsafe {
+        let player = &*rust.player;
+        let output = native
+            .step(
+                &mut player.artboard.instance.borrow_mut(),
+                &mut player.instance.borrow_mut(),
+                nuxie::page_player::Step {
+                    elapsed_seconds,
+                    ..Default::default()
+                },
+                std::slice::from_ref(&(&*rust.vm).instance),
+                player
+                    .artboard
+                    .scripted
+                    .as_deref()
+                    .map(|s| s as &dyn nuxie::page_player::Effects),
+            )
+            .unwrap();
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            step_status(
+                c.player,
+                &NuxPlayerStep {
+                    elapsed_seconds,
+                    ..Default::default()
+                },
+                &mut result
+            ),
+            NuxStatus::Ok
+        );
+        let result_ref = &mut *result;
+        let mut events = output.events;
+        // Independent imports have different native VM identities.
+        for event in &mut events {
+            event.view_model_instance_id = None;
+        }
+        for event in &mut result_ref.events {
+            event.view_model_instance_id = None;
+        }
+        assert_eq!(format!("{events:?}"), format!("{:?}", result_ref.events));
+        let (commands, values) = flatten_host_commands(output.commands);
+        assert_eq!(
+            format!("{commands:?}"),
+            format!("{:?}", result_ref.host_commands)
+        );
+        assert_eq!(
+            format!("{values:?}"),
+            format!("{:?}", result_ref.host_values)
+        );
+        let changes = output
+            .changes
+            .iter()
+            .map(|change| (change.property_index, &change.value))
+            .collect::<Vec<_>>();
+        let c_changes = result_ref
+            .view_model_changes
+            .iter()
+            .map(|change| (change.change.property_index, &change.change.value))
+            .collect::<Vec<_>>();
+        assert_eq!(changes, c_changes);
+        let counts = (events.len(), commands.len(), changes.len());
+        nux_player_step_result_free(result);
+        counts
+    }
+}
+
+#[test]
+fn page_player_rust_and_c_have_identical_events_changes_and_commands() {
+    unsafe {
+        let _flags = luaur_common::ScopedAllFlags::enter(true);
+        let rust = page_player_command_scene();
+        let c = page_player_command_scene();
+        let native = nuxie::page_player::PagePlayer::default();
+        let t = view("t1");
+        native
+            .step_begin(
+                &mut (&*rust.player).artboard.instance.borrow_mut(),
+                "B",
+                Some("t1"),
+                std::slice::from_ref(&(&*rust.vm).instance),
+                (&*rust.player)
+                    .artboard
+                    .scripted
+                    .as_deref()
+                    .map(|s| s as &dyn nuxie::page_player::Effects),
+            )
+            .unwrap();
+        assert_eq!(
+            nux_player_step_begin(c.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        for scene in [&rust, &c] {
+            let row = (&*scene.vm)
+                .instance
+                .list_item_by_property_name_path("screens", 1)
+                .unwrap();
+            assert!(
+                row.borrow_mut()
+                    .set_number_by_property_name("offset", 321.0)
+            );
+        }
+        native
+            .step_end(
+                &mut (&*rust.player).artboard.instance.borrow_mut(),
+                "B",
+                Some("t1"),
+                std::slice::from_ref(&(&*rust.vm).instance),
+                (&*rust.player)
+                    .artboard
+                    .scripted
+                    .as_deref()
+                    .map(|s| s as &dyn nuxie::page_player::Effects),
+            )
+            .unwrap();
+        assert_eq!(nux_player_step_end(c.player, view("B"), &t), NuxStatus::Ok);
+        for scene in [&rust, &c] {
+            let row = (&*scene.vm)
+                .instance
+                .list_item_by_property_name_path("screens", 1)
+                .unwrap();
+            assert!(
+                row.borrow_mut()
+                    .set_number_by_property_name("offset", 456.0)
+            );
+        }
+        let (_, commands, changes) = page_player_parity_step(&rust, &native, &c, 0.1);
+        assert!(commands >= 2);
+        assert!(changes > 0);
+        assert_eq!(page_player_parity_step(&rust, &native, &c, 0.0), (0, 0, 0));
+
+        let bytes = nuxie::live_move::device_fixture::device_fixture(2);
+        let rust = LiveScene::from_bytes(&bytes);
+        let c = LiveScene::from_bytes(&bytes);
+        let native = nuxie::page_player::PagePlayer::default();
+        for scene in [&rust, &c] {
+            for (index, phase) in [(0, "exiting"), (1, "entering")] {
+                let row = (&*scene.vm)
+                    .instance
+                    .list_item_by_property_name_path("screens", index)
+                    .unwrap();
+                assert!(
+                    row.borrow_mut()
+                        .set_string_by_property_name_path("screen/phase", phase.as_bytes())
+                );
+                assert!(
+                    row.borrow_mut()
+                        .set_string_by_property_name_path("screen/transition", b"t1")
+                );
+            }
+        }
+        native
+            .step_begin(
+                &mut (&*rust.player).artboard.instance.borrow_mut(),
+                "B",
+                Some("t1"),
+                std::slice::from_ref(&(&*rust.vm).instance),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            nux_player_step_begin(c.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        let mut events = 0;
+        for _ in 0..65 {
+            events += page_player_parity_step(&rust, &native, &c, 1.0 / 60.0).0;
+        }
+        assert!(
+            events > 0,
+            "parity sequence must include an authored arrival event"
+        );
+    }
+}
+
+#[test]
+fn page_player_content_height_c_query_preserves_render_revision() {
+    unsafe {
+        let scene = LiveScene::from_bytes(&fixture::fit_content_page_fixture());
+        let mut height = 0.0;
+        let revision = (&*scene.player).artboard.render_revision.get();
+        assert_eq!(
+            nux_player_content_height(scene.player, &mut height),
+            NuxStatus::Ok
+        );
+        assert!(height > 160.0 && height < 200.0);
+        assert_eq!((&*scene.player).artboard.render_revision.get(), revision);
+        let first = height;
+        assert!(
+            (&*scene.vm)
+                .instance
+                .move_list_item_by_property_name_path("screens", 0, 1)
+        );
+        step_ok(scene.player);
+        assert_eq!(
+            nux_player_content_height(scene.player, &mut height),
+            NuxStatus::Ok
+        );
+        assert!((first - height - 80.0).abs() < 0.01);
+        let native_height = (&*scene.player)
+            .page_player
+            .content_height(&(&*scene.player).artboard.instance.borrow())
+            .unwrap();
+        assert_eq!(native_height, height);
+        assert_eq!(
+            nux_player_content_height(scene.player, ptr::null_mut()),
+            NuxStatus::NullArgument
+        );
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 1),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        assert_eq!(
+            nux_player_content_height(scene.player, &mut height),
+            NuxStatus::Ok
+        );
+        assert_eq!(first, height);
+    }
+}

@@ -16,6 +16,8 @@ use std::{
 // no global route, revision or retained-handle store to sweep later.
 pub(crate) struct SceneState {
     root: CoreHandle,
+    // Classification belongs to this Page occurrence, not shared definitions.
+    screen_names: HashSet<String>,
     revision: Cell<u64>,
     reconciled_revision: Cell<Option<u64>>,
     pub(crate) plan: RefCell<crate::live_move::plan::Plan>,
@@ -80,8 +82,22 @@ impl SceneState {
         self.reconciled_revision.set(Some(revision));
     }
     pub(crate) fn new(root: CoreHandle) -> std::rc::Rc<Self> {
+        let screen_names = root
+            .with_downcast::<Artboard, _>(|b| {
+                b.find_all_handles::<crate::live_move::records::LiveStep>()
+            })
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|step| {
+                step.with_downcast::<crate::live_move::records::LiveStep, _>(|s| {
+                    [s.values.from_artboard.clone(), s.values.to_artboard.clone()]
+                })
+            })
+            .flatten()
+            .collect();
         let state = std::rc::Rc::new(Self {
             root,
+            screen_names,
             revision: Cell::new(0),
             reconciled_revision: Cell::new(None),
             plan: RefCell::new(Default::default()),
@@ -153,6 +169,18 @@ pub(crate) fn is_screen_list(list: &CoreHandle) -> bool {
     })
     .unwrap_or(false)
 }
+pub(crate) fn is_screen(board: &CoreHandle) -> bool {
+    let Some(scene) = scene_for(board) else {
+        return false;
+    };
+    board
+        .with_downcast::<Artboard, _>(|b| {
+            !scene.is_root(board)
+                && b.find_handle::<ArtboardComponentList>("screens").is_none()
+                && scene.screen_names.contains(b.name())
+        })
+        .unwrap_or(false)
+}
 pub(crate) fn is_live_slot(slot: &CoreHandle) -> bool {
     let Some(board) = slot
         .with(|o| {
@@ -171,7 +199,8 @@ pub(crate) fn is_live_slot(slot: &CoreHandle) -> bool {
     let Some(host) = board.with_downcast::<Artboard, _>(Artboard::host).flatten() else {
         return false;
     };
-    is_screen_list(&host)
+    is_screen(&board)
+        && is_screen_list(&host)
         && host
             .with_downcast::<ArtboardComponentList, _>(|list| {
                 (0..list.artboard_count()).any(|i| {
@@ -441,8 +470,10 @@ pub(crate) fn root_scene(root: &RuntimeArtboardInstanceHandle) -> Option<std::rc
     // A Screen used by paint or an ordinary nested host gets no scene state.
     let declared = source.1.as_ref().is_some_and(definition_has_records)
         && root.with_artboard(|b| {
-            !b.find_all_handles::<crate::live_move::records::LiveStep>()
-                .is_empty()
+            b.find_handle::<ArtboardComponentList>("screens").is_some()
+                && !b
+                    .find_all_handles::<crate::live_move::records::LiveStep>()
+                    .is_empty()
         });
     let scene = declared.then(|| SceneState::new(root.core_handle()));
     root.with_artboard_mut(|b| b.live_move_scene = Some(scene.clone()));

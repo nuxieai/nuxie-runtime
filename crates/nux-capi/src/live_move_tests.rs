@@ -1,5 +1,196 @@
 use super::*;
 use nuxie::live_move_fixture as fixture;
+
+#[test]
+fn page_player_published_emits_initial_presentation() {
+    use crate::data_binding::*;
+    unsafe {
+        let bytes = include_bytes!("../tests/fixtures/emit-values-scene.nux");
+        let mut scene = LiveScene {
+            file: ptr::null_mut(),
+            artboard: ptr::null_mut(),
+            vm: ptr::null_mut(),
+            player: ptr::null_mut(),
+        };
+        let commands = NuxHostCommandImportConfig {
+            module_name: view("nuxie"),
+            ..Default::default()
+        };
+        let mut imported = ptr::null_mut();
+        let status = nux_file_import_trusted_with_host_commands(
+            bytes.as_ptr(),
+            bytes.len(),
+            &NuxRenderCallbacks::default(),
+            &commands,
+            &mut scene.file,
+            &mut imported,
+        );
+        if !imported.is_null() {
+            eprintln!(
+                "emits import: {}",
+                String::from_utf8_lossy(&(*imported).message)
+            );
+            nux_capi_result_free(imported);
+        }
+        assert_eq!(status, NuxStatus::Ok);
+        // The portable callback C API has no external-font import hook. Supply
+        // the published System slot using the native asset setter used by
+        // platform imports, with a deterministic redistributable test face.
+        use nuxie::runtime::{assets::font_asset::FontAsset, text::font_hb::HbFont};
+        let font_asset = (*scene.file).file.with_file(|file| file.asset(0)).unwrap();
+        FontAsset::set_font_occurrence(
+            &font_asset,
+            Some(
+                HbFont::decode(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")).unwrap(),
+            ),
+        );
+        assert_eq!(
+            nux_artboard_instance_new_named(scene.file, view("$nuxie.page"), &mut scene.artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_default(scene.artboard, &mut scene.vm),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(scene.artboard, scene.vm),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_new_state_machine_named(
+                scene.artboard,
+                view("$nuxie.page"),
+                &mut scene.player
+            ),
+            NuxStatus::Ok
+        );
+        let mut catalog = ptr::null_mut();
+        assert_eq!(
+            nux_file_view_model_catalog(scene.file, &mut catalog),
+            NuxStatus::Ok
+        );
+        let mut info = NuxViewModelCatalogInfo::default();
+        assert_eq!(
+            nux_view_model_catalog_info(catalog, &mut info),
+            NuxStatus::Ok
+        );
+        let row_schema = (0..info.schema_count)
+            .find(|&index| {
+                let mut schema = NuxViewModelSchemaView::default();
+                assert_eq!(
+                    nux_view_model_catalog_schema(catalog, index, &mut schema),
+                    NuxStatus::Ok
+                );
+                std::slice::from_raw_parts(schema.name.data.cast::<u8>(), schema.name.len)
+                    == b"vm_runtime_root_scr_screens_semits"
+            })
+            .expect("published emits schema");
+        let mut row = ptr::null_mut();
+        assert_eq!(
+            nux_view_model_instance_new_schema_default(scene.file, row_schema, &mut row),
+            NuxStatus::Ok
+        );
+        for index in 0..3 {
+            let mut goal = ptr::null_mut();
+            assert_eq!(
+                nux_view_model_instance_list_item_acquire(
+                    row,
+                    view("experience/goals"),
+                    index,
+                    &mut goal
+                ),
+                NuxStatus::Ok,
+                "published goals defaults must remain populated"
+            );
+            nux_view_model_instance_free(goal);
+        }
+        nux_view_model_catalog_free(catalog);
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: scene.vm,
+            path: view("screens"),
+            related_instance: row,
+            ..Default::default()
+        };
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            ..Default::default()
+        };
+        let mut result = ptr::null_mut();
+        assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+        nux_view_model_mutation_result_free(result);
+        nux_view_model_instance_free(row);
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        step_ok(scene.player);
+        acknowledge_current(scene.player);
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(scene.player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        assert!(info.node_count > 0, "emits must present a semantic tree");
+        nux_semantic_snapshot_free(snapshot);
+        scene.close();
+    }
+}
+
+#[test]
+fn page_player_minimal_component_list_focus_presentation() {
+    unsafe {
+        let scene = LiveScene::from_bytes(&fixture::focus_list_fixture());
+        use crate::data_binding::*;
+        let mut row = ptr::null_mut();
+        assert_eq!(
+            nux_view_model_instance_new_schema_default(scene.file, 1, &mut row),
+            NuxStatus::Ok
+        );
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: scene.vm,
+            path: view("screens"),
+            related_instance: row,
+            ..Default::default()
+        };
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            ..Default::default()
+        };
+        let mut result = ptr::null_mut();
+        assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+        nux_view_model_mutation_result_free(result);
+        nux_view_model_instance_free(row);
+        step_ok(scene.player);
+
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        acknowledge_current(scene.player);
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(scene.player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        assert!(info.node_count > 0);
+        nux_semantic_snapshot_free(snapshot);
+        scene.close();
+    }
+}
 fn view(s: &str) -> NuxStringView {
     NuxStringView {
         data: s.as_ptr().cast(),
@@ -41,6 +232,18 @@ struct LiveScene {
     player: *mut NuxPlayer,
 }
 impl LiveScene {
+    unsafe fn close(mut self) {
+        unsafe {
+            assert_eq!(nux_player_free(self.player), NuxStatus::Ok);
+            self.player = ptr::null_mut();
+            assert_eq!(nux_view_model_instance_free(self.vm), NuxStatus::Ok);
+            self.vm = ptr::null_mut();
+            assert_eq!(nux_artboard_instance_free(self.artboard), NuxStatus::Ok);
+            self.artboard = ptr::null_mut();
+            assert_eq!(nux_file_free(self.file), NuxStatus::Ok);
+            self.file = ptr::null_mut();
+        }
+    }
     unsafe fn new() -> Self {
         unsafe { Self::from_bytes(&fixture::fixture(2)) }
     }

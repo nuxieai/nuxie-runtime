@@ -182,6 +182,7 @@ pub struct ArtboardComponentList {
     artboard_map_rules: HashMap<i32, i32>,
     list_scope_focus_node: Option<FocusNodeRef>,
     list_row_focus_nodes: Vec<Option<FocusNodeRef>>,
+    pending_focus_tree_build: Option<RuntimeFocusManagerHandle>,
     list_has_duplicate_items: bool,
     quiet_rows: Rc<RefCell<Vec<u64>>>,
     quiet_row_artboards: Rc<RefCell<Vec<Option<CoreHandle>>>>,
@@ -226,6 +227,7 @@ impl Default for ArtboardComponentList {
             artboard_map_rules: HashMap::new(),
             list_scope_focus_node: None,
             list_row_focus_nodes: Vec::new(),
+            pending_focus_tree_build: None,
             list_has_duplicate_items: false,
             quiet_rows: Rc::new(RefCell::new(Vec::new())),
             quiet_row_artboards: Rc::new(RefCell::new(Vec::new())),
@@ -378,6 +380,7 @@ impl ArtboardComponentList {
     }
 
     pub fn clear(&mut self) {
+        self.pending_focus_tree_build = None;
         crate::hosted_scene::membership_changed(self);
         self.live_move_rows = None;
         self.reset_quiet_rows(0);
@@ -806,7 +809,6 @@ fn artboard_has_focus_content(artboard: &RuntimeArtboardInstanceHandle) -> bool 
 
 impl ArtboardComponentList {
     fn list_item_needs_build_under_row(
-        &self,
         parent_focus_manager: &RuntimeFocusManagerHandle,
         instance: &RuntimeArtboardInstanceHandle,
         row: Option<FocusNodeRef>,
@@ -840,7 +842,7 @@ impl ArtboardComponentList {
             return;
         }
         if self.list_row_nodes_in_place() {
-            self.build_list_row_focus_trees(&focus_manager);
+            self.schedule_list_row_focus_trees(&focus_manager);
             return;
         }
         let list_copy = self.list_items.clone();
@@ -897,7 +899,7 @@ impl ArtboardComponentList {
             }
         }
         self.reparent_list_rows_in_scope(&focus_manager);
-        self.build_list_row_focus_trees(&focus_manager);
+        self.schedule_list_row_focus_trees(&focus_manager);
     }
 
     fn list_row_nodes_in_place(&self) -> bool {
@@ -916,16 +918,36 @@ impl ArtboardComponentList {
                 .all(|(child, row)| row.as_ref().is_some_and(|row| Rc::ptr_eq(child, row)))
     }
 
-    fn build_list_row_focus_trees(&mut self, focus_manager: &RuntimeFocusManagerHandle) {
-        for index in 0..self.list_items.len() {
-            let Some(instance) = self.artboard_instance(index as i32) else {
-                continue;
-            };
-            let row = self.list_row_focus_nodes[index].clone();
-            if row.is_none() {
-                continue;
-            }
-            if let Some(state_machine) = self.state_machine_instance(index as i32) {
+    fn schedule_list_row_focus_trees(&mut self, focus_manager: &RuntimeFocusManagerHandle) {
+        // Adopting a manager builds focus nodes synchronously. Their bounds
+        // walk back through this host, so CoreHandle must release the list's
+        // mutable payload before performing the row work.
+        self.pending_focus_tree_build = Some(focus_manager.clone());
+    }
+
+    pub(crate) fn take_pending_focus_tree_build(&mut self) -> Option<RuntimeFocusManagerHandle> {
+        self.pending_focus_tree_build.take()
+    }
+
+    pub(crate) fn build_list_row_focus_trees_occurrence(
+        owner: &CoreHandle,
+        focus_manager: RuntimeFocusManagerHandle,
+    ) {
+        let rows = owner
+            .with_downcast::<Self, _>(|list| {
+                (0..list.list_items.len())
+                    .filter_map(|index| {
+                        Some((
+                            list.artboard_instance(index as i32)?,
+                            list.list_row_focus_nodes[index].clone()?,
+                            list.state_machine_instance(index as i32),
+                        ))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (instance, row, state_machine) in rows {
+            if let Some(state_machine) = state_machine {
                 state_machine.with_instance_mut(|state_machine| {
                     let needs_parent = !state_machine
                         .focus_manager()
@@ -935,11 +957,11 @@ impl ArtboardComponentList {
                     }
                 });
             }
-            if self.list_item_needs_build_under_row(&focus_manager, &instance, row.clone()) {
+            if Self::list_item_needs_build_under_row(&focus_manager, &instance, Some(row.clone())) {
                 if instance.with_artboard(|instance| instance.focus_manager().is_some()) {
                     instance.cleanup_focus_tree();
                 }
-                instance.build_focus_tree(Some(focus_manager.clone()), row);
+                instance.build_focus_tree(Some(focus_manager.clone()), Some(row));
             }
         }
     }

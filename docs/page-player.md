@@ -447,4 +447,4 @@ test wrong_thread_wrong_kind_and_wrong_origin_are_stable_errors ... ok
 
 ## Handoff boundaries
 
-No commits, pushes or branch changes were made. SDK and ProductHost call-site adoption lives outside this runtime change. Android size was not measured here. The remaining product choice is how hosts display a sheet when its expanded stack is empty or intrinsic layout is unavailable; the query reports those conditions explicitly instead of changing page layout.
+SDK and ProductHost call-site adoption lives outside this runtime change. The PR records the Android size measurement and device runs. The remaining product choice is how hosts display a sheet when its expanded stack is empty or intrinsic layout is unavailable; the query reports those conditions explicitly instead of changing page layout.

@@ -76,6 +76,8 @@ pub struct TextInput {
     pub base: TextInputBase,
     world_bounds: Aabb,
     source_text: String,
+    // Distinguish user edits from authored/data-bound text for live moves.
+    user_edited_text: bool,
     text_style: Option<CoreHandle>,
     scroll_constraint: Option<CoreHandle>,
     is_dragging: bool,
@@ -96,6 +98,7 @@ impl Default for TextInput {
             base: TextInputBase::default(),
             world_bounds: Aabb::default(),
             source_text: String::new(),
+            user_edited_text: false,
             text_style: None,
             scroll_constraint: None,
             is_dragging: false,
@@ -509,7 +512,11 @@ impl TextInput {
         self.layout_height = size.y;
         self.update_multiline(false);
     }
+    pub(crate) fn live_move_typed_text(&self) -> Option<String> {
+        self.user_edited_text.then(|| self.base.text().to_owned())
+    }
     pub fn text_changed(&mut self) {
+        self.user_edited_text = false;
         self.source_text = self.base.text().to_owned();
         self.sync_displayed_text_from_source(false);
         self.mark_shape_dirty();
@@ -579,6 +586,7 @@ impl TextInput {
             self.source_text = displayed;
             if self.base.set_text_value(self.source_text.clone()) {
                 self.text_changed();
+                self.user_edited_text = true;
                 crate::mechanical_port::source::core::CoreObject::core_mut(self)
                     .notify_property_changed(TextInputBase::TEXT_PROPERTY_KEY);
             }

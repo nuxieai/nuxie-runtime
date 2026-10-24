@@ -1,5 +1,6 @@
 //! Atomic transport. The authored wrappers and the empty layout leaf belong to
 //! their slot. All running state belongs to the single transported occurrence.
+use super::values::{FlightValues, TypedText};
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
     source::{
@@ -348,10 +349,35 @@ pub fn empty_slot(host: &CoreHandle) -> Result<()> {
 /// Validate before taking anything. Call between frames under the shared
 /// occurrence guard. No mount, machine initialization, or user callback runs.
 pub fn move_live(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
+    move_with_props(from, to, to, None)
+}
+
+pub(super) fn move_to_flight(
+    from: &CoreHandle,
+    to: &CoreHandle,
+    landing: &CoreHandle,
+    values: &mut FlightValues,
+) -> Result<()> {
+    move_with_props(from, to, landing, Some(values))
+}
+
+fn move_with_props(
+    from: &CoreHandle,
+    to: &CoreHandle,
+    prop_slot: &CoreHandle,
+    values: Option<&mut FlightValues>,
+) -> Result<()> {
     validate_move(from, to)?;
     let instance = child(from)?.ok_or_else(|| anyhow::anyhow!("source slot is empty"))?;
     remember(from)?;
     remember(to)?;
+    // Read the outgoing slot's current native props before detaching them.
+    // Already transported props are also recognized by TypedText::capture.
+    let bound = slot_props(from)?
+        .iter()
+        .map(|(id, _)| *id)
+        .collect::<Vec<_>>();
+    let typed = TypedText::capture(&instance, &bound);
     let parent = read(to, NestedArtboard::parent_artboard_handle)?.expect("validated parent");
     let scene = crate::hosted_scene::scene_for(from).expect("validated live scene");
     let owner = scene
@@ -582,7 +608,15 @@ pub fn move_live(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
         }
     }
     super::reconcile_slot_collapse(to);
-    adopt_props(to, &instance)?;
+    // Attach the landing slot's props directly, never the flight placeholder's.
+    // Its native inline model remains the owner of the authored bindings.
+    if prop_slot != to {
+        let context = read(prop_slot, |s| s.data_context.clone())?;
+        if let Some(own) = instance.data_context() {
+            own.with_context_mut(|c| c.set_parent(context));
+        }
+    }
+    adopt_props(prop_slot, &instance, values, &typed)?;
     sync_layout(from);
     sync_layout(to);
     crate::hosted_scene::membership_changed_for(from);
@@ -681,9 +715,11 @@ fn slot_props(slot: &CoreHandle) -> Result<Vec<(u32, CoreHandle)>> {
         })
         .collect())
 }
-pub(super) fn adopt_props(
+fn adopt_props(
     slot: &CoreHandle,
     instance: &RuntimeArtboardInstanceHandle,
+    mut values: Option<&mut FlightValues>,
+    typed: &TypedText,
 ) -> Result<()> {
     let props = slot_props(slot)?;
     let Some(vm) = instance
@@ -709,6 +745,7 @@ pub(super) fn adopt_props(
         }
     }
     let arena = instance.core_handle().retain_arena().expect("unit arena");
+    let mut attached = Vec::new();
     for (id, template) in props {
         let target = vm
             .with_downcast::<ViewModelInstance, _>(|v| {
@@ -724,10 +761,23 @@ pub(super) fn adopt_props(
                     .cloned()
             })
             .flatten();
-        if let Some(bind) = DataBind::clone_with_target_into(&template, target, &arena) {
+        if let Some(target) = target
+            && let Some(bind) =
+                DataBind::clone_with_target_into(&template, Some(target.clone()), &arena)
+        {
             bind.with_mut(|o| o.as_data_bind_mut().unwrap().mark_instance_value_bind());
-            container.add_data_bind(bind);
+            if let Some(values) = values.as_deref_mut() {
+                values.attach(&bind, &target);
+            }
+            attached.push((id, bind, target));
         }
+    }
+    // Capture every start before switched props or text notify dependencies.
+    for (id, bind, target) in attached {
+        typed.write_back(id, &bind, &target, instance);
+        // Never write a previous Screen's presentation value back on arrival.
+        bind.with_mut(|o| o.as_data_bind_mut().unwrap().require_source_adoption());
+        container.add_data_bind(bind);
     }
     Ok(())
 }

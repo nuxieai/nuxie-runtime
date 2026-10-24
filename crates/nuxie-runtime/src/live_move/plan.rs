@@ -3,7 +3,7 @@ use super::{
     follow::{Flight, SizeMode},
     move_live,
     records::{LiveSlot, LiveStep, LiveStepUnit, Values, validate_step_units},
-    transport::{adopt_props, child, read},
+    transport::{child, read},
     validate_move,
 };
 use crate::{
@@ -190,6 +190,10 @@ impl Plan {
     }
     fn transport(&mut self, from: &CoreHandle, to: &CoreHandle) -> Result<()> {
         move_live(from, to)?;
+        self.record_transport(from, to);
+        Ok(())
+    }
+    fn record_transport(&mut self, from: &CoreHandle, to: &CoreHandle) {
         // Every previously empty home follows the occurrence, even across
         // a cut followed by another push. A filled home needs no history.
         for holder in self.homes.values_mut() {
@@ -206,7 +210,6 @@ impl Plan {
         if is_home {
             self.homes.insert(from.clone(), to.clone());
         }
-        Ok(())
     }
     pub fn step_begin(
         &mut self,
@@ -366,7 +369,7 @@ impl Plan {
             settle_slot(&home)?;
         }
         // A one-version match has one drawn occurrence throughout flight.
-        // Preserve the landing box and prop templates before discarding its
+        // Preserve the landing box and native inline props before discarding its
         // never-shown fresh playback. Two versions both take off instead.
         for slot in fresh_destinations {
             empty_slot(&slot)?;
@@ -375,16 +378,8 @@ impl Plan {
             // A returned incoming version has now settled in its own slot.
             // Scale mode preserves that departure size, not its old holder's.
             f.use_departure(&holder)?;
-            self.transport(&holder, &f.flight)?;
-            if let Some(unit) = child(&f.flight)? {
-                // Core PR adoption: only the newly attached occurrence binds
-                // change. Internal stateful/scripted binds are never rebound.
-                let context = read(&f.landing, |s| s.data_context.clone())?;
-                if let Some(own) = unit.data_context() {
-                    own.with_context_mut(|c| c.set_parent(context));
-                }
-                adopt_props(&f.landing, &unit)?;
-            }
+            super::transport::move_to_flight(&holder, &f.flight, &f.landing, &mut f.values)?;
+            self.record_transport(&holder, &f.flight);
             self.flights.push(f);
         }
         self.active = Some((incoming.to_owned(), step_name.map(str::to_owned)));

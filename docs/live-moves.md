@@ -1,6 +1,6 @@
 # Live moves runtime core
 
-UNIV-5289. Core PR, sections 1 to 7 of the runtime design. Section 8 is not implemented. The corrected sections 1, 3 and 4 are implemented.
+UNIV-5289. Core PR, sections 1 to 7 of the runtime design. Section 8 occurrence values are described below. The corrected sections 1, 3 and 4 are implemented.
 
 The plan is in the RIV file. There is no JSON move-list API. A player takes units into the exact flight slots named by its file records, follows the two endpoints after its normal advance, and lands the same instances. A cut returns borrowed instances to the incoming Screen immediately. A two-version incoming instance that is still held on a third Screen also comes home before taking off from its incoming slot. All planned returns and flights are checked before changing ownership.
 
@@ -32,7 +32,7 @@ Live-move state belongs to the scene occurrence. Every C API player created from
 
 Rust `LiveMoves` adapters and C API entry points dispatch into that native occurrence state. Keeping an adapter alive does not keep a plan, cache or retired handle alive. The child artboard and every object keep their handles. The nested wrappers stay in their original arenas. Only their running machine or timeline instances move. The slot's active and explicit VM state, ownership flag, global VMs, quantization remainder, mounted bindable, focus scope, listeners, and host references travel with the occurrence.
 
-At take-off, a one-version step saves the incoming slot's box and prop templates, then discards its fresh instance. Both ordinary slots are empty during flight. Two-version steps move two distinct unit artboards, each with its own unit key. Both fly along the outgoing-to-incoming path, then return to their own Screen slots. Each move still validates the same artboard and wrappers. Forward and back steps name separate flight pairs; their authored object order puts the incoming version above. The destination releases fresh playback before releasing its fresh artboard. The moved occurrence is never mounted again. Its internal binds and script instances are not reinitialized. Its own data context stays the same; its parent changes. Newly attached occurrence-prop binds adopt the destination values immediately. There is no number or color blending and no typed-text writeback into a new binding.
+At take-off, a one-version step saves the incoming slot's box and detaches its authored props into the native inline model, then discards its fresh instance. Both ordinary slots are empty during flight. Two-version steps move two distinct unit artboards, each with its own unit key. Both fly along the outgoing-to-incoming path, then return to their own Screen slots. Each move still validates the same artboard and wrappers. Forward and back steps name separate flight pairs; their authored object order puts the incoming version above. The destination releases fresh playback before releasing its fresh artboard. The moved occurrence is never mounted again. Its internal binds and script instances are not reinitialized. Its own data context stays the same; its parent changes. Newly attached occurrence props blend numbers and colors during flight; other values switch immediately, with the typed-text exception described in Section 8 below.
 
 Within one semantic manager, only the existing boundary is detached and attached. Descendant registrations and ids remain. A first semantic mount or a different manager uses normal cleanup and construction. Moves repair focus ancestry without blurring a visible focused leaf. Sleep follows upstream hidden-focus policy: a normal advance can blur a hidden field. Wake retains the same focus and semantic nodes; applications can focus that same field again.
 
@@ -588,7 +588,7 @@ Every failed case requires the missing pinned C++ oracle at `tools/cpp-probe/bui
 
 All 197 failures match fresh main. Current and main logs, names, messages, totals, source restoration evidence, build-setting hashes, preflight results and six fixture hashes are retained in `/private/tmp/live-moves-runtime-v2-correction-verification`. Request logs remain in the supplied `runtime-runner-v2` directory.
 
-The assets and lifecycle contracts are ready for the device harness. Physical device qualification remains unrun here. Section 8 is not implemented.
+The assets and lifecycle contracts are ready for the device harness. Physical device qualification remains unrun here. This verification preceded the section 8 change below.
 
 ## Review round 8: reconcile the mounted occurrence
 
@@ -768,3 +768,33 @@ Only the five touched Rust files were formatted with `rustfmt --edition 2024`. F
 ### Preserve authored prop binding order during live moves (UNIV-5289)
 
 Departure transferred slot prop bindings through import initialization, which changed two-way, target-first bindings to source-first. Ownership transfer now uses `retain_existing_value_data_bind` to preserve the authored flags; import initialization still normalizes them. The `nuxie-runtime` regression `a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home` in `tests/live_moves.rs` checks the core's derived binding flags after landing and returning home, plus a target write reaching the destination Screen's source after landing. The test has been added but not run in this sandbox.
+
+## Section 8: the next Screen's values during a flight
+
+Ported onto the merged core at `41d71302d3`. Arrival still uses `transport::adopt_props`: `slot_props` derives the current authored bindings from the native inline model and mounted parent, preserving fresh-binding priority and native ownership. No slot templates or separate attachment mechanism are restored. Take-off attaches the landing props directly, avoiding intermediate adoption of the flight placeholder's values. Outgoing bound-text detection uses that same native prop derivation plus the unit's mounted occurrence bindings.
+
+Number and color starts belong to `FlightValues` on the flight. Bindings hold weak projections; ordinary updates hold their targets until the follower samples the live converted source with the exact clamped progress used for its pose. Numbers interpolate linearly; colors use the existing `shapes::paint::color::color_lerp`, including alpha and channel rounding. Nonnumeric props switch immediately. Each version uses its own landing slot. Private values remain untouched. Landing, cuts and same-advance flights adopt the latest source without requiring a frame at progress 1.
+
+Blended values never write back. Attachment requests source-only adoption before normal two-way behavior resumes, retaining authored direction flags. Dropping a projection queues ordinary source settlement if its binding survives cancellation or reconciliation; it performs no value write itself. Flight snapshots do not retain projections. Following visits only active flights, with no new retained-row scan. Existing player mutation capture, checkpoint and exact-owner publication cover all writes; the C API frame loop is unchanged.
+
+Occurrence props target unit VM properties. Edited TextInputs are traced through their internal text bindings to local string properties without outgoing occurrence bindings. An incoming prop targeting that property receives the typed text before adoption: its to-source direction and reverse converter are used when available, otherwise a string VM source receives a direct native setter write. One-way non-string sources are left alone. Authored text does not count as a user edit, and internally bound text inputs retain their bindings and identity.
+
+All 13 runtime regressions are ported in `nuxie-runtime`, `tests/live_moves.rs`, using the core’s current Page / `screens` / Screen fixture builder:
+
+- `incoming_number_and_color_blend_then_bindings_drive_after_landing`
+- `incoming_values_follow_live_destination_changes_during_flight`
+- `incoming_string_switches_at_takeoff_and_private_values_stay`
+- `unbound_typed_text_writes_the_incoming_prop_source_in_both_directions`
+- `authored_unbound_text_does_not_override_the_incoming_prop`
+- `takeoff_and_landing_without_an_advance_adopt_destination_values_at_once`
+- `two_versions_blend_against_their_own_landing_slot_values`
+- `values_follow_the_same_native_keyed_progress_as_the_pose`
+- `converted_two_way_numbers_blend_without_writing_back_presentation_values`
+- `outgoing_bound_typed_text_does_not_write_the_incoming_source`
+- `target_first_two_way_midpoint_landing_adopts_source_before_writeback`
+- `target_first_two_way_return_after_midflight_row_removal_adopts_home_source`
+- `target_first_two_way_expired_projection_adopts_live_source_before_writeback`
+
+The C API regression in `nux-capi`, `src/live_move_tests.rs`, is `live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer`: begin, keyed half-second step and end yield 10/105/200 and invalidate the shared-model observer's presentation revision, with change notification. Existing immediate-publication and command-ordering tests set progress to 1 to preserve their original assertions. The new midpoint case covers blended publication. Existing record-free and collapsed-row visit regressions are retained.
+
+Compared with the earlier version, only transport's native prop lookup/ownership integration and the current fixture/test context changed. The small upstream binding and text hooks remain compatible with main; main's newer text hit-testing hooks are preserved. No dependencies, schema changes, public APIs or new test files were added. `live_move/values.rs` is a new runtime module. Rustfmt and whitespace checks are local only; compilation, test execution and Android size measurement await the caller's build pool. Earlier branch results are not claimed for this port.

@@ -313,6 +313,26 @@ unsafe fn acknowledge_current(player: *mut NuxPlayer) -> u64 {
     }
 }
 
+fn set_live_flight_progress(root: &nuxie::RuntimeArtboardInstanceHandle, progress: f32) {
+    let rows = nuxie::live_move::screens(root).unwrap();
+    for record in
+        rows["B"].with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveSlot>())
+    {
+        let is_flight = record
+            .with_downcast::<nuxie::live_move::records::LiveSlot, _>(|r| {
+                r.values.flight_key == 2 && r.values.role == 1
+            })
+            .unwrap();
+        if is_flight {
+            assert!(
+                nuxie::runtime::generated::core_registry::CoreRegistry::set_double_handle(
+                    &record, 62003, progress
+                )
+            );
+        }
+    }
+}
+
 #[test]
 fn live_moves_publish_exact_binding_owners_on_takeoff_landing_and_wake() {
     unsafe {
@@ -397,6 +417,8 @@ fn live_moves_publish_exact_binding_owners_on_takeoff_landing_and_wake() {
             nux_view_model_snapshot_free(snapshot);
             value.number_value
         };
+        // This regression covers immediate value publication at a completed flight.
+        set_live_flight_progress(&root, 1.0);
         let revision = acknowledge_current(observer_player);
         assert_eq!(
             nux_player_step_begin(scene.player, view("B"), &view("t1")),
@@ -1313,6 +1335,7 @@ fn live_moves_global_only_boundary_publishes_and_notifies_round5() {
             RuntimeOwnedViewModelHandle::from_native((*scene.file).file.clone(), mounted_b)
                 .unwrap();
         (*screen_b).identity = (*screen_b).instance.instance_identity();
+        set_live_flight_progress(&root, 1.0);
         let transition = view("t1");
         for (stage, expected) in [("takeoff", 200.0), ("landing", 321.0), ("wake", 456.0)] {
             if stage == "landing" {
@@ -1667,6 +1690,12 @@ return function() return {value=0,last=0,atSource=false,update=update} end"#;
             NuxStatus::Ok
         );
         step_ok(scene.player);
+        // Keep this command-publication regression at the completed value.
+        let root = (&(*scene.player).artboard)
+            .instance
+            .borrow()
+            .native_handle();
+        set_live_flight_progress(&root, 1.0);
         let t = view("t1");
         assert_eq!(
             nux_player_step_begin(scene.player, view("B"), &t),
@@ -2471,5 +2500,97 @@ fn page_player_content_height_c_query_preserves_render_revision() {
             NuxStatus::Ok
         );
         assert_eq!(first, height);
+    }
+}
+
+#[test]
+fn live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer() {
+    unsafe {
+        let scene = LiveScene::from_bytes(&fixture::keyed_fixture());
+        let root = (&(*scene.player).artboard)
+            .instance
+            .borrow()
+            .native_handle();
+        let rows = nuxie::live_move::screens(&root).unwrap();
+        let source = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
+        let unit = source
+            .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
+            .flatten()
+            .unwrap();
+        let native_model = unit
+            .data_context()
+            .unwrap()
+            .with_context(|c| c.main_view_model_instance())
+            .unwrap();
+        // As in the exact-owner regression, expose the nested unit's actual
+        // model through a public handle and bind another occurrence to it.
+        let mut shared = ptr::null_mut();
+        assert_eq!(
+            nux_view_model_instance_new_schema_default(scene.file, 0, &mut shared),
+            NuxStatus::Ok
+        );
+        (*shared).instance =
+            RuntimeOwnedViewModelHandle::from_native((*scene.file).file.clone(), native_model)
+                .unwrap();
+        (*shared).identity = (*shared).instance.instance_identity();
+        let mut observer = ptr::null_mut();
+        let mut observer_player = ptr::null_mut();
+        assert_eq!(
+            nux_artboard_instance_new(scene.file, 3, &mut observer),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(observer, shared),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_new_default(observer, &mut observer_player),
+            NuxStatus::Ok
+        );
+        let runtime = nuxie::ViewModelInstanceRuntime::new((*shared).instance.native_handle());
+        let number = runtime.property_number("prop").unwrap();
+        let transition = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &transition),
+            NuxStatus::Ok
+        );
+        assert_eq!(number.value(), 10.0);
+        let revision = acknowledge_current(observer_player);
+        number.value_runtime().clear_changes();
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            nux_player_step(
+                scene.player,
+                &NuxPlayerStep {
+                    elapsed_seconds: 0.5,
+                    ..Default::default()
+                },
+                &mut result
+            ),
+            NuxStatus::Ok
+        );
+        nux_player_step_result_free(result);
+        assert_eq!(number.value(), 105.0);
+        assert_eq!(
+            nux_player_acknowledge_presented(observer_player, revision),
+            NuxStatus::HandleMismatch
+        );
+        assert!(number.value_runtime().flush_changes());
+        assert!(!number.value_runtime().flush_changes());
+        let revision = acknowledge_current(observer_player);
+        number.value_runtime().clear_changes();
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &transition),
+            NuxStatus::Ok
+        );
+        assert_eq!(number.value(), 200.0);
+        assert_eq!(
+            nux_player_acknowledge_presented(observer_player, revision),
+            NuxStatus::HandleMismatch
+        );
+        assert!(number.value_runtime().flush_changes());
+        nux_player_free(observer_player);
+        nux_artboard_instance_free(observer);
+        nux_view_model_instance_free(shared);
     }
 }

@@ -564,11 +564,22 @@ impl ContextApplyBinding for CoreBinding {
         }
     }
     fn set_color(&mut self, key: u32, value: i32) {
+        // Only a live flight projects converted target values, in its follow pass.
+        let blend = self
+            .bind
+            .with(|o| o.as_data_bind()?.live_move_blend.upgrade())
+            .flatten();
+        let value = blend.map_or(value, |b| b.color(value));
         if let Some(target) = &self.target {
             mutate(|| CoreRegistry::set_color_handle(target, key as i32, value));
         }
     }
     fn set_double(&mut self, key: u32, value: f32) {
+        let blend = self
+            .bind
+            .with(|o| o.as_data_bind()?.live_move_blend.upgrade())
+            .flatten();
+        let value = blend.map_or(value, |b| b.number(value));
         if let Some(target) = &self.target {
             mutate(|| CoreRegistry::set_double_handle(target, key as i32, value));
         }

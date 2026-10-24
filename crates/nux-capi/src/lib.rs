@@ -7,6 +7,9 @@
     reason = "the centralized pointer/thread/lifetime safety contract is emitted in the public nux_capi.h umbrella header"
 )]
 
+mod live_moves;
+pub use live_moves::*;
+
 mod asset_catalog;
 mod video;
 mod video_resources;
@@ -390,6 +393,10 @@ impl FileMetadataCatalog {
 }
 
 struct ArtboardOccurrence {
+    // Slots, retained video identities and live-move history belong to this
+    // shared scene. Every player uses the same occurrence mutation guard.
+    video_occurrences: RefCell<video::VideoOccurrences>,
+    scene_step: Cell<u64>,
     instance: RefCell<ArtboardInstance>,
     #[cfg(feature = "scripting")]
     scripted: Option<Rc<nuxie::ScriptedFile>>,
@@ -834,7 +841,10 @@ impl Drop for ScriptEffectTransaction {
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
     global_view_models: Rc<player_globals::GlobalViewModels>,
-    video_occurrences: RefCell<video::VideoOccurrences>,
+    // Status-only operations use the ordinary mutation boundary. Their script
+    // outputs remain player-owned until an externally returned step result.
+    #[cfg(feature = "scripting")]
+    pending_host_commands: RefCell<Vec<HostCommand>>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
     artboard: Rc<ArtboardOccurrence>,
@@ -2888,6 +2898,8 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                 let view_model_index = instance.view_model_index();
                 let handle = NuxArtboardInstance {
                     occurrence: Rc::new(ArtboardOccurrence {
+                        video_occurrences: RefCell::new(video::VideoOccurrences::default()),
+                        scene_step: Cell::new(0),
                         instance: RefCell::new(instance),
                         #[cfg(feature = "scripting")]
                         scripted: file.scripted.clone(),
@@ -3219,7 +3231,8 @@ fn publish_player(
                 registered.push(Rc::downgrade(&globals));
                 globals
             },
-            video_occurrences: RefCell::new(video::VideoOccurrences::default()),
+            #[cfg(feature = "scripting")]
+            pending_host_commands: RefCell::new(Vec::new()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
             observed_view_model_binding_revision: Cell::new(
@@ -4164,11 +4177,42 @@ fn player_step_owned_result_bytes(
     Some(total)
 }
 
+// Status-only live moves use the same result firewall and transaction body.
+// They do not advance playback or consume the next frame's input/events.
+fn player_live_move_body(player: *mut NuxPlayer, request: live_moves::Request) -> NuxStatus {
+    let mut result = ptr::null_mut();
+    let status = ffi_guard_with_player_step_result(&mut result, || {
+        player_operation_body(
+            player,
+            &NuxPlayerStep::default(),
+            &mut result,
+            Some(request),
+        )
+    });
+    if !result.is_null() {
+        unsafe {
+            nux_player_step_result_free(result);
+        }
+    }
+    status
+}
+
 fn player_step_body(
     player: *mut NuxPlayer,
     step: *const NuxPlayerStep,
     out_result: *mut *mut NuxPlayerStepResult,
 ) -> NuxStatus {
+    player_operation_body(player, step, out_result, None)
+}
+
+fn player_operation_body(
+    player: *mut NuxPlayer,
+    step: *const NuxPlayerStep,
+    out_result: *mut *mut NuxPlayerStepResult,
+    live_request: Option<live_moves::Request>,
+) -> NuxStatus {
+    #[cfg(feature = "test-support")]
+    let mut live_timer = nuxie::hosted_scene::StepTimer::new("arguments");
     let _player_call = match enter_handle(player, HandleKind::Player) {
         Ok(guard) => guard,
         Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
@@ -4240,6 +4284,18 @@ fn player_step_body(
         Ok(guard) => guard,
         Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
     };
+    if live_request.is_some() && player.artboard.next_render_revision().is_err() {
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::LimitExceeded,
+            "player render revision exhausted",
+        );
+    }
+    let live_operation = match live_request.map(live_moves::Request::prepare).transpose() {
+        Ok(operation) => operation,
+        Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
+    };
+    let advances = live_operation.is_none();
     if let Err(status) = player.artboard.refresh_renderer_domain_invalidation() {
         player.artboard.poisoned.set(true);
         return publish_player_step_failure(
@@ -4319,6 +4375,8 @@ fn player_step_body(
         elapsed_seconds: step.elapsed_seconds,
     };
 
+    #[cfg(feature = "test-support")]
+    live_timer.mark("frame_scope");
     let mut subscribed_roots = player
         .global_view_models
         .values
@@ -4330,6 +4388,20 @@ fn player_step_body(
     // a policy or an explicit global override.
     let can_skip_quiet_graphs = has_value_policy || !subscribed_roots.is_empty();
     subscribed_roots.extend(bound_view_model.iter().cloned());
+    let live_frame_scope = match nuxie::live_move::LiveMoves::default()
+        .frame_scope(&artboard.native_handle(), &subscribed_roots)
+    {
+        Ok(scope) => scope,
+        Err(error) => {
+            return publish_player_step_failure(
+                out_result,
+                NuxStatus::InvalidArgument,
+                format!("live frame scope: {error:#}"),
+            );
+        }
+    };
+    #[cfg(feature = "test-support")]
+    live_timer.mark("owner_scope");
     let retained_subscribed_owners = if has_value_policy {
         match value_policy::retain_scope(&subscribed_roots) {
             Ok(owners) => owners,
@@ -4346,7 +4418,8 @@ fn player_step_body(
     };
     let has_subscriptions = !subscribed_roots.is_empty() || has_value_policy;
     let scene_view_model_roots = match has_subscriptions {
-        true => match player_view_models::scene_roots_across(
+        true => match player_view_models::for_player(
+            player,
             &artboard,
             &subscribed_roots,
             MAX_PLAYER_STEP_STATE_CHANGES,
@@ -4376,11 +4449,20 @@ fn player_step_body(
     } else {
         Vec::new()
     };
+    #[cfg(feature = "test-support")]
+    live_timer.mark("checkpoint");
     let mut view_model_transaction = match has_subscriptions {
-        true => match RuntimeOwnedViewModelGraphTransaction::begin(
-            &scene_view_model_roots,
-            MAX_PLAYER_STEP_STATE_CHANGES,
-        ) {
+        true => match if live_frame_scope.is_some() {
+            RuntimeOwnedViewModelGraphTransaction::begin_live(
+                &scene_view_model_roots,
+                MAX_PLAYER_STEP_STATE_CHANGES,
+            )
+        } else {
+            RuntimeOwnedViewModelGraphTransaction::begin(
+                &scene_view_model_roots,
+                MAX_PLAYER_STEP_STATE_CHANGES,
+            )
+        } {
             Ok(transaction) => Some(transaction),
             Err(RuntimeViewModelGraphTransactionError::LimitExceeded) => {
                 return publish_player_step_failure(
@@ -4402,6 +4484,8 @@ fn player_step_body(
         },
         false => None,
     };
+    #[cfg(feature = "test-support")]
+    live_timer.mark("input_setup");
     let change_capture = if has_subscriptions {
         match RuntimeViewModelChangeCapture::begin_bounded(
             MAX_PLAYER_STEP_STATE_CHANGES,
@@ -4468,132 +4552,192 @@ fn player_step_body(
         },
         _ => false,
     };
-    let (mut keep_going, mut runtime_dirty, mut runtime_settled) = match &mut *player_instance {
-        PlayerInstance::StateMachine(machine) => {
-            // Upstream command_server.cpp separates bindViewModelInstance from
-            // advanceStateMachine. Binding reports pending triggers, so it must
-            // not be repeated merely because the player advances another frame.
-            let binding_revision = player.artboard.view_model_binding_revision.get();
-            if player.observed_view_model_binding_revision.get() != binding_revision {
-                if let Some(view_model) = bound_view_model.as_ref() {
-                    machine.bind_owned_view_model_handle(view_model.clone());
-                }
-                player
-                    .observed_view_model_binding_revision
-                    .set(binding_revision);
-            }
-            let mut input_dirty = false;
-            for input in prepared.inputs {
-                match input {
-                    PlannedPlayerInput::Bool { index, value } => {
-                        input_dirty |= machine.set_bool(index, value);
-                    }
-                    PlannedPlayerInput::Number { index, value } => {
-                        input_dirty |= machine.set_number(index, value);
-                    }
-                    PlannedPlayerInput::Trigger { index } => {
-                        input_dirty |= machine.fire_trigger(index);
-                    }
-                }
-            }
-            for pointer in prepared.pointers.iter().copied() {
-                pointer_results.push(apply_player_pointer(machine, pointer));
-            }
-            for input in &prepared.focus_inputs {
-                focus_input_results.push(apply_focus_input(machine, input));
-            }
-            // Pointer and focus callbacks can report events immediately. Drain
-            // those before advancement, then append events authored by the
-            // advance itself so the result preserves C++ production order.
-            reported_events = machine.take_reported_events();
-            let advance = match artboard.advance_state_machine_instances(
-                std::slice::from_mut(&mut **machine),
-                prepared.elapsed_seconds,
-                true,
-            ) {
-                Ok(advance) => advance,
-                Err(error) => {
-                    player.artboard.poisoned.set(true);
-                    return publish_player_step_failure(
-                        out_result,
-                        NuxStatus::RuntimeError,
-                        format!("player advance failed: {error:#}"),
-                    );
-                }
-            };
-            let state_change_count = machine.changed_state_count();
-            if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
-                player.artboard.poisoned.set(true);
-                return publish_player_step_failure(
-                    out_result,
-                    NuxStatus::LimitExceeded,
-                    "runtime state-change count exceeds step bound",
-                );
-            }
-            for index in 0..state_change_count {
-                let Some(state) = machine.changed_state(index) else {
-                    player.artboard.poisoned.set(true);
-                    return publish_player_step_failure(
-                        out_result,
-                        NuxStatus::RuntimeError,
-                        "runtime state-change projection is inconsistent",
-                    );
-                };
-                state_changes.push(OwnedPlayerStateChange {
-                    // The exact source projection orders changed states by
-                    // authored layer. Until the C ABI grows an optional-id
-                    // representation, the compressed index and sentinel are
-                    // the only lossless C representation available.
-                    layer_index: index,
-                    state_core_type: u32::from(state.core_type),
-                    state_global_id: u32::MAX,
-                });
-            }
-            reported_events.extend(machine.take_reported_events());
-            (
-                advance.keep_going,
-                input_dirty || advance.changed,
-                !advance.keep_going,
-            )
-        }
-        PlayerInstance::LinearAnimation(animation) => {
-            pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
-            let advance = match artboard
-                .advance_linear_animation_instance(animation, prepared.elapsed_seconds)
+    #[cfg(feature = "test-support")]
+    live_timer.mark("advance");
+    let (mut keep_going, mut runtime_dirty, mut runtime_settled) = if let Some(operation) =
+        live_operation
+    {
+        let root = artboard.native_handle();
+        let membership = nuxie::hosted_scene::membership_revision(&root.core_handle());
+        let serial = root.with_artboard(|b| b.change_serial());
+        let applied = operation.apply(&mut nuxie::live_move::LiveMoves::default(), &root);
+        if let Err(status) = applied {
+            // Caller preflight refusals leave the occurrence usable. A failure
+            // after ownership, component or VM mutation uses the step's poison
+            // policy; dropping the checkpoint alone cannot undo those effects.
+            if membership != nuxie::hosted_scene::membership_revision(&root.core_handle())
+                || serial != root.with_artboard(|b| b.change_serial())
+                || change_capture
+                    .as_ref()
+                    .is_some_and(|c| c.write_count().map_or(true, |n| n != 0))
             {
-                Ok(advance) => advance,
-                Err(error) => {
-                    player.artboard.poisoned.set(true);
-                    return publish_player_step_failure(
-                        out_result,
-                        NuxStatus::RuntimeError,
-                        format!("player advance failed: {error:#}"),
-                    );
-                }
-            };
-            reported_events.extend(advance.reported_events);
-            (advance.keep_going, advance.changed, !advance.keep_going)
+                player.artboard.poisoned.set(true);
+            }
+            return publish_player_step_failure(out_result, status, "live move operation refused");
         }
-        PlayerInstance::StaticArtboard => {
-            pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
-            let dirty = match artboard.advance(0.0) {
-                Ok(dirty) => dirty,
-                Err(error) => {
+        (false, true, true)
+    } else {
+        match &mut *player_instance {
+            PlayerInstance::StateMachine(machine) => {
+                // Upstream command_server.cpp separates bindViewModelInstance from
+                // advanceStateMachine. Binding reports pending triggers, so it must
+                // not be repeated merely because the player advances another frame.
+                let binding_revision = player.artboard.view_model_binding_revision.get();
+                if player.observed_view_model_binding_revision.get() != binding_revision {
+                    if let Some(view_model) = bound_view_model.as_ref() {
+                        machine.bind_owned_view_model_handle(view_model.clone());
+                    }
+                    player
+                        .observed_view_model_binding_revision
+                        .set(binding_revision);
+                }
+                let mut input_dirty = false;
+                for input in prepared.inputs {
+                    match input {
+                        PlannedPlayerInput::Bool { index, value } => {
+                            input_dirty |= machine.set_bool(index, value);
+                        }
+                        PlannedPlayerInput::Number { index, value } => {
+                            input_dirty |= machine.set_number(index, value);
+                        }
+                        PlannedPlayerInput::Trigger { index } => {
+                            input_dirty |= machine.fire_trigger(index);
+                        }
+                    }
+                }
+                for pointer in prepared.pointers.iter().copied() {
+                    pointer_results.push(apply_player_pointer(machine, pointer));
+                }
+                for input in &prepared.focus_inputs {
+                    focus_input_results.push(apply_focus_input(machine, input));
+                }
+                // Pointer and focus callbacks can report events immediately. Drain
+                // those before advancement, then append events authored by the
+                // advance itself so the result preserves C++ production order.
+                reported_events = machine.take_reported_events();
+                let advance = match artboard.advance_state_machine_instances(
+                    std::slice::from_mut(&mut **machine),
+                    prepared.elapsed_seconds,
+                    true,
+                ) {
+                    Ok(advance) => advance,
+                    Err(error) => {
+                        player.artboard.poisoned.set(true);
+                        return publish_player_step_failure(
+                            out_result,
+                            NuxStatus::RuntimeError,
+                            format!("player advance failed: {error:#}"),
+                        );
+                    }
+                };
+                let state_change_count = machine.changed_state_count();
+                if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
                     player.artboard.poisoned.set(true);
                     return publish_player_step_failure(
                         out_result,
-                        NuxStatus::RuntimeError,
-                        format!("player advance failed: {error:#}"),
+                        NuxStatus::LimitExceeded,
+                        "runtime state-change count exceeds step bound",
                     );
                 }
-            };
-            // StaticScene's C++ keepGoing can report true for the initial
-            // zero-time settlement, but it does not represent continuing
-            // scheduled work for the host presentation loop.
-            (dirty, dirty, true)
+                for index in 0..state_change_count {
+                    let Some(state) = machine.changed_state(index) else {
+                        player.artboard.poisoned.set(true);
+                        return publish_player_step_failure(
+                            out_result,
+                            NuxStatus::RuntimeError,
+                            "runtime state-change projection is inconsistent",
+                        );
+                    };
+                    state_changes.push(OwnedPlayerStateChange {
+                        // The exact source projection orders changed states by
+                        // authored layer. Until the C ABI grows an optional-id
+                        // representation, the compressed index and sentinel are
+                        // the only lossless C representation available.
+                        layer_index: index,
+                        state_core_type: u32::from(state.core_type),
+                        state_global_id: u32::MAX,
+                    });
+                }
+                reported_events.extend(machine.take_reported_events());
+                (
+                    advance.keep_going,
+                    input_dirty || advance.changed,
+                    !advance.keep_going,
+                )
+            }
+            PlayerInstance::LinearAnimation(animation) => {
+                pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
+                let advance = match artboard
+                    .advance_linear_animation_instance(animation, prepared.elapsed_seconds)
+                {
+                    Ok(advance) => advance,
+                    Err(error) => {
+                        player.artboard.poisoned.set(true);
+                        return publish_player_step_failure(
+                            out_result,
+                            NuxStatus::RuntimeError,
+                            format!("player advance failed: {error:#}"),
+                        );
+                    }
+                };
+                reported_events.extend(advance.reported_events);
+                (advance.keep_going, advance.changed, !advance.keep_going)
+            }
+            PlayerInstance::StaticArtboard => {
+                pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
+                let dirty = match artboard.advance(0.0) {
+                    Ok(dirty) => dirty,
+                    Err(error) => {
+                        player.artboard.poisoned.set(true);
+                        return publish_player_step_failure(
+                            out_result,
+                            NuxStatus::RuntimeError,
+                            format!("player advance failed: {error:#}"),
+                        );
+                    }
+                };
+                // StaticScene's C++ keepGoing can report true for the initial
+                // zero-time settlement, but it does not represent continuing
+                // scheduled work for the host presentation loop.
+                (dirty, dirty, true)
+            }
         }
     };
 
+    #[cfg(feature = "test-support")]
+    live_timer.mark("follow");
+    if advances {
+        player
+            .artboard
+            .scene_step
+            .set(player.artboard.scene_step.get().wrapping_add(1));
+        match nuxie::live_move::LiveMoves::default().after_advance(&artboard.native_handle()) {
+            Ok(changed) => runtime_dirty |= changed,
+            Err(error) => {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    format!("live move update failed: {error:#}"),
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "test-support")]
+    live_timer.mark("events");
+    if view_model_transaction
+        .as_ref()
+        .is_some_and(|t| !t.checkpoint_within_limit())
+    {
+        // VM rollback cannot undo dispatched input, playback or flight ownership.
+        player.artboard.poisoned.set(true);
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::LimitExceeded,
+            "live frame checkpoint exceeds its bound",
+        );
+    }
     let events = match own_reported_events(
         reported_events,
         pointer_results.len(),
@@ -4622,6 +4766,17 @@ fn player_step_body(
         None => Vec::new(),
     };
     #[cfg(feature = "scripting")]
+    let commands = {
+        let pending = player.pending_host_commands.borrow();
+        if pending.is_empty() {
+            commands
+        } else {
+            pending.iter().cloned().chain(commands).collect::<Vec<_>>()
+        }
+    };
+    #[cfg(feature = "scripting")]
+    let deferred_commands = (!advances).then(|| commands.clone());
+    #[cfg(feature = "scripting")]
     let (host_commands, host_values) = flatten_host_commands(commands);
     #[cfg(not(feature = "scripting"))]
     let (host_commands, host_values) = (Vec::new(), Vec::new());
@@ -4630,6 +4785,8 @@ fn player_step_body(
         keep_going = true;
         runtime_settled = false;
     }
+    #[cfg(feature = "test-support")]
+    live_timer.mark("value_resolution");
     let resolved_view_model_changes = match change_capture {
         // A script refusal may need group output even after its capture rows
         // were consumed. Skip graph resolution only when both are quiet.
@@ -4651,7 +4808,8 @@ fn player_step_body(
             Vec::new()
         }
         Some(capture) => {
-            let mut roots = match player_view_models::scene_roots_across(
+            let mut roots = match player_view_models::for_player(
+                player,
                 &artboard,
                 &subscribed_roots,
                 MAX_PLAYER_STEP_STATE_CHANGES,
@@ -4760,7 +4918,8 @@ fn player_step_body(
                             keep_going = true;
                             runtime_settled = false;
                             policy.flush_marker_bindings(&artboard);
-                            match player_view_models::scene_roots_across(
+                            match player_view_models::for_player(
+                                player,
                                 &artboard,
                                 &subscribed_roots,
                                 MAX_PLAYER_STEP_STATE_CHANGES,
@@ -4827,6 +4986,8 @@ fn player_step_body(
         }
         None => Vec::new(),
     };
+    #[cfg(feature = "test-support")]
+    live_timer.mark("publication");
     let changed_view_model_owners = resolved_view_model_changes
         .iter()
         .map(|(owner, _)| owner.clone())
@@ -4979,6 +5140,12 @@ fn player_step_body(
     unsafe { (*pending.handle).scheduling.settled = runtime_settled };
     if runtime_dirty {
         player.artboard.render_revision.set(render_revision);
+    }
+    #[cfg(feature = "scripting")]
+    {
+        // Only acknowledge output after the result and mutation commit. Failed
+        // operations leave earlier queued commands available for the next step.
+        *player.pending_host_commands.borrow_mut() = deferred_commands.unwrap_or_default();
     }
     let _ = pending.finish();
     NuxStatus::Ok
@@ -6833,3 +7000,6 @@ mod firewall_tests {
         assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
     }
 }
+
+#[cfg(test)]
+mod live_move_tests;

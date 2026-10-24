@@ -61,70 +61,112 @@ enum Payload {
     List(Vec<(CoreHandle, Option<CoreHandle>)>),
     ViewModel(Option<CoreHandle>),
 }
+// Both checkpoint timings own the same native storage. In particular, an
+// occurrence can be replaced before the frame resolves its captured writes.
+struct CheckpointStorage {
+    _artboard: Option<crate::RuntimeArtboardInstanceHandle>,
+    _arena: crate::source::core::CoreArena,
+}
+impl CheckpointStorage {
+    fn retain(owner: &CoreHandle) -> Option<Self> {
+        Some(Self {
+            _artboard: owner.runtime_arena_owner(),
+            _arena: owner.retain_arena()?,
+        })
+    }
+}
+struct ChangeScope {
+    owners: Vec<RuntimeOwnedViewModelHandle>,
+    _storage: Vec<CheckpointStorage>,
+}
+impl ChangeScope {
+    fn capture(roots: &[RuntimeOwnedViewModelHandle]) -> Option<Self> {
+        let mut owners = Vec::new();
+        let mut storage = Vec::new();
+        let mut seen = BTreeSet::new();
+        for root in roots {
+            for owner in root.reachable_change_owner_snapshot()? {
+                if seen.insert(owner.native_handle().identity_key()) {
+                    storage.push(CheckpointStorage::retain(&owner.native_handle())?);
+                    owners.push(owner);
+                }
+            }
+        }
+        Some(Self {
+            owners,
+            _storage: storage,
+        })
+    }
+}
 struct Snapshot {
+    _storage: CheckpointStorage,
     owner: CoreHandle,
     state: HostValueState,
     payload: Payload,
 }
 impl Snapshot {
     fn capture(owner: CoreHandle) -> Option<Self> {
-        let (state, payload) = owner
-            .with(|owner| {
-                let state = owner.as_view_model_instance_value()?.host_snapshot();
-                let value = owner.as_any();
-                let payload = if let Some(v) = value.downcast_ref::<ViewModelInstanceNumber>() {
-                    Payload::Number(v.value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceBoolean>() {
-                    Payload::Boolean(v.value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceString>() {
-                    Payload::String(v.value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceColor>() {
-                    Payload::Color(v.value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceEnum>() {
-                    Payload::Enum(v.base.property_value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceSymbolListIndex>() {
-                    Payload::Index(v.base.property_value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceTrigger>() {
-                    Payload::Trigger(v.base.property_value())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceAssetImage>() {
-                    Payload::Image(v.base.property_value(), v.asset().render_image())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceAssetFont>() {
-                    Payload::Font(v.base.property_value(), v.asset().font())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceAssetBlob>() {
-                    Payload::Blob(v.base.property_value(), v.asset())
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceArtboard>() {
-                    Payload::Artboard(
-                        v.base.property_value(),
-                        v.asset(),
-                        v.bound_view_model_instance(),
-                    )
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceList>() {
-                    Payload::List(
-                        v.list_items()
-                            .iter()
-                            .map(|item| {
-                                (
-                                    item.clone(),
-                                    item.with(|item| {
-                                        item.as_view_model_instance_list_item()
-                                            .unwrap()
-                                            .view_model_instance()
-                                    })
-                                    .flatten(),
-                                )
+        owner
+            .with(|object| Self::capture_borrowed(owner.clone(), object))
+            .flatten()
+    }
+    fn capture_borrowed(
+        owner_handle: CoreHandle,
+        owner: &dyn crate::source::core::CoreObject,
+    ) -> Option<Self> {
+        let state = owner.as_view_model_instance_value()?.host_snapshot();
+        let value = owner.as_any();
+        let payload = if let Some(v) = value.downcast_ref::<ViewModelInstanceNumber>() {
+            Payload::Number(v.value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceBoolean>() {
+            Payload::Boolean(v.value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceString>() {
+            Payload::String(v.value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceColor>() {
+            Payload::Color(v.value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceEnum>() {
+            Payload::Enum(v.base.property_value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceSymbolListIndex>() {
+            Payload::Index(v.base.property_value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceTrigger>() {
+            Payload::Trigger(v.base.property_value())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceAssetImage>() {
+            Payload::Image(v.base.property_value(), v.asset().render_image())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceAssetFont>() {
+            Payload::Font(v.base.property_value(), v.asset().font())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceAssetBlob>() {
+            Payload::Blob(v.base.property_value(), v.asset())
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceArtboard>() {
+            Payload::Artboard(
+                v.base.property_value(),
+                v.asset(),
+                v.bound_view_model_instance(),
+            )
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceList>() {
+            Payload::List(
+                v.list_items()
+                    .iter()
+                    .map(|item| {
+                        (
+                            item.clone(),
+                            item.with(|item| {
+                                item.as_view_model_instance_list_item()
+                                    .unwrap()
+                                    .view_model_instance()
                             })
-                            .collect(),
-                    )
-                } else if let Some(v) = value.downcast_ref::<ViewModelInstanceViewModel>() {
-                    Payload::ViewModel(v.reference_view_model_instance())
-                } else {
-                    return None;
-                };
-                Some((state, payload))
-            })
-            .flatten()?;
+                            .flatten(),
+                        )
+                    })
+                    .collect(),
+            )
+        } else if let Some(v) = value.downcast_ref::<ViewModelInstanceViewModel>() {
+            Payload::ViewModel(v.reference_view_model_instance())
+        } else {
+            return None;
+        };
         Some(Self {
-            owner,
+            _storage: CheckpointStorage::retain(&owner_handle)?,
+            owner: owner_handle,
             state,
             payload,
         })
@@ -303,7 +345,15 @@ pub struct RuntimeOwnedViewModelGraphTransaction {
     transaction: Transaction,
     /// The owner of every cell checkpointed at `begin`: the frame's initial
     /// change scope.
-    owners: Vec<RuntimeOwnedViewModelHandle>,
+    scope: ChangeScope,
+    live: Option<LiveCheckpoint>,
+}
+impl Drop for RuntimeOwnedViewModelGraphTransaction {
+    fn drop(&mut self) {
+        // Restore lazy snapshots while publication is still deferred, exactly
+        // as the eager checkpoint does before discarding its notification queue.
+        self.finish_capture();
+    }
 }
 impl std::fmt::Debug for RuntimeOwnedViewModelTransaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -316,7 +366,7 @@ impl std::fmt::Debug for RuntimeOwnedViewModelGraphTransaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RuntimeOwnedViewModelGraphTransaction")
             .field("undo_entries", &self.transaction.snapshots.len())
-            .field("owners", &self.owners.len())
+            .field("owners", &self.scope.owners.len())
             .finish()
     }
 }
@@ -581,33 +631,48 @@ impl RuntimeOwnedViewModelTransaction {
     }
 }
 impl RuntimeOwnedViewModelGraphTransaction {
+    /// Same rollback and scope as `begin`, with property snapshots deferred
+    /// until first mutable access. The active graph projection excludes sleepers.
+    pub fn begin_live(
+        roots: &[RuntimeOwnedViewModelHandle],
+        maximum_entries: usize,
+    ) -> Result<Self, RuntimeViewModelGraphTransactionError> {
+        Self::begin_checkpoint(roots, maximum_entries, true)
+    }
     pub fn begin(
         roots: &[RuntimeOwnedViewModelHandle],
         maximum_entries: usize,
     ) -> Result<Self, RuntimeViewModelGraphTransactionError> {
-        // This is a rollback checkpoint around a runtime frame, not a host
-        // mutation batch. Internal bindings must see intermediate measurements
-        // while the frame settles. External observers remain commit-gated.
+        Self::begin_checkpoint(roots, maximum_entries, false)
+    }
+    fn begin_checkpoint(
+        roots: &[RuntimeOwnedViewModelHandle],
+        maximum_entries: usize,
+        lazy: bool,
+    ) -> Result<Self, RuntimeViewModelGraphTransactionError> {
+        // Intermediate binding writes remain visible inside a frame; external
+        // observers publish only on commit. Scope and storage ownership are
+        // independent of when property snapshots are captured.
         let mut transaction = Transaction::begin(RuntimeTransactionKind::PlayerFrame)?;
-        let mut visited = BTreeSet::new();
-        let mut checkpointed = Vec::new();
-        for root in roots {
-            let owners = root
-                .reachable_change_owner_snapshot()
-                .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
-            transaction.files.push(root.native_file());
-            for owner in owners {
+        transaction.files = roots.iter().map(|root| root.native_file()).collect();
+        let scope = ChangeScope::capture(roots)
+            .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
+        let live = if lazy {
+            let journal = Rc::new(RefCell::new(LiveJournal {
+                snapshots: Vec::new(),
+                seen: std::collections::HashSet::new(),
+                maximum_entries,
+                overflowed: false,
+            }));
+            LIVE_CHECKPOINT.with(|slot| *slot.borrow_mut() = Rc::downgrade(&journal));
+            Some(LiveCheckpoint(journal))
+        } else {
+            for owner in &scope.owners {
                 let properties = owner
                     .native_handle()
                     .with_downcast::<ViewModelInstance, _>(|owner| owner.property_values().to_vec())
                     .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
-                // A cell has one owner, so an owner whose cells are already
-                // checkpointed was reached through another root.
-                let mut owns_new_cells = false;
                 for property in properties {
-                    if !visited.insert(property.identity_key()) {
-                        continue;
-                    }
                     if transaction.snapshots.len() >= maximum_entries {
                         return Err(RuntimeViewModelGraphTransactionError::LimitExceeded);
                     }
@@ -615,17 +680,20 @@ impl RuntimeOwnedViewModelGraphTransaction {
                         Snapshot::capture(property)
                             .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?,
                     );
-                    owns_new_cells = true;
-                }
-                if owns_new_cells {
-                    checkpointed.push(owner);
                 }
             }
-        }
+            None
+        };
         Ok(Self {
             transaction,
-            owners: checkpointed,
+            scope,
+            live,
         })
+    }
+    fn finish_capture(&mut self) {
+        if let Some(live) = self.live.take() {
+            self.transaction.snapshots.extend(live.into_snapshots());
+        }
     }
     /// Resolve a change capture taken inside this frame against the frame's
     /// whole change scope: every owner checkpointed at `begin` plus every
@@ -639,13 +707,20 @@ impl RuntimeOwnedViewModelGraphTransaction {
         roots: &[RuntimeOwnedViewModelHandle],
         capture: RuntimeViewModelChangeCapture,
     ) -> Option<Vec<(RuntimeOwnedViewModelHandle, RuntimeViewModelChange)>> {
+        if self.live.as_ref().is_some_and(|j| j.0.borrow().overflowed) {
+            return None;
+        }
         RuntimeOwnedViewModelHandle::resolve_captured_changes(
-            &self.owners,
+            &self.scope.owners,
             roots,
             published_changes(capture)?,
         )
     }
+    pub fn checkpoint_within_limit(&self) -> bool {
+        self.live.as_ref().is_none_or(|l| !l.0.borrow().overflowed)
+    }
     pub fn commit(mut self) {
+        self.finish_capture();
         self.transaction.commit();
     }
 }
@@ -833,3 +908,58 @@ impl RuntimeOwnedViewModelHandle {
 #[cfg(test)]
 #[path = "graph_transaction_tests.rs"]
 mod graph_transaction_tests;
+
+struct LiveJournal {
+    snapshots: Vec<Snapshot>,
+    seen: std::collections::HashSet<CoreHandle>,
+    maximum_entries: usize,
+    overflowed: bool,
+}
+thread_local! { static LIVE_CHECKPOINT: RefCell<std::rc::Weak<RefCell<LiveJournal>>> = const { RefCell::new(std::rc::Weak::new()) }; }
+struct LiveCheckpoint(Rc<RefCell<LiveJournal>>);
+impl LiveCheckpoint {
+    fn into_snapshots(self) -> Vec<Snapshot> {
+        // Move, then unregister before any retained owner can be released.
+        // Transaction alone performs rollback, commit and notification disposal.
+        std::mem::take(&mut self.0.borrow_mut().snapshots)
+    }
+}
+impl Drop for LiveCheckpoint {
+    fn drop(&mut self) {
+        LIVE_CHECKPOINT.with(|slot| *slot.borrow_mut() = std::rc::Weak::new());
+    }
+}
+#[inline]
+pub(crate) fn checkpoint_live_value(
+    handle: &CoreHandle,
+    object: &dyn crate::source::core::CoreObject,
+) {
+    let Some(value) = object.as_view_model_instance_value() else {
+        return;
+    };
+    // Projection reachability follows mutable access in both checkpoint modes.
+    // This does not grant scope to an unrelated owner: it only activates an
+    // existing scene edge suppressed while its row or slot was dormant.
+    if let Some(owner) = value.view_model_instance() {
+        crate::live_move::frame::touch(&owner);
+    }
+    let Some(journal) = LIVE_CHECKPOINT.with(|s| s.borrow().upgrade()) else {
+        return;
+    };
+    let mut journal = journal.borrow_mut();
+    if !journal.seen.insert(handle.clone()) {
+        return;
+    }
+    // Never drop rollback state at the publication limit. The frame will fail
+    // validation, but every write including the overflowing one must roll back.
+    if journal.snapshots.len() >= journal.maximum_entries {
+        journal.overflowed = true;
+    }
+    if let Some(snapshot) = Snapshot::capture_borrowed(handle.clone(), object) {
+        journal.snapshots.push(snapshot);
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Checkpoint);
+    } else {
+        journal.overflowed = true;
+    }
+}

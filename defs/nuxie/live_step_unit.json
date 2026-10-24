@@ -1,0 +1,38 @@
+{
+  "name": "LiveStepUnit",
+  "key": {
+    "int": 62002,
+    "string": "livestepunit"
+  },
+  "extends": "container_component.json",
+  "properties": {
+    "incomingUnitKey": {
+      "type": "uint",
+      "key": {
+        "int": 62009
+      },
+      "initialValue": "0"
+    },
+    "outgoingUnitKey": {
+      "type": "uint",
+      "key": {
+        "int": 62010
+      },
+      "initialValue": "0"
+    },
+    "incomingFlightKey": {
+      "type": "uint",
+      "key": {
+        "int": 62011
+      },
+      "initialValue": "0"
+    },
+    "outgoingFlightKey": {
+      "type": "uint",
+      "key": {
+        "int": 62012
+      },
+      "initialValue": "0"
+    }
+  }
+}

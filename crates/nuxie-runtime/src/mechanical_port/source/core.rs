@@ -628,6 +628,18 @@ impl CoreArena {
         handle
     }
 
+    /// Nuxie: source capability queries read existing concrete-type metadata.
+    /// This does not allocate or keep a second inventory in record-free files.
+    pub(crate) fn contains_types(&self, types: std::ops::RangeInclusive<CoreTypeKey>) -> bool {
+        self.inner.upgrade().is_some_and(|arena| {
+            arena.borrow().slots.iter().any(|slot| {
+                slot.occupied.get()
+                    && !slot.retirement_pending.get()
+                    && types.contains(&slot.core_type.get())
+            })
+        })
+    }
+
     pub fn contains(&self, handle: &CoreHandle) -> bool {
         handle.belongs_to(self) && handle.is_alive()
     }
@@ -687,6 +699,24 @@ impl CoreArena {
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
         arena.borrow_mut().free.push(handle.identity.index);
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn count_instances(&self, type_key: CoreTypeKey) -> usize {
+        self.inner.upgrade().map_or(0, |arena| {
+            arena
+                .borrow()
+                .slots
+                .iter()
+                .filter(|slot| {
+                    slot.occupied.get()
+                        && slot
+                            .type_predicate
+                            .get()
+                            .is_some_and(|is_type| is_type(type_key))
+                })
+                .count()
+        })
     }
 
     pub fn len(&self) -> usize {
@@ -992,6 +1022,24 @@ impl CoreHandle {
         )
     }
 
+    /// Nuxie transaction storage lease, including children still being cloned.
+    /// Runtime occurrence arenas register their root before any cloned object.
+    /// Resolving that existing slot needs no graph walk or new bookkeeping.
+    pub(crate) fn runtime_arena_owner(
+        &self,
+    ) -> Option<crate::source::artboard::RuntimeArtboardInstanceHandle> {
+        let arena = self.identity.arena.upgrade()?;
+        let arena = arena.borrow();
+        let root = arena
+            .slots
+            .first()?
+            .runtime_artboard
+            .borrow()
+            .as_ref()?
+            .upgrade()?;
+        Some(crate::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root))
+    }
+
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
         let slot = &self.identity.slot;
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
@@ -1037,9 +1085,29 @@ impl CoreHandle {
         // available while an authored object is mutably borrowed. As above,
         // never carry the empty object guard into a runtime-root callback.
         {
-            let mut object = slot.object.borrow_mut();
-            if let Some(object) = object.as_deref_mut() {
-                return Some(f(object));
+            let mut payload = slot.object.borrow_mut();
+            if let Some(object) = payload.as_deref_mut() {
+                // Nuxie: shared frame projection and first-write checkpoint.
+                crate::host_viewmodel::checkpoint_live_value(self, object);
+                let result = f(object);
+                // Nuxie: an opted-in list's collapse may need to read its host
+                // ancestry. Complete that work after its payload borrow ends.
+                let collapse = if slot.core_type.get()
+                    == crate::source::artboard_component_list::ArtboardComponentList::TYPE_KEY
+                {
+                    object
+                        .as_artboard_component_list_mut()
+                        .and_then(|list| list.take_live_move_collapse())
+                } else {
+                    None
+                };
+                drop(payload);
+                if let Some(value) = collapse
+                    && self.is_alive()
+                {
+                    crate::source::artboard_component_list::ArtboardComponentList::collapse_after_super_occurrence(self, value);
+                }
+                return Some(result);
             }
         }
         let _root_lease = slot.lease();

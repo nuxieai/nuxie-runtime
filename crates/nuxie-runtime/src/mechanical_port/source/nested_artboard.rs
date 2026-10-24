@@ -75,7 +75,9 @@ pub struct NestedArtboard {
     pub base: NestedArtboardBase,
     pub artboard_referencer: ArtboardReferencer,
     pub data_bind_path_referencer: DataBindPathReferencer,
-    instance: Option<RuntimeArtboardInstanceHandle>,
+    // Nuxie atomic transfer hooks. Playback wrappers stay in their own arenas.
+    pub(crate) instance: Option<RuntimeArtboardInstanceHandle>,
+    pub(crate) live_move: Option<Box<crate::live_move::SlotState>>,
     mesh_host: Option<
         std::rc::Rc<
             std::cell::RefCell<crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost>,
@@ -84,18 +86,19 @@ pub struct NestedArtboard {
     bound_nested_state_machine: Option<CoreHandle>,
     nested_animations: Vec<CoreHandle>,
     file: RuntimeFileWeakHandle,
-    view_model_instance: Option<CoreHandle>,
-    data_context: Option<RuntimeDataContextHandle>,
-    active_view_model_instance: Option<CoreHandle>,
-    global_view_model_instances: Vec<CoreHandle>,
-    focus_scope: Option<FocusNodeRef>,
-    focus_scope_manager: Option<RuntimeFocusManagerHandle>,
-    cumulated_seconds: f32,
-    owns_active_vmi: bool,
+    pub(crate) view_model_instance: Option<CoreHandle>,
+    pub(crate) data_context: Option<RuntimeDataContextHandle>,
+    pub(crate) active_view_model_instance: Option<CoreHandle>,
+    pub(crate) global_view_model_instances: Vec<CoreHandle>,
+    pub(crate) focus_scope: Option<FocusNodeRef>,
+    pub(crate) focus_scope_manager: Option<RuntimeFocusManagerHandle>,
+    pub(crate) cumulated_seconds: f32,
+    pub(crate) owns_active_vmi: bool,
     host_flags: NestedArtboardHostFlags,
-    inactive_change_sequence: crate::mechanical_port::source::artboard_host::InactiveChangeMark,
+    pub(crate) inactive_change_sequence:
+        crate::mechanical_port::source::artboard_host::InactiveChangeMark,
     // Dropped after the mounted instance and all of its dependent state.
-    mounted_bindable:
+    pub(crate) mounted_bindable:
         Option<crate::mechanical_port::source::bindable_artboard::RuntimeBindableArtboardHandle>,
 }
 
@@ -106,6 +109,7 @@ impl Default for NestedArtboard {
             artboard_referencer: ArtboardReferencer::default(),
             data_bind_path_referencer: DataBindPathReferencer::default(),
             instance: None,
+            live_move: Default::default(),
             mesh_host: None,
             bound_nested_state_machine: None,
             nested_animations: Vec::new(),
@@ -169,7 +173,7 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
-    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::live_move::compose_slot_transform::<Self>,
     crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
 );
 
@@ -452,7 +456,7 @@ impl NestedArtboard {
 
     // nest() already owns the host. Pass that same owner to the child's dirty
     // callback, just as markLayoutDirty does for an already-borrowed host.
-    fn apply_origin_override(&mut self) {
+    pub(crate) fn apply_origin_override(&mut self) {
         if self.instance.is_none() {
             return;
         }
@@ -575,6 +579,8 @@ impl NestedArtboard {
     /// Runtime swaps use the handle boundary: semantic subtree construction
     /// can walk back through this host, so the callback cannot retain &mut self.
     pub fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+        // Nuxie: a bound swap can detach an instance before another advance.
+        crate::hosted_scene::membership_changed_for(owner);
         let prepared = owner
             .with_mut(|owner| {
                 owner
@@ -968,7 +974,7 @@ impl NestedArtboard {
             .as_ref()
             .and_then(|h| h.borrow().hosted_mesh())
     }
-    fn reset_mesh_raster(&mut self) {
+    pub(crate) fn reset_mesh_raster(&mut self) {
         if let Some(h) = &self.mesh_host {
             h.borrow_mut().reset_raster();
         }
@@ -1348,6 +1354,10 @@ impl NestedArtboard {
     }
 
     pub(crate) fn natural_size_for_layout(&self) -> Option<Vec2D> {
+        // Nuxie: an away instance leaves its measured slot behind.
+        if self.instance.is_none() {
+            return self.live_move.as_ref().and_then(|s| s.size);
+        }
         self.instance.as_ref().map(|instance| {
             instance
                 .with_artboard(|board| Vec2D::new(board.original_width(), board.original_height()))
@@ -1359,6 +1369,10 @@ impl NestedArtboard {
     pub(crate) fn natural_bounds_for_layout(
         &self,
     ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+        // Nuxie: preserve the slot while its live instance is away.
+        if self.instance.is_none() {
+            return self.live_move.as_ref().and_then(|s| s.bounds);
+        }
         self.instance.as_ref().map(|instance| {
             instance.with_artboard(|board| {
                 let (width, height) = (board.original_width(), board.original_height());
@@ -1390,12 +1404,24 @@ impl NestedArtboard {
             height
         };
         Vec2D::new(
-            maximum_width.min(self.instance.as_ref().map_or(0.0, |instance| {
-                instance.with_artboard(|instance| instance.width())
-            })),
-            maximum_height.min(self.instance.as_ref().map_or(0.0, |instance| {
-                instance.with_artboard(|instance| instance.height())
-            })),
+            maximum_width.min(
+                self.instance.as_ref().map_or(
+                    self.live_move
+                        .as_ref()
+                        .and_then(|s| s.size)
+                        .map_or(0.0, |s| s.x),
+                    |instance| instance.with_artboard(|instance| instance.width()),
+                ),
+            ),
+            maximum_height.min(
+                self.instance.as_ref().map_or(
+                    self.live_move
+                        .as_ref()
+                        .and_then(|s| s.size)
+                        .map_or(0.0, |s| s.y),
+                    |instance| instance.with_artboard(|instance| instance.height()),
+                ),
+            ),
         )
     }
 

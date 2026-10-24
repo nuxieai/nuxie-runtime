@@ -72,7 +72,7 @@ pub fn layout_node_owner_for(key: &LayoutNodeKey) -> Option<CoreHandle> {
                 nested
                     .base
                     .base
-                    .artboard_instance_handle(key.index as i32)
+                    .live_move_layout_instance()
                     .map(|instance| instance.core_handle())
             } else if let Some(list) = object.as_any().downcast_ref::<
                 crate::mechanical_port::source::artboard_component_list::ArtboardComponentList,

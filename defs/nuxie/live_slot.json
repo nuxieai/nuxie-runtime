@@ -1,0 +1,74 @@
+{
+  "name": "LiveSlot",
+  "key": {
+    "int": 62000,
+    "string": "liveslot"
+  },
+  "extends": "container_component.json",
+  "properties": {
+    "unitKey": {
+      "type": "uint",
+      "key": {
+        "int": 62000
+      },
+      "initialValue": "0"
+    },
+    "role": {
+      "type": "uint",
+      "key": {
+        "int": 62001
+      },
+      "initialValue": "0"
+    },
+    "sizeMode": {
+      "type": "uint",
+      "key": {
+        "int": 62002
+      },
+      "initialValue": "0"
+    },
+    "progress": {
+      "type": "double",
+      "key": {
+        "int": 62003
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "pathX": {
+      "type": "double",
+      "key": {
+        "int": 62004
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "pathY": {
+      "type": "double",
+      "key": {
+        "int": 62005
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "flightKey": {
+      "type": "uint",
+      "key": {
+        "int": 62013
+      },
+      "initialValue": "0"
+    },
+    "fade": {
+      "type": "double",
+      "key": {
+        "int": 62014
+      },
+      "initialValue": "1",
+      "animates": true,
+      "keyable": true
+    }
+  }
+}

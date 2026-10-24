@@ -13,7 +13,8 @@ build = "build.rs"
 path = "lib.rs"
 
 [features]
-"default" = ["android-authored-wgsl", "android-vulkan", "apple-authored-msl", "apple-metal", "scripting"]
+"default" = ["android-authored-wgsl", "android-vulkan", "apple-authored-msl", "apple-metal", "scripting", "test-support"]
+"test-support" = ["nuxie/test-support"]
 "scripting" = ["nuxie/scripting"]
 "apple-metal" = ["nuxie/renderer-metal", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-metal", "dep:objc2", "dep:objc2-metal", "dep:objc2-quartz-core"]
 "android-vulkan" = ["nuxie/renderer-vulkan", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
@@ -29,6 +30,7 @@ path = "lib.rs"
 "nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false }
 
 [dev-dependencies]
+"nux-capi" = { "path" = "../nux-capi", "features" = ["test-support", "scripting"] }
 "nuxie-video-host" = { "path" = "../nuxie-video-host" }
 "nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
 "luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }

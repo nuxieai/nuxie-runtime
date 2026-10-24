@@ -3420,7 +3420,8 @@ pub struct StateMachineInstance {
     // Never retain a cell guard across callbacks. Drop explicitly before managers.
     input_extras: Rc<RefCell<Sidecar<SMIInputExtras>>>,
     scripting: Sidecar<SMIScripting>,
-    nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
+    // Nuxie: transfer host event references with live playback.
+    pub(crate) nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
     nested_artboard: Option<CoreHandle>,
     #[cfg(feature = "tools")]
     input_changed_callback:
@@ -4570,6 +4571,9 @@ impl StateMachineInstance {
         timestamp: f32,
         button: PointerButton,
     ) -> HitResult {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Hit);
+
         let (position, contents_collapsed) = self.normalize_pointer_position(position);
         for group in &self.listener_groups {
             group.with_group(|group| group.reset(pointer_id));

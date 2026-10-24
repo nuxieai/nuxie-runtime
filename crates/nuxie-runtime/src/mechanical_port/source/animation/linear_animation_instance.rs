@@ -56,7 +56,8 @@ pub struct LinearAnimationInstance {
     // borrowing it.
     cells: Rc<LinearAnimationCells>,
     scene: Scene,
-    nested_event_notifier: NestedEventNotifier,
+    // Nuxie: rehome nested event listeners with running playback.
+    pub(crate) nested_event_notifier: NestedEventNotifier,
     time: f32,
     speed_direction: f32,
     total_time: f32,

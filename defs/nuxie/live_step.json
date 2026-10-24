@@ -1,0 +1,31 @@
+{
+  "name": "LiveStep",
+  "key": {
+    "int": 62001,
+    "string": "livestep"
+  },
+  "extends": "container_component.json",
+  "properties": {
+    "name": {
+      "type": "String",
+      "key": {
+        "int": 62006
+      },
+      "initialValue": "''"
+    },
+    "fromArtboard": {
+      "type": "String",
+      "key": {
+        "int": 62007
+      },
+      "initialValue": "''"
+    },
+    "toArtboard": {
+      "type": "String",
+      "key": {
+        "int": 62008
+      },
+      "initialValue": "''"
+    }
+  }
+}

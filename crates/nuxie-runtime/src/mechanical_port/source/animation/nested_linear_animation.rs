@@ -10,7 +10,8 @@ use crate::mechanical_port::source::{
 
 pub struct NestedLinearAnimation {
     pub base: NestedLinearAnimationBase,
-    animation_instance: Option<LinearAnimationInstance>,
+    // Nuxie: transfer the timeline, including time and cloned bind state.
+    pub(crate) animation_instance: Option<LinearAnimationInstance>,
 }
 
 impl Default for NestedLinearAnimation {

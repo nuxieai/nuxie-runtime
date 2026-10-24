@@ -12,12 +12,60 @@ use nuxie::video::{
 const MAX_VIDEO_SCENE_OBJECTS: usize = 65_536;
 const FIRST_NESTED_VIDEO_ID: usize = 1 << 30;
 
+#[derive(Default)]
 pub(super) struct VideoOccurrences {
+    legacy: LegacyVideoOccurrences,
+    // Nuxie: the retained lookup and frame cache exist only for record files.
+    live: Option<Box<LiveVideoOccurrences>>,
+}
+impl VideoOccurrences {
+    #[cfg(test)]
+    pub(super) fn has_live_bookkeeping(&self) -> bool {
+        self.live.is_some()
+    }
+    fn collect(&mut self, root: &ArtboardInstance, step: u64) -> Result<Vec<LiveVideo>, NuxStatus> {
+        if !nuxie::hosted_scene::enabled(&root.native_handle()) {
+            return self.legacy.collect(root);
+        }
+        let live = self.live.get_or_insert_with(Box::default);
+        live.refresh(root, step, &mut nuxie::hosted_scene::HostedIndex::default())?;
+        Ok(live.cached.clone())
+    }
+    fn lookup(
+        &mut self,
+        root: &ArtboardInstance,
+        step: u64,
+        id: usize,
+    ) -> Result<nuxie::CoreHandle, NuxStatus> {
+        if !nuxie::hosted_scene::enabled(&root.native_handle()) {
+            return self
+                .legacy
+                .collect(root)?
+                .into_iter()
+                .find(|v| v.id == id)
+                .map(|v| v.handle)
+                .ok_or(NuxStatus::NotFound);
+        }
+        let live = self.live.get_or_insert_with(Box::default);
+        live.refresh(root, step, &mut nuxie::hosted_scene::HostedIndex::default())?;
+        live.by_id
+            .get(&id)
+            .filter(|h| h.is_alive())
+            .cloned()
+            .ok_or(NuxStatus::NotFound)
+    }
+    fn is_active(&self, id: usize) -> bool {
+        self.live
+            .as_ref()
+            .is_none_or(|live| live.active_ids.contains(&id))
+    }
+}
+pub(super) struct LegacyVideoOccurrences {
     ids: std::collections::BTreeMap<(usize, usize, u64), usize>,
     next_id: usize,
 }
 
-impl Default for VideoOccurrences {
+impl Default for LegacyVideoOccurrences {
     fn default() -> Self {
         Self {
             ids: Default::default(),
@@ -26,14 +74,7 @@ impl Default for VideoOccurrences {
     }
 }
 
-struct LiveVideo {
-    id: usize,
-    source_artboard_index: usize,
-    source_component_id: usize,
-    handle: nuxie::CoreHandle,
-}
-
-impl VideoOccurrences {
+impl LegacyVideoOccurrences {
     fn collect(&mut self, root: &ArtboardInstance) -> Result<Vec<LiveVideo>, NuxStatus> {
         use std::collections::BTreeSet;
         let file = root.native_file();
@@ -120,6 +161,158 @@ impl VideoOccurrences {
         self.ids.extend(new_ids);
         Ok(output)
     }
+}
+
+struct LiveVideoOccurrences {
+    ids: std::collections::HashMap<nuxie::CoreHandle, usize>,
+    next_id: usize,
+    key: Option<(u64, u64)>,
+    cached: Vec<LiveVideo>,
+    // Control lookup covers retained videos. Enumeration and visibility use
+    // only the active projection. All handles are weak identity observations.
+    by_id: std::collections::HashMap<usize, nuxie::CoreHandle>,
+    active_ids: std::collections::HashSet<usize>,
+    sources: Option<std::collections::HashMap<nuxie::CoreHandle, usize>>,
+}
+impl Default for LiveVideoOccurrences {
+    fn default() -> Self {
+        Self {
+            ids: Default::default(),
+            next_id: FIRST_NESTED_VIDEO_ID,
+            key: None,
+            cached: Vec::new(),
+            by_id: Default::default(),
+            active_ids: Default::default(),
+            sources: None,
+        }
+    }
+}
+#[derive(Clone)]
+struct LiveVideo {
+    id: usize,
+    source_artboard_index: usize,
+    source_component_id: usize,
+    handle: nuxie::CoreHandle,
+}
+impl LiveVideoOccurrences {
+    fn refresh(
+        &mut self,
+        root: &ArtboardInstance,
+        step: u64,
+        index: &mut nuxie::hosted_scene::HostedIndex,
+    ) -> Result<(), NuxStatus> {
+        let key = (
+            step,
+            nuxie::hosted_scene::membership_revision(&root.native_handle().core_handle()),
+        );
+        if self.key == Some(key) {
+            return Ok(());
+        }
+        let membership_changed = self.key.is_none_or(|old| old.1 != key.1);
+        if membership_changed {
+            // The index already discovers every retained board on structural
+            // edits. Rebuild the control table once, including sleeping rows.
+            let retained = self.scan(root, &index.retained(&root.native_handle()), false)?;
+            let handles = retained
+                .iter()
+                .map(|v| v.handle.clone())
+                .collect::<std::collections::HashSet<_>>();
+            self.ids.retain(|h, _| handles.contains(h));
+            self.by_id = retained.into_iter().map(|v| (v.id, v.handle)).collect();
+        }
+        let output = self.scan(root, &index.active(&root.native_handle()), true)?;
+        self.active_ids = output.iter().map(|v| v.id).collect();
+        self.by_id
+            .extend(output.iter().map(|v| (v.id, v.handle.clone())));
+        self.cached = output;
+        self.key = Some(key);
+        Ok(())
+    }
+    fn scan(
+        &mut self,
+        root: &ArtboardInstance,
+        boards: &[nuxie::CoreHandle],
+        _record_walk: bool,
+    ) -> Result<Vec<LiveVideo>, NuxStatus> {
+        let sources = self.sources.get_or_insert_with(|| {
+            root.native_file().with_file(|f| {
+                (0..f.artboard_count())
+                    .filter_map(|i| f.artboard_handle(i).map(|h| (h, i)))
+                    .collect()
+            })
+        });
+        if boards.len() > MAX_VIDEO_SCENE_OBJECTS {
+            return Err(NuxStatus::LimitExceeded);
+        }
+        let mut output = Vec::new();
+        let mut count = 0usize;
+        for board in boards {
+            #[cfg(feature = "test-support")]
+            if _record_walk && *board != root.native_handle().core_handle() {
+                nuxie::hosted_scene::record_walk(nuxie::hosted_scene::Walk::VideoEnumeration);
+            }
+            let (source, objects) = board
+                .with_downcast::<nuxie::Artboard, _>(|b| {
+                    (b.artboard_source_handle(), b.objects().to_vec())
+                })
+                .ok_or(NuxStatus::RuntimeError)?;
+            let source_artboard_index = source
+                .and_then(|s| sources.get(&s).copied())
+                .ok_or(NuxStatus::RuntimeError)?;
+            count = count
+                .checked_add(objects.len())
+                .ok_or(NuxStatus::LimitExceeded)?;
+            if count > MAX_VIDEO_SCENE_OBJECTS {
+                return Err(NuxStatus::LimitExceeded);
+            }
+            for (source_component_id, handle) in objects
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, h)| h.map(|h| (i, h)))
+            {
+                if !handle.is_type_of(Video::TYPE_KEY) {
+                    continue;
+                }
+                let id = if *board == root.native_handle().core_handle() {
+                    source_component_id
+                } else if let Some(id) = self.ids.get(&handle) {
+                    *id
+                } else {
+                    let id = self.next_id;
+                    self.next_id = id
+                        .checked_add(1)
+                        .filter(|v| *v <= i64::MAX as usize)
+                        .ok_or(NuxStatus::LimitExceeded)?;
+                    self.ids.insert(handle.clone(), id);
+                    id
+                };
+                output.push(LiveVideo {
+                    id,
+                    source_artboard_index,
+                    source_component_id,
+                    handle,
+                });
+            }
+        }
+        Ok(output)
+    }
+}
+fn current_videos(player: &NuxPlayer) -> Result<Vec<LiveVideo>, NuxStatus> {
+    let artboard = player
+        .artboard
+        .instance
+        .try_borrow()
+        .map_err(|_| NuxStatus::ReentrantCall)?;
+    let mut moves = nuxie::live_move::LiveMoves::default();
+    moves
+        .prepare(&artboard.native_handle())
+        .map_err(|_| NuxStatus::InvalidArgument)?;
+    let mut videos = player
+        .artboard
+        .video_occurrences
+        .try_borrow_mut()
+        .map_err(|_| NuxStatus::ReentrantCall)?;
+    videos.collect(&artboard, player.artboard.scene_step.get())
 }
 
 /// Explicit assertion that the host has initialized a compatible decoder and
@@ -234,22 +427,24 @@ pub(crate) fn with_video<R>(
     let _handle = enter_handle(player, HandleKind::Player)?;
     let player = unsafe { &*player };
     let _occurrence = enter_occurrence(&player.artboard)?;
-    let videos = player
+    let artboard = player
+        .artboard
+        .instance
+        .try_borrow()
+        .map_err(|_| NuxStatus::ReentrantCall)?;
+    let mut moves = nuxie::live_move::LiveMoves::default();
+    moves
+        .prepare(&artboard.native_handle())
+        .map_err(|_| NuxStatus::InvalidArgument)?;
+    let mut occurrences = player
+        .artboard
         .video_occurrences
         .try_borrow_mut()
-        .map_err(|_| NuxStatus::ReentrantCall)?
-        .collect(
-            &*player
-                .artboard
-                .instance
-                .try_borrow()
-                .map_err(|_| NuxStatus::ReentrantCall)?,
-        )?;
-    let video = videos
-        .into_iter()
-        .find(|video| video.id == component_id)
-        .ok_or(NuxStatus::NotFound)?;
-    body(&video.handle, &player.artboard)
+        .map_err(|_| NuxStatus::ReentrantCall)?;
+    let video = occurrences.lookup(&artboard, player.artboard.scene_step.get(), component_id)?;
+    drop(occurrences);
+    drop(artboard);
+    body(&video, &player.artboard)
 }
 pub(crate) fn status(result: Result<(), NuxStatus>) -> NuxStatus {
     result.err().unwrap_or(NuxStatus::Ok)
@@ -270,7 +465,7 @@ pub unsafe extern "C" fn nux_player_video_is_visible(
     out_visible: *mut u32,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        status(with_video(player, component_id, |video, _| {
+        status(with_video(player, component_id, |video, occurrence| {
             if out_visible.is_null() {
                 return Err(NuxStatus::NullArgument);
             }
@@ -288,8 +483,13 @@ pub unsafe extern "C" fn nux_player_video_is_visible(
                 max_x,
                 max_y,
             };
-            let visible = nuxie::video::visibility::is_visible_in(video, viewport)
-                .map_err(|_| NuxStatus::RuntimeError)?;
+            let active = occurrence
+                .video_occurrences
+                .borrow()
+                .is_active(component_id);
+            let visible = active
+                && nuxie::video::visibility::is_visible_in(video, viewport)
+                    .map_err(|_| NuxStatus::RuntimeError)?;
             unsafe {
                 *out_visible = u32::from(visible);
             }
@@ -318,8 +518,9 @@ pub(crate) fn command(kind: u32, value: f64, reason: u32) -> Result<Command, Nux
 
 /// Enumerate root, nested, and materialized list video occurrences. Root IDs
 /// retain their component slots; nested IDs are opaque and never reused within
-/// this player. Removed occurrences reject further commands. Definition fields
-/// identify authored targets; component_id identifies the mounted player only.
+/// this scene occurrence, shared by its players. Sleeping videos stay addressable
+/// for control and report invisible. Removed occurrences reject commands.
+/// Definition fields identify authored targets; component_id identifies a mount.
 /// Calls are creator-thread affine; callbacks cannot reenter any C API.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_visit_videos(
@@ -333,17 +534,7 @@ pub unsafe extern "C" fn nux_player_visit_videos(
             let _handle = enter_handle(player, HandleKind::Player)?;
             let player = unsafe { &*player };
             let _occurrence = enter_occurrence(&player.artboard)?;
-            let videos = player
-                .video_occurrences
-                .try_borrow_mut()
-                .map_err(|_| NuxStatus::ReentrantCall)?
-                .collect(
-                    &*player
-                        .artboard
-                        .instance
-                        .try_borrow()
-                        .map_err(|_| NuxStatus::ReentrantCall)?,
-                )?;
+            let videos = current_videos(player)?;
             for video in videos {
                 let id = video.id;
                 let object = video.handle;

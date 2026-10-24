@@ -701,3 +701,21 @@ All verification used the rebase file-request runner, one request at a time:
 | `reviewfull` | `test -p nux-capi` | 271 tests across 22 targets passed, including one cached target, exit 0. |
 
 Only the three touched Rust files were formatted with `rustfmt --edition 2024 --config skip_children=true`. No schema definitions or generated files changed. Changes remain uncommitted.
+
+
+### Detached Screen writes and retired parents
+
+The iOS Page host exposed an existing parent-walk assumption in `mark_observable_mutation`: a retained Screen view model can name a parent whose native arena has retired. Mutation propagation now skips handles that no longer resolve to a `ViewModelInstance`, before recording a generation for them. Live instances keep the same generation propagation and identity-based seen set. The neighbouring value-policy retention walk skips the same retired parent edges. `reachable_change_owner_snapshot` was inspected: it walks children with fallible access, not parents, so its handling of invalid child graphs remains unchanged.
+
+Three regressions use the A/B device fixture, retain SDK row handles, and explicitly model the reported weak backlink by retiring a native parent arena. They cover removal followed by a write and step; a write followed by removal in one mutation batch and step; and a completed removal step followed by late effects captured, resolved and published through the runtime frame APIs. All verify detached and live values survive, and actual live parents still receive the changed child's generation. The separate detached-write case also verifies the former Page receives no generation update. Plain removal ordering alone passed before the fix (`detachedred`); the explicit retired-parent cases all reproduced the original `native instance` panic (`detachedredparents`). The strengthened late-effect version also failed all three cases before the fix (`detachedeffectsred`).
+
+After the fix, `detachedcapi` exposed an incorrect new test assumption that Page must remain a direct parent after removal. The assertion now checks the actual live parent handles; no runtime behavior was changed to satisfy it. Final verification used the rebase runner sequentially:
+
+| Request | Command | Result |
+| --- | --- | --- |
+| `detachedruntime` | `test -p nuxie-runtime --test live_moves` | 67 passed, exit 0. |
+| `detachedcapifinal` | `test -p nux-capi --lib live_moves` | 19 passed, including all three regressions, exit 0. |
+| `detachedfull` | `test -p nux-capi` | 274 tests across 22 targets passed, exit 0. |
+| `detachedcheck` | `check -p nux-capi --all-targets` | 26 targets built, exit 0. |
+
+Only the three touched Rust files were formatted with `rustfmt --edition 2024`. Formatting and whitespace checks pass. No schema or generated files changed, and nothing was committed.

@@ -1831,3 +1831,172 @@ fn live_moves_remove_outgoing_row_after_back_then_step_round9() {
         }
     }
 }
+
+unsafe fn detached_row_write_case(remove_before_write: bool, step_after_remove: bool) {
+    use crate::data_binding::*;
+    unsafe {
+        let scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
+        let mut row = ptr::null_mut();
+        let mut live = ptr::null_mut();
+        assert_eq!(
+            nux_view_model_instance_list_item_acquire(scene.vm, view("screens"), 1, &mut row),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_list_item_acquire(scene.vm, view("screens"), 0, &mut live),
+            NuxStatus::Ok
+        );
+        // Model the weak backlink left by a retired native Screen VM clone.
+        // Keep the SDK row alive, but retire the parent arena before publication.
+        use nuxie::runtime::{core::CoreArena, viewmodel::viewmodel_instance::ViewModelInstance};
+        let arena = CoreArena::default();
+        let retired = arena.insert(ViewModelInstance::default());
+        (*row)
+            .instance
+            .native_handle()
+            .with_downcast_mut::<ViewModelInstance, _>(|row| row.add_parent(retired.clone()))
+            .unwrap();
+        drop(arena);
+        assert!(
+            retired
+                .with_downcast::<ViewModelInstance, _>(|_| ())
+                .is_none()
+        );
+        let remove = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: scene.vm,
+            path: view("screens"),
+            index: 1,
+            ..Default::default()
+        };
+        let write = |instance, value: &'static [u8]| NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+            instance,
+            path: view("screen/phase"),
+            bytes_value: NuxByteView {
+                data: value.as_ptr(),
+                len: value.len(),
+            },
+            ..Default::default()
+        };
+        let mutate = |mutations: &[NuxViewModelMutation]| {
+            let batch = NuxViewModelMutationBatch {
+                mutations: mutations.as_ptr(),
+                mutation_count: mutations.len(),
+                ..Default::default()
+            };
+            let mut result = ptr::null_mut();
+            let status = nux_view_model_mutate(&batch, &mut result);
+            nux_view_model_mutation_result_free(result);
+            assert_eq!(status, NuxStatus::Ok);
+        };
+        if remove_before_write {
+            mutate(&[remove]);
+            if step_after_remove {
+                step_ok(scene.player);
+                // Deliver a late frame's effects using the runtime capture and
+                // publication path, after the removal step has completed.
+                let roots = [(*row).instance.clone(), (*live).instance.clone()];
+                let transaction =
+                    nuxie::RuntimeOwnedViewModelGraphTransaction::begin(&roots, 4096).unwrap();
+                let capture = nuxie::RuntimeViewModelChangeCapture::begin().unwrap();
+                for (owner, value) in [
+                    (&roots[0], b"cached".as_slice()),
+                    (&roots[1], b"active".as_slice()),
+                ] {
+                    assert!(
+                        owner
+                            .borrow_mut()
+                            .set_string_by_property_name_path("screen/phase", value)
+                    );
+                }
+                let effects = transaction
+                    .resolve_change_capture_with_owners(&roots, capture)
+                    .unwrap();
+                assert_eq!(
+                    effects.len(),
+                    2,
+                    "both detached and live effects must be delivered"
+                );
+                transaction.commit();
+                let generation = reserve_view_model_mutation_generation().unwrap();
+                for (owner, _) in effects {
+                    owner.mark_observable_mutation(generation);
+                }
+            } else {
+                let page_generation = (*scene.vm).instance.observable_mutation_generation();
+                mutate(&[write(row, b"cached")]);
+                assert_eq!(
+                    (*scene.vm).instance.observable_mutation_generation(),
+                    page_generation,
+                    "detached writes must not notify the former Page parent"
+                );
+                mutate(&[write(live, b"active")]);
+            }
+        } else {
+            mutate(&[write(row, b"cached"), remove, write(live, b"active")]);
+        }
+        step_ok(scene.player);
+        assert_eq!(
+            (*row)
+                .instance
+                .borrow()
+                .string_value_by_property_name_path("screen/phase")
+                .unwrap()
+                .as_ref(),
+            b"cached"
+        );
+        assert_eq!(
+            (*live)
+                .instance
+                .borrow()
+                .string_value_by_property_name_path("screen/phase")
+                .unwrap()
+                .as_ref(),
+            b"active"
+        );
+        assert!((*row).instance.observable_mutation_generation() > 0);
+        let live_value_owner = (*live)
+            .instance
+            .linked_view_model_by_property_name_path("screen")
+            .unwrap();
+        let generation = live_value_owner.observable_mutation_generation();
+        assert!(generation > 0);
+        let parents = live_value_owner
+            .native_handle()
+            .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
+            .unwrap();
+        let live_parents: Vec<_> = parents
+            .into_iter()
+            .filter_map(|parent| {
+                RuntimeOwnedViewModelHandle::from_native((*live).file.clone(), parent)
+            })
+            .collect();
+        assert!(
+            !live_parents.is_empty(),
+            "exercise propagation to live parents"
+        );
+        for parent in live_parents {
+            assert_eq!(
+                parent.observable_mutation_generation(),
+                generation,
+                "live parents still receive the changed child's generation"
+            );
+        }
+        nux_view_model_instance_free(row);
+        nux_view_model_instance_free(live);
+    }
+}
+
+#[test]
+fn live_moves_detached_row_write_after_remove() {
+    unsafe { detached_row_write_case(true, false) }
+}
+#[test]
+fn live_moves_detached_row_write_and_remove_in_one_batch() {
+    unsafe { detached_row_write_case(false, false) }
+}
+#[test]
+fn live_moves_detached_row_late_write_after_previous_step() {
+    unsafe { detached_row_write_case(true, true) }
+}

@@ -1294,12 +1294,16 @@ impl RuntimeOwnedViewModelHandle {
             if !seen.insert(owner.identity_key()) {
                 return;
             }
+            // Parent links are weak native identities. A detached instance can
+            // outlive a parent occurrence, which must receive no notification.
+            let Some(parents) =
+                owner.with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
+            else {
+                return;
+            };
             HOST_GENERATIONS.with(|values| {
                 values.borrow_mut().insert(owner.identity_key(), generation);
             });
-            let parents = owner
-                .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
-                .expect("native instance");
             for parent in parents {
                 visit(parent, generation, seen);
             }

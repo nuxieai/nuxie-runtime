@@ -9,6 +9,7 @@ def _impl(ctx):
     if data["revision"] != _REVISION:
         fail("Shader source manifest revision does not match the source archive")
     ctx.download_and_extract(
+        type = "tar.gz",
         url = "https://codeload.github.com/rive-app/rive-runtime/tar.gz/" + _REVISION,
         sha256 = _SHA256,
         stripPrefix = "rive-runtime-" + _REVISION,

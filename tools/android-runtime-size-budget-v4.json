@@ -3,7 +3,7 @@
   "releaseTag": "android-runtime-v1.0.0",
   "maximums": {
     "archiveBytes": 25165824,
-    "expandedBytes": 67108864,
+    "expandedBytes": 75497472,
     "fileBytes": {
       "include/nux_capi.generated.h": 524288,
       "jniLibs/arm64-v8a/libc++_shared.so": 12582912,

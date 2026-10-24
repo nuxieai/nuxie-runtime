@@ -254,6 +254,88 @@ fn private_values_text_and_destination_prop_survive() {
     close(val(&count, 575), 7.0);
 }
 #[test]
+fn a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home() {
+    use source::data_bind::{
+        data_bind::{DataBind, SOURCE_TO_TARGET_FIRST, TWO_WAY},
+        data_bind_context::DataBindContext,
+    };
+
+    let mut s = Scene::from_bytes(&fixture::live_page_fixture());
+    // Author the prop binds in the Screen containers, as for slot replacement.
+    // Both endpoints matter: arrival discards the destination's original unit
+    // and retains its authored bind before deriving the moved unit's bind.
+    for (row, slot, path) in [(&s.a, &s.s, 1), (&s.b, &s.d, 2)] {
+        let prop = property(&vm(&child(slot).unwrap()), "prop");
+        let container = row.core_handle().data_bind_container().unwrap();
+        // Drop the list's Ref before removal; a for-scrutinee temporary would
+        // otherwise keep the container borrowed throughout the loop.
+        let binds = container.data_binds().to_vec();
+        for bind in binds {
+            if bind
+                .with(|o| o.as_data_bind().and_then(DataBind::target))
+                .flatten()
+                == Some(prop.clone())
+            {
+                container.remove_and_delete_data_bind(&bind);
+            }
+        }
+        let mut bind = DataBindContext::default();
+        bind.base.base = DataBind::new(TWO_WAY, 575, 0);
+        bind.decode_source_path_ids(&[path, 0]);
+        let bind = slot.insert_sibling(bind).unwrap();
+        bind.with_mut(|o| o.as_data_bind_mut().unwrap().set_target(Some(prop)));
+        container.add_data_bind(bind);
+    }
+
+    let original = child(&s.s).unwrap();
+    let prop = property(&vm(&original), "prop");
+    let assert_order = |slot: &CoreHandle| {
+        let unit = child(slot).unwrap();
+        assert_eq!(unit.core_handle(), original.core_handle());
+        let binds: Vec<_> = unit
+            .core_handle()
+            .data_bind_container()
+            .unwrap()
+            .data_binds()
+            .to_vec()
+            .into_iter()
+            .filter(|bind| {
+                bind.with(|o| {
+                    o.as_data_bind().is_some_and(|b| {
+                        b.is_instance_value_bind() && b.target() == Some(prop.clone())
+                    })
+                }) == Some(true)
+            })
+            .collect();
+        assert_eq!(binds.len(), 1, "one derived prop binding on the moved unit");
+        binds[0].with(|o| {
+            let bind = o.as_data_bind().unwrap();
+            assert_ne!(bind.base.flags() & TWO_WAY, 0, "prop remains two-way");
+            assert_eq!(
+                bind.base.flags() & SOURCE_TO_TARGET_FIRST,
+                0,
+                "prop remains target-first"
+            );
+        });
+    };
+
+    s.begin();
+    s.advance(0.1);
+    s.end();
+    s.advance(0.0);
+    assert_order(&s.d);
+    set(&prop, 575, 321.0);
+    s.advance(0.0);
+    close(val(&property(&vm(&s.b), "offset"), 575), 321.0);
+
+    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
+    s.advance(0.1);
+    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
+    s.advance(0.0);
+    assert_order(&s.s);
+}
+
+#[test]
 fn hits_follow_the_new_host() {
     let mut s = Scene::new();
     let moved = machine(&s.s);

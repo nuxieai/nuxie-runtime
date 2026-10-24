@@ -631,7 +631,9 @@ fn detach_parent_props(from: &CoreHandle) {
                 // to its native VM owner. No hidden copies or template lifetime.
                 model.with_downcast_mut::<ViewModelInstance, _>(|v| {
                     if !v.value_data_binds().contains(&bind) {
-                        v.add_value_data_bind(bind);
+                        // Do not rerun inline import's source-first normalization.
+                        // Arrival derives bindings with this authored direction/order.
+                        v.retain_existing_value_data_bind(bind);
                     }
                 });
             }

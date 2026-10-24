@@ -188,6 +188,16 @@ fn slot_with_props(
 pub fn fixture(rows: usize) -> Vec<u8> {
     build(rows, Options::default())
 }
+/// Live steps and marked slots under the compiler's root naming contract.
+pub fn live_page_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            page_shape: true,
+            ..Options::default()
+        },
+    )
+}
 /// Decoder lifecycle regression, separate from all exported device fixtures.
 pub fn playing_video_fixture() -> Vec<u8> {
     build(

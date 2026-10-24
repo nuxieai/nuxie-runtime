@@ -665,6 +665,12 @@ impl ViewModelInstance {
                 flags,
             );
         }
+        self.retain_existing_value_data_bind(bind);
+    }
+
+    /// Live-move ownership transfer is not import initialization: preserve the
+    /// existing binding's authored direction/order when its parent detaches it.
+    pub(crate) fn retain_existing_value_data_bind(&mut self, bind: CoreHandle) {
         self.value_data_binds.push_back(bind);
     }
 

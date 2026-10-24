@@ -1313,9 +1313,14 @@ impl RuntimeOwnedViewModelHandle {
             seen: &mut BTreeSet<(usize, usize, u64)>,
             out: &mut Vec<RuntimeOwnedViewModelHandle>,
         ) -> Option<()> {
+            if crate::live_move::frame::graph_excluded(&owner) {
+                return Some(());
+            }
             if !seen.insert(owner.identity_key()) {
                 return Some(());
             }
+            #[cfg(feature = "test-support")]
+            crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ValueGraph);
             out.push(RuntimeOwnedViewModelHandle::from_native(
                 file.clone(),
                 owner.clone(),
@@ -1332,6 +1337,12 @@ impl RuntimeOwnedViewModelHandle {
                     .flatten()
                 {
                     visit(file, child, seen, out)?;
+                }
+                if let Some(children) = crate::live_move::frame::graph_list_children(&property) {
+                    for child in children {
+                        visit(file, child, seen, out)?;
+                    }
+                    continue;
                 }
                 if let Some(items) = property
                     .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())

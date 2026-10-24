@@ -363,6 +363,8 @@ impl DrawRangeState {
 }
 
 pub struct Artboard {
+    // Nuxie: state only on a root occurrence with published records.
+    pub(crate) live_move_scene: Option<Rc<crate::hosted_scene::SceneState>>,
     pub base: ArtboardBase,
     core_arena: CoreArena,
     definition_owner: Option<CoreArena>,
@@ -499,6 +501,7 @@ impl Default for Artboard {
             key_frame_source_binds: RefCell::new(HashMap::new()),
             key_frame_source_binds_built: Cell::new(false),
             scripting_vm: None,
+            live_move_scene: None,
             file: RuntimeFileWeakHandle::default(),
             draw_visitor: None,
             draw_visitor_file: None,
@@ -2895,6 +2898,11 @@ impl Artboard {
             crate::mechanical_port::source::artboard_host::InactiveChangeMark,
         >,
     ) -> Option<CoreHandle> {
+        // Nuxie: resolves the containing occurrence, with no ordinary-file allocation.
+        crate::hosted_scene::membership_changed(self);
+        if let Some(parent) = &parent_artboard {
+            crate::hosted_scene::membership_changed_for(parent);
+        }
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             inactive_change_sequence: inactive_change_sequence
@@ -3623,6 +3631,8 @@ impl Artboard {
     }
 
     pub fn update_pass_handle(root: &CoreHandle, _is_root: bool) -> bool {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Layout);
         Self::update_data_binds_handle(root, true);
         Self::sync_style_changes_with_update_handle(root, false);
         let (before, joysticks) = root
@@ -3685,6 +3695,10 @@ impl Artboard {
         elapsed_seconds: f32,
         flags: AdvanceFlags,
     ) -> bool {
+        #[cfg(feature = "test-support")]
+        if flags.contains(AdvanceFlags::NEW_FRAME) {
+            crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Advance);
+        }
         // The advancing component array is fixed once the artboard
         // initializes, so one snapshot serves the whole pass.
         let advancing = root
@@ -4065,6 +4079,8 @@ impl Artboard {
         renderer: &mut Renderer,
         visitor: Option<RuntimeDrawVisitor>,
     ) {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Draw);
         let runtime_receiver = root.runtime_artboard_instance();
         let receiver = runtime_receiver.as_ref();
         let visible = Self::with_root(root, receiver, |artboard| {
@@ -5970,6 +5986,20 @@ impl Artboard {
                     {
                         nested.cleanup_semantic_tree();
                         nested.build_semantic_tree(Some(semantic_manager.clone()), parent.clone());
+                    }
+                    // Nuxie: late semantics uses the same row/host collapse
+                    // reconciliation as sleep, wake and instance attachment.
+                    if list
+                        .with_downcast::<ArtboardComponentList, _>(|l| {
+                            l.live_move_collapse_enabled()
+                        })
+                        .unwrap_or(false)
+                    {
+                        ArtboardComponentList::reconcile_row_collapse_occurrence(
+                            &list,
+                            index as i32,
+                            &nested,
+                        );
                     }
                 }
                 index += 1;

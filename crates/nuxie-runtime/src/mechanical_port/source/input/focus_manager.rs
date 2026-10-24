@@ -253,7 +253,8 @@ pub type ScrollIntoViewCallback = fn(&Bounds, &CoreHandle);
 
 pub struct FocusManager {
     runtime_self: RuntimeFocusManagerWeakHandle,
-    primary_focus: Option<FocusNodeRef>,
+    // Nuxie: rehome a live focus scope without blurring its focused leaf.
+    pub(crate) primary_focus: Option<FocusNodeRef>,
     press_focus: Option<FocusNodeRef>,
     root_nodes: Rc<RefCell<Vec<FocusNodeRef>>>,
     pending_focus_requests: Vec<PendingFocusRequest>,

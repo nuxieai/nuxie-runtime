@@ -48,7 +48,9 @@ path = "lib.rs"
 
 [dev-dependencies]
 "nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false, "features" = ["test-support", "tools"] }
-"nuxie-scripting" = { "path" = "../nuxie-scripting" }
+"nuxie-scripting" = { "path" = "../nuxie-scripting", "features" = ["upstream-test-seams"] }
+"luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
 "nuxie-sriv" = { "path" = "../nuxie-sriv" }
 "png" = { "version" = "0.18" }

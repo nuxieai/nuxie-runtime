@@ -30,6 +30,8 @@ pub(super) fn collect(
         if !visited.insert(artboard.core_handle().identity_key()) {
             continue;
         }
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::EventDrain);
         for machine in machines {
             let reports = machine.with_instance(|machine| {
                 (0..machine.reported_event_count())
@@ -90,8 +92,10 @@ pub(super) fn collect(
                 continue;
             }
             object.with_downcast::<ArtboardComponentList, _>(|list| {
-                for index in 0..list.artboard_count() {
-                    let Ok(item_index) = i32::try_from(index) else {
+                // Event drains share the same row projection as the frame.
+                // Sleeping rows retain their native queues until they wake.
+                for &item_index in list.live_move_frame_indices() {
+                    let Ok(index) = usize::try_from(item_index) else {
                         continue;
                     };
                     let (Some(child), Some(item)) = (

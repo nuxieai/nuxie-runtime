@@ -24,7 +24,8 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct NestedStateMachine {
     pub base: NestedStateMachineBase,
-    instance: Option<RuntimeStateMachineInstanceHandle>,
+    // Nuxie: swap playback ownership without reapplying authored inputs.
+    pub(crate) instance: Option<RuntimeStateMachineInstanceHandle>,
     nested_inputs: Vec<CoreHandle>,
 }
 

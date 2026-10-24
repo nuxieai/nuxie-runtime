@@ -18,6 +18,10 @@ pub mod test_support;
 extern crate self as nuxie_runtime;
 
 pub mod css_text;
+pub mod hosted_scene;
+pub mod live_move;
+#[cfg(feature = "test-support")]
+pub mod live_move_fixture;
 pub mod text_decoration;
 pub mod utils;
 pub mod video;
@@ -31,6 +35,9 @@ pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObjec
         60001 => Some(Box::new(video::Video::default())),
         61005 => Some(Box::new(css_text::TextStyleCssText::default())),
         60002 => Some(Box::new(text_decoration::TextStyleDecoration::default())),
+        62000 => Some(Box::new(live_move::records::LiveSlot::default())),
+        62001 => Some(Box::new(live_move::records::LiveStep::default())),
+        62002 => Some(Box::new(live_move::records::LiveStepUnit::default())),
         _ => css_layout::make_core(type_key)
             .or_else(|| source::generated::core_registry::CoreRegistry::make_core_box(type_key)),
     }

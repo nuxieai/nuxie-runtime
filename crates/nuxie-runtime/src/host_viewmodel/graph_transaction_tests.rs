@@ -98,65 +98,98 @@ fn frame_rollback_restores_a_detached_owner() {
 
 #[test]
 fn frame_still_refuses_writes_outside_its_scope_and_overflowed_captures() {
-    let (root, [row, outsider], _factory) = values();
-    // Never part of the frame.
-    {
-        let transaction =
-            RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096)
-                .unwrap();
-        let capture = RuntimeViewModelChangeCapture::begin().unwrap();
-        assert!(outsider.borrow_mut().set_number_by_property_name("n", 1.0));
-        assert!(
-            transaction
+    for begin in [
+        RuntimeOwnedViewModelGraphTransaction::begin,
+        RuntimeOwnedViewModelGraphTransaction::begin_live,
+    ] {
+        let (root, [row, outsider], _factory) = values();
+        // Never part of the frame.
+        {
+            let transaction = begin(std::slice::from_ref(&root), 4096).unwrap();
+            let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+            assert!(outsider.borrow_mut().set_number_by_property_name("n", 1.0));
+            assert!(
+                transaction
+                    .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
+                    .is_none()
+            );
+        }
+        // Joined during the frame and still present: the live graph owns it.
+        {
+            let transaction = begin(std::slice::from_ref(&root), 4096).unwrap();
+            let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+            assert!(root.push_list_item_by_property_name_path("picks", &outsider));
+            assert!(outsider.borrow_mut().set_number_by_property_name("n", 2.0));
+            let changes = transaction
                 .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
-                .is_none()
-        );
-    }
-    // Joined during the frame and still present: the live graph owns it.
-    {
-        let transaction =
-            RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096)
                 .unwrap();
-        let capture = RuntimeViewModelChangeCapture::begin().unwrap();
-        assert!(root.push_list_item_by_property_name_path("picks", &outsider));
-        assert!(outsider.borrow_mut().set_number_by_property_name("n", 2.0));
-        let changes = transaction
-            .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
+            assert!(changes.iter().any(|(owner, _)| owner.ptr_eq(&outsider)));
+            transaction.commit();
+            assert!(root.remove_list_item_by_property_name_path("picks", 0));
+        }
+        // Joined and left within the frame: in neither the checkpoint nor the
+        // final graph, so its write cannot be rolled back and still fails.
+        {
+            let transaction = begin(std::slice::from_ref(&root), 4096).unwrap();
+            let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+            assert!(root.push_list_item_by_property_name_path("picks", &outsider));
+            assert!(outsider.borrow_mut().set_number_by_property_name("n", 3.0));
+            assert!(root.remove_list_item_by_property_name_path("picks", 0));
+            assert!(
+                transaction
+                    .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
+                    .is_none()
+            );
+        }
+        // A bounded journal that overflowed fails even for checkpointed owners.
+        {
+            assert!(root.push_list_item_by_property_name_path("picks", &row));
+            let transaction = begin(std::slice::from_ref(&root), 4096).unwrap();
+            let capture = RuntimeViewModelChangeCapture::begin_bounded(1, 1024).unwrap();
+            assert!(row.borrow_mut().set_number_by_property_name("n", 6.0));
+            assert!(row.borrow_mut().set_number_by_property_name("n", 7.0));
+            assert!(
+                transaction
+                    .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
+                    .is_none()
+            );
+        }
+        assert_eq!(number(&row), Some(0.0));
+    }
+}
+
+#[test]
+fn live_checkpoint_captures_on_touch_and_rolls_back_detached_scalar_and_list() {
+    let (root, [row, _], _factory) = values();
+    assert!(root.push_list_item_by_property_name_path("picks", &row));
+    crate::hosted_scene::measure_walks(true);
+    let transaction =
+        RuntimeOwnedViewModelGraphTransaction::begin_live(std::slice::from_ref(&root), 4096)
             .unwrap();
-        assert!(changes.iter().any(|(owner, _)| owner.ptr_eq(&outsider)));
-        transaction.commit();
-        assert!(root.remove_list_item_by_property_name_path("picks", 0));
-    }
-    // Joined and left within the frame: in neither the checkpoint nor the
-    // final graph, so its write cannot be rolled back and still fails.
-    {
-        let transaction =
-            RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096)
-                .unwrap();
-        let capture = RuntimeViewModelChangeCapture::begin().unwrap();
-        assert!(root.push_list_item_by_property_name_path("picks", &outsider));
-        assert!(outsider.borrow_mut().set_number_by_property_name("n", 3.0));
-        assert!(root.remove_list_item_by_property_name_path("picks", 0));
-        assert!(
-            transaction
-                .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
-                .is_none()
-        );
-    }
-    // A bounded journal that overflowed fails even for checkpointed owners.
-    {
-        assert!(root.push_list_item_by_property_name_path("picks", &row));
-        let transaction =
-            RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096)
-                .unwrap();
-        let capture = RuntimeViewModelChangeCapture::begin_bounded(1, 1024).unwrap();
-        assert!(row.borrow_mut().set_number_by_property_name("n", 6.0));
-        assert!(row.borrow_mut().set_number_by_property_name("n", 7.0));
-        assert!(
-            transaction
-                .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
-                .is_none()
-        );
-    }
+    assert_eq!(crate::hosted_scene::measure_walks(false).checkpoint, 0);
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    assert!(row.borrow_mut().set_number_by_property_name("n", 9.0));
+    assert!(root.remove_list_item_by_property_name_path("picks", 0));
+    let changes = transaction
+        .resolve_change_capture_with_owners(std::slice::from_ref(&root), capture)
+        .unwrap();
+    assert!(
+        changes
+            .iter()
+            .any(|(o, c)| o.ptr_eq(&row) && c.value == RuntimeViewModelChangeValue::Number(9.0))
+    );
+    drop(transaction);
+    assert_eq!(number(&row), Some(0.0));
+    assert_eq!(root.list_item_count_by_property_name_path("picks"), Some(1));
+}
+
+#[test]
+fn live_checkpoint_preserves_all_writes_for_rollback_even_after_limit_overflow() {
+    let (root, [row, _], _factory) = values();
+    let transaction =
+        RuntimeOwnedViewModelGraphTransaction::begin_live(std::slice::from_ref(&root), 0).unwrap();
+    assert!(row.borrow_mut().set_number_by_property_name("n", 11.0));
+    assert!(!transaction.checkpoint_within_limit());
+    drop(transaction);
     assert_eq!(number(&row), Some(0.0));
 }

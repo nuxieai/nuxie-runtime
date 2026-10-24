@@ -963,7 +963,16 @@ impl File {
         // Importers retain in_band_content; resolve before this frame ends.
         let resolved = import_stack.resolve();
         if !reader.has_error() && resolved == StatusCode::Ok {
-            (ImportResult::Success, true)
+            // Nuxie: declarations outside the compiler's Page/screens/Screen
+            // shape are ignored by the common whole-file and tools reader.
+            if crate::live_move::records::validate_import_shape(
+                self,
+                captured_artboard.as_deref().and_then(Option::as_ref),
+            ) {
+                (ImportResult::Success, true)
+            } else {
+                (ImportResult::Malformed, false)
+            }
         } else {
             (ImportResult::Malformed, false)
         }

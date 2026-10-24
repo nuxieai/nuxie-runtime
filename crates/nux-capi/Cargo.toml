@@ -10,6 +10,8 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [features]
 default = []
+# Counters and literal fixtures are absent from shipping builds.
+test-support = ["nuxie/test-support"]
 scripting = ["nuxie/scripting"]
 apple-metal = ["nuxie/renderer-metal", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-metal", "dep:objc2", "dep:objc2-metal", "dep:objc2-quartz-core"]
 android-vulkan = ["nuxie/renderer-vulkan", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
@@ -25,6 +27,7 @@ nuxie-renderer = { path = "../nuxie-renderer", optional = true, default-features
 nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false }
 
 [dev-dependencies]
+nux-capi = { path = ".", features = ["test-support", "scripting"] }
 nuxie-video-host = { path = "../nuxie-video-host" }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 luaur-common = "=0.1.8"

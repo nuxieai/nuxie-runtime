@@ -809,11 +809,10 @@ fn append_semantic_children(
     if let Some(container) = object.as_container_component() {
         pending.extend_from_slice(container.children());
     }
-    if let Some(host) = object.as_artboard_host() {
-        for index in 0..host.artboard_count() {
-            if let Some(instance) = host.artboard_instance(index as i32) {
-                pending.push(instance.core_handle());
-            }
-        }
+    // Nuxie per-row membership also bounds geometry validation.
+    for instance in crate::hosted_scene::active_instances(object) {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::SemanticValidation);
+        pending.push(instance.core_handle());
     }
 }

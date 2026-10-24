@@ -65,7 +65,9 @@ i_overlay = { version = "=8.1.1", default-features = false }
 # WITH_RIVE_SCRIPTNET stays a native-tools cut (`make test` runs it apart):
 # enabling it here would put its dependencies in the shipping registry.
 nuxie-runtime = { path = ".", default-features = false, features = ["test-support", "tools"] }
-nuxie-scripting = { path = "../nuxie-scripting" }
+nuxie-scripting = { path = "../nuxie-scripting", features = ["upstream-test-seams"] }
+luaur-common = "=0.1.8"
+luaur-compiler = "=0.1.8"
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-sriv = { path = "../nuxie-sriv" }
 png = "0.18"

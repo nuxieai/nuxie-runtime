@@ -2778,6 +2778,16 @@ NuxStatus nux_player_set_global_view_model(struct NuxPlayer *player,
                                            const struct NuxViewModelInstance *instance);
 
 /**
+ * Collapse or wake one mounted row of a named non-virtual list. collapsed is
+ * 0 or 1. Retains playback, view models, video and native field identities.
+ * Unknown lists, rows and virtualised lists return INVALID_ARGUMENT.
+ */
+NuxStatus nux_player_set_row_collapsed(struct NuxPlayer *player,
+                                       struct NuxStringView list_name,
+                                       uint32_t row_index,
+                                       uint8_t collapsed);
+
+/**
  * Apply named input changes, pointers, and focus inputs in that order, then
  * advance exactly once. Focus inputs retain array order. Their listener events
  * and view-model writes are captured in this same step's result. The
@@ -2789,6 +2799,25 @@ NuxStatus nux_player_set_global_view_model(struct NuxPlayer *player,
 NuxStatus nux_player_step(struct NuxPlayer *player,
                           const struct NuxPlayerStep *step,
                           struct NuxPlayerStepResult **out_result);
+
+/**
+ * Take off units from a published LiveStep. incoming_screen names the mounted,
+ * expanded Screen artboard. A NULL step_name performs immediate coming home
+ * for a cut. Returns INVALID_ARGUMENT for an unknown step, incompatible slots,
+ * collapsed incoming Screen, or an already active step. Uses the player's
+ * normal thread, occurrence, reentrancy and render-revision guards.
+ */
+NuxStatus nux_player_step_begin(struct NuxPlayer *player,
+                                struct NuxStringView incoming_screen,
+                                const struct NuxStringView *step_name);
+
+/**
+ * Land a published step. Both arguments must match step_begin, including a
+ * NULL step_name. The outgoing version of a two-version unit returns home.
+ */
+NuxStatus nux_player_step_end(struct NuxPlayer *player,
+                              struct NuxStringView incoming_screen,
+                              const struct NuxStringView *step_name);
 
 NuxStatus nux_player_step_result_diagnostic(const struct NuxPlayerStepResult *result,
                                             struct NuxCapiDiagnosticView *out_diagnostic);
@@ -3115,8 +3144,9 @@ NuxStatus nux_player_video_step(const struct NuxPlayer *player,
 /**
  * Enumerate root, nested, and materialized list video occurrences. Root IDs
  * retain their component slots; nested IDs are opaque and never reused within
- * this player. Removed occurrences reject further commands. Definition fields
- * identify authored targets; component_id identifies the mounted player only.
+ * this scene occurrence, shared by its players. Sleeping videos stay addressable
+ * for control and report invisible. Removed occurrences reject commands.
+ * Definition fields identify authored targets; component_id identifies a mount.
  * Calls are creator-thread affine; callbacks cannot reenter any C API.
  */
 NuxStatus nux_player_visit_videos(const struct NuxPlayer *player,

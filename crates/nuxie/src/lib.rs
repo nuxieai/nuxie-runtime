@@ -8,8 +8,10 @@
 //! Host authorization and allocation limits are explicit import boundaries.
 //! Applications and bindings must migrate to this API separately.
 
+#[cfg(feature = "test-support")]
+pub use nuxie_runtime::live_move_fixture;
 pub use nuxie_runtime::source as runtime;
-pub use nuxie_runtime::video;
+pub use nuxie_runtime::{hosted_scene, live_move, video};
 // Renderer DTOs have their own namespace; the primary math names below are
 // the types accepted and returned by the native runtime owners.
 pub use nuxie_render_api as render_api;

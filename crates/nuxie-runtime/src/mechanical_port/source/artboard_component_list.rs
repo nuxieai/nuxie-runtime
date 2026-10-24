@@ -156,6 +156,8 @@ pub struct ArtboardComponentList {
     data_bind_path_referencer:
         crate::mechanical_port::source::data_bind_path_referencer::DataBindPathReferencer,
     list_items: Vec<CoreHandle>,
+    // Nuxie per-row collapse is keyed by item identity, so reorders retain it.
+    pub(crate) live_move_rows: Option<Box<crate::live_move::collapse::RowState>>,
     artboards_map: HashMap<u32, CoreHandle>,
     artboard_instances_map: CoreHandleMap<RuntimeArtboardInstanceHandle>,
     state_machines_map: CoreHandleMap<RuntimeStateMachineInstanceHandle>,
@@ -199,6 +201,7 @@ impl Default for ArtboardComponentList {
             base: ArtboardComponentListBase::default(),
             data_bind_path_referencer: Default::default(),
             list_items: Vec::new(),
+            live_move_rows: None,
             artboards_map: HashMap::new(),
             artboard_instances_map: CoreHandleMap::default(),
             state_machines_map: CoreHandleMap::default(),
@@ -274,6 +277,15 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl ArtboardComponentList {
+    // Nuxie: all frame walks share this active row projection.
+    pub(crate) fn live_move_frame_indices(&self) -> &[i32] {
+        if !self.live_move_has_sleeping_rows() {
+            &self.realized_indices
+        } else {
+            &self.live_move_rows.as_ref().unwrap().active
+        }
+    }
+
     pub const TYPE_KEY: u16 = ArtboardComponentListBase::TYPE_KEY;
 
     fn drawable(&self) -> &crate::mechanical_port::source::drawable::Drawable {
@@ -323,22 +335,51 @@ impl ArtboardComponentList {
     }
 
     pub(crate) fn collapse_after_super(&mut self, value: bool) {
-        let mut k = 0;
-        while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
-                artboard.collapse_semantic_boundary(value);
+        // Nuxie: CoreHandle completes this after releasing its mutable payload.
+        // Effective visibility can walk through this same list from a child.
+        if let Some(state) = self.live_move_rows.as_mut() {
+            state.pending_collapse = Some(value);
+            return;
+        }
+        for &index in &self.realized_indices {
+            if let Some(row) = self.artboard_instance(index) {
+                row.collapse_semantic_boundary(value);
             }
-            k += 1;
         }
     }
 
     pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
-        Self::for_each_realized_occurrence(owner, |_, artboard| {
-            artboard.collapse_semantic_boundary(value)
+        let managed = owner
+            .with_downcast::<Self, _>(|list| list.live_move_collapse_enabled())
+            .unwrap_or(false);
+        Self::for_each_realized_occurrence(owner, |index, row| {
+            if managed {
+                Self::reconcile_row_collapse_occurrence(owner, index, &row);
+            } else {
+                row.collapse_semantic_boundary(value);
+            }
         });
     }
 
+    // Nuxie: every opt-in reconciliation uses the same effective state,
+    // including wake under a collapsed ancestor across artboard boundaries.
+    pub(crate) fn reconcile_row_collapse_occurrence(
+        owner: &CoreHandle,
+        index: i32,
+        row: &RuntimeArtboardInstanceHandle,
+    ) -> bool {
+        let hidden = owner
+            .with(|o| crate::live_move::effectively_hidden(o, Some(index)))
+            .unwrap_or(true);
+        crate::live_move::apply_row_collapse(row, hidden);
+        row.collapse_semantic_boundary(hidden);
+        crate::live_move::reconcile_row_hosts(row);
+        hidden
+    }
+
     pub fn clear(&mut self) {
+        crate::hosted_scene::membership_changed(self);
+        self.live_move_rows = None;
         self.reset_quiet_rows(0);
         for artboard in self.artboard_instances_map.values() {
             artboard.cleanup_semantic_tree();
@@ -371,6 +412,10 @@ impl ArtboardComponentList {
         &self,
         index: i32,
     ) -> Option<crate::mechanical_port::source::layout::layout_node_provider::LayoutNodeKey> {
+        // Nuxie: a collapsed row contributes no layout node.
+        if self.live_move_row_collapsed(index) {
+            return None;
+        }
         let artboard = self.artboard_instance(index)?;
         artboard.with_artboard_mut(|artboard| {
             artboard.take_layout_data();
@@ -451,8 +496,10 @@ impl ArtboardComponentList {
         let parent_is_row = self.main_axis_is_row();
         let parent_is_stack = self.is_stack();
         let mut k = 0;
-        while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+        while let Some(&index) = self.live_move_frame_indices().get(k) {
+            if !self.live_move_row_collapsed(index)
+                && let Some(artboard) = self.artboard_instance(index)
+            {
                 LayoutComponent::set_parent_is_row_with_host_occurrence(
                     &artboard.core_handle(),
                     parent_is_row,
@@ -475,8 +522,10 @@ impl ArtboardComponentList {
         // report their size.
         let has_virtual_window = self.virtualization_enabled() && self.window_visible_count > 0;
         let mut k = 0;
-        while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+        while let Some(&index) = self.live_move_frame_indices().get(k) {
+            if !self.live_move_row_collapsed(index)
+                && let Some(artboard) = self.artboard_instance(index)
+            {
                 let bounds = artboard.with_artboard_mut(|artboard| {
                     artboard.update_layout_bounds(animate);
                     artboard.layout_bounds()
@@ -507,8 +556,10 @@ impl ArtboardComponentList {
         direction: LayoutDirection,
     ) -> bool {
         let mut k = 0;
-        while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+        while let Some(&index) = self.live_move_frame_indices().get(k) {
+            if !self.live_move_row_collapsed(index)
+                && let Some(artboard) = self.artboard_instance(index)
+            {
                 LayoutComponent::cascade_layout_style_occurrence(
                     &artboard.core_handle(),
                     inherited_interpolation,
@@ -525,8 +576,10 @@ impl ArtboardComponentList {
     pub fn sync_style_changes(&mut self) -> bool {
         let mut changed = false;
         let mut k = 0;
-        while let Some(&index) = self.realized_indices.get(k) {
-            if let Some(artboard) = self.artboard_instance(index) {
+        while let Some(&index) = self.live_move_frame_indices().get(k) {
+            if !self.live_move_row_collapsed(index)
+                && let Some(artboard) = self.artboard_instance(index)
+            {
                 if artboard.sync_style_changes() {
                     changed = true;
                 }
@@ -946,6 +999,11 @@ impl ArtboardComponentList {
     }
 
     pub fn update_list_occurrence(owner: &CoreHandle, list: &[CoreHandle]) {
+        // Nuxie: return borrowed occurrences before removing their holder row.
+        if crate::live_move::return_row_loans(owner, list).is_err() {
+            return;
+        }
+
         let Some((previous_list_items, previous_row_nodes, was_updating_list)) = owner
             .with_downcast_mut::<Self, _>(|owner| owner.begin_list_change(list))
             .expect("live ArtboardComponentList")
@@ -1007,6 +1065,9 @@ impl ArtboardComponentList {
             .collect();
         sorted.sort_unstable();
         self.list_has_duplicate_items = sorted.windows(2).any(|pair| pair[0] == pair[1]);
+        // Nuxie: structural edits rebuild membership once, never per frame.
+        self.live_move_rebuild_collapse_mask();
+        crate::hosted_scene::membership_changed(self);
         self.invalidate_ordered_list_indices_cache();
         self.artboard_sizes.clear();
         self.reset_quiet_rows(self.list_items.len());
@@ -1093,7 +1154,7 @@ impl ArtboardComponentList {
         let rows = self.quiet_rows.borrow();
         while row < count {
             let word = row >> 6;
-            let quiet = rows.get(word).copied().unwrap_or(0);
+            let quiet = rows.get(word).copied().unwrap_or(0) | self.live_move_collapsed_word(word);
             let awake = !quiet & (u64::MAX << (row & 63));
             if awake != 0 {
                 return count.min((word << 6) + awake.trailing_zeros() as usize);
@@ -1178,7 +1239,7 @@ impl ArtboardComponentList {
         }
     }
 
-    fn reset_quiet_row(&mut self, row: usize) {
+    pub(crate) fn reset_quiet_row(&mut self, row: usize) {
         let word = row >> 6;
         if word >= self.quiet_rows.borrow().len() {
             return;
@@ -1301,6 +1362,10 @@ impl ArtboardComponentList {
     ) -> bool {
         let inactive = owner
             .with_downcast::<Self, _>(|owner| {
+                // Nuxie: preserve inactive VM change windows for collapsed rows.
+                if owner.live_move_has_sleeping_rows() {
+                    owner.inactive_change_sequence.mark_latest();
+                }
                 if owner.artboard_count() == 0 {
                     return true;
                 }
@@ -1403,6 +1468,9 @@ impl ArtboardComponentList {
         index: usize,
         scroll: Option<&ScrollConstraint>,
     ) -> Aabb {
+        if self.live_move_row_collapsed(index as i32) {
+            return Aabb::default();
+        }
         let virtualized = self.virtualization_enabled_with_scroll(scroll);
         if virtualized {
             let count = self.artboard_sizes.len();
@@ -1438,8 +1506,9 @@ impl ArtboardComponentList {
     }
 
     pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: &RuntimeArtboardInstanceHandle) {
+        // Nuxie: only active rows can dirty their hosting layout.
         if self
-            .realized_indices
+            .live_move_frame_indices()
             .iter()
             .filter_map(|index| self.artboard_instances_by_index[*index as usize].as_ref())
             .any(|artboard| artboard.downgrade().ptr_eq(&artboard_instance.downgrade()))
@@ -1621,6 +1690,10 @@ impl ArtboardComponentList {
             });
             self.cached_ordered_list_indices = indices;
         }
+        // Nuxie: the same ordered indices serve drawing and pointer routing.
+        let mut indices = std::mem::take(&mut self.cached_ordered_list_indices);
+        indices.retain(|i| !self.live_move_row_collapsed(*i));
+        self.cached_ordered_list_indices = indices;
         self.ordered_list_indices_cache_valid = true;
     }
 
@@ -1870,13 +1943,16 @@ impl ArtboardComponentList {
             return;
         }
         if Component::has_dirt_in(value, ComponentDirt::WORLD_TRANSFORM) {
-            Self::for_each_realized_occurrence(owner, |_, artboard| {
+            // Nuxie: active rows only, with the native ordinary-file path.
+            crate::hosted_scene::for_each_active_row(owner, |artboard| {
                 artboard.with_artboard_mut(|artboard| {
                     artboard.mark_semantic_boundary_transform_dirty()
                 });
             });
         }
         if Component::has_dirt_in(value, ComponentDirt::RENDER_OPACITY) {
+            // Preserve upstream inheritance for retained row roots. Collapsed
+            // children keep this dirt until native component uncollapse.
             Self::for_each_realized_occurrence(owner, |_, artboard| {
                 let opacity = owner
                     .with_downcast::<Self, _>(|list| list.transform().render_opacity())
@@ -1939,11 +2015,14 @@ impl ArtboardComponentList {
         }
         if !self.virtualization_enabled() {
             let use_layout = self.layout_parent_handle().is_some();
-            for index in 0..count {
+            // Nuxie: world-pose updates share the active row index.
+            for index in self.live_move_frame_indices().to_vec() {
                 if let (Some(artboard), Some(item)) = (
                     self.artboard_instance(index as i32),
                     self.list_item(index as i32),
                 ) {
+                    #[cfg(feature = "test-support")]
+                    crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Layout);
                     let (bounds, origin) = artboard.with_artboard(|artboard| {
                         (
                             if use_layout {
@@ -2341,6 +2420,8 @@ impl ArtboardComponentList {
     }
 
     pub fn remove_artboard(&mut self, item: CoreHandle) {
+        // Nuxie: unmounts invalidate active occurrence maps immediately.
+        crate::hosted_scene::membership_changed(self);
         self.invalidate_ordered_list_indices_cache();
         self.remove_draw_index_listener_for_item(&item);
         let artboard = self.artboard_instances_map.get(&item).cloned();
@@ -2799,6 +2880,17 @@ impl ArtboardComponentList {
     }
 
     pub fn for_each_list_item_transform(&mut self, mut use_transform: impl FnMut(&mut Mat2D)) {
+        // Nuxie: list constraints must leave sleeping rows untouched too.
+        if self.live_move_has_sleeping_rows() {
+            for &index in &self.live_move_rows.as_ref().unwrap().active {
+                if let Some(item) = self.list_items.get(index as usize)
+                    && let Some(transform) = self.artboard_transforms.get_mut(item)
+                {
+                    use_transform(transform);
+                }
+            }
+            return;
+        }
         for item in &self.list_items {
             if let Some(transform) = self.artboard_transforms.get_mut(item) {
                 use_transform(transform);
@@ -2814,7 +2906,7 @@ impl ArtboardComponentList {
     }
 
     pub fn realized_indices(&self, out: &mut Vec<i32>) {
-        out.extend_from_slice(&self.realized_indices);
+        out.extend_from_slice(self.live_move_frame_indices());
     }
     pub fn items_version(&self) -> u32 {
         self.items_version
@@ -2938,7 +3030,8 @@ impl LayoutNodeProvider for ArtboardComponentList {
         &self,
         out: &mut Vec<crate::source::layout::layout_node_provider::LayoutNodeKey>,
     ) {
-        for &index in &self.realized_indices {
+        // Nuxie: use the active projection before collecting layout nodes.
+        for &index in self.live_move_frame_indices() {
             if let Some(node) = self.layout_node(index) {
                 out.push(node);
             }

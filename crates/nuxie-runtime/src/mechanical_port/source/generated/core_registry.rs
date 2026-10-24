@@ -9739,6 +9739,16 @@ impl CoreRegistry {
         value: f32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        // Nuxie LiveSlot keyable flight controls.
+        if crate::live_move::records::field_id(property_key) == Some(2) {
+            crate::live_move::records::set_double(
+                object.as_registry_any_mut(),
+                property_key,
+                value,
+                completion,
+            );
+            return;
+        }
         if crate::css_layout::keys::field_id(property_key).is_some() {
             crate::css_layout::record::set_property(
                 object.as_registry_any_mut(),
@@ -10365,6 +10375,10 @@ impl CoreRegistry {
         object.get_bool(field)
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
+        // Nuxie LiveSlot keyable flight controls.
+        if crate::live_move::records::field_id(property_key) == Some(2) {
+            return crate::live_move::records::get_double(object.as_registry_any(), property_key);
+        }
         if crate::css_layout::keys::field_id(property_key).is_some() {
             return crate::css_layout::record::get_property(
                 object.as_registry_any(),
@@ -10728,6 +10742,10 @@ impl CoreRegistry {
     }
 
     pub fn property_field_id(property_key: i32) -> i32 {
+        // Nuxie published live-move records share the ordinary record grammar.
+        if let Some(field) = crate::live_move::records::field_id(property_key) {
+            return field;
+        }
         if let Some(field) = crate::video::properties::field_id(property_key) {
             return field;
         }
@@ -12063,6 +12081,10 @@ impl CoreRegistry {
         }
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
+        // Nuxie live-move property ownership, including keyable flight controls.
+        if let Some(owner) = crate::live_move::records::owner(property_key) {
+            return object.is_type_of(owner);
+        }
         if let Some((owner, _)) = u16::try_from(property_key)
             .ok()
             .and_then(crate::css_layout::keys::owner)

@@ -1,14 +1,8 @@
-//! A player's mutation scope is its live occurrence tree, not only the graph
-//! explicitly subscribed to by the host. Nested artboards own independent
-//! local ViewModels; their writes must remain valid and transactional without
-//! becoming notifications for an unrelated host-bound root.
-
-use std::collections::HashSet;
-
+//! The mutation scope is the active occurrence index plus explicitly subscribed
+//! roots. Nuxie row collapse uses the same index for every host frame path.
+use crate::{NuxPlayer, NuxStatus};
 use nuxie::{ArtboardInstance, RuntimeOwnedViewModelHandle};
-
-use crate::NuxStatus;
-
+use std::collections::HashSet;
 pub(super) fn scene_roots(
     artboard: &ArtboardInstance,
     bound: &RuntimeOwnedViewModelHandle,
@@ -16,61 +10,84 @@ pub(super) fn scene_roots(
 ) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
     scene_roots_across(artboard, std::slice::from_ref(bound), limit)
 }
-
 pub(super) fn scene_roots_across(
     artboard: &ArtboardInstance,
     subscribed: &[RuntimeOwnedViewModelHandle],
     limit: usize,
 ) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
+    let mut index = nuxie::hosted_scene::HostedIndex::default();
+    collect(
+        artboard,
+        subscribed,
+        limit,
+        &index.active(&artboard.native_handle()),
+    )
+}
+pub(super) fn for_player(
+    _player: &NuxPlayer,
+    artboard: &ArtboardInstance,
+    subscribed: &[RuntimeOwnedViewModelHandle],
+    limit: usize,
+) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
+    collect(
+        artboard,
+        subscribed,
+        limit,
+        &nuxie::hosted_scene::HostedIndex::default().active(&artboard.native_handle()),
+    )
+}
+fn collect(
+    artboard: &ArtboardInstance,
+    subscribed: &[RuntimeOwnedViewModelHandle],
+    limit: usize,
+    boards: &[nuxie::CoreHandle],
+) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
+    if boards.len() > limit {
+        return Err(NuxStatus::LimitExceeded);
+    }
     let file = artboard.native_file();
     let mut roots = Vec::new();
-    let mut seen_roots = HashSet::new();
+    let mut seen = HashSet::new();
+    let mut contexts = Vec::new();
     for root in subscribed {
-        if seen_roots.insert(root.native_handle().identity_key()) {
-            if roots.len() >= limit {
-                return Err(NuxStatus::LimitExceeded);
-            }
+        if seen.insert(root.native_handle()) {
             roots.push(root.clone());
         }
     }
-    let mut pending = vec![artboard.native_handle()];
-    let mut seen_artboards = HashSet::new();
-    let mut seen_contexts = Vec::new();
-
-    while let Some(artboard) = pending.pop() {
-        if !seen_artboards.insert(artboard.core_handle().identity_key()) {
-            continue;
+    // Authored inline models are part of the scene too, including a flight
+    // slot's model after its fresh child is retired during initial settlement.
+    // This shared boundary supplies both eager and lazy checkpoints with the
+    // same real scene roots, never with arbitrary owners from the write journal.
+    for instance in
+        nuxie::hosted_scene::HostedIndex::default().active_owned_models(&artboard.native_handle())
+    {
+        if seen.insert(instance.clone()) {
+            roots.push(
+                RuntimeOwnedViewModelHandle::from_native(file.clone(), instance)
+                    .ok_or(NuxStatus::RuntimeError)?,
+            );
         }
-        if seen_artboards.len() > limit {
-            return Err(NuxStatus::LimitExceeded);
+    }
+    for board in boards {
+        #[cfg(feature = "test-support")]
+        if *board != artboard.native_handle().core_handle() {
+            nuxie::hosted_scene::record_walk(nuxie::hosted_scene::Walk::OwnerCapture);
         }
-        let (mut context, hosts) = artboard.with_artboard(|artboard| {
-            (
-                artboard.base.data_context(),
-                artboard
-                    .base
-                    .nested_artboards()
-                    .into_iter()
-                    .chain(artboard.base.artboard_component_lists())
-                    .collect::<Vec<_>>(),
-            )
-        });
+        let mut context = board
+            .with_downcast::<nuxie::Artboard, _>(|b| b.data_context())
+            .flatten();
         while let Some(current) = context {
-            if seen_contexts.iter().any(|known| current.ptr_eq(known)) {
+            if contexts.iter().any(|c| current.ptr_eq(c)) {
                 break;
             }
-            if seen_contexts.len() >= limit {
+            if contexts.len() >= limit {
                 return Err(NuxStatus::LimitExceeded);
             }
-            let (instances, parent) = current.with_context(|context| {
-                (context.view_model_instances().to_vec(), context.parent())
-            });
-            seen_contexts.push(current);
+            let (instances, parent) =
+                current.with_context(|c| (c.view_model_instances().to_vec(), c.parent()));
+            contexts.push(current);
             for instance in instances.into_iter().flatten() {
-                if seen_roots.insert(instance.identity_key()) {
-                    if roots.len() >= limit {
-                        return Err(NuxStatus::LimitExceeded);
-                    }
+                if seen.insert(instance.clone()) {
                     roots.push(
                         RuntimeOwnedViewModelHandle::from_native(file.clone(), instance)
                             .ok_or(NuxStatus::RuntimeError)?,
@@ -79,23 +96,9 @@ pub(super) fn scene_roots_across(
             }
             context = parent;
         }
-        for host in hosts {
-            let children = host
-                .with(|object| {
-                    let host = object.as_artboard_host().ok_or(NuxStatus::RuntimeError)?;
-                    if host.artboard_count() > limit {
-                        return Err(NuxStatus::LimitExceeded);
-                    }
-                    Ok((0..host.artboard_count())
-                        .filter_map(|index| host.artboard_instance(index as i32))
-                        .collect::<Vec<_>>())
-                })
-                .ok_or(NuxStatus::RuntimeError)??;
-            if pending.len().saturating_add(children.len()) > limit {
-                return Err(NuxStatus::LimitExceeded);
-            }
-            pending.extend(children);
-        }
+    }
+    if roots.len() > limit {
+        return Err(NuxStatus::LimitExceeded);
     }
     Ok(roots)
 }

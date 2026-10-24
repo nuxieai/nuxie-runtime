@@ -34,7 +34,7 @@ pub use source_handles::*;
 pub use transactions::*;
 pub(crate) use transactions::{
     capture_native_change, capture_native_list_change, capture_native_view_model_change,
-    capture_unchanged_native_write,
+    capture_unchanged_native_write, checkpoint_live_value,
 };
 pub(crate) use value_policy::capture_initial_policy_owner;
 pub use value_policy::*;

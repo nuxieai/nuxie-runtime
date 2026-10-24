@@ -682,3 +682,22 @@ The coordinator confirmed the pool repair and resumed `r9capicheckfinal`. `r9bac
 | `v9suite5` | `test -p nux-capi` | Queued by the user, not resubmitted. |
 
 The build request took 4,114 seconds. Its retained evidence is `.nuxie/homelab/0e9c305a-ede5-4290-8883-a4ee7847153f/evidence`, and its complete log remains `result-r9capicheckfinal.log` in the supplied runner directory. The Back/removal regression has no result yet, so no cause or earlier-fix attribution is claimed. No runtime source changed during this resumed verification. All queued requests remain untouched.
+
+
+## Review on the rebased change
+
+Review of `1eca21db4e` found that record-free frames repeatedly scanned the shared file arena because only positive capability decisions were retained. Each root occurrence now remembers an unchecked, negative, or positive live-move Page decision. Negative decisions allocate no scene. Explicit-operation opt-in and Screen classification are unchanged; definition replacement creates a new occurrence with an unchecked decision.
+
+`record_free_frames_scan_capability_once_per_occurrence` imports a record-free file with ten artboards and plays only the small mascot for 128 frames, leaving the other nine unused. It exercises frame scope, post-advance handling and the capability query used by media, with fresh adapters each frame. The existing test-support walk counters count actual arena capability scans. Before the fix, `reviewred` failed with 384 scans instead of 1; after the fix, the same regression passes with exactly 1 and no scene bookkeeping. The tools-replacement regression also passes.
+
+All verification used the rebase file-request runner, one request at a time:
+
+| Request | Command | Result |
+| --- | --- | --- |
+| `reviewruntime` | `test -p nuxie-runtime --test live_moves` | 67 passed, exit 0. |
+| `reviewcapi` | `test -p nux-capi --lib live_moves` | 16 passed, exit 0. |
+| `reviewprobe` | `test -p nux-capi --test live_moves_collapsed_device_probe` | 1 passed; zero steady-state capability scans, exit 0. |
+| `reviewcheck` | `check -p nux-capi --all-targets` | 26 targets built, exit 0. |
+| `reviewfull` | `test -p nux-capi` | 271 tests across 22 targets passed, including one cached target, exit 0. |
+
+Only the three touched Rust files were formatted with `rustfmt --edition 2024 --config skip_children=true`. No schema definitions or generated files changed. Changes remain uncommitted.

@@ -363,8 +363,9 @@ impl DrawRangeState {
 }
 
 pub struct Artboard {
-    // Nuxie: state only on a root occurrence with published records.
-    pub(crate) live_move_scene: Option<Rc<crate::hosted_scene::SceneState>>,
+    // Nuxie: unchecked, checked ordinary root, or checked live-move Page.
+    // Definition replacement creates a fresh occurrence and a fresh decision.
+    pub(crate) live_move_scene: Option<Option<Rc<crate::hosted_scene::SceneState>>>,
     pub base: ArtboardBase,
     core_arena: CoreArena,
     definition_owner: Option<CoreArena>,

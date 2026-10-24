@@ -2406,6 +2406,40 @@ fn ordinary_ten_thousand_row_append_does_no_live_move_work_round5() {
 }
 
 #[test]
+fn record_free_frames_scan_capability_once_per_occurrence() {
+    let before = hosted_scene::bookkeeping_counts();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::ordinary_fixture(8),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(file.with_file(|f| f.artboard_count()), 10);
+    hosted_scene::measure_walks(true);
+    // Play only the small unit; the Page and eight Screens remain unused.
+    let root = file.with_file(|f| f.artboard_named("mascot")).unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    for _ in 0..128 {
+        // Fresh adapters must reuse the decision stored on the occurrence.
+        let mut moves = LiveMoves::default();
+        assert!(moves.frame_scope(&root, &[]).unwrap().is_none());
+        machine.advance_and_apply(1.0 / 60.0);
+        assert!(!moves.after_advance(&root).unwrap());
+        // Media queries use this same capability entry point.
+        assert!(!hosted_scene::enabled(&root));
+    }
+    let walks = hosted_scene::measure_walks(false);
+    assert_eq!(
+        walks.capability_scan, 1,
+        "one scan across all frames and queries"
+    );
+    assert_eq!(hosted_scene::bookkeeping_counts(), before);
+}
+
+#[test]
 fn record_free_create_and_free_has_no_bookkeeping_round6() {
     let before = hosted_scene::bookkeeping_counts();
     let mut factory = PersistentFactory::new(RecordingFactory::new());

@@ -102,7 +102,7 @@ impl Drop for SceneState {
 pub(crate) fn scene_for_object(object: &dyn CoreObject) -> Option<std::rc::Rc<SceneState>> {
     if let Some(board) = object.as_artboard() {
         if board.host().is_none() && board.parent_artboard().is_none() {
-            if let Some(scene) = &board.live_move_scene {
+            if let Some(Some(scene)) = &board.live_move_scene {
                 return Some(scene.clone());
             }
         }
@@ -433,24 +433,20 @@ pub(crate) fn root_scene(root: &RuntimeArtboardInstanceHandle) -> Option<std::rc
         }
         Some((b.live_move_scene.clone(), b.artboard_source_handle()))
     })?;
-    if let Some(scene) = source.0 {
-        return Some(scene);
+    if let Some(decision) = source.0 {
+        return decision;
     }
-    if !source.1.as_ref().is_some_and(definition_has_records) {
-        return None;
-    }
-    // Capability is derived from this mounted Page. A Screen definition used
-    // by paint or an ordinary nested host never receives its own scene state.
-    let declared = root.with_artboard(|b| {
-        !b.find_all_handles::<crate::live_move::records::LiveStep>()
-            .is_empty()
-    });
-    if !declared {
-        return None;
-    }
-    let scene = SceneState::new(root.core_handle());
+    // Decide once for this occurrence, including a negative answer. Native
+    // hooks only read the decision; explicit entry points initialize it here.
+    // A Screen used by paint or an ordinary nested host gets no scene state.
+    let declared = source.1.as_ref().is_some_and(definition_has_records)
+        && root.with_artboard(|b| {
+            !b.find_all_handles::<crate::live_move::records::LiveStep>()
+                .is_empty()
+        });
+    let scene = declared.then(|| SceneState::new(root.core_handle()));
     root.with_artboard_mut(|b| b.live_move_scene = Some(scene.clone()));
-    Some(scene)
+    scene
 }
 pub(crate) fn is_active_artboard(board: &CoreHandle) -> bool {
     board
@@ -462,6 +458,7 @@ pub(crate) fn is_active_artboard(board: &CoreHandle) -> bool {
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy)]
 pub enum Walk {
+    CapabilityScan,
     IndexBuild,
     Advance,
     Layout,
@@ -479,6 +476,7 @@ pub enum Walk {
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WalkCounts {
+    pub capability_scan: u64,
     pub index_build: u64,
     pub advance: u64,
     pub layout: u64,
@@ -510,6 +508,7 @@ pub fn record_walk(walk: Walk) {
     COUNTS.with(|v| {
         if let Some(mut c) = v.get() {
             let target = match walk {
+                Walk::CapabilityScan => &mut c.capability_scan,
                 Walk::IndexBuild => &mut c.index_build,
                 Walk::Advance => &mut c.advance,
                 Walk::Layout => &mut c.layout,
@@ -644,7 +643,11 @@ pub(crate) fn definition_has_records(source: &CoreHandle) -> bool {
         .with_downcast::<Artboard, _>(Artboard::artboard_source_handle)
         .flatten()
         .and_then(|source| source.retain_arena())
-        .is_some_and(|arena| arena.contains_types(62000..=62002));
+        .is_some_and(|arena| {
+            #[cfg(feature = "test-support")]
+            record_walk(Walk::CapabilityScan);
+            arena.contains_types(62000..=62002)
+        });
     records
         && source
             .with_downcast::<Artboard, _>(|b| {

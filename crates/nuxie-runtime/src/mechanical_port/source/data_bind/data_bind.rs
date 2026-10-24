@@ -57,6 +57,9 @@ const SUPPRESS_DIRT: u8 = 8;
 const OBSERVING: u8 = 16;
 const TARGET_ORIGIN: u8 = 32;
 const INSTANCE_VALUE_BIND: u8 = 64;
+// A live-move presentation target must adopt its source before writeback can
+// resume, even after its flight's weak projection has expired.
+const SOURCE_ADOPTION_PENDING: u8 = 128;
 
 pub trait BindScriptInput {
     fn scripted_object(&self) -> Option<CoreHandle>;
@@ -167,6 +170,8 @@ pub struct DataBind {
     container: Option<DataBindContainerOwner>,
     file: RuntimeFileWeakHandle,
     changed_callback: Option<fn()>,
+    // Flight-owned value projection; absent for ordinary bindings.
+    pub(crate) live_move_blend: std::rc::Weak<crate::live_move::ValueBlend>,
 }
 
 impl std::ops::Deref for DataBind {
@@ -196,6 +201,7 @@ impl Default for DataBind {
             container: None,
             file: RuntimeFileWeakHandle::default(),
             changed_callback: None,
+            live_move_blend: std::rc::Weak::new(),
         }
     }
 }
@@ -392,8 +398,13 @@ impl DataBind {
         #[cfg(any(test, feature = "testing"))]
         super::data_bind_container::SM_DATA_BIND_UPDATES
             .with(|count| count.set(count.get().wrapping_add(1)));
-        let dirt = owner
-            .with(|owner| owner.as_data_bind().unwrap().dirt())
+        let (dirt, adoption_pending) = owner
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                let pending = bind.has_flag(SOURCE_ADOPTION_PENDING);
+                let adopting = pending && bind.live_move_blend.upgrade().is_none();
+                (bind.dirt() | if adopting { BINDINGS } else { 0 }, pending)
+            })
             .expect("live DataBind");
         if dirt & DEPENDENTS == DEPENDENTS {
             let converter = owner
@@ -403,7 +414,10 @@ impl DataBind {
                 super::converters::data_converter::DataConverter::update_handle(&converter);
             }
         }
+        // Keep the entire first update source-only, regardless of the authored
+        // two-way order or persisting/queued target dirt from the flight.
         let wants = apply_target_to_source
+            && !adoption_pending
             && owner
                 .with(|owner| {
                     owner.as_data_bind().unwrap().in_persisting_list()
@@ -434,7 +448,11 @@ impl DataBind {
         let state = owner
             .with_mut(|owner| {
                 let bind = owner.as_data_bind_mut().unwrap();
-                if bind.source.is_none()
+                if bind
+                    .live_move_blend
+                    .upgrade()
+                    .is_some_and(|b| !b.sampling())
+                    || bind.source.is_none()
                     || bind.context_value.is_none()
                     || dirt & BINDINGS != BINDINGS
                     || !bind.to_target()
@@ -458,18 +476,25 @@ impl DataBind {
             .apply(target, key, is_main, owner.clone());
         context.borrow_mut().refresh_target_value(owner.clone());
         owner.with_mut(|owner| {
-            owner
-                .as_data_bind_mut()
-                .unwrap()
-                .set_flag(SUPPRESS_DIRT, false)
+            let bind = owner.as_data_bind_mut().unwrap();
+            bind.set_flag(SUPPRESS_DIRT, false);
+            if bind.live_move_blend.upgrade().is_none() {
+                bind.set_flag(SOURCE_ADOPTION_PENDING, false);
+            }
         });
     }
 
     pub fn update_source_binding_handle(owner: &CoreHandle, invalidate: bool) {
+        if owner.with(|o| o.as_data_bind().unwrap().has_flag(SOURCE_ADOPTION_PENDING)) == Some(true)
+        {
+            Self::update_data_bind_handle(owner, false);
+            return;
+        }
         let state = owner
             .with(|owner| {
                 let bind = owner.as_data_bind().unwrap();
-                if !bind.to_source() {
+                // Blended presentation values never write back into their source.
+                if bind.live_move_blend.upgrade().is_some() || !bind.to_source() {
                     return None;
                 }
                 Some((
@@ -821,7 +846,8 @@ impl DataBind {
     }
 
     pub fn update(&mut self, value: u32) {
-        if self.source.is_some()
+        if self.live_move_blend.upgrade().is_none_or(|b| b.sampling())
+            && self.source.is_some()
             && self.context_value.is_some()
             && value & BINDINGS == BINDINGS
             && self.to_target()
@@ -838,6 +864,9 @@ impl DataBind {
             context.refresh_target_value(bind);
             drop(context);
             self.set_flag(SUPPRESS_DIRT, false);
+            if self.live_move_blend.upgrade().is_none() {
+                self.set_flag(SOURCE_ADOPTION_PENDING, false);
+            }
         }
     }
 
@@ -852,7 +881,11 @@ impl DataBind {
     }
 
     pub fn update_source_binding(&mut self, invalidate: bool) {
-        if self.to_source() {
+        if self.has_flag(SOURCE_ADOPTION_PENDING) {
+            self.update(BINDINGS);
+            return;
+        }
+        if self.live_move_blend.upgrade().is_none() && self.to_source() {
             let Some(bind) = self.handle() else {
                 return;
             };
@@ -1057,6 +1090,14 @@ impl DataBind {
             });
         }
         Some(cloned)
+    }
+
+    /// One-time handoff for live-move props. Do not change authored two-way
+    /// ordering; block source writes until an unprojected target has been read.
+    pub(crate) fn require_source_adoption(&mut self) {
+        if self.to_target() {
+            self.set_flag(SOURCE_ADOPTION_PENDING, true);
+        }
     }
 
     pub fn is_instance_value_bind(&self) -> bool {

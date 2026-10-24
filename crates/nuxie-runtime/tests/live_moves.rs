@@ -225,7 +225,7 @@ fn private_values_text_and_destination_prop_survive() {
     );
     let context = original.data_context().unwrap();
     s.begin();
-    close(val(&property(&model, "prop"), 575), 200.0);
+    close(val(&property(&model, "prop"), 575), 10.0);
     s.advance(0.2);
     s.end();
     s.advance(0.0);
@@ -3414,4 +3414,434 @@ fn pending_remove_is_applied_before_row_sleep() {
     set_row_collapsed(&list, 0, false).unwrap();
     s.moves.step_begin(&s.root, "B", None).unwrap();
     s.moves.step_end(&s.root, "B", None).unwrap();
+}
+
+fn string_value(model: &CoreHandle, name: &str) -> String {
+    CoreRegistry::get_string_handle(&property(model, name), 561).unwrap()
+}
+fn color_value(model: &CoreHandle, name: &str) -> u32 {
+    CoreRegistry::get_color_handle(&property(model, name), 555).unwrap() as u32
+}
+fn flight_progress(s: &mut Scene, progress: f32) {
+    for flight in s.moves.flights(&s.root) {
+        set(&flight.controls(), 62003, progress);
+    }
+    s.advance(0.0);
+}
+
+#[test]
+fn incoming_number_and_color_blend_then_bindings_drive_after_landing() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let unit = child(&s.s).unwrap();
+    let model = vm(&unit);
+    // The start is the current instance value, rather than its old source.
+    set(&property(&model, "prop"), 575, 30.0);
+    s.begin();
+    for (progress, number, color) in [
+        (0.0, 30.0, 0x20406080),
+        (0.5, 115.0, 0x80808080),
+        (1.0, 200.0, 0xe0c0a080),
+    ] {
+        flight_progress(&mut s, progress);
+        close(val(&property(&model, "prop"), 575), number);
+        assert_eq!(color_value(&model, "accent"), color);
+    }
+    s.end();
+    assert_eq!(child(&s.d).unwrap().core_handle(), unit.core_handle());
+    set(&property(&vm(&s.b), "offset"), 575, 321.0);
+    assert!(CoreRegistry::set_color_handle(
+        &property(&vm(&s.b), "accent"),
+        555,
+        0x12345678
+    ));
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 321.0);
+    assert_eq!(color_value(&model, "accent"), 0x12345678);
+}
+
+#[test]
+fn incoming_values_follow_live_destination_changes_during_flight() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let model = vm(&child(&s.s).unwrap());
+    s.begin();
+    flight_progress(&mut s, 0.5);
+    close(val(&property(&model, "prop"), 575), 105.0);
+    set(&property(&vm(&s.b), "offset"), 575, 310.0);
+    assert!(CoreRegistry::set_color_handle(
+        &property(&vm(&s.b), "accent"),
+        555,
+        0x6080a0c0
+    ));
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 160.0);
+    assert_eq!(color_value(&model, "accent"), 0x406080a0);
+    flight_progress(&mut s, 1.0);
+    close(val(&property(&model, "prop"), 575), 310.0);
+    assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
+    // Landing samples the latest destination even without another follow.
+    set(&property(&vm(&s.b), "offset"), 575, 410.0);
+    s.end();
+    close(val(&property(&model, "prop"), 575), 410.0);
+}
+
+#[test]
+fn incoming_string_switches_at_takeoff_and_private_values_stay() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let model = vm(&child(&s.s).unwrap());
+    assert_eq!(string_value(&model, "label"), "outgoing");
+    set(&property(&model, "count"), 575, 7.0);
+    s.begin();
+    assert_eq!(string_value(&model, "label"), "incoming");
+    close(val(&property(&model, "prop"), 575), 10.0);
+    close(val(&property(&model, "count"), 575), 7.0);
+    flight_progress(&mut s, 0.5);
+    s.end();
+    close(val(&property(&model, "count"), 575), 7.0);
+}
+
+#[test]
+fn unbound_typed_text_writes_the_incoming_prop_source_in_both_directions() {
+    for (two_way, settle) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut s = Scene::from_bytes(&fixture::values_fixture(two_way));
+        let unit = child(&s.s).unwrap();
+        let model = vm(&unit);
+        let field = unit
+            .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
+            .unwrap();
+        assert!(
+            field
+                .with_downcast_mut::<source::text::text_input::TextInput, _>(
+                    |f| f.text_input("typed locally")
+                )
+                .unwrap()
+        );
+        if settle {
+            s.advance(0.0);
+            assert_eq!(string_value(&model, "text"), "typed locally");
+        }
+        s.begin();
+        assert_eq!(string_value(&vm(&s.b), "text"), "typed locally");
+        s.end();
+        assert_eq!(string_value(&vm(&s.b), "text"), "typed locally");
+        assert_eq!(string_value(&model, "text"), "typed locally");
+        assert_eq!(
+            CoreRegistry::get_string_handle(&field, 817).as_deref(),
+            Some("typed locally")
+        );
+        // From landing on, the incoming prop drives the same input normally.
+        assert!(CoreRegistry::set_string_handle(
+            &property(&vm(&s.b), "text"),
+            561,
+            "later".into()
+        ));
+        s.advance(0.0);
+        assert_eq!(
+            CoreRegistry::get_string_handle(&field, 817).as_deref(),
+            Some("later")
+        );
+    }
+}
+
+#[test]
+fn authored_unbound_text_does_not_override_the_incoming_prop() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let unit = child(&s.s).unwrap();
+    let model = vm(&unit);
+    assert!(CoreRegistry::set_string_handle(
+        &property(&model, "text"),
+        561,
+        "authored".into()
+    ));
+    s.advance(0.0);
+    s.begin();
+    s.end();
+    assert_eq!(string_value(&vm(&s.b), "text"), "destination text");
+    assert_eq!(string_value(&model, "text"), "destination text");
+}
+
+#[test]
+fn takeoff_and_landing_without_an_advance_adopt_destination_values_at_once() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let model = vm(&child(&s.s).unwrap());
+    s.begin();
+    s.end();
+    close(val(&property(&model, "prop"), 575), 200.0);
+    assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
+    assert!(s.moves.flights(&s.root).is_empty());
+    s.moves.step_begin(&s.root, "A", None).unwrap();
+    close(val(&property(&model, "prop"), 575), 10.0);
+    assert_eq!(color_value(&model, "accent"), 0x20406080);
+    s.moves.step_end(&s.root, "A", None).unwrap();
+}
+
+#[test]
+fn two_versions_blend_against_their_own_landing_slot_values() {
+    let mut s = Scene::from_bytes(&fixture::two_version_values_fixture());
+    let outgoing = vm(&child(&s.s).unwrap());
+    let incoming = vm(&child(&s.d).unwrap());
+    s.begin();
+    close(val(&property(&outgoing, "prop"), 575), 10.0);
+    close(val(&property(&incoming, "prop"), 575), 200.0);
+    set(&property(&vm(&s.a), "offset"), 575, 110.0);
+    set(&property(&vm(&s.b), "offset"), 575, 400.0);
+    flight_progress(&mut s, 0.5);
+    close(val(&property(&outgoing, "prop"), 575), 60.0);
+    close(val(&property(&incoming, "prop"), 575), 300.0);
+    s.end();
+    close(val(&property(&outgoing, "prop"), 575), 110.0);
+    close(val(&property(&incoming, "prop"), 575), 400.0);
+}
+
+#[test]
+fn values_follow_the_same_native_keyed_progress_as_the_pose() {
+    let mut s = Scene::from_bytes(&fixture::keyed_fixture());
+    let model = vm(&child(&s.s).unwrap());
+    s.begin();
+    s.advance(0.5);
+    let progress = val(&s.moves.flights(&s.root)[0].controls(), 62003);
+    close(progress, 0.5);
+    close(val(&property(&model, "prop"), 575), 105.0);
+}
+
+#[test]
+fn converted_two_way_numbers_blend_without_writing_back_presentation_values() {
+    use source::data_bind::converters::{
+        data_converter_operation::ArithmeticOperation,
+        data_converter_operation_value::DataConverterOperationValue,
+    };
+    use source::viewmodel::viewmodel_instance::ViewModelInstance;
+    let mut s = Scene::new();
+    let model = vm(&child(&s.s).unwrap());
+    let fresh = child(&s.d).unwrap();
+    let fresh_model = vm(&fresh);
+    let target = property(&fresh_model, "prop");
+    let converter =
+        s.d.insert_sibling(DataConverterOperationValue::new(
+            ArithmeticOperation::Multiply,
+            2.0,
+        ))
+        .unwrap();
+    let mut binds = s.b.with_artboard(|b| b.data_bind_handles());
+    binds.extend(fresh.with_artboard(|b| b.data_bind_handles()));
+    binds.extend(
+        fresh_model
+            .with_downcast::<ViewModelInstance, _>(|v| v.value_data_binds().to_vec())
+            .unwrap(),
+    );
+    let mut configured = 0;
+    for bind in binds {
+        if bind
+            .with(|o| o.as_data_bind().and_then(|b| b.target()))
+            .flatten()
+            .as_ref()
+            == Some(&target)
+        {
+            assert!(CoreRegistry::set_uint_handle(&bind, 587, 2 | 8));
+            bind.with_mut(|o| {
+                o.as_data_bind_mut()
+                    .unwrap()
+                    .set_converter(Some(converter.clone()))
+            });
+            configured += 1;
+        }
+    }
+    assert!(configured > 0);
+    s.begin();
+    flight_progress(&mut s, 0.5);
+    close(val(&property(&model, "prop"), 575), 205.0);
+    close(val(&property(&vm(&s.b), "offset"), 575), 200.0);
+    set(&property(&vm(&s.b), "offset"), 575, 310.0);
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 315.0);
+    close(val(&property(&vm(&s.b), "offset"), 575), 310.0);
+    s.end();
+    close(val(&property(&model, "prop"), 575), 620.0);
+    close(val(&property(&vm(&s.b), "offset"), 575), 310.0);
+}
+
+#[test]
+fn outgoing_bound_typed_text_does_not_write_the_incoming_source() {
+    use source::data_bind::{data_bind::DataBind, data_bind_context::DataBindContext};
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let unit = child(&s.s).unwrap();
+    let model = vm(&unit);
+    let mut bind = DataBindContext::default();
+    bind.base.base = DataBind::new(0, 561, 0);
+    bind.decode_source_path_ids(&[1, 3]);
+    let bind = s.s.insert_sibling(bind).unwrap();
+    bind.with_mut(|o| {
+        o.as_data_bind_mut()
+            .unwrap()
+            .set_target(Some(property(&model, "text")))
+    });
+    s.a.with_artboard_mut(|b| b.add_data_bind(bind));
+    s.advance(0.0);
+    let field = unit
+        .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
+        .unwrap();
+    assert!(
+        field
+            .with_downcast_mut::<source::text::text_input::TextInput, _>(
+                |f| f.text_input("new edit")
+            )
+            .unwrap()
+    );
+    s.begin();
+    s.end();
+    assert_eq!(string_value(&vm(&s.b), "text"), "destination text");
+    assert_eq!(string_value(&model, "text"), "destination text");
+    assert_eq!(
+        CoreRegistry::get_string_handle(&field, 817).as_deref(),
+        Some("destination text")
+    );
+}
+
+// Inline VM import normally makes two-way props source-first. Explicitly
+// restore authored target-first ordering in the native and mounted bindings.
+fn target_first_props(row: &RuntimeArtboardInstanceHandle, slot: &CoreHandle, names: &[&str]) {
+    use source::viewmodel::viewmodel_instance::ViewModelInstance;
+    let unit = child(slot).unwrap();
+    let model = vm(&unit);
+    let mut binds = row.with_artboard(|b| b.data_bind_handles());
+    binds.extend(unit.with_artboard(|b| b.data_bind_handles()));
+    binds.extend(
+        model
+            .with_downcast::<ViewModelInstance, _>(|v| v.value_data_binds().to_vec())
+            .unwrap(),
+    );
+    for name in names {
+        let target = property(&model, name);
+        let mut configured = 0;
+        for bind in &binds {
+            if bind
+                .with(|o| o.as_data_bind().and_then(|b| b.target()))
+                .flatten()
+                .as_ref()
+                == Some(&target)
+            {
+                assert!(CoreRegistry::set_uint_handle(bind, 587, 2));
+                configured += 1;
+            }
+        }
+        assert!(configured > 0, "no prop binding for {name}");
+    }
+}
+
+fn assert_target_first_prop(unit: &RuntimeArtboardInstanceHandle, target: &CoreHandle) {
+    let binds = unit.with_artboard(|b| b.data_bind_handles());
+    assert!(
+        binds.iter().any(|bind| bind.with(|o| {
+            let b = o.as_data_bind().unwrap();
+            b.target().as_ref() == Some(target) && b.to_source() && !b.source_to_target_runs_first()
+        }) == Some(true)),
+        "normal authored two-way ordering must resume"
+    );
+}
+
+#[test]
+fn target_first_two_way_midpoint_landing_adopts_source_before_writeback() {
+    for latest in [200.0, 310.0] {
+        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+        target_first_props(&s.b, &s.d, &["prop", "accent"]);
+        let unit = child(&s.s).unwrap();
+        let model = vm(&unit);
+        let destination = vm(&s.b);
+        s.begin();
+        flight_progress(&mut s, 0.5);
+        close(val(&property(&model, "prop"), 575), 105.0);
+        assert_eq!(color_value(&model, "accent"), 0x80808080);
+        // No further follow: landing must sample the latest source itself.
+        set(&property(&destination, "offset"), 575, latest);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&destination, "accent"),
+            555,
+            0x6080a0c0
+        ));
+        s.end();
+        close(val(&property(&destination, "offset"), 575), latest);
+        close(val(&property(&model, "prop"), 575), latest);
+        assert_eq!(color_value(&destination, "accent"), 0x6080a0c0);
+        assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
+        assert_target_first_prop(&unit, &property(&model, "prop"));
+        // The handoff is one-time: real edits after landing still write back.
+        set(&property(&model, "prop"), 575, 444.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&model, "accent"),
+            555,
+            0x12345678
+        ));
+        s.advance(0.0);
+        close(val(&property(&destination, "offset"), 575), 444.0);
+        assert_eq!(color_value(&destination, "accent"), 0x12345678);
+    }
+}
+
+#[test]
+fn target_first_two_way_return_after_midflight_row_removal_adopts_home_source() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    target_first_props(&s.a, &s.s, &["prop", "accent"]);
+    target_first_props(&s.b, &s.d, &["prop", "accent"]);
+    let unit = child(&s.s).unwrap();
+    let model = vm(&unit);
+    let home = vm(&s.a);
+    let destination = vm(&s.b);
+    s.begin();
+    flight_progress(&mut s, 0.5);
+    close(val(&property(&model, "prop"), 575), 105.0);
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let a = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(0))
+        .flatten()
+        .unwrap();
+    ArtboardComponentList::update_list_occurrence(&list, &[a]);
+    s.advance(0.0);
+    assert_eq!(child(&s.s).unwrap().core_handle(), unit.core_handle());
+    assert!(s.moves.flights(&s.root).is_empty());
+    close(val(&property(&home, "offset"), 575), 10.0);
+    close(val(&property(&destination, "offset"), 575), 200.0);
+    close(val(&property(&model, "prop"), 575), 10.0);
+    assert_eq!(color_value(&home, "accent"), 0x20406080);
+    assert_eq!(color_value(&destination, "accent"), 0xe0c0a080);
+    assert_eq!(color_value(&model, "accent"), 0x20406080);
+    assert_target_first_prop(&unit, &property(&model, "prop"));
+    set(&property(&model, "prop"), 575, 88.0);
+    s.advance(0.0);
+    close(val(&property(&home, "offset"), 575), 88.0);
+    close(val(&property(&destination, "offset"), 575), 200.0);
+}
+
+#[test]
+fn target_first_two_way_expired_projection_adopts_live_source_before_writeback() {
+    for queued_target in [false, true] {
+        let mut s = Scene::new();
+        target_first_props(&s.b, &s.d, &["prop"]);
+        let unit = child(&s.s).unwrap();
+        let model = vm(&unit);
+        let target = property(&model, "prop");
+        let source = property(&vm(&s.b), "offset");
+        s.begin();
+        flight_progress(&mut s, 0.5);
+        close(val(&target, 575), 105.0);
+        if queued_target {
+            // Leave target dirt queued at the synthesized value, as well as
+            // a newer source; neither ordering may write the blend back.
+            set(&target, 575, 104.0);
+            set(&target, 575, 105.0);
+            set(&source, 575, 310.0);
+        }
+        // Cancellation can drop only the projection and retain the mounted
+        // binding. Even a clean binding must settle its source-only handoff.
+        s.moves.with_flights(&s.root, |flights| flights.clear());
+        unit.update_data_binds(true);
+        let expected = if queued_target { 310.0 } else { 200.0 };
+        close(val(&source, 575), expected);
+        close(val(&target, 575), expected);
+        assert_target_first_prop(&unit, &target);
+        set(&target, 575, 444.0);
+        unit.update_data_binds(true);
+        close(val(&source, 575), 444.0);
+    }
 }

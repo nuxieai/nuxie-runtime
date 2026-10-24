@@ -94,6 +94,7 @@ pub struct Flight {
     pub size_mode: SizeMode,
     controls: CoreHandle,
     departure_size: Vec2D,
+    pub(super) values: super::values::FlightValues,
     pub(super) landing: CoreHandle,
     pub(super) board: CoreHandle,
     from_board: CoreHandle,
@@ -153,6 +154,7 @@ impl Flight {
             size_mode,
             controls,
             departure_size,
+            values: super::values::FlightValues::default(),
         })
     }
     pub(super) fn use_departure(&mut self, holder: &CoreHandle) -> Result<()> {
@@ -240,6 +242,9 @@ impl Flight {
         if !apply {
             return Ok(());
         }
+        // Values and pose share this exact read of the keyed progress. Normal
+        // binding updates hold these targets until this post-layout pass.
+        self.values.follow(t);
         if let Some(instance) = child(&self.flight)? {
             let size = if self.size_mode == SizeMode::Layout {
                 blended_size

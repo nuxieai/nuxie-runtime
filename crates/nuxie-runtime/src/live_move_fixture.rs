@@ -119,8 +119,38 @@ fn slot(
     unit: u64,
     x: f32,
     screen_model: u8,
+    value_props: bool,
+    text_two_way: bool,
 ) {
     slot_with_props(b, parent, host_id, name, unit, x, Some(screen_model));
+    if value_props {
+        for (kind, id, value, key) in [
+            ("ViewModelInstanceColor", 2, V::Color(0), 555),
+            ("ViewModelInstanceString", 3, V::S(""), 561),
+            ("ViewModelInstanceString", 4, V::S(""), 561),
+        ] {
+            obj(
+                b,
+                kind,
+                &[
+                    ("parentId", V::U(host_id + 3)),
+                    ("viewModelPropertyId", V::U(id)),
+                    ("propertyValue", value),
+                ],
+            );
+            if id != 4 || screen_model != 1 {
+                obj(
+                    b,
+                    "DataBindContext",
+                    &[
+                        ("propertyKey", V::U(key)),
+                        ("sourcePathIds", V::Bytes(&[screen_model, (id - 1) as u8])),
+                        ("flags", V::U(if id == 4 && text_two_way { 2 } else { 0 })),
+                    ],
+                );
+            }
+        }
+    }
 }
 fn slot_with_props(
     b: &mut Vec<u8>,
@@ -277,9 +307,32 @@ struct Options {
     nested_list: bool,
     globals: bool,
     page_unit: bool,
+    value_props: bool,
+    text_two_way: bool,
     paint_list: bool,
     unnamed_screen: bool,
     empty_screens: bool,
+}
+/// Number, color, switched string and locally bound text on the same unit.
+pub fn values_fixture(text_two_way: bool) -> Vec<u8> {
+    build(
+        2,
+        Options {
+            value_props: true,
+            text_two_way,
+            ..Options::default()
+        },
+    )
+}
+pub fn two_version_values_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            value_props: true,
+            two_versions: true,
+            ..Options::default()
+        },
+    )
 }
 pub fn scripted_fixture() -> Vec<u8> {
     build(
@@ -466,6 +519,15 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     for name in ["count", "prop"] {
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S(name))]);
     }
+    if options.value_props {
+        for (kind, name) in [
+            ("ViewModelPropertyColor", "accent"),
+            ("ViewModelPropertyString", "label"),
+            ("ViewModelPropertyString", "text"),
+        ] {
+            obj(&mut b, kind, &[("name", S(name))]);
+        }
+    }
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
     for i in 0..2 {
         obj(
@@ -474,10 +536,32 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             &[("viewModelPropertyId", U(i)), ("propertyValue", F(0.0))],
         );
     }
+    if options.value_props {
+        for (kind, id, value) in [
+            ("ViewModelInstanceColor", 2, Color(0)),
+            ("ViewModelInstanceString", 3, S("")),
+            ("ViewModelInstanceString", 4, S("")),
+        ] {
+            obj(
+                &mut b,
+                kind,
+                &[("viewModelPropertyId", U(id)), ("propertyValue", value)],
+            );
+        }
+    }
     for i in 0..rows {
         let name = format!("Screen{i}");
         obj(&mut b, "ViewModel", &[("name", S(&name))]);
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
+        if options.value_props {
+            for (kind, name) in [
+                ("ViewModelPropertyColor", "accent"),
+                ("ViewModelPropertyString", "label"),
+                ("ViewModelPropertyString", "text"),
+            ] {
+                obj(&mut b, kind, &[("name", S(name))]);
+            }
+        }
         obj(
             &mut b,
             "ViewModelInstance",
@@ -491,6 +575,27 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("propertyValue", F(10.0 + i as f32 * 190.0)),
             ],
         );
+        if options.value_props {
+            for (kind, id, value) in [
+                (
+                    "ViewModelInstanceColor",
+                    1,
+                    Color(if i == 0 { 0x20406080 } else { 0xe0c0a080 }),
+                ),
+                (
+                    "ViewModelInstanceString",
+                    2,
+                    S(if i == 0 { "outgoing" } else { "incoming" }),
+                ),
+                ("ViewModelInstanceString", 3, S("destination text")),
+            ] {
+                obj(
+                    &mut b,
+                    kind,
+                    &[("viewModelPropertyId", U(id)), ("propertyValue", value)],
+                );
+            }
+        }
     }
     let mut page = vec![("name", S("Page"))];
     if options.globals {
@@ -834,8 +939,11 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 + u64::from(options.two_versions && (i == 1 || options.incoming_away && i == 2)),
             5.0,
             i as u8 + 1,
+            options.value_props,
+            options.text_two_way,
         );
-        let layer_id = host_id + 6;
+        let slot_width = if options.value_props { 9 } else { 6 };
+        let layer_id = host_id + slot_width;
         obj(
             &mut b,
             "Node",
@@ -847,7 +955,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             // A for forward, A then B for back, so incoming draws above.
             // The same Screen owns both named pairs; runtime never reorders.
             for (j, key) in [2, 1, 1, 2].into_iter().enumerate() {
-                let id = layer_id + 1 + j as u64 * 7;
+                let id = layer_id + 1 + j as u64 * (slot_width + 1);
                 slot(
                     &mut b,
                     layer_id,
@@ -860,6 +968,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     rows as u64 + key + u64::from(options.invalid_plan == 2 && i == 1 && j == 1),
                     0.0,
                     i as u8 + 1,
+                    options.value_props,
+                    options.text_two_way,
                 );
                 obj(
                     &mut b,
@@ -890,6 +1000,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 rows as u64 + 1,
                 0.0,
                 i as u8 + 1,
+                options.value_props,
+                options.text_two_way,
             );
         }
         if !options.ordinary {
@@ -940,6 +1052,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 rows as u64 + key,
                 80.0,
                 i as u8 + 1,
+                options.value_props,
+                options.text_two_way,
             );
             obj(
                 &mut b,
@@ -1019,6 +1133,17 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "TextInput",
             &[("name", S("edit")), ("parentId", U(0)), ("text", S(""))],
         ); // 2
+        if options.value_props {
+            obj(
+                &mut b,
+                "DataBindContext",
+                &[
+                    ("propertyKey", U(817)),
+                    ("sourcePathIds", Bytes(&[0, 4])),
+                    ("flags", U(2)),
+                ],
+            );
+        }
         // One visible rectangle makes draw counts concrete, not host-loop counters.
         obj(
             &mut b,

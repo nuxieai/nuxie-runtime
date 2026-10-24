@@ -387,7 +387,7 @@ pub struct RuntimeStateMachineAdvanceResult {
 
 /// The public multi-machine adaptation of StateMachineInstance::advanceAndApply.
 /// Machine callbacks run with neither the Artboard nor another machine borrowed.
-fn advance_native_state_machines(
+pub(crate) fn advance_native_state_machines(
     artboard: &RuntimeArtboardInstanceHandle,
     machines: &[RuntimeStateMachineInstanceHandle],
     seconds: f32,
@@ -793,15 +793,7 @@ impl StateMachineInstance {
                 )
             })
             .collect();
-        let after = self
-            .artboard
-            .with_artboard(|artboard| artboard.host_nested_event_sequence);
-        let nested = nested_events::collect(&self.artboard, after);
-        if let Some(sequence) = nested.iter().map(|event| event.host_sequence).max() {
-            self.artboard
-                .with_artboard_mut(|artboard| artboard.host_nested_event_sequence = sequence);
-        }
-        events.extend(nested);
+        events.extend(take_nested_reported_events(&self.artboard));
         events.sort_by_key(|event| event.host_sequence);
         events
     }
@@ -1032,4 +1024,18 @@ impl StateMachineInstance {
         self.native
             .with_instance_mut(|machine| machine.reset_state());
     }
+}
+
+// Status operations share the ordinary host cursor without consuming native
+// listener queues. Capture before a row sleeps or another evaluation clears it.
+pub(crate) fn take_nested_reported_events(
+    root: &RuntimeArtboardInstanceHandle,
+) -> Vec<StateMachineReportedEvent> {
+    let after = root.with_artboard(|b| b.host_nested_event_sequence);
+    let mut events = nested_events::collect(root, after);
+    if let Some(sequence) = events.iter().map(|event| event.host_sequence).max() {
+        root.with_artboard_mut(|b| b.host_nested_event_sequence = sequence);
+    }
+    events.sort_by_key(|event| event.host_sequence);
+    events
 }

@@ -633,6 +633,52 @@ impl LiveMoves {
         root.update_pass(false);
         scene.plan.borrow_mut().step_end(root, incoming, name)
     }
+    /// Named steps evaluate only their expanded endpoints. A cut has no
+    /// published from/to record: its expanded Screens are the host's endpoints.
+    pub(crate) fn evaluate_step_rows(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        incoming: &str,
+        name: Option<&str>,
+    ) -> Result<Vec<crate::StateMachineReportedEvent>> {
+        let scene = crate::hosted_scene::root_scene(root)
+            .ok_or_else(|| anyhow::anyhow!("root is not a page"))?;
+        let outgoing = name.and_then(|name| {
+            scene
+                .plan
+                .borrow()
+                .steps
+                .iter()
+                .find(|step| step.name == name)
+                .map(|step| step.from.clone())
+        });
+        let list = root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .ok_or_else(|| anyhow::anyhow!("page has no screens list"))?;
+        let rows = list
+            .with_downcast::<ArtboardComponentList, _>(|l| {
+                l.live_move_frame_indices()
+                    .iter()
+                    .copied()
+                    .filter(|&index| {
+                        l.artboard_instance(index).is_some_and(|row| {
+                            crate::hosted_scene::is_active_artboard(&row.core_handle())
+                                && (name.is_none()
+                                    || row.with_artboard(|b| {
+                                        b.name() == incoming
+                                            || outgoing.as_deref() == Some(b.name())
+                                    }))
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let mut events = Vec::new();
+        for index in rows {
+            events.extend(super::collapse::evaluate_row(root, &list, index));
+        }
+        Ok(events)
+    }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
         let Some(scene) = crate::hosted_scene::root_scene(root) else {
             return Ok(false);

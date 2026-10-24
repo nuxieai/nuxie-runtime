@@ -3845,3 +3845,328 @@ fn target_first_two_way_expired_projection_adopts_live_source_before_writeback()
         close(val(&source, 575), 444.0);
     }
 }
+
+// The SDK batches lifecycle writes, list moves and status operations without
+// an ordinary step between a finished arrival and the next entering write.
+struct RowEvaluationScene {
+    _factory: PersistentFactory<RecordingFactory>,
+    board: ArtboardInstance,
+    playback: page_player::Playback,
+    vm: RuntimeOwnedViewModelHandle,
+    player: page_player::PagePlayer,
+}
+impl RowEvaluationScene {
+    fn new(bytes: &[u8]) -> Self {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let mut board = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+        let root = board.native_handle();
+        let model = file
+            .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+            .unwrap();
+        let vm = RuntimeOwnedViewModelHandle::from_native(file, model).unwrap();
+        board.bind_owned_view_model_handle(vm.clone());
+        let mut machine = board.default_state_machine_instance().unwrap();
+        machine.bind_owned_view_model_handle(vm.clone());
+        let mut scene = Self {
+            _factory: factory,
+            board,
+            playback: page_player::Playback::StateMachine(Box::new(machine)),
+            vm,
+            player: page_player::PagePlayer::default(),
+        };
+        scene.step(0.0);
+        scene
+    }
+    fn phase(&self, row: usize, phase: &str, transition: &str) {
+        let vm = self
+            .vm
+            .list_item_by_property_name_path("screens", row)
+            .unwrap();
+        for (path, value) in [("screen/phase", phase), ("screen/transition", transition)] {
+            vm.borrow_mut()
+                .set_string_by_property_name_path(path, value.as_bytes());
+            assert_eq!(
+                vm.borrow()
+                    .string_value_by_property_name_path(path)
+                    .unwrap()
+                    .as_ref(),
+                value.as_bytes()
+            );
+        }
+    }
+    fn step(&mut self, elapsed_seconds: f32) -> page_player::Output {
+        self.player
+            .step(
+                &mut self.board,
+                &mut self.playback,
+                page_player::Step {
+                    elapsed_seconds,
+                    ..Default::default()
+                },
+                std::slice::from_ref(&self.vm),
+                None,
+            )
+            .unwrap()
+    }
+    fn begin(&mut self, incoming: &str, name: Option<&str>) {
+        self.player
+            .step_begin(
+                &mut self.board,
+                incoming,
+                name,
+                std::slice::from_ref(&self.vm),
+                None,
+            )
+            .unwrap();
+    }
+    fn end(&mut self, incoming: &str, name: Option<&str>) {
+        self.player
+            .step_end(
+                &mut self.board,
+                incoming,
+                name,
+                std::slice::from_ref(&self.vm),
+                None,
+            )
+            .unwrap();
+    }
+    fn collapse(&mut self, index: i32, collapsed: bool) {
+        self.player
+            .set_row_collapsed(
+                &mut self.board,
+                "screens",
+                index,
+                collapsed,
+                std::slice::from_ref(&self.vm),
+                None,
+            )
+            .unwrap();
+    }
+    fn arrival(&mut self) -> usize {
+        (0..76)
+            .map(|frame| {
+                self.step(if frame == 0 { 0.0 } else { 1.0 / 60.0 })
+                    .events
+                    .iter()
+                    .filter(|event| event.name.as_deref() == Some(b"nx_enter_done:t1"))
+                    .count()
+            })
+            .sum()
+    }
+}
+fn repeated_arrival_after_cut(collapse_b: bool) {
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    s.begin("B", Some("t1"));
+    assert_eq!(s.arrival(), 1, "first arrival");
+    s.end("B", Some("t1"));
+    s.collapse(0, true);
+    s.phase(0, "hidden", "");
+    s.phase(1, "active", "");
+
+    s.phase(1, "exiting", "");
+    assert!(s.vm.move_list_item_by_property_name_path("screens", 0, 1));
+    s.collapse(1, false);
+    s.phase(1, "entering", "");
+    s.begin("A", None);
+    if collapse_b {
+        s.collapse(0, true);
+    }
+    s.phase(0, "hidden", "");
+    s.end("A", None);
+    s.phase(1, "active", "");
+
+    assert!(s.vm.move_list_item_by_property_name_path("screens", 0, 1));
+    if collapse_b {
+        s.collapse(1, false);
+    }
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    s.begin("B", Some("t1"));
+    assert_eq!(s.arrival(), 1, "second arrival after cut");
+    s.end("B", Some("t1"));
+    assert_eq!(s.arrival(), 0, "completion must not repeat");
+}
+#[test]
+fn row_evaluation_repeated_arrival_after_sleeping_cut() {
+    repeated_arrival_after_cut(true);
+}
+#[test]
+fn row_evaluation_repeated_arrival_after_awake_cut() {
+    repeated_arrival_after_cut(false);
+}
+
+// An Effects integration projects a host command when evaluation fires the
+// authored event. This isolates the shared player's deferral contract from a VM.
+struct RowEventEffects(RuntimeStateMachineInstanceHandle);
+struct RowEventTransaction {
+    machine: RuntimeStateMachineInstanceHandle,
+    before: usize,
+}
+impl page_player::Effects for RowEventEffects {
+    fn begin(&self) -> Box<dyn page_player::EffectTransaction> {
+        Box::new(RowEventTransaction {
+            machine: self.0.clone(),
+            before: self.0.with_instance(|m| m.reported_event_count()),
+        })
+    }
+}
+impl page_player::EffectTransaction for RowEventTransaction {
+    fn finish(self: Box<Self>) -> Result<Vec<page_player::HostCommand>, ScriptError> {
+        Ok(
+            if self.machine.with_instance(|m| m.reported_event_count()) > self.before {
+                vec![page_player::HostCommand {
+                    name: "arrival".into(),
+                    payload: page_player::HostValue::Null,
+                }]
+            } else {
+                Vec::new()
+            },
+        )
+    }
+}
+#[test]
+fn row_evaluation_defers_events_and_commands_until_next_step_once() {
+    use page_player::{Operation, Playback, Step};
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::status_event_fixture());
+    let root = s.board.native_handle();
+    let list = root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let machine = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(1))
+        .flatten()
+        .unwrap();
+    let effects = RowEventEffects(machine);
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    let mut pending = s
+        .player
+        .operation(
+            &mut s.board,
+            &mut Playback::StaticArtboard,
+            Step::default(),
+            Some(Operation::Begin("B".into(), Some("t1".into()))),
+            std::slice::from_ref(&s.vm),
+            None,
+            None,
+            false,
+            Some(&effects),
+            |_| (),
+        )
+        .unwrap();
+    let output = pending.output.take().unwrap();
+    assert!(
+        output.events.is_empty(),
+        "status call must not deliver events"
+    );
+    assert!(
+        output.commands.is_empty(),
+        "status call must not deliver commands"
+    );
+    pending.commit();
+    s.end("B", Some("t1"));
+    s.collapse(1, true);
+    // B sleeps on both drain frames: status reports cannot depend on waking it.
+    let output = s.step(0.0);
+    assert_eq!(
+        output
+            .events
+            .iter()
+            .filter(|event| event.name.as_deref() == Some(b"nx_enter_done:t1"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        output.commands,
+        [page_player::HostCommand {
+            name: "arrival".into(),
+            payload: page_player::HostValue::Null
+        }]
+    );
+    let output = s.step(0.0);
+    assert!(output.events.is_empty());
+    assert!(output.commands.is_empty());
+    s.collapse(1, false);
+    let output = s.step(0.0);
+    assert!(
+        output.events.is_empty(),
+        "wake must not redeliver the queued event"
+    );
+    assert!(output.commands.is_empty());
+}
+
+#[test]
+fn row_evaluation_each_status_observes_phase_without_elapsed_time() {
+    for operation in ["begin", "end", "sleep", "wake"] {
+        let mut s = RowEvaluationScene::new(&live_move::device_fixture::status_event_fixture());
+        if operation == "end" {
+            s.begin("B", Some("t1"));
+        }
+        if operation == "wake" {
+            s.collapse(1, true);
+        }
+        s.phase(1, "entering", "t1");
+        match operation {
+            "begin" => s.begin("B", Some("t1")),
+            "end" => s.end("B", Some("t1")),
+            "sleep" => s.collapse(1, true),
+            "wake" => s.collapse(1, false),
+            _ => unreachable!(),
+        }
+        // Hide the guard before advancing: only the status evaluation can
+        // have fired this state-entry event. No one-second completion can fire.
+        s.phase(1, "hidden", "");
+        let events = s.step(0.0).events;
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.name.as_deref() == Some(b"nx_enter_done:t1"))
+                .count(),
+            1,
+            "{operation} must evaluate its row"
+        );
+        assert!(
+            s.step(0.0).events.is_empty(),
+            "{operation} must deliver once"
+        );
+    }
+}
+
+#[test]
+fn row_evaluation_named_steps_do_not_advance_unrelated_expanded_rows() {
+    let advances = |rows| {
+        let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(rows));
+        s.phase(0, "exiting", "t1");
+        s.phase(1, "entering", "t1");
+        hosted_scene::measure_walks(true);
+        s.begin("B", Some("t1"));
+        let begin = hosted_scene::measure_walks(false).advance;
+        hosted_scene::measure_walks(true);
+        s.end("B", Some("t1"));
+        let end = hosted_scene::measure_walks(false).advance;
+        hosted_scene::measure_walks(true);
+        s.collapse(1, true);
+        let sleep = hosted_scene::measure_walks(false).advance;
+        hosted_scene::measure_walks(true);
+        s.collapse(1, false);
+        let wake = hosted_scene::measure_walks(false).advance;
+        [begin, end, sleep, wake]
+    };
+    let endpoints = advances(2);
+    assert!(endpoints.iter().all(|&count| count > 0));
+    assert_eq!(
+        advances(40),
+        endpoints,
+        "extra expanded rows must not advance during endpoint operations"
+    );
+}

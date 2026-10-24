@@ -454,34 +454,23 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
                 )
             })
             .unwrap();
-        let misplaced = objects
-            .iter()
-            .enumerate()
-            .filter_map(|(index, record)| {
-                let record = record.as_ref()?;
-                let valid = match record.core_type() {
-                    Some(62000) => is_screen,
-                    Some(62001 | 62002) => pages.contains(&board),
-                    _ => return None,
-                };
-                (!valid).then_some((index, record.clone()))
-            })
-            .collect::<Vec<_>>();
-        // Remove every reserved slot before retiring a parent and its children.
-        // No definition clone may encounter a retired child in an occupied slot.
-        board.with_downcast_mut::<Artboard, _>(|b| {
-            for (index, _) in &misplaced {
-                b.release_import_slot(*index);
+        // Validation is read-only, including definitions shared with an
+        // installed Page during tools replacement. Diagnose here; the mounted
+        // Page's endpoint classification and path checks ignore these at use.
+        for record in objects.iter().flatten() {
+            let valid = match record.core_type() {
+                Some(62000) => is_screen,
+                Some(62001 | 62002) => pages.contains(&board),
+                _ => continue,
+            };
+            if !valid {
+                eprintln!(
+                    "live moves: ignoring record outside page/screens/Screen slots in {}",
+                    board
+                        .with_downcast::<Artboard, _>(|b| b.name().to_owned())
+                        .unwrap()
+                );
             }
-        });
-        for (_, record) in misplaced {
-            eprintln!(
-                "live moves: ignoring record outside page/screens/Screen slots in {}",
-                board
-                    .with_downcast::<Artboard, _>(|b| b.name().to_owned())
-                    .unwrap()
-            );
-            record.remove_occurrence();
         }
         // Validate plans only after the supported shape has been selected.
         // A declaration on ordinary paint/nested content is ignored as a unit.

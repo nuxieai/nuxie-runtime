@@ -73,23 +73,9 @@ impl Plan {
             return Ok(());
         }
         if self.steps.is_empty() {
-            let list = root
-                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-                .expect("list");
-            let live = list
-                .with_downcast::<ArtboardComponentList, _>(|l| {
-                    (0..l.artboard_count())
-                        .filter_map(|i| l.artboard_instance(i as i32))
-                        .any(|row| {
-                            row.with_artboard(|b| !b.find_all_handles::<LiveSlot>().is_empty())
-                        })
-                })
-                .unwrap_or(false);
-            if !live {
-                self.rows.clear();
-                self.revision = Some(revision);
-                return Ok(());
-            }
+            self.rows.clear();
+            self.revision = Some(revision);
+            return Ok(());
         }
         self.rows = screen_rows(root)?;
         let mounted = self
@@ -556,9 +542,12 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
     for (name, board) in rows {
         let mut slots = Vec::new();
         let mut keys = HashSet::new();
-        for object in
+        let objects = if crate::hosted_scene::is_screen(&board.core_handle()) {
             board.with_artboard(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>())
-        {
+        } else {
+            Vec::new()
+        };
+        for object in objects {
             if let Some((Some(node), values)) =
                 object.with_downcast::<LiveSlot, _>(|r| (r.parent(), r.values.clone()))
             {

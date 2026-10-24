@@ -739,3 +739,26 @@ The harness should save the capture serial at the edit, return after changing to
 | `snapshotfull` | `test -p nux-capi`: 275 tests across 22 targets passed, exit 0. |
 
 The test file was formatted with `rustfmt --edition 2024`. Whitespace checks pass. No commits were made. This diagnoses the Android failure; it does not claim a new emulator run or completion of that run's collapsed-budget stage.
+
+### Read-only import validation after review of 5f4bb83701
+
+Replacement validation previously retired misplaced records from every definition in its candidate view of the file. A replacement Page naming different endpoints could therefore strip the installed Screens before a duplicate mapping made `validate_step_units` reject it. Disposing the rejected Page did not restore those shared definitions.
+
+Import shape validation now only diagnoses misplaced records. It never releases their object slots or retires them. The mounted Page occurrence remembers its step endpoint names, and plan discovery and explicit slot operations ignore records outside that classification and the existing Page/screens/Screen path. A root without a `screens` list cannot opt in merely because it retains misplaced steps. Definition replacement gives new occurrences their own classification; retained old occurrences keep their original Page classification. No post-commit cleanup or schema changes are needed.
+
+The regressions cover rejection after naming different Screens, successful replacement that stops naming A, original-file misplaced slots, unnamed rows with both empty and populated defaults, and misplaced steps without `screens`. They check record preservation, transport refusal, unchanged ignored flight contents, and a successful live step from a fresh occurrence after rejection. The diagnostics remain visible in runner output. Existing round 9 tests now assert preservation plus use-time refusal instead of record deletion.
+
+`importreadonlyred` reproduced deletion in the original-file and successful-replacement cases. Its initial rejection fixture was dropped by individual record validation, so it was corrected to duplicate an otherwise valid mapping. `importreadonlyred2` then failed all four selected tests, including `Malformed` followed by missing original A records. Verification results follow below.
+
+The first focused C API run (`importreadonlycapi`) passed 19 cases and failed one obsolete round 9 assertion that paint-content steps had been deleted. That assertion now requires the records to remain, while explicitly refusing scene opt-in and step execution on the paint occurrence. Production code did not change in response to that failure.
+
+| Request | Command | Result |
+| --- | --- | --- |
+| `importreadonlygreen` | `test -p nuxie-runtime --test live_moves import_validation` | 5 passed, exit 0. |
+| `importreadonlyfinal` | Same focused command, with retained-old-Page coverage | 5 passed, exit 0. |
+| `importreadonlyruntime` | `test -p nuxie-runtime --test live_moves` | 70 passed, exit 0. |
+| `importreadonlycapifinal` | `test -p nux-capi --lib live_moves` | 20 passed, exit 0. |
+| `importreadonlyfull` | `test -p nux-capi` | 275 tests across 22 targets passed, exit 0. |
+| `importreadonlycheck` | `check -p nux-capi --all-targets` | 26 targets built, exit 0. |
+
+Only the five touched Rust files were formatted with `rustfmt --edition 2024`. Formatting and whitespace checks pass. No generated files changed, no pool failure occurred, and nothing was committed.

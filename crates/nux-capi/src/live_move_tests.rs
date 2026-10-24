@@ -1492,9 +1492,15 @@ fn live_moves_paint_content_edits_invalidate_the_enclosing_index_round9() {
             .with_downcast::<PaintImage, _>(|p| p.source.as_ref().unwrap().artboard())
             .unwrap();
         assert!(
-            content
+            !content
                 .with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveStep>())
                 .is_empty()
+        );
+        assert!(!nuxie::hosted_scene::enabled(&content));
+        assert!(
+            nuxie::live_move::LiveMoves::default()
+                .step_begin(&content, "B", Some("t1"))
+                .is_err()
         );
         let list = content
             .with_artboard(|b| b.find_handle::<ArtboardComponentList>("inner"))

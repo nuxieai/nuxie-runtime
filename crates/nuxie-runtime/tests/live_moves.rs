@@ -2624,7 +2624,7 @@ fn checkpoint_rollback_retains_and_restores_replaced_rows_round7() {
 }
 
 #[test]
-fn misplaced_page_slot_is_ignored_and_cannot_transport_round9() {
+fn import_validation_misplaced_page_slot_is_preserved_and_ignored() {
     let before = hosted_scene::bookkeeping_counts();
     let s = Scene::from_bytes(&fixture::root_owned_vm_fixture());
     let source = s
@@ -2638,7 +2638,7 @@ fn misplaced_page_slot_is_ignored_and_cannot_transport_round9() {
                 .unwrap()
                 .children()
                 .iter()
-                .all(|h| { !h.is_type_of(records::LiveSlot::TYPE_KEY) || !h.is_alive() }))
+                .any(|h| h.is_type_of(records::LiveSlot::TYPE_KEY) && h.is_alive()))
             .unwrap()
     );
     let unit = child(&source).unwrap();
@@ -2889,7 +2889,7 @@ fn mutable_list_collapse_reconciles_after_its_borrow_round9() {
 }
 
 #[test]
-fn only_step_endpoints_keep_slot_records_regardless_of_default_rows_round9() {
+fn import_validation_preserves_slots_regardless_of_default_rows() {
     for empty in [true, false] {
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         let file = File::import(
@@ -2900,17 +2900,205 @@ fn only_step_endpoints_keep_slot_records_regardless_of_default_rows_round9() {
             None,
         )
         .unwrap();
-        for (name, expected) in [
-            ("A", true),
-            ("B", true),
-            ("R2", true),
-            ("R3", true),
-            ("R4", false),
-        ] {
+        for name in ["A", "B", "R2", "R3", "R4"] {
             let board = file.with_file(|f| f.artboard_named(name)).unwrap();
             let has_slots =
                 board.with_artboard(|b| !b.find_all_handles::<records::LiveSlot>().is_empty());
-            assert_eq!(has_slots, expected, "{name}, empty defaults: {empty}");
+            assert!(has_slots, "{name}, empty defaults: {empty}");
+        }
+        if !empty {
+            let root = fresh_page(&file);
+            let rows = screens(&root).unwrap();
+            let slots = rows["R4"].with_artboard(|b| b.find_all_handles::<NestedArtboard>());
+            let unit = child(&slots[0]).unwrap().core_handle();
+            let flight = child(&slots[1]).unwrap().core_handle();
+            LiveMoves::default().prepare(&root).unwrap();
+            assert!(move_live(&slots[0], &slots[1]).is_err());
+            assert!(empty_slot(&slots[1]).is_err());
+            assert_eq!(child(&slots[0]).unwrap().core_handle(), unit);
+            assert_eq!(child(&slots[1]).unwrap().core_handle(), flight);
         }
     }
+}
+
+// Patch only known encoded declaration properties in the extracted Page run.
+#[cfg(feature = "tools")]
+fn replacement_page(s: &Scene, rejected: bool) -> Vec<u8> {
+    use source::{core::binary_reader::BinaryReader, runtime_header::RuntimeHeader};
+    let bytes = fixture::fixture(2);
+    let mut reader = BinaryReader::new(&bytes);
+    assert!(RuntimeHeader::read(
+        &mut reader,
+        &mut RuntimeHeader::default()
+    ));
+    let offset = bytes.len() - reader.position().len();
+    let range = s._file.with_file(|f| f.artboard_byte_range(0));
+    let mut page = bytes[offset + range.start..offset + range.end].to_vec();
+    fn key(mut n: u16) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        while n >= 128 {
+            bytes.push((n as u8 & 127) | 128);
+            n >>= 7;
+        }
+        bytes.push(n as u8);
+        bytes
+    }
+    for field in [records::FROM_ARTBOARD, records::TO_ARTBOARD] {
+        let mut prefix = key(field);
+        prefix.push(1); // one-byte artboard name
+        let mut count = 0;
+        for i in 0..page.len() - prefix.len() {
+            if page[i..].starts_with(&prefix) {
+                let value = &mut page[i + prefix.len()];
+                assert!(matches!(*value, b'A' | b'B'));
+                *value = if rejected {
+                    if *value == b'A' { b'X' } else { b'Y' }
+                } else {
+                    b'B'
+                };
+                count += 1;
+            }
+        }
+        assert_eq!(count, 2);
+    }
+    if rejected {
+        // Duplicate a valid mapping at the end of the Page run. Individual
+        // lifecycle validation succeeds, but validate_step_units rejects it.
+        let prefix = key(records::LiveStepUnit::TYPE_KEY);
+        let start = page
+            .windows(prefix.len())
+            .position(|w| w == prefix)
+            .unwrap();
+        let end = start + page[start..].iter().position(|v| *v == 0).unwrap() + 1;
+        let duplicate = page[start..end].to_vec();
+        page.extend(duplicate);
+    }
+    page
+}
+
+fn fresh_page(file: &RuntimeFileHandle) -> RuntimeArtboardInstanceHandle {
+    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    root
+}
+
+#[cfg(feature = "tools")]
+#[test]
+fn import_validation_rejected_replacement_preserves_existing_definitions() {
+    let s = Scene::new();
+    let page = s
+        ._file
+        .with_file(|f| f.artboard_named_source("Page"))
+        .unwrap();
+    let records = ["A", "B"].map(|name| {
+        s._file
+            .with_file(|f| f.artboard_named_source(name))
+            .unwrap()
+            .with_downcast::<Artboard, _>(|b| b.find_all_handles::<records::LiveSlot>())
+            .unwrap()
+    });
+    let bytes = replacement_page(&s, true);
+    assert_eq!(
+        s._file.with_file_mut(|f| f.replace_artboard(0, &bytes)),
+        ImportResult::Malformed
+    );
+    assert_eq!(
+        s._file
+            .with_file(|f| f.artboard_named_source("Page"))
+            .unwrap(),
+        page
+    );
+    for (name, before) in ["A", "B"].into_iter().zip(records) {
+        let after = s
+            ._file
+            .with_file(|f| f.artboard_named_source(name))
+            .unwrap()
+            .with_downcast::<Artboard, _>(|b| b.find_all_handles::<records::LiveSlot>())
+            .unwrap();
+        assert!(!before.is_empty());
+        assert_eq!(before, after, "{name} definition records changed");
+        assert!(before.iter().all(CoreHandle::is_alive));
+    }
+    let root = fresh_page(&s._file);
+    let rows = screens(&root).unwrap();
+    let source = rows["A"].with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
+    let destination =
+        rows["B"].with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
+    let unit = child(&source).unwrap().core_handle();
+    let mut moves = LiveMoves::default();
+    moves.step_begin(&root, "B", Some("t1")).unwrap();
+    moves.step_end(&root, "B", Some("t1")).unwrap();
+    assert_eq!(child(&destination).unwrap().core_handle(), unit);
+}
+
+#[cfg(feature = "tools")]
+#[test]
+fn import_validation_successful_replacement_ignores_former_screen_slots() {
+    let mut s = Scene::new();
+    let bytes = replacement_page(&s, false);
+    assert_eq!(
+        s._file.with_file_mut(|f| f.replace_artboard(0, &bytes)),
+        ImportResult::Success
+    );
+    let root = fresh_page(&s._file);
+    let rows = screens(&root).unwrap();
+    let a = &rows["A"];
+    assert!(
+        !a.with_artboard(|b| b.find_all_handles::<records::LiveSlot>())
+            .is_empty()
+    );
+    let slots = a.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
+    let unit = child(&slots[0]).unwrap().core_handle();
+    let flight = child(&slots[1]).unwrap().core_handle();
+    let mut moves = LiveMoves::default();
+    moves.prepare(&root).unwrap();
+    assert_eq!(
+        child(&slots[1]).unwrap().core_handle(),
+        flight,
+        "ignored flight was emptied"
+    );
+    assert!(move_live(&slots[0], &slots[1]).is_err());
+    assert!(empty_slot(&slots[1]).is_err());
+    assert_eq!(child(&slots[0]).unwrap().core_handle(), unit);
+    // The retained old occurrence still has its original A/B classification.
+    s.begin();
+    s.end();
+}
+
+#[test]
+fn import_validation_preserves_and_ignores_steps_without_screens() {
+    let mut bytes = fixture::fixture(2);
+    for i in 0..bytes.len() - 7 {
+        if &bytes[i..i + 7] == b"screens" {
+            bytes[i..i + 7].copy_from_slice(b"content");
+        }
+    }
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = fresh_page(&file);
+    assert_eq!(
+        root.with_artboard(|b| b.find_all_handles::<records::LiveStep>().len()),
+        2
+    );
+    assert_eq!(
+        root.with_artboard(|b| b.find_all_handles::<records::LiveStepUnit>().len()),
+        2
+    );
+    assert!(!hosted_scene::enabled(&root));
+    let mut moves = LiveMoves::default();
+    moves.prepare(&root).unwrap();
+    assert!(moves.frame_scope(&root, &[]).unwrap().is_none());
+    assert!(moves.step_begin(&root, "B", Some("t1")).is_err());
 }

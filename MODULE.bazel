@@ -44,6 +44,7 @@ use_repo(ndk, "androidndk")
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.annotation(
     crate = "libhydrogen-sys",
+    repositories = ["runtime_crates", "runtime_native_tools_crates"],
     build_script_use_default_shell_env = "on",
 )
 crate.from_cargo(

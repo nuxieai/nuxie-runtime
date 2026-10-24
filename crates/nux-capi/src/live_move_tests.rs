@@ -2000,3 +2000,166 @@ fn live_moves_detached_row_write_and_remove_in_one_batch() {
 fn live_moves_detached_row_late_write_after_previous_step() {
     unsafe { detached_row_write_case(true, true) }
 }
+
+#[test]
+fn live_moves_native_typing_requires_a_fresh_presented_snapshot() {
+    use nuxie::runtime::{focus_data::FocusData, semantic::semantic_data::SemanticData};
+    unsafe {
+        let scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        let root = (&(*scene.player).artboard)
+            .instance
+            .borrow()
+            .native_handle();
+        let rows = nuxie::live_move::screens(&root).unwrap();
+        let source = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
+        let unit = source
+            .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
+            .flatten()
+            .unwrap();
+        let field_id = unit
+            .with_artboard(|b| b.find_all_handles::<SemanticData>())
+            .into_iter()
+            .find_map(|h| {
+                h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
+                    .flatten()
+                    .filter(|node| node.borrow().role == 6)
+            })
+            .unwrap()
+            .borrow()
+            .id();
+        let focus = unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+            .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+            .flatten()
+            .unwrap();
+        unit.with_artboard(|b| b.focus_manager())
+            .unwrap()
+            .with_focus_manager_mut(|m| m.set_focus(focus));
+        acknowledge_current(scene.player);
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(scene.player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let read = |capture, expected, text: &str| {
+            let mut bytes = [0u8; 64];
+            let mut length = 999;
+            assert_eq!(
+                nux_player_field_string_copy(
+                    scene.player,
+                    capture,
+                    field_id,
+                    view("edit"),
+                    bytes.as_mut_ptr(),
+                    bytes.len(),
+                    &mut length
+                ),
+                expected
+            );
+            if expected == NuxStatus::Ok {
+                assert_eq!(&bytes[..length], text.as_bytes());
+            } else {
+                assert_eq!(length, 0);
+            }
+        };
+        let mut original_owner = ptr::null_mut();
+        assert_eq!(
+            nux_player_field_view_model_instance(
+                scene.player,
+                snapshot,
+                field_id,
+                view("edit"),
+                &mut original_owner
+            ),
+            NuxStatus::Ok
+        );
+        for text in ["hello", "hello there"] {
+            assert_eq!(
+                nux_player_validate_semantic_snapshot(scene.player, snapshot),
+                NuxStatus::Ok
+            );
+            // Android nativeWriter selects all, releases the key, then sends
+            // the complete EditText draft through zero-time player steps.
+            let inputs = [
+                NuxPlayerFocusInput {
+                    kind: NUX_PLAYER_FOCUS_KIND_KEY,
+                    key_code: 65,
+                    modifiers: 8,
+                    pressed: 1,
+                    ..Default::default()
+                },
+                NuxPlayerFocusInput {
+                    kind: NUX_PLAYER_FOCUS_KIND_KEY,
+                    key_code: 65,
+                    modifiers: 8,
+                    pressed: 0,
+                    ..Default::default()
+                },
+                NuxPlayerFocusInput {
+                    kind: NUX_PLAYER_FOCUS_KIND_TEXT,
+                    text: view(text),
+                    ..Default::default()
+                },
+            ];
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                step_status(
+                    scene.player,
+                    &NuxPlayerStep {
+                        focus_inputs: inputs.as_ptr(),
+                        focus_input_count: inputs.len(),
+                        ..Default::default()
+                    },
+                    &mut result
+                ),
+                NuxStatus::Ok
+            );
+            let mut scheduling = NuxPlayerSchedulingInfo::default();
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut scheduling),
+                NuxStatus::Ok
+            );
+            nux_player_step_result_free(result);
+            assert!(scheduling.render_required);
+            read(snapshot, NuxStatus::HandleMismatch, "");
+            let mut premature = ptr::null_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(scene.player, &mut premature),
+                NuxStatus::HandleMismatch
+            );
+            assert!(premature.is_null());
+            // The renderer must actually present this revision before the host
+            // acknowledges it. The test models that presentation receipt here.
+            assert_eq!(
+                nux_player_acknowledge_presented(scene.player, scheduling.render_revision),
+                NuxStatus::Ok
+            );
+            read(snapshot, NuxStatus::HandleMismatch, "");
+            nux_semantic_snapshot_free(snapshot);
+            snapshot = ptr::null_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(scene.player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            read(snapshot, NuxStatus::Ok, text);
+            let mut owner = ptr::null_mut();
+            assert_eq!(
+                nux_player_field_view_model_instance(
+                    scene.player,
+                    snapshot,
+                    field_id,
+                    view("edit"),
+                    &mut owner
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                (*owner).instance.instance_identity(),
+                (*original_owner).instance.instance_identity()
+            );
+            nux_view_model_instance_free(owner);
+        }
+        nux_view_model_instance_free(original_owner);
+        nux_semantic_snapshot_free(snapshot);
+    }
+}

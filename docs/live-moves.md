@@ -719,3 +719,23 @@ After the fix, `detachedcapi` exposed an incorrect new test assumption that Page
 | `detachedcheck` | `check -p nux-capi --all-targets` | 26 targets built, exit 0. |
 
 Only the three touched Rust files were formatted with `rustfmt --edition 2024`. Formatting and whitespace checks pass. No schema or generated files changed, and nothing was committed.
+
+
+### Android stage-10 snapshot read on 5ef20c0727
+
+Verdict: (c), a stale presented snapshot read. In `android-20261024T125558Z-49097/checks.log`, native typing succeeds before `readNativeText` returns status 9. The activity's stage-10 block types and sets stage 11 without returning. If both elapsed-time thresholds have passed, the following stage-11 block reads through the old `semantic` capture in the same `actions()` call, before `presented()` refreshes it. The `native-write` line records successful select-all plus text focus inputs through zero-time player steps, not a fresh semantic capture.
+
+The C API contract requires field reads to use the current acknowledged presentation (`semantic_snapshot.rs`, `nux_player_field_string_copy`, `nux_player_validate_semantic_snapshot`, and `nux_player_semantic_snapshot`). A changed typing step advances the runtime revision. Old snapshots remain invalid even after presentation, and new captures are refused until that revision is acknowledged as presented. The complete semantic snapshot implementation is identical at round 6 (`bf44dcf75a`) and this head. Its revision authorization check originated in `658d2a3106` (owned presentation-bound semantic captures), before round 6. The earlier emulator pass does not make the same-frame read valid; the harness's elapsed-time fall-through depends on when stage 10 is reached.
+
+The harness should save the capture serial at the edit, return after changing to stage 11, and defer its runtime text assertion until a successful renderer presentation has acknowledged the new revision and `presented()` has installed a newer snapshot that validates. Merely capturing again immediately after typing is insufficient. Presentation must not be acknowledged early just to authorize the read. Keep the native editor and field identity; replace the stale capture and refresh field metadata through the existing presentation path.
+
+`live_moves_native_typing_requires_a_fresh_presented_snapshot` uses the two-screen device fixture, writes `hello` then `hello there` using the harness's key-down/key-up/text order, and confirms the held snapshot returns HANDLE_MISMATCH. A premature fresh capture also fails. After the presentation receipt and a fresh capture, the correct string is readable with the same field-owner identity. No runtime or SDK implementation changed.
+
+| Request | Result |
+| --- | --- |
+| `snapshotorder` | Test compile error from comparing a bool to an integer; corrected in the test. |
+| `snapshotorderfixed` | New focused test passed, exit 0. |
+| `snapshotcapi` | `test -p nux-capi --lib live_moves`: 20 passed, exit 0. |
+| `snapshotfull` | `test -p nux-capi`: 275 tests across 22 targets passed, exit 0. |
+
+The test file was formatted with `rustfmt --edition 2024`. Whitespace checks pass. No commits were made. This diagnoses the Android failure; it does not claim a new emulator run or completion of that run's collapsed-budget stage.

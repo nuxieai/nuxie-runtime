@@ -1090,18 +1090,29 @@ impl CoreHandle {
                 // Nuxie: shared frame projection and first-write checkpoint.
                 crate::host_viewmodel::checkpoint_live_value(self, object);
                 let result = f(object);
-                // Nuxie: an opted-in list's collapse may need to read its host
-                // ancestry. Complete that work after its payload borrow ends.
-                let collapse = if slot.core_type.get()
+                // Row focus construction and opted-in collapse both walk host
+                // ancestry. Complete them after the list's payload borrow ends.
+                let (collapse, focus) = if slot.core_type.get()
                     == crate::source::artboard_component_list::ArtboardComponentList::TYPE_KEY
                 {
                     object
                         .as_artboard_component_list_mut()
-                        .and_then(|list| list.take_live_move_collapse())
+                        .map(|list| {
+                            (
+                                list.take_live_move_collapse(),
+                                list.take_pending_focus_tree_build(),
+                            )
+                        })
+                        .unwrap_or_default()
                 } else {
-                    None
+                    (None, None)
                 };
                 drop(payload);
+                if let Some(manager) = focus
+                    && self.is_alive()
+                {
+                    crate::source::artboard_component_list::ArtboardComponentList::build_list_row_focus_trees_occurrence(self, manager);
+                }
                 if let Some(value) = collapse
                     && self.is_alive()
                 {

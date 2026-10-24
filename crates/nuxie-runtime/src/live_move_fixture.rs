@@ -1677,6 +1677,87 @@ pub fn ordinary_list_fixture(rows: usize) -> Vec<u8> {
     b
 }
 
+/// A populated ordinary list inside a row inserted into an initially empty
+/// outer list. No page records, map rules, fonts, scripts, or nested hosts.
+pub fn focus_list_fixture() -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    obj(&mut b, "ViewModel", &[("name", S("Button"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
+    for (id, name, property) in [(1, "Row", "children"), (2, "Page", "screens")] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+        obj(&mut b, "ViewModelPropertyList", &[("name", S(property))]);
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(id))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceList",
+            &[("viewModelPropertyId", U(0))],
+        );
+        if id == 1 {
+            obj(
+                &mut b,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", U(0)), ("viewModelInstanceId", U(0))],
+            );
+        }
+    }
+    for (id, name, property) in [(2, "Page", "screens"), (1, "Row", "children")] {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(name)),
+                ("width", F(100.0)),
+                ("height", F(100.0)),
+                ("viewModelId", U(id)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "ArtboardComponentList",
+            &[("name", S(property)), ("parentId", U(0))],
+        );
+        bind(&mut b, 800, &[id as u8, 0]);
+        machine(&mut b, false);
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Button")),
+            ("width", F(10.0)),
+            ("height", F(10.0)),
+            ("viewModelId", U(0)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "LayoutComponent",
+        &[
+            ("parentId", U(0)),
+            ("name", S("button")),
+            ("width", F(10.0)),
+            ("height", F(10.0)),
+            ("styleId", U(2)),
+        ],
+    );
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(1))]);
+    obj(&mut b, "FocusData", &[("parentId", U(1))]);
+    obj(
+        &mut b,
+        "SemanticData",
+        &[("parentId", U(1)), ("role", U(1)), ("label", S("button"))],
+    );
+    machine(&mut b, false);
+    b
+}
+
 /// Two full-height Screen rows with different intrinsic content and bound text.
 pub fn fit_content_page_fixture() -> Vec<u8> {
     use V::*;

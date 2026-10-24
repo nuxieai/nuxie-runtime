@@ -5806,9 +5806,14 @@ impl Artboard {
             if !object.is_type_of(FocusData::TYPE_KEY) {
                 continue;
             }
-            let node = object
-                .with_downcast_mut::<FocusData, _>(FocusData::focus_node)
-                .expect("FocusData type key resolves to FocusData");
+            // Cleanup must not lazily construct a focus node: initialization
+            // computes bounds through hosts that may be unbinding this row.
+            let Some(node) = object
+                .with_downcast::<FocusData, _>(FocusData::existing_focus_node)
+                .flatten()
+            else {
+                continue;
+            };
             let should_remove = {
                 let node = node.borrow();
                 match node.manager() {

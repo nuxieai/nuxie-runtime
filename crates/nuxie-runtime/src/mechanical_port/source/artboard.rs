@@ -3684,6 +3684,14 @@ impl Artboard {
     }
 
     pub fn mark_layout_dirty(&mut self, layout_component: CoreHandle) {
+        self.mark_layout_dirty_with_host(layout_component, None);
+    }
+
+    fn mark_layout_dirty_with_host(
+        &mut self,
+        layout_component: CoreHandle,
+        borrowed_host: Option<&mut dyn ArtboardHost>,
+    ) {
         if !self.begin_layout_dirty(layout_component) {
             return;
         }
@@ -3691,11 +3699,21 @@ impl Artboard {
             if self.shares_layout_with_host() {
                 if let Some(host) = self.host() {
                     let runtime = self.runtime_self.clone();
-                    host.with_mut(|host| {
-                        if let Some(host) = host.as_artboard_host_mut() {
-                            host.mark_hosting_layout_dirty(runtime);
-                        }
-                    });
+                    if let Some(borrowed_host) = borrowed_host {
+                        assert_eq!(borrowed_host.host_component().as_ref(), Some(&host));
+                        borrowed_host.mark_hosting_layout_dirty(runtime);
+                    } else {
+                        host.with_mut(|host| {
+                            if let Some(host) = host.as_artboard_host_mut() {
+                                host.mark_hosting_layout_dirty(runtime);
+                            }
+                        });
+                    }
+                }
+            } else if let Some(borrowed_host) = borrowed_host {
+                if let Some(host) = self.begin_host_transform_dirty() {
+                    assert_eq!(borrowed_host.host_component().as_ref(), Some(&host));
+                    borrowed_host.mark_host_transform_dirty();
                 }
             } else {
                 self.mark_host_transform_dirty();
@@ -5462,7 +5480,7 @@ impl Artboard {
         self.origin_changed_with_host(None);
     }
 
-    fn origin_changed_with_host(&mut self, borrowed_host: Option<&mut dyn ArtboardHost>) {
+    fn origin_changed_with_host(&mut self, mut borrowed_host: Option<&mut dyn ArtboardHost>) {
         self.add_dirt(ComponentDirt::PATH | ComponentDirt::COMPONENTS, false);
         // Our layer: a CSS leaf artboard places its content from its origin
         // at its next layout (docs/CSS_LAYOUT.md, 5).
@@ -5471,7 +5489,13 @@ impl Artboard {
             if let Some(this) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
             {
-                self.mark_layout_dirty(this);
+                // Origin changes invalidate CSS content layout too. Mount and
+                // transport may already own the host, just as for sizing.
+                if let Some(host) = borrowed_host.as_mut() {
+                    self.mark_layout_dirty_with_host(this, Some(&mut **host));
+                } else {
+                    self.mark_layout_dirty(this);
+                }
             }
         }
         if let Some(borrowed_host) = borrowed_host {

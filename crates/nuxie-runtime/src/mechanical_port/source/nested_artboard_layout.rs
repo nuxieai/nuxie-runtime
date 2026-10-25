@@ -79,9 +79,9 @@ impl NestedArtboardLayout {
         nested
     }
 
-    fn mark_hosting_layout_dirty_instance(&mut self, instance: &RuntimeArtboardInstanceHandle) {
+    fn mark_hosting_layout_dirty_root(&mut self, root: CoreHandle) {
         if let Some(artboard) = self.base.base.parent_artboard_handle() {
-            Artboard::mark_layout_dirty_occurrence(&artboard, instance.core_handle(), None);
+            Artboard::mark_layout_dirty_occurrence(&artboard, root, None);
         }
     }
 
@@ -327,7 +327,7 @@ impl StyleOverrideProvider for NestedArtboardLayout {
         self.base.instance_width()
     }
     fn mark_hosting_layout_dirty(&mut self, artboard: &RuntimeArtboardInstanceHandle) {
-        self.mark_hosting_layout_dirty_instance(artboard);
+        self.mark_hosting_layout_dirty_root(artboard.core_handle());
     }
     fn borrowed_artboard_host(&mut self) -> Option<&mut dyn ArtboardHost> {
         Some(self)
@@ -426,8 +426,10 @@ impl ArtboardHost for NestedArtboardLayout {
     }
 
     fn mark_hosting_layout_dirty(&mut self, _artboard_instance: RuntimeArtboardInstanceWeakHandle) {
-        if let Some(instance) = self.base.base.live_move_layout_instance() {
-            self.mark_hosting_layout_dirty_instance(&instance);
+        // The child's origin setter may still own its Artboard borrow. The
+        // mounted reference already holds its identity; do not read it again.
+        if let Some(root) = self.base.base.artboard_referencer.referenced_artboard() {
+            self.mark_hosting_layout_dirty_root(root);
         }
     }
 

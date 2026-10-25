@@ -37,16 +37,15 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `3d7dcc5b` source checkpoint advances runtime/source-oracle pins while
-upstream removes unshipped CoreGraphics renderer/test-window adapters and the
-optional Silver visual diagnostic. No live downstream owner is deleted; Apple
-image decoding/framework links and Silver producers/baselines remain unchanged.
-Both independent reviews are complete and clean; exact regenerated Silver was
-verified to change only its source reference. No new pool compilation was run
-because runtime and shader inputs are unchanged. Imported
+The `2a29c82d` source checkpoint advances runtime/source-oracle pins while
+accounting for changes to upstream's test-deployment helper, which has no live
+Nuxie counterpart. Both independent reviews are complete and clean. Exact
+regenerated Silver was checked to change only its source reference. No new pool
+compilation was run because runtime and shader inputs are unchanged. Imported shader
 products retain actual `41a2120b` provenance from pool job
-`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical Metal captures and prior
-validation evidence remain at their original checkpoints in the sync map.
+`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical Metal captures, validation
+evidence and browser/device limitations remain at their original checkpoints
+in the sync map.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

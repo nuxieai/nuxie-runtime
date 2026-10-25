@@ -4476,3 +4476,207 @@ fn a_shared_layout_flight_settles_shifted_sibling_drawing_without_advancing_play
 fn a_shared_layout_flight_settles_shifted_sibling_hit_testing_without_advancing_playback() {
     shared_layout_flight_frame(true);
 }
+
+fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: bool) {
+    use source::{
+        layout_component::LayoutComponent,
+        math::{mat2d::Mat2D, vec2d::Vec2D},
+    };
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &if two_flights {
+            fixture::shared_layout_two_flight_endpoint_fixture()
+        } else {
+            fixture::shared_layout_endpoint_fixture()
+        },
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = file.with_file(|f| f.artboard_named("SharedPage")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let player = root.default_state_machine_handle().unwrap();
+    player.with_instance_mut(|m| m.bind_view_model_instance(model));
+    player.advance_and_apply(0.0);
+    let rows = screens(&root).unwrap();
+    let screen = &rows["FlightScreen"];
+    let destination = &rows["Sibling"];
+    let slot = |row: &RuntimeArtboardInstanceHandle, name| {
+        row.with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+            .unwrap()
+    };
+    let from = slot(screen, "source");
+    let to = slot(destination, "landing");
+    let flight = slot(screen, "flight");
+    empty_slot(&slot(screen, "destination")).unwrap();
+    set(&from, 13, 30.0);
+    set(&to, 13, 200.0);
+    set(&to, 14, 20.0);
+    child(&to).unwrap().set_size(200.0, 120.0);
+    if two_flights {
+        let from2 = slot(screen, "source2");
+        let to2 = slot(destination, "landing2");
+        child(&from2).unwrap().set_size(80.0, 40.0);
+        child(&to2).unwrap().set_size(300.0, 160.0);
+        let color = child(&from2)
+            .unwrap()
+            .with_artboard(|b| {
+                b.find_handle::<source::shapes::paint::solid_color::SolidColor>("markerColor")
+            })
+            .unwrap();
+        assert!(CoreRegistry::set_color_handle(
+            &color,
+            37,
+            0xffabcdef_u32 as i32
+        ));
+    }
+    player.advance_and_apply(0.0);
+    let original = child(&from).unwrap();
+    let playback = machine(&from);
+    let reflow = original
+        .with_artboard(|b| b.find_handle::<LayoutComponent>("reflow"))
+        .unwrap();
+    let time = || {
+        playback
+            .with_instance_mut(|m| m.current_animation_by_index(0))
+            .unwrap()
+            .first_animation(|a| a.time())
+            .unwrap()
+    };
+    let draw = || {
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        root.draw(&mut renderer);
+        let stream = factory.borrow().stream();
+        let mut matrix = Mat2D::identity();
+        let mut stack = Vec::new();
+        let mut points = Vec::new();
+        for line in stream.lines() {
+            if line == "save" {
+                stack.push(matrix);
+            } else if line == "restore" {
+                matrix = stack.pop().unwrap();
+            } else if let Some(values) = line
+                .strip_prefix("transform matrix=[")
+                .and_then(|s| s.strip_suffix(']'))
+            {
+                let mut local = Mat2D::identity();
+                for (i, value) in values.split(',').enumerate() {
+                    local[i] = value.parse().unwrap();
+                }
+                matrix *= local;
+            } else if line.starts_with("drawPath ") && line.contains("color=0xffedcba9") {
+                assert!(points.is_empty(), "only the live unit's marker paints");
+                for point in line
+                    .split("points=[")
+                    .nth(1)
+                    .unwrap()
+                    .split(']')
+                    .next()
+                    .unwrap()
+                    .split("),(")
+                {
+                    let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+                    points.push(matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap()));
+                }
+            }
+        }
+        assert!(!points.is_empty());
+        Vec2D::new(
+            points.iter().map(|p| p.x).fold(f32::INFINITY, f32::min),
+            points.iter().map(|p| p.y).fold(f32::INFINITY, f32::min),
+        )
+    };
+    let mut moves = LiveMoves::default();
+    moves.step_begin(&root, "Sibling", Some("shared")).unwrap();
+    for (frame, progress) in progresses.iter().copied().enumerate() {
+        for follower in moves.flights(&root) {
+            set(&follower.controls(), 62003, progress);
+        }
+        player.advance_and_apply(0.1);
+        let before = time();
+        let solves = Artboard::layout_pass_count();
+        hosted_scene::measure_walks(true);
+        moves.after_advance(&root).unwrap();
+        assert_eq!(
+            Artboard::layout_pass_count() - solves,
+            1,
+            "resize solves the shared tree once; pose settlement must not solve again"
+        );
+        let visits = hosted_scene::measure_walks(false);
+        assert_eq!(visits.advance, 0);
+        close(time(), before);
+        close(time(), 0.1 * (frame + 1) as f32);
+        assert_eq!(
+            child(&flight).unwrap().core_handle(),
+            original.core_handle()
+        );
+        let width = 100.0 + 100.0 * progress;
+        let height = 80.0 + 40.0 * progress;
+        close(original.with_artboard(|b| b.layout_width()), width);
+        close(
+            reflow
+                .with_downcast::<LayoutComponent, _>(|b| b.layout_width())
+                .unwrap(),
+            width,
+        );
+        close(
+            reflow
+                .with_downcast::<LayoutComponent, _>(|b| b.layout_height())
+                .unwrap(),
+            height,
+        );
+        let row_height = height
+            + if two_flights {
+                40.0 + 120.0 * progress
+            } else {
+                0.0
+            };
+        close(screen.with_artboard(|b| b.layout_height()), row_height);
+        close(destination.with_artboard(|b| b.layout_y()), row_height);
+        let a = slot_pose(&from).unwrap().transform;
+        let b = slot_pose(&to).unwrap().transform;
+        let actual = draw();
+        close(actual.x, a[4] + (b[4] - a[4]) * progress);
+        close(actual.y, a[5] + (b[5] - a[5]) * progress);
+        let solves = Artboard::layout_pass_count();
+        moves.after_advance(&root).unwrap();
+        assert_eq!(
+            Artboard::layout_pass_count(),
+            solves,
+            "reprojecting a pose must leave layout clean"
+        );
+        close(draw().y, actual.y);
+        close(time(), before);
+    }
+    assert_eq!(*progresses.last().unwrap(), 1.0);
+    let before_landing = draw();
+    let before_time = time();
+    moves.step_end(&root, "Sibling", Some("shared")).unwrap();
+    let after_landing = draw();
+    close(after_landing.x, before_landing.x);
+    close(after_landing.y, before_landing.y);
+    close(time(), before_time);
+    assert_eq!(child(&to).unwrap().core_handle(), original.core_handle());
+    close(original.with_artboard(|b| b.layout_width()), 200.0);
+    close(original.with_artboard(|b| b.layout_height()), 120.0);
+}
+
+#[test]
+fn a_resizing_flight_reaches_its_settled_destination_without_a_landing_jump() {
+    a_flight_aims_at_the_settled_destination(&[1.0], false);
+}
+
+#[test]
+fn a_resizing_flight_interpolates_between_settled_endpoints_of_the_same_frame() {
+    a_flight_aims_at_the_settled_destination(&[0.25, 0.5, 0.75, 1.0], false);
+}
+
+#[test]
+fn a_resizing_flight_samples_poses_only_after_all_flights_have_resized() {
+    a_flight_aims_at_the_settled_destination(&[0.25, 0.5, 0.75, 1.0], true);
+}

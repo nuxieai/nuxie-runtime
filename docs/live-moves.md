@@ -38,7 +38,14 @@ Within one semantic manager, only the existing boundary is detached and attached
 
 The follower multiplies blended endpoint opacity by the flight slot's keyable `fade`, before compensating for the flight parent's effective inherited and hosted opacity. Pose endpoints can hold different unit artboards. Only transport requires compatible artboards.
 
-Following applies every active flight pose before settling each affected row once. The ordinary dirty-component update settles the transported subtree. A shared row with two flights receives one row update and two child updates, with zero playback advances.
+A live-move frame has four barriers, each across all active flights:
+
+1. **Size:** capture keyed controls and endpoint sizes without sampling transforms, then apply every follower's size and blended values. Values belong here because their bindings can affect layout. Layout mode writes the interpolated box; scale mode keeps its departure box.
+2. **Layout:** settle affected layout roots through the ordinary `Artboard::update_pass_handle`, with inner independent trees before containing trees. Shared roots are deduplicated. The ordinary list path refreshes cached row transforms and settles awake siblings. Explicit row passes also cover fixed-size Screens whose hosting list stays clean.
+3. **Pose:** sample all awake endpoint and flight-parent transforms from that settled layout, retaining the last settled pose of sleeping endpoints. Compute all projections before applying their transform/opacity overrides. Use the same captured controls as Size; do not write size or blended values here.
+4. **Settle:** use the ordinary update pass again to publish the final transforms and hosted caches. Poses do not invalidate layout, so this phase does not solve it again. Neither update phase advances machines or timelines.
+
+A single pass cannot replace Layout and the final Settle when sizing dirties layout: pose sampling must happen between them. Clean component passes are skipped, so a frame without size/value work still needs just the final row pass (one row and two child updates for two flights sharing that row). The sizing pass and pose projection are separate operations; there is no layout/pose feedback loop.
 
 An explicit occurrence VM can belong to its original Screen arena. The scene occurrence holds its storage lease by transported unit identity while it is needed. Slots and rows never own another row. Return and replacement release the lease, and dropping the scene releases every remaining lease. There is no arena history retained for the occurrence's lifetime. Empty slots retain only a layout leaf and identity observations. The controller caches weak row and slot identities. Removing an active flight holder or landing row also prunes the active step and settles surviving loans. If the incoming row leaves while another flight row survives, its loans return to surviving empty homes. Mounted rows determine its records and holder history. Removing a holder first returns loans to surviving homes, before the row is released.
 

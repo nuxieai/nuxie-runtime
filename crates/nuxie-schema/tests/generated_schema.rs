@@ -16,7 +16,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // with its Number and String kinds, and TextStyleDecoration. CSS layout
     // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
     // (61000 to 61005, including TextStyleCssText, docs/CSS_LAYOUT.md).
-    assert_eq!(DEFINITIONS.len(), 370);
+    // Live-move records add LiveSlot, LiveStep and LiveStepUnit (62000–62002).
+    assert_eq!(DEFINITIONS.len(), 373);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -48,7 +49,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 106
     // (61000 to 61105): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
-    assert_eq!(runtime_property_count, 798);
+    // LiveSlot adds 8, LiveStep 3 and LiveStepUnit 4 (62000 to 62014).
+    // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
+    assert_eq!(runtime_property_count, 815);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -59,13 +62,15 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // and position animate since its native property migration. Of CSS
     // layout's, 68 animate: LayoutCssStyle's 54 (its numbers), BoxGradient's
     // 9, BoxPaint's 4 and BoxShadow's spread.
-    assert_eq!(animatable_property_count, 310);
+    // LiveSlot's progress, pathX, pathY and fade add four; text limits do not animate.
+    assert_eq!(animatable_property_count, 314);
 
     let grouped_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.group.is_some())
         .count();
+    // Live-move records and text limits add no groups, non-coop or described fields.
     assert_eq!(grouped_property_count, 73);
 
     let non_coop_property_count = DEFINITIONS

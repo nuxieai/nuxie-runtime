@@ -226,7 +226,10 @@ fn nuxie_definitions_stay_out_of_the_cpp_registry() {
             ("BoxGradient", 61002),
             ("BoxShadow", 61003),
             ("BoxPaint", 61004),
-            ("TextStyleCssText", 61005)
+            ("TextStyleCssText", 61005),
+            ("LiveSlot", 62000),
+            ("LiveStep", 62001),
+            ("LiveStepUnit", 62002)
         ]
     );
 

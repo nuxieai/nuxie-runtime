@@ -37,7 +37,7 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `156e959c` source checkpoint advances runtime/source-oracle
+The `8ea42e0e` source checkpoint advances runtime/source-oracle
 pins while shader source/archive/tool pins and generated products retain their
 actual `74e5d3f6` provenance. Pool generation for those products succeeded in job
 `8eb47d12-0906-4ce1-8828-f76a6d84f51f`; exact artifact import and both

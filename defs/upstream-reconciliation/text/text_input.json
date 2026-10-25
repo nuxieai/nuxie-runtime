@@ -1,38 +1,56 @@
 {
   "name": "TextInput",
-  "key": { "int": 569, "string": "textinput" },
+  "key": {
+    "int": 569,
+    "string": "textinput"
+  },
   "extends": "drawable.json",
   "properties": {
     "alignValue": {
       "type": "uint",
       "initialValue": "0",
-      "key": { "int": 222, "string": "alignvalue" },
+      "key": {
+        "int": 222,
+        "string": "alignvalue"
+      },
       "bindable": true
     },
     "verticalAlignValue": {
       "type": "uint",
       "initialValue": "0",
-      "key": { "int": 1094, "string": "verticalalignvalue" },
+      "key": {
+        "int": 1094,
+        "string": "verticalalignvalue"
+      },
       "bindable": true
     },
     "text": {
       "type": "String",
       "initialValue": "''",
-      "key": { "int": 817, "string": "text" },
+      "key": {
+        "int": 817,
+        "string": "text"
+      },
       "bindable": true
     },
     "selectionRadius": {
       "type": "double",
       "initialValue": "5.0",
       "animates": true,
-      "key": { "int": 818, "string": "selectionradius" },
+      "key": {
+        "int": 818,
+        "string": "selectionradius"
+      },
       "description": "Selection radius applied to the selection geometry",
       "bindable": true
     },
     "fieldHeight": {
       "type": "double",
       "initialValue": "98.0",
-      "key": { "int": 819, "string": "fieldheight" },
+      "key": {
+        "int": 819,
+        "string": "fieldheight"
+      },
       "description": "An edit time property used to track the height of the field in the inspector",
       "runtime": false,
       "coop": false
@@ -40,20 +58,47 @@
     "multiline": {
       "type": "bool",
       "initialValue": "true",
-      "key": { "int": 979, "string": "multiline" },
+      "key": {
+        "int": 979,
+        "string": "multiline"
+      },
       "description": "Whether the text input is single line or multiline",
       "bindable": true
     },
     "selectAllOnFocus": {
       "type": "bool",
       "initialValue": "false",
-      "key": { "int": 1099, "string": "selectallonfocus" }
+      "key": {
+        "int": 1099,
+        "string": "selectallonfocus"
+      }
     },
     "obscured": {
       "type": "bool",
       "initialValue": "false",
-      "key": { "int": 1095, "string": "obscured" },
+      "key": {
+        "int": 1095,
+        "string": "obscured"
+      },
       "description": "Whether the text input obscures its text for password entry",
+      "bindable": true
+    },
+    "maxCharacters": {
+      "type": "uint",
+      "initialValue": "0",
+      "key": {
+        "int": 489,
+        "string": "maxcharacters"
+      },
+      "bindable": true
+    },
+    "maxLines": {
+      "type": "uint",
+      "initialValue": "0",
+      "key": {
+        "int": 490,
+        "string": "maxlines"
+      },
       "bindable": true
     }
   }

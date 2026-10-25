@@ -4608,6 +4608,8 @@ pub enum CoreField {
     TextInputMultiline,
     TextInputObscured,
     TextInputSelectAllOnFocus,
+    TextInputMaxCharacters,
+    TextInputMaxLines,
     TextInputAlignValue,
     TextInputVerticalAlignValue,
     TextInputSelectionRadius,
@@ -9495,6 +9497,8 @@ impl CoreRegistry {
             279 => CoreField::TextStyleFontAssetId,
             289 => CoreField::TextStyleAxisTag,
             281 => CoreField::TextAlignValue,
+            489 => CoreField::TextInputMaxCharacters,
+            490 => CoreField::TextInputMaxLines,
             222 => CoreField::TextInputAlignValue,
             1094 => CoreField::TextInputVerticalAlignValue,
             284 => CoreField::TextSizingValue,
@@ -10191,6 +10195,8 @@ impl CoreRegistry {
             279 => CoreField::TextStyleFontAssetId,
             289 => CoreField::TextStyleAxisTag,
             281 => CoreField::TextAlignValue,
+            489 => CoreField::TextInputMaxCharacters,
+            490 => CoreField::TextInputMaxLines,
             222 => CoreField::TextInputAlignValue,
             1094 => CoreField::TextInputVerticalAlignValue,
             284 => CoreField::TextSizingValue,
@@ -58490,6 +58496,18 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
         match field {
+            CoreField::TextInputMaxCharacters => {
+                if self.base.set_max_characters_value(value) {
+                    self.max_characters_changed();
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 489);
+                }
+            }
+            CoreField::TextInputMaxLines => {
+                if self.base.set_max_lines_value(value) {
+                    self.max_lines_changed();
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 490);
+                }
+            }
             CoreField::TextInputAlignValue => {
                 if self.base.set_align_value_value(value) {
                     self.align_value_changed();
@@ -58785,6 +58803,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::TextInputMaxCharacters => self.base.max_characters(),
+            CoreField::TextInputMaxLines => self.base.max_lines(),
             CoreField::TextInputAlignValue => self.base.align_value(),
             CoreField::TextInputVerticalAlignValue => self.base.vertical_align_value(),
             CoreField::ComponentParentId => self
@@ -86954,7 +86974,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_input_base::TextInputBaseCallbacks
     for crate::mechanical_port::source::text::text_input::TextInput
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text_input::TextInput; align_value_changed, vertical_align_value_changed, multiline_changed, obscured_changed, selection_radius_changed, text_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text_input::TextInput; max_lines_changed, max_characters_changed, align_value_changed, vertical_align_value_changed, multiline_changed, obscured_changed, selection_radius_changed, text_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
     }

@@ -93,18 +93,43 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `73d7b1c208b6f044c3679e73b864fc55d47516b0`
+- LAST_SYNCED_SHA: `0238f2995df485168a87801e4dbf92478a3317d2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  34 upstream commits remain after this checkpoint at the fetched target.
-  All 286 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (308 after `5892bb05`); this
+  33 upstream commits remain after this checkpoint at the fetched target.
+  All 287 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (309 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `0238f299`: account for the complete 54-file public delta. Translate global
+  text-style references, per-text instances and on-demand list-item styles,
+  shareability analysis/cache lifetimes, host data-context reads, geometry/paint
+  ownership, style metrics and variation propagation, and targetless pointer
+  listeners serving styled runs in host coordinates. Wire generated types,
+  advancing/artboard-referencer dispatch, File ownership and artboard binding;
+  retain the missing-view-model clone behavior. Port all 26 public test cases
+  across the five global-style regression files, including listener teardown
+  sections. All five binary fixtures and authored RML remain in the exact
+  upstream fixture tree. Private `.rive_head` reveals no implementation to port.
+  Translation, both independent reviews and correction rereviews are complete.
+  Pool validation passed all 26 new global-style cases
+  (`f8d46577-da1f-443d-bde1-fdc3bc68cb63`), 871 runtime unit tests (2 ignored)
+  and 58 existing regression cases across 15 targets
+  (`ee4ce26d-f262-46e8-9e9e-bdf2eb63242d`), plus shipping C API compilation
+  (`e125b0a4-117b-44f8-9923-c35f78d6ed1a`). Validation exposed Rust callback
+  borrow boundaries in property notifications and nested/list context teardown;
+  corrections preserve notification stages, source identity and destruction order.
+  Synthetic tests now construct the derived paint type and traverse polymorphic
+  container capabilities, retaining all assertions and tolerances. Schema and
+  callback generation ran on the pool. Silver advances its reference only;
+  no new device pixel coverage is claimed.
+  CSS layout/text behavior remains the deliberate product contract; no Yoga
+  semantics or guest Wasm engine are introduced. Source/oracle and Silver pins
+  advance; shader inputs/products retain actual `41a2120b` provenance.
 - `73d7b1c2`: account for the complete 18-file public delta. Translate shared
   artboard animation/state-machine source reads, exact object-vector reservation,
   and nested semantic visibility without destructive tree reparenting. Preserve
@@ -1758,6 +1783,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0238f2995df485168a87801e4dbf92478a3317d2` | Global text-style references, instances/sharing, host data binding and run pointer listeners; all 26 public regressions. Both reviews and correction rereviews complete. Pool: 26 new tests, 871 runtime tests (2 ignored), 58 existing regressions and shipping C API compilation pass. Full54-file public delta accounted, private metadata unclaimed; CSS contract and actual41a shader provenance retained. | — |
 | `73d7b1c208b6f044c3679e73b864fc55d47516b0` | Shared artboard source lists and nested semantic visibility/lifetime, public regression tests. Both reviews/correction rereviews complete; pool 871 runtime (2 ignored), 90 upstream regression, 119 host/live-move tests pass and shipping C API compiles. Full18-file public delta accounted, private metadata unclaimed; CSS behavior and actual41a shader provenance retained. | — |
 | `cf0f67522988e0297cb83056c63f8265cacd3e16` | Renderer recording/resource lifecycle and BC/native GPU format guards; view-model/trigger/delegate lifetime; bounded UTF decoding and raw-text/input/native Luau tests. Full91-file delta accounted; guest engine/fixtures excluded and private metadata unclaimed. Invalid-byte TextValueRun fixture not literally executable at safe-String boundary. Both reviews and correction rereviews clean; pool 871 runtime +96 runtime integration +15 lifetime +13 scripting text +592 renderer tests pass (8 ignored total), Vulkan and Metal compile pass. No device pixel claim; actual41a shader provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4e930086e8739bb1e2fe0dccced3b66ca5e3f583` | Tools image hide/reveal identity and bounded artboard settling, native Luau deterministic seed and draw settling, CSS-compatible image layout invalidation. Both independent reviews and correction rereviews clean; pool API40/runtime871+2ignored/renderer590+6ignored/scripting43 passed, tools-disabled C API and Metal tools checks passed. No device pixels. Guest-Wasm proxy/VM work excluded; private CLI/test changes unclaimed. Actual41a shader products retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
-    container_component::ContainerComponent, core::binary_reader::BinaryReader,
-    text::text_style::TextStyle,
+    core::binary_reader::BinaryReader, text::text_style::TextStyle,
+    text::text_style_reference::TextStyleReference,
 };
 
 pub trait TextStyleBaseCallbacks:
@@ -13,7 +13,7 @@ pub trait TextStyleBaseCallbacks:
 }
 
 pub struct TextStyleBase {
-    pub base: ContainerComponent,
+    pub base: TextStyleReference,
     font_size: f32,
     line_height: f32,
     letter_spacing: f32,
@@ -23,7 +23,7 @@ pub struct TextStyleBase {
 impl Default for TextStyleBase {
     fn default() -> Self {
         Self {
-            base: ContainerComponent::default(),
+            base: TextStyleReference::default(),
             font_size: 12.0,
             line_height: -1.0,
             letter_spacing: 0.0,
@@ -167,7 +167,7 @@ impl TextStyleBase {
 }
 
 impl std::ops::Deref for TextStyleBase {
-    type Target = ContainerComponent;
+    type Target = TextStyleReference;
 
     fn deref(&self) -> &Self::Target {
         &self.base

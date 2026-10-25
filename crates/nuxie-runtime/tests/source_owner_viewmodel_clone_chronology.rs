@@ -170,7 +170,7 @@ fn property(arena: &CoreArena, owner: &CoreHandle, callback: Rc<dyn Fn()>) -> Co
 fn instance(arena: &CoreArena, model: &CoreHandle) -> CoreHandle {
     let owner = arena.insert(ViewModelInstance::default());
     owner
-        .with_downcast_mut::<ViewModelInstance, _>(|owner| owner.view_model(model.clone()))
+        .with_downcast_mut::<ViewModelInstance, _>(|owner| owner.view_model(Some(model.clone())))
         .unwrap();
     owner
 }
@@ -188,7 +188,7 @@ fn clone_reads_view_model_after_open_child_clone() {
         Rc::new(move || {
             source
                 .with_downcast_mut::<ViewModelInstance, _>(|source| {
-                    source.view_model(changed.clone())
+                    source.view_model(Some(changed.clone()))
                 })
                 .unwrap();
         }),
@@ -498,7 +498,7 @@ fn clone_preserves_existing_model_fallback_when_source_has_no_model() {
                 .flatten()
                 .unwrap();
             cloned_owner
-                .with_downcast_mut::<ViewModelInstance, _>(|owner| owner.view_model(model.clone()))
+                .with_downcast_mut::<ViewModelInstance, _>(|owner| owner.view_model(Some(model.clone())))
                 .unwrap();
         }),
     });

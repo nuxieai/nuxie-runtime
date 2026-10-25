@@ -1,0 +1,9 @@
+{
+  "name": "TextStyleReference",
+  "key": {
+    "int": 1100,
+    "string": "textstylereference"
+  },
+  "extends": "container_component.json",
+  "properties": {}
+}

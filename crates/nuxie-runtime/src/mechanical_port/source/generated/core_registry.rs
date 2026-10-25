@@ -3380,7 +3380,10 @@ pub fn artboard_referencer_update_artboard_handle(
     owner: &CoreHandle,
     value: Option<CoreHandle>,
 ) -> bool {
-    if owner.is_type_of(crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY) {
+    if owner.is_type_of(crate::source::text::text_style_global::TextStyleGlobal::TYPE_KEY) {
+        crate::source::text::text_style_global::TextStyleGlobal::update_artboard_occurrence(owner, value);
+        true
+    } else if owner.is_type_of(crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY) {
         crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout::update_artboard_occurrence(owner, value);
         true
     } else if owner.is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY) {
@@ -3406,7 +3409,11 @@ pub fn data_bind_update_list_handle(owner: &CoreHandle, list: &[CoreHandle]) -> 
         crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::update_list_occurrence(owner, list);
         true
     } else {
-        owner.with_mut(|owner| owner.data_bind_update_list(list)).unwrap_or(false)
+        let updated = owner.with_mut(|owner| owner.data_bind_update_list(list)).unwrap_or(false);
+        if updated && owner.is_type_of(crate::source::text::text::Text::TYPE_KEY) {
+            crate::source::text::text::Text::resolve_list_run_styles_occurrence(owner);
+        }
+        updated
     }
 }
 
@@ -4038,6 +4045,7 @@ pub enum CoreConcreteType {
     TextVariationModifier,
     TextModifierGroup,
     TextStyle,
+    TextStyleGlobal,
     TextStylePaint,
     TextInputSelectedText,
     TextInput,
@@ -4645,6 +4653,7 @@ pub enum CoreField {
     TextStyleFeatureFeatureValue,
     TextStyleFeatureTag,
     TextStyleBackgroundCornerRadius,
+    TextStyleGlobalArtboardId,
     TextStyleFontAssetId,
     TextStyleFontSize,
     TextStyleLetterSpacing,
@@ -5337,6 +5346,11 @@ pub trait CoreCapabilities: Any {
     ) -> Option<&mut crate::mechanical_port::source::shapes::paint::dash::Dash> {
         None
     }
+    fn as_text_style_global(&self) -> Option<&crate::source::text::text_style_global::TextStyleGlobal> { None }
+    fn as_text_style_global_mut(&mut self) -> Option<&mut crate::source::text::text_style_global::TextStyleGlobal> { None }
+    fn as_text_style_paint(&self) -> Option<&crate::source::text::text_style_paint::TextStylePaint> { None }
+    fn as_text_style_paint_mut(&mut self) -> Option<&mut crate::source::text::text_style_paint::TextStylePaint> { None }
+    fn text_interface_style_reference_will_change(&mut self) -> bool { false }
     fn as_text_style(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_style::TextStyle> {
@@ -9039,6 +9053,7 @@ impl CoreRegistry {
             1069 => CoreConcreteType::TextStyleBackground,
             162 => CoreConcreteType::TextVariationModifier,
             159 => CoreConcreteType::TextModifierGroup,
+            1101 => CoreConcreteType::TextStyleGlobal,
             573 => CoreConcreteType::TextStyle,
             137 => CoreConcreteType::TextStylePaint,
             575 => CoreConcreteType::TextInputSelectedText,
@@ -9160,7 +9175,8 @@ impl CoreRegistry {
             95 => CoreField::TendonBoneId,
             378 => CoreField::TextModifierRangeRunId,
             778 => CoreField::TextTargetModifierTargetId,
-            279 => CoreField::TextStyleFontAssetId,
+             493 => CoreField::TextStyleGlobalArtboardId,
+             279 => CoreField::TextStyleFontAssetId,
             932 => CoreField::TextTextRunListSource,
             272 => CoreField::TextValueRunStyleId,
             934 => CoreField::ArtboardListMapRuleArtboardId,
@@ -9494,7 +9510,8 @@ impl CoreRegistry {
             357 => CoreField::TextStyleFeatureFeatureValue,
             320 => CoreField::TextVariationModifierAxisTag,
             335 => CoreField::TextModifierGroupModifierFlags,
-            279 => CoreField::TextStyleFontAssetId,
+             493 => CoreField::TextStyleGlobalArtboardId,
+             279 => CoreField::TextStyleFontAssetId,
             289 => CoreField::TextStyleAxisTag,
             281 => CoreField::TextAlignValue,
             489 => CoreField::TextInputMaxCharacters,
@@ -9905,7 +9922,8 @@ impl CoreRegistry {
             95 => CoreField::TendonBoneId,
             378 => CoreField::TextModifierRangeRunId,
             778 => CoreField::TextTargetModifierTargetId,
-            279 => CoreField::TextStyleFontAssetId,
+             493 => CoreField::TextStyleGlobalArtboardId,
+             279 => CoreField::TextStyleFontAssetId,
             932 => CoreField::TextTextRunListSource,
             272 => CoreField::TextValueRunStyleId,
             934 => CoreField::ArtboardListMapRuleArtboardId,
@@ -10192,7 +10210,8 @@ impl CoreRegistry {
             357 => CoreField::TextStyleFeatureFeatureValue,
             320 => CoreField::TextVariationModifierAxisTag,
             335 => CoreField::TextModifierGroupModifierFlags,
-            279 => CoreField::TextStyleFontAssetId,
+             493 => CoreField::TextStyleGlobalArtboardId,
+             279 => CoreField::TextStyleFontAssetId,
             289 => CoreField::TextStyleAxisTag,
             281 => CoreField::TextAlignValue,
             489 => CoreField::TextInputMaxCharacters,
@@ -10781,6 +10800,7 @@ impl CoreRegistry {
             414 => 0,
             415 => 0,
             487 => 0,
+            493 => 0,
             269 => 0,
             270 => 0,
             271 => 0,
@@ -11453,6 +11473,7 @@ impl CoreRegistry {
             414 => 110,
             415 => 113,
             487 => 113,
+            493 => 1101,
             269 => 113,
             270 => 113,
             271 => 113,
@@ -57627,7 +57648,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
     ) {
         match field {
             CoreField::ComponentParentId => {
-                if self.base.base.base.base.base.set_parent_id_value(value) {
+                if self.base.base.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::text::text_style::TextStyle as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
                 }
@@ -57648,7 +57669,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
     ) {
         match field {
             CoreField::ComponentName => {
-                if self.base.base.base.base.base.set_name_value(value) {
+                if self.base.base.base.base.base.base.base.set_name_value(value) {
                     <crate::mechanical_port::source::text::text_style::TextStyle as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
                 }
@@ -57718,14 +57739,14 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
+            CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             CoreField::TextStyleFontAssetId => self.base.font_asset_id(),
             _ => 0,
         }
     }
     fn get_string(&mut self, field: CoreField) -> String {
         match field {
-            CoreField::ComponentName => self.base.base.base.base.base.name().to_owned(),
+            CoreField::ComponentName => self.base.base.base.base.base.base.base.name().to_owned(),
             _ => String::new(),
         }
     }
@@ -57757,10 +57778,10 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::is_type_of
     }
     fn core(&self) -> &crate::mechanical_port::source::core::Core {
-        &self.base.base.base.base.base.base
+        &self.base.base.base.base.base.base.base.base
     }
     fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
-        &mut self.base.base.base.base.base.base
+        &mut self.base.base.base.base.base.base.base.base
     }
     fn core_type(&self) -> u16 {
         crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY
@@ -57809,7 +57830,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
                     .base
                     .base
                     .base
-                    .base
+                    .base.base.base
                     .set_parent_id_value(value)
                 {
                     <crate::mechanical_port::source::text::text_style_paint::TextStylePaint as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -57839,7 +57860,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
                     .base
                     .base
                     .base
-                    .base
+                    .base.base.base
                     .set_name_value(value)
                 {
                     <crate::mechanical_port::source::text::text_style_paint::TextStylePaint as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
@@ -57911,14 +57932,14 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
+            CoreField::ComponentParentId => self.base.base.base.base.base.base.base.base.base.parent_id(),
             CoreField::TextStyleFontAssetId => self.base.base.base.font_asset_id(),
             _ => 0,
         }
     }
     fn get_string(&mut self, field: CoreField) -> String {
         match field {
-            CoreField::ComponentName => self.base.base.base.base.base.base.base.name().to_owned(),
+            CoreField::ComponentName => self.base.base.base.base.base.base.base.base.base.name().to_owned(),
             _ => String::new(),
         }
     }
@@ -57950,10 +57971,10 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::text::text_style_paint_base::TextStylePaintBase::is_type_of
     }
     fn core(&self) -> &crate::mechanical_port::source::core::Core {
-        &self.base.base.base.base.base.base.base.base
+        &self.base.base.base.base.base.base.base.base.base.base
     }
     fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
-        &mut self.base.base.base.base.base.base.base.base
+        &mut self.base.base.base.base.base.base.base.base.base.base
     }
     fn core_type(&self) -> u16 {
         crate::mechanical_port::source::generated::text::text_style_paint_base::TextStylePaintBase::TYPE_KEY
@@ -78089,7 +78110,7 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style::Text
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
             crate::mechanical_port::source::component::Component::on_added_dirty(
-                &mut self.base.base.base.base,
+                &mut self.base.base.base.base.base.base,
                 context,
             ),
         )
@@ -78112,25 +78133,27 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style::Text
     }
 
     fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
-        Some(&self.base.base.base.base)
+        Some(&self.base.base.base.base.base.base)
     }
     fn as_component_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::component::Component> {
-        Some(&mut self.base.base.base.base)
+        Some(&mut self.base.base.base.base.base.base)
     }
     fn as_container_component(
         &self,
     ) -> Option<&crate::mechanical_port::source::container_component::ContainerComponent> {
-        Some(&self.base.base)
+        Some(&self.base.base.base.base)
     }
     fn as_container_component_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
-        Some(&mut self.base.base)
+        Some(&mut self.base.base.base.base)
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint::TextStylePaint {
+    fn as_text_style_paint(&self) -> Option<&crate::source::text::text_style_paint::TextStylePaint> { Some(self) }
+    fn as_text_style_paint_mut(&mut self) -> Option<&mut crate::source::text::text_style_paint::TextStylePaint> { Some(self) }
     fn component_on_dirty_handler(
         &self,
     ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
@@ -78226,7 +78249,7 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
             crate::mechanical_port::source::component::Component::on_added_dirty(
-                &mut self.base.base.base.base.base.base,
+                &mut self.base.base.base.base.base.base.base.base,
                 context,
             ),
         )
@@ -78255,22 +78278,22 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint
     }
 
     fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
-        Some(&self.base.base.base.base.base.base)
+        Some(&self.base.base.base.base.base.base.base.base)
     }
     fn as_component_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::component::Component> {
-        Some(&mut self.base.base.base.base.base.base)
+        Some(&mut self.base.base.base.base.base.base.base.base)
     }
     fn as_container_component(
         &self,
     ) -> Option<&crate::mechanical_port::source::container_component::ContainerComponent> {
-        Some(&self.base.base.base.base)
+        Some(&self.base.base.base.base.base.base)
     }
     fn as_container_component_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
-        Some(&mut self.base.base.base.base)
+        Some(&mut self.base.base.base.base.base.base)
     }
 }
 impl CoreCapabilities
@@ -79041,6 +79064,10 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
+    fn is_advancing_component(&self) -> bool { true }
+    fn advancing_component_quiet_state(&self) -> crate::source::advancing_component::QuietState { self.quiet_state() }
+    fn text_interface_style_reference_will_change(&mut self) -> bool { self.style_reference_will_change(); true }
+
     fn component_on_dirty_handler(
         &self,
     ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
@@ -86779,7 +86806,7 @@ impl crate::mechanical_port::source::generated::text::text_style_base::TextStyle
 {
     forward_callback_methods!(crate::mechanical_port::source::text::text_style::TextStyle; font_size_changed, letter_spacing_changed, line_height_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
-        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
+        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
@@ -86787,7 +86814,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 {
     fn notify_property_changed(&mut self, property_key: u16) {
         crate::mechanical_port::source::core::Core::notify_property_changed(
-            &mut self.base.base.base.base,
+            &mut self.base.base.base.base.base.base,
             property_key,
         )
     }
@@ -86797,7 +86824,7 @@ impl crate::mechanical_port::source::generated::text::text_style_base::TextStyle
 {
     forward_callback_methods!(crate::mechanical_port::source::text::text_style::TextStyle; font_size_changed, letter_spacing_changed, line_height_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
-        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
+        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
@@ -86805,7 +86832,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 {
     fn notify_property_changed(&mut self, property_key: u16) {
         crate::mechanical_port::source::core::Core::notify_property_changed(
-            &mut self.base.base.base.base.base.base,
+            &mut self.base.base.base.base.base.base.base.base,
             property_key,
         )
     }
@@ -88054,6 +88081,7 @@ impl CoreRegistry {
             1069 => Some(Box::new(<crate::mechanical_port::source::text::text_style_background::TextStyleBackground>::default())),
             162 => Some(Box::new(<crate::mechanical_port::source::text::text_variation_modifier::TextVariationModifier>::default())),
             159 => Some(Box::new(<crate::mechanical_port::source::text::text_modifier_group::TextModifierGroup>::default())),
+            1101 => Some(Box::new(crate::source::text::text_style_global::TextStyleGlobal::default())),
             573 => Some(Box::new(<crate::mechanical_port::source::text::text_style::TextStyle>::default())),
             137 => Some(Box::new(<crate::mechanical_port::source::text::text_style_paint::TextStylePaint>::default())),
             575 => Some(Box::new(<crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText>::default())),
@@ -88599,6 +88627,184 @@ impl crate::mechanical_port::source::generated::assets::file_asset_base::FileAss
             object,
         )
     }
+}
+
+impl CoreRegistryObject
+    for crate::mechanical_port::source::text::text_style_global::TextStyleGlobal
+{
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::text::text_style_global_base::TextStyleGlobalBase::is_type_of(type_key)
+    }
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        match field {
+            CoreField::ComponentParentId => {
+                if self.base.base.base.base.base.base.base.set_parent_id_value(value) {
+                    <crate::mechanical_port::source::text::text_style_global::TextStyleGlobal as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
+                }
+            }
+            CoreField::TextStyleGlobalArtboardId => {
+                if self.base.set_artboard_id_value(value) {
+                    <crate::mechanical_port::source::text::text_style_global::TextStyleGlobal as crate::mechanical_port::source::generated::text::text_style_global_base::TextStyleGlobalBaseCallbacks>::artboard_id_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::text::text_style_global_base::TextStyleGlobalBase::ARTBOARD_ID_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        match field {
+            CoreField::ComponentName => {
+                if self.base.base.base.base.base.base.base.set_name_value(value) {
+                    <crate::mechanical_port::source::text::text_style_global::TextStyleGlobal as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
+            CoreField::TextStyleGlobalArtboardId => self.base.artboard_id(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::ComponentName => self.base.base.base.base.base.base.base.name().to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        let _ = field;
+        0.0
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::text::text_style_global::TextStyleGlobal
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::text::text_style_global_base::TextStyleGlobalBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::text::text_style_global_base::TextStyleGlobalBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::text::text_style_global_base::TextStyleGlobalBase::is_type_of(type_key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        Some(self.clone_value())
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+
+impl crate::source::core::CoreType for crate::source::text::text_style_global::TextStyleGlobal {
+ const TYPE_KEY: u16 = 1101;
+}
+impl crate::source::generated::component_base::ComponentBaseCallbacks for crate::source::text::text_style_global::TextStyleGlobal {
+ fn notify_property_changed(&mut self, key:u16) { self.base.base.notify_property_changed(key); }
+}
+impl CoreCapabilities for crate::source::text::text_style_global::TextStyleGlobal {
+ fn as_text_style_global(&self)->Option<&Self> { Some(self) }
+ fn as_text_style_global_mut(&mut self)->Option<&mut Self> { Some(self) }
+ fn as_component(&self)->Option<&crate::source::component::Component> { Some(&self.base.base.base.base.base.base) }
+ fn as_component_mut(&mut self)->Option<&mut crate::source::component::Component> { Some(&mut self.base.base.base.base.base.base) }
+ fn as_container_component(&self)->Option<&crate::source::container_component::ContainerComponent> { Some(&self.base.base.base.base) }
+ fn as_container_component_mut(&mut self)->Option<&mut crate::source::container_component::ContainerComponent> { Some(&mut self.base.base.base.base) }
+ fn component_on_dirty_is_noop(&self)->bool { true }
+ fn component_on_dirty(&mut self,_dirt:crate::source::component_dirt::ComponentDirt)->bool { true }
+ fn lifecycle_validate(&mut self, context:&mut dyn crate::source::core_context::CoreContext)->Option<bool> { Some(self.base.validate(context)) }
+ fn lifecycle_on_added_dirty(&mut self,context:&mut dyn crate::source::core_context::CoreContext)->Option<crate::source::status_code::StatusCode> { Some(self.base.on_added_dirty(context)) }
+ fn lifecycle_on_added_clean(&mut self,context:&mut dyn crate::source::core_context::CoreContext)->Option<crate::source::status_code::StatusCode> { Some(self.on_added_clean(context)) }
+ fn lifecycle_import(&mut self, stack:&mut crate::source::importers::import_stack::ImportStack)->Option<crate::source::status_code::StatusCode> { Some(self.import(stack)) }
+ fn artboard_referencer_referenced_artboard_id(&self)->Option<i32> { Some(self.base.artboard_id() as i32) }
+ fn artboard_referencer_set_referenced_artboard(&mut self, artboard:CoreHandle)->bool { self.set_referenced_artboard(Some(artboard)); true }
+ fn is_advancing_component(&self)->bool { true }
+ fn advancing_component_quiet_state(&self)->crate::source::advancing_component::QuietState { self.quiet_state() }
 }
 
 impl crate::source::core::CoreType for crate::source::data_bind::converters::data_converter_string_template::DataConverterStringTemplate { const TYPE_KEY: u16 = 177; }

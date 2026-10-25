@@ -111,6 +111,9 @@ impl TextStyleBackground {
         if self.rects.is_empty() {
             return;
         }
+        let text_parent = self.style().text_style_parent().is_some_and(|parent| {
+            parent.is_type_of(crate::source::generated::text::text_base::TextBase::TYPE_KEY)
+        });
         let base = &self.base;
         // Read through the actual Style parent and Text matrix fields only
         // when ShapePaint requests the container transform after callbacks.
@@ -126,7 +129,9 @@ impl TextStyleBackground {
                     return;
                 }
                 let fill_rule = paint.fill_rule();
-                paint.shape_paint_mut().blend_mode(blend, additive_amount);
+                if text_parent {
+                    paint.shape_paint_mut().blend_mode(blend, additive_amount);
+                }
                 paint.shape_paint_mut().draw_with_active_container(
                     renderer,
                     &mut self.path.path,
@@ -147,11 +152,10 @@ impl TextStyleBackground {
     }
 
     fn style_world_transform(style: &CoreHandle) -> Mat2D {
-        style
+        let parent = style
             .text_style_parent()
-            .expect("TextStyleBackground parent is TextStylePaint")
-            .text_shape_world_transform()
-            .expect("TextStylePaint parent is Text")
+            .expect("TextStyleBackground parent is TextStylePaint");
+        super::text_style_paint::TextStylePaint::parent_world_transform(&parent)
     }
 
     pub fn path_builder(&self) -> CoreHandle {

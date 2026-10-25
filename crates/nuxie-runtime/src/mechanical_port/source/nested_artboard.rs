@@ -1251,7 +1251,10 @@ impl NestedArtboard {
 
     pub(crate) fn collapse_after_super(&mut self, _value: bool) {
         if let Some(instance) = self.instance.as_ref() {
-            Artboard::sync_semantic_boundary_with_host_state(&instance.core_handle(), self.is_collapsed());
+            Artboard::sync_semantic_boundary_with_host_state(
+                &instance.core_handle(),
+                self.is_collapsed(),
+            );
         }
     }
 
@@ -1441,6 +1444,148 @@ impl NestedArtboard {
     pub fn copy_data_bind_path_ids(&mut self, object: &NestedArtboard) {
         self.data_bind_path_referencer
             .copy_data_bind_path(&object.data_bind_path_referencer);
+    }
+
+    fn set_nested_state_machine_context_occurrence(
+        owner: &CoreHandle,
+        value: Option<RuntimeDataContextHandle>,
+    ) {
+        let animations = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard host")
+                    .nested_animations
+                    .clone()
+            })
+            .expect("live NestedArtboard host");
+        for animation in animations {
+            animation.with_downcast_mut::<NestedStateMachine, _>(|machine| match value.clone() {
+                Some(context) => machine.data_context(context),
+                None => machine.clear_data_context(),
+            });
+        }
+    }
+
+    pub(crate) fn internal_data_context_occurrence(
+        owner: &CoreHandle,
+        value: Option<RuntimeDataContextHandle>,
+    ) {
+        let work = owner
+            .with_mut(|owner| {
+                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.data_context = value.clone();
+                nested.view_model_instance = None;
+                let instance = nested.instance.clone()?;
+                if nested.try_schedule_bind_stateful() {
+                    return None;
+                }
+                Some((instance, nested.global_view_model_instances.clone()))
+            })
+            .flatten();
+        let Some((instance, globals)) = work else {
+            return;
+        };
+        let context = if !globals.is_empty() {
+            instance.bind_view_model_instances(build_vmi_list(None, &globals), value);
+            instance.data_context()
+        } else {
+            match value.clone() {
+                Some(context) => instance.internal_data_context(context),
+                None => instance.clear_data_context(),
+            }
+            value
+        };
+        Self::set_nested_state_machine_context_occurrence(owner, context);
+    }
+
+    pub(crate) fn bind_view_model_instance_occurrence(
+        owner: &CoreHandle,
+        value: Option<CoreHandle>,
+        parent: Option<RuntimeDataContextHandle>,
+    ) {
+        let work = owner
+            .with_mut(|owner| {
+                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.data_context = parent.clone();
+                nested.view_model_instance = value.clone();
+                Some((
+                    nested.instance.clone()?,
+                    nested.active_view_model_instance.clone(),
+                    nested.global_view_model_instances.clone(),
+                ))
+            })
+            .flatten();
+        let Some((instance, active, globals)) = work else {
+            return;
+        };
+        let primary = active.or(value);
+        let context = if primary.is_some() || !globals.is_empty() {
+            instance.bind_view_model_instances(build_vmi_list(primary, &globals), parent);
+            instance.data_context()
+        } else {
+            match parent.clone() {
+                Some(context) => instance.internal_data_context(context),
+                None => instance.clear_data_context(),
+            }
+            parent
+        };
+        Self::set_nested_state_machine_context_occurrence(owner, context);
+    }
+
+    pub(crate) fn relink_data_context_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+        let instance = owner
+            .with_mut(|owner| {
+                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.view_model_instance = value.clone();
+                if nested.base.is_stateful() {
+                    None
+                } else {
+                    nested.instance.clone()
+                }
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return;
+        };
+        if let Some(context) = instance.data_context() {
+            if context.with_context(|context| context.main_view_model_instance()) != value {
+                context.set_view_model_instance(value);
+            }
+        }
+        instance.relink_data_context();
+    }
+
+    pub(crate) fn clear_data_context_occurrence(owner: &CoreHandle) {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard host")
+                    .instance
+                    .clone()
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return;
+        };
+        instance.clear_data_context();
+        Self::set_nested_state_machine_context_occurrence(owner, None);
+    }
+
+    pub(crate) fn unbind_occurrence(owner: &CoreHandle) {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard host")
+                    .instance
+                    .clone()
+            })
+            .flatten();
+        if let Some(instance) = instance {
+            instance.unbind();
+        }
     }
 
     pub fn internal_data_context(&mut self, value: Option<RuntimeDataContextHandle>) {

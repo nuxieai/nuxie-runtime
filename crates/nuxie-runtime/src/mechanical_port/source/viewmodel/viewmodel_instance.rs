@@ -515,8 +515,8 @@ impl ViewModelInstance {
             .flatten()
     }
 
-    pub fn view_model(&mut self, value: CoreHandle) {
-        self.view_model = Some(value);
+    pub fn view_model(&mut self, value: Option<CoreHandle>) {
+        self.view_model = value;
     }
 
     pub fn get_view_model(&self) -> Option<CoreHandle> {
@@ -633,7 +633,7 @@ impl ViewModelInstance {
         cloned
             .with_downcast_mut::<Self, _>(|cloned| {
                 if let Some(view_model) = view_model {
-                    cloned.view_model(view_model);
+                    cloned.view_model(Some(view_model));
                 }
             })
             .is_some()

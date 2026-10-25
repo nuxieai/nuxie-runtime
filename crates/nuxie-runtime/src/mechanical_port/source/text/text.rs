@@ -1,9 +1,13 @@
+use crate::source::viewmodel::viewmodel_value_dependent::TextStyleSourceValue;
 use super::{
     glyph_lookup::GlyphLookup,
     text_interface::TextInterface,
     text_modifier_group::{TextModifierGroup, TransformGlyphArg},
     text_style_background::TextStyleBackground,
+    text_style_geometry::TextStyleGeometry,
+    text_style_on_demand::TextStyleOnDemand,
     text_style_paint::TextStylePaint,
+    text_style_reference::TextStyleReferenceHandle,
     text_value_run::TextValueRun,
     utf::Utf,
 };
@@ -458,7 +462,7 @@ pub enum TextValueRunHandle {
 }
 
 impl TextValueRunHandle {
-    fn with<R>(&self, use_run: impl FnOnce(&TextValueRun) -> R) -> Option<R> {
+    pub(crate) fn with<R>(&self, use_run: impl FnOnce(&TextValueRun) -> R) -> Option<R> {
         match self {
             Self::Core(run) => run
                 .with(|run| run.as_text_value_run().map(use_run))
@@ -481,6 +485,7 @@ pub struct TextValueRunProperty {
     text_value_run: TextValueRunHandle,
     text: CoreHandle,
     instance_value: CoreHandle,
+    instance: CoreHandle,
     property_key: u16,
     symbol_type: SymbolType,
 }
@@ -490,6 +495,7 @@ impl TextValueRunProperty {
         text_value_run: TextValueRunHandle,
         text: CoreHandle,
         instance_value: CoreHandle,
+        instance: CoreHandle,
         property_key: u16,
         symbol_type: SymbolType,
     ) -> Self {
@@ -497,6 +503,7 @@ impl TextValueRunProperty {
             text_value_run,
             text,
             instance_value,
+            instance,
             property_key,
             symbol_type,
         }
@@ -507,18 +514,16 @@ impl TextValueRunProperty {
     }
 
     fn write_value_with_text(&mut self, mut text: Option<&mut Text>) {
-        // The symbol lookup above guarantees the same concrete string value
-        // that the upstream as<ViewModelInstanceString>() cast requires.
-        let Some(value) = self
-            .instance_value
-            .with_downcast::<ViewModelInstanceString, _>(|value| {
-                value.base.property_value().to_owned()
-            })
-        else {
-            return;
-        };
         match self.symbol_type {
             SymbolType::TextContent => {
+                let Some(value) = self
+                    .instance_value
+                    .with_downcast::<ViewModelInstanceString, _>(|value| {
+                        value.base.property_value().to_owned()
+                    })
+                else {
+                    return;
+                };
                 if let Some(text) = text.as_deref_mut() {
                     self.text_value_run
                         .with_mut(|run| run.set_bound_text_with_borrowed_text(value, text));
@@ -527,33 +532,13 @@ impl TextValueRunProperty {
                         .with_mut(|run| run.set_bound_text(value));
                 }
             }
-            SymbolType::TextStyle => {
-                let owned_style_paints;
-                let style_paints = if let Some(text) = text.as_deref() {
-                    text.text_style_paints()
-                } else {
-                    owned_style_paints = self
-                        .text
-                        .with(|text| text.as_text().map(|text| text.text_style_paints().to_vec()))
-                        .flatten()
-                        .unwrap_or_default();
-                    &owned_style_paints
-                };
-                for (index, style_paint) in style_paints.iter().enumerate() {
-                    let matches = style_paint
-                        .with(|style| {
-                            style
-                                .as_text_style()
-                                .is_some_and(|style| style.base.name() == value)
-                        })
-                        .unwrap_or(false);
-                    if matches || index == 0 {
-                        self.text_value_run
-                            .with_mut(|run| run.set_style(style_paint.clone()));
-                        if matches {
-                            break;
-                        }
-                    }
+            SymbolType::TextStyle | SymbolType::GlobalTextStyle => {
+                // Initial list construction holds Text; its occurrence dispatcher
+                // resolves both symbols immediately after releasing that borrow.
+                if text.is_none() {
+                    let style = Text::resolve_list_run_style_occurrence(&self.text, &self.instance);
+                    self.text_value_run
+                        .with_mut(|run| run.set_style_reference(style));
                 }
             }
             _ => {}
@@ -574,6 +559,19 @@ impl Dirtyable for TextValueRunProperty {
 
 impl ViewModelValueDependent for TextValueRunProperty {
     fn relink_data_bind(&mut self) {}
+    fn add_dirt_from_text_style_source(&mut self,_value:ComponentDirt,_recurse:bool,source:&CoreHandle,current:&TextStyleSourceValue) {
+      match self.symbol_type {
+       SymbolType::TextContent if source==&self.instance_value => {
+         if let TextStyleSourceValue::String(value)=current {self.text_value_run.with_mut(|run|run.set_bound_text(value.clone()));}
+       }
+       SymbolType::TextStyle | SymbolType::GlobalTextStyle => {
+         let style=Text::resolve_list_run_style_with_source(&self.text,&self.instance,Some((source,current)));
+         self.text_value_run.with_mut(|run|run.set_style_reference(style));
+       }
+       _=>self.write_value(),
+      }
+      self.text.with_mut(|text| {if let Some(text)=text.as_text_mut() {text.mark_shape_dirty();}});
+    }
 }
 
 pub struct TextValueRunListener {
@@ -625,6 +623,7 @@ impl TextValueRunListener {
     fn create_properties_with_text(&mut self, mut text: Option<&mut Text>) {
         self.properties.clear();
         self.create_property_listener(SymbolType::TextStyle, text.as_deref_mut());
+        self.create_property_listener(SymbolType::GlobalTextStyle, text.as_deref_mut());
         self.create_property_listener(SymbolType::TextContent, text.as_deref_mut());
     }
 
@@ -633,7 +632,7 @@ impl TextValueRunListener {
         symbol_type: SymbolType,
     ) -> Option<TextValueRunProperty> {
         let property_key = match symbol_type {
-            SymbolType::TextStyle => {
+            SymbolType::TextStyle | SymbolType::GlobalTextStyle => {
                 crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBase::STYLE_ID_PROPERTY_KEY
             }
             SymbolType::TextContent => {
@@ -649,10 +648,19 @@ impl TextValueRunListener {
                     .property_value_for_symbol(symbol_type)
             })
             .flatten()?;
+        let correct_type = instance_value.with(|value| match symbol_type {
+            SymbolType::TextContent | SymbolType::TextStyle => value.as_any().downcast_ref::<ViewModelInstanceString>().is_some(),
+            SymbolType::GlobalTextStyle => value.as_any().downcast_ref::<crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard>().is_some(),
+            _ => false,
+        }).unwrap_or(false);
+        if !correct_type {
+            return None;
+        }
         Some(TextValueRunProperty::new(
             self.text_value_run(),
             self.text.clone(),
             instance_value,
+            self.instance.clone(),
             property_key,
             symbol_type,
         ))
@@ -677,6 +685,7 @@ impl TextValueRunListener {
 
 enum TextDrawCommand {
     Style(CoreHandle),
+    SharedStyle(CoreHandle, Rc<RefCell<TextStyleGeometry>>),
     ColorGlyph {
         font: FontRef,
         glyph_id: u16,
@@ -692,12 +701,31 @@ enum TextDrawCommand {
 fn add_decoration(
     render_styles: &mut Vec<CoreHandle>,
     draw_commands: &mut Vec<TextDrawCommand>,
+    shared_geometry: &mut Vec<(CoreHandle, Rc<RefCell<TextStyleGeometry>>)>,
     render_opacity: f32,
     style: &CoreHandle,
     path: &RawPath,
     opacity: f32,
 ) {
     if path.empty() {
+        return;
+    }
+    if style
+        .with_downcast::<TextStylePaint, _>(TextStylePaint::is_shared)
+        .unwrap_or(false)
+    {
+        let geometry =
+            if let Some((_, geometry)) = shared_geometry.iter().find(|(paint, _)| paint == style) {
+                geometry.clone()
+            } else {
+                let geometry = Rc::new(RefCell::new(TextStyleGeometry::default()));
+                shared_geometry.push((style.clone(), geometry.clone()));
+                geometry
+            };
+        let first = geometry.borrow_mut().add_path(path, opacity);
+        if first {
+            draw_commands.push(TextDrawCommand::SharedStyle(style.clone(), geometry));
+        }
         return;
     }
     let first_path = style
@@ -795,6 +823,8 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
         crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
             owner, dirt,
         );
+        owner.with_downcast_mut::<Self, _>(|object| object.mark_listened_runs());
+        Self::sync_style_list_items_occurrence(owner);
         owner.with_downcast_mut::<Self, _>(|object| object.update_after_transform_super(dirt));
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
@@ -843,6 +873,12 @@ pub struct Text {
     runs: Vec<CoreHandle>,
     all_runs: Vec<TextValueRunHandle>,
     render_styles: Vec<CoreHandle>,
+    shared_geometry: Vec<(CoreHandle, Rc<RefCell<TextStyleGeometry>>)>,
+    global_backgrounds: Vec<CoreHandle>,
+    on_demand_styles: Vec<Rc<RefCell<TextStyleOnDemand>>>,
+    listened_runs_dirty: bool,
+    list_items_dirty: bool,
+    file: Option<crate::source::file::RuntimeFileWeakHandle>,
     pub(super) shape: Vec<Paragraph>,
     modifier_shape: Vec<Paragraph>,
     pub(super) lines: Vec<Vec<GlyphLine>>,
@@ -890,6 +926,12 @@ impl Default for Text {
             runs: Vec::new(),
             all_runs: Vec::new(),
             render_styles: Vec::new(),
+            shared_geometry: Vec::new(),
+            global_backgrounds: Vec::new(),
+            on_demand_styles: Vec::new(),
+            listened_runs_dirty: true,
+            list_items_dirty: true,
+            file: None,
             shape: Vec::new(),
             modifier_shape: Vec::new(),
             lines: Vec::new(),
@@ -930,6 +972,10 @@ impl Drop for Text {
                 controller.borrow_mut().remove_dropping_text(&handle);
             }
         }
+        // Listeners retain their on-demand style references; release runs first.
+        self.value_run_listeners.clear();
+        self.all_runs.clear();
+        self.on_demand_styles.clear();
     }
 }
 
@@ -952,6 +998,7 @@ impl Text {
         let mut callbacks = Self::default();
         let mut twin = self.base.clone_into(&mut callbacks);
         twin.file_features = self.file_features;
+        twin.file = self.file.clone();
         twin
     }
 
@@ -985,6 +1032,8 @@ impl Text {
         self.mark_shape_dirty_layout(true);
     }
     pub fn mark_shape_dirty_layout(&mut self, send_to_layout: bool) {
+        self.listened_runs_dirty = true;
+        self.list_items_dirty = true;
         CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
         for group in &mut self.modifier_groups {
             group.with_mut(|group| {
@@ -999,6 +1048,10 @@ impl Text {
         }
     }
     pub(crate) fn mark_shape_dirty_occurrence(owner: &CoreHandle, send_to_layout: bool) {
+        owner.with_downcast_mut::<Self, _>(|text| {
+            text.listened_runs_dirty = true;
+            text.list_items_dirty = true;
+        });
         crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
             owner.clone(),
         )
@@ -1227,10 +1280,9 @@ impl Text {
         self.text_style_paints.push(paint);
     }
     pub fn style_from_shaper_id(&self, id: u16) -> Option<CoreHandle> {
-        self.runs.get(id as usize).and_then(|run| {
-            run.with(|run| run.as_text_value_run().and_then(TextValueRun::style))
-                .flatten()
-        })
+        self.all_runs
+            .get(id as usize)
+            .and_then(|run| run.with(TextValueRun::style).flatten())
     }
     pub fn runs(&self) -> &[TextValueRunHandle] {
         &self.all_runs
@@ -1686,6 +1738,13 @@ impl Text {
         }
         self.render_styles.clear();
         self.draw_commands.clear();
+        for (_, geometry) in &self.shared_geometry {
+            geometry.borrow_mut().rewind();
+        }
+        for background in &self.global_backgrounds {
+            background.with_downcast_mut::<TextStyleBackground, _>(TextStyleBackground::reset_path);
+        }
+        self.global_backgrounds.clear();
 
         // Reset off the child list: emoji-only styles never enter render_styles.
         self.build_text_style_paints();
@@ -2132,12 +2191,17 @@ impl Text {
                             .get_path(glyph_id)
                             .transform(path_transform);
                         inked = !path.empty();
-                        let first_path = style
-                            .with_downcast_mut::<TextStylePaint, _>(|style| {
-                                style.add_path(&path, opacity)
-                            })
-                            .unwrap_or(false);
-                        if first_path {
+                        if style.with_downcast::<TextStylePaint, _>(TextStylePaint::is_shared).unwrap_or(false) {
+                            let geometry = if let Some((_, geometry)) = self.shared_geometry.iter().find(|(paint, _)| paint == &style) {
+                                geometry.clone()
+                            } else {
+                                let geometry = Rc::new(RefCell::new(TextStyleGeometry::default()));
+                                self.shared_geometry.push((style.clone(), geometry.clone()));
+                                geometry
+                            };
+                            let first = geometry.borrow_mut().add_path(&path, opacity);
+                            if first { self.draw_commands.push(TextDrawCommand::SharedStyle(style.clone(), geometry)); }
+                        } else if style.with_downcast_mut::<TextStylePaint, _>(|style| style.add_path(&path, opacity)).unwrap_or(false) {
                             self.render_styles.push(style.clone());
                             style.with_downcast_mut::<TextStylePaint, _>(|style| {
                                 style.paints.propagate_opacity(self.base.render_opacity());
@@ -2195,6 +2259,16 @@ impl Text {
                             value_run.with_mut(|value_run| value_run.add_hit_rect(glyph_bounds));
                         }
                         if let Some(background) = background {
+                            if style
+                                .with_downcast::<TextStylePaint, _>(|paint| {
+                                    paint.base.parent_handle()
+                                })
+                                .flatten()
+                                != self.base.handle()
+                                && !self.global_backgrounds.contains(&background)
+                            {
+                                self.global_backgrounds.push(background.clone());
+                            }
                             background.with_downcast_mut::<TextStyleBackground, _>(|background| {
                                 background.add_rect(glyph_bounds);
                             });
@@ -2206,6 +2280,7 @@ impl Text {
                     add_decoration(
                         &mut self.render_styles,
                         &mut self.draw_commands,
+                        &mut self.shared_geometry,
                         self.base.render_opacity(),
                         &decoration.style,
                         &decoration.path,
@@ -2280,7 +2355,7 @@ impl Text {
                     cluster_text,
                     ..
                 } => Some(color_glyph_cache_key(font, *glyph_id, cluster_text)),
-                TextDrawCommand::Style(_) => None,
+                TextDrawCommand::Style(_) | TextDrawCommand::SharedStyle(_, _) => None,
             })
             .collect();
         self.emoji_image_cache.retain(|entry| {
@@ -2317,6 +2392,14 @@ impl Text {
                 });
             }
         }
+        for background in &self.global_backgrounds {
+            background.with_downcast_mut::<TextStyleBackground, _>(|background| {
+                background.update_path();
+                background.propagate_opacity(self.base.render_opacity());
+            });
+        }
+        self.shared_geometry
+            .retain(|(_, geometry)| geometry.borrow().has_contents());
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.base.needs_save_operation() {
@@ -2346,11 +2429,28 @@ impl Text {
                 });
             }
         }
+        for background in &self.global_backgrounds {
+            background.with_downcast_mut::<TextStyleBackground, _>(|background| {
+                background.draw(renderer, &world_transform, blend_mode, additive_amount);
+            });
+        }
         if let Some(controller) = self.selection_controller.upgrade() {
             controller.borrow_mut().draw(self, renderer);
         }
         for index in 0..self.draw_commands.len() {
             match &self.draw_commands[index] {
+                TextDrawCommand::SharedStyle(style, geometry) => {
+                    style.with_downcast_mut::<TextStylePaint, _>(|paint| {
+                        paint.draw_geometry(
+                            renderer,
+                            &world_transform,
+                            &mut geometry.borrow_mut(),
+                            self.base.render_opacity(),
+                            blend_mode,
+                            additive_amount,
+                        );
+                    });
+                }
                 TextDrawCommand::Style(style) => {
                     style.with_downcast_mut::<TextStylePaint, _>(|style| {
                         style.draw(renderer, &world_transform, blend_mode, additive_amount)
@@ -2957,6 +3057,373 @@ impl Text {
             self.mark_shape_dirty();
         }
     }
+    pub fn resolve_list_run_style_occurrence(
+        owner: &CoreHandle,
+        item: &CoreHandle,
+    ) -> Option<TextStyleReferenceHandle> {
+        Self::resolve_list_run_style_with_source(owner,item,None)
+    }
+    fn resolve_list_run_style_with_source(owner:&CoreHandle,item:&CoreHandle,current:Option<(&CoreHandle,&TextStyleSourceValue)>)->Option<TextStyleReferenceHandle> {
+        use crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
+        let (global, name) = item
+            .with(|item| {
+                let vm = item.as_view_model_instance()?;
+                Some((
+                    vm.property_value_for_symbol(SymbolType::GlobalTextStyle),
+                    vm.property_value_for_symbol(SymbolType::TextStyle),
+                ))
+            })
+            .flatten()?;
+        if let Some(value) = global.as_ref().filter(|value| {
+            value.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_artboard_base::ViewModelInstanceArtboardBase::TYPE_KEY)
+        }) {
+            if let Some(style) = Self::global_style_reference_occurrence(owner, value, item, current) {
+                return Some(style);
+            }
+        }
+        if global.is_none() && name.is_none() {
+            return None;
+        }
+        if let Some(name) = name.and_then(|name| {
+            if let Some((source,TextStyleSourceValue::String(value)))=current {if source==&name {return Some(value.clone());}}
+            name.with_downcast::<ViewModelInstanceString, _>(|name| {
+                name.base.property_value().to_owned()
+            })
+        }) {
+            if let Some(style) = owner
+                .with_downcast::<Self, _>(|text| text.style_reference_named(&name))
+                .flatten()
+            {
+                return Some(style);
+            }
+        }
+        owner
+            .with_downcast_mut::<Self, _>(Self::first_style_reference)
+            .flatten()
+    }
+    fn global_style_reference_occurrence(
+        owner: &CoreHandle,
+        value: &CoreHandle,
+        item: &CoreHandle,
+        current:Option<(&CoreHandle,&TextStyleSourceValue)>,
+    ) -> Option<TextStyleReferenceHandle> {
+        use super::{
+            text_style_global::TextStyleGlobal, text_style_share_cache::TextStyleShareCache,
+        };
+        use crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
+        let snapshot=current.filter(|(source,_)|*source==value).and_then(|(_,current)|match current {TextStyleSourceValue::Artboard{asset,index,bound}=>Some((asset.clone(),*index,bound.clone())),_=>None});
+        let (asset, index, bound) = snapshot.or_else(||
+            value.with_downcast::<ViewModelInstanceArtboard, _>(|value| {
+                (
+                    value.asset(),
+                    value.base.property_value(),
+                    value.bound_view_model_instance(),
+                )
+            }))?;
+        let (file, children, existing, host) = owner.with_downcast::<Self, _>(|text| {
+            (
+                text.file.as_ref().and_then(|file| file.upgrade()),
+                text.base.children().to_vec(),
+                text.on_demand_styles.clone(),
+                text.base
+                    .with_artboard(|host| (host.factory(), host.data_context())),
+            )
+        })?;
+        let mut cross_file = None;
+        let source = if let Some(asset) = asset {
+            if let Some(asset_file) = asset.file().and_then(|file| file.upgrade()) {
+                if !file.as_ref().is_some_and(|file| file.ptr_eq(&asset_file)) {
+                    cross_file = Some(asset_file);
+                }
+            }
+            asset.source_artboard_handle()
+        } else if index != u32::MAX {
+            file.as_ref()
+                .and_then(|file| file.with_file(|file| file.artboard_at_source(index as usize)))
+        } else {
+            None
+        }?;
+        TextStyleGlobal::first_text_style_paint(Some(&source))?;
+        let info = if cross_file.is_none() && file.is_some() {
+            file.as_ref()
+                .unwrap()
+                .with_file(|file| file.text_style_shares())
+                .borrow_mut()
+                .info(&source)
+        } else {
+            TextStyleShareCache::analyze(&source, cross_file.as_ref())
+        };
+        let per_item = info.has_state_machine.then(|| item.clone());
+        let mut values_source = None;
+        if bound.is_none() {
+            for child in children {
+                if let Some((instance_source, values)) =
+                    child.with_downcast::<TextStyleGlobal, _>(|style| {
+                        (style.instance_source(), style.style_view_model_instance())
+                    })
+                {
+                    if instance_source.as_ref() == Some(&source) {
+                        if per_item.is_none() {
+                            return Some(TextStyleReferenceHandle::Authored(child));
+                        }
+                        values_source = values;
+                        break;
+                    }
+                }
+            }
+        }
+        for style in existing {
+            let same = {
+                let style = style.borrow();
+                style.source() == source
+                    && style.bound_view_model_instance() == bound
+                    && style.item() == per_item
+            };
+            if same {
+                return Some(TextStyleReferenceHandle::OnDemand(style));
+            }
+        }
+        let (factory, parent) = host?;
+        let style = TextStyleOnDemand::new(
+            source,
+            bound,
+            file,
+            cross_file,
+            factory?,
+            parent,
+            Some(owner.clone()),
+            per_item,
+            values_source,
+        );
+        owner.with_downcast_mut::<Self, _>(|text| text.on_demand_styles.push(style.clone()));
+        Some(TextStyleReferenceHandle::OnDemand(style))
+    }
+    pub fn resolve_list_run_styles_occurrence(owner: &CoreHandle) {
+        let listeners = owner
+            .with_downcast::<Self, _>(|text| {
+                text.value_run_listeners
+                    .iter()
+                    .map(|listener| (listener.instance.clone(), listener.text_value_run.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (item, run) in listeners {
+            let style = Self::resolve_list_run_style_occurrence(owner, &item);
+            run.borrow_mut().set_style_reference(style);
+        }
+        owner.with_downcast_mut::<Self, _>(|text| text.prune_on_demand_styles());
+    }
+    pub fn set_file(&mut self, file: crate::source::file::RuntimeFileWeakHandle) {
+        self.file = Some(file);
+    }
+    pub fn file(&self) -> Option<crate::source::file::RuntimeFileWeakHandle> {
+        self.file.clone()
+    }
+    pub fn on_demand_style_count(&self) -> usize {
+        self.on_demand_styles.len()
+    }
+    pub fn run_style_references(&self) -> Vec<TextStyleReferenceHandle> {
+        let mut styles: Vec<_> = self.base.children().iter().filter(|child| child.is_type_of(crate::source::generated::text::text_style_reference_base::TextStyleReferenceBase::TYPE_KEY)).cloned().map(TextStyleReferenceHandle::Authored).collect();
+        styles.extend(
+            self.on_demand_styles
+                .iter()
+                .cloned()
+                .map(TextStyleReferenceHandle::OnDemand),
+        );
+        styles
+    }
+    pub fn run_state_machines(
+        &self,
+        out: &mut Vec<
+            crate::source::animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+        >,
+    ) {
+        out.extend(
+            self.run_style_references()
+                .iter()
+                .filter_map(|style| style.run_state_machine()),
+        );
+    }
+    pub fn may_have_listening_runs(&self) -> bool {
+        self.run_style_references().iter().any(|style| {
+            matches!(style, TextStyleReferenceHandle::Authored(_)) && style.listens_to_runs()
+        }) || self
+            .file
+            .as_ref()
+            .and_then(|file| file.upgrade())
+            .is_some_and(|file| {
+                file.with_file(|file| file.text_style_shares())
+                    .borrow_mut()
+                    .any_listens_to_runs()
+            })
+    }
+    pub fn style_reference_named(&self, name: &str) -> Option<TextStyleReferenceHandle> {
+        self.base.children().iter().find(|child| child.is_type_of(crate::source::generated::text::text_style_reference_base::TextStyleReferenceBase::TYPE_KEY) && child.with(|child| child.as_component().is_some_and(|child| child.name() == name)).unwrap_or(false)).cloned().map(TextStyleReferenceHandle::Authored)
+    }
+    pub fn first_style_reference(&mut self) -> Option<TextStyleReferenceHandle> {
+        self.build_text_style_paints();
+        self.text_style_paints
+            .first()
+            .cloned()
+            .map(TextStyleReferenceHandle::Authored)
+            .or_else(|| {
+                self.run_style_references()
+                    .into_iter()
+                    .find(|style| matches!(style, TextStyleReferenceHandle::Authored(_)))
+            })
+    }
+    pub fn style_reference_will_change(&mut self) {
+        self.clear_render_styles();
+        self.shared_geometry.clear();
+        self.mark_shape_dirty();
+    }
+    pub fn style_reference_did_change_occurrence(owner: &CoreHandle) {
+        Self::resolve_list_run_styles_occurrence(owner);
+        owner.with_downcast_mut::<Self, _>(|text| {
+            text.prune_on_demand_styles();
+            text.mark_shape_dirty();
+        });
+    }
+    fn prune_on_demand_styles(&mut self) {
+        let used: Vec<_> = self
+            .value_run_listeners
+            .iter()
+            .filter_map(|listener| listener.text_value_run.borrow().style_reference())
+            .collect();
+        if self
+            .on_demand_styles
+            .iter()
+            .all(|style| used.contains(&TextStyleReferenceHandle::OnDemand(style.clone())))
+        {
+            return;
+        }
+        self.clear_render_styles();
+        self.shared_geometry.clear();
+        self.on_demand_styles
+            .retain(|style| used.contains(&TextStyleReferenceHandle::OnDemand(style.clone())));
+        self.mark_shape_dirty();
+    }
+    pub fn mark_listened_runs(&mut self) {
+        if !self.listened_runs_dirty {
+            return;
+        }
+        self.listened_runs_dirty = false;
+        if !self
+            .base
+            .with_artboard(|artboard| artboard.is_instance())
+            .unwrap_or(false)
+        {
+            return;
+        }
+        for run in &self.all_runs {
+            if run
+                .with(|run| {
+                    run.style_reference()
+                        .is_some_and(|style| style.listens_to_runs())
+                })
+                .unwrap_or(false)
+            {
+                run.with_mut(|run| run.set_is_hit_target(true));
+            }
+        }
+    }
+    pub fn sync_style_list_items_occurrence(owner: &CoreHandle) {
+        let bindings = owner
+            .with_downcast_mut::<Self, _>(|text| {
+                if !text.list_items_dirty {
+                    return Vec::new();
+                }
+                text.list_items_dirty = false;
+                if !text
+                    .base
+                    .with_artboard(|artboard| artboard.is_instance())
+                    .unwrap_or(false)
+                {
+                    return Vec::new();
+                }
+                text.run_style_references()
+                    .into_iter()
+                    .map(|style| {
+                        let runs: Vec<_> = text
+                            .all_runs
+                            .iter()
+                            .filter(|run| {
+                                run.with(|run| run.style_reference().as_ref() == Some(&style))
+                                    .unwrap_or(false)
+                            })
+                            .collect();
+                        let item = if runs.len() == 1 {
+                            match runs[0] {
+                                TextValueRunHandle::Runtime(run) => text
+                                    .value_run_listeners
+                                    .iter()
+                                    .find(|listener| Rc::ptr_eq(&listener.text_value_run, run))
+                                    .map(|listener| listener.instance.clone()),
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                        (style, item)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (style, item) in bindings {
+            style.list_item(item);
+        }
+    }
+    fn on_demand_occurrences(owner: &CoreHandle) -> Vec<Rc<RefCell<TextStyleOnDemand>>> {
+        owner
+            .with_downcast::<Self, _>(|text| text.on_demand_styles.clone())
+            .unwrap_or_default()
+    }
+    pub fn host_data_context_occurrence(
+        owner: &CoreHandle,
+        value: Option<crate::source::data_bind::data_context::RuntimeDataContextHandle>,
+    ) {
+        for style in Self::on_demand_occurrences(owner) {
+            style.borrow_mut().host_data_context(value.clone());
+        }
+    }
+    pub fn relink_host_data_context_occurrence(owner: &CoreHandle) {
+        for style in Self::on_demand_occurrences(owner) {
+            style.borrow_mut().relink_host_data_context();
+        }
+    }
+    pub fn update_hosted_data_binds_occurrence(owner: &CoreHandle) {
+        for style in Self::on_demand_occurrences(owner) {
+            style.borrow_mut().update_hosted_data_binds();
+        }
+    }
+    pub fn advance_component_occurrence(
+        owner: &CoreHandle,
+        elapsed: f32,
+        flags: crate::source::advance_flags::AdvanceFlags,
+    ) -> bool {
+        Self::sync_style_list_items_occurrence(owner);
+        let mut changed = false;
+        let mut keep_going = false;
+        for style in Self::on_demand_occurrences(owner) {
+            keep_going |= style.borrow_mut().advance(elapsed, flags, &mut changed);
+        }
+        if changed {
+            Self::mark_shape_dirty_occurrence(owner, true);
+        }
+        keep_going
+    }
+    pub fn quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        use crate::source::advancing_component::QuietState;
+        let mut state = QuietState::Quiet;
+        for style in &self.on_demand_styles {
+            match style.borrow().quiet_state() {
+                QuietState::Never => return QuietState::Never,
+                QuietState::Busy => state = QuietState::Busy,
+                QuietState::Quiet => {}
+            }
+        }
+        state
+    }
     pub fn build_text_style_paints(&mut self) {
         if self.text_style_paints.is_empty() {
             for child in self.base.children() {
@@ -3037,10 +3504,11 @@ mod settled_text_value_tests {
         let arena = CoreArena::default();
         let asset = arena.insert(FontAsset::default());
         FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&bytes).unwrap()));
-        let style = arena.insert(TextStyle::default());
+        let style = arena.insert(TextStylePaint::default());
         TextStyle::set_asset_occurrence(&style, Some(asset));
         style
-            .with_downcast_mut::<TextStyle, _>(|style| {
+            .with_mut(|object| {
+                let style = object.as_text_style_mut().unwrap();
                 style.base.set_font_size_value(40.0);
                 style.base.set_line_height_value(44.0);
             })

@@ -37,11 +37,11 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `73d7b1c2` source checkpoint advances runtime/source-oracle and Silver
-references for shared artboard source lists and nested semantic visibility.
-Both independent reviews and correction rereviews are complete. Pool runtime,
-upstream semantic/sharing and host/live-move tests pass, with shipping C API
-compilation passing; exact results are recorded in the sync map.
+The `0238f299` source checkpoint advances runtime/source-oracle and Silver
+references for global text styles, sharing and run pointer listeners.
+Both independent reviews and correction rereviews are complete. Pool validation
+passed 26 new global-style tests, 871 runtime tests (2 ignored), 58 existing
+regressions and shipping C API compilation; details are in the sync map.
 Renderer/shader inputs and products are unchanged, retaining actual `41a2120b`
 provenance from pool job `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` and historical
 validation under their original checkpoints. No new device pixels are claimed.

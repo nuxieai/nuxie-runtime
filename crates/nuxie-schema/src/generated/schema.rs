@@ -368,6 +368,8 @@ pub enum ObjectKind {
     TextStyleBackground,
     ScriptModuleAsset,
     AngularGradient,
+    TextStyleReference,
+    TextStyleGlobal,
     VideoAsset,
     Video,
     TextStyleDecoration,
@@ -746,18 +748,20 @@ impl ObjectKind {
             Self::TextStyleBackground => &DEFINITIONS[358],
             Self::ScriptModuleAsset => &DEFINITIONS[359],
             Self::AngularGradient => &DEFINITIONS[360],
-            Self::VideoAsset => &DEFINITIONS[361],
-            Self::Video => &DEFINITIONS[362],
-            Self::TextStyleDecoration => &DEFINITIONS[363],
-            Self::LayoutCssStyle => &DEFINITIONS[364],
-            Self::BoxBorder => &DEFINITIONS[365],
-            Self::BoxGradient => &DEFINITIONS[366],
-            Self::BoxShadow => &DEFINITIONS[367],
-            Self::BoxPaint => &DEFINITIONS[368],
-            Self::TextStyleCssText => &DEFINITIONS[369],
-            Self::LiveSlot => &DEFINITIONS[370],
-            Self::LiveStep => &DEFINITIONS[371],
-            Self::LiveStepUnit => &DEFINITIONS[372],
+            Self::TextStyleReference => &DEFINITIONS[361],
+            Self::TextStyleGlobal => &DEFINITIONS[362],
+            Self::VideoAsset => &DEFINITIONS[363],
+            Self::Video => &DEFINITIONS[364],
+            Self::TextStyleDecoration => &DEFINITIONS[365],
+            Self::LayoutCssStyle => &DEFINITIONS[366],
+            Self::BoxBorder => &DEFINITIONS[367],
+            Self::BoxGradient => &DEFINITIONS[368],
+            Self::BoxShadow => &DEFINITIONS[369],
+            Self::BoxPaint => &DEFINITIONS[370],
+            Self::TextStyleCssText => &DEFINITIONS[371],
+            Self::LiveSlot => &DEFINITIONS[372],
+            Self::LiveStep => &DEFINITIONS[373],
+            Self::LiveStepUnit => &DEFINITIONS[374],
         }
     }
 
@@ -1133,6 +1137,8 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         1069 => Some(ObjectKind::TextStyleBackground),
         1071 => Some(ObjectKind::ScriptModuleAsset),
         1089 => Some(ObjectKind::AngularGradient),
+        1100 => Some(ObjectKind::TextStyleReference),
+        1101 => Some(ObjectKind::TextStyleGlobal),
         60000 => Some(ObjectKind::VideoAsset),
         60001 => Some(ObjectKind::Video),
         60002 => Some(ObjectKind::TextStyleDecoration),
@@ -1516,18 +1522,20 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "TextStyleBackground" => Some(&DEFINITIONS[358]),
         "ScriptModuleAsset" => Some(&DEFINITIONS[359]),
         "AngularGradient" => Some(&DEFINITIONS[360]),
-        "VideoAsset" => Some(&DEFINITIONS[361]),
-        "Video" => Some(&DEFINITIONS[362]),
-        "TextStyleDecoration" => Some(&DEFINITIONS[363]),
-        "LayoutCssStyle" => Some(&DEFINITIONS[364]),
-        "BoxBorder" => Some(&DEFINITIONS[365]),
-        "BoxGradient" => Some(&DEFINITIONS[366]),
-        "BoxShadow" => Some(&DEFINITIONS[367]),
-        "BoxPaint" => Some(&DEFINITIONS[368]),
-        "TextStyleCssText" => Some(&DEFINITIONS[369]),
-        "LiveSlot" => Some(&DEFINITIONS[370]),
-        "LiveStep" => Some(&DEFINITIONS[371]),
-        "LiveStepUnit" => Some(&DEFINITIONS[372]),
+        "TextStyleReference" => Some(&DEFINITIONS[361]),
+        "TextStyleGlobal" => Some(&DEFINITIONS[362]),
+        "VideoAsset" => Some(&DEFINITIONS[363]),
+        "Video" => Some(&DEFINITIONS[364]),
+        "TextStyleDecoration" => Some(&DEFINITIONS[365]),
+        "LayoutCssStyle" => Some(&DEFINITIONS[366]),
+        "BoxBorder" => Some(&DEFINITIONS[367]),
+        "BoxGradient" => Some(&DEFINITIONS[368]),
+        "BoxShadow" => Some(&DEFINITIONS[369]),
+        "BoxPaint" => Some(&DEFINITIONS[370]),
+        "TextStyleCssText" => Some(&DEFINITIONS[371]),
+        "LiveSlot" => Some(&DEFINITIONS[372]),
+        "LiveStep" => Some(&DEFINITIONS[373]),
+        "LiveStepUnit" => Some(&DEFINITIONS[374]),
         _ => None,
     }
 }
@@ -1580,6 +1588,7 @@ pub fn is_id_property_key(key: u16) -> bool {
         415 => true,
         459 => true,
         487 => true,
+        493 => true,
         494 => true,
         549 => true,
         550 => true,
@@ -1948,6 +1957,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         487 => Some(CoreRegistryFieldKind::Uint),
         489 => Some(CoreRegistryFieldKind::Uint),
         490 => Some(CoreRegistryFieldKind::Uint),
+        493 => Some(CoreRegistryFieldKind::Uint),
         494 => Some(CoreRegistryFieldKind::Uint),
         498 => Some(CoreRegistryFieldKind::Double),
         499 => Some(CoreRegistryFieldKind::Double),
@@ -2779,6 +2789,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         487 => Some(FieldKind::Uint),
         489 => Some(FieldKind::Uint),
         490 => Some(FieldKind::Uint),
+        493 => Some(FieldKind::Uint),
         494 => Some(FieldKind::Uint),
         498 => Some(FieldKind::Double),
         499 => Some(FieldKind::Double),
@@ -3592,6 +3603,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         487 => Some(FieldKind::Uint),
         489 => Some(FieldKind::Uint),
         490 => Some(FieldKind::Uint),
+        493 => Some(FieldKind::Uint),
         494 => Some(FieldKind::Uint),
         498 => Some(FieldKind::Double),
         499 => Some(FieldKind::Double),
@@ -14151,7 +14163,12 @@ static DEF_125_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_126_ANCESTORS: &[&str] = &["TextStyle", "ContainerComponent", "Component"];
+static DEF_126_ANCESTORS: &[&str] = &[
+    "TextStyle",
+    "TextStyleReference",
+    "ContainerComponent",
+    "Component",
+];
 
 static DEF_126_PROPERTIES: &[Property] = &[];
 
@@ -25432,7 +25449,7 @@ static DEF_275_ANCESTORS: &[&str] = &[
 
 static DEF_275_PROPERTIES: &[Property] = &[];
 
-static DEF_276_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_276_ANCESTORS: &[&str] = &["TextStyleReference", "ContainerComponent", "Component"];
 
 static DEF_276_PROPERTIES: &[Property] = &[
     Property {
@@ -30400,9 +30417,52 @@ static DEF_360_ANCESTORS: &[&str] = &["LinearGradient", "ContainerComponent", "C
 
 static DEF_360_PROPERTIES: &[Property] = &[];
 
-static DEF_361_ANCESTORS: &[&str] = &["DrawableAsset", "FileAsset", "Asset"];
+static DEF_361_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_361_PROPERTIES: &[Property] = &[
+static DEF_361_PROPERTIES: &[Property] = &[];
+
+static DEF_362_ANCESTORS: &[&str] = &["TextStyleReference", "ContainerComponent", "Component"];
+
+static DEF_362_PROPERTIES: &[Property] = &[Property {
+    name: "artboardId",
+    key: Key {
+        int: 493,
+        name: "artboardid",
+    },
+    alternates: &[],
+    declared_type: "Id",
+    runtime_type: FieldKind::Uint,
+    description: None,
+    initial_value: Some("Core.missingId"),
+    initial_value_runtime: Some("-1"),
+    group: None,
+    sidecar: None,
+    nullable: false,
+    override_set: false,
+    override_get: false,
+    virtual_: false,
+    editor_only: false,
+    coop: true,
+    with_rive_tools_only: false,
+    stores_data: true,
+    deserializes: true,
+    stores_field: true,
+    encoded: false,
+    bindable: true,
+    animates: false,
+    computed: false,
+    journal: None,
+    parentable: None,
+    records: None,
+    exports_to_runtime_conditionally: false,
+    pure_virtual: false,
+    passthrough: false,
+    bitmask_passthrough: None,
+}];
+
+static DEF_363_ANCESTORS: &[&str] = &["DrawableAsset", "FileAsset", "Asset"];
+
+static DEF_363_PROPERTIES: &[Property] = &[
     Property {
         name: "sourceKey",
         key: Key {
@@ -30513,7 +30573,7 @@ static DEF_361_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_362_ANCESTORS: &[&str] = &[
+static DEF_364_ANCESTORS: &[&str] = &[
     "Image",
     "Drawable",
     "Node",
@@ -30523,7 +30583,7 @@ static DEF_362_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_362_PROPERTIES: &[Property] = &[
+static DEF_364_PROPERTIES: &[Property] = &[
     Property {
         name: "autoplay",
         key: Key {
@@ -31216,9 +31276,9 @@ static DEF_362_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_363_ANCESTORS: &[&str] = &["Component"];
+static DEF_365_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_363_PROPERTIES: &[Property] = &[Property {
+static DEF_365_PROPERTIES: &[Property] = &[Property {
     name: "line",
     key: Key {
         int: 60022,
@@ -31257,9 +31317,9 @@ static DEF_363_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_364_ANCESTORS: &[&str] = &["Component"];
+static DEF_366_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_364_PROPERTIES: &[Property] = &[
+static DEF_366_PROPERTIES: &[Property] = &[
     Property {
         name: "display",
         key: Key {
@@ -34350,9 +34410,9 @@ static DEF_364_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_365_ANCESTORS: &[&str] = &["Component"];
+static DEF_367_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_365_PROPERTIES: &[Property] = &[
+static DEF_367_PROPERTIES: &[Property] = &[
     Property {
         name: "sides",
         key: Key {
@@ -34429,9 +34489,9 @@ static DEF_365_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_366_ANCESTORS: &[&str] = &["Component"];
+static DEF_368_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_366_PROPERTIES: &[Property] = &[
+static DEF_368_PROPERTIES: &[Property] = &[
     Property {
         name: "angle",
         key: Key {
@@ -34872,9 +34932,9 @@ static DEF_366_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_367_ANCESTORS: &[&str] = &["Component"];
+static DEF_369_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_367_PROPERTIES: &[Property] = &[Property {
+static DEF_369_PROPERTIES: &[Property] = &[Property {
     name: "spread",
     key: Key {
         int: 61096,
@@ -34911,9 +34971,9 @@ static DEF_367_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_368_ANCESTORS: &[&str] = &["Component"];
+static DEF_370_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_368_PROPERTIES: &[Property] = &[
+static DEF_370_PROPERTIES: &[Property] = &[
     Property {
         name: "width",
         key: Key {
@@ -35068,9 +35128,9 @@ static DEF_368_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_369_ANCESTORS: &[&str] = &["Component"];
+static DEF_371_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_369_PROPERTIES: &[Property] = &[
+static DEF_371_PROPERTIES: &[Property] = &[
     Property {
         name: "textTransform",
         key: Key {
@@ -35149,9 +35209,9 @@ static DEF_369_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_370_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_372_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_370_PROPERTIES: &[Property] = &[
+static DEF_372_PROPERTIES: &[Property] = &[
     Property {
         name: "unitKey",
         key: Key {
@@ -35442,9 +35502,9 @@ static DEF_370_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_371_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_373_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_371_PROPERTIES: &[Property] = &[
+static DEF_373_PROPERTIES: &[Property] = &[
     Property {
         name: "name",
         key: Key {
@@ -35555,9 +35615,9 @@ static DEF_371_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_372_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_374_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_372_PROPERTIES: &[Property] = &[
+static DEF_374_PROPERTIES: &[Property] = &[
     Property {
         name: "incomingUnitKey",
         key: Key {
@@ -38051,15 +38111,20 @@ pub fn property_by_key_in_hierarchy(
         (1089, 1105) => Some(("LinearGradient", &DEF_21_PROPERTIES[7])),
         (1089, 1106) => Some(("LinearGradient", &DEF_21_PROPERTIES[8])),
         (1089, 1107) => Some(("LinearGradient", &DEF_21_PROPERTIES[9])),
+        (1100, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (1100, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (1101, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (1101, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (1101, 493) => Some(("TextStyleGlobal", &DEF_362_PROPERTIES[0])),
         (60000, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (60000, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (60000, 207) => Some(("DrawableAsset", &DEF_98_PROPERTIES[0])),
         (60000, 208) => Some(("DrawableAsset", &DEF_98_PROPERTIES[1])),
         (60000, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (60000, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (60000, 60000) => Some(("VideoAsset", &DEF_361_PROPERTIES[0])),
-        (60000, 60001) => Some(("VideoAsset", &DEF_361_PROPERTIES[1])),
-        (60000, 60002) => Some(("VideoAsset", &DEF_361_PROPERTIES[2])),
+        (60000, 60000) => Some(("VideoAsset", &DEF_363_PROPERTIES[0])),
+        (60000, 60001) => Some(("VideoAsset", &DEF_363_PROPERTIES[1])),
+        (60000, 60002) => Some(("VideoAsset", &DEF_363_PROPERTIES[2])),
         (60001, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (60001, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (60001, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -38090,167 +38155,167 @@ pub fn property_by_key_in_hierarchy(
         (60001, 1076) => Some(("Image", &DEF_96_PROPERTIES[6])),
         (60001, 1077) => Some(("Image", &DEF_96_PROPERTIES[7])),
         (60001, 1078) => Some(("Image", &DEF_96_PROPERTIES[8])),
-        (60001, 60003) => Some(("Video", &DEF_362_PROPERTIES[0])),
-        (60001, 60004) => Some(("Video", &DEF_362_PROPERTIES[1])),
-        (60001, 60005) => Some(("Video", &DEF_362_PROPERTIES[2])),
-        (60001, 60006) => Some(("Video", &DEF_362_PROPERTIES[3])),
-        (60001, 60007) => Some(("Video", &DEF_362_PROPERTIES[4])),
-        (60001, 60008) => Some(("Video", &DEF_362_PROPERTIES[5])),
-        (60001, 60009) => Some(("Video", &DEF_362_PROPERTIES[6])),
-        (60001, 60010) => Some(("Video", &DEF_362_PROPERTIES[7])),
-        (60001, 60011) => Some(("Video", &DEF_362_PROPERTIES[8])),
-        (60001, 60012) => Some(("Video", &DEF_362_PROPERTIES[9])),
-        (60001, 60013) => Some(("Video", &DEF_362_PROPERTIES[10])),
-        (60001, 60014) => Some(("Video", &DEF_362_PROPERTIES[11])),
-        (60001, 60015) => Some(("Video", &DEF_362_PROPERTIES[12])),
-        (60001, 60016) => Some(("Video", &DEF_362_PROPERTIES[13])),
-        (60001, 60017) => Some(("Video", &DEF_362_PROPERTIES[14])),
-        (60001, 60018) => Some(("Video", &DEF_362_PROPERTIES[15])),
-        (60001, 60019) => Some(("Video", &DEF_362_PROPERTIES[16])),
-        (60001, 60020) => Some(("Video", &DEF_362_PROPERTIES[17])),
-        (60001, 60021) => Some(("Video", &DEF_362_PROPERTIES[18])),
+        (60001, 60003) => Some(("Video", &DEF_364_PROPERTIES[0])),
+        (60001, 60004) => Some(("Video", &DEF_364_PROPERTIES[1])),
+        (60001, 60005) => Some(("Video", &DEF_364_PROPERTIES[2])),
+        (60001, 60006) => Some(("Video", &DEF_364_PROPERTIES[3])),
+        (60001, 60007) => Some(("Video", &DEF_364_PROPERTIES[4])),
+        (60001, 60008) => Some(("Video", &DEF_364_PROPERTIES[5])),
+        (60001, 60009) => Some(("Video", &DEF_364_PROPERTIES[6])),
+        (60001, 60010) => Some(("Video", &DEF_364_PROPERTIES[7])),
+        (60001, 60011) => Some(("Video", &DEF_364_PROPERTIES[8])),
+        (60001, 60012) => Some(("Video", &DEF_364_PROPERTIES[9])),
+        (60001, 60013) => Some(("Video", &DEF_364_PROPERTIES[10])),
+        (60001, 60014) => Some(("Video", &DEF_364_PROPERTIES[11])),
+        (60001, 60015) => Some(("Video", &DEF_364_PROPERTIES[12])),
+        (60001, 60016) => Some(("Video", &DEF_364_PROPERTIES[13])),
+        (60001, 60017) => Some(("Video", &DEF_364_PROPERTIES[14])),
+        (60001, 60018) => Some(("Video", &DEF_364_PROPERTIES[15])),
+        (60001, 60019) => Some(("Video", &DEF_364_PROPERTIES[16])),
+        (60001, 60020) => Some(("Video", &DEF_364_PROPERTIES[17])),
+        (60001, 60021) => Some(("Video", &DEF_364_PROPERTIES[18])),
         (60002, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (60002, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (60002, 60022) => Some(("TextStyleDecoration", &DEF_363_PROPERTIES[0])),
+        (60002, 60022) => Some(("TextStyleDecoration", &DEF_365_PROPERTIES[0])),
         (61000, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61000, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (61000, 61000) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[0])),
-        (61000, 61001) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[1])),
-        (61000, 61002) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[2])),
-        (61000, 61003) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[3])),
-        (61000, 61004) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[4])),
-        (61000, 61005) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[5])),
-        (61000, 61006) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[6])),
-        (61000, 61007) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[7])),
-        (61000, 61008) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[8])),
-        (61000, 61009) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[9])),
-        (61000, 61010) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[10])),
-        (61000, 61011) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[11])),
-        (61000, 61012) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[12])),
-        (61000, 61013) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[13])),
-        (61000, 61014) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[14])),
-        (61000, 61015) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[15])),
-        (61000, 61016) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[16])),
-        (61000, 61017) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[17])),
-        (61000, 61018) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[18])),
-        (61000, 61019) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[19])),
-        (61000, 61020) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[20])),
-        (61000, 61021) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[21])),
-        (61000, 61022) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[22])),
-        (61000, 61023) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[23])),
-        (61000, 61024) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[24])),
-        (61000, 61025) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[25])),
-        (61000, 61026) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[26])),
-        (61000, 61027) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[27])),
-        (61000, 61028) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[28])),
-        (61000, 61029) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[29])),
-        (61000, 61030) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[30])),
-        (61000, 61031) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[31])),
-        (61000, 61032) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[32])),
-        (61000, 61033) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[33])),
-        (61000, 61034) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[34])),
-        (61000, 61035) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[35])),
-        (61000, 61036) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[36])),
-        (61000, 61037) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[37])),
-        (61000, 61038) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[38])),
-        (61000, 61039) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[39])),
-        (61000, 61040) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[40])),
-        (61000, 61041) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[41])),
-        (61000, 61042) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[42])),
-        (61000, 61043) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[43])),
-        (61000, 61044) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[44])),
-        (61000, 61045) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[45])),
-        (61000, 61046) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[46])),
-        (61000, 61047) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[47])),
-        (61000, 61048) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[48])),
-        (61000, 61049) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[49])),
-        (61000, 61050) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[50])),
-        (61000, 61051) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[51])),
-        (61000, 61052) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[52])),
-        (61000, 61053) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[53])),
-        (61000, 61054) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[54])),
-        (61000, 61055) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[55])),
-        (61000, 61056) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[56])),
-        (61000, 61057) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[57])),
-        (61000, 61058) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[58])),
-        (61000, 61059) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[59])),
-        (61000, 61060) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[60])),
-        (61000, 61061) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[61])),
-        (61000, 61062) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[62])),
-        (61000, 61063) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[63])),
-        (61000, 61064) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[64])),
-        (61000, 61065) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[65])),
-        (61000, 61066) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[66])),
-        (61000, 61067) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[67])),
-        (61000, 61068) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[68])),
-        (61000, 61069) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[69])),
-        (61000, 61070) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[70])),
-        (61000, 61071) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[71])),
-        (61000, 61072) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[72])),
-        (61000, 61073) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[73])),
-        (61000, 61074) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[74])),
-        (61000, 61075) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[75])),
-        (61000, 61076) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[76])),
-        (61000, 61077) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[77])),
-        (61000, 61078) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[78])),
-        (61000, 61079) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[79])),
-        (61000, 61080) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[80])),
-        (61000, 61081) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[81])),
-        (61000, 61082) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[82])),
-        (61000, 61099) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[83])),
-        (61000, 61100) => Some(("LayoutCssStyle", &DEF_364_PROPERTIES[84])),
+        (61000, 61000) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[0])),
+        (61000, 61001) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[1])),
+        (61000, 61002) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[2])),
+        (61000, 61003) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[3])),
+        (61000, 61004) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[4])),
+        (61000, 61005) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[5])),
+        (61000, 61006) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[6])),
+        (61000, 61007) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[7])),
+        (61000, 61008) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[8])),
+        (61000, 61009) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[9])),
+        (61000, 61010) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[10])),
+        (61000, 61011) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[11])),
+        (61000, 61012) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[12])),
+        (61000, 61013) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[13])),
+        (61000, 61014) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[14])),
+        (61000, 61015) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[15])),
+        (61000, 61016) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[16])),
+        (61000, 61017) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[17])),
+        (61000, 61018) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[18])),
+        (61000, 61019) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[19])),
+        (61000, 61020) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[20])),
+        (61000, 61021) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[21])),
+        (61000, 61022) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[22])),
+        (61000, 61023) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[23])),
+        (61000, 61024) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[24])),
+        (61000, 61025) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[25])),
+        (61000, 61026) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[26])),
+        (61000, 61027) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[27])),
+        (61000, 61028) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[28])),
+        (61000, 61029) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[29])),
+        (61000, 61030) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[30])),
+        (61000, 61031) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[31])),
+        (61000, 61032) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[32])),
+        (61000, 61033) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[33])),
+        (61000, 61034) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[34])),
+        (61000, 61035) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[35])),
+        (61000, 61036) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[36])),
+        (61000, 61037) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[37])),
+        (61000, 61038) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[38])),
+        (61000, 61039) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[39])),
+        (61000, 61040) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[40])),
+        (61000, 61041) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[41])),
+        (61000, 61042) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[42])),
+        (61000, 61043) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[43])),
+        (61000, 61044) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[44])),
+        (61000, 61045) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[45])),
+        (61000, 61046) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[46])),
+        (61000, 61047) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[47])),
+        (61000, 61048) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[48])),
+        (61000, 61049) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[49])),
+        (61000, 61050) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[50])),
+        (61000, 61051) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[51])),
+        (61000, 61052) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[52])),
+        (61000, 61053) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[53])),
+        (61000, 61054) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[54])),
+        (61000, 61055) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[55])),
+        (61000, 61056) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[56])),
+        (61000, 61057) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[57])),
+        (61000, 61058) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[58])),
+        (61000, 61059) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[59])),
+        (61000, 61060) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[60])),
+        (61000, 61061) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[61])),
+        (61000, 61062) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[62])),
+        (61000, 61063) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[63])),
+        (61000, 61064) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[64])),
+        (61000, 61065) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[65])),
+        (61000, 61066) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[66])),
+        (61000, 61067) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[67])),
+        (61000, 61068) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[68])),
+        (61000, 61069) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[69])),
+        (61000, 61070) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[70])),
+        (61000, 61071) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[71])),
+        (61000, 61072) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[72])),
+        (61000, 61073) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[73])),
+        (61000, 61074) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[74])),
+        (61000, 61075) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[75])),
+        (61000, 61076) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[76])),
+        (61000, 61077) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[77])),
+        (61000, 61078) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[78])),
+        (61000, 61079) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[79])),
+        (61000, 61080) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[80])),
+        (61000, 61081) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[81])),
+        (61000, 61082) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[82])),
+        (61000, 61099) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[83])),
+        (61000, 61100) => Some(("LayoutCssStyle", &DEF_366_PROPERTIES[84])),
         (61001, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61001, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (61001, 61083) => Some(("BoxBorder", &DEF_365_PROPERTIES[0])),
-        (61001, 61103) => Some(("BoxBorder", &DEF_365_PROPERTIES[1])),
+        (61001, 61083) => Some(("BoxBorder", &DEF_367_PROPERTIES[0])),
+        (61001, 61103) => Some(("BoxBorder", &DEF_367_PROPERTIES[1])),
         (61002, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61002, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (61002, 61084) => Some(("BoxGradient", &DEF_366_PROPERTIES[0])),
-        (61002, 61085) => Some(("BoxGradient", &DEF_366_PROPERTIES[1])),
-        (61002, 61086) => Some(("BoxGradient", &DEF_366_PROPERTIES[2])),
-        (61002, 61087) => Some(("BoxGradient", &DEF_366_PROPERTIES[3])),
-        (61002, 61088) => Some(("BoxGradient", &DEF_366_PROPERTIES[4])),
-        (61002, 61089) => Some(("BoxGradient", &DEF_366_PROPERTIES[5])),
-        (61002, 61090) => Some(("BoxGradient", &DEF_366_PROPERTIES[6])),
-        (61002, 61091) => Some(("BoxGradient", &DEF_366_PROPERTIES[7])),
-        (61002, 61092) => Some(("BoxGradient", &DEF_366_PROPERTIES[8])),
-        (61002, 61093) => Some(("BoxGradient", &DEF_366_PROPERTIES[9])),
-        (61002, 61094) => Some(("BoxGradient", &DEF_366_PROPERTIES[10])),
-        (61002, 61095) => Some(("BoxGradient", &DEF_366_PROPERTIES[11])),
+        (61002, 61084) => Some(("BoxGradient", &DEF_368_PROPERTIES[0])),
+        (61002, 61085) => Some(("BoxGradient", &DEF_368_PROPERTIES[1])),
+        (61002, 61086) => Some(("BoxGradient", &DEF_368_PROPERTIES[2])),
+        (61002, 61087) => Some(("BoxGradient", &DEF_368_PROPERTIES[3])),
+        (61002, 61088) => Some(("BoxGradient", &DEF_368_PROPERTIES[4])),
+        (61002, 61089) => Some(("BoxGradient", &DEF_368_PROPERTIES[5])),
+        (61002, 61090) => Some(("BoxGradient", &DEF_368_PROPERTIES[6])),
+        (61002, 61091) => Some(("BoxGradient", &DEF_368_PROPERTIES[7])),
+        (61002, 61092) => Some(("BoxGradient", &DEF_368_PROPERTIES[8])),
+        (61002, 61093) => Some(("BoxGradient", &DEF_368_PROPERTIES[9])),
+        (61002, 61094) => Some(("BoxGradient", &DEF_368_PROPERTIES[10])),
+        (61002, 61095) => Some(("BoxGradient", &DEF_368_PROPERTIES[11])),
         (61003, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61003, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (61003, 61096) => Some(("BoxShadow", &DEF_367_PROPERTIES[0])),
+        (61003, 61096) => Some(("BoxShadow", &DEF_369_PROPERTIES[0])),
         (61004, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61004, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (61004, 61097) => Some(("BoxPaint", &DEF_368_PROPERTIES[0])),
-        (61004, 61098) => Some(("BoxPaint", &DEF_368_PROPERTIES[1])),
-        (61004, 61101) => Some(("BoxPaint", &DEF_368_PROPERTIES[2])),
-        (61004, 61102) => Some(("BoxPaint", &DEF_368_PROPERTIES[3])),
+        (61004, 61097) => Some(("BoxPaint", &DEF_370_PROPERTIES[0])),
+        (61004, 61098) => Some(("BoxPaint", &DEF_370_PROPERTIES[1])),
+        (61004, 61101) => Some(("BoxPaint", &DEF_370_PROPERTIES[2])),
+        (61004, 61102) => Some(("BoxPaint", &DEF_370_PROPERTIES[3])),
         (61005, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (61005, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (61005, 61104) => Some(("TextStyleCssText", &DEF_369_PROPERTIES[0])),
-        (61005, 61105) => Some(("TextStyleCssText", &DEF_369_PROPERTIES[1])),
+        (61005, 61104) => Some(("TextStyleCssText", &DEF_371_PROPERTIES[0])),
+        (61005, 61105) => Some(("TextStyleCssText", &DEF_371_PROPERTIES[1])),
         (62000, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (62000, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (62000, 62000) => Some(("LiveSlot", &DEF_370_PROPERTIES[0])),
-        (62000, 62001) => Some(("LiveSlot", &DEF_370_PROPERTIES[1])),
-        (62000, 62002) => Some(("LiveSlot", &DEF_370_PROPERTIES[2])),
-        (62000, 62003) => Some(("LiveSlot", &DEF_370_PROPERTIES[3])),
-        (62000, 62004) => Some(("LiveSlot", &DEF_370_PROPERTIES[4])),
-        (62000, 62005) => Some(("LiveSlot", &DEF_370_PROPERTIES[5])),
-        (62000, 62013) => Some(("LiveSlot", &DEF_370_PROPERTIES[6])),
-        (62000, 62014) => Some(("LiveSlot", &DEF_370_PROPERTIES[7])),
+        (62000, 62000) => Some(("LiveSlot", &DEF_372_PROPERTIES[0])),
+        (62000, 62001) => Some(("LiveSlot", &DEF_372_PROPERTIES[1])),
+        (62000, 62002) => Some(("LiveSlot", &DEF_372_PROPERTIES[2])),
+        (62000, 62003) => Some(("LiveSlot", &DEF_372_PROPERTIES[3])),
+        (62000, 62004) => Some(("LiveSlot", &DEF_372_PROPERTIES[4])),
+        (62000, 62005) => Some(("LiveSlot", &DEF_372_PROPERTIES[5])),
+        (62000, 62013) => Some(("LiveSlot", &DEF_372_PROPERTIES[6])),
+        (62000, 62014) => Some(("LiveSlot", &DEF_372_PROPERTIES[7])),
         (62001, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (62001, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (62001, 62006) => Some(("LiveStep", &DEF_371_PROPERTIES[0])),
-        (62001, 62007) => Some(("LiveStep", &DEF_371_PROPERTIES[1])),
-        (62001, 62008) => Some(("LiveStep", &DEF_371_PROPERTIES[2])),
+        (62001, 62006) => Some(("LiveStep", &DEF_373_PROPERTIES[0])),
+        (62001, 62007) => Some(("LiveStep", &DEF_373_PROPERTIES[1])),
+        (62001, 62008) => Some(("LiveStep", &DEF_373_PROPERTIES[2])),
         (62002, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (62002, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (62002, 62009) => Some(("LiveStepUnit", &DEF_372_PROPERTIES[0])),
-        (62002, 62010) => Some(("LiveStepUnit", &DEF_372_PROPERTIES[1])),
-        (62002, 62011) => Some(("LiveStepUnit", &DEF_372_PROPERTIES[2])),
-        (62002, 62012) => Some(("LiveStepUnit", &DEF_372_PROPERTIES[3])),
+        (62002, 62009) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[0])),
+        (62002, 62010) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[1])),
+        (62002, 62011) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[2])),
+        (62002, 62012) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[3])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),
@@ -43765,8 +43830,8 @@ pub static DEFINITIONS: &[Definition] = &[
             int: 573,
             name: "textstyle",
         },
-        runtime_parent: Some("ContainerComponent"),
-        raw_parent_file: Some("container_component.json"),
+        runtime_parent: Some("TextStyleReference"),
+        raw_parent_file: Some("text/text_style_reference.json"),
         mixins: &[],
         generic: None,
         generic_pass_through: None,
@@ -45373,6 +45438,44 @@ pub static DEFINITIONS: &[Definition] = &[
         ancestors: DEF_360_ANCESTORS,
     },
     Definition {
+        name: "TextStyleReference",
+        rust_variant: "TextStyleReference",
+        file: "text/text_style_reference.json",
+        type_key: Key {
+            int: 1100,
+            name: "textstylereference",
+        },
+        runtime_parent: Some("ContainerComponent"),
+        raw_parent_file: Some("container_component.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_361_PROPERTIES,
+        ancestors: DEF_361_ANCESTORS,
+    },
+    Definition {
+        name: "TextStyleGlobal",
+        rust_variant: "TextStyleGlobal",
+        file: "text/text_style_global.json",
+        type_key: Key {
+            int: 1101,
+            name: "textstyleglobal",
+        },
+        runtime_parent: Some("TextStyleReference"),
+        raw_parent_file: Some("text/text_style_reference.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_362_PROPERTIES,
+        ancestors: DEF_362_ANCESTORS,
+    },
+    Definition {
         name: "VideoAsset",
         rust_variant: "VideoAsset",
         file: "nuxie/videoasset.json",
@@ -45388,8 +45491,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_361_PROPERTIES,
-        ancestors: DEF_361_ANCESTORS,
+        properties: DEF_363_PROPERTIES,
+        ancestors: DEF_363_ANCESTORS,
     },
     Definition {
         name: "Video",
@@ -45407,8 +45510,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_362_PROPERTIES,
-        ancestors: DEF_362_ANCESTORS,
+        properties: DEF_364_PROPERTIES,
+        ancestors: DEF_364_ANCESTORS,
     },
     Definition {
         name: "TextStyleDecoration",
@@ -45426,8 +45529,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_363_PROPERTIES,
-        ancestors: DEF_363_ANCESTORS,
+        properties: DEF_365_PROPERTIES,
+        ancestors: DEF_365_ANCESTORS,
     },
     Definition {
         name: "LayoutCssStyle",
@@ -45445,8 +45548,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_364_PROPERTIES,
-        ancestors: DEF_364_ANCESTORS,
+        properties: DEF_366_PROPERTIES,
+        ancestors: DEF_366_ANCESTORS,
     },
     Definition {
         name: "BoxBorder",
@@ -45464,8 +45567,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_365_PROPERTIES,
-        ancestors: DEF_365_ANCESTORS,
+        properties: DEF_367_PROPERTIES,
+        ancestors: DEF_367_ANCESTORS,
     },
     Definition {
         name: "BoxGradient",
@@ -45483,8 +45586,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_366_PROPERTIES,
-        ancestors: DEF_366_ANCESTORS,
+        properties: DEF_368_PROPERTIES,
+        ancestors: DEF_368_ANCESTORS,
     },
     Definition {
         name: "BoxShadow",
@@ -45502,8 +45605,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_367_PROPERTIES,
-        ancestors: DEF_367_ANCESTORS,
+        properties: DEF_369_PROPERTIES,
+        ancestors: DEF_369_ANCESTORS,
     },
     Definition {
         name: "BoxPaint",
@@ -45521,8 +45624,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_368_PROPERTIES,
-        ancestors: DEF_368_ANCESTORS,
+        properties: DEF_370_PROPERTIES,
+        ancestors: DEF_370_ANCESTORS,
     },
     Definition {
         name: "TextStyleCssText",
@@ -45540,8 +45643,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_369_PROPERTIES,
-        ancestors: DEF_369_ANCESTORS,
+        properties: DEF_371_PROPERTIES,
+        ancestors: DEF_371_ANCESTORS,
     },
     Definition {
         name: "LiveSlot",
@@ -45559,8 +45662,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_370_PROPERTIES,
-        ancestors: DEF_370_ANCESTORS,
+        properties: DEF_372_PROPERTIES,
+        ancestors: DEF_372_ANCESTORS,
     },
     Definition {
         name: "LiveStep",
@@ -45578,8 +45681,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_371_PROPERTIES,
-        ancestors: DEF_371_ANCESTORS,
+        properties: DEF_373_PROPERTIES,
+        ancestors: DEF_373_ANCESTORS,
     },
     Definition {
         name: "LiveStepUnit",
@@ -45597,7 +45700,7 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_372_PROPERTIES,
-        ancestors: DEF_372_ANCESTORS,
+        properties: DEF_374_PROPERTIES,
+        ancestors: DEF_374_ANCESTORS,
     },
 ];

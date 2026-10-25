@@ -91,6 +91,7 @@ use crate::mechanical_port::source::{
         semantic_node::SemanticNodeRef,
     },
     sidecar::Sidecar,
+    text::text_style_reference::{TextStyleReferenceHandle, TextStyleReferenceWeak},
     view_model_type::ViewModelType,
     viewmodel::{
         viewmodel::ViewModel,
@@ -1743,6 +1744,7 @@ pub struct HitDrawable {
     component: RuntimeDrawableOccurrence,
     drawable: RuntimeDrawableOccurrence,
     hit_radius: f32,
+    text_style: Option<TextStyleReferenceWeak>,
     is_hovered: Cell<bool>,
     can_early_out: Cell<bool>,
     has_down_listener: Cell<bool>,
@@ -1767,6 +1769,7 @@ pub struct HitDrawable {
 type HitExpandable = HitDrawable;
 type HitTextRun = HitExpandable;
 type HitLayout = HitDrawable;
+type HitTextStyleTarget = HitDrawable;
 
 impl HitDrawable {
     fn scroll_proxy_for(
@@ -1805,6 +1808,7 @@ impl HitDrawable {
             component,
             drawable,
             hit_radius: 2.0,
+            text_style: None,
             is_hovered: Cell::new(false),
             can_early_out: Cell::new(can_early_out),
             has_down_listener: Cell::new(false),
@@ -2034,6 +2038,24 @@ impl HitComponent for HitDrawable {
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
+        if let Some(style) = &self.text_style {
+            let Some(style) = style.upgrade() else {
+                return false;
+            };
+            let runs = self
+                .component
+                .authored_handle()
+                .expect("text style target is authored")
+                .with(|owner| owner.as_text().expect("text style target").runs().to_vec())
+                .expect("live text style target");
+            return runs.iter().any(|run| {
+                run.with(|run| {
+                    run.style_reference().as_ref() == Some(&style)
+                        && run.hit_test_point(position, true, true)
+                })
+                .unwrap_or(false)
+            });
+        }
         self.component
             .hit_test_point(&position, self.hit_path, self.hit_clip)
     }
@@ -2092,6 +2114,112 @@ impl HitComponent for HitDrawable {
             listener.with_group(|listener| listener.disable(pointer_id));
         }
     }
+}
+
+struct HitTextStyleRuns {
+    component: CoreHandle,
+}
+impl HitTextStyleRuns {
+    fn hidden(&self) -> bool {
+        component_is_collapsed(&self.component) || component_is_hidden(&self.component)
+    }
+    fn state_machines(&self) -> Vec<RuntimeStateMachineInstanceHandle> {
+        self.component
+            .with(|owner| {
+                let mut machines = Vec::new();
+                owner
+                    .as_text()
+                    .expect("text style hit target")
+                    .run_state_machines(&mut machines);
+                machines
+            })
+            .expect("live text style hit target")
+    }
+}
+impl HitComponent for HitTextStyleRuns {
+    fn component(&self) -> RuntimeDrawableOccurrence {
+        RuntimeDrawableOccurrence::Authored(self.component.clone())
+    }
+    fn hit_test(&self, position: Vec2D) -> bool {
+        !self.hidden()
+            && self
+                .state_machines()
+                .iter()
+                .any(|sm| sm.with_instance(|sm| sm.hit_test(position)))
+    }
+    fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
+        !self.hidden()
+            && self
+                .state_machines()
+                .iter()
+                .any(|sm| sm.with_instance_mut(|sm| sm.listens_to_button_at(position, button)))
+    }
+    fn process_event(
+        &self,
+        machine: &mut StateMachineInstance,
+        position: Vec2D,
+        hit_type: ListenerType,
+        can_hit: bool,
+        timestamp: f32,
+        pointer_id: i32,
+        button: PointerButton,
+    ) -> HitResult {
+        let mut hit_result = HitResult::None;
+        let mut running_can_hit = can_hit && !self.hidden();
+        // Retain the collected machines, never a Text/style borrow, across listeners.
+        let state_machines = self.state_machines();
+        for state_machine in state_machines {
+            let style_hit_result = state_machine.with_instance_mut(|sm| {
+                let mut result = HitResult::None;
+                if running_can_hit {
+                    match hit_type {
+                        ListenerType::Down => {
+                            result = sm.pointer_down(position, pointer_id, button)
+                        }
+                        ListenerType::Up => result = sm.pointer_up(position, pointer_id, button),
+                        ListenerType::Move => {
+                            result = sm.pointer_move(position, timestamp, pointer_id)
+                        }
+                        ListenerType::Exit => result = sm.pointer_exit(position, pointer_id),
+                        ListenerType::DragStart => {
+                            sm.drag_start(position, 0.0, true, pointer_id, button);
+                        }
+                        ListenerType::DragEnd => {
+                            sm.drag_end(position, 0.0, pointer_id, button);
+                        }
+                        _ => {}
+                    }
+                } else if matches!(
+                    hit_type,
+                    ListenerType::Down | ListenerType::Up | ListenerType::Move | ListenerType::Exit
+                ) {
+                    sm.pointer_exit(position, pointer_id);
+                }
+                if sm.needs_advance() {
+                    machine.mark_needs_advance();
+                }
+                result
+            });
+            if (hit_result == HitResult::None
+                && matches!(style_hit_result, HitResult::Hit | HitResult::HitOpaque))
+                || (hit_result == HitResult::Hit && style_hit_result == HitResult::HitOpaque)
+            {
+                hit_result = style_hit_result;
+            }
+            if hit_result == HitResult::HitOpaque {
+                running_can_hit = false;
+            }
+        }
+        hit_result
+    }
+    fn process_gamepad_invocation(
+        &self,
+        _invocation: &ListenerInvocation,
+        _already_dispatched: Option<&CoreHandle>,
+    ) -> HitResult {
+        HitResult::None
+    }
+    fn prepare_event(&self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
 struct HitNestedArtboard {
@@ -3404,6 +3532,7 @@ pub struct StateMachineInstance {
     // Re-picking on each event would hand a flick's tail to an outer view.
     scroll_latch: Option<Rc<dyn HitComponent>>,
     pointer_scroll_clock: bool,
+    host_space_pointers: bool,
     /// Each pointer's drag owner in CSS content (docs/CSS_LAYOUT.md, 4.5).
     css_drag_owners: Vec<(i32, usize)>,
     /// The CSS boxes whose own hit hears the pointer move, enter or leave,
@@ -3515,6 +3644,7 @@ impl StateMachineInstance {
             hit_components: Vec::new(),
             scroll_latch: None,
             pointer_scroll_clock: false,
+            host_space_pointers: false,
             css_drag_owners: Vec::new(),
             css_hover_boxes: Vec::new(),
             css_hits: false,
@@ -3608,6 +3738,7 @@ impl StateMachineInstance {
             instance.initialize_listeners(&mut hit_lookup);
             instance.initialize_component_provided_listeners(&mut hit_lookup);
             instance.initialize_nested_hit_components();
+            instance.initialize_text_style_runs();
             instance.initialize_text_inputs();
             instance.initialize_scripted_objects();
             instance.sort_hit_components();
@@ -4084,6 +4215,71 @@ impl StateMachineInstance {
         }
     }
 
+    pub fn serve_text_style(&mut self, text: &CoreHandle, style: &TextStyleReferenceHandle) {
+        self.serve_text_style_weak(text, &style.downgrade());
+    }
+
+    pub fn serve_text_style_weak(&mut self, text: &CoreHandle, style: &TextStyleReferenceWeak) {
+        let mut hit_runs: Option<HitTextStyleTarget> = None;
+        for group in &self.listener_groups {
+            let Some(listener) = group.with_group(|group| group.listener_handle()) else {
+                continue;
+            };
+            if !listener
+                .with(super::state_machine_listener::has_pointer_listeners)
+                .unwrap_or(false)
+                || self
+                    .resolve_artboard_object(Self::listener_target_id(&listener))
+                    .is_some()
+            {
+                continue;
+            }
+            let hit = hit_runs.get_or_insert_with(|| {
+                let mut hit = HitDrawable::new(
+                    RuntimeDrawableOccurrence::Authored(text.clone()),
+                    RuntimeDrawableOccurrence::Authored(text.clone()),
+                    false,
+                    true,
+                    true,
+                );
+                hit.text_style = Some(style.clone());
+                hit
+            });
+            hit.add_listener(group.clone());
+        }
+        if let Some(hit) = hit_runs {
+            self.hit_components.push(Rc::new(hit));
+        }
+        self.host_space_pointers = true;
+    }
+
+    fn initialize_text_style_runs(&mut self) {
+        let texts = self
+            .artboard_instance
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .filter(|owner| {
+                        owner
+                            .with(|owner| {
+                                owner
+                                    .as_text()
+                                    .is_some_and(|text| text.may_have_listening_runs())
+                            })
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .expect("a state machine retains its ArtboardInstance");
+        for component in texts {
+            self.hit_components
+                .push(Rc::new(HitTextStyleRuns { component }));
+        }
+    }
+
     fn initialize_text_inputs(&mut self) {
         for text_input in self
             .artboard_instance
@@ -4314,6 +4510,9 @@ impl StateMachineInstance {
     }
 
     fn map_to_content_space(&self, position: &mut Vec2D, delta: Option<&mut Vec2D>) -> bool {
+        if self.host_space_pointers {
+            return true;
+        }
         self.artboard_instance
             .with_artboard(|artboard| {
                 if artboard.frame_origin() {

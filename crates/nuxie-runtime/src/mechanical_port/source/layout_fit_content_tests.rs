@@ -61,7 +61,7 @@ fn make_text(arena: &CoreArena, content: &str) -> (CoreHandle, CoreHandle) {
     )
     .unwrap();
     FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&font).unwrap()));
-    let mut style = TextStyle::default();
+    let mut style = crate::source::text::text_style_paint::TextStylePaint::default();
     style.base.set_font_size_value(28.0);
     style.base.set_line_height_value(36.0);
     let style = arena.insert(style);
@@ -1016,7 +1016,8 @@ fn css_fit_content_letter_spacing_is_included_in_the_minimum() {
         .flatten()
         .unwrap();
     style
-        .with_downcast_mut::<TextStyle, _>(|style| {
+        .with_mut(|object| {
+            let style = object.as_text_style_mut().unwrap();
             style.base.set_letter_spacing_value(2.0);
         })
         .unwrap();

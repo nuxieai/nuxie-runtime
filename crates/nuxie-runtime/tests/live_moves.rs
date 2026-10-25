@@ -4219,3 +4219,100 @@ fn hosted_css_item_rehomes_into_flight_destination_and_home_in_one_advance() {
         }
     }
 }
+
+#[test]
+fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
+    use source::{
+        generated::nested_artboard_layout_base::NestedArtboardLayoutBase,
+        layout_component::LayoutComponent,
+    };
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::native_layout_flight_reflow_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let (root, screen, machine) = mount_layout_page(&file);
+    let slot = |name| {
+        screen
+            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+            .unwrap()
+    };
+    // This fixture's destination is a plain host; its source is a native layout
+    // host. Fly from the plain 100 x 80 unit towards the 200 x 120 layout box.
+    let from = slot("destination");
+    let to = slot("source");
+    let flight = slot("flight");
+    for (slot, width, height) in [(&to, 200.0, 120.0), (&flight, 60.0, 40.0)] {
+        set(
+            slot,
+            NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY.into(),
+            width,
+        );
+        set(
+            slot,
+            NestedArtboardLayoutBase::INSTANCE_HEIGHT_PROPERTY_KEY.into(),
+            height,
+        );
+    }
+    machine.advance_and_apply(0.0);
+    let start = slot_pose(&from).unwrap().size;
+    let end = slot_pose(&to).unwrap().size;
+    close(start.x, 100.0);
+    close(start.y, 80.0);
+    close(end.x, 200.0);
+    close(end.y, 120.0);
+    let original = child(&from).unwrap();
+    let reflow = original
+        .with_artboard(|b| b.find_handle::<LayoutComponent>("reflow"))
+        .unwrap();
+    empty_slot(&flight).unwrap();
+    move_live(&from, &flight).unwrap();
+    let follower = Flight::new(flight.clone(), from.clone(), to.clone(), SizeMode::Layout).unwrap();
+    let mut moves = LiveMoves::default();
+    moves.with_flights(&root, |flights| flights.push(follower));
+    for progress in [0.5, 0.25, 0.75] {
+        set(&moves.flights(&root)[0].controls(), 62003, progress);
+        machine.advance_and_apply(0.0);
+        moves.after_advance(&root).unwrap();
+        let width = 100.0 + 100.0 * progress;
+        let height = 80.0 + 40.0 * progress;
+        assert_eq!(
+            child(&flight).unwrap().core_handle(),
+            original.core_handle()
+        );
+        let (stored_width, stored_height, layout_width, layout_height) = original
+            .with_artboard(|b| (b.width(), b.height(), b.layout_width(), b.layout_height()));
+        let size = reflow
+            .with_downcast::<LayoutComponent, _>(|c| (c.layout_width(), c.layout_height()))
+            .unwrap();
+        for (label, actual, expected) in [
+            ("stored width", stored_width, width),
+            ("stored height", stored_height, height),
+            ("layout width", layout_width, width),
+            ("layout height", layout_height, height),
+            ("child width", size.0, width),
+            ("child height", size.1, height),
+        ] {
+            assert!(
+                (actual - expected).abs() < 0.002,
+                "progress {progress}, {label}: expected {expected}, got {actual}; stored=({stored_width}, {stored_height}), layout=({layout_width}, {layout_height}), child={size:?}"
+            );
+        }
+    }
+    moves.with_flights(&root, |flights| flights.clear());
+    move_live(&flight, &to).unwrap();
+    machine.advance_and_apply(0.0);
+    assert_eq!(child(&to).unwrap().core_handle(), original.core_handle());
+    let landed = original.with_artboard(|b| (b.layout_width(), b.layout_height()));
+    close(landed.0, 200.0);
+    close(landed.1, 120.0);
+    let landed_child = reflow
+        .with_downcast::<LayoutComponent, _>(|c| (c.layout_width(), c.layout_height()))
+        .unwrap();
+    close(landed_child.0, 200.0);
+    close(landed_child.1, 120.0);
+}

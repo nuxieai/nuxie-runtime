@@ -1312,18 +1312,26 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
 
 /// A flex sibling after a NestedArtboardLayout, exercising its real layout node.
 pub fn layout_fixture() -> Vec<u8> {
-    build_layout_fixture(false, None, false)
+    build_layout_fixture(false, None, false, false)
 }
 pub fn layout_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false)
+    build_layout_fixture(true, None, false, false)
 }
 pub fn hosted_css_layout_fixture(destination_css: bool) -> Vec<u8> {
-    build_layout_fixture(true, Some(destination_css), false)
+    build_layout_fixture(true, Some(destination_css), false, false)
 }
 pub fn hosted_css_plain_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, Some(true), true)
+    build_layout_fixture(true, Some(true), true, false)
 }
-fn build_layout_fixture(flight: bool, hosted_css: Option<bool>, plain_flight: bool) -> Vec<u8> {
+pub fn native_layout_flight_reflow_fixture() -> Vec<u8> {
+    build_layout_fixture(true, None, false, true)
+}
+fn build_layout_fixture(
+    flight: bool,
+    hosted_css: Option<bool>,
+    plain_flight: bool,
+    reflow: bool,
+) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
@@ -1498,6 +1506,22 @@ fn build_layout_fixture(flight: bool, hosted_css: Option<bool>, plain_flight: bo
     );
     obj(&mut b, "Node", &[("name", S("inside")), ("parentId", U(0))]);
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]);
+    if reflow {
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[("name", S("reflow")), ("parentId", U(0)), ("styleId", U(4))],
+        ); // 3
+        obj(
+            &mut b,
+            "LayoutComponentStyle",
+            &[
+                ("parentId", U(3)),
+                ("layoutWidthScaleType", U(1)),
+                ("layoutHeightScaleType", U(1)),
+            ],
+        ); // 4
+    }
     if hosted_css.is_some() {
         obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]);
     }

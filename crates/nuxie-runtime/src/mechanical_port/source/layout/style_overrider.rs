@@ -33,7 +33,10 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
     }
     pub fn attach(&mut self, _provider: &mut T) {}
 
-    fn update_css_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) -> bool {
+    pub(crate) fn update_css_override(
+        provider: &mut T,
+        artboard: &RuntimeArtboardInstanceHandle,
+    ) -> bool {
         let record = artboard
             .with_artboard(|artboard| artboard.css_record())
             .and_then(|_| provider.css_item_record(artboard));

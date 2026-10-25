@@ -514,11 +514,11 @@ fn move_with_props(
         s.apply_origin_override();
         s.base.base.base.add_dirt(ComponentDirt::FILTHY, false);
     });
-    // Reuse ordinary hosting's sizing/ownership step after installing the live
-    // instance. This also clears a prior CSS item when the new host has none.
+    // Reuse ordinary hosting's CSS ownership step, leaving native size
+    // overrides untouched so a flight can drive the instance's stored size.
     if to
         .with_downcast_mut::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
-            |host| host.mark_layout_node_dirty(false),
+            |host| host.update_hosted_css_item(),
         )
         .is_none()
     {
@@ -631,6 +631,9 @@ fn move_with_props(
     adopt_props(prop_slot, &instance, values, &typed)?;
     sync_layout(from);
     sync_layout(to);
+    // The instance may change layout trees. Publish its adopted dimensions
+    // and CSS item style before the new tree takes its node.
+    LayoutComponent::sync_style_occurrence(&instance.core_handle());
     crate::hosted_scene::membership_changed_for(from);
     Ok(())
 }

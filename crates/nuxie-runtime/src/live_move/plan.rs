@@ -8,7 +8,11 @@ use super::{
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    source::{artboard_component_list::ArtboardComponentList, nested_artboard::NestedArtboard},
+    source::{
+        artboard_component_list::ArtboardComponentList,
+        generated::nested_artboard_layout_base::NestedArtboardLayoutBase,
+        nested_artboard::NestedArtboard,
+    },
 };
 use anyhow::{Result, ensure};
 use std::collections::{HashMap, HashSet};
@@ -424,15 +428,38 @@ impl Plan {
             .cloned()
             .collect::<HashSet<_>>();
         let mut rows = HashSet::new();
+        let mut shared_layout_roots = HashSet::new();
         for f in &self.flights {
             if active.contains(&f.board) {
                 f.follow(true, Some(&active))?;
                 rows.insert(f.board.clone());
+                if f.flight.is_type_of(NestedArtboardLayoutBase::TYPE_KEY) {
+                    let mut layout_root = f.board.clone();
+                    while let Some(parent) = layout_root
+                        .with_downcast::<Artboard, _>(|board| {
+                            (!board.updates_own_layout())
+                                .then(|| board.parent_artboard())
+                                .flatten()
+                        })
+                        .flatten()
+                    {
+                        layout_root = parent;
+                    }
+                    if layout_root != f.board {
+                        shared_layout_roots.insert(layout_root);
+                    }
+                }
             }
         }
         // All poses use the same completed player advance. Only then settle
         // each affected row once, including its dirty transported children.
         let changed = !rows.is_empty();
+        // A layout flight can share its Taffy tree above the Screen row (for
+        // example through Page.screens). Solve each such tree once after all
+        // followers write their sizes, before settling the affected rows.
+        for layout_root in shared_layout_roots {
+            Artboard::sync_style_changes_with_update_handle(&layout_root, false);
+        }
         for row in rows {
             Artboard::update_pass_handle(&row, false);
         }

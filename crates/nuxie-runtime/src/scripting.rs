@@ -1677,6 +1677,26 @@ pub struct ScriptedContextSource {
     projection: ScriptedContextProjection,
 }
 
+// The VM enters the executing occurrence for every callback, including nested
+// property callbacks and generators. An owner scope restores the prior source
+// on return or error; it never changes the host's policy transaction.
+thread_local! {
+    static EXECUTING_SCRIPT: RefCell<Option<ScriptedContextSource>> = const { RefCell::new(None) };
+}
+
+#[doc(hidden)]
+pub struct ScriptExecutionScope {
+    previous: Option<ScriptedContextSource>,
+}
+impl Drop for ScriptExecutionScope {
+    fn drop(&mut self) {
+        EXECUTING_SCRIPT.with(|slot| *slot.borrow_mut() = self.previous.take());
+    }
+}
+pub(crate) fn executing_script_source() -> Option<ScriptedContextSource> {
+    EXECUTING_SCRIPT.with(|slot| slot.borrow().clone())
+}
+
 #[derive(Clone)]
 enum ScriptedContextProjection {
     Snapshot {
@@ -1769,6 +1789,12 @@ impl std::fmt::Debug for ScriptedContextSource {
 }
 
 impl ScriptedContextSource {
+    #[doc(hidden)]
+    pub fn enter_execution(source: Option<Self>) -> ScriptExecutionScope {
+        ScriptExecutionScope {
+            previous: EXECUTING_SCRIPT.with(|slot| slot.replace(source)),
+        }
+    }
     /// Retain failed-generator properties until their actual scripted owner is
     /// disposed or reinitialized. Snapshot contexts have no such runtime owner.
     #[doc(hidden)]
@@ -1818,7 +1844,7 @@ impl ScriptedContextSource {
         }
     }
 
-    fn current_data_context(
+    pub(crate) fn current_data_context(
         &self,
     ) -> Option<crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle>
     {

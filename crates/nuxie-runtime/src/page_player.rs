@@ -9,6 +9,98 @@ use std::{
 const MAX_PLAYER_STEP_STATE_CHANGES: usize = 4096;
 const MAX_PLAYER_STEP_RESULT_BYTES: usize = 8 * 1024 * 1024;
 
+// Scoped to the actual player occurrence, rather than a file or VM schema. The
+// native DataContext identity distinguishes rows and players sharing VM values.
+thread_local! {
+    static CHECKED_PAGE: RefCell<Option<RuntimeArtboardInstanceHandle>> = const { RefCell::new(None) };
+}
+struct CheckedPageScope {
+    previous: Option<RuntimeArtboardInstanceHandle>,
+}
+impl CheckedPageScope {
+    fn enter(root: RuntimeArtboardInstanceHandle) -> Self {
+        let current = hosted_scene::enabled(&root).then_some(root);
+        Self {
+            previous: CHECKED_PAGE.with(|slot| slot.replace(current)),
+        }
+    }
+}
+impl Drop for CheckedPageScope {
+    fn drop(&mut self) {
+        CHECKED_PAGE.with(|slot| *slot.borrow_mut() = self.previous.take());
+    }
+}
+
+/// Resolve the unnamed checked-script root inside the current page operation.
+/// Named globals and non-page/host writes retain their supplied roots. Every
+/// checked read, scalar write and atomic batch uses this same resolution.
+#[doc(hidden)]
+pub fn checked_script_root(
+    name: &str,
+    fallback: &RuntimeOwnedViewModelHandle,
+) -> Result<RuntimeOwnedViewModelHandle, RuntimeValuePolicyError> {
+    if !name.is_empty() {
+        return Ok(fallback.clone());
+    }
+    let Some(source) = crate::scripting::executing_script_source() else {
+        return Ok(fallback.clone());
+    };
+    let Some(page) = CHECKED_PAGE.with(|slot| slot.borrow().clone()) else {
+        return Ok(fallback.clone());
+    };
+    let file = fallback.native_file();
+    if !source
+        .current_file()
+        .and_then(|file| file.upgrade())
+        .is_some_and(|source_file| source_file.ptr_eq(&file))
+    {
+        return Err(RuntimeValuePolicyError::InvalidArgument);
+    }
+    let list = page
+        .with_artboard(|b| {
+            b.find_handle::<source::artboard_component_list::ArtboardComponentList>("screens")
+        })
+        .ok_or(RuntimeValuePolicyError::NotFound)?;
+    let page_context = page.data_context();
+    let mut current = source.current_data_context();
+    for _ in 0..MAX_PLAYER_STEP_STATE_CHANGES {
+        let Some(context) = current else {
+            return Err(RuntimeValuePolicyError::NotFound);
+        };
+        // Match the occurrence's live context, never its schema or shared VM
+        // identity. Following parent contexts handles scripts in nested units
+        // and follows a transported unit to its current Screen. Inspect only
+        // awake rows: sleeping rows add no work to checked callback frames.
+        let row = list
+            .with_downcast::<source::artboard_component_list::ArtboardComponentList, _>(|l| {
+                l.live_move_frame_indices()
+                    .iter()
+                    .filter_map(|&index| l.artboard_instance(index))
+                    .find(|row| {
+                        row.data_context()
+                            .is_some_and(|row_context| row_context.ptr_eq(&context))
+                    })
+            })
+            .flatten();
+        if let Some(row) = row {
+            let model = row
+                .data_context()
+                .and_then(|c| c.with_context(|c| c.main_view_model_instance()))
+                .ok_or(RuntimeValuePolicyError::NotFound)?;
+            return RuntimeOwnedViewModelHandle::from_native(file, model)
+                .ok_or(RuntimeValuePolicyError::NotFound);
+        }
+        if page_context
+            .as_ref()
+            .is_some_and(|page_context| page_context.ptr_eq(&context))
+        {
+            return Ok(fallback.clone());
+        }
+        current = context.with_context(|c| c.parent());
+    }
+    Err(RuntimeValuePolicyError::LimitExceeded)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     InvalidArgument,
@@ -105,6 +197,7 @@ pub struct PendingStep<'a, G = ()> {
     pub output: Option<Output>,
     transaction: Option<RuntimeOwnedViewModelGraphTransaction>,
     _scope: Option<live_move::FrameScope>,
+    _checked_page: CheckedPageScope,
     rules: Option<Rc<RefCell<RuntimeValuePolicyOperation>>>,
     policy: Option<&'a RuntimeValuePolicy>,
     commands: Rc<RefCell<Vec<HostCommand>>>,
@@ -305,6 +398,7 @@ impl PagePlayer {
         };
         #[cfg(feature = "test-support")]
         live_timer.mark("owner_scope");
+        let checked_page = CheckedPageScope::enter(artboard.native_handle());
         let retained_subscribed_owners = if has_value_policy {
             match retain_scope(&subscribed_roots) {
                 Ok(owners) => owners,
@@ -869,6 +963,7 @@ impl PagePlayer {
             }),
             transaction: view_model_transaction,
             _scope: live_frame_scope,
+            _checked_page: checked_page,
             rules: rule_operation,
             policy,
             commands: self.pending_commands.clone(),

@@ -190,6 +190,9 @@ pub fn script_list_property_values(
     let root = roots
         .get(root_name)
         .ok_or_else(|| read_error(RuntimeValuePolicyError::NotFound))?;
+    let scoped_root =
+        nuxie_runtime::page_player::checked_script_root(root_name, root).map_err(read_error)?;
+    let root = &scoped_root;
     policy.resolve_property(root, path).map_err(read_error)?;
     let Some(count) = root.list_item_count_by_property_name_path(path) else {
         return Ok(Value::Nil);

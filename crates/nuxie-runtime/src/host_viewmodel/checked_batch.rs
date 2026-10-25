@@ -87,6 +87,8 @@ pub fn runtime_checked_value_write_batch(
         let root = roots
             .get(&entry.root_name)
             .ok_or(RuntimeValuePolicyError::NotFound)?;
+        let scoped_root = crate::page_player::checked_script_root(&entry.root_name, root)?;
+        let root = &scoped_root;
         let (candidate, marker) =
             checked_candidate(entry.value, policy.property_value(root, &entry.path)?)?;
         let (owner, index) = policy.resolve_property(root, &entry.path)?;

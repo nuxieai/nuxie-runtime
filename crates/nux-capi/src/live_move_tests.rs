@@ -2924,3 +2924,258 @@ fn row_evaluation_c_api_repeated_arrival_after_cut_without_ordinary_step() {
         nux_view_model_instance_free(b);
     }
 }
+
+// The published responses.set adapter, copied from scripted-resource-compiler.
+const CHECKED_SCREEN_SCRIPT: &[u8] = br#"local module = require('bridge')
+local responses = {}
+responses.set = function(field, value) if type(field) ~= "string" or #field > 4096 then error("nuxie.responses.set field must be a form.field string of at most 4096 UTF-8 bytes") end; local form, name = string.match(field, "^([^.]+)%.([^.]+)$"); if not form or string.find(field, "[/%z]") then error("nuxie.responses.set field must name a form and field") end; local answer = "experience/responses:" .. form .. "/" .. name; if value == nil or type(value) == "table" then local options = module.listValues("", answer, "value"); if options == nil then if value ~= nil then error("nuxie.responses.set choices need a several-choice answer") end; return module.set("", answer, nil) end; local chosen = {}; if value ~= nil then local count = 0; for key, option in pairs(value) do if type(option) ~= "string" then error("nuxie.responses.set choices must be option names") end; count = count + 1; chosen[option] = true end; for key in pairs(value) do if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > count then error("nuxie.responses.set choices must be a list of option names") end end end; local writes = {}; for index, option in ipairs(options) do local hex = string.gsub(option, ".", function(byte) return string.format("%02x", string.byte(byte)) end); writes[index] = {root = "", path = "experience/responses:" .. form .. "/option:" .. name .. ":" .. hex .. "/picked", value = chosen[option] == true}; chosen[option] = nil end; if next(chosen) ~= nil then error("nuxie.responses.set choices must name options of this answer") end; return module.setAll(writes) end; return module.set("", answer, value) end
+return function(context)
+ return {init = function() return true end, performAction = function(self)
+  local mode = context:viewModel().mode.value
+  local before = module.listValues('', 'experience/responses:form/field', 'picked')
+  if mode == 1 or mode == 5 then assert(before[1] and not before[2]) end
+  local chosen = {'y'}
+  if mode == 2 then chosen = {'x', 'y'} elseif mode == 3 then chosen = nil end
+  if mode == 4 or mode == 5 then
+   assert(module.set('', 'experience/responses:form/title', 'changed'))
+  end
+  local ok, rule = responses.set('form.field', chosen)
+  if mode == 2 then
+   assert(not ok and rule == 'one-choice')
+   local after = module.listValues('', 'experience/responses:form/field', 'picked')
+   assert(before[1] == after[1] and before[2] == after[2])
+  else assert(ok and rule == nil) end
+  if mode == 4 then error('abort row') end
+  module.command('row-action', {applied=ok})
+ end}
+end"#;
+
+unsafe fn checked_screen_scene(standalone: bool) -> LiveScene {
+    unsafe {
+        let _flags = luaur_common::ScopedAllFlags::enter(true);
+        let mut size = 0;
+        let code = luaur_compiler::functions::luau_compile::luau_compile(
+            CHECKED_SCREEN_SCRIPT.as_ptr().cast(),
+            CHECKED_SCREEN_SCRIPT.len(),
+            ptr::null_mut(),
+            &mut size,
+        );
+        assert!(!code.is_null());
+        let mut payload = vec![0];
+        payload.extend_from_slice(std::slice::from_raw_parts(code.cast::<u8>(), size));
+        unsafe extern "C" {
+            fn free(p: *mut c_void);
+        }
+        free(code.cast());
+        let bytes = fixture::checked_screen_fixture(&payload);
+        let mut scene = LiveScene {
+            file: ptr::null_mut(),
+            artboard: ptr::null_mut(),
+            vm: ptr::null_mut(),
+            player: ptr::null_mut(),
+        };
+        let mut result = ptr::null_mut();
+        let status = nux_file_import_trusted_with_host_commands(
+            bytes.as_ptr(),
+            bytes.len(),
+            &NuxRenderCallbacks::default(),
+            &NuxHostCommandImportConfig {
+                module_name: view("bridge"),
+                ..Default::default()
+            },
+            &mut scene.file,
+            &mut result,
+        );
+        if !result.is_null() {
+            eprintln!(
+                "checked scene: {}",
+                String::from_utf8_lossy(&(*result).message)
+            );
+            nux_capi_result_free(result);
+        }
+        assert_eq!(status, NuxStatus::Ok);
+        let rule = NuxValueRule {
+            model: view("Form"),
+            property: view("field"),
+            kind: NUX_VALUE_RULE_PICKED_COUNT,
+            mode: NUX_VALUE_RULE_REFUSE,
+            picked_property: view("picked"),
+            bound_flags: 3,
+            minimum: 0,
+            maximum: 1,
+            code: view("one-choice"),
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_file_set_value_rules(scene.file, &rule, 1),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_new(scene.file, usize::from(standalone), &mut scene.artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_default(scene.artboard, &mut scene.vm),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(scene.artboard, scene.vm),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_new_default(scene.artboard, &mut scene.player),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        scene
+    }
+}
+fn checked_screen_row(
+    scene: &LiveScene,
+    index: usize,
+    standalone: bool,
+) -> RuntimeOwnedViewModelHandle {
+    let root = unsafe { &*scene.vm }.instance.clone();
+    if standalone {
+        root
+    } else {
+        root.list_item_by_property_name_path("screens", index)
+            .unwrap()
+    }
+}
+fn checked_screen_choices(row: &RuntimeOwnedViewModelHandle) -> ([bool; 2], Vec<u64>) {
+    let path = "experience/responses:form/field";
+    assert_eq!(row.list_item_count_by_property_name_path(path), Some(2));
+    let items = (0..2)
+        .map(|i| row.list_item_by_property_name_path(path, i).unwrap())
+        .collect::<Vec<_>>();
+    (
+        [
+            items[0]
+                .borrow()
+                .boolean_value_by_property_name("picked")
+                .unwrap(),
+            items[1]
+                .borrow()
+                .boolean_value_by_property_name("picked")
+                .unwrap(),
+        ],
+        items.iter().map(|v| v.instance_identity()).collect(),
+    )
+}
+unsafe fn checked_screen_action(scene: &LiveScene, indices: &[usize], expected: NuxStatus) {
+    unsafe {
+        let pointers = indices
+            .iter()
+            .map(|&i| NuxPlayerPointerEvent {
+                kind: NUX_PLAYER_POINTER_KIND_DOWN,
+                x: 100.0 + i as f32 * 300.0,
+                y: 50.0,
+                pointer_id: i as i32 + 1,
+                timestamp_seconds: 0.0,
+            })
+            .collect::<Vec<_>>();
+        let mut result = ptr::null_mut();
+        let status = step_status(
+            scene.player,
+            &NuxPlayerStep {
+                pointers: pointers.as_ptr(),
+                pointer_count: pointers.len(),
+                ..Default::default()
+            },
+            &mut result,
+        );
+        assert_eq!(status, expected);
+        if expected == NuxStatus::RuntimeError {
+            assert!(
+                String::from_utf8_lossy(&(*result).message).contains("abort row"),
+                "must reach the later callback failure: {}",
+                String::from_utf8_lossy(&(*result).message)
+            );
+        }
+        if expected == NuxStatus::Ok {
+            assert_eq!(
+                (&(*result).host_commands).len(),
+                indices.len(),
+                "each action must run"
+            );
+        }
+        nux_player_step_result_free(result);
+    }
+}
+#[test]
+fn screen_checked_actions_read_and_write_their_own_rows() {
+    unsafe {
+        let scene = checked_screen_scene(false);
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        checked_screen_action(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(checked_screen_choices(&a).0, [false, true]);
+        assert_eq!(checked_screen_choices(&b).0, [true, false]);
+        b.borrow_mut().set_number_by_property_name("mode", 5.0);
+        checked_screen_action(&scene, &[1], NuxStatus::Ok);
+        assert_eq!(checked_screen_choices(&a).0, [false, true]);
+        assert_eq!(checked_screen_choices(&b).0, [false, true]);
+        for (row, title) in [(&a, b"before".as_slice()), (&b, b"changed".as_slice())] {
+            assert_eq!(
+                row.borrow()
+                    .string_value_by_property_name_path("experience/responses:form/title")
+                    .unwrap()
+                    .as_ref(),
+                title
+            );
+        }
+    }
+}
+#[test]
+fn screen_checked_rejection_is_atomic_and_nil_keeps_records() {
+    unsafe {
+        let scene = checked_screen_scene(false);
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        let initial = checked_screen_choices(&a);
+        a.borrow_mut().set_number_by_property_name("mode", 2.0);
+        checked_screen_action(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(checked_screen_choices(&a), initial);
+        a.borrow_mut().set_number_by_property_name("mode", 3.0);
+        checked_screen_action(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(checked_screen_choices(&a), ([false, false], initial.1));
+        assert_eq!(checked_screen_choices(&b).0, [true, false]);
+    }
+}
+#[test]
+fn screen_checked_later_error_rolls_back_both_rows() {
+    unsafe {
+        let scene = checked_screen_scene(false);
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        b.borrow_mut().set_number_by_property_name("mode", 4.0);
+        checked_screen_action(&scene, &[0, 1], NuxStatus::RuntimeError);
+        assert_eq!(checked_screen_choices(&a).0, [true, false]);
+        assert_eq!(checked_screen_choices(&b).0, [true, false]);
+        assert_eq!(
+            b.borrow()
+                .string_value_by_property_name_path("experience/responses:form/title")
+                .unwrap()
+                .as_ref(),
+            b"before"
+        );
+    }
+}
+#[test]
+fn screen_checked_standalone_keeps_its_bound_root() {
+    unsafe {
+        let scene = checked_screen_scene(true);
+        let root = checked_screen_row(&scene, 0, true);
+        root.borrow_mut().set_number_by_property_name("mode", 5.0);
+        checked_screen_action(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(checked_screen_choices(&root).0, [false, true]);
+        assert_eq!(
+            root.borrow()
+                .string_value_by_property_name_path("experience/responses:form/title")
+                .unwrap()
+                .as_ref(),
+            b"changed"
+        );
+    }
+}

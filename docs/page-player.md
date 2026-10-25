@@ -19,11 +19,19 @@ The existing one-time root capability decision now accepts `$nuxie.page` with a 
 
 Begin, end and row sleep first flush pending binding changes and settle component updates. Insertions, removals and moves therefore take effect before row lookup and ownership transfer. This also settles the fresh incoming row's opacity and transforms before flight validation.
 
-After settlement, begin and end evaluate the expanded incoming and outgoing Screen machines through the native `advanceAndApply` path at zero elapsed time. Named steps select their published endpoints; NULL-name cuts use the expanded Screens supplied by the host. Row collapse evaluates that row before putting it to sleep; wake evaluates it immediately after restoring bindings. These evaluations observe intermediate lifecycle phases and reset completed one-shot arrival states before another identical `entering`/transition pair. They add no elapsed time to timelines and do not advance the page machine or unrelated rows.
+After settlement, begin and end evaluate the expanded incoming and outgoing Screen machines through the port of Rive’s `StateMachineInstance::tryChangeState()` (`try_change_state`). This updates data bindings and layer states directly, with no advance call. Named steps select their published endpoints; NULL-name cuts use the expanded Screens supplied by the host. Row collapse evaluates that row before putting it to sleep; wake evaluates it immediately after restoring bindings. These evaluations observe intermediate lifecycle phases and reset completed one-shot arrival states before another identical `entering`/transition pair. They advance no timeline, nested artboard or page machine. The endpoint cost test now requires zero artboard advances for begin, end, sleep and wake, with either 2 or 40 expanded rows.
 
 The player snapshots evaluation reports before native queues can be cleared or hidden by collapse. It uses the ordinary event cursor, preserves native listener queues and queues reports alongside host commands in the status transaction. Status outputs contain neither events nor commands. The next committed ordinary step delivers the queued effects once, even if the producing row is still asleep. Projection uses the ordinary event count, property and byte limits. Ordinary files without page shape never enter row evaluation, and sleeping rows still cost no per-frame playback or event walks.
 
 The host controls stack order through the view-model list. Move the incoming row just above the outgoing row for forward navigation and just below it for back navigation, then call begin in the same batch. List moves retain row instance identity, playback, view model and sleep state. The player does not clone or recreate a kept row.
+
+## Checked scripts in Screen rows
+
+During a page operation, checked scripts address the executing Screen row’s root view model under the empty root name (`""`). The published `responses.set` adapter therefore resolves paths such as `experience/responses:form/field` on that row, rather than on the page model whose only field is `screens`. Named global roots retain their existing meaning. A standalone player continues to use its bound root.
+
+The VM enters an execution-source scope for callbacks and generators, and restores the previous source on return or error. Property callbacks retain a weak source reference alongside their existing owner tracking. The shared page player resolves that source’s live DataContext ancestry against the current page’s awake row contexts. Context identity distinguishes owning occurrences even when they share a file, schema or VM values, and follows a nested unit to its current Screen. Sleeping rows are excluded from this lookup.
+
+Checked scalar writes, atomic batches and list reads use the same root resolver. Both the C API and ProductHost call these shared helpers. The host’s original policy operation, change capture and graph transaction remain shared across the whole page: a rejected batch changes none of its candidate properties, and a later script failure rolls back earlier row writes and commands in the same step. Clearing choices with nil updates their picked flags without removing the records.
 
 ## Content measurement
 
@@ -33,7 +41,35 @@ The owning layout tree caches one answer by Screen node and width. Repeated quer
 
 Scripted layout uses its last natural measurement from the ordinary layout pass. The query never executes script callbacks. It returns an error if a settled Screen layout tree or required natural measurement is unavailable. An empty expanded stack returns NotFound. Callers should query after stepping, including after changing page width or bound text.
 
-## UNIV-5289 row-evaluation validation
+## tryChangeState and checked-script follow-up validation
+
+The evaluation entry point was checked against `src/animation/state_machine_instance.cpp` at the pinned Rive ref `12e5327ba8cb4346155010d34584cb4dab640d51`: `tryChangeState()` updates data binds with false and then updates each layer's state, without advancing time. Status operations now call its existing Rust port directly. All first-commit regressions remain green in `trychangeruntimefinal` and `screencheckedcapifinal`, including both repeated-arrival cuts, once-only deferred events/commands, record-free files, zero-visit ordinary files and collapsed-row costs. The endpoint test now asserts zero native artboard advances for every status operation.
+
+The checked-script trace was verified against the compiler's `responses_set_fragment!` in `tools/nuxie-editor/crates/scripted-resource-compiler/src/lib.rs`, the C API root map in `value_rule_script.rs`, and the common list-read helper in `checked_value_script.rs`. The published adapter reads `experience/responses:form/field` through root `""`; the old map supplied the page root. The new device-shaped two-row fixture runs that published adapter through real scripted listener actions and the shared page player. It checks batch writes, scalar writes, per-row isolation and retained record identities.
+
+| Regression/control | Red evidence in `screencheckedretry` | Green evidence in `screencheckedgreen2` and `screencheckedcapifinal` |
+| --- | --- | --- |
+| `screen_checked_actions_read_and_write_their_own_rows` | Failed with checked value read: NotFound | Both rows read their own initial choices and update only their own response branch; scalar writes also select the executing row |
+| `screen_checked_rejection_is_atomic_and_nil_keeps_records` | Failed with checked value read: NotFound | Rejected choice batch changes nothing; nil clears flags while retaining all record identities |
+| `screen_checked_later_error_rolls_back_both_rows` | Original assertion passed incidentally on the early NotFound | Strengthened assertion requires the later `abort row` error; earlier writes in both rows, including a scalar write, roll back |
+| `screen_checked_standalone_keeps_its_bound_root` | Passed as the standalone control | Still passes using its bound Screen root |
+
+The initial pool failure stopped work; the user repaired the pool and submitted `screencheckedretry`. No pool fault occurred after that resumption. `screencheckedgreen` exposed a missing execution-source field in the property-owner reconstruction path; it was fixed before the next request. Every request below used the file runner, one at a time, with no source edits while outstanding. No build or test command ran directly in this worktree. Logs are `result-<id>.log` in the runner folder listed in the initial validation section below; evidence is `.nuxie/homelab/<job>/evidence`.
+
+| Request ID | Command through tools/bazel/runtime.py | Runner exit and result | Job ID |
+| --- | --- | --- | --- |
+| `screencheckedred` | `test -p nux-capi --lib screen_checked_` | 2: pool fault, WSL rustup permission denied; no tests ran; stopped | `d7c83f76-246e-4ce1-bcf0-04b379d0a9fd` |
+| `screencheckedretry` (user submitted) | `test -p nux-capi --lib screen_checked_` | 2: expected red, 2 failed and 2 controls passed | `4b0faffa-2c73-49dd-82ba-02a8dc483d38` |
+| `screencheckedgreen` | `test -p nux-capi --lib screen_checked_` | 2: compile error E0063, missing owner source field; no tests ran | `f0d7fcb5-ce92-4dce-b66e-cf8cfce2afdc` |
+| `screencheckedgreen2` | `test -p nux-capi --lib screen_checked_` | 0: all 4 tests passed, including strengthened rollback assertion | `56969a6f-6d91-4a6b-aecb-304858e6e44a` |
+| `trychangeruntimefinal` | `test -p nuxie-runtime --test live_moves` | 0: all 82 tests passed | `bd26693a-0c06-4299-b719-f6ad2999aad0` |
+| `screencheckedcapifinal` | `test -p nux-capi` | 0: all 282 tests passed across 22 targets | `4bf56e59-8637-4117-84fc-d30cbd2d3a3d` |
+| `screencheckedruntimecheck` | `check -p nuxie-runtime --all-targets` | 0: all 235 targets built successfully | `0421f811-fd75-430e-b2a8-502a8ecd764b` |
+| `screencheckedcapicheck` | `check -p nux-capi --all-targets` | 0: all 26 targets built successfully | `53daaf0c-bf20-40c2-b303-f7a177b9cded` |
+
+These are native runner tests and builds; no Android or iOS device run was performed in this follow-up. Rustfmt and `git diff --check` passed. The follow-up changes are uncommitted.
+
+## Initial UNIV-5289 row-evaluation validation
 
 This is the runtime fix for UNIV-5289; the SDK ledger item is UNIV-5113. The three Rust regressions and the C API regression ran against the main implementation at `8f3c67de2e` before the fix. The initial Rust run exposed two test-harness assertions: unchanged string setters return false. After correcting the helper to check the stored values, all three tests failed at their intended missing-event assertions. The C API test independently failed on the second arrival, matching the Android device sequence.
 

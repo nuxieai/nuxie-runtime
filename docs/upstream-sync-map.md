@@ -93,18 +93,29 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `47d1cd54ccefd468db7cb26ecc4699ae1723dd85`
+- LAST_SYNCED_SHA: `156e959c7a71d96f2ffc16515b483ee464c38863`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  49 upstream commits remain after this checkpoint at the fetched target.
-  All 271 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (293 after `5892bb05`); this
+  48 upstream commits remain after this checkpoint at the fetched target.
+  All 272 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (294 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `156e959c`: translate inner-feather change notification and path rebuild,
+  with the public upstream path regression. Private `.rive_head` contents are
+  not claimed. Both independent reviews and correction rereviews are clean.
+  Pool job `0516edac-fc39-4054-be50-fba817bf7b20` passed all 7 selected feather
+  unit tests (0 failures, 0 ignored, 860 filtered), including the new upstream
+  regression, existing inner-text coverage and two CSS shadow tests. All 30
+  Silver manifest checks pass. This is scoped validation, not broad suite or
+  device qualification. Active source/oracle pins advance; exact Silver
+  regeneration shifts five path-test producer lines by 45 without changing
+  expectations. Shader products and tooling retain actual `74e5d3f6`
+  provenance; earlier validation evidence below remains historical.
 - `47d1cd54`: translate applicable sampler validation and WebGPU feature
   support from this mixed commit. Guest Wasm/AnimaScript web test-player and
   dependent premake changes remain excluded under
@@ -1475,6 +1486,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `156e959c7a71d96f2ffc16515b483ee464c38863` | Translate inner-feather change notification/path rebuild and the public path regression. Refresh exact Silver producer-line provenance and active source/oracle pins; no private metadata claims or shader relabeling. Both independent reviews and correction rereviews clean; all 7 scoped feather tests and 30 Silver manifest checks pass. No broad/device qualification claimed. | — |
 | `47d1cd54ccefd468db7cb26ecc4699ae1723dd85` | Translate applicable sampler validation and WebGPU feature support. Exclude guest Wasm/AnimaScript web test-player and dependent premake changes; no private metadata claims. Active source/oracle pins advance, shader products retain actual 74e5d3f6 provenance. Both independent reviews and correction rereview clean; macOS pool tests pass 266/0/5 ignored, with 30 Silver and 16 provenance checks passing. No new browser/device coverage. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4efe82a106e0223056c97c137d1ae735aed4f0c2` | Account for all nine public housekeeping files: eight whitespace/comment-only changes and private provenance. No Rust behavior delta or unseen RML regeneration claimed. Advance active source/oracle and Silver references; retain actual 74e5d3f6 shader generation provenance. Both independent reviews clean; 30 Silver and 16 provenance checks pass. | — |
 | `74e5d3f635c3c463fe10e4327261705549ee5919` | Translate angular-gradient shader specialization and shifted feature bits/keys across supported shared and backend owners. Regenerate portable products on the pool; update all aliases and exact Metal capture. Both reviews and correction rereviews clean; renderer tests and Vulkan compilation pass, with Metal/browser/device limitations recorded above. Exclude unsupported Unreal-only preprocessing and private metadata claims. | — |

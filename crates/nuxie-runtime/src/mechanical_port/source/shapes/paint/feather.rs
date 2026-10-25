@@ -271,6 +271,12 @@ impl Feather {
     pub fn offset_y_changed(&mut self) {
         self.strength_changed();
     }
+    // The inner path is built only while inner; switching must rebuild an
+    // empty path or one made stale by changes while outer.
+    pub fn inner_changed(&mut self) {
+        self.base
+            .add_dirt(ComponentDirt::PAINT | ComponentDirt::WORLD_TRANSFORM, false);
+    }
     pub fn inner_path(&self) -> Rc<RefCell<ShapePaintPath>> {
         self.inner_path.clone()
     }
@@ -281,3 +287,7 @@ impl Feather {
         self.effect_path_dirty = true;
     }
 }
+
+#[cfg(test)]
+#[path = "feather_tests.rs"]
+mod tests;

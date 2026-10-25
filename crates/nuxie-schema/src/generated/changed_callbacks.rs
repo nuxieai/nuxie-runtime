@@ -88,6 +88,7 @@ pub fn changed_in_use(name: &str) -> bool {
             | "inRotation"
             | "inValues"
             | "indices"
+            | "inner"
             | "innerRadius"
             | "instanceHeight"
             | "instanceHeightScaleType"

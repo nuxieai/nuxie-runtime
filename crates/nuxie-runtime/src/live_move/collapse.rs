@@ -182,31 +182,21 @@ fn set_row_collapsed_inner(
     Ok(events)
 }
 
-/// Evaluate only this row's native machine and subtree, using the ordinary
-/// advanceAndApply path with no elapsed time. The page/root never advances.
+/// Ask Rive to update this row's state without advancing any timeline or
+/// nested artboard. Native listener queues remain intact for the next frame.
 pub(crate) fn evaluate_row(
     root: &crate::RuntimeArtboardInstanceHandle,
     list: &CoreHandle,
     index: i32,
 ) -> Vec<crate::StateMachineReportedEvent> {
-    let playback = list
-        .with_downcast::<ArtboardComponentList, _>(|l| {
-            Some((
-                l.artboard_instance(index)?,
-                l.state_machine_instance(index)?,
-            ))
-        })
+    let machine = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(index))
         .flatten();
-    let Some((row, machine)) = playback else {
+    let Some(machine) = machine else {
         return Vec::new();
     };
     let mut events = crate::host_state_machine::take_nested_reported_events(root);
-    crate::host_state_machine::advance_native_state_machines(
-        &row,
-        std::slice::from_ref(&machine),
-        0.0,
-        true,
-    );
+    machine.with_instance_mut(|machine| machine.try_change_state());
     events.extend(crate::host_state_machine::take_nested_reported_events(root));
     events
 }

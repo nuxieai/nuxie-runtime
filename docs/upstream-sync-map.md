@@ -93,18 +93,35 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `12e5327ba8cb4346155010d34584cb4dab640d51`
+- LAST_SYNCED_SHA: `ada892f37808e289e716d29010b7e79d0656f79d`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `48b8c0ba160586078c9e40eaa2e9ef2f17ac496f` (refreshed 2026-10-23).
+- Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  44 upstream commits remain after this checkpoint at the fetched target.
-  All 266 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (288 after `5892bb05`); this
+  53 upstream commits remain after this checkpoint at the fetched target.
+  All 267 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (289 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `ada892f3`: translate the five retained shared shader owners; unsupported
+  D3D host/backend changes and the D3D root signature are not imported. Private
+  `.rive_head` contents are not claimed. Regenerate portable shader products on
+  the pool using pinned compilers; refresh minified aliases and sampled-clip
+  overrides coherently. Both source and integration reviews passed, including
+  rereviews of alias corrections. Pool generation passed (job
+  `65d1b4db-9ee8-489d-941b-87b521a0f9c9`); renderer library tests passed
+  265/0/5 ignored (job `35e28b9f-977c-4502-bfc6-92ed2033678a`). Explicit
+  macOS Metal compilation passed (job `d65acac0-1ba8-4f71-842b-29609ce8ca95`),
+  using the translated Metal source before browser-only artifact/alias refresh.
+  Browser-feature native tests did not run: Linux linking lacked Dawn symbols.
+  The wasm32 consumer check was blocked before consumer compilation by the
+  pool's remote-only strategy rejecting rules_rust's CopyFile action. Neither
+  is counted as a pass or asserted to be a proven baseline failure. Browser
+  execution and new hardware raster comparisons remain unverified. Metadata
+  checks passed (30 manifest, 16 provenance, 5 pipeline); both workflow YAML
+  files and Buildkite JSON parse. Editor/compiler publication remains parked.
 - `12e5327b`: replay only each canvas's last frame, discard replaced ranges
   before dependency scheduling, close stale same-canvas ranges on explicit
   begin, and reset new-frame recorder transforms without resetting nested
@@ -1408,6 +1425,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ada892f37808e289e716d29010b7e79d0656f79d` | Translate five retained shared shader owners and regenerate WGSL/GLSL/SPIR-V with pinned pool tools; keep generated exports, Rust aliases and sampled-clip adaptation coherent. D3D-only host/backend/root-signature work is unsupported; private metadata is not claimed. Both review passes and scoped renderer tests/Metal compilation pass; browser consumer validation limitations are recorded above. | — |
 | `12e5327ba8cb4346155010d34584cb4dab640d51` | Translate the complete public deferred-canvas delta: mark frame-starting ranges, retain only each canvas's last frame before grouping and dependency scheduling, close stale same-canvas ranges on begin, prohibit self-nesting, and reset retained recorder transforms for new frames while preserving nested resume state. Port all four public canvas-reframe regressions. The `.rive_head` update is provenance only; no private source changes are claimed. Both independent reviews pass; pool renderer suite passes 265 tests with 5 ignored, including all four new cases. | — |
 | `8920a6b03e202086408f596fc4a317df07763440` | Translate public per-entry binding wire metadata, shader/module retention and physical-name mapping, selected-entry layout derivation, actual native-slot collision checks, draw-group validation and 136-byte deferred shader descriptors. Port all eleven entry-layout tests and changed recording/layout/asset cases. Update Luau and live Metal/WebGPU/WebGL2/Vulkan adapter owners; reserve section 2 for upstream metadata and move private Metal reflection to 128 with coordinated editor compilation. Guest Wasm IDL/VM/web proxy changes are excluded; private `.rive_head` compiler implementation is not claimed. | [UNIV-5495](https://universe.basis.dev/issue/UNIV-5495), [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5551696a826ff546775fffe46ca78824b1f1dc51` | Translate measurement/shape keys with exact bit packing, wrapping arithmetic, initial inequality and font identity; avoid redundant post-shape layout dirt while preserving paragraph-spacing/origin invalidation. Retain variable fonts only for identical base identity and ordered options/coordinates. Preserve stable coordinate-map iteration across Rust styling passes without sorting. Port all five text regressions and the changed component-list assertion; pin the new variation fixture and consume the updated rewards Silver recording. CSS/Taffy layout semantics remain unchanged; private .rive_head contents and reported upstream benchmark speedups are not claimed. | — |

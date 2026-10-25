@@ -157,7 +157,7 @@ struct Shadow {
 fn scene(shadow: Shadow, strength_scale: f32) -> Vec<u8> {
     let mut riv = Riv::default();
     riv.object(BACKBOARD).end();
-    // 0 artboard, 1 box, 2 record, 3 fill, 4 colour, 5 feather, 6 BoxShadow,
+    // 0 artboard, 1 box, 2 record, 3 fill, 4 color, 5 feather, 6 BoxShadow,
     // 7 the artboard's style, 8 the box's style.
     riv.object(ARTBOARD)
         .float(WIDTH, SIZE as f32)
@@ -230,7 +230,7 @@ fn render(bytes: &[u8], mode: RenderMode) -> Vec<u8> {
     host.finish()
 }
 
-/// Mean and largest per-pixel difference (the largest of the colour
+/// Mean and largest per-pixel difference (the largest of the color
 /// channels), in 8-bit levels, and how many pixels differ by more than 8.
 fn difference(chrome: &[u8], ours: &[u8]) -> (f32, u8, usize) {
     let mut sum = 0u64;
@@ -443,7 +443,7 @@ fn css_shadow_rounded_matches_chrome() {
 fn css_border_sides_match_chrome() {
     let mut riv = Riv::default();
     riv.object(BACKBOARD).end();
-    // 0 artboard, 1 box, 2 record, 3 and 6 strokes, 4 and 7 colours,
+    // 0 artboard, 1 box, 2 record, 3 and 6 strokes, 4 and 7 colors,
     // 5 and 8 BoxBorders, 9 and 10 styles.
     riv.object(ARTBOARD)
         .float(WIDTH, SIZE as f32)
@@ -504,11 +504,11 @@ const DOTTED: u64 = 2;
 
 /// A 100 by 60 CSS box at (50, 70) with a `width` border in `style` on
 /// every side and `radius` corners, drawn by one Stroke and BoxBorder per
-/// (colour, sides) in `strokes`.
+/// (color, sides) in `strokes`.
 fn border_style_scene(width: f32, style: u64, radius: f32, strokes: &[(u32, u64)]) -> Vec<u8> {
     let mut riv = Riv::default();
     riv.object(BACKBOARD).end();
-    // 0 artboard, 1 box, 2 record, then a stroke, its colour and its
+    // 0 artboard, 1 box, 2 record, then a stroke, its color and its
     // BoxBorder per entry, then the two styles.
     let styles = 3 + 3 * strokes.len() as u64;
     riv.object(ARTBOARD)
@@ -625,7 +625,7 @@ fn css_border_dashed_rounded_matches_chrome() {
     check_border_style("border_dashed_rounded", 4.0, DASHED, 20.0, ALL_BLACK, 300);
 }
 
-/// Dashed sides in two colours, black top and left, red right and bottom,
+/// Dashed sides in two colors, black top and left, red right and bottom,
 /// split at the corners as Chrome splits them.
 #[test]
 fn css_border_dashed_sides_match_chrome() {

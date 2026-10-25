@@ -293,9 +293,9 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 |---|---|
 | `background-color` | a `Fill` child of the box with a `SolidColor` |
 | `background-image: linear-gradient()` or `radial-gradient()` | a `Fill` with a `LinearGradient` or `RadialGradient` and its `GradientStop`s, plus a `BoxGradient` (4.2) so its geometry follows the box |
-| uniform solid `border` (one width and one colour on all four sides) | a `Stroke` child, `position` 0 (inside), `thickness` the width. An inside stroke of the border box covers exactly the CSS border ring, inner radii included. The four border widths are also written in the record, because they take part in layout |
+| uniform solid `border` (one width and one color on all four sides) | a `Stroke` child, `position` 0 (inside), `thickness` the width. An inside stroke of the border box covers exactly the CSS border ring, inner radii included. The four border widths are also written in the record, because they take part in layout |
 | `border-radius` in points, circular | `LayoutComponentStyle` `cornerRadiusTL` (640), `TR` (641), `BL` (642), `BR` (643), with `linkCornerRadius` (639) false when they differ |
-| `box-shadow` | a `Fill` with a `SolidColor` (the shadow colour), written before the background `Fill` so it draws below it. Its `Feather` child has `strength` equal to the CSS blur radius (both are two standard deviations), `offsetX` and `offsetY` equal to the CSS offsets, `spaceValue` 1 (local, so the shadow moves with its box as in CSS), and `inner` true for `inset`. Inset shadows go after the background. Every shadow also gets a `BoxShadow` (4.2), spread 0 when it has none: it gives the shadow CSS's clipping |
+| `box-shadow` | a `Fill` with a `SolidColor` (the shadow color), written before the background `Fill` so it draws below it. Its `Feather` child has `strength` equal to the CSS blur radius (both are two standard deviations), `offsetX` and `offsetY` equal to the CSS offsets, `spaceValue` 1 (local, so the shadow moves with its box as in CSS), and `inner` true for `inset`. Inset shadows go after the background. Every shadow also gets a `BoxShadow` (4.2), spread 0 when it has none: it gives the shadow CSS's clipping |
 | several backgrounds or shadows | several fills, in CSS's paint order (the first CSS layer is drawn last) |
 
 ### 4.2 Our additions
@@ -303,7 +303,7 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | Addition | Keys | Values | What the runtime does |
 |---|---|---|---|
 | Percent radii | `LayoutCssStyle` 61079 to 61082 | CSS percentage per corner | The corner's horizontal radius is its point radius plus that percentage of the box width, and its vertical radius is the same with the height, so a non-square box gets elliptical corners, as CSS. Overlapping radii scale down by CSS's rule |
-| Per-side borders | `BoxBorder` 61083 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different colour per side is one `Stroke` and `BoxBorder` per colour |
+| Per-side borders | `BoxBorder` 61083 `sides`, uint8 bit mask: 1 top, 2 right, 4 bottom, 8 left; default 15 | | Its `Stroke` draws its paint over the CSS border ring of the given sides: between the border box and the padding box, from the record's four border widths, with inner radii reduced by those widths, and adjacent sides meeting on the line from each outer corner through the matching inner corner, continued to the end of the corner's curve, as CSS, so a rounded ring is shared between its two sides. The stroke's own thickness and position are ignored. A different color per side is one `Stroke` and `BoxBorder` per color |
 | Border styles | `BoxBorder` 61103 `style`, uint8: 0 solid, 1 dashed, 2 dotted; default 0 | | Applies to the record's sides, drawn as Chrome 155 draws them (Blink's border painter), inside the same ring and corner joins. On a box without radii each side is a line down its middle across its whole outer length: dashes two widths long with one-width gaps (three and two widths below 3 points), dots up to 3 points wide square and wider ones round, fitted to the side's length at every layout so a resize keeps them even: dashed gaps stretch to the dash count closest to the base gap, a dash at each end; thin dots keep whole dots at both ends; round dots are evenly spread end to end. A side too short for two dashes is solid, and so is a side whose marks would number more than 65,536 (a hairline border's), which look solid and stay within memory. On a rounded box a side whose inner corners are rounded follows the whole centre line instead (the border box inset by half the widths, from the top side's left end, clockwise), with dashes or dots fitted to its length as Skia measures it, cut to the ring. A uniform dashed or dotted border is one `BoxBorder` with all four sides, since a plain inside `Stroke` cannot fit dashes per side. Rive's own `DashPath` is not used: its dashes are fixed lengths or fractions of the whole contour, with no per-side fit or round dots |
 | Box-relative gradients | `BoxGradient`, see the table below | | Recomputes its gradient's start and end (and, for an ellipse, the shader's scale) from the box's padding box at each layout, as CSS's background positioning area |
 | Shadow spread and CSS shadow clipping | `BoxShadow` 61096 `spread`, double, points; default 0 | | The shadow fill's path is the border box grown by the spread (an inset shadow: the padding box shrunk by it), corner radii grown or shrunk by CSS's rule. An outer shadow draws only outside the border box, and an inset one only inside the padding box, as CSS |
@@ -323,7 +323,7 @@ A box paints itself at the size layout gives it: its border box, a rounded recta
 | 61093, 61094 | `radiusY`, `radiusYPercent` | double, double | explicit size, ellipse only | 0 and 0 |
 | 61095 | `toCorner` | uint8 | linear only: 0 none (use angle), 1 to top right, 2 to bottom right, 3 to bottom left, 4 to top left (CSS's corner angle, which depends on the box's shape) | 0 |
 
-Stops keep Rive's `GradientStop` positions (0 to 1) and colours.
+Stops keep Rive's `GradientStop` positions (0 to 1) and colors.
 
 ### 4.3 Checked against Chrome
 
@@ -344,15 +344,15 @@ every iPhone uses) and clockwise-atomic, and each bound below holds in both:
   circle at a position, all within 2 levels.
 - Dashed and dotted borders (`fixtures/css_layout/chrome/border_dashed_*` and
   `border_dotted_*`): thin and thick dashes, square and round dots, a rounded
-  box and two colours, each within a mean of half a level; straight dashes
+  box and two colors, each within a mean of half a level; straight dashes
   and square dots are pixel-exact or within a few edge pixels, and round dots
   and curves differ only in their anti-aliasing.
-- Per-side borders with two colours and a radius: a mean difference of 0.27
+- Per-side borders with two colors and a radius: a mean difference of 0.27
   levels; only pixels on the diagonal joins and curved edges differ.
 
 Known differences in step 1:
 
-- A gradient fills the border box with its end colours past the padding box,
+- A gradient fills the border box with its end colors past the padding box,
   where CSS repeats the background image (its initial `background-repeat`).
   They differ only under a transparent border.
 - Shadows and per-side borders drawn by a `ForegroundLayoutDrawable` keep

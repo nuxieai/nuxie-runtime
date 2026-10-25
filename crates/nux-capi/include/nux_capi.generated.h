@@ -1118,7 +1118,7 @@ typedef void (*NuxFontPictureSink)(void*, const struct NuxFontPicture*);
  * possibly on any thread. get_path and get_picture may run on any thread,
  * concurrently; callbacks and context must be thread-safe, must not unwind,
  * and must not reenter the font API. At least one callback must be supplied.
- * get_picture is glyph-scoped: every nonzero glyph without native colour is
+ * get_picture is glyph-scoped: every nonzero glyph without native color is
  * requested once while cached, independently per font variant. Glyph 0 is never
  * requested. Cluster code points are borrowed context only; the first context
  * seen for a glyph supplies its cached answer. Present and absent answers share
@@ -2539,7 +2539,7 @@ NuxStatus nux_font_has_glyph(const struct NuxFont *font, uint32_t character, boo
 NuxStatus nux_font_new(const struct NuxFontSource *source, struct NuxFont **out_font);
 
 /**
- * Decode a host font with optional empty-outline recovery and colour pictures.
+ * Decode a host font with optional empty-outline recovery and color pictures.
  * Outline recovery mirrors upstream's first CoreTextHBFont attempt; pictures
  * extend it for native formats the runtime cannot decode. File shaping,
  * metrics and nonempty outlines remain unchanged. No fallback hook is installed.

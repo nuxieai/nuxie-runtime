@@ -248,7 +248,7 @@ fn an_unrelated_change_leaves_a_masks_rasters_alone() {
     assert_eq!(f.frame(), 0);
 }
 #[test]
-fn recolouring_masked_content_rebuilds_the_raster() {
+fn recoloring_masked_content_rebuilds_the_raster() {
     let mut f = Fixture::new(true);
     let m = build_mask_fixture(&f);
     f.initialize();
@@ -331,7 +331,7 @@ fn two_masks_pointing_at_each_other_terminate() {
     assert!(f.frame() <= 4);
 }
 #[test]
-fn recolouring_a_mask_source_rebuilds_the_raster() {
+fn recoloring_a_mask_source_rebuilds_the_raster() {
     let mut f = Fixture::new(true);
     let m = build_mask_fixture(&f);
     uint(&m.mask, LayerMaskBase::MASK_MODE_VALUE_PROPERTY_KEY, 2);

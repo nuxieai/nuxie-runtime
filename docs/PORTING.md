@@ -80,7 +80,7 @@ It takes copied PNG bytes, pixel dimensions and normalized em bearings/extents;
 C `top` is positive above the baseline and maps to negative Rust `bearing_y`.
 Native COLR/readable PNG takes precedence. Rust picture sources declare
 `HostPictureScope::Glyph` or `HostPictureScope::Cluster` when installed. Glyph
-scope requests every nonzero glyph without native colour, keyed by glyph id;
+scope requests every nonzero glyph without native color, keyed by glyph id;
 cluster code points are context only, and the first context seen supplies the
 cached answer. Each cluster component can draw, so glyph-drawing hosts return
 None for spaces or hidden glyphs without ink. Cluster scope requests only the
@@ -89,7 +89,7 @@ text); a picture suppresses the same font's remaining glyphs in that cluster.
 Glyph 0 is never requested in either scope. The C callback is always glyph
 scope. Present and absent answers share a 4096-entry FIFO cache independently
 for each font variant; evicted entries may be requested again. Both scopes
-count as colour capability for VS16 fallback. Callback context
+count as color capability for VS16 fallback. Callback context
 may be called on any thread concurrently, must not reenter or unwind, and
 outlives all retained fonts/variants. The C sink limits PNGs to 4 MiB and each
 encoded/reported side to 1024 pixels, validates matching dimensions and finite
@@ -97,14 +97,14 @@ metrics, and refuses repeated sink calls. Pictures compose with host outlines;
 picture sources survive options, while the existing outline variant policy
 above remains upstream behavior.
 
-The **text-input-colour-glyphs** addition records colour glyphs separately from
+The **text-input-color-glyphs** addition records color glyphs separately from
 both field outline paths and draws native/host layers after outline paints.
 Clipping matches each route's outline text: direct RawTextInput clips both,
 while imported text and selected-text drawable routes apply no extra field
 overflow clip. Foreground follows upstream Text's first solid Fill, else black;
-colour glyph command opacity is always 1.0, like upstream Text. Direct write-only
-RenderPaint callers use black. Selection keeps colour. Cursor/selection geometry,
-line metrics, hit testing and non-colour glyph paths retain upstream behavior.
+color glyph command opacity is always 1.0, like upstream Text. Direct write-only
+RenderPaint callers use black. Selection keeps color. Cursor/selection geometry,
+line metrics, hit testing and non-color glyph paths retain upstream behavior.
 The **raw-text-host-pictures** addition uses Text's retained image decoder only
 for host pictures; native RawText layer traversal remains pinned behavior.
 

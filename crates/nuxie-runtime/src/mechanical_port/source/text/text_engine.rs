@@ -428,7 +428,7 @@ pub trait Font: Any + Send + Sync {
         None
     }
 
-    /// Native/host colour query with cluster context. Cluster-scoped sources
+    /// Native/host color query with cluster context. Cluster-scoped sources
     /// require the logical leader; shaped consumers use glyph_render_kind.
     /// Glyph-only queries stay native.
     fn is_color_glyph_with_text(&self, glyph: GlyphId, cluster: &[Unichar]) -> bool {
@@ -436,7 +436,7 @@ pub trait Font: Any + Send + Sync {
     }
 
     /// Resolve the additive host answer for this exact glyph and cluster.
-    /// Native colour glyphs and glyph zero never ask the host.
+    /// Native color glyphs and glyph zero never ask the host.
     fn host_picture_layer(
         &self,
         _glyph: GlyphId,

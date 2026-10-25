@@ -326,7 +326,7 @@ impl RawTextFont {
     pub fn has_color_glyphs(&self) -> bool {
         self.native.has_color_glyphs()
     }
-    /// Query native colour tables independently of host picture answers.
+    /// Query native color tables independently of host picture answers.
     /// Use `is_color_glyph_with_text` for glyphs from shaped host-picture runs.
     pub fn is_color_glyph(&self, glyph: u32) -> bool {
         self.native.is_color_glyph(glyph as u16)
@@ -337,7 +337,7 @@ impl RawTextFont {
     pub fn is_color_glyph_with_text(&self, glyph: u32, cluster: &[u32]) -> bool {
         self.native.is_color_glyph_with_text(glyph as u16, cluster)
     }
-    /// Native colour layers; host pictures require `color_layers_with_text`.
+    /// Native color layers; host pictures require `color_layers_with_text`.
     pub fn color_layers(&self, glyph: u32, foreground: u32) -> Vec<RuntimeColorGlyphLayer> {
         let mut layers = Vec::new();
         self.native

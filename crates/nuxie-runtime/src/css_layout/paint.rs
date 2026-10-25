@@ -1354,7 +1354,7 @@ mod tests {
     }
 
     /// A radial gradient whose ending shape is zero-sized is drawn as CSS
-    /// draws it, a vanishingly small circle (the last stop's colour), not
+    /// draws it, a vanishingly small circle (the last stop's color), not
     /// with the Rive gradient's authored ends.
     #[test]
     fn zero_radius_gradients_stay_box_gradients() {

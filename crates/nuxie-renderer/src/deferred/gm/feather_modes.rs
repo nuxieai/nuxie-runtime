@@ -132,7 +132,7 @@ const SOFT: Shape = Shape {
 fn scene(shape: Shape, fill_rule: FillRule) -> Vec<u8> {
     let mut riv = Riv::default();
     riv.object(BACKBOARD).end();
-    // 0 artboard, 1 shape, 2 rectangle, 3 fill, 4 colour, 5 feather.
+    // 0 artboard, 1 shape, 2 rectangle, 3 fill, 4 color, 5 feather.
     riv.object(ARTBOARD)
         .float(WIDTH, SIZE as f32)
         .float(HEIGHT, SIZE as f32)

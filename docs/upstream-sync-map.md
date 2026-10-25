@@ -93,18 +93,31 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `4efe82a106e0223056c97c137d1ae735aed4f0c2`
+- LAST_SYNCED_SHA: `47d1cd54ccefd468db7cb26ecc4699ae1723dd85`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  50 upstream commits remain after this checkpoint at the fetched target.
-  All 270 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (292 after `5892bb05`); this
+  49 upstream commits remain after this checkpoint at the fetched target.
+  All 271 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (293 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `47d1cd54`: translate applicable sampler validation and WebGPU feature
+  support from this mixed commit. Guest Wasm/AnimaScript web test-player and
+  dependent premake changes remain excluded under
+  [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728); private `.rive_head`
+  content is not claimed. Both independent reviews and the test-import correction
+  rereview are clean. macOS pool job `b7d1d91b-20a0-4022-8ebd-9ff18ed09a11`
+  passed 266 tests with 0 failures and 5 ignored, including the upstream sampler
+  regression. Initial job `33850159` failed compilation because the new test
+  used the wrong export; it was corrected to the existing public `script_guards`
+  export without weakening assertions. All 30 Silver and 16 provenance checks
+  pass. No new browser/device coverage is claimed. Active source/oracle pins
+  advance; shader products and generation tooling retain actual `74e5d3f6`
+  provenance. Results for earlier checkpoints below remain historical.
 - `4efe82a1`: account for all nine public files in the clang-format 19.1.7
   housekeeping delta. Eight code/shader files change whitespace/comments only;
   `.rive_head` is private provenance. No unseen RML regeneration is claimed.
@@ -1462,7 +1475,8 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
-| `4efe82a106e0223056c97c137d1ae735aed4f0c2` | Account for all nine public housekeeping files: eight whitespace/comment-only changes and private provenance. No Rust behavior delta or unseen RML regeneration claimed. Advance active source/oracle and Silver references; retain actual 74e5d3f6 shader generation provenance. Reviews pending. | — |
+| `47d1cd54ccefd468db7cb26ecc4699ae1723dd85` | Translate applicable sampler validation and WebGPU feature support. Exclude guest Wasm/AnimaScript web test-player and dependent premake changes; no private metadata claims. Active source/oracle pins advance, shader products retain actual 74e5d3f6 provenance. Both independent reviews and correction rereview clean; macOS pool tests pass 266/0/5 ignored, with 30 Silver and 16 provenance checks passing. No new browser/device coverage. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
+| `4efe82a106e0223056c97c137d1ae735aed4f0c2` | Account for all nine public housekeeping files: eight whitespace/comment-only changes and private provenance. No Rust behavior delta or unseen RML regeneration claimed. Advance active source/oracle and Silver references; retain actual 74e5d3f6 shader generation provenance. Both independent reviews clean; 30 Silver and 16 provenance checks pass. | — |
 | `74e5d3f635c3c463fe10e4327261705549ee5919` | Translate angular-gradient shader specialization and shifted feature bits/keys across supported shared and backend owners. Regenerate portable products on the pool; update all aliases and exact Metal capture. Both reviews and correction rereviews clean; renderer tests and Vulkan compilation pass, with Metal/browser/device limitations recorded above. Exclude unsupported Unreal-only preprocessing and private metadata claims. | — |
 | `16c184ef2c17fa8615a5e9366f7800e0c4d79fae` | Formatting-only public source: full lexical/preprocessor audit and shader-generator token comparison found no production semantic delta. Account for new shader clang-format configuration and private provenance without claiming private changes. Advance active source/oracle references and exact Silver line metadata; preserve actual ada892f3 shader artifact provenance. | — |
 | `ada892f37808e289e716d29010b7e79d0656f79d` | Translate five retained shared shader owners and regenerate WGSL/GLSL/SPIR-V with pinned pool tools; keep generated exports, Rust aliases and sampled-clip adaptation coherent. D3D-only host/backend/root-signature work is unsupported; private metadata is not claimed. Both review passes and scoped renderer tests/Metal compilation pass; browser consumer validation limitations are recorded above. | — |

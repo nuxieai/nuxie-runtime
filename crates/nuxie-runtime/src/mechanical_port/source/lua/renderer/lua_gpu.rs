@@ -888,6 +888,15 @@ fn gpu_sampler_construct(state: &mut LuaState) -> i32 {
                 "GPUSampler.new: maxAnisotropy must be a power of two in [1, 16] (got {anisotropy})"
             ));
         }
+        if anisotropy > 1
+            && (desc.min_filter != Filter::Linear
+                || desc.mag_filter != Filter::Linear
+                || desc.mipmap_filter != Filter::Linear)
+        {
+            state.error::<()>(format!(
+                "GPUSampler.new: maxAnisotropy={anisotropy} needs linear min, mag and mipmap filters"
+            ));
+        }
         if anisotropy > 1 && !ore_context(state).unwrap().features().anisotropic_filtering {
             state.error::<()>(format!("GPUSampler.new: maxAnisotropy={anisotropy} requires anisotropicFiltering feature, which the active backend does not support"));
         }

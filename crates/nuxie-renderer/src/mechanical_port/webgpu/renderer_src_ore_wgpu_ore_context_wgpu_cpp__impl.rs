@@ -1198,7 +1198,7 @@ fn webGPUFeatures() -> Features {
     f.textureViewSampling = true;
     f.drawBaseInstance = true;
     f.depthBiasClamp = true;
-    f.anisotropicFiltering = false;
+    f.anisotropicFiltering = true;
     f.texture3D = true;
     f.textureArrays = true;
     f.computeShaders = true;
@@ -1346,7 +1346,7 @@ impl ContextApi for ContextWGPU {
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 17;
 pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 22;
-const _: [(); 47132] = [(); PINNED_SOURCE.len()];
+const _: [(); 43795] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1354,7 +1354,7 @@ mod tests {
 
     #[test]
     fn complete_source_byte_and_feature_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1276);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1293);
         assert_eq!(SOURCE_CONVERSION_HELPER_COUNT, 20);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 17);
         assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 22);

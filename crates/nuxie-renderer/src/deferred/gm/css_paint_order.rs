@@ -1,4 +1,4 @@
-//! CSS stacking contexts against Chrome's flat-colour reference pixels.
+//! CSS stacking contexts against Chrome's flat-color reference pixels.
 //! The HTML fixtures are rendered by tools/css-layout/chrome-references.sh.
 use super::ore_gm_helper::*;
 use crate::RenderMode;
@@ -222,7 +222,7 @@ fn render(bytes: &[u8], mode: RenderMode) -> Vec<u8> {
     host.finish()
 }
 
-/// Whole-pixel edges and solid colours allow at most two levels in every
+/// Whole-pixel edges and solid colors allow at most two levels in every
 /// channel, including the rounding of the single-paint opacity scenes.
 fn check(name: &str, boxes: &[BoxSpec]) {
     let reference =

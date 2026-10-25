@@ -70,13 +70,13 @@ the builder and publisher. This candidate is not published by building it.
 
 The v0.4.14 candidate contains everything on main since v0.4.13, through
 `2739b89493`, including [UNIV-4921 / #1084](https://github.com/nuxieai/nuxie-runtime/pull/1084).
-Colour emoji and other colour glyphs now draw in editable text fields, including
+Color emoji and other color glyphs now draw in editable text fields, including
 multi-glyph clusters and fallback fonts. Hosts can provide cached PNG glyph
 pictures alongside outlines through the optional `get_picture` callback appended
-to `NuxFontOutlineCallbacks`. Native colour takes precedence; host answers are
+to `NuxFontOutlineCallbacks`. Native color takes precedence; host answers are
 cached per glyph and font variant with a bounded 4096-entry FIFO. Bitmap `sbix`
 and CBDT placement follows HarfBuzz bearings and extents, with guarded `sbix`
-reads and colour classification sized for the font's glyph count. PNG answers
+reads and color classification sized for the font's glyph count. PNG answers
 are copied synchronously, limited to 4 MiB and 1024 pixels per side, and require
 finite em-space metrics. Callback threading, lifetime and cache rules are in
 `nux_capi.generated.h`; hosts must follow them when adopting pictures.

@@ -1031,7 +1031,7 @@ fn ordinary_text_reuses_images_across_rebuilds_and_releases_replaced_host_fonts(
 }
 
 // Replace only cmap in an existing outline face. This font has no emoji GSUB
-// ligatures or colour tables; A/B/C/D/E outlines become fixed emoji glyphs.
+// ligatures or color tables; A/B/C/D/E outlines become fixed emoji glyphs.
 // Rebuilding the directory record leaves all shaping/outline tables untouched.
 fn unjoined_emoji_outline_font() -> FontRef {
     let mut bytes = regular_bytes();

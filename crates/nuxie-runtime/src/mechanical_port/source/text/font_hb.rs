@@ -402,7 +402,7 @@ struct HbFace {
     has_color_layers: bool,
     has_color_paint: bool,
     has_png: bool,
-    // 0 unknown, 1 outline, 2 colour. Table classification is immutable and
+    // 0 unknown, 1 outline, 2 color. Table classification is immutable and
     // shared by every variant; relaxed atomics avoid a hot-path face mutex.
     native_color_glyphs: Box<[AtomicU8]>,
     palette_colors: Vec<skrifa::color::Color>,
@@ -615,7 +615,7 @@ impl HbFont {
                 has_color_layers,
                 has_color_paint,
                 has_png,
-                // Only colour-capable faces classify glyphs, so other faces
+                // Only color-capable faces classify glyphs, so other faces
                 // keep an empty table instead of one byte per possible glyph.
                 native_color_glyphs: if has_color_layers || has_color_paint || has_png {
                     let glyphs = outline.maxp().map_or(usize::from(u16::MAX) + 1, |maxp| {

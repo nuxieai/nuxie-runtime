@@ -47,13 +47,13 @@ qualification and SDK adoption remain separate work.
 
 Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-3375).
 
-### UNIV-4921 additive colour glyph boundaries
+### UNIV-4921 additive color glyph boundaries
 
 - **host-glyph-pictures**: `HbFont::with_host_pictures` and the appended
   `NuxFontOutlineCallbacks::get_picture` opt a font into platform PNG answers.
   Native COLR/readable PNG wins. Rust sources declare `HostPictureScope::Glyph`
   or `HostPictureScope::Cluster`; the C callback always uses glyph scope.
-  Glyph scope requests every nonzero glyph without native colour, keyed by
+  Glyph scope requests every nonzero glyph without native color, keyed by
   glyph id. Cluster code points are context only; the first context seen supplies
   the cached answer. Every component can draw; hosts return None for spaces and
   hidden glyphs without ink. Cluster scope requests only the cluster's first glyph
@@ -61,7 +61,7 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
   suppresses the same font's remaining cluster glyphs. Neither scope requests
   glyph 0. Present and absent answers share a 4096-entry FIFO cache independently
   per font variant; evicted entries may be requested again. Both scopes count as
-  colour capability for VS16 fallback. Host-only cluster metadata is captured
+  color capability for VS16 fallback. Host-only cluster metadata is captured
   before fallback/ellipsis slices.
   Pictures compose with empty-outline recovery; option variants retain the
   picture source with a fresh answer cache, while preserving upstream's policy
@@ -70,13 +70,13 @@ Track device qualification in [UNIV-3375](https://universe.basis.dev/issue/UNIV-
   `image_bearing_y`, and rejects repeated answers, non-finite metrics, PNGs
   over 4 MiB, and encoded/reported dimensions outside 1..1024 or inconsistent
   with each other. Context/threading rules match the outline callback.
-- **text-input-colour-glyphs**: RawTextInput retains native/host colour glyphs
+- **text-input-color-glyphs**: RawTextInput retains native/host color glyphs
   outside both outline paths. Authored text and selected-text drawables and the
   direct editor/scripting draw route paint them after outlines. Each route
   matches its outlines' clipping: direct RawTextInput clips both; imported and
   selected-text drawables add no field overflow clip. Selection keeps their
-  colours. Foreground follows upstream Text's first solid Fill (black without
-  one); colour glyph command opacity is always 1.0, like upstream Text. Direct
+  colors. Foreground follows upstream Text's first solid Fill (black without
+  one); color glyph command opacity is always 1.0, like upstream Text. Direct
   RawTextInput paint handles are write-only and use the same black default. Metrics, cursor, hit testing and
   ordinary outline transforms remain upstream behavior.
 - **raw-text-host-pictures**: only host picture layers in RawText use Text's
@@ -87,7 +87,7 @@ The sbix/CBDT extent correction is parity, not an additive host policy:
 `font_hb.rs` follows pinned HarfBuzz rive_13.1.1 strike selection, bitmap-origin
 semantics and integer rounding into Rive's 2048-unit scale. Oracle expectations
 come from that HarfBuzz source; the existing C++ probe has no bitmap-extents
-query. Runtime/device rasterization and host colour-space choices remain SDK
+query. Runtime/device rasterization and host color-space choices remain SDK
 qualification work.
 
 

@@ -37,20 +37,16 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `e406d1f4` source checkpoint advances runtime/source-oracle pins for
-per-entry sampling and GL sampler ordering. Translation and both independent
-reviews are complete and clean. Renderer pool validation with
-`renderer-webgl2,with-rive-tools` passed 590 tests with zero failures and six
-ignored, including both new entry regressions and the GL sampler-order test.
-Luau shader asset resolution passed 18 tests with zero failures or ignored;
-non-tools Vulkan consumer check passed. Browser and Metal hardware are not
-qualified by these results; the prior supplementary macOS request still has
-no result. Shader-generation inputs and tools are unchanged; no regeneration
-was needed and imported products retain their actual `41a2120b` provenance
-from pool job `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical Metal captures
-also retain their original provenance. Prior validation and browser/device
-coverage limitations stay recorded under their original checkpoint in the
-sync map; they are not new results for this update.
+The `3d7dcc5b` source checkpoint advances runtime/source-oracle pins while
+upstream removes unshipped CoreGraphics renderer/test-window adapters and the
+optional Silver visual diagnostic. No live downstream owner is deleted; Apple
+image decoding/framework links and Silver producers/baselines remain unchanged.
+Both independent reviews are complete and clean; exact regenerated Silver was
+verified to change only its source reference. No new pool compilation was run
+because runtime and shader inputs are unchanged. Imported
+products retain actual `41a2120b` provenance from pool job
+`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical Metal captures and prior
+validation evidence remain at their original checkpoints in the sync map.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

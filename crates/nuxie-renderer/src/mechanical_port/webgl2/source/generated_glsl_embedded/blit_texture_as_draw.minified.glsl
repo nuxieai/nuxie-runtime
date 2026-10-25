@@ -1,33 +1,33 @@
-v2
+m2
 #ifdef KD
-F0 W(0,c,l2);
+F0 W(0,c,n2);
 #endif
-k2
+M1
 #ifdef BB
-q4 r4 Y4 Z4 e1(f0) f1 y1(PF,f0,B,F,r){c F2;F2.x=(F&1)==0?-1.:1.;F2.y=(F&2)==0?-1.:1.;
+v4 w4 a5 c5 e1(e0) f1 o1(PF,e0,A,C,r){c F2;F2.x=(C&1)==0?-1.:1.;F2.y=(C&2)==0?-1.:1.;
 #ifdef KD
-V(l2,c);l2.x=F2.x*.5+.5;l2.y=F2.y*-.5+.5;a0(l2);
+V(n2,c);n2.x=F2.x*.5+.5;n2.y=F2.y*-.5+.5;a0(n2);
 #endif
-f I=f(F2,0,1);z1(I);}
+e I=e(F2,0,1);A1(I);}
 #endif
 #ifdef EB
-V3
-#ifdef XD
-Fg(B5,v4,IC);
+X3
+#ifdef YD
+Ig(C5,x4,JC);
 #else
-q3(B5,v4,IC);
+q3(C5,x4,JC);
 #endif
-W3
+Y3
 #ifdef KD
-C5 w4(Gg) D5
+D5 y4(Jg) E5
 #endif
-V2(i,TE){i d9;
+L2(i,VE){i d9;
 #ifdef KD
-q(l2,c);d9=E5(IC,Gg,l2,.0);
-#elif defined(XD)
-d9=(e9(IC,0,g0(floor(d0.xy)))+e9(IC,1,g0(floor(d0.xy)))+e9(IC,2,g0(floor(d0.xy)))+e9(IC,3,g0(floor(d0.xy))))*0.25;
+q(n2,c);d9=F5(JC,Jg,n2,.0);
+#elif defined(YD)
+d9=(e9(JC,0,g0(floor(c0.xy)))+e9(JC,1,g0(floor(c0.xy)))+e9(JC,2,g0(floor(c0.xy)))+e9(JC,3,g0(floor(c0.xy))))*0.25;
 #else
-d9=r1(IC,g0(floor(d0.xy)));
+d9=v1(JC,g0(floor(c0.xy)));
 #endif
-L2(d9);}
+M2(d9);}
 #endif

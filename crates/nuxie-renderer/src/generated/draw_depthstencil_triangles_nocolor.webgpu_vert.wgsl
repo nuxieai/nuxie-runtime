@@ -1,25 +1,25 @@
-struct VB {
-    yd: f32,
-    Ee: f32,
-    Jg: f32,
-    Kg: f32,
-    S6_: u32,
+struct WB {
+    Cd: f32,
+    He: f32,
+    Mg: f32,
+    Ng: f32,
+    T6_: u32,
     Ea: u32,
-    vg: u32,
-    wg: u32,
+    yg: u32,
+    zg: u32,
     H8_: vec4<i32>,
-    Ci: vec2<f32>,
-    Fe: vec2<f32>,
-    q2_: u32,
-    Gi: f32,
-    w6_: u32,
+    Fi: vec2<f32>,
+    Ie: vec2<f32>,
+    r2_: u32,
+    Ji: f32,
+    z6_: u32,
     i3_: f32,
-    Ge: f32,
-    og: u32,
+    Je: f32,
+    rg: u32,
     G3_: f32,
     H3_: f32,
-    He: f32,
-    zi: u32,
+    Ke: f32,
+    Ci: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -35,13 +35,13 @@ struct gl_PerVertex {
 var<private> gl_VertexIndex_1: i32;
 var<private> LB_1: vec3<f32>;
 @group(0) @binding(0)
-var<uniform> j: VB;
+var<uniform> j: WB;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
     let _e16 = LB_1;
-    let _e18 = j.Jg;
-    let _e20 = j.Kg;
+    let _e18 = j.Mg;
+    let _e20 = j.Ng;
     let _e28 = vec4<f32>(((_e16.x * _e18) - 1f), ((_e16.y * _e20) - sign(_e20)), 0f, 1f);
     let _e30 = LB_1[2u];
     unnamed.gl_Position = vec4<f32>(_e28.x, _e28.y, ((f32((((bitcast<u32>(_e30) & 65535u) << bitcast<u32>(8u)) | 255u)) * 0.000000059604645f) + 0.000000029802322f), _e28.w);

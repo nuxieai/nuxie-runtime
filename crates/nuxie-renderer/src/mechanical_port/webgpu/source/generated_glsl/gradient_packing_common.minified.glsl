@@ -1,7 +1,7 @@
-#define hc 8.0
+#define ic 8.0
 #ifdef VERTEX
-e f Fa(c l0,X U9,c y2,c n8,uint l5,float o4,float n){f R1;R1.xy=C0(U9,l0)+y2;bool n4=(n8.x<0.0);n8.x=max(n8.x,0.0);R1.z=n8.y+(float(l5)/hc)+(n8.x*(a5/hc));R1.z=(n4)?-R1.z:R1.z;R1.w=(n*-0.5-0.25)-round(o4*255.0);return R1;}
+f e Fa(c l0,X U9,c y2,c n8,uint m5,float q4,float n){e U1;U1.xy=C0(U9,l0)+y2;bool p4=(n8.x<0.0);n8.x=max(n8.x,0.0);U1.z=n8.y+(float(m5)/ic)+(n8.x*(d5/ic));U1.z=(p4)?-U1.z:U1.z;U1.w=(n*-0.5-0.25)-round(q4*255.0);return U1;}
 #endif
 #ifdef FRAGMENT
-e c Ve(float l5,c Z6,c a3,bool n4){if(l5==float(wh)){float t=gb(c(Z6.x,-Z6.y))/(3.14159*2.0);return c(t,a3.y);}else{float t=(l5==float(vh))?Z6.x:length(Z6.xy);t=clamp(t,0.0,1.0);float Li=n4?(1.0-a5):a5;float x=t*Li+a3.x;return c(x,a3.y);}}e c tg(float l5,c Z6,c We,bool n4,float ic,float jc){const float kc=0.5*a5;c a3=c(We.x*a5+kc,We.y*ic+jc);return Ve(l5,Z6,a3,n4);}e c Va(f R1,float ic,float jc){const float kc=0.5*a5;bool n4=R1.z<0.0;R1.z=abs(R1.z);c a3;a3.y=floor(R1.z);a3.x=(R1.z-a3.y)*hc+kc;a3.y=a3.y*ic+jc;float l5=floor(a3.x);return Ve(l5,R1.xy,a3,n4);}e d gi(f R1){return fract(R1.w)*-2.0+1.5;}e d me(f R1){const float Mi=-1.0/255.0;return ceil(R1.w)*Mi;}
+f c Ye(float m5,c a7,c a3,bool p4){if(m5==float(zh)){float t=gb(c(a7.x,-a7.y))/(3.14159*2.0);return c(t,a3.y);}else{float t=(m5==float(yh))?a7.x:length(a7.xy);t=clamp(t,0.0,1.0);float Oi=p4?(1.0-d5):d5;float x=t*Oi+a3.x;return c(x,a3.y);}}f c wg(float m5,c a7,c Ze,bool p4,float jc,float kc){const float lc=0.5*d5;c a3=c(Ze.x*d5+lc,Ze.y*jc+kc);return Ye(m5,a7,a3,p4);}f c Va(e U1,float jc,float kc){const float lc=0.5*d5;bool p4=U1.z<0.0;U1.z=abs(U1.z);c a3;a3.y=floor(U1.z);a3.x=(U1.z-a3.y)*ic+lc;a3.y=a3.y*jc+kc;float m5=floor(a3.x);return Ye(m5,U1.xy,a3,p4);}f d ji(e U1){return fract(U1.w)*-2.0+1.5;}f d pe(e U1){const float Pi=-1.0/255.0;return ceil(U1.w)*Pi;}
 #endif

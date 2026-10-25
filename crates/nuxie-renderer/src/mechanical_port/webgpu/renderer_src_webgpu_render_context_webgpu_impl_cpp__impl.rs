@@ -155,37 +155,37 @@ const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "EB";
 const GLSL_POST_INVERT_Y: &str = "NC";
 const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
-const GLSL_DRAW_PATH: &str = "RD";
-const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "GE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "HE";
+const GLSL_DRAW_PATH: &str = "SD";
+const GLSL_ENABLE_FEATHER: &str = "IB";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "HE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "JE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_CLEAR_COLOR: &str = "BF";
-const GLSL_LOAD_COLOR: &str = "DF";
-const GLSL_STORE_COLOR: &str = "IE";
-const GLSL_CLEAR_COVERAGE: &str = "JE";
+const GLSL_CLEAR_COLOR: &str = "CF";
+const GLSL_LOAD_COLOR: &str = "EF";
+const GLSL_STORE_COLOR: &str = "KE";
+const GLSL_CLEAR_COVERAGE: &str = "LE";
 const GLSL_CLEAR_CLIP: &str = "BG";
 const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
 const GLSL_ENABLE_EVEN_ODD: &str = "YC";
 const GLSL_ENABLE_NESTED_CLIPPING: &str = "ED";
-const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
+const GLSL_ENABLE_HSL_BLEND_MODES: &str = "GC";
 const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
-const GLSL_TARGET_SPIRV: &str = "DC";
+const GLSL_TARGET_SPIRV: &str = "EC";
 const GLSL_PLS_IMPL_EXT_NATIVE: &str = "WF";
 const GLSL_PLS_IMPL_NONE: &str = "YF";
 const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "XF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "QE";
+const GLSL_DRAW_IMAGE: &str = "SE";
 const GLSL_DRAW_IMAGE_RECT: &str = "FD";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
-const GLSL_CLOCKWISE_FILL: &str = "KE";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "R";
+const GLSL_CLOCKWISE_FILL: &str = "ME";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
 
@@ -4965,7 +4965,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            53_880
+            53_908
         );
     }
 

@@ -293,7 +293,17 @@ pub fn status_event_fixture() -> Vec<u8> {
 fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
     build_with_start_event(rows, false)
 }
+pub fn status_animation_event_fixture() -> Vec<u8> {
+    build_with_events(2, true, true).0
+}
 fn build_with_start_event(rows: usize, start_event: bool) -> (Vec<u8>, serde_json::Value) {
+    build_with_events(rows, start_event, false)
+}
+fn build_with_events(
+    rows: usize,
+    start_event: bool,
+    page_animation: bool,
+) -> (Vec<u8>, serde_json::Value) {
     use V::*;
     assert!(rows >= 1);
     let mut b = b"RIVE".to_vec();
@@ -503,13 +513,34 @@ fn build_with_start_event(rows: usize, start_event: bool) -> (Vec<u8>, serde_jso
             ],
         );
     }
-    machine(&mut b, false);
+    machine(&mut b, page_animation);
     if start_event {
         obj(
             &mut b,
             "Event",
             &[("parentId", U(0)), ("name", S("page-event"))],
         );
+    }
+    if page_animation {
+        assert!(start_event);
+        obj(
+            &mut b,
+            "LinearAnimation",
+            &[
+                ("name", S("page-report")),
+                ("fps", U(60)),
+                ("duration", U(60)),
+                ("loopValue", U(0)),
+            ],
+        );
+        // The page Event follows the list and, with multiple rows, two step/unit pairs.
+        obj(
+            &mut b,
+            "KeyedObject",
+            &[("objectId", U(if rows > 1 { 7 } else { 3 }))],
+        );
+        obj(&mut b, "KeyedProperty", &[("propertyKey", U(395))]);
+        obj(&mut b, "KeyFrameCallback", &[("frame", U(30))]);
     }
     for i in 0..rows {
         let name = if i == 0 {

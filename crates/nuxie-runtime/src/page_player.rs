@@ -750,6 +750,9 @@ impl PagePlayer {
             .cloned()
             .chain(reported_events)
             .collect::<Vec<_>>();
+        // Every producer uses the shared emission clock, including linear
+        // animations. Collection time can differ from emission time (a root
+        // machine may retain an older report during status evaluation).
         reported_events.sort_by_key(StateMachineReportedEvent::host_sequence);
         let deferred_events = if advances {
             Vec::new()

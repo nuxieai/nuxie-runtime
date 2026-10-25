@@ -8,6 +8,10 @@ use nuxie::{
     ViewModelInstanceRuntime,
 };
 use nuxie_render_api::SerializingFactory;
+use nuxie_runtime::source::data_bind::{
+    converters::data_converter_interpolator::DataConverterInterpolator,
+    data_values::data_value_number::DataValueNumber,
+};
 use silver_corpus::{compare_sriv, parse_sriv};
 
 fn pinned(relative: &str) -> Vec<u8> {
@@ -163,6 +167,49 @@ fn data_converter_interpolator_resets_on_binding() {
             );
         },
     );
+}
+
+#[test]
+fn data_converter_interpolator_restarts_without_holding_a_frame() {
+    // One frame in runtime order: advance, then convert the bound value.
+    fn step_interpolator(converter: &mut DataConverterInterpolator, target: f32) -> f32 {
+        converter.advance(1.0_f32 / 60.0_f32);
+        let input = DataValueNumber::new(target);
+        converter
+            .convert(&input)
+            .as_any()
+            .downcast_ref::<DataValueNumber>()
+            .expect("interpolator preserves numeric input type")
+            .value()
+    }
+
+    fn tween_to(converter: &mut DataConverterInterpolator, target: f32) -> i32 {
+        let mut previous = step_interpolator(converter, target);
+        let mut frames = 0;
+        while previous != target && frames < 600 {
+            let value = step_interpolator(converter, target);
+            assert_ne!(value, previous, "frame {frames} value {value}");
+            previous = value;
+            frames += 1;
+        }
+        assert_eq!(previous, target);
+        frames
+    }
+
+    let mut converter = DataConverterInterpolator::new(0.375_f32);
+    let initial = DataValueNumber::new(0.0);
+    converter.convert(&initial);
+    // Get past the initial snap instead of counting it as a tween.
+    step_interpolator(&mut converter, 0.0);
+    step_interpolator(&mut converter, 0.0);
+    let first_tween_frames = tween_to(&mut converter, 300.0);
+    assert_eq!(tween_to(&mut converter, 0.0), first_tween_frames);
+    assert_eq!(tween_to(&mut converter, 300.0), first_tween_frames);
+    // Interrupt the next tween and check the smoothing handoff keeps moving.
+    for _ in 0..12 {
+        step_interpolator(&mut converter, 0.0);
+    }
+    tween_to(&mut converter, 300.0);
 }
 
 #[test]

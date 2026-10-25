@@ -70,7 +70,7 @@ fn nested_with_component(
     artboard: &RuntimeArtboardInstanceHandle,
     required_component: &str,
 ) -> RuntimeArtboardInstanceHandle {
-    let children = artboard.with_artboard(|artboard| artboard.base.nested_artboards());
+    let children = artboard.with_artboard(|artboard| artboard.base.nested_artboards().to_vec());
     for child in children.into_iter().filter_map(|nested| {
         nested
             .with(|nested| nested.nested_artboard_instance_handle())
@@ -84,7 +84,7 @@ fn nested_with_component(
         }) {
             return child;
         }
-        let descendants = child.with_artboard(|child| child.base.nested_artboards());
+        let descendants = child.with_artboard(|child| child.base.nested_artboards().to_vec());
         if !descendants.is_empty() {
             // Only recurse when the child can contain another live occurrence.
             if let Some(found) = find_nested(&child, required_component) {
@@ -99,7 +99,7 @@ fn find_nested(
     artboard: &RuntimeArtboardInstanceHandle,
     required_component: &str,
 ) -> Option<RuntimeArtboardInstanceHandle> {
-    let children = artboard.with_artboard(|artboard| artboard.base.nested_artboards());
+    let children = artboard.with_artboard(|artboard| artboard.base.nested_artboards().to_vec());
     for child in children.into_iter().filter_map(|nested| {
         nested
             .with(|nested| nested.nested_artboard_instance_handle())

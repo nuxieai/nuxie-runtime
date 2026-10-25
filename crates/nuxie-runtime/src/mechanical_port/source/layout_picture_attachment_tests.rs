@@ -259,7 +259,7 @@ fn picture_mode_follows_data_bound_nested_swaps_and_component_copies() {
                 .instance_with_factory(RuntimeFactoryHandle::from_factory(&mut factory))
                 .unwrap();
         }
-        let hosts = main.with_artboard(|main| main.nested_artboards());
+        let hosts = main.with_artboard(|main| main.nested_artboards().to_vec());
         assert_eq!(hosts.len(), 3);
         for (index, host) in hosts.into_iter().enumerate() {
             let supplied = file.with_file(|file| file.artboard_named("CSS")).unwrap();
@@ -326,7 +326,7 @@ fn picture_mode_follows_data_bound_nested_swaps_and_component_copies() {
                 // clone_references_into rebuilds that child occurrence too.
                 let copied = main.instance().unwrap();
                 let copied_host =
-                    copied.with_artboard(|root| root.nested_artboards())[index].clone();
+                    copied.with_artboard(|root| root.nested_artboards()[index].clone());
                 let copied_child = copied_host
                     .with(|host| {
                         host.as_nested_artboard()

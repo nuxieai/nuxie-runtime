@@ -169,8 +169,8 @@ fn collect_selectable(root: &CoreHandle, result: &mut Vec<CoreHandle>) {
     let Some((drawables, nested, lists)) = root.with_downcast::<Artboard, _>(|a| {
         (
             a.drawables().to_vec(),
-            a.nested_artboards(),
-            a.artboard_component_lists(),
+            a.nested_artboards().to_vec(),
+            a.artboard_component_lists().to_vec(),
         )
     }) else {
         return;

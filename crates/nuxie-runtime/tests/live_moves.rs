@@ -411,7 +411,7 @@ fn collapsed_rows_cost_one_row_and_wake_with_data() {
         .unwrap();
     let rows = screens(&root).unwrap();
     for row in rows.values() {
-        let hosts = row.with_artboard(|b| b.nested_artboards());
+        let hosts = row.with_artboard(|b| b.nested_artboards().to_vec());
         empty_slot(&hosts[1]).unwrap();
     }
     machine.advance_and_apply(0.0);
@@ -430,7 +430,7 @@ fn collapsed_rows_cost_one_row_and_wake_with_data() {
     for i in 1..40 {
         set_row_collapsed(&list, i, true).unwrap();
     }
-    let inactive = rows["B"].with_artboard(|b| b.nested_artboards())[0].clone();
+    let inactive = rows["B"].with_artboard(|b| b.nested_artboards()[0].clone());
     let unit = child(&inactive).unwrap();
     let keyed = unit
         .with_artboard(|b| b.find_handle::<Node>("keyed"))
@@ -2367,7 +2367,7 @@ fn nested_list_descendants_follow_the_same_native_collapse_path() {
         .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
         .flatten()
         .unwrap();
-    let hosts = row.with_artboard(|b| b.nested_artboards());
+    let hosts = row.with_artboard(|b| b.nested_artboards().to_vec());
     let nested_unit = child(&hosts[0]).unwrap();
     s.machine.with_instance_mut(|m| m.enable_semantics());
     let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
@@ -2421,7 +2421,7 @@ fn ordinary_nested_row_cannot_wake_a_sleeping_screen_round9() {
         .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
         .flatten()
         .unwrap();
-    let slots = row.with_artboard(|b| b.nested_artboards());
+    let slots = row.with_artboard(|b| b.nested_artboards().to_vec());
     let nested = child(&slots[0]).unwrap();
     s.machine.advance_and_apply(0.0);
     s.machine.with_instance_mut(|m| m.enable_semantics());

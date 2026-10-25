@@ -1678,7 +1678,7 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
                             NestedArtboard::artboard_instance_default,
                         )
                         .flatten()?;
-                    Some((host, child))
+                    Some((host.clone(), child))
                 })
         })
         .expect("fixture has a retained nested occurrence");

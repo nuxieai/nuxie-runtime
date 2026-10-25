@@ -214,10 +214,10 @@ pub(crate) fn reconcile_slot_collapse(host: &CoreHandle) {
     }
 }
 pub(crate) fn reconcile_row_hosts(board: &crate::RuntimeArtboardInstanceHandle) {
-    for host in board.with_artboard(|b| b.nested_artboards()) {
+    for host in board.with_artboard(|b| b.nested_artboards().to_vec()) {
         reconcile_slot_collapse(&host);
     }
-    for list in board.with_artboard(|b| b.artboard_component_lists()) {
+    for list in board.with_artboard(|b| b.artboard_component_lists().to_vec()) {
         let hidden = list.with(|o| effectively_hidden(o, None)).unwrap_or(true);
         ArtboardComponentList::collapse_after_super_occurrence(&list, hidden);
         let managed = list

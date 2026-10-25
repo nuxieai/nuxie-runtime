@@ -909,6 +909,11 @@ impl Artboard {
         self.core_arena = arena.weak_handle();
     }
 
+    #[cfg(feature = "test-support")]
+    pub fn objects_capacity(&self) -> usize {
+        self.objects.capacity()
+    }
+
     pub fn objects(&self) -> &[Option<CoreHandle>] {
         &self.objects
     }
@@ -933,20 +938,20 @@ impl Artboard {
         crate::mechanical_port::source::typed_children::TypedChildren::new(&self.objects)
     }
 
-    pub fn animation_handles(&self) -> &[CoreHandle] {
-        &self.animations
+    pub fn with_animation_handles<R>(&self, callback: impl FnOnce(&[CoreHandle]) -> R) -> R {
+        self.with_animation_source(|source| callback(&source.animations))
     }
 
-    pub fn state_machine_handles(&self) -> &[CoreHandle] {
-        &self.state_machines
+    pub fn with_state_machine_handles<R>(&self, callback: impl FnOnce(&[CoreHandle]) -> R) -> R {
+        self.with_animation_source(|source| callback(&source.state_machines))
     }
 
-    pub fn nested_artboards(&self) -> Vec<CoreHandle> {
-        self.nested_artboards.clone()
+    pub fn nested_artboards(&self) -> &[CoreHandle] {
+        &self.nested_artboards
     }
 
-    pub fn artboard_component_lists(&self) -> Vec<CoreHandle> {
-        self.component_lists.clone()
+    pub fn artboard_component_lists(&self) -> &[CoreHandle] {
+        &self.component_lists
     }
 
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
@@ -1018,11 +1023,11 @@ impl Artboard {
     }
 
     pub fn animation_count(&self) -> usize {
-        self.animations.len()
+        self.with_animation_source(|source| source.animations.len())
     }
 
     pub fn state_machine_count(&self) -> usize {
-        self.state_machines.len()
+        self.with_animation_source(|source| source.state_machines.len())
     }
 
     pub fn first_animation(&self) -> Option<CoreHandle> {
@@ -1089,6 +1094,18 @@ impl Artboard {
         } else {
             crate::mechanical_port::source::core::CoreObject::core(self).handle()
         }
+    }
+
+    // Instances borrow the original owner's lists. A source-less editor
+    // instance deliberately owns empty lists and uses itself, as upstream does.
+    fn with_animation_source<R>(&self, callback: impl FnOnce(&Artboard) -> R) -> R {
+        if self.is_instance {
+            if let Some(source) = self.artboard_source.as_ref() {
+                return source.with_downcast::<Artboard, _>(callback)
+                    .expect("live animation source Artboard");
+            }
+        }
+        callback(self)
     }
 
     pub fn stateful_interpolator_handle(
@@ -1180,14 +1197,14 @@ impl Artboard {
                 return true;
             }
         }
-        for machine in &self.state_machines {
-            if machine.with_downcast::<StateMachine, _>(|machine| {
+        if self.with_state_machine_handles(|machines| machines.iter().any(|machine| {
+            machine.with_downcast::<StateMachine, _>(|machine| {
                 machine.has_scripted_objects() || (0..machine.data_bind_count()).any(|i| {
                     machine.data_bind(i).is_some_and(|bind| bind_runs_script(&bind))
                 })
-            }).unwrap_or(false) {
-                return true;
-            }
+            }).unwrap_or(false)
+        })) {
+            return true;
         }
         self.data_bind_container.data_binds().iter().any(bind_runs_script)
     }
@@ -5429,38 +5446,38 @@ impl Artboard {
     }
 
     pub fn animation_named(&self, name: &str) -> Option<CoreHandle> {
-        self.animations
+        self.with_animation_handles(|animations| animations
             .iter()
             .find(|animation| {
                 animation
                     .with_downcast::<LinearAnimation, _>(|animation| animation.name() == name)
                     .unwrap_or(false)
             })
-            .cloned()
+            .cloned())
     }
 
     pub fn animation_handle_at(&self, index: usize) -> Option<CoreHandle> {
-        self.animations.get(index).cloned()
+        self.with_animation_handles(|animations| animations.get(index).cloned())
     }
 
     pub fn state_machine_named(&self, name: &str) -> Option<CoreHandle> {
-        self.state_machines
+        self.with_state_machine_handles(|machines| machines
             .iter()
             .find(|machine| {
                 machine
                     .with_downcast::<StateMachine, _>(|machine| machine.name() == name)
                     .unwrap_or(false)
             })
-            .cloned()
+            .cloned())
     }
 
     pub fn state_machine_handle_at(&self, index: usize) -> Option<CoreHandle> {
-        self.state_machines.get(index).cloned()
+        self.with_state_machine_handles(|machines| machines.get(index).cloned())
     }
 
     pub fn default_state_machine_index(&self) -> i32 {
         let index = self.base.default_state_machine_id() as usize;
-        if index >= self.state_machines.len() {
+        if index >= self.state_machine_count() {
             -1
         } else {
             index as i32
@@ -6241,55 +6258,33 @@ impl Artboard {
         });
     }
 
-    fn collapse_boundary_subtree(node: &SemanticNodeRef, value: bool) {
-        let children = node.borrow().children().to_vec();
-        for child in children {
-            let semantic_data = child.borrow().semantic_data.clone();
-            if let Some(semantic_data) = semantic_data {
-                semantic_data.with_mut(|semantic_data| {
-                    if semantic_data
-                        .as_semantic_data()
-                        .is_some_and(|semantic_data| semantic_data.is_collapsed() != value)
-                    {
-                        semantic_data.component_collapse(value);
-                    }
-                });
-            }
-            Self::collapse_boundary_subtree(&child, value);
-        }
+    pub fn is_host_collapsed(&self) -> bool {
+        self.host().is_some_and(|host| {
+            host.with(|host| host.component_is_collapsed()).unwrap_or(false)
+        })
     }
 
-    pub fn collapse_semantic_boundary_handle(root: &CoreHandle, value: bool) {
-        let (managed, boundary) = root
-            .with_downcast::<Artboard, _>(|artboard| {
-                (
-                    artboard.active_semantic_manager.is_some(),
-                    artboard.semantic_boundary_node.clone(),
-                )
-            })
+    pub fn sync_semantic_boundary_handle(root: &CoreHandle) {
+        let collapsed = root.with_downcast::<Artboard, _>(Artboard::is_host_collapsed)
             .expect("live semantic Artboard");
-        if !managed {
-            return;
+        Self::sync_semantic_boundary_with_host_state(root, collapsed);
+    }
+
+    // A synchronous collapse hook already owns the host mutably. Its just-set
+    // state is authoritative; do not reborrow that same host to read it back.
+    pub(crate) fn sync_semantic_boundary_with_host_state(root: &CoreHandle, collapsed: bool) {
+        let (manager, boundary) = root
+            .with_downcast::<Artboard, _>(|artboard| (
+                artboard.active_semantic_manager.clone(),
+                artboard.semantic_boundary_node.clone(),
+            ))
+            .expect("live semantic Artboard");
+        let (Some(manager), Some(boundary)) = (manager, boundary) else { return; };
+        if !boundary.borrow().children().is_empty() {
+            manager.with_semantic_manager_mut(|manager| manager.mark_dirty(
+                crate::source::semantic::semantic_dirt::SemanticDirt::STRUCTURE));
         }
-        if value && boundary.is_some() {
-            Self::collapse_boundary_subtree(boundary.as_ref().unwrap(), true);
-        } else {
-            let objects = root
-                .with_downcast::<Artboard, _>(|artboard| artboard.objects.clone())
-                .expect("live semantic Artboard");
-            for object in objects.into_iter().flatten() {
-                if object.is_type_of(crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase::TYPE_KEY) {
-                    object.with_mut(|object| {
-                        if object.as_semantic_data().expect("SemanticData").is_collapsed()
-                            != value
-                        {
-                            object.component_collapse(value);
-                        }
-                    });
-                }
-            }
-        }
-        if !value {
+        if !collapsed {
             root.with_downcast_mut::<Artboard, _>(Artboard::mark_semantic_boundary_transform_dirty);
         }
     }
@@ -6899,14 +6894,12 @@ impl Artboard {
         retain_definitions: bool,
         factory: Option<RuntimeFactoryHandle>,
     ) -> Option<RuntimeArtboardInstanceHandle> {
-        let (mut definition, objects, data_binds, animations, state_machines) = source
+        let (mut definition, objects, data_binds) = source
             .with_downcast::<Artboard, _>(|source| {
                 (
                     source.clone_instance_definition(),
                     source.objects.clone(),
                     source.data_bind_container.data_binds().to_vec(),
-                    source.animations.clone(),
-                    source.state_machines.clone(),
                 )
             })?;
         let reroute = factory.as_ref().is_some_and(|factory| {
@@ -6920,6 +6913,9 @@ impl Artboard {
         if !retain_definitions {
             definition.base.definition_owner = None;
         }
+        // Reserve before RuntimeArtboardInstanceHandle registers/pushes the
+        // root, so even a small instance carries no geometric-growth slack.
+        definition.base.objects = Vec::with_capacity(objects.len());
         let instance = RuntimeArtboardInstanceHandle::new(*definition);
         let root = instance.core_handle();
         let (arena, container) = instance.with_artboard(|instance| {
@@ -6952,10 +6948,6 @@ impl Artboard {
                 .with_downcast::<Artboard, _>(Artboard::data_context)
                 .flatten(),
         );
-        instance.with_artboard_mut(|instance| {
-            instance.base.animations = animations;
-            instance.base.state_machines = state_machines;
-        });
         if reroute {
             Self::reinstance_nested_artboards_handle(&root, factory.as_ref().unwrap());
         }
@@ -7211,6 +7203,9 @@ impl AdvancingComponent for Artboard {
 
 impl Drop for Artboard {
     fn drop(&mut self) {
+        if let Some(boundary) = self.semantic_boundary_node.as_ref() {
+            boundary.borrow_mut().boundary_artboard = None;
+        }
         // Retained instances clean up before their final Rc release so blur
         // callbacks can still resolve the root. This also covers unretained
         // source artboards on which a caller explicitly allocated a manager.
@@ -7632,8 +7627,8 @@ impl RuntimeArtboardInstanceHandle {
     pub fn cleanup_semantic_tree(&self) {
         Artboard::cleanup_semantic_tree_handle(&self.core_handle());
     }
-    pub fn collapse_semantic_boundary(&self, value: bool) {
-        Artboard::collapse_semantic_boundary_handle(&self.core_handle(), value);
+    pub fn sync_semantic_boundary(&self) {
+        Artboard::sync_semantic_boundary_handle(&self.core_handle());
     }
     pub fn advance(&self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         Artboard::advance_handle(&self.core_handle(), elapsed_seconds, flags)
@@ -8407,9 +8402,7 @@ impl RuntimeArtboardInstanceHandle {
             let machine = artboard.base.state_machine_named(name)?;
             artboard
                 .base
-                .state_machine_handles()
-                .iter()
-                .position(|candidate| candidate == &machine)
+                .with_state_machine_handles(|machines| machines.iter().position(|candidate| candidate == &machine))
         })?;
         self.state_machine_instance_handle(index)
     }

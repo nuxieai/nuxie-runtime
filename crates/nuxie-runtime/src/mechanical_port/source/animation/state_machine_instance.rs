@@ -3104,7 +3104,10 @@ impl RuntimeStateMachineInstanceHandle {
             return;
         };
         let semantic_data = manager
-            .with_semantic_manager(|manager| manager.node_by_id(node_id))
+            .with_semantic_manager(|manager| {
+                let node = manager.node_by_id(node_id);
+                node.filter(|node| manager.is_in_tree(Some(node)))
+            })
             .and_then(|node| node.borrow().semantic_data.clone());
         let Some(semantic_data) = semantic_data else {
             return;
@@ -4043,7 +4046,7 @@ impl StateMachineInstance {
     fn initialize_nested_hit_components(&mut self) {
         for nested in self
             .artboard_instance
-            .with_artboard(|artboard| artboard.nested_artboards())
+            .with_artboard(|artboard| artboard.nested_artboards().to_vec())
             .expect("a state machine retains its ArtboardInstance")
         {
             self.hit_components.push(Rc::new(HitNestedArtboard {
@@ -4073,7 +4076,7 @@ impl StateMachineInstance {
         }
         for list in self
             .artboard_instance
-            .with_artboard(|artboard| artboard.artboard_component_lists())
+            .with_artboard(|artboard| artboard.artboard_component_lists().to_vec())
             .expect("a state machine retains its ArtboardInstance")
         {
             self.hit_components
@@ -6807,7 +6810,7 @@ impl StateMachineInstance {
     fn remove_event_listeners(&mut self) {
         for nested in self
             .artboard_instance
-            .with_artboard(|artboard| artboard.nested_artboards())
+            .with_artboard(|artboard| artboard.nested_artboards().to_vec())
             .unwrap_or_default()
         {
             for animation in nested_animations(&nested) {

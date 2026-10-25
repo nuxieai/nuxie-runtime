@@ -29,6 +29,8 @@ pub struct SemanticNode {
     pub trait_flags: u32,
     pub core_owner: Option<CoreHandle>,
     pub is_boundary_node: bool,
+    /// Owner used for actions/focus and live hidden-state checks while flattening.
+    /// Boundary nodes have no SemanticData owner.
     pub semantic_data: Option<CoreHandle>,
     pub boundary_artboard: Option<CoreHandle>,
 }

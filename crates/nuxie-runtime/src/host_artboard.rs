@@ -427,8 +427,8 @@ fn set_script_input_in_occurrence_tree(
     let (objects, nested_hosts, component_lists, source) = artboard.with_artboard(|artboard| {
         (
             artboard.base.objects().to_vec(),
-            artboard.base.nested_artboards(),
-            artboard.base.artboard_component_lists(),
+            artboard.base.nested_artboards().to_vec(),
+            artboard.base.artboard_component_lists().to_vec(),
             artboard.base.artboard_source_handle(),
         )
     });

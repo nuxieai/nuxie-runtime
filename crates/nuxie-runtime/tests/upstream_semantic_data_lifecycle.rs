@@ -16,6 +16,146 @@ use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, R
 
 const DROPDOWN_LABEL: &str = "Select a fandom";
 
+const FANDOM_LABELS: [&str; 4] = [
+    "War of the Stars",
+    "Scufflestar Galactica",
+    "Galaxy Hike",
+    "Dino Planet",
+];
+
+type SemanticEntries = std::collections::BTreeMap<
+    u32,
+    nuxie_runtime::source::semantic::semantic_snapshot::SemanticsDiffNode,
+>;
+
+fn fandom_entries(
+    entries: &SemanticEntries,
+) -> Vec<nuxie_runtime::source::semantic::semantic_snapshot::SemanticsDiffNode> {
+    entries
+        .values()
+        .filter(|entry| {
+            entry.role == nuxie_runtime::source::semantic::semantic_role::SemanticRole::Text as u32
+                && FANDOM_LABELS.contains(&entry.label.as_str())
+        })
+        .cloned()
+        .collect()
+}
+
+fn assert_all_fandoms(entries: &SemanticEntries) {
+    let entries = fandom_entries(entries);
+    let labels: std::collections::BTreeSet<_> =
+        entries.iter().map(|entry| entry.label.as_str()).collect();
+    assert_eq!(labels, FANDOM_LABELS.into_iter().collect());
+}
+
+fn tap_dropdown(fixture: &Dropdown, entries: &mut SemanticEntries) {
+    let button = entries
+        .values()
+        .find(|entry| entry.label == DROPDOWN_LABEL)
+        .unwrap();
+    let center = nuxie_runtime::source::math::vec2d::Vec2D::new(
+        (button.min_x + button.max_x) * 0.5,
+        (button.min_y + button.max_y) * 0.5,
+    );
+    fixture.machine.with_instance_mut(|machine| {
+        use nuxie_runtime::source::pointer_button::PointerButton;
+        machine.pointer_down(center, 0, PointerButton::Primary);
+        machine.pointer_up(center, 0, PointerButton::Primary);
+    });
+    for _ in 0..10 {
+        fixture.machine.advance_and_apply(0.1);
+    }
+    let diff = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.drain_diff());
+    for id in diff.removed {
+        entries.remove(&id);
+    }
+    for node in diff.added {
+        entries.insert(node.id, node);
+    }
+    for node in diff.updated_semantic {
+        if let Some(entry) = entries.get_mut(&node.id) {
+            entry.role = node.role;
+            entry.label = node.label;
+            entry.state_flags = node.state_flags;
+            entry.trait_flags = node.trait_flags;
+        }
+    }
+    for bounds in diff.updated_geometry {
+        if let Some(entry) = entries.get_mut(&bounds.id) {
+            entry.set_bounds(bounds.bounds());
+        }
+    }
+}
+
+fn semantic_data_node_count(fixture: &Dropdown) -> usize {
+    // Same bounded ID inventory as upstream; no tools-only nodeCount is
+    // required to count live SemanticData registrations in the runtime lane.
+    fixture.manager.with_semantic_manager(|manager| {
+        (0..65536)
+            .filter_map(|id| manager.node_by_id(id))
+            .filter(|node| node.borrow().semantic_data.is_some())
+            .count()
+    })
+}
+
+#[test]
+fn collapsing_dropdown_hides_but_keeps_list_item_registrations() {
+    let fixture = dropdown();
+    let mut entries = fixture.initial_entries.clone();
+    assert_all_fandoms(&entries);
+    let before = fandom_entries(&entries);
+    tap_dropdown(&fixture, &mut entries);
+    assert!(fandom_entries(&entries).is_empty());
+    let button = entries
+        .values()
+        .find(|entry| entry.label == DROPDOWN_LABEL)
+        .unwrap();
+    assert!(!has_semantic_state(
+        button.state_flags,
+        SemanticState::EXPANDED
+    ));
+    fixture.manager.with_semantic_manager(|manager| {
+        for entry in before {
+            let node = manager.node_by_id(entry.id);
+            assert!(node.is_some());
+            assert!(!manager.is_in_tree(node.as_ref()));
+        }
+    });
+}
+
+#[test]
+fn reexpanding_dropdown_brings_list_item_semantics_back() {
+    let fixture = dropdown();
+    let mut entries = fixture.initial_entries.clone();
+    tap_dropdown(&fixture, &mut entries);
+    assert!(fandom_entries(&entries).is_empty());
+    tap_dropdown(&fixture, &mut entries);
+    assert_all_fandoms(&entries);
+    for entry in fandom_entries(&entries) {
+        assert!(fixture.manager.with_semantic_manager(|manager| {
+            manager.is_in_tree(manager.node_by_id(entry.id).as_ref())
+        }));
+    }
+}
+
+#[test]
+fn repeated_dropdown_cycles_preserve_four_labels_and_registration_count() {
+    let fixture = dropdown();
+    let mut entries = fixture.initial_entries.clone();
+    assert_all_fandoms(&entries);
+    let registered = semantic_data_node_count(&fixture);
+    for _ in 0..3 {
+        tap_dropdown(&fixture, &mut entries);
+        assert!(fandom_entries(&entries).is_empty());
+        tap_dropdown(&fixture, &mut entries);
+        assert_all_fandoms(&entries);
+        assert_eq!(semantic_data_node_count(&fixture), registered);
+        assert_eq!(fandom_entries(&entries).len(), 4);
+    }
+}
+
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
@@ -27,6 +167,7 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 }
 
 struct Dropdown {
+    initial_entries: SemanticEntries,
     _file: RuntimeFileHandle,
     _artboard: RuntimeArtboardInstanceHandle,
     machine: RuntimeStateMachineInstanceHandle,
@@ -77,6 +218,11 @@ fn dropdown() -> Dropdown {
     ));
     let button_id = initial_button.id;
     Dropdown {
+        initial_entries: initial
+            .added
+            .into_iter()
+            .map(|entry| (entry.id, entry))
+            .collect(),
         _file: file,
         _artboard: artboard,
         machine: state_machine,
@@ -114,7 +260,7 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
 }
 
 #[test]
-fn semantic_actions_use_registration_at_enqueue_without_rechecking_state() {
+fn semantic_actions_use_last_flattened_snapshot_at_enqueue_without_rechecking_state() {
     for (hidden, queued) in [(false, false), (true, false), (false, true), (true, true)] {
         let fixture = dropdown();
         let Dropdown {
@@ -142,6 +288,12 @@ fn semantic_actions_use_registration_at_enqueue_without_rechecking_state() {
             }
         })
         .expect("semantic data");
+        // Hidden marks Structure but leaves the node registered. Until the
+        // next flatten, it is still in the snapshot used by fireSemanticAction.
+        assert!(manager.with_semantic_manager(|manager| {
+            let node = manager.node_by_id(button_id).expect("node stays registered");
+            manager.is_in_tree(Some(&node))
+        }));
         if !queued {
             machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
         }
@@ -151,8 +303,8 @@ fn semantic_actions_use_registration_at_enqueue_without_rechecking_state() {
         assert_eq!(
             data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
                 .unwrap(),
-            hidden && !queued,
-            "Hidden removes the node before lookup; already queued actions and Disabled still execute (hidden={hidden}, queued={queued})"
+            false,
+            "The last snapshot still includes this node; both newly enqueued and already queued actions execute despite Hidden or Disabled (hidden={hidden}, queued={queued})"
         );
     }
 }

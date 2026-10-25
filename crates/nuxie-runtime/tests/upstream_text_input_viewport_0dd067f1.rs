@@ -118,7 +118,7 @@ fn a_press_in_the_host_blurs_a_nested_text_input() {
     let a = file.with_file(|f| f.artboard_named("Host")).unwrap();
     let m = a.state_machine_at(0).unwrap();
     m.advance_and_apply(0.0);
-    let hosts = a.with_artboard(|a| a.nested_artboards());
+    let hosts = a.with_artboard(|a| a.nested_artboards().to_vec());
     assert_eq!(hosts.len(), 2);
     let nested_input = |host: &CoreHandle| {
         let instance = host

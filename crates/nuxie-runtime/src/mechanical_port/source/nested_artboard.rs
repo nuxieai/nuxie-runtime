@@ -1249,13 +1249,13 @@ impl NestedArtboard {
         )
     }
 
-    pub(crate) fn collapse_after_super(&mut self, value: bool) {
+    pub(crate) fn collapse_after_super(&mut self, _value: bool) {
         if let Some(instance) = self.instance.as_ref() {
-            instance.collapse_semantic_boundary(value);
+            Artboard::sync_semantic_boundary_with_host_state(&instance.core_handle(), self.is_collapsed());
         }
     }
 
-    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
+    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, _value: bool) {
         let instance = owner
             .with(|object| {
                 object
@@ -1266,7 +1266,7 @@ impl NestedArtboard {
             })
             .expect("live NestedArtboard collapse owner");
         if let Some(instance) = instance {
-            instance.collapse_semantic_boundary(value);
+            instance.sync_semantic_boundary();
         }
     }
 
@@ -1283,7 +1283,7 @@ impl NestedArtboard {
 
     pub fn nested_artboard(&self, name: &str) -> Option<CoreHandle> {
         self.instance.as_ref()?.with_artboard(|instance| {
-            instance.nested_artboards().into_iter().find(|nested| {
+            instance.nested_artboards().iter().find(|nested| {
                 nested
                     .with(|object| {
                         object
@@ -1291,7 +1291,7 @@ impl NestedArtboard {
                             .is_some_and(|nested| nested.base.base.name() == name)
                     })
                     .unwrap_or(false)
-            })
+            }).cloned()
         })
     }
 

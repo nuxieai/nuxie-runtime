@@ -37,18 +37,14 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `cf0f6752` source checkpoint advances runtime/source-oracle and Silver
-references for recording/resource lifetime, GPU format guards, view-model
-lifetime and bounded UTF decoding. Both independent reviews and correction
-rereviews are complete. Pool renderer tests pass 592 cases (6 ignored); Vulkan
-shipping and Metal tools compilation pass. Runtime and native scripting results
-are recorded in the sync map. Guest engine work remains excluded; the malformed-byte TextValueRun
-fixture cannot execute literally through safe String storage, as recorded in
-the sync map. Shader generation inputs and products are unchanged, retaining
-actual `41a2120b` provenance from pool job
-`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical captures and validation results
-remain under their original checkpoints; no new device pixel qualification is
-claimed by advancing this source reference.
+The `73d7b1c2` source checkpoint advances runtime/source-oracle and Silver
+references for shared artboard source lists and nested semantic visibility.
+Both independent reviews and correction rereviews are complete. Pool runtime,
+upstream semantic/sharing and host/live-move tests pass, with shipping C API
+compilation passing; exact results are recorded in the sync map.
+Renderer/shader inputs and products are unchanged, retaining actual `41a2120b`
+provenance from pool job `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` and historical
+validation under their original checkpoints. No new device pixels are claimed.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

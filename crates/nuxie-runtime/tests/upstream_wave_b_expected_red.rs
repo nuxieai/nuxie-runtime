@@ -5097,7 +5097,7 @@ fn binding_nested_instance_named(
     name: &str,
 ) -> RuntimeArtboardInstanceHandle {
     artboard
-        .with_artboard(|artboard| artboard.nested_artboards())
+        .with_artboard(|artboard| artboard.nested_artboards().to_vec())
         .into_iter()
         .find_map(|host| {
             host.with_downcast::<NestedArtboard, _>(|host| host.artboard_instance_default())
@@ -5800,7 +5800,7 @@ fn wave_b_focus_test_080_direct_port_expected_red() {
     let manager = fixture.manager();
     let lists = fixture
         .artboard
-        .with_artboard(|artboard| artboard.artboard_component_lists());
+        .with_artboard(|artboard| artboard.artboard_component_lists().to_vec());
     assert_eq!(lists.len(), 1);
     let list = lists[0].clone();
     let count = list
@@ -5873,7 +5873,7 @@ fn wave_b_focus_test_081_direct_port_expected_red() {
     let mut slot_found = false;
     for host in fixture
         .artboard
-        .with_artboard(|artboard| artboard.nested_artboards())
+        .with_artboard(|artboard| artboard.nested_artboards().to_vec())
     {
         let (source, bound) = host
             .with_downcast::<NestedArtboard, _>(|host| {
@@ -5995,7 +5995,7 @@ fn wave_b_focus_test_083_direct_port_expected_red() {
 
     let bound_machine = fixture
         .artboard
-        .with_artboard(|artboard| artboard.nested_artboards())
+        .with_artboard(|artboard| artboard.nested_artboards().to_vec())
         .into_iter()
         .find_map(|host| {
             host.with_downcast::<NestedArtboard, _>(|host| {

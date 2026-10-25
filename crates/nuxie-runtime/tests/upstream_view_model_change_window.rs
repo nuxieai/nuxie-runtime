@@ -229,7 +229,7 @@ fn named_nested_machine(
     name: &str,
 ) -> RuntimeStateMachineInstanceHandle {
     let nested = a
-        .with_artboard(|a| a.nested_artboards())
+        .with_artboard(|a| a.nested_artboards().to_vec())
         .into_iter()
         .find(|n| {
             n.with(|n| n.as_nested_artboard().unwrap().artboard_instance_handle(0))
@@ -382,7 +382,7 @@ fn child_state_after_fire(paused: bool) -> String {
     for _ in 0..9 {
         m.advance_and_apply(0.25);
     }
-    let nested = a.with_artboard(|a| a.nested_artboards());
+    let nested = a.with_artboard(|a| a.nested_artboards().to_vec());
     assert_eq!(nested.len(), 1);
     assert!(
         !nested[0]

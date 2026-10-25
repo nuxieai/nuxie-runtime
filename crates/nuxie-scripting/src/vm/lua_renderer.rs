@@ -56,17 +56,15 @@ impl RendererBindings {
         // factory, which remains installed for script-created resources.
         let (scripted_renderer, _renderer_scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
+        let _property_owner = owner.map(|owner| {
+            super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
+        });
         let field: Value = table.get_field("draw")?;
         let result = match field {
-            Value::Function(function) => {
-                let _property_owner = owner.map(|owner| {
-                    super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
-                });
-                super::ProtectedScriptCall::protected_call::<()>(
-                    &function,
-                    (table.clone(), scripted_renderer.clone()),
-                )
-            }
+            Value::Function(function) => super::ProtectedScriptCall::protected_call::<()>(
+                &function,
+                (table.clone(), scripted_renderer.clone()),
+            ),
             // Legacy files advertise every optional method. C++ treats a
             // currently missing or non-function draw field as a balanced
             // no-op after installing the renderer userdata.

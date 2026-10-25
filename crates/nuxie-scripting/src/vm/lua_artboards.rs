@@ -268,11 +268,13 @@ impl UserData for ScriptedArtboard {
                     let current = current.clone();
                     let failure = failure.clone();
                     let renderer_userdata = renderer.clone();
+                    let scope = super::view_model::ScriptCallbackScope::capture(lua);
                     Rc::new(move |drawable, renderer| {
                         if failure.borrow().is_some() {
                             Drawable::draw_handle(drawable, renderer);
                             return;
                         }
+                        let _scope = scope.enter(&visitor.lua());
                         let previous = current.replace(Some(drawable.clone()));
                         let result = (|| {
                             let scripted_renderer = renderer_userdata.borrow::<ScriptedRenderer>()?;

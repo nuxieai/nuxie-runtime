@@ -447,12 +447,12 @@ pub(super) fn call_path_effect_update(
     owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
 ) -> Result<Option<RenderRawPath>> {
     let lua = table.lua();
-    let function: luaur_rt::Function = table.get_field("update")?;
-    let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
-    let node = lua.create_userdata(LuaScriptedNode::new(node))?;
     let _property_owner = owner.map(|owner| {
         super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
     });
+    let function: luaur_rt::Function = table.get_field("update")?;
+    let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
+    let node = lua.create_userdata(LuaScriptedNode::new(node))?;
     let output: Value = function.protected_call((table.clone(), source, node))?;
     // None is upstream's false result, distinct from a valid empty Path.
     // Rejection itself is not a Lua execution error.

@@ -128,10 +128,6 @@ pub(super) struct ScriptedPropertyListenerOwner {
 }
 
 impl ScriptedPropertyListenerOwner {
-    fn ptr_eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.properties, &other.properties)
-    }
-
     fn tracked_property_count(&self) -> usize {
         self.properties
             .borrow()
@@ -216,8 +212,6 @@ struct ScriptedPropertyState {
     track_index: Cell<usize>,
     owning_model: RefCell<Option<ScriptViewModel>>,
     owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
-    owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
-    owner_source: RefCell<Weak<RefCell<Option<ScriptedContextSource>>>>,
     orphan_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     orphan_owner_tag: Cell<u32>,
     cleanup: RefCell<Option<Box<dyn Fn()>>>,
@@ -257,13 +251,6 @@ impl ScriptedPropertyState {
             .as_ref()
             .and_then(ScriptViewModel::native_instance)
     }
-    fn owner(&self) -> Option<ScriptedPropertyListenerOwner> {
-        Some(ScriptedPropertyListenerOwner {
-            source: self.owner_source.borrow().clone(),
-            properties: self.owner_properties.borrow().upgrade()?,
-            watches: self.owner_watches.borrow().upgrade()?,
-        })
-    }
     fn dispose(&self) {
         if self.disposed.replace(true) {
             return;
@@ -272,8 +259,6 @@ impl ScriptedPropertyState {
             untrack_scripted_property(&mut properties.borrow_mut(), self);
         }
         *self.owner_properties.borrow_mut() = Weak::new();
-        *self.owner_watches.borrow_mut() = Weak::new();
-        *self.owner_source.borrow_mut() = Weak::new();
         if let Some(orphans) = self.orphan_properties.borrow().upgrade() {
             untrack_scripted_property(&mut orphans.borrow_mut(), self);
         }
@@ -307,6 +292,40 @@ impl Drop for ScriptedPropertyOwnerScope {
     }
 }
 
+/// The registering script owns a retained callback, even when another script
+/// synchronously dispatches it or a native completion arrives on a later frame.
+/// Keep the source slot weak and resolve it at invocation so moves and teardown
+/// retain the same semantics as ordinary scripted-object method calls.
+#[derive(Clone)]
+pub(super) struct ScriptCallbackScope {
+    owner: Option<ScriptedPropertyListenerOwner>,
+}
+
+impl ScriptCallbackScope {
+    pub(super) fn capture(lua: &Lua) -> Self {
+        Self {
+            owner: ScriptViewModelFrameContext::for_lua(lua)
+                .current_owner
+                .borrow()
+                .clone(),
+        }
+    }
+
+    pub(super) fn enter(&self, lua: &Lua) -> ScriptedPropertyOwnerScope {
+        ScriptViewModelFrameContext::for_lua(lua).enter_callback_owner(self.owner.clone())
+    }
+
+    /// Lua owns the callback and this dispatcher. The Rust closure captures no
+    /// Lua handles, avoiding a VM -> function -> VM reference cycle.
+    pub(super) fn dispatcher(lua: &Lua) -> luaur_rt::Result<Function> {
+        let scope = Self::capture(lua);
+        lua.create_function(move |lua, (callback, args): (Function, MultiValue)| {
+            let _scope = scope.enter(lua);
+            callback.call::<MultiValue>(args)
+        })
+    }
+}
+
 impl std::fmt::Debug for ScriptViewModelFrameContext {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -323,12 +342,19 @@ impl ScriptViewModelFrameContext {
         &self,
         owner: ScriptedPropertyListenerOwner,
     ) -> ScriptedPropertyOwnerScope {
+        self.enter_callback_owner(Some(owner))
+    }
+
+    fn enter_callback_owner(
+        &self,
+        owner: Option<ScriptedPropertyListenerOwner>,
+    ) -> ScriptedPropertyOwnerScope {
         let source = owner
-            .source
-            .upgrade()
+            .as_ref()
+            .and_then(|owner| owner.source.upgrade())
             .and_then(|source| source.borrow().clone());
         let execution = ScriptedContextSource::enter_execution(source);
-        let previous = self.current_owner.borrow_mut().replace(owner);
+        let previous = std::mem::replace(&mut *self.current_owner.borrow_mut(), owner);
         ScriptedPropertyOwnerScope {
             _execution: execution,
             current: self.current_owner.clone(),
@@ -660,8 +686,6 @@ fn register_scripted_property(lua: &Lua, state: &Rc<ScriptedPropertyState>) {
     if let Some(owner) = context.current_owner.borrow().clone() {
         track_scripted_property(&mut owner.properties.borrow_mut(), state);
         *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
-        *state.owner_watches.borrow_mut() = Rc::downgrade(&owner.watches);
-        *state.owner_source.borrow_mut() = owner.source.clone();
     } else {
         #[cfg(feature = "tools")]
         {
@@ -1270,6 +1294,7 @@ fn call_property_listeners(listeners: &RefCell<Vec<ScriptedListener>>) {
         let Some(lua) = listener.callback.main_lua() else {
             continue;
         };
+        let _scope = listener.scope.enter(&lua);
         let _ = (|| -> luaur_rt::Result<()> {
             let callback: Function = listener.callback.get(&lua)?;
             let userdata = listener
@@ -3048,6 +3073,7 @@ impl ScriptedPropertyTrigger {
 
 #[derive(Clone)]
 struct ScriptedListener {
+    scope: ScriptCallbackScope,
     callback: MainThreadRef,
     userdata: Option<MainThreadRef>,
     identity: *const std::ffi::c_void,
@@ -3056,6 +3082,7 @@ struct ScriptedListener {
 impl ScriptedListener {
     fn new(lua: &Lua, callback: Function, userdata: Option<Value>) -> luaur_rt::Result<Self> {
         Ok(Self {
+            scope: ScriptCallbackScope::capture(lua),
             identity: callback.to_pointer(),
             callback: MainThreadRef::new(lua, callback)?,
             userdata: userdata

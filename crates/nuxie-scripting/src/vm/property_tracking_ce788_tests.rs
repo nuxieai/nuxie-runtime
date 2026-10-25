@@ -59,7 +59,10 @@ fn untracking_in_any_order_keeps_an_objects_tracked_list_intact() {
         for (index, property) in tracked.iter().enumerate() {
             let property = property.upgrade().unwrap();
             assert_eq!(property.track_index.get(), index);
-            assert!(property.owner().unwrap().ptr_eq(&object));
+            assert!(Rc::ptr_eq(
+                &property.owner_properties.borrow().upgrade().unwrap(),
+                &object.properties
+            ));
             sorted.push(Rc::as_ptr(&property));
         }
         sorted.sort_unstable();

@@ -1949,6 +1949,15 @@ pub fn fit_content_page_fixture() -> Vec<u8> {
 /// A record-free page whose Screen listener actions use the published checked
 /// response adapter. Choices are aliased both in the answer list and by name.
 pub fn checked_screen_fixture(payload: &[u8]) -> Vec<u8> {
+    checked_screen_fixture_with_global(payload, false)
+}
+
+/// Checked actions on two Screens observing the same global Page property.
+pub fn checked_screen_listener_fixture(payload: &[u8]) -> Vec<u8> {
+    checked_screen_fixture_with_global(payload, true)
+}
+
+fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
@@ -2070,12 +2079,32 @@ pub fn checked_screen_fixture(payload: &[u8]) -> Vec<u8> {
         obj(
             &mut b,
             "ViewModelInstanceNumber",
-            &[("viewModelPropertyId", U(1)), ("propertyValue", F(1.0))],
+            &[
+                ("viewModelPropertyId", U(1)),
+                (
+                    "propertyValue",
+                    F(if global { row as f32 + 6.0 } else { 1.0 }),
+                ),
+            ],
         );
     }
-    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    let mut page = vec![("name", S("Page"))];
+    if global {
+        page.push(("viewModelType", U(2)));
+    }
+    obj(&mut b, "ViewModel", &page);
     obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    if global {
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("counter"))]);
+    }
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(5))]);
+    if global {
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(1)), ("propertyValue", F(0.0))],
+        );
+    }
     obj(
         &mut b,
         "ViewModelInstanceList",

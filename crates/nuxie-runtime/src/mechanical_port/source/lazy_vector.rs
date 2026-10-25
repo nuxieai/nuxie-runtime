@@ -62,6 +62,12 @@ impl<T: Clone> LazyVector<T> {
     pub fn remove(&mut self, index: usize) -> T {
         self.writable().remove(index)
     }
+    /// Erase every matching element in order, without realizing an empty owner.
+    pub fn erase_if(&mut self, mut predicate: impl FnMut(&T) -> bool) {
+        if self.values.is_some() {
+            self.writable().retain(|candidate| !predicate(candidate));
+        }
+    }
     pub fn clear(&mut self) {
         if self.values.is_some() {
             self.writable().clear();
@@ -151,6 +157,7 @@ mod tests {
         assert_eq!(values.snapshot().len(), 0);
         values.clear();
         values.erase_all(&1);
+        values.erase_if(|_| panic!("empty owner never evaluates its predicate"));
         assert!(values.values.is_none());
         assert!(values.clone().values.is_none());
     }
@@ -166,6 +173,16 @@ mod tests {
         let capacity = values.values.as_ref().unwrap().capacity();
         values.erase_all(&3);
         assert_eq!(values.view(), &[1, 2, 4]);
+        assert_eq!(values.values.as_ref().unwrap().capacity(), capacity);
+        let snapshot = values.snapshot();
+        let mut visited = Vec::new();
+        values.erase_if(|value| {
+            visited.push(*value);
+            *value % 2 == 0
+        });
+        assert_eq!(visited, [1, 2, 4]);
+        assert_eq!(values.view(), &[1]);
+        assert_eq!(snapshot.iter().copied().collect::<Vec<_>>(), [1, 2, 4]);
         assert_eq!(values.values.as_ref().unwrap().capacity(), capacity);
         values.clear();
         assert!(values.empty());

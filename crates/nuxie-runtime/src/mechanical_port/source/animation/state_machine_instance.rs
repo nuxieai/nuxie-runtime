@@ -523,24 +523,26 @@ impl StateMachineLayerInstance {
         {
             return false;
         }
-        let (serial, source, has_binds) = machine
+        let (serial, source) = machine
             .artboard_instance
-            .with_artboard(|artboard| {
-                (
-                    artboard.change_serial(),
-                    artboard.artboard_source_handle(),
-                    artboard.has_key_frame_source_binds(),
-                )
-            })
+            .with_artboard(|artboard| (artboard.change_serial(), artboard.artboard_source_handle()))
             .expect("a state machine retains its ArtboardInstance");
         if serial != pose_since {
             return false;
         }
-        if source.as_ref().map_or(has_binds, |source| {
-            source
-                .with_downcast::<Artboard, _>(Artboard::has_key_frame_source_binds)
-                .expect("live artboard source")
-        }) {
+        if source.as_ref().map_or_else(
+            || {
+                machine
+                    .artboard_instance
+                    .with_artboard(|artboard| artboard.has_key_frame_source_binds())
+                    .expect("a state machine retains its ArtboardInstance")
+            },
+            |source| {
+                source
+                    .with_downcast::<Artboard, _>(Artboard::has_key_frame_source_binds)
+                    .expect("live artboard source")
+            },
+        ) {
             return false;
         }
         if let Some(interpolator) = self.transition.as_ref().and_then(|transition| {

@@ -2,6 +2,7 @@ pub mod advance_flags;
 pub mod advancing_component;
 pub mod animation;
 pub mod artboard;
+pub(crate) mod artboard_clusters;
 pub mod artboard_component_list;
 pub mod artboard_host;
 pub mod artboard_list_map_rule;

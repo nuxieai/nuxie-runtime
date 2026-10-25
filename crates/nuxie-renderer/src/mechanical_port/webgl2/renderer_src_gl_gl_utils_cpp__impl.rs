@@ -74,8 +74,8 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
 const GLSL_GLSL_VERSION: &str = "LC";
 const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "EB";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "HE";
-const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "YE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "JE";
+const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "ZE";
 const GLSL_GL_RENDERER_MALI: &str = "SF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 

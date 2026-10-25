@@ -1,41 +1,41 @@
-struct ii {
-    r2_: array<vec4<u32>>,
+struct li {
+    v2_: array<vec4<u32>>,
 }
 
-struct hi {
-    r2_: array<vec4<u32>>,
+struct ki {
+    v2_: array<vec4<u32>>,
 }
 
-struct mg {
-    r2_: array<vec4<f32>>,
+struct pg {
+    v2_: array<vec4<f32>>,
 }
 
-struct lg {
-    r2_: array<vec2<u32>>,
+struct og {
+    v2_: array<vec2<u32>>,
 }
 
-struct VB {
-    yd: f32,
-    Ee: f32,
-    Jg: f32,
-    Kg: f32,
-    S6_: u32,
+struct WB {
+    Cd: f32,
+    He: f32,
+    Mg: f32,
+    Ng: f32,
+    T6_: u32,
     Ea: u32,
-    vg: u32,
-    wg: u32,
+    yg: u32,
+    zg: u32,
     H8_: vec4<i32>,
-    Ci: vec2<f32>,
-    Fe: vec2<f32>,
-    q2_: u32,
-    Gi: f32,
-    w6_: u32,
+    Fi: vec2<f32>,
+    Ie: vec2<f32>,
+    r2_: u32,
+    Ji: f32,
+    z6_: u32,
     i3_: f32,
-    Ge: f32,
-    og: u32,
+    Je: f32,
+    rg: u32,
     G3_: f32,
     H3_: f32,
-    He: f32,
-    zi: u32,
+    Ke: f32,
+    Ci: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -56,26 +56,26 @@ struct VertexOutput {
 }
 
 @id(15) override N7_: bool = false;
-@id(16) override he: bool = false;
-@id(2) override cj: bool = true;
-@id(8) override ij: bool = true;
+@id(16) override ke: bool = false;
+@id(2) override gj: bool = true;
+@id(8) override mj: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 @group(0) @binding(7)
-var UB: texture_2d<u32>;
+var VB: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> DD: ii;
+var<storage> DD: li;
 @group(0) @binding(2)
-var<storage> KB: hi;
+var<storage> KB: ki;
 @group(0) @binding(4)
-var<storage> JB: mg;
+var<storage> JB: pg;
 var<private> P0_: vec4<f32>;
-var<private> U0_: vec3<f32>;
+var<private> V0_: vec3<f32>;
 @group(0) @binding(3)
-var<storage> XC: lg;
+var<storage> XC: og;
 var<private> Q0_: f32;
 @group(0) @binding(0)
-var<uniform> j: VB;
+var<uniform> j: WB;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
@@ -137,7 +137,7 @@ fn main_1() {
                 phi_1181_ = true;
                 break;
             }
-            if he {
+            if ke {
                 phi_1181_ = true;
                 break;
             }
@@ -181,23 +181,23 @@ fn main_1() {
     let _e132 = phi_1183_;
     let _e134 = min(_e132, (_e130 - 1i));
     let _e136 = ((_e128 * _e130) + _e134);
-    let _e141 = textureLoad(UB, vec2<i32>((_e136 & 2047i), (_e136 >> bitcast<u32>(11i))), 0i);
-    let _e148 = DD.r2_[(max((_e141.w & 65535u), 1u) - 1u)];
+    let _e141 = textureLoad(VB, vec2<i32>((_e136 & 2047i), (_e136 >> bitcast<u32>(11i))), 0i);
+    let _e148 = DD.v2_[(max((_e141.w & 65535u), 1u) - 1u)];
     let _e150 = bitcast<vec2<f32>>(_e148.xy);
     let _e152 = (_e148.z & 65535u);
     let _e154 = (_e152 * 4u);
-    let _e157 = KB.r2_[_e154];
+    let _e157 = KB.v2_[_e154];
     let _e158 = bitcast<vec4<f32>>(_e157);
     let _e165 = mat2x2<f32>(vec2<f32>(_e158.x, _e158.y), vec2<f32>(_e158.z, _e158.w));
-    let _e169 = KB.r2_[(_e154 + 1u)];
+    let _e169 = KB.v2_[(_e154 + 1u)];
     let _e171 = bitcast<vec2<f32>>(_e169.xy);
-    let _e177 = KB.r2_[(_e154 + 2u)];
+    let _e177 = KB.v2_[(_e154 + 2u)];
     let _e179 = (_e141.w & 8388608u);
     if N7_ {
         phi_1228_ = _e124;
         phi_1193_ = false;
     } else {
-        if he {
+        if ke {
             let _e180 = (_e179 != 0u);
             phi_1230_ = _e124;
             if _e180 {
@@ -226,7 +226,7 @@ fn main_1() {
     phi_1223_ = _e141;
     if (_e199 != _e134) {
         let _e202 = ((_e136 + _e199) - _e134);
-        let _e207 = textureLoad(UB, vec2<i32>((_e202 & 2047i), (_e202 >> bitcast<u32>(11i))), 0i);
+        let _e207 = textureLoad(VB, vec2<i32>((_e202 & 2047i), (_e202 >> bitcast<u32>(11i))), 0i);
         if ((_e207.w & 8454143u) != (_e141.w & 8454143u)) {
             if N7_ {
                 phi_1204_ = (_e150.x != 0f);
@@ -237,7 +237,7 @@ fn main_1() {
             phi_1206_ = _e141;
             if _e215 {
                 let _e216 = bitcast<i32>(_e148.w);
-                let _e221 = textureLoad(UB, vec2<i32>((_e216 & 2047i), (_e216 >> bitcast<u32>(11i))), 0i);
+                let _e221 = textureLoad(VB, vec2<i32>((_e216 & 2047i), (_e216 >> bitcast<u32>(11i))), 0i);
                 phi_1206_ = _e221;
             }
             let _e223 = phi_1206_;
@@ -257,7 +257,7 @@ fn main_1() {
                 phi_1212_ = true;
                 break;
             }
-            if he {
+            if ke {
                 phi_1212_ = true;
                 break;
             }
@@ -365,12 +365,12 @@ fn main_1() {
     let _e343 = phi_1298_;
     if ((_e74 & 268435456i) != 0i) {
         P0_ = vec4<f32>(0f, 0f, 0f, 0f);
-        U0_ = vec3<f32>(0f, 0f, 0f);
+        V0_ = vec3<f32>(0f, 0f, 0f);
     } else {
-        let _e346 = XC.r2_[_e152];
+        let _e346 = XC.v2_[_e152];
         let _e348 = (_e346.x & 15u);
         phi_1345_ = false;
-        if cj {
+        if gj {
             let _e351 = ((_e346.x >> bitcast<u32>(4i)) & 15u);
             Q0_ = f32(_e351);
             phi_1345_ = (_e351 != 0u);
@@ -387,8 +387,8 @@ fn main_1() {
             }
         } else {
             let _e364 = (_e152 * 8u);
-            let _e367 = JB.r2_[_e364];
-            let _e378 = JB.r2_[(_e364 + 1u)];
+            let _e367 = JB.v2_[_e364];
+            let _e378 = JB.v2_[(_e364 + 1u)];
             let _e383 = ((mat2x2<f32>(vec2<f32>(_e367.x, _e367.y), vec2<f32>(_e367.z, _e367.w)) * _e343) + _e378.xy);
             let _e394 = ((_e378.w + (f32(_e348) * 0.125f)) + (max(_e378.z, 0f) * 0.00024414063f));
             if (_e378.z < 0f) {
@@ -399,23 +399,23 @@ fn main_1() {
             let _e397 = phi_1343_;
             P0_ = vec4<f32>(_e383.x, _e383.y, _e397, (((_e122 * -0.5f) - 0.25f) - round((bitcast<f32>(_e346.y) * 255f))));
         }
-        phi_837_ = ij;
-        if ij {
+        phi_837_ = mj;
+        if mj {
             phi_837_ = ((_e346.x & 2048u) != 0u);
         }
         let _e407 = phi_837_;
         if _e407 {
             let _e408 = (_e152 * 8u);
-            let _e412 = JB.r2_[(_e408 + 4u)];
-            let _e423 = JB.r2_[(_e408 + 5u)];
+            let _e412 = JB.v2_[(_e408 + 4u)];
+            let _e423 = JB.v2_[(_e408 + 5u)];
             let _e426 = ((mat2x2<f32>(vec2<f32>(_e412.x, _e412.y), vec2<f32>(_e412.z, _e412.w)) * _e343) + _e423.xy);
-            U0_ = vec3<f32>(_e426.x, _e426.y, (1f + _e423.z));
+            V0_ = vec3<f32>(_e426.x, _e426.y, (1f + _e423.z));
         } else {
-            U0_ = vec3<f32>(0f, 0f, 0f);
+            V0_ = vec3<f32>(0f, 0f, 0f);
         }
     }
-    let _e433 = j.Jg;
-    let _e435 = j.Kg;
+    let _e433 = j.Mg;
+    let _e435 = j.Ng;
     let _e443 = vec4<f32>(((_e343.x * _e433) - 1f), ((_e343.y * _e435) - sign(_e435)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {
@@ -423,7 +423,7 @@ fn main_1() {
                 phi_1353_ = true;
                 break;
             }
-            if he {
+            if ke {
                 phi_1353_ = true;
                 break;
             }
@@ -453,7 +453,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     main_1();
     let _e8 = P0_;
-    let _e9 = U0_;
+    let _e9 = V0_;
     let _e10 = Q0_;
     let _e11 = unnamed.gl_Position;
     return VertexOutput(_e8, _e9, _e10, _e11);

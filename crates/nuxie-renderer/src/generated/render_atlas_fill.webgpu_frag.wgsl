@@ -1,25 +1,25 @@
-struct VB {
-    yd: f32,
-    Ee: f32,
-    Jg: f32,
-    Kg: f32,
-    S6_: u32,
+struct WB {
+    Cd: f32,
+    He: f32,
+    Mg: f32,
+    Ng: f32,
+    T6_: u32,
     Ea: u32,
-    vg: u32,
-    wg: u32,
+    yg: u32,
+    zg: u32,
     H8_: vec4<i32>,
-    Ci: vec2<f32>,
-    Fe: vec2<f32>,
-    q2_: u32,
-    Gi: f32,
-    w6_: u32,
+    Fi: vec2<f32>,
+    Ie: vec2<f32>,
+    r2_: u32,
+    Ji: f32,
+    z6_: u32,
     i3_: f32,
-    Ge: f32,
-    og: u32,
+    Je: f32,
+    rg: u32,
     G3_: f32,
     H3_: f32,
-    He: f32,
-    zi: u32,
+    Ke: f32,
+    Ci: u32,
     Da: u32,
     O8_: f32,
     P8_: f32,
@@ -29,26 +29,26 @@ struct VB {
 var AD: texture_2d<f32>;
 @group(3) @binding(9)
 var db: sampler;
-var<private> Ji: f32;
-var<private> S_1: vec4<f32>;
+var<private> Mi: f32;
+var<private> T_1: vec4<f32>;
 var<private> gl_FrontFacing_1: bool;
 @group(0) @binding(0)
-var<uniform> j: VB;
+var<uniform> j: WB;
 @group(0) @binding(8)
 var ZC: texture_2d<f32>;
 @group(1) @binding(11)
-var TB: texture_2d<f32>;
+var UB: texture_2d<f32>;
 @group(3) @binding(8)
 var Q8_: sampler;
 @group(1) @binding(13)
-var U4_: sampler;
+var W4_: sampler;
 
 fn main_1() {
     var phi_419_: f32;
     var phi_423_: f32;
     var phi_424_: f32;
 
-    let _e25 = S_1;
+    let _e25 = T_1;
     let _e26 = gl_FrontFacing_1;
     let _e29 = max(_e25.w, 0f);
     if (_e25.z >= 0f) {
@@ -78,15 +78,15 @@ fn main_1() {
         phi_424_ = -(_e83);
     }
     let _e87 = phi_424_;
-    Ji = _e87;
+    Mi = _e87;
     return;
 }
 
 @fragment
-fn main(@location(0) S: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) -> @location(0) f32 {
-    S_1 = S;
+fn main(@location(0) T: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) -> @location(0) f32 {
+    T_1 = T;
     gl_FrontFacing_1 = gl_FrontFacing;
     main_1();
-    let _e5 = Ji;
+    let _e5 = Mi;
     return _e5;
 }

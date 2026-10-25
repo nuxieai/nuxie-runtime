@@ -6,37 +6,37 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_clockwise_clip_frag[] = R"===(#ifdef EB
-E1
-#ifndef U
-z0(x2,n0);
+F1
+#ifndef R
+y0(x2,n0);
 #endif
-q1(k3,m0);
-#ifndef U
-fc(A6,I4);
+r1(k3,m0);
+#ifndef R
+gc(E6,K4);
 #endif
-q1(l7,Y0);F1 X1(IB){q(i2,D);d A1=-i2.x;
+r1(m7,Y0);G1 I1(HB){q(k2,E);d B1=-k2.x;
 #ifdef DB
-q(o1,d);d B0=o1;
+q(p1,d);d B0=p1;
 #else
-q(S,Q2);d B0=S.x;
+q(T,R2);d B0=T.x;
 #endif
-O2;D W0;d g6,P3;
-#if defined(DB)&&defined(EC)
-if(EC){P3=B0;}else
+P2;E X0;d j6,R3;
+#if defined(DB)&&defined(FC)
+if(FC){R3=B0;}else
 #endif
-{W0=unpackHalf2x16(k1(m0));g6=W0.y;d p5=g6==A1?W0.x:J0(.0);P3=p5+B0;}
+{X0=unpackHalf2x16(k1(m0));j6=X0.y;d q5=j6==B1?X0.x:J0(.0);R3=q5+B0;}
 #ifdef ED
-d e6=i2.y;if(ED&&e6!=.0){d M4=.0;
-#if defined(DB)&&defined(EC)
-if(EC){W0=unpackHalf2x16(k1(m0));g6=W0.y;}
+d h6=k2.y;if(ED&&h6!=.0){d O4=.0;
+#if defined(DB)&&defined(FC)
+if(FC){X0=unpackHalf2x16(k1(m0));j6=X0.y;}
 #endif
-if(g6!=A1){M4=g6==e6?W0.x:.0;m1(Y0,packHalf2x16(R2(M4,uh)));}else{M4=unpackHalf2x16(k1(Y0)).x;g2(Y0);}P3=min(P3,M4);}else
+if(j6!=B1){O4=j6==h6?X0.x:.0;m1(Y0,packHalf2x16(S2(O4,xh)));}else{O4=unpackHalf2x16(k1(Y0)).x;i2(Y0);}R3=min(R3,O4);}else
 #endif
-{g2(Y0);}m1(m0,packHalf2x16(R2(P3,A1)));
-#ifndef U
-N2(n0);
+{i2(Y0);}m1(m0,packHalf2x16(S2(R3,B1)));
+#ifndef R
+O2(n0);
 #endif
-P2;o2;}
+Q2;O1;}
 #endif
 )===";
 } // namespace glsl

@@ -6,24 +6,24 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char flush_uniforms[] = R"===(#ifndef Z2
-#define Z2(D4) float D4;
+#define Z2(G4) float G4;
 #endif
-#ifndef d4
-#define d4(D4) uint D4;
+#ifndef f4
+#define f4(G4) uint G4;
 #endif
-#ifndef Ce
-#define Ce(D4) x6 D4;
+#ifndef Fe
+#define Fe(G4) B6 G4;
 #endif
-#ifndef Zb
-#define Zb(D4) c D4;
+#ifndef ac
+#define ac(G4) c G4;
 #endif
-#ifndef Fi
-#define Fi(D4) f D4;
+#ifndef Ii
+#define Ii(G4) e G4;
 #endif
-#ifndef De
-#define De VB
+#ifndef Ge
+#define Ge WB
 #endif
-f8(e5,De) Z2(yd) Z2(Ee) Z2(Jg) Z2(Kg) d4(S6) d4(Ea) d4(vg) d4(wg) Ce(H8) Zb(Ci) Zb(Fe) d4(q2) Z2(Gi) d4(w6) Z2(i3) Z2(Ge) d4(og) Z2(G3) Z2(H3) Z2(He) d4(zi) d4(Da) Z2(O8) Z2(P8) O9(j)
+f8(g5,Ge) Z2(Cd) Z2(He) Z2(Mg) Z2(Ng) f4(T6) f4(Ea) f4(yg) f4(zg) Fe(H8) ac(Fi) ac(Ie) f4(r2) Z2(Ji) f4(z6) Z2(i3) Z2(Je) f4(rg) Z2(G3) Z2(H3) Z2(Ke) f4(Ci) f4(Da) Z2(O8) Z2(P8) O9(j)
 )===";
 } // namespace glsl
 } // namespace gpu

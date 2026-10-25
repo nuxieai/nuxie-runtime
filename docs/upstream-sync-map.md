@@ -93,18 +93,26 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8ea42e0ee49bb5d9f1887643a1042226790772f6`
+- LAST_SYNCED_SHA: `094d24e1744141102962dae1e82f8536900a22d9`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  47 upstream commits remain after this checkpoint at the fetched target.
-  All 273 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (295 after `5892bb05`); this
+  46 upstream commits remain after this checkpoint at the fetched target.
+  All 274 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (296 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `094d24e1`: account for the complete four-file public delta. Three shader
+  files put ATTR declarations on single lines and add clang-format guards for
+  Unreal's compiler. Tokens and supported runtime behavior are unchanged; Nuxie
+  has no Unreal shader consumer. Private `.rive_head` changes are not claimed.
+  Advance active source/oracle and Silver references only. Shader source/archive,
+  tools and generated artifacts keep actual `74e5d3f6` provenance. Independent
+  source-equivalence and separate Rust-integration reviews are clean; all 30
+  Silver manifest checks pass. No new compiler or hardware validation is claimed.
 - `8ea42e0e`: text-input `maxCharacters`/`maxLines` limits and the empty-line
   cursor fix are eligible. Upstream Yoga/legacy hug-layout semantics are
   excluded by the CSS/Taffy product decision. CSS-owned TextInput maxLines
@@ -1514,6 +1522,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `094d24e1744141102962dae1e82f8536900a22d9` | Account for three shader ATTR formatting/comment changes for the unsupported Unreal compiler and private provenance. No supported runtime semantic delta; advance active source/oracle and Silver references while retaining actual 74e5d3f6 shader provenance. Independent reviews pending. | — |
 | `8ea42e0ee49bb5d9f1887643a1042226790772f6` | Text-input character/line limits and empty-line cursor correction are eligible; preserve CSS/Taffy semantics and exclude Yoga/legacy hug-layout behavior. CSS-owned maxLines uses current laid-out max_width; only non-CSS explicit existing Hug uses measured width. Upstream Yoga/legacy hug helper and engine changes are excluded. Both reviews and correction rereviews complete; 13 high-level tests pass and all 17 new raw cases passed initially. Full raw/schema reruns pending after bounded fixture/parser/inventory corrections. Goldens lack a declared pool C++ builder and were not run. No private Dart/FFI changes absent from the public delta claimed. | — |
 | `156e959c7a71d96f2ffc16515b483ee464c38863` | Translate inner-feather change notification/path rebuild and the public path regression. Refresh exact Silver producer-line provenance and active source/oracle pins; no private metadata claims or shader relabeling. Both independent reviews and correction rereviews clean; all 7 scoped feather tests and 30 Silver manifest checks pass. No broad/device qualification claimed. | — |
 | `47d1cd54ccefd468db7cb26ecc4699ae1723dd85` | Translate applicable sampler validation and WebGPU feature support. Exclude guest Wasm/AnimaScript web test-player and dependent premake changes; no private metadata claims. Active source/oracle pins advance, shader products retain actual 74e5d3f6 provenance. Both independent reviews and correction rereview clean; macOS pool tests pass 266/0/5 ignored, with 30 Silver and 16 provenance checks passing. No new browser/device coverage. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

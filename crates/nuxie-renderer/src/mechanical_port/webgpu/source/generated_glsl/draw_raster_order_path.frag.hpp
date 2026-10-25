@@ -6,7 +6,7 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_raster_order_path_frag[] = R"===(#ifdef DB
-F1 y0(x2,n0);r1(k3,m0);y0(E6,M4);r1(m7,r8);G1 I1(HB){q(N0,e);
+F1 y0(x2,n0);r1(k3,m0);y0(E6,M4);r1(l7,r8);G1 I1(HB){q(N0,e);
 #ifdef GB
 q(O0,M);
 #endif
@@ -46,7 +46,7 @@ n=min(n,C0(1.));}
 #ifdef N
 if(N&&k2.x<.0){d B1=-k2.x;
 #ifdef ED
-if(ED){d h6=k2.y;if(h6!=.0){E X0=unpackHalf2x16(k1(m0));d i7=X0.y;d Q4;if(i7!=B1){Q4=i7==h6?X0.x:.0;
+if(ED){d h6=k2.y;if(h6!=.0){E X0=unpackHalf2x16(k1(m0));d h7=X0.y;d Q4;if(h7!=B1){Q4=h7==h6?X0.x:.0;
 #ifndef EB
 x0(M4,E0(Q4,.0,.0,.0));
 #endif
@@ -60,7 +60,7 @@ m1(m0,packHalf2x16(S2(n,B1)));O2(n0);}else
 #endif
 {
 #ifdef N
-if(N){d B1=k2.x;if(B1!=.0){E X0=unpackHalf2x16(k1(m0));d i7=X0.y;n=(i7==B1)?min(X0.x,n):C0(.0);}}
+if(N){d B1=k2.x;if(B1!=.0){E X0=unpackHalf2x16(k1(m0));d h7=X0.y;n=(h7==B1)?min(X0.x,n):C0(.0);}}
 #endif
 #ifdef AB
 if(AB){d A5=C3(Y4(W0));n=clamp(A5,C0(.0),n);}

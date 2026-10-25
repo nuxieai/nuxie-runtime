@@ -41,7 +41,7 @@ var<private> gl_VertexIndex_1: i32;
 var<private> KC_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: WB;
-var<private> z7_: vec4<f32>;
+var<private> y7_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -103,7 +103,7 @@ fn main_1() {
         phi_244_ = _e85;
     }
     let _e87 = phi_244_;
-    z7_ = (vec4<f32>(((vec4(_e87) >> bitcast<vec4<u32>>(vec4<u32>(16u, 8u, 0u, 24u))) & vec4<u32>(255u, 255u, 255u, 255u))) * vec4<f32>(0.003921569f, 0.003921569f, 0.003921569f, 0.003921569f));
+    y7_ = (vec4<f32>(((vec4(_e87) >> bitcast<vec4<u32>>(vec4<u32>(16u, 8u, 0u, 24u))) & vec4<u32>(255u, 255u, 255u, 255u))) * vec4<f32>(0.003921569f, 0.003921569f, 0.003921569f, 0.003921569f));
     unnamed.gl_Position = vec4<f32>(((_e81 * 2f) - 1f), (((f32((_e56 & 536870911u)) + _e54) * _e50) - sign(_e50)), 0f, 1f);
     return;
 }
@@ -113,7 +113,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) KC: vec4<u32>) 
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     KC_1 = KC;
     main_1();
-    let _e8 = z7_;
+    let _e8 = y7_;
     let _e9 = unnamed.gl_Position;
     return VertexOutput(_e8, _e9);
 }

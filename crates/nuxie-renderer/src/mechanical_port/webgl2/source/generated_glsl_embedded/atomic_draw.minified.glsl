@@ -86,7 +86,7 @@ V(V3,P);
 #ifdef H
 V(N1,P);
 #endif
-bool Aa=HC.z==.0||HC.w==.0;x5=Aa?.0:1.;c i0=HC.xy;X R0=q1(AC);X k7=transpose(inverse(R0));if(!Aa){float Ba=S4*Ca(k7[1])/dot(R0[1],k7[1]);if(Ba>=.5){i0.x=.5;x5*=T4(.5/Ba);}else{i0.x+=Ba*HC.z;}float Da=S4*Ca(k7[0])/dot(R0[0],k7[0]);if(Da>=.5){i0.y=.5;x5*=T4(.5/Da);}else{i0.y+=Da*HC.w;}}X qg=q1(TD);n2=D0(qg,i0)+GD.xy;i0=D0(R0,i0)+PB.xy;if(Aa){c l4=D0(k7,HC.zw);l4*=Ca(l4)/dot(l4,l4);i0+=S4*l4;}
+bool Aa=HC.z==.0||HC.w==.0;x5=Aa?.0:1.;c i0=HC.xy;X R0=q1(AC);X j7=transpose(inverse(R0));if(!Aa){float Ba=S4*Ca(j7[1])/dot(R0[1],j7[1]);if(Ba>=.5){i0.x=.5;x5*=T4(.5/Ba);}else{i0.x+=Ba*HC.z;}float Da=S4*Ca(j7[0])/dot(R0[0],j7[0]);if(Da>=.5){i0.y=.5;x5*=T4(.5/Da);}else{i0.y+=Da*HC.w;}}X qg=q1(TD);n2=D0(qg,i0)+GD.xy;i0=D0(R0,i0)+PB.xy;if(Aa){c l4=D0(j7,HC.zw);l4*=Ca(l4)/dot(l4,l4);i0+=S4*l4;}
 #ifdef AB
 if(AB){W0=I8(q1(UB),PB.zw,i0);}
 #endif
@@ -131,7 +131,7 @@ h3 W(5,P,N1);
 #endif
 M1
 #ifdef BB
-l7(TB,E3,F3,W3,j3,E1,j0,C){L(C,F3,PC,c);L(C,j3,QC,c);L(r,j0,AC,e);L(r,j0,UB,e);L(r,j0,PB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,MC,uint);L(r,j0,IC,e);V(n2,c);
+k7(TB,E3,F3,W3,j3,E1,j0,C){L(C,F3,PC,c);L(C,j3,QC,c);L(r,j0,AC,e);L(r,j0,UB,e);L(r,j0,PB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,MC,uint);L(r,j0,IC,e);V(n2,c);
 #ifdef AB
 V(W0,e);
 #endif
@@ -215,13 +215,13 @@ U4(k3,m0);
 r1(k3,m0);
 #endif
 #endif
-V2(m7,W4);G1 m4 m6(id,ug,XC);n6(jd,vg,JB);n4 f uint wg(float x){return uint(round(x*Ka+La));}f d L8(uint x){return T4(float(x)*kd+(-La*kd));}P M8(P f0){
+V2(l7,W4);G1 m4 m6(id,ug,XC);n6(jd,vg,JB);n4 f uint wg(float x){return uint(round(x*Ka+La));}f d L8(uint x){return T4(float(x)*kd+(-La*kd));}P M8(P f0){
 #ifdef OF
 f0=min(f0,j.xg);
 #endif
 return f0;}
 #ifdef N
-f void ld(uint B1,V4 X0,n7(d) n){
+f void ld(uint B1,V4 X0,m7(d) n){
 #ifdef VC
 if(all(lessThan(abs(X0.xy-unpackUnorm4x8(B1).xy),S2(.25/255.)))) n=min(n,X0.z);else n=.0;
 #else
@@ -231,9 +231,9 @@ if(B1==X0>>16) n=min(n,unpackHalf2x16(X0).x);else n=.0;
 #endif
 f void N8(uint f0,d w0,l1(i) Q
 #if defined(N)&&!defined(WC)
-,n7(V4) H1
+,m7(V4) H1
 #endif
-o7 p4){T0 L0=z5(XC,f0);d n=w0;if((L0.x&(yg|Ma))!=0u){n=abs(n);
+n7 p4){T0 L0=z5(XC,f0);d n=w0;if((L0.x&(yg|Ma))!=0u){n=abs(n);
 #ifdef YC
 if(YC&&(L0.x&Ma)!=0u){n=1.-abs(fract(n*.5)*2.+-1.);}
 #endif

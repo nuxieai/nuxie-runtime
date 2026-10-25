@@ -13,7 +13,7 @@ r1(k3,m0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 y0(E6,M4);
 #endif
-r1(m7,Y0);
+r1(l7,Y0);
 #else
 y0(k3,m0);
 #endif
@@ -68,7 +68,7 @@ W2(S0),
 N0 m3);d n=clamp(p2(JD,Ta,U2,.0).x,C0(.0),C0(1.));
 #endif
 #ifdef DRAW_IMAGE_MESH
-i k=j8(RB,v4,g6,j.Re);d n=1.;
+i k=i8(RB,v4,g6,j.Re);d n=1.;
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){d A5=max(C3(Y4(W0)),C0(.0));n=min(A5,n);}
@@ -79,7 +79,7 @@ P2;
 #if defined(ENABLE_CLIPPING)
 if(ENABLE_CLIPPING&&i4!=.0){d S3;
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
-E X0=unpackHalf2x16(k1(m0));d i7=X0.y;S3=max(i7==i4?X0.x:C0(.0),C0(.0));
+E X0=unpackHalf2x16(k1(m0));d h7=X0.y;S3=max(h7==i4?X0.x:C0(.0),C0(.0));
 #else
 S3=K0(m0).x;
 #endif

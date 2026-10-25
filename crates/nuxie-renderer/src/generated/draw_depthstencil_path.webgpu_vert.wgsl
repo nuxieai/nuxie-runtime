@@ -58,7 +58,7 @@ struct VertexOutput {
     @location(1) @interpolate(flat, either) member_2: f32,
 }
 
-@id(16) override O7_: bool = false;
+@id(16) override N7_: bool = false;
 @id(17) override qe: bool = false;
 @id(1) override kj: bool = true;
 @id(2) override lj: bool = true;
@@ -138,7 +138,7 @@ fn main_1() {
     let _e84 = (_e78 & 268435455i);
     switch bitcast<i32>(0u) {
         default: {
-            if O7_ {
+            if N7_ {
                 phi_1291_ = true;
                 break;
             }
@@ -157,7 +157,7 @@ fn main_1() {
         let _e95 = select(1i, 2i, _e83);
         let _e101 = (_e94 & ((1i << bitcast<u32>(_e95)) - 1i));
         phi_1292_ = _e101;
-        if (O7_ && !(_e83)) {
+        if (N7_ && !(_e83)) {
             phi_1292_ = (_e101 + 1i);
         }
         let _e106 = phi_1292_;
@@ -198,7 +198,7 @@ fn main_1() {
     let _e175 = bitcast<vec2<f32>>(_e173.xy);
     let _e181 = KB.v2_[(_e158 + 2u)];
     let _e183 = (_e145.w & 8388608u);
-    if O7_ {
+    if N7_ {
         phi_1338_ = _e128;
         phi_1303_ = false;
     } else {
@@ -233,7 +233,7 @@ fn main_1() {
         let _e206 = ((_e140 + _e203) - _e138);
         let _e211 = textureLoad(VB, vec2<i32>((_e206 & 2047i), (_e206 >> bitcast<u32>(11i))), 0i);
         if ((_e211.w & 8454143u) != (_e145.w & 8454143u)) {
-            if O7_ {
+            if N7_ {
                 phi_1314_ = (_e154.x != 0f);
             } else {
                 phi_1314_ = true;
@@ -258,7 +258,7 @@ fn main_1() {
     let _e236 = phi_1333_;
     switch bitcast<i32>(0u) {
         default: {
-            if O7_ {
+            if N7_ {
                 phi_1322_ = true;
                 break;
             }
@@ -280,7 +280,7 @@ fn main_1() {
         phi_1386_ = _e253;
         phi_1383_ = _e242;
         phi_1373_ = _e249;
-        if O7_ {
+        if N7_ {
             let _e255 = ((_e234 & 1048576u) != 0u);
             phi_1358_ = _e242;
             if _e255 {
@@ -447,7 +447,7 @@ fn main_1() {
     let _e501 = vec4<f32>(((_e347.x * _e491) - 1f), ((_e347.y * _e493) - sign(_e493)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {
-            if O7_ {
+            if N7_ {
                 phi_1471_ = true;
                 break;
             }

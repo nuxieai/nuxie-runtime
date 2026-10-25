@@ -1,11 +1,11 @@
 //! Exact upstream gradient packing shader program.
 #![allow(dead_code)]
-pub const PINNED_UPSTREAM_COMMIT: &str = "74e5d3f635c3c463fe10e4327261705549ee5919";
+pub const PINNED_UPSTREAM_COMMIT: &str = "41a2120bb572e8168ba08fd2ea514c9ddf25d270";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/gradient_packing_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "51d678f536e41ff62ffe745e88ddbe37af73317cf700d0cf39612c4b30b8043f";
+    "5cabd01586f69442dfac1f658bae8b940d08c89bfb0529c385028a7d8e5cccef";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 170;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 6400;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 6372;
 pub const PINNED_GRADIENT_PACKING_COMMON_SOURCE: &str = r###"// We need to adjust the scaling of the packed `u` value in the gradient data by
 // this amount, to leave enough bits for the gradient type.
 #define GRADIENT_PACKING_U_SCALE 8.0
@@ -76,7 +76,7 @@ INLINE float2 getGradientUVFromOriginUV(
     // angular gradient types always span the whole texture, *including* to
     // the next texel (i.e. it's not first to last texel, there's always a
     // wrap involved).
-    float t = atan2(float2(gradientCoord.x, -gradientCoord.y)) * (1.0 / _2PI);
+    float t = atan2(gradientCoord) * (1.0 / _2PI);
 
     // Note: don't add the half-texel offset here, it causes the angle to be
     // slightly off - we actually want angle 0 to be directly in between

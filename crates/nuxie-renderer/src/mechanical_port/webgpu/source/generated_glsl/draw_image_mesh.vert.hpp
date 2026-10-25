@@ -21,7 +21,7 @@ h3 W(4,P,N1);
 #endif
 M1
 #ifdef BB
-x4 y4 l7(TB,E3,F3,W3,j3,E1,j0,C){L(C,F3,PC,c);L(C,j3,QC,c);L(r,j0,AC,e);L(r,j0,UB,e);L(r,j0,PB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,MC,uint);L(r,j0,IC,e);V(g6,c);
+x4 y4 k7(TB,E3,F3,W3,j3,E1,j0,C){L(C,F3,PC,c);L(C,j3,QC,c);L(r,j0,AC,e);L(r,j0,UB,e);L(r,j0,PB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,MC,uint);L(r,j0,IC,e);V(g6,c);
 #ifdef N
 V(i4,d);
 #endif

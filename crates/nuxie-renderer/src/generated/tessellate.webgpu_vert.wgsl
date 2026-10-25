@@ -64,8 +64,8 @@ var<storage> KB: pi;
 var AD: texture_2d<f32>;
 @group(3) @binding(9)
 var eb: sampler;
+var<private> d7_: vec4<f32>;
 var<private> e7_: vec4<f32>;
-var<private> f7_: vec4<f32>;
 var<private> p5_: vec4<f32>;
 var<private> q5_: vec3<f32>;
 var<private> v8_: u32;
@@ -424,8 +424,8 @@ fn main_1() {
         phi_1994_ = -(_e452);
     }
     let _e464 = phi_1994_;
-    e7_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
-    f7_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
+    d7_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
+    e7_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
     let _e475 = f32((((_e417 + _e119) + _e121) - 1u));
     p5_ = vec4<f32>((_e475 - abs((_e93 - _e115.x))), _e475, f32(((_e121 << bitcast<u32>(10i)) | _e417)), _e464);
     let _e485 = UC_1;
@@ -472,8 +472,8 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) QD: vec4<f32>, 
     UC_1 = UC;
     XB_1 = XB;
     main_1();
-    let _e18 = e7_;
-    let _e19 = f7_;
+    let _e18 = d7_;
+    let _e19 = e7_;
     let _e20 = p5_;
     let _e21 = q5_;
     let _e22 = v8_;

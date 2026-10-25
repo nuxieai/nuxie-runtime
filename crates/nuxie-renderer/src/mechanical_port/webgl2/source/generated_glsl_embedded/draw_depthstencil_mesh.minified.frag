@@ -34,7 +34,7 @@ q(S0,d);
 #endif
 #endif
 #ifdef NB
-i k=j8(RB,v4,g6,j.Re)*Y1;
+i k=i8(RB,v4,g6,j.Re)*Y1;
 #else
 d n=
 #ifdef FB

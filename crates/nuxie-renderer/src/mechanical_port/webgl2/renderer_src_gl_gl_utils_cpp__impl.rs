@@ -73,7 +73,7 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
 
 const GLSL_GLSL_VERSION: &str = "LC";
 const GLSL_VERTEX: &str = "BB";
-const GLSL_FRAGMENT: &str = "EB";
+const GLSL_FRAGMENT: &str = "DB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "JE";
 const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "AF";
 const GLSL_GL_RENDERER_MALI: &str = "TF";
@@ -589,11 +589,11 @@ mod tests {
         let expectedPrefix = concat!(
             "#version 300 es\n",
             "#define LC 300\n",
-            "#define EB\n",
+            "#define DB\n",
             "#define CUSTOM true\n",
-            "#define YE _baseVertex\n",
-            "#define HE _baseInstance\n",
-            "#define SF\n",
+            "#define AF _baseVertex\n",
+            "#define JE _baseInstance\n",
+            "#define TF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

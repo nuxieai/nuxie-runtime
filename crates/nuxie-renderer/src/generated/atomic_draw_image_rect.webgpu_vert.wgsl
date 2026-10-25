@@ -1,28 +1,28 @@
 struct WB {
-    Cd: f32,
-    He: f32,
-    Mg: f32,
-    Ng: f32,
+    Fd: f32,
+    Pe: f32,
+    Sg: f32,
+    Tg: f32,
     T6_: u32,
-    Ea: u32,
-    yg: u32,
-    zg: u32,
-    I8_: vec4<i32>,
-    Gi: vec2<f32>,
-    Ie: vec2<f32>,
+    Fa: u32,
+    Eg: u32,
+    Fg: u32,
+    J8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Qe: vec2<f32>,
     r2_: u32,
-    Ki: f32,
+    Oi: f32,
     z6_: u32,
     i3_: f32,
-    Je: f32,
-    rg: u32,
-    G3_: f32,
+    Re: f32,
+    xg: u32,
     H3_: f32,
-    Ke: f32,
-    Di: u32,
-    Da: u32,
-    P8_: f32,
+    I3_: f32,
+    Se: f32,
+    Hi: u32,
+    Ea: u32,
     Q8_: f32,
+    R8_: f32,
 }
 
 struct gl_PerVertex {
@@ -32,19 +32,19 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct li {
+struct pi {
     v2_: array<vec4<u32>>,
 }
 
-struct og {
+struct ug {
     v2_: array<vec2<u32>>,
 }
 
-struct pg {
+struct vg {
     v2_: array<vec4<f32>>,
 }
 
-struct mi {
+struct qi {
     v2_: array<vec4<u32>>,
 }
 
@@ -59,22 +59,22 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(1) override gj: bool = true;
+@id(1) override kj: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> HC_1: vec4<f32>;
-var<private> v5_: f32;
+var<private> x5_: f32;
 var<private> AC_1: vec4<f32>;
 var<private> TD_1: vec4<f32>;
 var<private> n2_: vec2<f32>;
 var<private> GD_1: vec4<f32>;
 var<private> PB_1: vec4<f32>;
 var<private> W0_: vec4<f32>;
-var<private> TB_1: vec4<f32>;
+var<private> UB_1: vec4<f32>;
 var<private> Y1_: vec4<f32>;
 var<private> BC_1: u32;
-var<private> U3_: u32;
+var<private> V3_: u32;
 var<private> CC_1: u32;
 var<private> N1_: u32;
 var<private> DC_1: u32;
@@ -82,22 +82,22 @@ var<private> DC_1: u32;
 var<uniform> j: WB;
 var<private> HD_1: vec4<f32>;
 var<private> UD_1: vec4<f32>;
-var<private> w5_: vec4<f32>;
+var<private> y5_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
 var VB: texture_2d<u32>;
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> KB: li;
+var<storage> KB: pi;
 @group(0) @binding(3)
-var<storage> XC: og;
+var<storage> XC: ug;
 @group(0) @binding(4)
-var<storage> JB: pg;
+var<storage> JB: vg;
 @group(0) @binding(5)
-var<storage> DD: mi;
+var<storage> DD: qi;
 @group(3) @binding(9)
-var db: sampler;
+var eb: sampler;
 var<private> MC_1: u32;
 
 fn main_1() {
@@ -118,7 +118,7 @@ fn main_1() {
         phi_242_ = (_e54 == 0f);
     }
     let _e57 = phi_242_;
-    v5_ = select(1f, 0f, _e57);
+    x5_ = select(1f, 0f, _e57);
     let _e59 = HC_1;
     let _e60 = _e59.xy;
     let _e61 = AC_1;
@@ -130,8 +130,8 @@ fn main_1() {
     if !(_e57) {
         let _e80 = ((0.5f * (abs(_e70[1].x) + abs(_e70[1].y))) / dot(_e67, _e70[1]));
         if (_e80 >= 0.5f) {
-            let _e92 = v5_;
-            v5_ = (_e92 * (0.5f / _e80));
+            let _e92 = x5_;
+            x5_ = (_e92 * (0.5f / _e80));
             phi_779_ = vec2<f32>(0.5f, _e60.y);
         } else {
             phi_779_ = vec2<f32>((_e59.x + (_e80 * _e50)), _e60.y);
@@ -139,8 +139,8 @@ fn main_1() {
         let _e95 = phi_779_;
         let _e104 = ((0.5f * (abs(_e70[0].x) + abs(_e70[0].y))) / dot(_e66, _e70[0]));
         if (_e104 >= 0.5f) {
-            let _e118 = v5_;
-            v5_ = (_e118 * (0.5f / _e104));
+            let _e118 = x5_;
+            x5_ = (_e118 * (0.5f / _e104));
             phi_781_ = vec2<f32>(_e95.x, 0.5f);
         } else {
             let _e107 = HC_1[3u];
@@ -161,8 +161,8 @@ fn main_1() {
         phi_782_ = (_e139 + ((_e141 * ((abs(_e141.x) + abs(_e141.y)) / dot(_e141, _e141))) * 0.5f));
     }
     let _e153 = phi_782_;
-    if gj {
-        let _e154 = TB_1;
+    if kj {
+        let _e154 = UB_1;
         let _e159 = vec2<f32>(_e154.x, _e154.y);
         let _e160 = vec2<f32>(_e154.z, _e154.w);
         switch bitcast<i32>(0u) {
@@ -192,11 +192,11 @@ fn main_1() {
     let _e189 = BC_1;
     Y1_ = unpack4x8unorm(_e189);
     let _e191 = CC_1;
-    U3_ = _e191;
+    V3_ = _e191;
     let _e192 = DC_1;
     N1_ = _e192;
-    let _e194 = j.Mg;
-    let _e196 = j.Ng;
+    let _e194 = j.Sg;
+    let _e196 = j.Tg;
     let _e206 = HD_1[2u];
     let _e207 = bitcast<u32>(_e206);
     if (_e207 != 0u) {
@@ -210,16 +210,16 @@ fn main_1() {
             phi_796_ = _e231;
         }
         let _e234 = phi_796_;
-        w5_ = vec4<f32>(_e220.x, _e220.y, _e234, (-0.75f - round(255f)));
+        y5_ = vec4<f32>(_e220.x, _e220.y, _e234, (-0.75f - round(255f)));
     } else {
-        w5_ = vec4<f32>(0f, 0f, 0f, 0f);
+        y5_ = vec4<f32>(0f, 0f, 0f, 0f);
     }
     unnamed.gl_Position = vec4<f32>(((_e153.x * _e194) - 1f), ((_e153.y * _e196) - sign(_e196)), 0f, 1f);
     return;
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_InstanceIndex: u32, @location(0) HC: vec4<f32>, @location(2) AC: vec4<f32>, @location(9) TD: vec4<f32>, @location(11) GD: vec4<f32>, @location(4) PB: vec4<f32>, @location(3) TB: vec4<f32>, @location(5) BC: u32, @location(6) CC: u32, @location(7) DC: u32, @location(12) HD: vec4<f32>, @location(10) UD: vec4<f32>, @location(8) MC: u32) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_InstanceIndex: u32, @location(0) HC: vec4<f32>, @location(2) AC: vec4<f32>, @location(9) TD: vec4<f32>, @location(11) GD: vec4<f32>, @location(4) PB: vec4<f32>, @location(3) UB: vec4<f32>, @location(5) BC: u32, @location(6) CC: u32, @location(7) DC: u32, @location(12) HD: vec4<f32>, @location(10) UD: vec4<f32>, @location(8) MC: u32) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     gl_InstanceIndex_1 = i32(gl_InstanceIndex);
     HC_1 = HC;
@@ -227,7 +227,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_
     TD_1 = TD;
     GD_1 = GD;
     PB_1 = PB;
-    TB_1 = TB;
+    UB_1 = UB;
     BC_1 = BC;
     CC_1 = CC;
     DC_1 = DC;
@@ -235,13 +235,13 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_
     UD_1 = UD;
     MC_1 = MC;
     main_1();
-    let _e39 = v5_;
+    let _e39 = x5_;
     let _e40 = n2_;
     let _e41 = W0_;
     let _e42 = Y1_;
-    let _e43 = U3_;
+    let _e43 = V3_;
     let _e44 = N1_;
-    let _e45 = w5_;
+    let _e45 = y5_;
     let _e46 = unnamed.gl_Position;
     return VertexOutput(_e39, _e40, _e41, _e42, _e43, _e44, _e45, _e46);
 }

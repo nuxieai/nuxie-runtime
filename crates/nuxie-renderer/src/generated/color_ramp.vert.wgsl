@@ -1,28 +1,28 @@
 struct WB {
-    Cd: f32,
-    He: f32,
-    Mg: f32,
-    Ng: f32,
+    Fd: f32,
+    Pe: f32,
+    Sg: f32,
+    Tg: f32,
     T6_: u32,
-    Ea: u32,
-    yg: u32,
-    zg: u32,
-    I8_: vec4<i32>,
-    Gi: vec2<f32>,
-    Ie: vec2<f32>,
+    Fa: u32,
+    Eg: u32,
+    Fg: u32,
+    J8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Qe: vec2<f32>,
     r2_: u32,
-    Ki: f32,
+    Oi: f32,
     z6_: u32,
     i3_: f32,
-    Je: f32,
-    rg: u32,
-    G3_: f32,
+    Re: f32,
+    xg: u32,
     H3_: f32,
-    Ke: f32,
-    Di: u32,
-    Da: u32,
-    P8_: f32,
+    I3_: f32,
+    Se: f32,
+    Hi: u32,
+    Ea: u32,
     Q8_: f32,
+    R8_: f32,
 }
 
 struct gl_PerVertex {
@@ -66,7 +66,7 @@ fn main_1() {
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = j.Cd;
+    let _e50 = j.Fd;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);

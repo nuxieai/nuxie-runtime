@@ -91,7 +91,7 @@ mod tests {
                 | LoadStoreActionsEXT::clearClip.0,
         );
         BuildLoadStoreEXTGLSL(&mut shader, all);
-        assert!(shader.starts_with("#define CF\n#define EF\n#define KE\n#define LE\n#define BG\n"));
+        assert!(shader.starts_with("#define DF\n#define FF\n#define LE\n#define ME\n#define CG\n"));
         assert!(shader.ends_with(GLSL_PLS_LOAD_STORE_EXT));
     }
 }

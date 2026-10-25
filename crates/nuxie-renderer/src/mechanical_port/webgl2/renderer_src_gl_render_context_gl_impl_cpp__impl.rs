@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 159556] = [(); PINNED_SOURCE.len()];
+const _: [(); 135390] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -94,7 +94,7 @@ const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "VF";
 const GLSL_DRAW_IMAGE: &str = "TE";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_DRAW_IMAGE_RECT: &str = "FD";
-const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
+const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_DRAW_PATH: &str = "SD";
 const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "NF";
 const GLSL_ENABLE_FEATHER: &str = "IB";
@@ -119,7 +119,7 @@ const GLSL_dstColorTexture: &str = "MD";
 const GLSL_featherAtlasTexture: &str = "JD";
 const GLSL_gaussianIntegralTexture: &str = "AD";
 const GLSL_gradTexture: &str = "ZC";
-const GLSL_imageTexture: &str = "UB";
+const GLSL_imageTexture: &str = "RB";
 const GLSL_paintAuxBuffer: &str = "JB";
 const GLSL_paintBuffer: &str = "XC";
 const GLSL_pathBuffer: &str = "KB";
@@ -466,8 +466,22 @@ impl TexelBufferRingWebGL {
         slot: usize,
         reallocateTexture: bool,
     ) {
-        assert!(slot == 0 || self.m_state.borrow().capabilities().avoidTexSubImage2DOnInFlightTextures);
-        assert!(!reallocateTexture || self.m_state.borrow().capabilities().avoidTexSubImage2DOnInFlightTextures);
+        assert!(
+            slot == 0
+                || self
+                    .m_state
+                    .borrow()
+                    .capabilities()
+                    .avoidTexSubImage2DOnInFlightTextures
+        );
+        assert!(
+            !reallocateTexture
+                || self
+                    .m_state
+                    .borrow()
+                    .capabilities()
+                    .avoidTexSubImage2DOnInFlightTextures
+        );
         assert!(slot < gpu::kBufferRingSize as usize);
         let (width, height) = StorageTextureSize(bindingSize, self.m_bufferStructure);
         let uploadSize = width as usize
@@ -482,7 +496,10 @@ impl TexelBufferRingWebGL {
             recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0 + bindingIdx));
             if self.m_textures[slot].id() == 0 || reallocateTexture {
                 self.m_textures[slot].moveAssign(GLTexture::new());
-                recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, self.m_textures[slot].id()));
+                recordGLCommand(GLCommand::BindTexture(
+                    GL_TEXTURE_2D,
+                    self.m_textures[slot].id(),
+                ));
                 recordGLCommand(GLCommand::TexStorage2D {
                     target: GL_TEXTURE_2D,
                     levels: 1,
@@ -497,7 +514,10 @@ impl TexelBufferRingWebGL {
                     GL_CLAMP_TO_EDGE as GLint,
                 );
             } else {
-                recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, self.m_textures[slot].id()));
+                recordGLCommand(GLCommand::BindTexture(
+                    GL_TEXTURE_2D,
+                    self.m_textures[slot].id(),
+                ));
             }
             recordGLCommand(GLCommand::TexSubImage2D {
                 target: GL_TEXTURE_2D,
@@ -531,13 +551,16 @@ impl BufferRingContract for TexelBufferRingWebGL {
 impl Drop for TexelBufferRingWebGL {
     fn drop(&mut self) {
         let execution = (&*self.rust_execution).clone();
-        if execution.withDeleteCurrent(|| {
-            // C++ destroys array elements in reverse order. Enter the owning
-            // domain so dropping a replaced ring retires its names immediately.
-            for texture in self.m_textures.iter_mut().rev() {
-                unsafe { std::ptr::drop_in_place(texture) };
-            }
-        }).is_none() {
+        if execution
+            .withDeleteCurrent(|| {
+                // C++ destroys array elements in reverse order. Enter the owning
+                // domain so dropping a replaced ring retires its names immediately.
+                for texture in self.m_textures.iter_mut().rev() {
+                    unsafe { std::ptr::drop_in_place(texture) };
+                }
+            })
+            .is_none()
+        {
             for texture in self.m_textures.iter_mut().rev() {
                 // A lost generation has no live GL names to delete. Release
                 // the old stamp without queuing names in a foreign domain.
@@ -628,7 +651,9 @@ fn newContextOwner(
         m_imageMeshVAO: ManuallyDrop::new(VAO::new()),
         m_emptyVAO: ManuallyDrop::new(VAO::new()),
         m_blitAsDrawProgram: ManuallyDrop::new(Program::Zero()),
-        m_polyfillBufferTextureFences: ManuallyDrop::new(std::array::from_fn(|_| glutils::Fence::default())),
+        m_polyfillBufferTextureFences: ManuallyDrop::new(std::array::from_fn(|_| {
+            glutils::Fence::default()
+        })),
         m_polyfillBufferTextureIdx: 0,
         m_state: ManuallyDrop::new(state),
         m_testForAdvancedBlendError: false,
@@ -711,6 +736,8 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
         features.framebufferBottomUp = true;
         // GL state is dynamic, so combined subpasses share a single program.
         features.supportsPipelineDynamicState = true;
+        // GLState implements ZERO/SRC_ALPHA blending and real color write masks.
+        features.supportsDepthStencilLayerMask = true;
         features.maxTextureSize = u32::try_from(execution.domain().getInteger(GL_MAX_TEXTURE_SIZE))
             .expect("GL_MAX_TEXTURE_SIZE is nonnegative");
         features.supportsClipScissor = !(context.m_capabilities.isAdreno()
@@ -2416,14 +2443,17 @@ pub(crate) fn tryStartAsyncUbershaderCreation(
                     // unsupported combination would assert in DrawShader.
                     return true;
                 }
-                queuePipelineIfNotFound(context, &StandardPipelineProps {
-                    drawType,
-                    shaderFeatures,
-                    interlockMode,
-                    shaderMiscFlags,
-                    #[cfg(feature = "with-rive-tools")]
-                    synthesizedFailureType: gpu::SynthesizedFailureType::none,
-                });
+                queuePipelineIfNotFound(
+                    context,
+                    &StandardPipelineProps {
+                        drawType,
+                        shaderFeatures,
+                        interlockMode,
+                        shaderMiscFlags,
+                        #[cfg(feature = "with-rive-tools")]
+                        synthesizedFailureType: gpu::SynthesizedFailureType::none,
+                    },
+                );
                 true
             },
         );
@@ -4539,11 +4569,12 @@ mod tests {
             &mut self,
             ingress: GLFinalReleaseIngress,
         ) -> std::sync::Arc<dyn nuxie_ore_metal::gpu_resource::ResourceFinalReleaseWake> {
-            assert!(self
-                .finalReleaseIngress
-                .borrow_mut()
-                .replace(ingress)
-                .is_none());
+            assert!(
+                self.finalReleaseIngress
+                    .borrow_mut()
+                    .replace(ingress)
+                    .is_none()
+            );
             self.finalReleaseWake.clone()
         }
 
@@ -4624,8 +4655,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4075);
-        assert_eq!(PINNED_SOURCE.len(), 159556);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4174);
+        assert_eq!(PINNED_SOURCE.len(), 135390);
     }
 
     #[test]
@@ -4846,10 +4877,12 @@ mod tests {
         assert!(!commands.borrow().contains(&GLCommand::DeleteTexture(11)));
         execution.withCurrent(|| {});
         assert!(commands.borrow().contains(&GLCommand::DeleteTexture(11)));
-        assert!(!commands
-            .borrow()
-            .iter()
-            .any(|command| matches!(command, GLCommand::DeleteFramebuffer(_))));
+        assert!(
+            !commands
+                .borrow()
+                .iter()
+                .any(|command| matches!(command, GLCommand::DeleteFramebuffer(_)))
+        );
         drop(execution);
         domain.shutdown();
         assert!(finalReleaseIngress.borrow().is_some());

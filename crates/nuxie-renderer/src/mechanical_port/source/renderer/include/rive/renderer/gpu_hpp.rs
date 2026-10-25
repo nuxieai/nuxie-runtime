@@ -141,6 +141,7 @@
 //     bool supportsBlendAdvancedCoherentKHR = false;
 //     // Required for @ENABLE_CLIP_RECT in depthStencil mode.
 //     bool supportsClipPlanes = false;
+//     bool supportsDepthStencilLayerMask = false;
 //     // The backend supports dynamic state that allows Rive to collapse multiple
 //     // subpasses onto a single pipeline, namely:
 //     //  * Depth (Vulkan 1.3)
@@ -1068,11 +1069,12 @@
 //     // a single pass, instead of (1) resolving the offscreen texture, and then
 //     // (2) copying the offscreen texture to back the renderTarget.
 //     coalescedResolveAndTransfer = 1 << 9,
+//     layerMask = 1 << 10,
 // };
 //
-// constexpr static size_t ShaderMiscFlagCount = 10;
+// constexpr static size_t ShaderMiscFlagCount = 11;
 // static_assert(
-//     static_cast<uint32_t>(ShaderMiscFlags::coalescedResolveAndTransfer) ==
+//     static_cast<uint32_t>(ShaderMiscFlags::layerMask) ==
 //     1 << (ShaderMiscFlagCount - 1));
 //
 // // Since shader keys also pack the interlockMode and drawType, they don't have
@@ -2221,6 +2223,7 @@
 //     plus = srcOver + 1,
 //     min = srcOver + 2,
 //     max = srcOver + 3,
+//     layerMask = srcOver + 4,
 //
 //     // "Advanced" hardware blend equations.
 //     // PlatformFeatures::supportsKHRBlendEquations is required.
@@ -2449,6 +2452,7 @@ pub struct PlatformFeatures {
     pub supportsBlendAdvancedKHR: bool,
     pub supportsBlendAdvancedCoherentKHR: bool,
     pub supportsClipPlanes: bool,
+    pub supportsDepthStencilLayerMask: bool,
     pub supportsPipelineDynamicState: bool,
     pub avoidFlatVaryings: bool,
     pub alwaysFeatherToAtlas: bool,
@@ -2477,6 +2481,7 @@ impl Default for PlatformFeatures {
             supportsBlendAdvancedKHR: false,
             supportsBlendAdvancedCoherentKHR: false,
             supportsClipPlanes: false,
+            supportsDepthStencilLayerMask: false,
             supportsPipelineDynamicState: false,
             avoidFlatVaryings: false,
             alwaysFeatherToAtlas: false,
@@ -3206,16 +3211,17 @@ define_flag_type!(
     loadColorFromDstTexture = 1 << 7,
     swizzleColorBGRAToRGBA = 1 << 8,
     coalescedResolveAndTransfer = 1 << 9,
+    layerMask = 1 << 10,
 );
 
-pub const ShaderMiscFlagCount: usize = 10;
+pub const ShaderMiscFlagCount: usize = 11;
 pub const ShaderMiscFlagKeyBitCount: usize = 5;
 pub const DrawTypeKeyBitCount: usize = 4;
 pub const ShaderUniqueKeyBitCount: usize =
     ShaderMiscFlagKeyBitCount + InterlockModeBitCount + ShaderFeatureCount + DrawTypeKeyBitCount;
 const _: () = assert!(ShaderUniqueKeyBitCount == 22);
 const _: () =
-    assert!(ShaderMiscFlags::coalescedResolveAndTransfer.0 == 1 << (ShaderMiscFlagCount - 1));
+    assert!(ShaderMiscFlags::layerMask.0 == 1 << (ShaderMiscFlagCount - 1));
 
 impl ShaderMiscFlags {
     pub const FIXED_FUNCTION_COLOR_OUTPUT: Self = Self::fixedFunctionColorOutput;
@@ -4124,6 +4130,7 @@ pub enum BlendEquation {
     plus = 4,
     min = 5,
     max = 6,
+    layerMask = 7,
     screen = 14,
     overlay = 15,
     darken = 16,

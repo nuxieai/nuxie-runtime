@@ -193,10 +193,6 @@
 //             }
 //             break;
 //
-//         case DrawType::featherAtlasBlit:
-//         case DrawType::imageRect:
-//         case DrawType::imageMesh:
-//         case DrawType::depthStrokes:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilDynamicMidpointFans:
 //         case DrawType::stencilDynamicOuterCubics:
@@ -209,6 +205,17 @@
 //         case DrawType::stencilOuterCubicReset:
 //         case DrawType::stencilOuterCubicWinding:
 //         case DrawType::stencilOuterCubicCover:
+//         case DrawType::depthAAOuterHairline:
+//             if (mode == InterlockMode::depthStencil)
+//             {
+//                 outFlags |= ShaderMiscFlags::layerMask;
+//             }
+//             break;
+//         case DrawType::featherAtlasBlit:
+//         case DrawType::imageRect:
+//         case DrawType::imageMesh:
+//         case DrawType::depthStrokes:
+//         case DrawType::depthAAStrokes:
 //             break;
 //     }
 //
@@ -276,7 +283,7 @@
 //
 //         case InterlockMode::depthStencil:
 //             return ShaderMiscFlags::fixedFunctionColorOutput |
-//                    ShaderMiscFlags::msaaDstRead;
+//                    ShaderMiscFlags::msaaDstRead | ShaderMiscFlags::layerMask;
 //     }
 //     RIVE_UNREACHABLE();
 // }
@@ -384,6 +391,14 @@
 //                                 ShaderMiscFlags::fixedFunctionColorOutput))
 //                     {
 //                         continue;
+//                     }
+//                     if (enums::is_flag_set(curMiscFlags, ShaderMiscFlags::layerMask))
+//                     {
+//                         if (!platformFeatures.supportsDepthStencilLayerMask ||
+//                             !enums::is_flag_set(curMiscFlags, ShaderMiscFlags::fixedFunctionColorOutput))
+//                         {
+//                             continue;
+//                         }
 //                     }
 //                     break;
 //
@@ -2088,6 +2103,12 @@
 //             }
 //
 //         case InterlockMode::depthStencil:
+//             if (enums::is_flag_set(shaderMiscFlags, ShaderMiscFlags::layerMask))
+//             {
+//                 assert(platformFeatures.supportsDepthStencilLayerMask);
+//                 assert(!enums::is_flag_set(drawContents, DrawContents::opaquePaint));
+//                 return BlendEquation::layerMask;
+//             }
 //             if (enums::is_flag_set(drawContents, DrawContents::opaquePaint))
 //             {
 //                 // A dynamic-state draw may suppress color writes by outputting
@@ -2901,6 +2922,23 @@ fn get_valid_shader_misc_flags(draw_type: DrawType, mode: InterlockMode) -> u32 
         DrawType::renderPassResolve if mode == InterlockMode::atomics => {
             flags |= ShaderMiscFlags::coalescedResolveAndTransfer.0;
         }
+        DrawType::stencilMidpointFanBorrowedCoverage
+        | DrawType::stencilDynamicMidpointFans
+        | DrawType::stencilDynamicOuterCubics
+        | DrawType::stencilMidpointFans
+        | DrawType::stencilMidpointFanReset
+        | DrawType::stencilMidpointFanWinding
+        | DrawType::stencilMidpointFanCover
+        | DrawType::stencilOuterCubicBorrowedCoverage
+        | DrawType::stencilOuterCubics
+        | DrawType::stencilOuterCubicReset
+        | DrawType::stencilOuterCubicWinding
+        | DrawType::stencilOuterCubicCover
+        | DrawType::depthAAOuterHairline => {
+            if mode == InterlockMode::depthStencil {
+                flags |= ShaderMiscFlags::layerMask.0;
+            }
+        }
         _ => {}
     }
     flags |= ShaderMiscFlags::fixedFunctionColorOutput.0;
@@ -2937,7 +2975,9 @@ const fn shaderMiscFlagKeyMask(mode: InterlockMode) -> u32 {
                 | ShaderMiscFlags::nestedClipUpdateOnly.0
                 | ShaderMiscFlags::borrowedCoveragePass.0
         }
-        InterlockMode::depthStencil => fixed | ShaderMiscFlags::msaaDstRead.0,
+        InterlockMode::depthStencil => {
+            fixed | ShaderMiscFlags::msaaDstRead.0 | ShaderMiscFlags::layerMask.0
+        }
     }
 }
 
@@ -3005,6 +3045,13 @@ pub fn ForEachUbershaderPermutation(
                     & (ShaderMiscFlags::msaaDstRead.0 | ShaderMiscFlags::fixedFunctionColorOutput.0)
                     == (ShaderMiscFlags::msaaDstRead.0
                         | ShaderMiscFlags::fixedFunctionColorOutput.0)
+            {
+                continue;
+            }
+            if interlockMode == InterlockMode::depthStencil
+                && has_u32(misc, ShaderMiscFlags::layerMask.0)
+                && (!platformFeatures.supportsDepthStencilLayerMask
+                    || !has_u32(misc, ShaderMiscFlags::fixedFunctionColorOutput.0))
             {
                 continue;
             }
@@ -4714,6 +4761,11 @@ fn get_blend_equation(
             }
         }
         InterlockMode::depthStencil => {
+            if has_u32(shaderMiscFlags.0, ShaderMiscFlags::layerMask.0) {
+                debug_assert!(platformFeatures.supportsDepthStencilLayerMask);
+                debug_assert!(!has_u32(drawContents.0, DrawContents::opaquePaint.0));
+                return BlendEquation::layerMask;
+            }
             if has_u32(drawContents.0, DrawContents::opaquePaint.0) {
                 // A transparent shader output suppresses color writes only
                 // with blending enabled; otherwise it erases the destination.
@@ -4889,6 +4941,7 @@ mod dynamic_color_write_tests {
     fn upstream_shader_unique_keys_do_not_collide() {
         let platform = PlatformFeatures {
             supportsPipelineDynamicState: true,
+            supportsDepthStencilLayerMask: true,
             ..PlatformFeatures::default()
         };
         for mode in [
@@ -5071,6 +5124,66 @@ mod dynamic_color_write_tests {
     }
 
     #[test]
+    fn depth_stencil_layer_mask_permutations_and_blending() {
+        for supported in [false, true] {
+            let platform = PlatformFeatures {
+                supportsPipelineDynamicState: true,
+                supportsDepthStencilLayerMask: supported,
+                ..PlatformFeatures::default()
+            };
+            let mut mask_draw_types = std::collections::BTreeSet::new();
+            ForEachUbershaderPermutation(
+                InterlockMode::depthStencil,
+                &platform,
+                |draw_type, _, misc| {
+                    if has_u32(misc.0, ShaderMiscFlags::layerMask.0) {
+                        assert!(supported);
+                        assert!(has_u32(misc.0, ShaderMiscFlags::fixedFunctionColorOutput.0));
+                        assert!(!has_u32(misc.0, ShaderMiscFlags::msaaDstRead.0));
+                        assert_eq!(
+                            get_blend_equation(
+                                draw_type,
+                                InterlockMode::depthStencil,
+                                misc,
+                                DrawContents::none,
+                                BlendMode::SrcOver,
+                                true,
+                                &platform,
+                            ),
+                            BlendEquation::layerMask,
+                        );
+                        mask_draw_types.insert(draw_type as u8);
+                    }
+                    true
+                },
+            );
+            let expected = if supported {
+                [
+                    DrawType::stencilMidpointFanBorrowedCoverage,
+                    DrawType::stencilDynamicMidpointFans,
+                    DrawType::stencilDynamicOuterCubics,
+                    DrawType::stencilMidpointFans,
+                    DrawType::stencilMidpointFanReset,
+                    DrawType::stencilMidpointFanWinding,
+                    DrawType::stencilMidpointFanCover,
+                    DrawType::stencilOuterCubicBorrowedCoverage,
+                    DrawType::stencilOuterCubics,
+                    DrawType::stencilOuterCubicReset,
+                    DrawType::stencilOuterCubicWinding,
+                    DrawType::stencilOuterCubicCover,
+                    DrawType::depthAAOuterHairline,
+                ]
+                .into_iter()
+                .map(|draw_type| draw_type as u8)
+                .collect()
+            } else {
+                std::collections::BTreeSet::new()
+            };
+            assert_eq!(mask_draw_types, expected);
+        }
+    }
+
+    #[test]
     fn shader_misc_flags_preserve_upstream_bit_positions() {
         assert_eq!(ShaderMiscFlags::borrowedCoveragePass.0, 1 << 4);
         assert_eq!(ShaderMiscFlags::msaaDstRead.0, 1 << 5);
@@ -5078,6 +5191,7 @@ mod dynamic_color_write_tests {
         assert_eq!(ShaderMiscFlags::loadColorFromDstTexture.0, 1 << 7);
         assert_eq!(ShaderMiscFlags::swizzleColorBGRAToRGBA.0, 1 << 8);
         assert_eq!(ShaderMiscFlags::coalescedResolveAndTransfer.0, 1 << 9);
+        assert_eq!(ShaderMiscFlags::layerMask.0, 1 << 10);
     }
 }
 

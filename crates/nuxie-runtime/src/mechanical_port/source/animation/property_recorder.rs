@@ -173,7 +173,10 @@ impl PropertyRecorder {
 
     pub fn record_artboard(&mut self, artboard: &CoreHandle) {
         let machine = artboard
-            .with_downcast::<Artboard, _>(|artboard| artboard.state_machine_handle_at(0))
+            .with_downcast::<Artboard, _>(|artboard| {
+                let default_index = artboard.default_state_machine_index();
+                artboard.state_machine_handle_at(if default_index >= 0 { default_index as usize } else { 0 })
+            })
             .expect("PropertyRecorder records an Artboard occurrence");
         self.record_state_machine_inputs(machine.as_ref());
         self.record_state_machine(machine.as_ref());
@@ -437,13 +440,11 @@ impl PropertyRecorder {
                     self.reader_end_sm,
                 );
                 let name = instance.with_instance(|instance| {
-                    instance
-                        .input(index)
-                        .expect("recorded state-machine input index")
-                        .name()
-                        .to_owned()
+                    instance.input(index).map(|input| input.name().to_owned())
                 });
-                instance.set_number(&name, value);
+                if let Some(name) = name {
+                    instance.set_number(&name, value);
+                }
             } else if kind == 1 {
                 let value = Self::read_byte(
                     &self.write_buffer_sm,
@@ -451,13 +452,11 @@ impl PropertyRecorder {
                     self.reader_end_sm,
                 );
                 let name = instance.with_instance(|instance| {
-                    instance
-                        .input(index)
-                        .expect("recorded state-machine input index")
-                        .name()
-                        .to_owned()
+                    instance.input(index).map(|input| input.name().to_owned())
                 });
-                instance.set_bool(&name, value != 0);
+                if let Some(name) = name {
+                    instance.set_bool(&name, value != 0);
+                }
             }
             index += 1;
         }

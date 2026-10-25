@@ -140,6 +140,15 @@ impl ListenerGroup {
         }
     }
 
+    /// Forget every tracked gesture without dispatching an event.
+    pub fn release_all_pointers(&self) {
+        loop {
+            let pointer_id = self.pointers.borrow().keys().next().copied();
+            let Some(pointer_id) = pointer_id else { break };
+            self.release_event(pointer_id);
+        }
+    }
+
     pub fn enable(&self, pointer_id: i32) {
         self.pointer_data(pointer_id)
             .phase
@@ -422,6 +431,12 @@ pub trait ListenerGroupBehavior {
     }
     fn reset(&self, pointer_id: i32);
     fn release_event(&self, pointer_id: i32);
+    /// Return tracked pointers to their owning group's pool without callbacks.
+    fn release_all_pointers(&self) {
+        for pointer_id in self.tracked_pointer_ids() {
+            self.release_event(pointer_id);
+        }
+    }
     fn hover(&self, pointer_id: i32);
     fn enable(&self, pointer_id: i32);
     fn disable(&self, pointer_id: i32);

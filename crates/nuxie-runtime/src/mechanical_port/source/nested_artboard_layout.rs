@@ -82,7 +82,6 @@ impl NestedArtboardLayout {
     fn mark_hosting_layout_dirty_instance(&mut self, instance: &RuntimeArtboardInstanceHandle) {
         if let Some(artboard) = self.base.base.parent_artboard_handle() {
             Artboard::mark_layout_dirty_occurrence(&artboard, instance.core_handle(), None);
-            crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_style_dirty_occurrence(&artboard);
         }
     }
 

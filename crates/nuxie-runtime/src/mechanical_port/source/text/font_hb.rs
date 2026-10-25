@@ -391,6 +391,7 @@ pub struct HbFont {
     feature_values: HashMap<u32, u32>,
     axis_values: HashMap<u32, f32>,
     color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
+    glyph_path_cache: Mutex<HashMap<GlyphId, RawPath>>,
 }
 
 /// What a font face's variants share: its shaper data, the shape plans built
@@ -669,6 +670,7 @@ impl HbFont {
             feature_values,
             axis_values,
             color_layer_cache: Mutex::new(HashMap::new()),
+            glyph_path_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -884,9 +886,23 @@ impl Font for HbFont {
         Arc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
-        let font = self.outline_font();
-        let location = self.location(&font);
-        let path = glyph_path(&font, LocationRef::from(&location), glyph);
+        let path = {
+            let mut cache = self.glyph_path_cache.lock().unwrap();
+            if let Some(path) = cache.get(&glyph) {
+                path.clone()
+            } else {
+                let font = self.outline_font();
+                let location = self.location(&font);
+                let path = glyph_path(&font, LocationRef::from(&location), glyph);
+                const MAX_CACHED_GLYPH_PATHS: usize = 512;
+                if cache.len() >= MAX_CACHED_GLYPH_PATHS {
+                    cache.clear();
+                }
+                cache.insert(glyph, path.clone());
+                path
+            }
+        };
+        // CoreTextHBFont's empty-outline recovery remains outside HBFont's cache.
         if path.empty() {
             if let Some(outline) = &self.host_outline {
                 let coords: Vec<_> = self

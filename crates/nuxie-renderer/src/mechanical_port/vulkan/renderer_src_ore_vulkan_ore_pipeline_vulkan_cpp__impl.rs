@@ -9,9 +9,7 @@ use super::ore_pipeline_vulkan_decl::PipelineVulkan;
 use super::ore_shader_module_vulkan_decl::ShaderModuleVulkan;
 use super::ore_vulkan_dsl::kVkMaxGroups;
 use ash::vk;
-use nuxie_ore_metal::bind_group_layout::{
-    validatePipelineDesc, NativeSlotScope,
-};
+use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::types::{
     BlendFactor, BlendOp, ColorWriteMask, CompareFunction, CullMode, FaceWinding, LoadOp,
@@ -187,6 +185,22 @@ impl Drop for BindGroupLayoutVulkan {
     }
 }
 
+struct EntryModules<'a> {
+    vk: &'a super::vulkan_context_decl::VulkanContext,
+    modules: [vk::ShaderModule; 2],
+}
+impl Drop for EntryModules<'_> {
+    fn drop(&mut self) {
+        for module in self.modules {
+            if module != vk::ShaderModule::null() {
+                unsafe {
+                    self.vk.m_ashDevice.destroy_shader_module(module, None);
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn makePipeline(
     context: &mut ContextVulkan,
     desc: &PipelineDesc<'_>,
@@ -242,11 +256,23 @@ pub(crate) fn makePipeline(
 
     let vertexEntry = CString::new(desc.vertexEntryPoint.unwrap_or("vs_main")).ok()?;
     let vertexModule = desc.vertexModule?.downcast_ref::<ShaderModuleVulkan>()?;
+    let vk_context = std::sync::Arc::clone(&context.m_vk);
+    let mut entryModules = EntryModules {
+        vk: &vk_context,
+        modules: [vk::ShaderModule::null(); 2],
+    };
+    let vertexStage = vertexModule.stageModule(
+        &vk_context,
+        crate::ore_spirv_entry_split::kSpirvVertexModel,
+        desc.vertexEntryPoint,
+        &mut context.m_spirvScratch,
+        &mut entryModules.modules[0],
+    );
     let mut stages = Vec::with_capacity(2);
     stages.push(
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
-            .module(vertexModule.m_vkShaderModule)
+            .module(vertexStage)
             .name(&vertexEntry),
     );
     let fragmentEntry = desc
@@ -256,10 +282,17 @@ pub(crate) fn makePipeline(
         .ok()?;
     if let Some(fragmentHandle) = desc.fragmentModule {
         let fragmentModule = fragmentHandle.downcast_ref::<ShaderModuleVulkan>()?;
+        let fragmentStage = fragmentModule.stageModule(
+            &vk_context,
+            crate::ore_spirv_entry_split::kSpirvFragmentModel,
+            desc.fragmentEntryPoint,
+            &mut context.m_spirvScratch,
+            &mut entryModules.modules[1],
+        );
         stages.push(
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::FRAGMENT)
-                .module(fragmentModule.m_vkShaderModule)
+                .module(fragmentStage)
                 .name(fragmentEntry.as_ref().expect("fragment entry point")),
         );
     }
@@ -405,13 +438,15 @@ pub(crate) fn makePipeline(
     if desc.fragmentModule.is_some() {
         pipelineInfo = pipelineInfo.color_blend_state(&colorBlend);
     }
-    match unsafe {
+    let result = unsafe {
         context.m_vk.m_ashDevice.create_graphics_pipelines(
             vk::PipelineCache::null(),
             std::slice::from_ref(&pipelineInfo),
             None,
         )
-    } {
+    };
+    drop(entryModules);
+    match result {
         Ok(created) => pipeline.m_vkPipeline = created[0],
         Err((_, result)) => {
             context.setLastError(format!(

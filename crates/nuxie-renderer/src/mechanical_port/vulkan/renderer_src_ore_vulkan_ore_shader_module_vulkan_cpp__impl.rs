@@ -10,11 +10,7 @@ impl Drop for ShaderModuleVulkan {
         if self.m_vkShaderModule != vk::ShaderModule::null() {
             if let Some(destroy_shader_module) = self.m_vkDestroyShaderModule {
                 unsafe {
-                    destroy_shader_module(
-                        self.m_vkDevice,
-                        self.m_vkShaderModule,
-                        core::ptr::null(),
-                    )
+                    destroy_shader_module(self.m_vkDevice, self.m_vkShaderModule, core::ptr::null())
                 };
             }
         }
@@ -53,5 +49,45 @@ mod tests {
         }
         drop(module);
         assert_eq!(DESTROY_COUNT.load(Ordering::Relaxed), 1);
+    }
+}
+
+pub(crate) fn createVkShaderModule(
+    vk: &super::vulkan_context_decl::VulkanContext,
+    code: &[u32],
+) -> Result<ash::vk::ShaderModule, ash::vk::Result> {
+    let info = ash::vk::ShaderModuleCreateInfo::default().code(code);
+    unsafe { vk.m_ashDevice.create_shader_module(&info, None) }
+}
+impl ShaderModuleVulkan {
+    pub(crate) fn stageModule(
+        &self,
+        vk: &super::vulkan_context_decl::VulkanContext,
+        executionModel: u32,
+        entryPoint: Option<&str>,
+        scratch: &mut crate::ore_spirv_entry_split::SpirvEntryScratch,
+        entryModule: &mut ash::vk::ShaderModule,
+    ) -> ash::vk::ShaderModule {
+        *entryModule = ash::vk::ShaderModule::null();
+        if self.m_multiEntryCode.is_empty() {
+            return self.m_vkShaderModule;
+        }
+        if crate::ore_spirv_entry_split::spirvEntryModule(
+            &self.m_multiEntryCode,
+            executionModel,
+            entryPoint,
+            scratch,
+        ) {
+            if let Ok(module) = createVkShaderModule(vk, &scratch.words) {
+                *entryModule = module;
+                return module;
+            }
+        }
+        *entryModule = ash::vk::ShaderModule::null();
+        eprintln!(
+            "Ore Vulkan: '{}' uses its multi entry module whole",
+            entryPoint.unwrap_or("")
+        );
+        self.m_vkShaderModule
     }
 }

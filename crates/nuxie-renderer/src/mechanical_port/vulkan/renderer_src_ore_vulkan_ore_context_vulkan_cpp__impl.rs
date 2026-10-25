@@ -261,6 +261,7 @@ pub(crate) fn Make(
         )),
         m_lifetime: super::ore_context_vulkan_decl::ContextVulkanLifetime::new(),
         m_vk: ManuallyDrop::new(vk_context),
+        m_spirvScratch: Default::default(),
         m_vkQueue: vk::Queue::null(),
         m_vkQueueFamily: 0,
         m_vkDepth24Stencil8Format: depth24_format,
@@ -1070,26 +1071,48 @@ pub(crate) fn makeShaderModule(
     desc: &ShaderModuleDesc<'_>,
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = contextResourceParts(context);
-    let bytes = desc.code?.get(..desc.codeSize as usize)?;
-    if bytes.len() % 4 != 0 {
+    let wordCount = desc.codeSize as usize / 4;
+    if desc.code.is_none() || wordCount == 0 {
+        context
+            .base
+            .setLastError("Ore Vulkan: shader module has no code");
         return None;
     }
-    let words = bytes
-        .chunks_exact(4)
-        .map(|chunk| u32::from_ne_bytes(chunk.try_into().unwrap()))
-        .collect::<Vec<_>>();
-    let info = vk::ShaderModuleCreateInfo::default().code(&words);
-    let native = match unsafe { context.m_vk.m_ashDevice.create_shader_module(&info, None) } {
-        Ok(module) if module != vk::ShaderModule::null() => module,
-        Err(result) => {
-            context.base.setLastError(format!(
-                "Ore Vulkan: vkCreateShaderModule failed (VkResult={})",
-                result.as_raw()
-            ));
-            return None;
-        }
-        _ => return None,
+    let bytes = desc.code?.get(..wordCount * 4)?;
+    let multiEntry =
+        crate::ore_spirv_entry_split::spirvEntryPointCount(bytes, wordCount) > 1;
+    let aligned = (bytes.as_ptr() as usize) % std::mem::align_of::<u32>() == 0;
+    let copy = if multiEntry || !aligned {
+        bytes
+            .chunks_exact(4)
+            .map(|b| u32::from_ne_bytes(b.try_into().unwrap()))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
     };
+    // All u32 bit patterns are valid; the input bounds and alignment are checked.
+    let words = if copy.is_empty() {
+        unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast::<u32>(), wordCount) }
+    } else {
+        &copy
+    };
+    let native =
+        match super::ore_shader_module_vulkan_impl::createVkShaderModule(&context.m_vk, words) {
+            Ok(module) if module != vk::ShaderModule::null() => module,
+            Err(result) => {
+                context.base.setLastError(format!(
+                    "Ore Vulkan: vkCreateShaderModule failed (VkResult={})",
+                    result.as_raw()
+                ));
+                return None;
+            }
+            Ok(_) => {
+                context
+                    .base
+                    .setLastError("Ore Vulkan: vkCreateShaderModule failed (VkResult=0)");
+                return None;
+            }
+        };
     let mut module = ShaderModuleVulkan::new();
     unsafe {
         module.setNativeShaderModule(
@@ -1097,6 +1120,9 @@ pub(crate) fn makeShaderModule(
             native,
             context.m_vk.m_ashDevice.fp_v1_0().destroy_shader_module,
         );
+    }
+    if multiEntry {
+        module.m_multiEntryCode = copy;
     }
     module.applyBindingMapFromDesc(desc);
     Some(ResourceHandle::new_in_domain(Some(manager), domain, module).erase())

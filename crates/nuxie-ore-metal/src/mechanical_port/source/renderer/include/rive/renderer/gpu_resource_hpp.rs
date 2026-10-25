@@ -1397,6 +1397,18 @@ impl GPUResourceManager {
         self.inner.lock_state().safeFrameNumber
     }
 
+    // Core and ORE may share a manager that has already reached a later frame.
+    pub fn advanceFrameNumberAtLeast(&self, nextFrameNumber: u64, safeFrameNumber: u64) {
+        let (nextFrameNumber, safeFrameNumber) = {
+            let state = self.inner.lock_state();
+            (
+                nextFrameNumber.max(state.currentFrameNumber),
+                safeFrameNumber.max(state.safeFrameNumber),
+            )
+        };
+        self.advanceFrameNumber(nextFrameNumber, safeFrameNumber);
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
     }

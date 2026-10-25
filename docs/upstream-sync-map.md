@@ -93,18 +93,41 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `0238f2995df485168a87801e4dbf92478a3317d2`
+- LAST_SYNCED_SHA: `e579560ae8bace3074a9a91670cc1573d4cf68d7`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  33 upstream commits remain after this checkpoint at the fetched target.
-  All 287 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (309 after `5892bb05`); this
+  32 upstream commits remain after this checkpoint at the fetched target.
+  All 288 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (310 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `e579560a`: account for the complete 22-file public delta. Translate the
+  conservative single-entry SPIR-V splitter, reusable scratch and retained
+  multi-entry shader words, per-stage temporary Vulkan modules and their cleanup.
+  Translate shared GPU frame advancement and unlabeled replay pipeline diagnostic
+  names. Port all four public splitter tests, including every baked GM entry.
+  D3D12 descriptor/frame lifetime changes and its eight backend-only test cases
+  have no shipped backend counterpart; private `.rive_head` is not implementation
+  evidence. C++ premake registration is represented by Rust/Bazel registration.
+  Both independent reviews and correction rereviews are complete.
+  Pool validation passed 260 portable renderer tests (5 existing ignored), including
+  all four new SPIR-V tests (`da6052ec-7e0a-42b1-9b8e-f821b6c8be77`), all 94
+  portable ORE tests (`1435b486-3551-457f-9793-ca836b25ccb1`), and Vulkan compilation
+  (`d4cfe433-1476-4865-ad03-8f14c0678d0b`).
+  Initial validation exposed a stale baseline sampler test: anisotropy requires
+  linear filters. Its corrected fixture preserves success/error-order assertions
+  and adds exact nearest-filter rejection coverage; production behavior is unchanged.
+  The initial default renderer run omitted the new tests because their parent
+  module was feature-gated. Registration now lives at the unconditional root;
+  the final run explicitly executed all four. The malformed-module fixture also
+  required matching upstream’s exact 20-byte copy into a zeroed 24-byte buffer;
+  its rejection assertion is unchanged. No test assertions were weakened.
+  Shader products retain actual `41a2120b` provenance; source/oracle and Silver
+  references advance. No new device pixel or Adreno hardware coverage is claimed.
 - `0238f299`: account for the complete 54-file public delta. Translate global
   text-style references, per-text instances and on-demand list-item styles,
   shareability analysis/cache lifetimes, host data-context reads, geometry/paint
@@ -1783,6 +1806,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `e579560ae8bace3074a9a91670cc1573d4cf68d7` | Vulkan single-entry SPIR-V splitting, reusable scratch and temporary stage modules; shared frame advancement and replay diagnostics. Four public splitter tests. Both reviews and correction rereviews complete; pool 260 renderer tests (5 ignored), 94 ORE tests and Vulkan compilation pass. D3D12-only changes are unshipped; private metadata unclaimed; actual41a shader provenance retained. | — |
 | `0238f2995df485168a87801e4dbf92478a3317d2` | Global text-style references, instances/sharing, host data binding and run pointer listeners; all 26 public regressions. Both reviews and correction rereviews complete. Pool: 26 new tests, 871 runtime tests (2 ignored), 58 existing regressions and shipping C API compilation pass. Full54-file public delta accounted, private metadata unclaimed; CSS contract and actual41a shader provenance retained. | — |
 | `73d7b1c208b6f044c3679e73b864fc55d47516b0` | Shared artboard source lists and nested semantic visibility/lifetime, public regression tests. Both reviews/correction rereviews complete; pool 871 runtime (2 ignored), 90 upstream regression, 119 host/live-move tests pass and shipping C API compiles. Full18-file public delta accounted, private metadata unclaimed; CSS behavior and actual41a shader provenance retained. | — |
 | `cf0f67522988e0297cb83056c63f8265cacd3e16` | Renderer recording/resource lifecycle and BC/native GPU format guards; view-model/trigger/delegate lifetime; bounded UTF decoding and raw-text/input/native Luau tests. Full91-file delta accounted; guest engine/fixtures excluded and private metadata unclaimed. Invalid-byte TextValueRun fixture not literally executable at safe-String boundary. Both reviews and correction rereviews clean; pool 871 runtime +96 runtime integration +15 lifetime +13 scripting text +592 renderer tests pass (8 ignored total), Vulkan and Metal compile pass. No device pixel claim; actual41a shader provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

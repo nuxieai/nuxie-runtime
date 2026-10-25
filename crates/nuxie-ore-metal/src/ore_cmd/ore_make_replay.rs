@@ -414,8 +414,10 @@ pub fn replayOreLifecycle(
                 bindGroupLayoutCount: p.bindGroupLayoutCount,
                 label: cstr(reader, p.label),
             };
+            // Unlabeled pipelines go by their vertex entry point in failures.
+            let name = d.label.or(d.vertexEntryPoint);
             if unresolved {
-                return skipUnresolvedMake(table, m.id, m.generation, "pipeline", d.label);
+                return skipUnresolvedMake(table, m.id, m.generation, "pipeline", name);
             }
             let mut error = String::new();
             let pipeline = ctx.makePipeline(&d, Some(&mut error));
@@ -426,7 +428,7 @@ pub fn replayOreLifecycle(
                 OreKind::pipeline,
                 pipeline,
                 "pipeline",
-                d.label,
+                name,
                 &error,
             );
         }

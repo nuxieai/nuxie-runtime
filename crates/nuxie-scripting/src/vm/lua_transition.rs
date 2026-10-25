@@ -140,15 +140,15 @@ pub(super) fn call_changed(
     direction: i32,
     owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
 ) -> Result<()> {
-    let Value::Function(function) = table.get::<Value>("changed")? else {
-        return Ok(());
-    };
     let lua = table.lua();
-    let (from, _from_scope) = push_child(&lua, from)?;
-    let (to, _to_scope) = push_child(&lua, to)?;
     let _property_owner = owner.map(|owner| {
         super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
     });
+    let Value::Function(function) = table.get::<Value>("changed")? else {
+        return Ok(());
+    };
+    let (from, _from_scope) = push_child(&lua, from)?;
+    let (to, _to_scope) = push_child(&lua, to)?;
     function.protected_call((table.clone(), from, to, direction))
 }
 
@@ -164,14 +164,14 @@ pub(super) fn call_draw(
     let (scripted_renderer, _renderer_scope) =
         ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, bindings.clone())?;
     let result = (|| {
+        let _property_owner = owner.map(|owner| {
+            super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
+        });
         let Value::Function(function) = table.get::<Value>("draw")? else {
             return Ok(());
         };
         let (from, _from_scope) = push_child(&lua, from)?;
         let (to, _to_scope) = push_child(&lua, to)?;
-        let _property_owner = owner.map(|owner| {
-            super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
-        });
         function.protected_call::<()>((table.clone(), scripted_renderer.clone(), from, to))
     })();
     scripted_renderer.borrow::<ScriptedRenderer>()?.end();

@@ -110,7 +110,9 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
         )?
     };
     let install: Function = install.call(())?;
-    let exports: Table = install.call((new_promise, new_async_thread))?;
+    let capture_scope =
+        lua.create_function(|lua, ()| super::view_model::ScriptCallbackScope::dispatcher(lua))?;
+    let exports: Table = install.call((new_promise, new_async_thread, capture_scope))?;
 
     let engine: Table = exports.get("engine")?;
     lua.set_named_registry_value(PROMISE_ENGINE_REGISTRY_KEY, engine)?;
@@ -125,7 +127,15 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
 
 #[allow(dead_code)]
 const PROMISE_LIBRARY: &str = r##"
-return function(newPromise, newAsyncThread)
+return function(newPromise, newAsyncThread, captureScope)
+    -- Retained user handlers run for their registering script. The dispatcher
+    -- restores the caller even when pcall contains an error. Async bodies stay
+    -- yieldable: scope the resume operation, never the coroutine body itself.
+    local function scoped(handler)
+        if type(handler) ~= "function" then return nil end
+        local dispatch = captureScope()
+        return function(...) return dispatch(handler, ...) end
+    end
     local PENDING = "Pending"
     local FULFILLED = "Fulfilled"
     local REJECTED = "Rejected"
@@ -347,8 +357,8 @@ return function(newPromise, newAsyncThread)
         local child = newPending()
         wire(source, child)
         table.insert(sourceState.thenCallbacks, {
-            success = type(onFulfilled) == "function" and onFulfilled or nil,
-            failure = type(onRejected) == "function" and onRejected or nil,
+            success = scoped(onFulfilled),
+            failure = scoped(onRejected),
             child = child,
         })
         if sourceState.status ~= PENDING then
@@ -366,7 +376,7 @@ return function(newPromise, newAsyncThread)
         local child = newPending()
         wire(source, child)
         table.insert(sourceState.finallyCallbacks, {
-            handler = type(handler) == "function" and handler or nil,
+            handler = scoped(handler),
             child = child,
         })
         if sourceState.status ~= PENDING then
@@ -383,7 +393,7 @@ return function(newPromise, newAsyncThread)
     engine.onCancel = function(promise, handler)
         local state = stateOf(promise)
         if type(handler) == "function" then
-            state.onCancel = handler
+            state.onCancel = scoped(handler)
         end
         return promise
     end
@@ -446,7 +456,7 @@ return function(newPromise, newAsyncThread)
         end
         local function onCancelCallback(handler)
             if type(handler) == "function" then
-                stateOf(promise).onCancel = handler
+                stateOf(promise).onCancel = scoped(handler)
             end
         end
 
@@ -559,7 +569,7 @@ return function(newPromise, newAsyncThread)
         local thread = newAsyncThread(body)
         local resumeThread
 
-        resumeThread = function(...)
+        resumeThread = scoped(function(...)
             local resumed = table.pack(coroutine.resume(thread, ...))
             if not resumed[1] then
                 reject(resultPromise, resumed[2])
@@ -604,7 +614,7 @@ return function(newPromise, newAsyncThread)
             if awaitedState.status ~= PENDING then
                 notifyCallbacks(awaited)
             end
-        end
+        end)
 
         resumeThread()
         return resultPromise

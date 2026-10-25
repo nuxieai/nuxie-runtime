@@ -29,7 +29,7 @@ The host controls stack order through the view-model list. Move the incoming row
 
 During a page operation, checked scripts address the executing Screen row’s root view model under the empty root name (`""`). The published `responses.set` adapter therefore resolves paths such as `experience/responses:form/field` on that row, rather than on the page model whose only field is `screens`. Named global roots retain their existing meaning. A standalone player continues to use its bound root.
 
-The VM enters an execution-source scope for callbacks and generators, and restores the previous source on return or error. Property callbacks retain a weak source reference alongside their existing owner tracking. The shared page player resolves that source’s live DataContext ancestry against the current page’s awake row contexts. Context identity distinguishes owning occurrences even when they share a file, schema or VM values, and follows a nested unit to its current Screen. Sleeping rows are excluded from this lookup.
+The VM enters an execution-source scope for callbacks and generators, and restores the previous source on return or error. Retained property listeners, Promise handlers, async continuations and draw visitors capture their registering owner through `ScriptCallbackScope`. Host method lookup enters the owner before any Lua `__index` getter can execute. The captured owner retains a weak source slot, resolved at invocation. The shared page player resolves that source’s live DataContext ancestry against the current page’s awake row contexts. Context identity distinguishes owning occurrences even when they share a file, schema or VM values, and follows a nested unit to its current Screen. Sleeping rows are excluded from this lookup.
 
 Checked scalar writes, atomic batches and list reads use the same root resolver. Both the C API and ProductHost call these shared helpers. The host’s original policy operation, change capture and graph transaction remain shared across the whole page: a rejected batch changes none of its candidate properties, and a later script failure rolls back earlier row writes and commands in the same step. Clearing choices with nil updates their picked flags without removing the records.
 
@@ -52,6 +52,60 @@ After the ordinary step settles layout, the query selects the last active Screen
 The owning layout tree caches one answer by Screen node and width. Repeated queries reuse it; the next normal layout solve invalidates it. The first query after a relevant solve costs one intrinsic subtree solve, so this is not a second implementation of layout and is not a zero-work query on a changed frame. Sleeping rows and other Screens are not measured.
 
 Scripted layout uses its last natural measurement from the ordinary layout pass. The query never executes script callbacks. It returns an error if a settled Screen layout tree or required natural measurement is unavailable. An empty expanded stack returns NotFound. Callers should query after stepping, including after changing page width or bound text.
+
+## Script callback scope review correction
+
+This follow-up starts at `a592f4183c`. `ScriptedListener` now captures the registering script's owner in `ScriptCallbackScope` when `addListener` runs. Invocation enters that owner's execution source and property-listener owner, then restores both caller slots on return or error. The source slot stays weak and is resolved at invocation, preserving the live owning occurrence as components move or contexts are disposed. Property userdata created by A can therefore carry an independently scoped listener registered by B. The unused `ScriptedPropertyState::owner()` accessor and its source/watch bookkeeping were removed; lifetime tests now inspect the ownership tracker directly.
+
+Both ProductHost and the C API consume this shared scripting-VM change. The checked page-root resolver and shared policy transaction remain the same. Host method lookup also enters the owner before reading a Lua field, because `__index` can itself execute checked script or register callbacks.
+
+| VM entry point | Scope rule |
+| --- | --- |
+| Scalar, list, referenced-VM, blob and trigger property listeners | Every registration captures its current owner; synchronous facade flushes, native delegate notifications and deferred change notifications all use `call_property_listeners` and the same guard. |
+| Promise fulfillment/rejection handlers, `catch`, `finally`, `onCancel`, and the executor's cancellation hook | Each retained handler captures its registering scope through the same dispatcher. Lua owns the handler and dispatcher; the Rust closure captures no Lua handles. |
+| `async`/`await` continuation | The captured scope surrounds each coroutine resume, so the body can yield and the resolving caller's scope is restored. |
+| Image-decode completion and ScriptNet delivery | These native producers settle Promises; their script callbacks use the scoped Promise engine. |
+| Script methods, optional methods, `has_method`, init, advance, listener actions, pointer/scroll/keyboard/gamepad/text input, triggers, interpolators and data converters | Their existing owner guards now cover Lua method lookup as well as invocation. Generators and init-retry generators already enter their context owner. |
+| Rendering, path effects and transition changed/draw callbacks | The helper's owner guard now includes field lookup. |
+| `Artboard:draw` visitor | Captures the caller at visitor registration and restores that scope around each visit, including nested scripted drawing. |
+| Timers or another scheduled-script queue | No timer API or separate scheduled-script queue was found. Native asynchronous script delivery uses the Promise paths above. |
+
+The two listener regressions mount A and B, share a global property wrapper created by A, register listeners independently, and assert that both run before A's setter returns. Distinct answer branches make a wrong checked read observable; each callback writes its own scalar response. B's explicit callback error is contained by the existing listener behavior, after which A's checked write must still target A. With original listener dispatch, both tests fail because B's response remains `before` instead of `row-b` (`listenerssyncred4`). They pass in `listenerscheckedfinal2`.
+
+The six `screen_checked_deferred_{then,catch,finally,cancel,executor_cancel,async}_scope` cases run through the ordinary C page operation and its shared policy transaction. Each resolves or cancels both rows' callbacks from A, verifies row-local reads, scalar and batch writes, and verifies A's continuation after B errors. All six failed in `listenersred4` and pass on final source. `screen_checked_method_lookup_uses_own_screen` additionally failed with checked-read `NotFound` in a Lua `__index` getter (`listenerslookupred`) and passes after moving the guard before lookup.
+
+Fixture timing matters: the C adapter's subscription transaction buffers native property notifications until publication. The early listener fixtures therefore did not reproduce the requested synchronous dispatch; after scope entry was fixed, that buffered path reached a separate checked-write `BorrowConflict` during buffered notification publication (`listenersprobe`). This attribution change does not change that publication behavior. The final synchronous regression uses the shared Rust player without the optional host-subscription checkpoint or installed rules, and uses scalar checked writes. Ordinary C regressions retain coverage of atomic rejection, nil-keeps-records and shared transaction rollback. The early fixture failures below are not counted as the synchronous regression's red evidence.
+
+Final validation: all 15 checked-script tests, 101 live_moves tests, 5 C API page-player tests, all 8 matching C API event tests, and 293 VM unit tests passed; one VM test was ignored. The broad event run passed all 22 test targets before the lookup follow-up. Final event verification repeats every matching event test through the library (5), `capi` (2), and `player_step` (1) targets.
+
+All requests used runtime-runner-roweval, one at a time, with no source edits while a request was outstanding. The runner's `RIVE_RUNTIME_DIR` pin was retained. There were no pool faults or retries of pool failures. Rustfmt for all changed Rust files and `git diff --check` passed. This follow-up remains uncommitted.
+
+Every runner result for this follow-up is below. `result-<request>.log` and `done-<request>` are in the task's runner folder, `/private/tmp/claude-501/-Users-levi-dev-nuxie-dev--claude-worktrees-epic-driscoll-f31072/a897c63b-9750-4ab1-8162-c42f317b6f2a/scratchpad/runtime-runner-roweval/`. Evidence is retained at `.nuxie/homelab/<evidence job>/evidence`. Exit codes are the `done-*` codes.
+
+| Request | Command | Exit and result | Evidence job |
+| --- | --- | --- | --- |
+| `listenersred` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: initial lazy listener-registration fixture | `517dd42e-2472-4053-945c-f3e6f73889ec` |
+| `listenersred2` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: registered listeners; buffered notifications did not exercise synchronous dispatch | `d87a5933-fbcc-4f58-bba3-dcee244607f9` |
+| `listenersred3` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: both callbacks ran; checked reads returned NotFound | `dd386576-467c-4218-adb9-fe08fb20fc77` |
+| `listenersred4` | `test -p nux-capi --lib screen_checked_` | 2: 6 passed, 8 failed: valid red for all six Promise cases; listener fixture still buffered | `f7083dfd-0b02-449d-be21-6b280161b0f4` |
+| `listenersgreen` | `test -p nux-capi --lib screen_checked_` | 2: 12 passed, 2 failed: Promise cases green; buffered listener checked writes failed | `c8161120-b86f-4e05-9b2a-05b63234c4aa` |
+| `listenersprobe` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: diagnostic confirmed correct captured occurrences and checked-write BorrowConflict | `fa9ae88b-b7f8-4f79-a096-73909486ce2d` |
+| `listenerssyncred` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: synchronization control rejected the buffered C fixture | `c312cab4-9e82-4bdb-b376-20ab8ae89283` |
+| `listenerssyncred2` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: unbuffered fixture still had installed rules without a rule operation (InvalidArgument) | `e5e39225-c6f3-42ff-af3c-3eaa1392d9f1` |
+| `listenerssyncred3` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 failures: unbuffered fixture still used setAll, which requires a graph transaction | `8c477ea3-80b3-458c-b139-9138dc1a0f2c` |
+| `listenerssyncred4` | `test -p nux-capi --lib screen_checked_property_listener` | 2: 2 intended failures: synchronous controls passed; B response stayed before with original dispatch | `98ab67b6-21ed-4050-a069-39b6d9c04144` |
+| `listenerscheckedfinal` | `test -p nux-capi --lib screen_checked_` | 0: 14 passed before the method-lookup follow-up | `fb87057c-78b8-41c9-b537-fede447e4ba5` |
+| `listenersruntimefinal` | `test -p nuxie-runtime --test live_moves` | 0: 101 passed before the method-lookup follow-up | `37755a26-24c0-47bf-8738-48c341cc3b62` |
+| `listenerspagefinal` | `test -p nux-capi --lib page_player_` | 0: 5 passed before the method-lookup follow-up | `99a262f8-c90d-4a34-aaf8-1cb1f7dd59a6` |
+| `listenerseventsfinal` | `test -p nux-capi event` | 0: 8 matching tests passed across 22 test targets (25 build targets), before the lookup follow-up | `6f6c74ee-dd45-4b37-b6f0-cc1f09d363ac` |
+| `listenerslookupred` | `test -p nux-capi --lib screen_checked_method_lookup` | 2: 1 intended failure: checked read in __index returned NotFound | `00a365a7-abb6-4d70-8a9b-aeb9f23271ed` |
+| `listenerscheckedfinal2` | `test -p nux-capi --lib screen_checked_` | 0: 15 passed on final source | `10fd3200-4ea2-45cf-acf1-acd1f1c01be7` |
+| `listenersvmfinal` | `test -p nuxie-scripting --lib vm::` | 0: 293 passed, 1 ignored, 66 filtered on final source | `f9455cca-35bf-4130-ad6a-7e09ad6544d8` |
+| `listenersruntimefinal2` | `test -p nuxie-runtime --test live_moves` | 0: 101 passed on final source | `53741728-8b7f-4c64-83e0-64fb02f57ab6` |
+| `listenerspagefinal2` | `test -p nux-capi --lib page_player_` | 0: 5 passed on final source | `fccfaa4f-27de-49a6-aa58-49be72356fab` |
+| `listenerseventlibfinal` | `test -p nux-capi --lib event` | 0: 5 passed on final source | `0181fd9d-53bf-423c-8fe6-28fe81b72397` |
+| `listenerseventcapifinal` | `test -p nux-capi --test capi event` | 0: 2 passed on final source | `7c0a27fc-0c45-45d7-a62f-9a106d557d60` |
+| `listenerseventstepfinal` | `test -p nux-capi --test player_step event` | 0: 1 passed on final source | `a830936b-8721-43dc-943f-3b6a9565b82c` |
 
 ## Rebased review corrections
 
@@ -81,7 +135,7 @@ All requests below used the file runner, one at a time, with no source edits whi
 | `reviewcapievents` | `test -p nux-capi event` | 0: all 8 matching tests passed across 22 filtered targets | `33d2c6a4-03d6-4df9-9554-460faaf5007a` |
 | `reviewcapifinal2` | `test -p nux-capi --lib page_player_` | 0: all 5 tests passed, including all four overflow/refusal paths | `c53777e5-e560-45c1-b686-50e4cc0df60b` |
 
-Rustfmt and `git diff --check` passed. These review corrections are uncommitted.
+Rustfmt and `git diff --check` passed. These review corrections were committed as `a592f4183c`.
 
 ## UNIV-5548 event-context validation
 

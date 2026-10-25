@@ -2990,12 +2990,20 @@ return function(context)
 end"#;
 
 unsafe fn checked_screen_scene(standalone: bool) -> LiveScene {
+    unsafe { checked_screen_scene_with_script(standalone, CHECKED_SCREEN_SCRIPT, false) }
+}
+
+unsafe fn checked_screen_scene_with_script(
+    standalone: bool,
+    script: &[u8],
+    listeners: bool,
+) -> LiveScene {
     unsafe {
         let _flags = luaur_common::ScopedAllFlags::enter(true);
         let mut size = 0;
         let code = luaur_compiler::functions::luau_compile::luau_compile(
-            CHECKED_SCREEN_SCRIPT.as_ptr().cast(),
-            CHECKED_SCREEN_SCRIPT.len(),
+            script.as_ptr().cast(),
+            script.len(),
             ptr::null_mut(),
             &mut size,
         );
@@ -3006,7 +3014,11 @@ unsafe fn checked_screen_scene(standalone: bool) -> LiveScene {
             fn free(p: *mut c_void);
         }
         free(code.cast());
-        let bytes = fixture::checked_screen_fixture(&payload);
+        let bytes = if listeners {
+            fixture::checked_screen_listener_fixture(&payload)
+        } else {
+            fixture::checked_screen_fixture(&payload)
+        };
         let mut scene = LiveScene {
             file: ptr::null_mut(),
             artboard: ptr::null_mut(),
@@ -3084,6 +3096,12 @@ unsafe fn checked_screen_scene(standalone: bool) -> LiveScene {
             nux_player_new_default(scene.artboard, &mut scene.player),
             NuxStatus::Ok
         );
+        if listeners {
+            assert_eq!(
+                nux_player_set_global_view_model(scene.player, view("Page"), scene.vm),
+                NuxStatus::Ok
+            );
+        }
         step_ok(scene.player);
         scene
     }
@@ -3432,6 +3450,281 @@ fn page_player_review_deferred_budget_refusal_keeps_queue_usable() {
             assert!((&(*result).host_commands).is_empty());
             assert!((&(*result).events).is_empty());
             nux_player_step_result_free(result);
+        }
+    }
+}
+
+unsafe fn screen_checked_property_listener_scopes(error_in_b: bool) {
+    unsafe {
+        let script = br#"local module = require('bridge')
+local counter
+local seen = {}
+return function(context)
+ -- Share one property userdata as well as one native global property. This
+ -- makes both registrations dispatch synchronously through the writer's facade.
+ counter = counter or context:globalViewModel('Page').counter
+ local mode = context:viewModel().mode.value
+ local isA = mode == 6
+ local registered = false
+ return {init = function() return true end, performAction = function()
+  if not registered then
+   registered = true
+   counter:addListener(function()
+   seen[mode] = true
+   context:viewModel().mode.value += 10
+   local before = module.listValues('', 'experience/responses:form/field', 'picked')
+   assert(before[1] == isA and before[2] ~= isA, 'listener must read its own answer')
+   assert(module.set('', 'experience/responses:form/title', if isA then 'row-a' else 'row-b'))
+   if not isA and ERROR_IN_B then error('listener B failed') end
+  end)
+  module.command('row-action', {})
+  return
+  end
+  counter.value += 1
+  assert(seen[6] and seen[7], "both listeners must fire synchronously")
+  -- Both normal return and B's swallowed callback error must restore A.
+  assert(module.set('', 'experience/responses:form/title', 'changed'))
+  module.command('row-action', {})
+ end}
+end"#;
+        let script = String::from_utf8(script.to_vec())
+            .unwrap()
+            .replace("ERROR_IN_B", if error_in_b { "true" } else { "false" });
+        let scene = checked_screen_scene_with_script(false, script.as_bytes(), true);
+        assert_eq!(
+            nux_file_set_value_rules(scene.file, ptr::null(), 0),
+            NuxStatus::Ok
+        );
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        for (index, picked) in [false, true].into_iter().enumerate() {
+            b.list_item_by_property_name_path("experience/responses:form/field", index)
+                .unwrap()
+                .borrow_mut()
+                .set_boolean_by_property_name("picked", picked);
+        }
+        // Exercise synchronous VM notifications through the shared Rust player.
+        // A subscription checkpoint buffers dirt until publication; omit that
+        // optional host subscription here so callbacks execute in A's setter.
+        // The checked extension still supplies the real page root. Atomic
+        // rules/rollback are covered by the ordinary C checked-script tests.
+        let action = |indices: &[usize]| {
+            let player = &*scene.player;
+            let root = (&*scene.vm).instance.clone();
+            let effects = player.artboard.scripted.as_deref().unwrap();
+            let mut artboard = player.artboard.instance.borrow_mut();
+            let mut playback = player.instance.borrow_mut();
+            let mut pending = player
+                .page_player
+                .operation(
+                    &mut artboard,
+                    &mut playback,
+                    nuxie::page_player::Step {
+                        pointers: indices
+                            .iter()
+                            .map(|&i| nuxie::page_player::Pointer {
+                                kind: nuxie::page_player::PointerKind::Down,
+                                x: 100.0 + i as f32 * 300.0,
+                                y: 50.0,
+                                pointer_id: i as i32 + 1,
+                                timestamp_seconds: 0.0,
+                            })
+                            .collect(),
+                        ..Default::default()
+                    },
+                    None,
+                    &[],
+                    None,
+                    None,
+                    false,
+                    Some(effects),
+                    |operation| value_rule_script::enter(player, Some(&root), operation),
+                )
+                .expect("synchronous checked listener step");
+            assert_eq!(pending.output.take().unwrap().commands.len(), indices.len());
+            pending.commit();
+        };
+        // Listener actions are instantiated lazily. Register both before firing.
+        action(&[0, 1]);
+        action(&[0]);
+        assert_eq!(
+            a.borrow().number_value_by_property_name("mode"),
+            Some(16.0),
+            "A listener must run"
+        );
+        assert_eq!(
+            b.borrow().number_value_by_property_name("mode"),
+            Some(17.0),
+            "B listener must run"
+        );
+        assert_eq!(checked_screen_choices(&a).0, [true, false]);
+        assert_eq!(checked_screen_choices(&b).0, [false, true]);
+        for (row, title) in [(&a, b"changed".as_slice()), (&b, b"row-b".as_slice())] {
+            assert_eq!(
+                row.borrow()
+                    .string_value_by_property_name_path("experience/responses:form/title")
+                    .unwrap()
+                    .as_ref(),
+                title
+            );
+        }
+    }
+}
+
+#[test]
+fn screen_checked_property_listeners_use_registering_screen() {
+    unsafe { screen_checked_property_listener_scopes(false) }
+}
+
+#[test]
+fn screen_checked_property_listener_error_restores_writer_scope() {
+    unsafe { screen_checked_property_listener_scopes(true) }
+}
+
+unsafe fn screen_checked_deferred_scope(kind: &str) {
+    unsafe {
+        let (register, fire) = match kind {
+            "then" => ("p:andThen(finished)", "resolves[i]()"),
+            "catch" => ("p:catch(finished)", "rejects[i]('reason')"),
+            "finally" => ("p:finally(finished)", "resolves[i]()"),
+            "cancel" => ("p:onCancel(finished)", "pending[i]:cancel()"),
+            "executor_cancel" => ("", "pending[i]:cancel()"),
+            "async" => (
+                "async(function() await(p); finished() end)",
+                "resolves[i]()",
+            ),
+            _ => unreachable!(),
+        };
+        let source = r#"local module = require('bridge')
+local pending, resolves, rejects = {}, {}, {}
+return function(context)
+ local mode = context:viewModel().mode.value
+ local index, isA = mode - 5, mode == 6
+ local registered = false
+ return {init = function() return true end, performAction = function()
+  if not registered then
+   registered = true
+   local function finished()
+    context:viewModel().mode.value += 10
+    local before = module.listValues('', 'experience/responses:form/field', 'picked')
+    assert(before[1] and not before[2], 'deferred callback must read its own answer')
+    assert(module.set('', 'experience/responses:form/title', if isA then 'row-a' else 'row-b'))
+    assert(module.setAll({
+     {root='', path='experience/responses:form/option:field:78/picked', value=false},
+     {root='', path='experience/responses:form/option:field:79/picked', value=isA}
+    }))
+    if not isA then error('deferred B failed') end
+   end
+   local p = Promise.new(function(resolve, reject, onCancel)
+    resolves[index], rejects[index] = resolve, reject
+    EXECUTOR_CANCEL
+   end)
+   pending[index] = p
+   REGISTER
+   module.command('row-action', {})
+   return
+  end
+  for i=1,2 do FIRE end
+  assert(module.set('', 'experience/responses:form/title', 'changed'))
+  module.command('row-action', {})
+ end}
+end"#;
+        let source = source
+            .replace(
+                "EXECUTOR_CANCEL",
+                if kind == "executor_cancel" {
+                    "onCancel(finished)"
+                } else {
+                    ""
+                },
+            )
+            .replace("REGISTER", register)
+            .replace("FIRE", fire);
+        let scene = checked_screen_scene_with_script(false, source.as_bytes(), true);
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        checked_screen_action(&scene, &[0, 1], NuxStatus::Ok);
+        checked_screen_action(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(
+            a.borrow().number_value_by_property_name("mode"),
+            Some(16.0),
+            "{kind}: A callback must run"
+        );
+        assert_eq!(
+            b.borrow().number_value_by_property_name("mode"),
+            Some(17.0),
+            "{kind}: B callback must run"
+        );
+        assert_eq!(checked_screen_choices(&a).0, [false, true], "{kind}");
+        assert_eq!(checked_screen_choices(&b).0, [false, false], "{kind}");
+        for (row, title) in [(&a, b"changed".as_slice()), (&b, b"row-b".as_slice())] {
+            assert_eq!(
+                row.borrow()
+                    .string_value_by_property_name_path("experience/responses:form/title")
+                    .unwrap()
+                    .as_ref(),
+                title,
+                "{kind}: callback/error must restore A"
+            );
+        }
+    }
+}
+#[test]
+fn screen_checked_deferred_then_scope() {
+    unsafe { screen_checked_deferred_scope("then") }
+}
+#[test]
+fn screen_checked_deferred_catch_scope() {
+    unsafe { screen_checked_deferred_scope("catch") }
+}
+#[test]
+fn screen_checked_deferred_finally_scope() {
+    unsafe { screen_checked_deferred_scope("finally") }
+}
+#[test]
+fn screen_checked_deferred_cancel_scope() {
+    unsafe { screen_checked_deferred_scope("cancel") }
+}
+#[test]
+fn screen_checked_deferred_executor_cancel_scope() {
+    unsafe { screen_checked_deferred_scope("executor_cancel") }
+}
+#[test]
+fn screen_checked_deferred_async_scope() {
+    unsafe { screen_checked_deferred_scope("async") }
+}
+
+#[test]
+fn screen_checked_method_lookup_uses_own_screen() {
+    unsafe {
+        let script = br#"local module = require('bridge')
+return function(context)
+ local mode = context:viewModel().mode.value
+ return setmetatable({init = function() return true end}, {
+  __index = function(self, key)
+   if key == 'performAction' then
+    local before = module.listValues('', 'experience/responses:form/field', 'picked')
+    assert(before[1] and not before[2])
+    assert(module.set('', 'experience/responses:form/title', if mode == 6 then 'row-a' else 'row-b'))
+    return function() module.command('row-action', {}) end
+   end
+  end
+ })
+end"#;
+        let scene = checked_screen_scene_with_script(false, script, true);
+        checked_screen_action(&scene, &[0, 1], NuxStatus::Ok);
+        for (index, title) in [b"row-a".as_slice(), b"row-b".as_slice()]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(
+                checked_screen_row(&scene, index, false)
+                    .borrow()
+                    .string_value_by_property_name_path("experience/responses:form/title")
+                    .unwrap()
+                    .as_ref(),
+                title
+            );
         }
     }
 }

@@ -359,12 +359,10 @@ fn init_time_properties_belong_to_scripted_object() {
     for name in ["counter", "enabled"] {
         let property: AnyUserData = instance.table().get(name).unwrap();
         let state = scripted_property_state(&property).unwrap();
-        assert!(
-            state
-                .owner()
-                .unwrap()
-                .ptr_eq(&instance.property_listener_owner)
-        );
+        assert!(Rc::ptr_eq(
+            &state.owner_properties.borrow().upgrade().unwrap(),
+            &instance.property_listener_owner.properties
+        ));
     }
 }
 

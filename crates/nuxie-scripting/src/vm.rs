@@ -1321,6 +1321,7 @@ impl LuaScriptInstance {
     }
 
     fn enter_property_owner(&self, lua: &Lua) -> view_model::ScriptedPropertyOwnerScope {
+        // Enter before reading Lua fields too: __index can execute script.
         ScriptViewModelFrameContext::for_lua(lua).enter_owner(self.property_listener_owner.clone())
     }
 
@@ -1332,6 +1333,7 @@ impl LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(Value::Nil);
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table
             .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
@@ -1357,7 +1359,6 @@ impl LuaScriptInstance {
         {
             call_args.push_back(Value::UserData(context.clone()));
         }
-        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call(call_args)
             .map_err(|error| self.script_error(error))
@@ -1378,6 +1379,7 @@ impl LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(false);
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let lua = table.lua();
         let mut call_args = MultiValue::with_capacity(args.len() + 1);
         call_args.push_back(Value::Table(table.clone()));
@@ -1390,7 +1392,6 @@ impl LuaScriptInstance {
         let Value::Function(function) = field else {
             return Ok(false);
         };
-        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call::<Value>(call_args)
             .map(|value| !matches!(value, Value::Nil | Value::Boolean(false)))
@@ -1425,6 +1426,7 @@ impl LuaScriptInstance {
             let missing_before = self.context_missing_requested_data.replace(false);
             self.reset_execution_budget();
             let table = self.live_table()?;
+            let _property_owner = self.enter_property_owner(&table.lua());
             let value: Value = table
                 .get_field(ScriptMethod::Init.as_str())
                 .map_err(|error| self.script_error(error))?;
@@ -1441,7 +1443,6 @@ impl LuaScriptInstance {
             if let Some(context) = self.context.as_ref() {
                 args.push_back(Value::UserData(context.clone()));
             }
-            let _property_owner = self.enter_property_owner(&function.lua());
             let value = function
                 .protected_call(args)
                 .map_err(|error| self.script_error(error));
@@ -1615,6 +1616,7 @@ impl LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let field: Value = table
             .get_field(method.as_str())
             .map_err(&conversion_error)?;
@@ -1626,7 +1628,6 @@ impl LuaScriptInstance {
         };
         let lua = table.lua();
         let input = lua_data_value::create_data_value(&lua, value).map_err(&conversion_error)?;
-        let _property_owner = self.enter_property_owner(&lua);
         let output: Value = function
             .protected_call((table, input))
             .map_err(&conversion_error)?;
@@ -3278,6 +3279,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(false);
         }
         let table = self.live_table()?;
+        let _property_owner = self.enter_property_owner(&table.lua());
         // ScriptingVM::hasMethod uses lua_getfield, including __index, and
         // accepts only LUA_TFUNCTION (not merely a truthy/callable value).
         let value: Value = table
@@ -3326,6 +3328,7 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptOptionalMethodResult::Missing);
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table
             .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
@@ -3338,7 +3341,6 @@ impl ScriptInstance for LuaScriptInstance {
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
-        let _property_owner = self.enter_property_owner(&lua);
         let returned: Value = function
             .protected_call(call_args)
             .map_err(|error| self.script_error(error))?;
@@ -3357,6 +3359,7 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptOptionalNumberResult::Missing);
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table
             .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
@@ -3369,7 +3372,6 @@ impl ScriptInstance for LuaScriptInstance {
         for value in args {
             call_args.push_back(Value::Number(f64::from(*value)));
         }
-        let _property_owner = self.enter_property_owner(&lua);
         let returned: Value = function
             .protected_call(call_args)
             .map_err(|error| self.script_error(error))?;
@@ -3428,13 +3430,13 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(());
         }
         let table = self.live_table()?;
+        let _property_owner = self.enter_property_owner(&table.lua());
         let function: Function = table
             .get_field(method.as_script_method().as_str())
             .map_err(|error| self.script_error(error))?;
         let lua = table.lua();
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
-        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call((table, invocation))
             .map_err(|error| self.script_error(error))
@@ -3449,6 +3451,7 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(false);
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let perform_action: Value = table
             .get(
                 ScriptListenerActionMethod::PerformAction
@@ -3475,7 +3478,6 @@ impl ScriptInstance for LuaScriptInstance {
         let lua = table.lua();
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
-        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call::<()>((table, invocation))
             .map_err(|error| self.script_error(error))?;
@@ -3508,6 +3510,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
         }
         let table = self.live_table()?;
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table
             .get_field(method)
             .map_err(|error| self.script_error(error))?;
@@ -3523,8 +3526,6 @@ impl ScriptInstance for LuaScriptInstance {
         else {
             return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
         };
-
-        let _property_owner = self.enter_property_owner(&lua);
         if gamepad {
             // `ScriptedDrawable::gamepadDispatch` consumes protected-call
             // failures and reports the drawable as dispatched whenever the
@@ -3588,6 +3589,7 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table
             .get_field(method.as_str())
             .map_err(|error| self.script_error(error))?;
@@ -3599,8 +3601,6 @@ impl ScriptInstance for LuaScriptInstance {
             &lua, pointer_id, local_x, local_y, hit_type, timestamp,
         )
         .map_err(|error| self.script_error(error))?;
-
-        let _property_owner = self.enter_property_owner(&lua);
         // Keep the event anchored through the hit-result read, matching callHitEvent.
         let call_result = function.protected_call::<()>((table, argument.clone()));
         let hit = match hit_result.get() {
@@ -3637,6 +3637,7 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
         };
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table
             .get_field("pointerScroll")
             .map_err(|error| self.script_error(error))?;
@@ -3647,7 +3648,6 @@ impl ScriptInstance for LuaScriptInstance {
         let (argument, hit_result) =
             lua_input::scroll_event_argument(&lua, pointer_id, local_x, local_y, event, timestamp)
                 .map_err(|error| self.script_error(error))?;
-        let _property_owner = self.enter_property_owner(&lua);
         let call_result = function.protected_call::<()>((table, argument.clone()));
         let hit = match hit_result.get() {
             listener_invocation::ScriptedPointerHitResult::None => {
@@ -3680,12 +3680,12 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(());
         }
         let table = self.live_table()?;
+        let _property_owner = self.enter_property_owner(&table.lua());
         let value: Value = table.get(name).map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             host.mark_script_update();
             return Ok(());
         };
-        let _property_owner = self.enter_property_owner(&function.lua());
         let result = function
             .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));
@@ -3706,6 +3706,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(());
         }
         let table = self.live_table()?;
+        let _property_owner = self.enter_property_owner(&table.lua());
         let lua = table.lua();
         let key = lua.create_string(name.as_c_str_bytes());
         let value: Value = table.get(key).map_err(|error| self.script_error(error))?;
@@ -3713,7 +3714,6 @@ impl ScriptInstance for LuaScriptInstance {
             host.mark_script_update();
             return Ok(());
         };
-        let _property_owner = self.enter_property_owner(&lua);
         let result = function
             .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));

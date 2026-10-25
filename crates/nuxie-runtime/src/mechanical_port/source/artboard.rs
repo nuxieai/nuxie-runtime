@@ -1,3 +1,4 @@
+use super::{artboard_clusters::ArtboardSourceState, lazy_vector::LazyVector, sidecar::Sidecar};
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
@@ -376,21 +377,19 @@ pub struct Artboard {
     core_arena: CoreArena,
     definition_owner: Option<CoreArena>,
     objects: Vec<Option<CoreHandle>>,
-    invalid_objects: Vec<Option<CoreHandle>>,
-    animations: Vec<CoreHandle>,
-    state_machines: Vec<CoreHandle>,
+    source_state: std::cell::OnceCell<Box<ArtboardSourceState>>,
     dependency_order: Vec<crate::mechanical_port::source::component::ComponentOccurrenceHandle>,
     // Built once initialize has fixed the edges; see component_graph.rs.
     component_graph: Option<Rc<crate::mechanical_port::source::component_graph::ComponentGraph>>,
-    dependency_order_recipe: std::cell::RefCell<Vec<DependencyOrderEntry>>,
+    dependency_order_recipe: RefCell<Sidecar<Vec<DependencyOrderEntry>>>,
     recipe_state: std::cell::Cell<RecipeState>,
     dispose_source_for_replacement: bool,
     drawables: Vec<RuntimeDrawableOccurrence>,
-    clipping_shapes: Vec<CoreHandle>,
-    layer_masks: Vec<CoreHandle>,
-    draw_targets: Vec<CoreHandle>,
-    nested_artboards: Vec<CoreHandle>,
-    component_lists: Vec<CoreHandle>,
+    clipping_shapes: LazyVector<CoreHandle>,
+    layer_masks: LazyVector<CoreHandle>,
+    draw_targets: LazyVector<CoreHandle>,
+    nested_artboards: LazyVector<CoreHandle>,
+    component_lists: LazyVector<CoreHandle>,
     // Fixed once the artboard is initialized; shared so walks need no copy.
     artboard_hosts: Rc<[CoreHandle]>,
     // Runtime handles execute callback-bearing teardown while the root is
@@ -398,11 +397,11 @@ pub struct Artboard {
     drop_callbacks_prepared: bool,
     host_data_context_consumers:
         Rc<[crate::source::data_bind::host_data_context_consumer::HostDataContextConsumer]>,
-    joysticks: Vec<CoreHandle>,
+    joysticks: LazyVector<CoreHandle>,
     // The BitmapCache child, collected in initialize(). None unless the
     // artboard has one; the object itself owns the offscreen render state.
     bitmap_cache: Option<CoreHandle>,
-    scripted_objects: Vec<CoreHandle>,
+    scripted_objects: LazyVector<CoreHandle>,
     scripted_interpolators: RefCell<
         HashMap<
             CoreHandle,
@@ -415,10 +414,6 @@ pub struct Artboard {
     instance_value_binds_source: Option<CoreHandle>,
     instance_value_binds_pending: bool,
     pub(crate) data_bind_container: DataBindContainer,
-    // Shared-keyframe identity -> first serialized source bind. Built once;
-    // source artboard bindings do not change during playback.
-    key_frame_source_binds: RefCell<HashMap<CoreHandle, CoreHandle>>,
-    key_frame_source_binds_built: Cell<bool>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     file: RuntimeFileWeakHandle,
     draw_visitor: Option<RuntimeDrawVisitor>,
@@ -491,33 +486,29 @@ impl Default for Artboard {
             core_arena: CoreArena::default(),
             definition_owner: None,
             objects: Vec::new(),
-            invalid_objects: Vec::new(),
-            animations: Vec::new(),
-            state_machines: Vec::new(),
+            source_state: std::cell::OnceCell::new(),
             dependency_order: Vec::new(),
             component_graph: None,
-            dependency_order_recipe: std::cell::RefCell::new(Vec::new()),
+            dependency_order_recipe: RefCell::new(Sidecar::default()),
             recipe_state: std::cell::Cell::new(RecipeState::Unbuilt),
             dispose_source_for_replacement: false,
             drawables: Vec::new(),
-            clipping_shapes: Vec::new(),
-            layer_masks: Vec::new(),
-            draw_targets: Vec::new(),
-            nested_artboards: Vec::new(),
-            component_lists: Vec::new(),
+            clipping_shapes: LazyVector::default(),
+            layer_masks: LazyVector::default(),
+            draw_targets: LazyVector::default(),
+            nested_artboards: LazyVector::default(),
+            component_lists: LazyVector::default(),
             artboard_hosts: Rc::default(),
             drop_callbacks_prepared: false,
             host_data_context_consumers: Rc::default(),
-            joysticks: Vec::new(),
+            joysticks: LazyVector::default(),
             bitmap_cache: None,
-            scripted_objects: Vec::new(),
+            scripted_objects: LazyVector::default(),
             scripted_interpolators: RefCell::new(HashMap::new()),
             advancing_components: Rc::new([]),
             instance_value_binds_source: None,
             instance_value_binds_pending: false,
             data_bind_container: DataBindContainer::default(),
-            key_frame_source_binds: RefCell::new(HashMap::new()),
-            key_frame_source_binds_built: Cell::new(false),
             scripting_vm: None,
             page_boundary: None,
             live_move_scene: None,
@@ -945,20 +936,50 @@ impl Artboard {
         crate::mechanical_port::source::typed_children::TypedChildren::new(&self.objects)
     }
 
+    // The cluster never moves or resets while this Artboard lives. Its index
+    // has separate interior mutability, so list readers can build it reentrantly.
+    fn ensure_source_state(&self) -> &ArtboardSourceState {
+        self.source_state
+            .get_or_init(|| Box::new(ArtboardSourceState::default()))
+    }
+
+    fn ensure_source_state_mut(&mut self) -> &mut ArtboardSourceState {
+        self.ensure_source_state();
+        self.source_state.get_mut().unwrap()
+    }
+
+    fn own_animations(&self) -> &[CoreHandle] {
+        self.source_state
+            .get()
+            .map_or(&[], |state| state.animations.as_slice())
+    }
+
+    fn own_state_machines(&self) -> &[CoreHandle] {
+        self.source_state
+            .get()
+            .map_or(&[], |state| state.state_machines.as_slice())
+    }
+
+    fn own_invalid_objects(&self) -> &[Option<CoreHandle>] {
+        self.source_state
+            .get()
+            .map_or(&[], |state| state.invalid_objects.as_slice())
+    }
+
     pub fn with_animation_handles<R>(&self, callback: impl FnOnce(&[CoreHandle]) -> R) -> R {
-        self.with_animation_source(|source| callback(&source.animations))
+        self.with_animation_source(|source| callback(source.own_animations()))
     }
 
     pub fn with_state_machine_handles<R>(&self, callback: impl FnOnce(&[CoreHandle]) -> R) -> R {
-        self.with_animation_source(|source| callback(&source.state_machines))
+        self.with_animation_source(|source| callback(source.own_state_machines()))
     }
 
     pub fn nested_artboards(&self) -> &[CoreHandle] {
-        &self.nested_artboards
+        self.nested_artboards.view()
     }
 
     pub fn artboard_component_lists(&self) -> &[CoreHandle] {
-        &self.component_lists
+        self.component_lists.view()
     }
 
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
@@ -970,8 +991,9 @@ impl Artboard {
     }
 
     fn build_key_frame_source_binds_index(&self) {
-        self.key_frame_source_binds_built.set(true);
-        let mut index = self.key_frame_source_binds.borrow_mut();
+        let state = self.ensure_source_state();
+        state.key_frame_binds_built.set(true);
+        let mut index = state.key_frame_binds.borrow_mut();
         for bind in self.data_bind_container.data_binds().iter() {
             let Some(target) = bind
                 .with(|bind| bind.as_data_bind().and_then(|bind| bind.target()))
@@ -987,17 +1009,37 @@ impl Artboard {
     }
 
     pub fn has_key_frame_source_binds(&self) -> bool {
-        if !self.key_frame_source_binds_built.get() {
+        if !self
+            .source_state
+            .get()
+            .is_some_and(|state| state.key_frame_binds_built.get())
+        {
             self.build_key_frame_source_binds_index();
         }
-        !self.key_frame_source_binds.borrow().is_empty()
+        !self
+            .source_state
+            .get()
+            .unwrap()
+            .key_frame_binds
+            .borrow()
+            .is_empty()
     }
 
     pub fn key_frame_source_bind(&self, keyframe: &CoreHandle) -> Option<CoreHandle> {
-        if !self.key_frame_source_binds_built.get() {
+        if !self
+            .source_state
+            .get()
+            .is_some_and(|state| state.key_frame_binds_built.get())
+        {
             self.build_key_frame_source_binds_index();
         }
-        self.key_frame_source_binds.borrow().get(keyframe).cloned()
+        self.source_state
+            .get()
+            .unwrap()
+            .key_frame_binds
+            .borrow()
+            .get(keyframe)
+            .cloned()
     }
 
     pub fn add_data_bind(&mut self, bind: CoreHandle) {
@@ -1030,11 +1072,11 @@ impl Artboard {
     }
 
     pub fn animation_count(&self) -> usize {
-        self.with_animation_source(|source| source.animations.len())
+        self.with_animation_source(|source| source.own_animations().len())
     }
 
     pub fn state_machine_count(&self) -> usize {
-        self.with_animation_source(|source| source.state_machines.len())
+        self.with_animation_source(|source| source.own_state_machines().len())
     }
 
     pub fn first_animation(&self) -> Option<CoreHandle> {
@@ -1108,7 +1150,8 @@ impl Artboard {
     fn with_animation_source<R>(&self, callback: impl FnOnce(&Artboard) -> R) -> R {
         if self.is_instance {
             if let Some(source) = self.artboard_source.as_ref() {
-                return source.with_downcast::<Artboard, _>(callback)
+                return source
+                    .with_downcast::<Artboard, _>(callback)
                     .expect("live animation source Artboard");
             }
         }
@@ -1190,8 +1233,13 @@ impl Artboard {
             scripted::scripted_data_converter::ScriptedDataConverter,
         };
         fn converter_runs_script(converter: Option<CoreHandle>) -> bool {
-            let Some(converter) = converter else { return false; };
-            if converter.with_downcast::<ScriptedDataConverter, _>(|_| ()).is_some() {
+            let Some(converter) = converter else {
+                return false;
+            };
+            if converter
+                .with_downcast::<ScriptedDataConverter, _>(|_| ())
+                .is_some()
+            {
                 return true;
             }
             let items =
@@ -1212,7 +1260,10 @@ impl Artboard {
             )
         }
         for object in self.objects.iter().flatten() {
-            if object.with(|object| object.as_scripted_object().is_some()).unwrap_or(false) {
+            if object
+                .with(|object| object.as_scripted_object().is_some())
+                .unwrap_or(false)
+            {
                 return true;
             }
         }
@@ -1232,7 +1283,10 @@ impl Artboard {
         }) {
             return true;
         }
-        self.data_bind_container.data_binds().iter().any(bind_runs_script)
+        self.data_bind_container
+            .data_binds()
+            .iter()
+            .any(bind_runs_script)
     }
 
     #[cfg(feature = "tools")]
@@ -1281,15 +1335,15 @@ impl Artboard {
     }
 
     pub(crate) fn add_animation(&mut self, object: CoreHandle) {
-        self.animations.push(object);
+        self.ensure_source_state_mut().animations.push(object);
     }
 
     pub(crate) fn add_state_machine(&mut self, object: CoreHandle) {
-        self.state_machines.push(object);
+        self.ensure_source_state_mut().state_machines.push(object);
     }
 
     pub fn add_scripted_object(&mut self, object: CoreHandle) {
-        self.scripted_objects.push(object);
+        self.scripted_objects.push_back(object);
     }
 
     pub fn validate_objects(&mut self) -> bool {
@@ -1316,7 +1370,10 @@ impl Artboard {
                     if is_valid {
                         continue;
                     }
-                    self.invalid_objects.push(self.objects[i].clone());
+                    let rejected = self.objects[i].clone();
+                    self.ensure_source_state_mut()
+                        .invalid_objects
+                        .push(rejected);
                     self.objects[i] = None;
                 }
             } else {
@@ -1387,7 +1444,7 @@ impl Artboard {
             .unwrap();
         if !is_instance {
             let animations = root
-                .with_downcast::<Artboard, _>(|a| a.animations.clone())
+                .with_downcast::<Artboard, _>(|a| a.own_animations().to_vec())
                 .unwrap();
             for animation in animations {
                 let code = animation
@@ -1400,7 +1457,7 @@ impl Artboard {
                 }
             }
             let state_machines = root
-                .with_downcast::<Artboard, _>(|a| a.state_machines.clone())
+                .with_downcast::<Artboard, _>(|a| a.own_state_machines().to_vec())
                 .unwrap();
             for state_machine in state_machines {
                 let code = state_machine
@@ -1412,7 +1469,7 @@ impl Artboard {
             }
             if root
                 .with_downcast::<Artboard, _>(|a| {
-                    a.animations.is_empty() && a.state_machines.is_empty()
+                    a.own_animations().is_empty() && a.own_state_machines().is_empty()
                 })
                 .unwrap()
             {
@@ -1423,7 +1480,10 @@ impl Artboard {
                     return StatusCode::MissingObject;
                 };
                 root.with_downcast_mut::<Artboard, _>(|artboard| {
-                    artboard.state_machines.push(state_machine)
+                    artboard
+                        .ensure_source_state_mut()
+                        .state_machines
+                        .push(state_machine)
                 });
             }
         }
@@ -1472,12 +1532,12 @@ impl Artboard {
                     );
                 }
             } else if object.is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY) {
-                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.nested_artboards.push(object.clone()));
+                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.nested_artboards.push_back(object.clone()));
                 root.with_downcast_mut::<Artboard, _>(|artboard| {
                     artboard.artboard_hosts = artboard.artboard_hosts.iter().cloned().chain([object.clone()]).collect();
                 });
             } else if object.is_type_of(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
-                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.component_lists.push(object.clone()));
+                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.component_lists.push_back(object.clone()));
                 root.with_downcast_mut::<Artboard, _>(|artboard| {
                     artboard.artboard_hosts = artboard.artboard_hosts.iter().cloned().chain([object.clone()]).collect();
                 });
@@ -1498,7 +1558,7 @@ impl Artboard {
                 if !can_apply_before {
                     root.with_downcast_mut::<Artboard, _>(|artboard| artboard.joysticks_apply_before_update = false);
                 }
-                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.joysticks.push(object.clone()));
+                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.joysticks.push_back(object.clone()));
             } else if object.is_type_of(crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::TYPE_KEY) {
                 root.with_downcast_mut::<Artboard, _>(|artboard| artboard.bitmap_cache = Some(object.clone()));
             }
@@ -1537,7 +1597,7 @@ impl Artboard {
             .unwrap()
         {
             let animations = root
-                .with_downcast::<Artboard, _>(|a| a.animations.clone())
+                .with_downcast::<Artboard, _>(|a| a.own_animations().to_vec())
                 .unwrap();
             for animation in animations {
                 let code = animation
@@ -1552,7 +1612,7 @@ impl Artboard {
             // The generated state machine was appended after the dirty phase.
             // Like the source, clean the current list, including that machine.
             let clean_state_machines = root
-                .with_downcast::<Artboard, _>(|artboard| artboard.state_machines.clone())
+                .with_downcast::<Artboard, _>(|artboard| artboard.own_state_machines().to_vec())
                 .unwrap_or_default();
             for state_machine in clean_state_machines {
                 let code = state_machine
@@ -1689,8 +1749,14 @@ impl Artboard {
 
         root.with_downcast_mut::<Artboard, _>(|artboard| {
             artboard.drawables = drawables;
-            artboard.clipping_shapes = clipping_shapes;
-            artboard.layer_masks = layer_masks;
+            artboard.clipping_shapes.clear();
+            for shape in clipping_shapes {
+                artboard.clipping_shapes.push_back(shape);
+            }
+            artboard.layer_masks.clear();
+            for mask in layer_masks {
+                artboard.layer_masks.push_back(mask);
+            }
             artboard.sort_dependencies();
         });
         let objects = root
@@ -1755,16 +1821,15 @@ impl Artboard {
             draw_target_roots.into_iter().map(Into::into).collect(),
             &mut draw_target_order,
         );
-        root.with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_targets.extend(
-            draw_target_order
+        root.with_downcast_mut::<Artboard, _>(|artboard| { for target in draw_target_order
                 .into_iter()
                 .filter_map(|target| target.authored().cloned())
                 .filter(|target| {
                     target.is_type_of(
                         crate::mechanical_port::source::generated::draw_target_base::DrawTargetBase::TYPE_KEY,
                     )
-                }),
-        ));
+                }) { artboard.draw_targets.push_back(target); }
+        });
         // Every edge is in place now (including the DrawTarget edges above).
         // Build without an Artboard borrow: the order includes the root itself.
         if let Some((order, dirty)) = root.with_downcast::<Artboard, _>(|artboard| {
@@ -1788,7 +1853,7 @@ impl Artboard {
     /// (docs/CSS_LAYOUT.md, 4.4). Draw rules keep Rive's order.
     fn apply_css_paint_order(&mut self) {
         use crate::css_layout::paint_order;
-        if !self.draw_targets.is_empty() {
+        if !self.draw_targets.empty() {
             return;
         }
         let root_css = self.base.base.is_css_mode();
@@ -1838,7 +1903,7 @@ impl Artboard {
         } else {
             counter.get() + 1
         });
-        for target in &self.draw_targets {
+        for target in self.draw_targets.view() {
             target.with_downcast_mut::<DrawTarget, _>(|target| {
                 target.first = None;
                 target.last = None;
@@ -1897,7 +1962,7 @@ impl Artboard {
             }
         }
 
-        for rule_handle in &self.draw_targets {
+        for rule_handle in self.draw_targets.view() {
             let Some((first, last, target_drawable, placement)) = rule_handle
                 .with_downcast::<DrawTarget, _>(|rule| {
                     Some((
@@ -1963,7 +2028,7 @@ impl Artboard {
         }
 
         self.first_drawable = last_drawable;
-        for clipping_shape in &self.clipping_shapes {
+        for clipping_shape in self.clipping_shapes.view() {
             clipping_shape.with_downcast_mut::<ClippingShape, _>(ClippingShape::reset_drawables);
         }
 
@@ -2146,7 +2211,7 @@ impl Artboard {
     }
 
     pub fn all_layer_masks(&self) -> &[CoreHandle] {
-        &self.layer_masks
+        self.layer_masks.view()
     }
 
     fn splice_layer_mask_bracket(
@@ -2298,10 +2363,10 @@ impl Artboard {
     fn interleave_layer_masks(&mut self) {
         let _relinking = self.draw_links.relinking();
         use crate::mechanical_port::source::layer_mask::{LayerMask, LayerMaskOp};
-        for mask in &self.layer_masks {
+        for mask in self.layer_masks.view() {
             mask.with_downcast_mut::<LayerMask, _>(LayerMask::reset_drawables);
         }
-        for mask in self.layer_masks.clone() {
+        for mask in self.layer_masks.view().to_vec() {
             if mask
                 .with_downcast::<LayerMask, _>(LayerMask::is_self_referential)
                 .unwrap_or(false)
@@ -2458,12 +2523,18 @@ impl Artboard {
 
     fn dependency_order_recipe(&self) -> Option<std::cell::Ref<'_, Vec<DependencyOrderEntry>>> {
         match self.recipe_state.get() {
-            RecipeState::Valid => return Some(self.dependency_order_recipe.borrow()),
+            RecipeState::Valid => {
+                return Some(std::cell::Ref::map(
+                    self.dependency_order_recipe.borrow(),
+                    |recipe| recipe.get().unwrap(),
+                ));
+            }
             RecipeState::Unusable => return None,
             RecipeState::Unbuilt => {}
         }
         let count = self.dependency_order.len();
-        let mut recipe = self.dependency_order_recipe.borrow_mut();
+        let mut recipe_storage = self.dependency_order_recipe.borrow_mut();
+        let recipe = recipe_storage.ensure_allocated();
         recipe.clear();
         recipe.resize(
             count,
@@ -2519,13 +2590,16 @@ impl Artboard {
             }
         }
         if filled != count {
-            recipe.clear();
+            recipe_storage.reset();
             self.recipe_state.set(RecipeState::Unusable);
             return None;
         }
         self.recipe_state.set(RecipeState::Valid);
-        drop(recipe);
-        Some(self.dependency_order_recipe.borrow())
+        drop(recipe_storage);
+        Some(std::cell::Ref::map(
+            self.dependency_order_recipe.borrow(),
+            |recipe| recipe.get().unwrap(),
+        ))
     }
 
     fn replay_source_dependency_order(&mut self) -> bool {
@@ -2584,7 +2658,7 @@ impl Artboard {
                 component.set_graph_order(graph_order as u32);
             });
         }
-        self.dependency_order_recipe.get_mut().clear();
+        self.dependency_order_recipe.get_mut().reset();
         self.recipe_state.set(RecipeState::Unbuilt);
         self.dirty_state.collapse_changed();
         self.dirty_state.mark_components_dirty();
@@ -2598,7 +2672,7 @@ impl Artboard {
             .with_downcast::<Artboard, _>(|artboard| {
                 artboard
                     .is_instance
-                    .then(|| artboard.scripted_objects.clone())
+                    .then(|| artboard.scripted_objects.view().to_vec())
             })
             .flatten()
         else {
@@ -2864,8 +2938,8 @@ impl Artboard {
     }
     pub fn row_quiet_state(&self) -> QuietState {
         if !self.artboard_hosts.is_empty()
-            || !self.joysticks.is_empty()
-            || !self.scripted_objects.is_empty()
+            || !self.joysticks.empty()
+            || !self.scripted_objects.empty()
         {
             return QuietState::Never;
         }
@@ -3785,7 +3859,10 @@ impl Artboard {
             {
                 let instance = host
                     .with(|owner| {
-                        owner.as_artboard_host().expect("ArtboardHost").artboard_instance(index as i32)
+                        owner
+                            .as_artboard_host()
+                            .expect("ArtboardHost")
+                            .artboard_instance(index as i32)
                     })
                     .flatten();
                 if let Some(instance) = instance {
@@ -3838,14 +3915,16 @@ impl Artboard {
     #[cfg(feature = "tools")]
     pub fn settle_if_images_revealed_handle(root: &CoreHandle) {
         let generation = nuxie_render_api::render_image_reveal_generation();
-        let settle = root.with_downcast_mut::<Artboard, _>(|artboard| {
-            if artboard.has_updated && artboard.seen_image_reveal_generation != generation {
-                artboard.seen_image_reveal_generation = generation;
-                true
-            } else {
-                false
-            }
-        }).expect("live Artboard");
+        let settle = root
+            .with_downcast_mut::<Artboard, _>(|artboard| {
+                if artboard.has_updated && artboard.seen_image_reveal_generation != generation {
+                    artboard.seen_image_reveal_generation = generation;
+                    true
+                } else {
+                    false
+                }
+            })
+            .expect("live Artboard");
         if settle {
             Self::settle_after_image_reveal_handle(root);
         }
@@ -3863,7 +3942,7 @@ impl Artboard {
                 artboard.host_transform_marked_dirty = false;
                 let before = artboard.joysticks_apply_before_update;
                 let joysticks =
-                    (!artboard.joysticks.is_empty()).then(|| artboard.joysticks.clone());
+                    (!artboard.joysticks.empty()).then(|| artboard.joysticks.view().to_vec());
                 (before, joysticks)
             })
             .expect("live Artboard update pass");
@@ -6003,8 +6082,8 @@ impl Artboard {
                 Some((
                     artboard.focus_manager()?,
                     artboard.objects.clone(),
-                    artboard.nested_artboards.clone(),
-                    artboard.component_lists.clone(),
+                    artboard.nested_artboards.view().to_vec(),
+                    artboard.component_lists.view().to_vec(),
                 ))
             })
             .flatten()
@@ -6173,7 +6252,7 @@ impl Artboard {
         }
 
         let nested_artboards = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.nested_artboards.clone())
+            .with_downcast::<Artboard, _>(|artboard| artboard.nested_artboards.view().to_vec())
             .expect("live semantic Artboard");
         for nested_host in nested_artboards {
             let parent = SemanticData::find_closest_semantic_node_handle(Some(nested_host.clone()))
@@ -6189,7 +6268,7 @@ impl Artboard {
             }
         }
         let lists = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.component_lists.clone())
+            .with_downcast::<Artboard, _>(|artboard| artboard.component_lists.view().to_vec())
             .expect("live semantic Artboard");
         for list in lists {
             let parent = SemanticData::find_closest_semantic_node_handle(Some(list.clone()))
@@ -6253,7 +6332,7 @@ impl Artboard {
             return;
         };
         let nested_artboards = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.nested_artboards.clone())
+            .with_downcast::<Artboard, _>(|artboard| artboard.nested_artboards.view().to_vec())
             .expect("live semantic Artboard");
         for nested_host in nested_artboards {
             let nested = nested_host
@@ -6266,7 +6345,7 @@ impl Artboard {
             }
         }
         let lists = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.component_lists.clone())
+            .with_downcast::<Artboard, _>(|artboard| artboard.component_lists.view().to_vec())
             .expect("live semantic Artboard");
         for list in lists {
             let mut index = 0;
@@ -6325,12 +6404,14 @@ impl Artboard {
 
     pub fn is_host_collapsed(&self) -> bool {
         self.host().is_some_and(|host| {
-            host.with(|host| host.component_is_collapsed()).unwrap_or(false)
+            host.with(|host| host.component_is_collapsed())
+                .unwrap_or(false)
         })
     }
 
     pub fn sync_semantic_boundary_handle(root: &CoreHandle) {
-        let collapsed = root.with_downcast::<Artboard, _>(Artboard::is_host_collapsed)
+        let collapsed = root
+            .with_downcast::<Artboard, _>(Artboard::is_host_collapsed)
             .expect("live semantic Artboard");
         Self::sync_semantic_boundary_with_host_state(root, collapsed);
     }
@@ -6346,7 +6427,9 @@ impl Artboard {
                 )
             })
             .expect("live semantic Artboard");
-        let (Some(manager), Some(boundary)) = (manager, boundary) else { return; };
+        let (Some(manager), Some(boundary)) = (manager, boundary) else {
+            return;
+        };
         if !boundary.borrow().children().is_empty() {
             manager.with_semantic_manager_mut(|manager| {
                 manager.mark_dirty(crate::source::semantic::semantic_dirt::SemanticDirt::STRUCTURE)
@@ -6530,7 +6613,7 @@ impl Artboard {
             consumer.host_data_context(Some(value.clone()));
         }
         let objects = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.scripted_objects.clone())
+            .with_downcast::<Artboard, _>(|artboard| artboard.scripted_objects.view().to_vec())
             .expect("live Artboard");
         for object in objects {
             object.with_mut(|object| {
@@ -6579,7 +6662,7 @@ impl Artboard {
             .with_downcast::<Artboard, _>(|artboard| {
                 (
                     Rc::clone(&artboard.artboard_hosts),
-                    artboard.scripted_objects.clone(),
+                    artboard.scripted_objects.view().to_vec(),
                 )
             })
             .expect("live Artboard");
@@ -6841,7 +6924,7 @@ impl Artboard {
         for consumer in Rc::clone(&self.host_data_context_consumers).iter() {
             consumer.host_data_context(None);
         }
-        for scripted_object in self.scripted_objects.clone() {
+        for scripted_object in self.scripted_objects.view().to_vec() {
             scripted_object.with_mut(|scripted_object| {
                 if let Some(scripted_object) = scripted_object.as_scripted_object_mut() {
                     scripted_object.reset_lua_init();
@@ -7033,8 +7116,8 @@ impl Artboard {
         retain_definitions: bool,
         factory: Option<RuntimeFactoryHandle>,
     ) -> Option<RuntimeArtboardInstanceHandle> {
-        let (mut definition, objects, data_binds) = source
-            .with_downcast::<Artboard, _>(|source| {
+        let (mut definition, objects, data_binds) =
+            source.with_downcast::<Artboard, _>(|source| {
                 (
                     source.clone_instance_definition(),
                     source.objects.clone(),
@@ -7370,8 +7453,8 @@ impl Drop for Artboard {
                 Self::cleanup_focus_tree_contents(
                     &manager,
                     self.objects.clone(),
-                    self.nested_artboards.clone(),
-                    self.component_lists.clone(),
+                    self.nested_artboards.view().to_vec(),
+                    self.component_lists.view().to_vec(),
                 );
             }
             if let (Some(engine), Some(identity)) = (
@@ -7393,12 +7476,8 @@ impl Drop for Artboard {
         // every FocusData callback target before any hierarchy deletion can
         // blur the chain, without accessing the possibly expired manager.
         let root = crate::mechanical_port::source::core::CoreObject::core(self).handle();
-        for object in self
-            .objects
-            .iter()
-            .chain(self.invalid_objects.iter())
-            .flatten()
-        {
+        let invalid_objects = self.own_invalid_objects().to_vec();
+        for object in self.objects.iter().chain(invalid_objects.iter()).flatten() {
             if Some(object) != root.as_ref() {
                 object.with_downcast_mut::<FocusData, _>(FocusData::detach_focusable);
             }
@@ -7411,7 +7490,7 @@ impl Drop for Artboard {
             let vm_objects: std::collections::HashSet<_> = self
                 .objects
                 .iter()
-                .chain(self.invalid_objects.iter())
+                .chain(invalid_objects.iter())
                 .flatten()
                 .filter(|object| {
                     object
@@ -7427,7 +7506,7 @@ impl Drop for Artboard {
                 .objects
                 .iter()
                 .skip(1)
-                .chain(self.invalid_objects.iter())
+                .chain(invalid_objects.iter())
                 .flatten()
             {
                 if !vm_objects.contains(object) {
@@ -7441,7 +7520,7 @@ impl Drop for Artboard {
                     .objects
                     .iter()
                     .skip(1)
-                    .chain(self.invalid_objects.iter())
+                    .chain(invalid_objects.iter())
                     .flatten()
                 {
                     if vm_objects.contains(object) {
@@ -7459,17 +7538,19 @@ impl Drop for Artboard {
             }
         }
         if self.dispose_source_for_replacement {
-            for animation in &self.animations {
+            for animation in self.own_animations() {
                 crate::mechanical_port::source::animation::source_disposal::dispose_animation_source(animation);
             }
-            for machine in &self.state_machines {
+            for machine in self.own_state_machines() {
                 crate::mechanical_port::source::animation::source_disposal::dispose_state_machine_source(machine);
             }
         }
         self.objects.clear();
-        self.invalid_objects.clear();
-        self.animations.clear();
-        self.state_machines.clear();
+        if let Some(state) = self.source_state.get_mut() {
+            state.invalid_objects.clear();
+            state.animations.clear();
+            state.state_machines.clear();
+        }
         self.dirty_layout.clear();
     }
 }
@@ -8838,3 +8919,40 @@ mod artboard_animation_context_tests;
 #[cfg(test)]
 #[path = "artboard_keyed_object_borrow_tests.rs"]
 mod keyed_object_borrow_tests;
+
+#[cfg(test)]
+mod source_state_reentrant_tests {
+    use super::Artboard;
+
+    #[test]
+    fn source_list_reads_stay_empty_without_allocating() {
+        let board = Artboard::default();
+        board.with_animation_handles(|values| assert!(values.is_empty()));
+        board.with_state_machine_handles(|values| assert!(values.is_empty()));
+        assert!(board.source_state.get().is_none());
+    }
+
+    #[test]
+    fn source_list_callbacks_can_build_the_keyframe_index() {
+        for animations in [true, false] {
+            let board = Artboard::default();
+            let check = |values: &[super::CoreHandle]| {
+                assert!(values.is_empty());
+                assert!(!board.has_key_frame_source_binds());
+                assert!(
+                    board
+                        .source_state
+                        .get()
+                        .unwrap()
+                        .key_frame_binds_built
+                        .get()
+                );
+            };
+            if animations {
+                board.with_animation_handles(check);
+            } else {
+                board.with_state_machine_handles(check);
+            }
+        }
+    }
+}

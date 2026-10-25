@@ -37,10 +37,11 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `1a15344b` source checkpoint advances runtime/source-oracle and Silver
-references for the Vulkan warmup permutation fix. Both independent reviews and
-pool Vulkan compilation passed. Shader inputs and products are
-unchanged, retaining actual `41a2120b` provenance from pool job
+The `b3360ab9` source checkpoint advances runtime/source-oracle and Silver
+references for artboard lazy storage. Both reviews and correction rereviews are
+complete; pool 873 runtime tests (2 ignored), 71 regressions and shipping
+C API compilation pass. Shader inputs and products are unchanged,
+retaining actual `41a2120b` provenance from pool job
 `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` and historical validation under their
 original checkpoints. No new device pixels are claimed.
 The pool target selects its pinned source archive. Standalone shader checks and

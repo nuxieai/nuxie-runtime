@@ -93,18 +93,41 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1a15344bdc16c1cdac83fa9007fc801777fe1470`
+- LAST_SYNCED_SHA: `b3360ab942e4f187f6b9fb74f5ef0617745e8ce9`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  31 upstream commits remain after this checkpoint at the fetched target.
-  All 289 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (311 after `5892bb05`); this
+  30 upstream commits remain after this checkpoint at the fetched target.
+  All 290 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (312 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `b3360ab9`: translate the complete public artboard storage delta: cold
+  instance lists use LazyVector; source-owned animations, state machines,
+  rejected objects and the lazy keyframe-bind index share ArtboardSourceState;
+  the source dependency-order recipe uses its own Sidecar. Preserve allocation-free
+  empty reads, source sharing, ordered destruction and lazy index construction.
+  Translate LazyVector predicate removal. This is memory-storage behavior, not
+  CSS layout semantics; the CSS contract remains unchanged. Upstream added no
+  tests. C++ `WITH_RIVE_EDITOR` clearAnimations, clearStateMachines and
+  editorPrepareForDestruction rewrites have no shipped Rust/native-editor
+  counterparts and are not imported. Private `.rive_head` is not implementation
+  evidence.
+  Both independent reviews and correction rereviews are complete. Pool passed
+  873 runtime tests (2 ignored) and 71 regression cases across 14 targets
+  (`34ef7da3-895b-45ad-94ce-b544b24843e1`), plus shipping C API compilation
+  (`a67afa34-04c5-43c4-945f-170d5961a58c`). Integration review caught a shared-storage
+  callback borrow conflict and an eager instance keyframe query. Stable boxed
+  source storage with separately mutable index state preserves callback reads;
+  pose checking now queries only the selected source after its serial guard.
+  Two focused callback/nonallocation regressions and extended LazyVector tests
+  retain all prior assertions. The source cluster uses Rust OnceCell ownership;
+  the dependency recipe retains Sidecar ownership. No read clones were added.
+  Source/oracle and Silver references advance; shader products retain actual
+  `41a2120b` provenance. No new hardware or memory-size measurement is claimed.
 - `1a15344b`: translate the complete public Vulkan warmup predicate change:
   depth/stencil permutations that seed MSAA from an offscreen texture require
   both multisampling and preserve-render-target color loading. Clear/discard
@@ -1815,6 +1838,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `b3360ab942e4f187f6b9fb74f5ef0617745e8ce9` | Artboard cold-list LazyVectors, source-state and dependency-recipe sidecars, lazy keyframe index and predicate removal. Both reviews and correction rereviews complete; pool 873 runtime tests (2 ignored), 71 regressions and shipping C API compilation pass. C++ editor-only hooks are unshipped. CSS behavior retained; private metadata unclaimed; actual41a shader provenance retained. | — |
 | `1a15344bdc16c1cdac83fa9007fc801777fe1470` | Exclude invalid depth/stencil Vulkan warmup permutations: offscreen MSAA seeding requires MSAA and preserved color. Both reviews complete; pool Vulkan compilation passes. No new upstream tests or Android hardware claim. Private metadata unclaimed; actual41a shader provenance retained. | — |
 | `e579560ae8bace3074a9a91670cc1573d4cf68d7` | Vulkan single-entry SPIR-V splitting, reusable scratch and temporary stage modules; shared frame advancement and replay diagnostics. Four public splitter tests. Both reviews and correction rereviews complete; pool 260 renderer tests (5 ignored), 94 ORE tests and Vulkan compilation pass. D3D12-only changes are unshipped; private metadata unclaimed; actual41a shader provenance retained. | — |
 | `0238f2995df485168a87801e4dbf92478a3317d2` | Global text-style references, instances/sharing, host data binding and run pointer listeners; all 26 public regressions. Both reviews and correction rereviews complete. Pool: 26 new tests, 871 runtime tests (2 ignored), 58 existing regressions and shipping C API compilation pass. Full54-file public delta accounted, private metadata unclaimed; CSS contract and actual41a shader provenance retained. | — |

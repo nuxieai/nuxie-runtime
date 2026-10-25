@@ -7,11 +7,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -19,18 +19,18 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 var<private> e7_1: vec4<f32>;
 var<private> f7_1: vec4<f32>;
 var<private> n5_1: vec4<f32>;
-var<private> q8_1: u32;
+var<private> r8_1: u32;
 var<private> o5_1: vec3<f32>;
-var<private> Mi: vec4<u32>;
+var<private> Ni: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: WB;
 
@@ -106,7 +106,7 @@ fn main_1() {
     let _e77 = u32(_e76);
     let _e82 = f32((_e77 >> bitcast<u32>(10i)));
     let _e84 = n5_1[3u];
-    let _e85 = q8_1;
+    let _e85 = r8_1;
     let _e86 = (_e74 - _e82);
     let _e87 = (_e72 <= _e86);
     if _e87 {
@@ -354,18 +354,18 @@ fn main_1() {
         phi_1247_ = vec4<u32>(_e352.x, _e352.y, (((bitcast<u32>(i32(round((_e337 * 10430.378f)))) & 65535u) << bitcast<u32>(16i)) | _e391), _e352.w);
     }
     let _e401 = phi_1247_;
-    Mi = vec4<u32>(_e401.x, _e401.y, _e401.z, _e154);
+    Ni = vec4<u32>(_e401.x, _e401.y, _e401.z, _e154);
     return;
 }
 
 @fragment
-fn main(@location(0) e7_: vec4<f32>, @location(1) f7_: vec4<f32>, @location(2) n5_: vec4<f32>, @location(4) @interpolate(flat, either) q8_: u32, @location(3) o5_: vec3<f32>) -> @location(0) vec4<u32> {
+fn main(@location(0) e7_: vec4<f32>, @location(1) f7_: vec4<f32>, @location(2) n5_: vec4<f32>, @location(4) @interpolate(flat, either) r8_: u32, @location(3) o5_: vec3<f32>) -> @location(0) vec4<u32> {
     e7_1 = e7_;
     f7_1 = f7_;
     n5_1 = n5_;
-    q8_1 = q8_;
+    r8_1 = r8_;
     o5_1 = o5_;
     main_1();
-    let _e11 = Mi;
+    let _e11 = Ni;
     return _e11;
 }

@@ -42,7 +42,7 @@ i p0;d V1;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
 if(!BORROWED_COVERAGE_PASS)
 #endif
-{p0=x8(
+{p0=y8(
 #ifdef ENABLE_MODULATED_IMAGE
 V0,
 #endif
@@ -78,11 +78,11 @@ i a1=K0(n0);
 #ifdef ENABLE_ADVANCED_BLEND
 if(ENABLE_ADVANCED_BLEND&&Q0!=x6(W3)){if(T1!=.0){if(q2==.0){p0.xyz=P4(p0.xyz,a1,W2(Q0));
 #ifndef DRAW_INTERIOR_TRIANGLES
-if(T1<V1){v C8=p0.xyz;
+if(T1<V1){v D8=p0.xyz;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){C8+=i6*j.Ke;}
+if(ENABLE_DITHER){D8+=i6*j.Ke;}
 #endif
-x0(h7,H0(C8,0.0));}
+x0(h7,H0(D8,0.0));}
 #endif
 }else{p0.xyz=K0(h7).xyz;O2(h7);}}p0.xyz*=p0.w;}
 #endif

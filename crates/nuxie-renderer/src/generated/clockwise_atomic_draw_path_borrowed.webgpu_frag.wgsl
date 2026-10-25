@@ -7,11 +7,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -19,10 +19,10 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct Ef {
@@ -33,7 +33,7 @@ struct Ef_1 {
     v2_: array<atomic<u32>>,
 }
 
-@id(3) override hj: bool = true;
+@id(3) override ij: bool = true;
 
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
@@ -51,7 +51,7 @@ var ZC: texture_2d<f32>;
 @group(1) @binding(11)
 var UB: texture_2d<f32>;
 @group(3) @binding(8)
-var Q8_: sampler;
+var R8_: sampler;
 @group(1) @binding(13)
 var W4_: sampler;
 var<private> P0_1: vec4<f32>;
@@ -62,13 +62,13 @@ var<private> Q0_1: f32;
 var<private> V0_1: vec3<f32>;
 
 fn main_1() {
-    var phi_599_: bool;
-    var phi_852_: f32;
-    var phi_858_: f32;
+    var phi_600_: bool;
+    var phi_853_: f32;
     var phi_859_: f32;
-    var phi_536_: bool;
     var phi_860_: f32;
+    var phi_537_: bool;
     var phi_861_: f32;
+    var phi_862_: f32;
 
     let _e48 = T_1;
     switch bitcast<i32>(0u) {
@@ -76,43 +76,43 @@ fn main_1() {
             if (_e48.y >= 0f) {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_536_ = hj;
-                        if hj {
-                            phi_536_ = (_e48.x < -1.5f);
+                        phi_537_ = ij;
+                        if ij {
+                            phi_537_ = (_e48.x < -1.5f);
                         }
-                        let _e119 = phi_536_;
+                        let _e119 = phi_537_;
                         if _e119 {
                             let _e125 = textureSampleLevel(AD, db, vec2<f32>((3f + _e48.x), 0f), 0f);
                             let _e130 = textureSampleLevel(AD, db, vec2<f32>((1f - _e48.y), 0f), 0f);
-                            phi_860_ = ((1f - _e125.x) - _e130.x);
+                            phi_861_ = ((1f - _e125.x) - _e130.x);
                             break;
                         } else {
-                            phi_860_ = min(_e48.x, _e48.y);
+                            phi_861_ = min(_e48.x, _e48.y);
                             break;
                         }
                     }
                 }
-                let _e134 = phi_860_;
-                phi_861_ = _e134;
+                let _e134 = phi_861_;
+                phi_862_ = _e134;
                 break;
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_599_ = hj;
-                        if hj {
-                            phi_599_ = (_e48.y < -1.5f);
+                        phi_600_ = ij;
+                        if ij {
+                            phi_600_ = (_e48.y < -1.5f);
                         }
-                        let _e55 = phi_599_;
+                        let _e55 = phi_600_;
                         if _e55 {
                             let _e59 = max(_e48.w, 0f);
                             if (_e48.z >= 0f) {
                                 let _e62 = textureSampleLevel(AD, db, vec2<f32>(_e59, 0f), 0f);
-                                phi_852_ = _e62.x;
+                                phi_853_ = _e62.x;
                             } else {
-                                phi_852_ = 0f;
+                                phi_853_ = 0f;
                             }
-                            let _e65 = phi_852_;
-                            phi_858_ = _e65;
+                            let _e65 = phi_853_;
+                            phi_859_ = _e65;
                             if (abs(_e48.z) < 1000f) {
                                 let _e71 = (-2f - _e48.y);
                                 let _e73 = ((_e71 - _e59) * 0.5984134f);
@@ -123,24 +123,24 @@ fn main_1() {
                                 let _e91 = textureSampleLevel(AD, db, vec2<f32>(_e82.z, 0f), 0f);
                                 let _e94 = textureSampleLevel(AD, db, vec2<f32>(_e82.w, 0f), 0f);
                                 let _e100 = (_e76 * 5.0959306f);
-                                phi_858_ = (_e65 + (dot(vec4<f32>(_e85.x, _e88.x, _e91.x, _e94.x), exp2(((vec4<f32>(2.5479653f, 2.5479653f, 2.5479653f, 2.5479653f) - _e100) * (_e100 + vec4<f32>(-2.5479653f, -2.5479653f, -2.5479653f, -2.5479653f))))) * _e73));
+                                phi_859_ = (_e65 + (dot(vec4<f32>(_e85.x, _e88.x, _e91.x, _e94.x), exp2(((vec4<f32>(2.5479653f, 2.5479653f, 2.5479653f, 2.5479653f) - _e100) * (_e100 + vec4<f32>(-2.5479653f, -2.5479653f, -2.5479653f, -2.5479653f))))) * _e73));
                             }
-                            let _e109 = phi_858_;
-                            phi_859_ = (_e109 * sign(_e48.x));
+                            let _e109 = phi_859_;
+                            phi_860_ = (_e109 * sign(_e48.x));
                             break;
                         } else {
-                            phi_859_ = _e48.x;
+                            phi_860_ = _e48.x;
                             break;
                         }
                     }
                 }
-                let _e114 = phi_859_;
-                phi_861_ = _e114;
+                let _e114 = phi_860_;
+                phi_862_ = _e114;
                 break;
             }
         }
     }
-    let _e136 = phi_861_;
+    let _e136 = phi_862_;
     let _e137 = N4_1;
     let _e139 = vec2<u32>(floor(_e137));
     let _e141 = A3_1[1u];

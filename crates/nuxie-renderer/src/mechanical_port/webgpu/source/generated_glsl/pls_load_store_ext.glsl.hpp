@@ -19,55 +19,55 @@ gl_Position.y=-gl_Position.y;
 #else
 #extension GL_EXT_shader_framebuffer_fetch:require
 #endif
-#ifdef CF
+#ifdef DF
 #if __VERSION__>=310
-layout(binding=0,std140) uniform Nk{uniform highp vec4 Yi;}Zi;
+layout(binding=0,std140) uniform Pk{uniform highp vec4 Zi;}aj;
 #else
-uniform mediump vec4 DF;
+uniform mediump vec4 EF;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
-#ifdef KE
+#ifdef LE
 __pixel_local_inEXT j2
 #else
 __pixel_local_outEXT j2
 #endif
-{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 K4;layout(r32ui) highp uint p8;};
+{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 K4;layout(r32ui) highp uint q8;};
 #ifndef GL_ARM_shader_framebuffer_fetch
-#ifdef EF
+#ifdef FF
 layout(location=0) inout mediump vec4 sc;
 #endif
 #endif
-#ifdef KE
+#ifdef LE
 layout(location=0) out mediump vec4 sc;
 #endif
 void main(){
-#ifdef CF
+#ifdef DF
 #if __VERSION__>=310
-n0=Zi.Yi;
+n0=aj.Zi;
 #else
-n0=DF;
+n0=EF;
 #endif
 #endif
-#ifdef EF
+#ifdef FF
 #ifdef GL_ARM_shader_framebuffer_fetch
 n0=gl_LastFragColorARM;
 #else
 n0=sc;
 #endif
 #endif
-#ifdef LE
-p8=0u;
+#ifdef ME
+q8=0u;
 #endif
-#ifdef BG
+#ifdef CG
 m0=0u;
 #endif
-#ifdef KE
+#ifdef LE
 sc=n0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 aj;void main(){aj=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 bj;void main(){bj=vec4(0,1,0,1);}
 #endif
 #endif
 )===";

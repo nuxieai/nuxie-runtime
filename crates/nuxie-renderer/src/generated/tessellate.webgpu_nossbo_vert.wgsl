@@ -7,11 +7,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -19,10 +19,10 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct gl_PerVertex {
@@ -60,7 +60,7 @@ var<private> e7_: vec4<f32>;
 var<private> f7_: vec4<f32>;
 var<private> n5_: vec4<f32>;
 var<private> o5_: vec3<f32>;
-var<private> q8_: u32;
+var<private> r8_: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -454,7 +454,7 @@ fn main_1() {
         phi_2029_ = (_e125 | 8388608u);
     }
     let _e533 = phi_2029_;
-    q8_ = _e533;
+    r8_ = _e533;
     unnamed.gl_Position = vec4<f32>(((_e117.x * 0.0009765625f) - 1f), ((_e117.y * _e107) - sign(_e107)), 0f, 1f);
     return;
 }
@@ -471,7 +471,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) QD: vec4<f32>, 
     let _e19 = f7_;
     let _e20 = n5_;
     let _e21 = o5_;
-    let _e22 = q8_;
+    let _e22 = r8_;
     let _e23 = unnamed.gl_Position;
     return VertexOutput(_e18, _e19, _e20, _e21, _e22, _e23);
 }

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/specialization.glsl.
  *
- * Upstream source revision: c73593c3a868f87b5dcd328432255db33e3e2266
+ * Upstream source revision: 74e5d3f635c3c463fe10e4327261705549ee5919
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c73593c3a868f87b5dcd328432255db33e3e2266";
+pub const PINNED_UPSTREAM_COMMIT: &str = "74e5d3f635c3c463fe10e4327261705549ee5919";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "afd2d84e69cc09c49c66e524f89d0ad23435daf6e559b5142c0cef8a2de44add";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 52;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2493;
+    "fce8cd208800e9dbe32a2a5646fe0e14109ad819e4314fcf3901a506c6abac74";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 55;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2651;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_SPECIALIZATION_GLSL_SOURCE: &str = r###"layout(constant_id = CLIPPING_SPECIALIZATION_IDX) const
@@ -26,6 +26,8 @@ layout(constant_id = ADVANCED_BLEND_SPECIALIZATION_IDX) const
     bool EnableAdvancedBlend = true;
 layout(constant_id = FEATHER_SPECIALIZATION_IDX) const
     bool EnableFeather = true;
+layout(constant_id = MODULATED_IMAGE_SPECIALIZATION_IDX) const
+    bool EnableModulatedImage = true;
 layout(constant_id = EVEN_ODD_SPECIALIZATION_IDX) const
     bool EnableEvenOdd = true;
 layout(constant_id = NESTED_CLIPPING_SPECIALIZATION_IDX) const
@@ -33,8 +35,8 @@ layout(constant_id = NESTED_CLIPPING_SPECIALIZATION_IDX) const
 layout(constant_id = HSL_BLEND_MODES_SPECIALIZATION_IDX) const
     bool EnableHSLBlendModes = true;
 layout(constant_id = DITHER_SPECIALIZATION_IDX) const bool EnableDither = true;
-layout(constant_id = MODULATED_IMAGE_SPECIALIZATION_IDX) const
-    bool EnableModulatedImage = true;
+layout(constant_id = ANGULAR_GRADIENT_SPECIALIZATION_IDX) const
+    bool EnableAngularGradient = true;
 layout(constant_id = CLOCKWISE_FILL_SPECIALIZATION_IDX) const
     bool ClockwiseFill = true;
 layout(constant_id = NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX) const
@@ -57,11 +59,12 @@ layout(constant_id = DS_HAIRLINE_STROKE_SPECIALIZATION_IDX) const
 #define @ENABLE_ADVANCED_BLEND EnableAdvancedBlend
 #define @DISABLE_ADVANCED_BLEND DisableAdvancedBlend
 #define @ENABLE_FEATHER EnableFeather
+#define @ENABLE_MODULATED_IMAGE EnableModulatedImage
 #define @ENABLE_EVEN_ODD EnableEvenOdd
 #define @ENABLE_NESTED_CLIPPING EnableNestedClipping
 #define @ENABLE_HSL_BLEND_MODES EnableHSLBlendModes
 #define @ENABLE_DITHER EnableDither
-#define @ENABLE_MODULATED_IMAGE EnableModulatedImage
+#define @ENABLE_ANGULAR_GRADIENT EnableAngularGradient
 #define @CLOCKWISE_FILL ClockwiseFill
 #define @NESTED_CLIP_UPDATE_ONLY NestedClipUpdateOnly
 #define @BORROWED_COVERAGE_PASS BorrowedCoveragePrepass

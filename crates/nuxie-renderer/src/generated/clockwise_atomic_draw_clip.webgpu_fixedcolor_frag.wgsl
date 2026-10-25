@@ -11,11 +11,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -23,10 +23,10 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct Ef_1 {
@@ -38,7 +38,7 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override oj: bool = false;
+@id(11) override qj: bool = false;
 
 var<private> T_1: vec4<f32>;
 var<private> A3_1: vec2<u32>;
@@ -58,7 +58,7 @@ var AD: texture_2d<f32>;
 @group(1) @binding(11)
 var UB: texture_2d<f32>;
 @group(3) @binding(8)
-var Q8_: sampler;
+var R8_: sampler;
 @group(1) @binding(13)
 var W4_: sampler;
 var<private> P0_1: vec4<f32>;
@@ -71,14 +71,14 @@ var<private> V0_1: vec3<f32>;
 fn main_1() {
     var phi_183_: bool;
     var phi_184_: bool;
+    var phi_468_: f32;
     var phi_467_: f32;
     var phi_466_: f32;
-    var phi_465_: f32;
-    var phi_468_: f32;
-    var phi_472_: f32;
+    var phi_469_: f32;
+    var phi_473_: f32;
 
     let _e39 = T_1[0u];
-    if oj {
+    if qj {
         let _e41 = A3_1[1u];
         let _e43 = A3_1[0u];
         let _e44 = N4_1;
@@ -98,36 +98,36 @@ fn main_1() {
         }
         let _e87 = phi_184_;
         if _e87 {
-            phi_472_ = 0f;
+            phi_473_ = 0f;
         } else {
             let _e89 = j.r2_;
-            phi_465_ = _e39;
+            phi_466_ = _e39;
             if (_e76 < _e89) {
                 let _e96 = (_e89 | (262144u + u32(((abs(_e39) * 1024f) + 0.5f))));
                 let _e97 = atomicMax((&Y0_.v2_[(_e43 + (((((_e46.y >> bitcast<u32>(5u)) * (_e41 << bitcast<u32>(5u))) + ((_e46.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e46.x & 28u) << bitcast<u32>(5u)) + ((_e46.y & 28u) << bitcast<u32>(2i)))) + (((_e46.y & 3u) << bitcast<u32>(2i)) + (_e46.x & 3u))))]), _e96);
                 if (_e97 <= _e89) {
-                    phi_466_ = 0f;
+                    phi_467_ = 0f;
                 } else {
-                    phi_467_ = _e39;
+                    phi_468_ = _e39;
                     if (_e97 < _e96) {
-                        phi_467_ = (f32(bitcast<i32>(((_e97 & 524287u) - 262144u))) * 0.0009765625f);
+                        phi_468_ = (f32(bitcast<i32>(((_e97 & 524287u) - 262144u))) * 0.0009765625f);
                     }
-                    let _e106 = phi_467_;
-                    phi_466_ = _e106;
+                    let _e106 = phi_468_;
+                    phi_467_ = _e106;
                 }
-                let _e108 = phi_466_;
-                phi_465_ = _e108;
+                let _e108 = phi_467_;
+                phi_466_ = _e108;
             }
-            let _e110 = phi_465_;
-            phi_468_ = _e39;
+            let _e110 = phi_466_;
+            phi_469_ = _e39;
             if (_e110 > 0f) {
                 let _e116 = atomicAdd((&Y0_.v2_[(_e43 + (((((_e46.y >> bitcast<u32>(5u)) * (_e41 << bitcast<u32>(5u))) + ((_e46.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e46.x & 28u) << bitcast<u32>(5u)) + ((_e46.y & 28u) << bitcast<u32>(2i)))) + (((_e46.y & 3u) << bitcast<u32>(2i)) + (_e46.x & 3u))))]), u32(((abs(_e110) * 1024f) + 0.5f)));
-                phi_468_ = ((f32(bitcast<i32>(((_e116 & 524287u) - 262144u))) * 0.0009765625f) + _e39);
+                phi_469_ = ((f32(bitcast<i32>(((_e116 & 524287u) - 262144u))) * 0.0009765625f) + _e39);
             }
-            let _e124 = phi_468_;
-            phi_472_ = (1f - _e124);
+            let _e124 = phi_469_;
+            phi_473_ = (1f - _e124);
         }
-        let _e127 = phi_472_;
+        let _e127 = phi_473_;
         m0_ = vec4(_e127);
         Q1_ = vec4<f32>(1f, 1f, 1f, 1f);
     } else {

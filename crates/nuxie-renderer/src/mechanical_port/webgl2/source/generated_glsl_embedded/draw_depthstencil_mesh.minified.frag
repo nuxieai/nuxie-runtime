@@ -34,7 +34,7 @@ q(Q0,d);
 #endif
 #endif
 #ifdef NB
-i k=h8(UB,W4,g6,j.Je)*Y1;
+i k=i8(UB,W4,g6,j.Je)*Y1;
 #else
 d n=
 #ifdef FB
@@ -42,7 +42,7 @@ clamp(p2(JD,Sa,U2,.0).x,J0(.0),J0(1.));
 #else
 1.;
 #endif
-i k=x8(
+i k=y8(
 #ifdef GB
 V0,
 #endif

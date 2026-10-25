@@ -85,18 +85,18 @@ const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "DE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
 const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "EE";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "FF";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "GF";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
-const GLSL_CLEAR_COVERAGE: &str = "LE";
-const GLSL_CLOCKWISE_FILL: &str = "ME";
+const GLSL_CLEAR_COVERAGE: &str = "ME";
+const GLSL_CLOCKWISE_FILL: &str = "NE";
 const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ID";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
-const GLSL_DRAW_IMAGE: &str = "SE";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "VF";
+const GLSL_DRAW_IMAGE: &str = "TE";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_DRAW_IMAGE_RECT: &str = "FD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_DRAW_PATH: &str = "SD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "MF";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "NF";
 const GLSL_ENABLE_FEATHER: &str = "IB";
 const GLSL_ENABLE_INSTANCE_INDEX: &str = "HE";
 const GLSL_DS_POLAR_STROKE: &str = "BD";
@@ -104,16 +104,16 @@ const GLSL_DS_HAIRLINE_STROKE: &str = "CD";
 const GLSL_ENABLE_BASE_VERTEX: &str = "IE";
 const GLSL_DRAW_DEPTHSTENCIL_PATH: &str =
     include_str!("source/generated_glsl_embedded/draw_depthstencil_path.minified.glsl");
-const GLSL_ENABLE_KHR_BLEND: &str = "RE";
+const GLSL_ENABLE_KHR_BLEND: &str = "SE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "R";
 const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "VD";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "WC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "VF";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "WF";
 const GLSL_FlushUniforms: &str = "WB";
-const GLSL_atlasRenderTexture: &str = "IF";
+const GLSL_atlasRenderTexture: &str = "JF";
 const GLSL_contourBuffer: &str = "DD";
 const GLSL_dstColorTexture: &str = "MD";
 const GLSL_featherAtlasTexture: &str = "JD";
@@ -1702,6 +1702,7 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "GC",
         gpu::ShaderFeatures::ENABLE_DITHER => "OB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
+        gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT => "KE",
         _ => panic!("combined or empty shader feature"),
     }
 }
@@ -4777,7 +4778,7 @@ mod tests {
     }
 
     #[test]
-    fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
+    fn shader_feature_dispatch_matches_the_current_ten_feature_map() {
         let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
         let features = [
             ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "N"),
@@ -4812,6 +4813,11 @@ mod tests {
                 "ENABLE_MODULATED_IMAGE",
                 gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE,
                 "GB",
+            ),
+            (
+                "ENABLE_ANGULAR_GRADIENT",
+                gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT,
+                "KE",
             ),
         ];
         assert_eq!(features.len(), gpu::ShaderFeatureCount);

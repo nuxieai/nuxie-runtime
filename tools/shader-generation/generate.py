@@ -67,6 +67,13 @@ def main() -> None:
         subprocess.run(["/bin/bash", str(repo / "tools/generate-renderer-shaders.sh"),
                         "--declared-inputs", str(args.manifest.resolve())], env=env, check=True)
         subprocess.run(["make", "-C", str(shaders), f"OUT={output / 'upstream'}", "minify", "spirv"], env=env, check=True)
+        # Capture the declared upstream generator itself. Feature objects use
+        # identity hashing, so preserve this emission's bytes and provenance
+        # rather than claiming that PYTHONHASHSEED fixes their iteration order.
+        metal_generator = shaders / "metal/generate_draw_combinations.py"
+        metal_capture = output / "upstream/draw_combinations.metal"
+        subprocess.run(["/usr/bin/python3", str(metal_generator), str(metal_capture)],
+                       env=env, check=True)
         provenance = {
             "revision": revision,
             "source_manifest_sha256": sha256(args.manifest),
@@ -74,6 +81,13 @@ def main() -> None:
             "generator_sha256": sha256(args.generator),
             "overlay_sha256": sha256(args.overlay),
             "compiler_sha256": {name: sha256(path) for name, path in compilers.items()},
+            "metal_draw_combinations": {
+                "revision": revision,
+                "generator_path": "renderer/src/shaders/metal/generate_draw_combinations.py",
+                "generator_sha256": sha256(metal_generator),
+                "output_path": "upstream/draw_combinations.metal",
+                "output_sha256": sha256(metal_capture),
+            },
         }
         (output / "provenance.json").write_text(json.dumps(provenance, sort_keys=True, indent=2) + "\n")
 

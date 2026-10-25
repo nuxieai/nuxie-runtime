@@ -2759,6 +2759,7 @@ const GLSL_ENABLE_NESTED_CLIPPING: &[u8] = b"ENABLE_NESTED_CLIPPING\0";
 const GLSL_ENABLE_HSL_BLEND_MODES: &[u8] = b"ENABLE_HSL_BLEND_MODES\0";
 const GLSL_ENABLE_DITHER: &[u8] = b"ENABLE_DITHER\0";
 const GLSL_ENABLE_MODULATED_IMAGE: &[u8] = b"ENABLE_MODULATED_IMAGE\0";
+const GLSL_ENABLE_ANGULAR_GRADIENT: &[u8] = b"ENABLE_ANGULAR_GRADIENT\0";
 const CLIP_UPDATE_PAINT_TYPE: u32 = 0;
 const SOLID_COLOR_PAINT_TYPE: u32 = 1;
 const LINEAR_GRADIENT_PAINT_TYPE: u32 = 2;
@@ -3133,6 +3134,7 @@ pub fn GetShaderFeatureGLSLName(feature: ShaderFeatures) -> *const c_char {
         ShaderFeatures::ENABLE_HSL_BLEND_MODES => GLSL_ENABLE_HSL_BLEND_MODES,
         ShaderFeatures::ENABLE_DITHER => GLSL_ENABLE_DITHER,
         ShaderFeatures::ENABLE_MODULATED_IMAGE => GLSL_ENABLE_MODULATED_IMAGE,
+        ShaderFeatures::ENABLE_ANGULAR_GRADIENT => GLSL_ENABLE_ANGULAR_GRADIENT,
         _ => panic!("RIVE_UNREACHABLE: ShaderFeatures::NONE or combined flags"),
     };
     name.as_ptr().cast()

@@ -16,7 +16,7 @@ use super::context_options::NativeMetalSynthesizedFailureType;
 pub(crate) use super::context_options::{NativeMetalContextOptions, ShaderCompilationMode};
 use super::shader_compile_plan::{
     InterlockMode, ShaderFeatures, ShaderMiscFlags, BORROWED_COVERAGE_PASS,
-    COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
+    COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ANGULAR_GRADIENT, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
     ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
     ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
     SWIZZLE_COLOR_BGRA_TO_RGBA,
@@ -26,10 +26,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Mutex;
 
-const ALL_SHADER_FEATURES: ShaderFeatures = (1 << 9) - 1;
+const ALL_SHADER_FEATURES: ShaderFeatures = (1 << 10) - 1;
 const EXCLUSIVE_ATOMIC_UBERSHADER_FEATURES: ShaderFeatures = ENABLE_ADVANCED_BLEND;
 const INTERLOCK_MODE_BIT_COUNT: u32 = 3;
-const SHADER_FEATURE_COUNT: u32 = 9;
+const SHADER_FEATURE_COUNT: u32 = 10;
 const DRAW_TYPE_KEY_BIT_COUNT: u32 = 4;
 const CLOCKWISE_FILL: ShaderMiscFlags = 1 << 1;
 
@@ -167,6 +167,7 @@ pub(crate) fn shader_features_mask_for(
                 | ENABLE_HSL_BLEND_MODES
                 | ENABLE_DITHER
                 | ENABLE_MODULATED_IMAGE
+                | ENABLE_ANGULAR_GRADIENT
         }
     };
 
@@ -179,6 +180,9 @@ pub(crate) fn shader_features_mask_for(
                 | ENABLE_ADVANCED_BLEND
                 | ENABLE_HSL_BLEND_MODES
                 | ENABLE_DITHER;
+            if draw_type != DrawType::ImageMesh {
+                mask |= ENABLE_ANGULAR_GRADIENT;
+            }
             if draw_type == DrawType::AtlasBlit {
                 mask |= ENABLE_MODULATED_IMAGE;
             }
@@ -486,50 +490,50 @@ pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineC
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000100",
-            "p11111111100",
+            "p111110000000",
+            "p111111111100",
         )?,
         make(
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000100",
-            "c11111111100",
+            "p111110000000",
+            "c111111111100",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000110",
-            "p11111111110",
+            "p111110000010",
+            "p111111111110",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000110",
-            "c11111111110",
+            "p111110000010",
+            "c111111111110",
         )?,
         make(
             DrawType::AtlasBlit,
             shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::RasterOrdering)?,
             0,
-            "p11100000111",
-            "p11100011111",
+            "p111010000011",
+            "p111010011111",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             0,
-            "m11100000000",
-            "m11100011000",
+            "m111000000000",
+            "m111000011000",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             CLOCKWISE_FILL,
-            "m11100000000",
-            "m11100011000",
+            "m111000000000",
+            "m111000011000",
         )?,
     ])
 }
@@ -1175,10 +1179,10 @@ mod tests {
             InterlockMode::RasterOrdering,
             0,
         );
-        assert_eq!(ubershader_features_mask_for(midpoint, platform), Ok(0x1ff));
+        assert_eq!(ubershader_features_mask_for(midpoint, platform), Ok(0x3ff));
         assert_eq!(
-            pipeline_key(midpoint.draw_type, 0x1ff, midpoint.interlock_mode, 0),
-            Ok(PipelineKey(0x1ff0))
+            pipeline_key(midpoint.draw_type, 0x3ff, midpoint.interlock_mode, 0),
+            Ok(PipelineKey(0x3ff0))
         );
 
         let atomic_resolve = PipelineRequest::new(
@@ -1201,7 +1205,7 @@ mod tests {
             .map(PipelineKey::get),
             // gpu.cpp::ShaderUniqueKey compacts the atomic resolve flag to bit4,
             // advanced-blend feature bit2, and renderPassResolve draw key10.
-            Ok((1 << (4 + 3 + 9 + 4)) | (1 << (9 + 4)) | (4 << 4) | 10)
+            Ok((1 << (4 + 3 + 10 + 4)) | (1 << (10 + 4)) | (4 << 4) | 10)
         );
 
         let msaa_midpoint = PipelineRequest::new(
@@ -1215,7 +1219,8 @@ mod tests {
             Ok(ENABLE_ADVANCED_BLEND
                 | ENABLE_HSL_BLEND_MODES
                 | ENABLE_DITHER
-                | ENABLE_MODULATED_IMAGE),
+                | ENABLE_MODULATED_IMAGE
+                | ENABLE_ANGULAR_GRADIENT),
             "pinned Metal supports clip scissors but leaves clip-distance planes disabled"
         );
         assert_eq!(
@@ -1230,7 +1235,8 @@ mod tests {
                 | ENABLE_ADVANCED_BLEND
                 | ENABLE_HSL_BLEND_MODES
                 | ENABLE_DITHER
-                | ENABLE_MODULATED_IMAGE),
+                | ENABLE_MODULATED_IMAGE
+                | ENABLE_ANGULAR_GRADIENT),
             "the pure key policy must still distinguish a backend that really has clip planes"
         );
 
@@ -1285,12 +1291,12 @@ mod tests {
         ] {
             assert_eq!(
                 pipeline_key(draw_type, 0, InterlockMode::DepthStencil, 0),
-                Ok(PipelineKey((4 << (9 + 4)) | draw_key)),
+                Ok(PipelineKey((4 << (10 + 4)) | draw_key)),
             );
             if draw_type != DrawType::RenderPassInitialize {
                 assert_eq!(
                     pipeline_key(draw_type, 0, InterlockMode::DepthStencil, MSAA_DST_READ),
-                    Ok(PipelineKey((2 << (3 + 9 + 4)) | (4 << (9 + 4)) | draw_key)),
+                    Ok(PipelineKey((2 << (3 + 10 + 4)) | (4 << (10 + 4)) | draw_key)),
                 );
             }
         }
@@ -1332,7 +1338,7 @@ mod tests {
                 .iter()
                 .map(|spec| spec.key.get())
                 .collect::<Vec<_>>(),
-            vec![0x1ff0, 0x21ff0, 0x1ff4, 0x21ff4, 0x1c75, 0x0c77, 0x20c77]
+            vec![0x3ff0, 0x43ff0, 0x3ff4, 0x43ff4, 0x3975, 0x1877, 0x41877]
         );
         assert_eq!(
             state
@@ -1341,13 +1347,13 @@ mod tests {
                 .map(|spec| (spec.vertex_function.clone(), spec.fragment_function.clone()))
                 .collect::<Vec<_>>(),
             vec![
-                ("p11110000100", "p11111111100"),
-                ("p11110000100", "c11111111100"),
-                ("p11110000110", "p11111111110"),
-                ("p11110000110", "c11111111110"),
-                ("p11100000111", "p11100011111"),
-                ("m11100000000", "m11100011000"),
-                ("m11100000000", "m11100011000"),
+                ("p111110000000", "p111111111100"),
+                ("p111110000000", "c111111111100"),
+                ("p111110000010", "p111111111110"),
+                ("p111110000010", "c111111111110"),
+                ("p111010000011", "p111010011111"),
+                ("m111000000000", "m111000011000"),
+                ("m111000000000", "m111000011000"),
             ]
             .into_iter()
             .map(|(vertex, fragment)| (

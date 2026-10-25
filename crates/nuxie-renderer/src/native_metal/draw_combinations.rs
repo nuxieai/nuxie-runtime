@@ -1,27 +1,22 @@
 //! Mechanical translation of the pinned upstream Metal draw-combination
-//! generator, cross-checked against the shared precompiled-function namespace
-//! lookup owned by `pipeline_names`.
+//! generator, cross-checked against the shared precompiled-function namespace.
 //!
-//! Sources, pinned to rive-runtime commit
-//! `3ed35ee0ded0d58fb8d380930a156041a4624a2f`:
-//!
-//! - `renderer/src/shaders/metal/generate_draw_combinations.py:1-164`
-//! - `renderer/src/metal/render_context_metal_impl.mm:183-261`
+//! Source: rive-runtime `74e5d3f635c3c463fe10e4327261705549ee5919`,
+//! `renderer/src/shaders/metal/generate_draw_combinations.py` and
+//! `renderer/src/metal/render_context_metal_impl.mm`.
 //!
 //! The upstream generator iterates Python sets of identity-hashed `Feature`
-//! objects. The inventory below records the ordering of a captured upstream
-//! generator emission whose full SHA-256 is
-//! `d3ec0fcb16802b4081d04356e03560d244afb4799c408b0a7b633e591679e06d`.
-//! It was captured by running
-//! `python3 renderer/src/shaders/metal/generate_draw_combinations.py <output>`
-//! from the pinned checkout. Because `Feature` keeps identity hashing, separate
-//! Python processes can emit the same feature sets in different textual orders;
-//! the fixture preserves this one exact upstream emission rather than claiming
-//! that the upstream script has deterministic bytes.
+//! objects. Ordered arrays below preserve the exact emission captured by pool
+//! job `8eb47d12-0906-4ce1-8828-f76a6d84f51f`, checked against its provenance
+//! JSON. The output SHA-256 is
+//! `f7ad64879b30b6738cdd6889eaa3a0a7418d456df87cf28cef5069cdd1ca7185`.
+//! Separate Python processes may emit equivalent sets in different orders;
+//! the exact-byte fixture records this emission, not deterministic upstream
+//! generation. The earlier 3ed35ee0/d3ec0fcb fixture remains historical evidence.
 
 use super::pipeline_names::{
     DRAW_INTERIOR_TRIANGLES, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
-    ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
+    ENABLE_ANGULAR_GRADIENT, ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
     ENABLE_NESTED_CLIPPING, FEATHER_ATLAS_BLIT,
 };
 
@@ -31,7 +26,7 @@ const WHOLE_PROGRAM_FEATURES: u32 = ENABLE_CLIPPING
     | ENABLE_FEATHER
     | ENABLE_MODULATED_IMAGE;
 const FRAGMENT_ONLY_FEATURES: u32 =
-    ENABLE_EVEN_ODD | ENABLE_NESTED_CLIPPING | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER;
+    ENABLE_EVEN_ODD | ENABLE_NESTED_CLIPPING | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER | ENABLE_ANGULAR_GRADIENT;
 const ALL_FEATURES: u32 = WHOLE_PROGRAM_FEATURES | FRAGMENT_ONLY_FEATURES;
 const NON_ATLAS_COVERAGE_FEATURES: u32 = ENABLE_FEATHER | ENABLE_EVEN_ODD | ENABLE_NESTED_CLIPPING;
 const NON_IMAGE_MESH_FEATURES: u32 = ENABLE_FEATHER
@@ -39,7 +34,8 @@ const NON_IMAGE_MESH_FEATURES: u32 = ENABLE_FEATHER
     | ENABLE_NESTED_CLIPPING
     | DRAW_INTERIOR_TRIANGLES
     | FEATHER_ATLAS_BLIT
-    | ENABLE_MODULATED_IMAGE;
+    | ENABLE_MODULATED_IMAGE
+    | ENABLE_ANGULAR_GRADIENT;
 
 /// Upstream's `Feature` value, retained to preserve emitted `#define` order.
 #[derive(Clone, Copy, Debug)]
@@ -71,37 +67,42 @@ const FEATURE_FEATHER: Feature = Feature {
 };
 const FEATURE_EVEN_ODD: Feature = Feature {
     name: "ENABLE_EVEN_ODD",
-    index: 4,
+    index: 5,
     bit: ENABLE_EVEN_ODD,
 };
 const FEATURE_NESTED_CLIPPING: Feature = Feature {
     name: "ENABLE_NESTED_CLIPPING",
-    index: 5,
+    index: 6,
     bit: ENABLE_NESTED_CLIPPING,
 };
 const FEATURE_HSL_BLEND_MODES: Feature = Feature {
     name: "ENABLE_HSL_BLEND_MODES",
-    index: 6,
+    index: 7,
     bit: ENABLE_HSL_BLEND_MODES,
 };
 const FEATURE_DITHER: Feature = Feature {
     name: "ENABLE_DITHER",
-    index: 7,
+    index: 8,
     bit: ENABLE_DITHER,
 };
 const FEATURE_MODULATED_IMAGE: Feature = Feature {
     name: "ENABLE_MODULATED_IMAGE",
-    index: 8,
+    index: 4,
     bit: ENABLE_MODULATED_IMAGE,
+};
+const FEATURE_ANGULAR_GRADIENT: Feature = Feature {
+    name: "ENABLE_ANGULAR_GRADIENT",
+    index: 9,
+    bit: ENABLE_ANGULAR_GRADIENT,
 };
 const FEATURE_INTERIOR_TRIANGLES: Feature = Feature {
     name: "DRAW_INTERIOR_TRIANGLES",
-    index: 9,
+    index: 10,
     bit: DRAW_INTERIOR_TRIANGLES,
 };
 const FEATURE_ATLAS_BLIT: Feature = Feature {
     name: "FEATHER_ATLAS_BLIT",
-    index: 10,
+    index: 11,
     bit: FEATHER_ATLAS_BLIT,
 };
 
@@ -127,9 +128,9 @@ pub(crate) const fn is_image_mesh_feature_set(feature_set: u32) -> bool {
     feature_set & NON_IMAGE_MESH_FEATURES == 0
 }
 
-/// Construct the eleven-character namespace identifier used by the generator.
+/// Construct the twelve-character namespace identifier used by the generator.
 pub(crate) fn namespace_id(feature_set: u32) -> String {
-    let mut id = ['0'; 11];
+    let mut id = ['0'; 12];
     for feature in ALL_FEATURES_ARRAY
         .iter()
         .chain([FEATURE_INTERIOR_TRIANGLES, FEATURE_ATLAS_BLIT].iter())
@@ -173,66 +174,72 @@ pub(crate) struct DrawCombination {
 }
 
 const PATH_VERTEX_FEATURES: [Feature; 5] = [
-    FEATURE_ADVANCED_BLEND,
     FEATURE_MODULATED_IMAGE,
     FEATURE_CLIP_RECT,
+    FEATURE_ADVANCED_BLEND,
     FEATURE_FEATHER,
     FEATURE_CLIPPING,
 ];
-const PATH_FRAGMENT_FEATURES: [Feature; 9] = [
-    FEATURE_ADVANCED_BLEND,
+const PATH_FRAGMENT_FEATURES: [Feature; 10] = [
     FEATURE_MODULATED_IMAGE,
-    FEATURE_CLIP_RECT,
-    FEATURE_NESTED_CLIPPING,
-    FEATURE_HSL_BLEND_MODES,
-    FEATURE_FEATHER,
     FEATURE_EVEN_ODD,
+    FEATURE_CLIP_RECT,
     FEATURE_DITHER,
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_NESTED_CLIPPING,
+    FEATURE_FEATHER,
+    FEATURE_HSL_BLEND_MODES,
+    FEATURE_ANGULAR_GRADIENT,
     FEATURE_CLIPPING,
 ];
 const INTERIOR_VERTEX_FEATURES: [Feature; 6] = [
-    FEATURE_FEATHER,
-    FEATURE_ADVANCED_BLEND,
-    FEATURE_MODULATED_IMAGE,
     FEATURE_INTERIOR_TRIANGLES,
-    FEATURE_CLIP_RECT,
+    FEATURE_MODULATED_IMAGE,
     FEATURE_CLIPPING,
-];
-const INTERIOR_FRAGMENT_FEATURES: [Feature; 10] = [
-    FEATURE_ADVANCED_BLEND,
-    FEATURE_MODULATED_IMAGE,
-    FEATURE_CLIP_RECT,
-    FEATURE_NESTED_CLIPPING,
-    FEATURE_HSL_BLEND_MODES,
     FEATURE_FEATHER,
-    FEATURE_INTERIOR_TRIANGLES,
+    FEATURE_CLIP_RECT,
+    FEATURE_ADVANCED_BLEND,
+];
+const INTERIOR_FRAGMENT_FEATURES: [Feature; 11] = [
+    FEATURE_MODULATED_IMAGE,
     FEATURE_EVEN_ODD,
+    FEATURE_CLIP_RECT,
     FEATURE_DITHER,
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_INTERIOR_TRIANGLES,
+    FEATURE_NESTED_CLIPPING,
+    FEATURE_FEATHER,
+    FEATURE_HSL_BLEND_MODES,
+    FEATURE_ANGULAR_GRADIENT,
     FEATURE_CLIPPING,
 ];
 const ATLAS_VERTEX_FEATURES: [Feature; 6] = [
-    FEATURE_ADVANCED_BLEND,
     FEATURE_MODULATED_IMAGE,
     FEATURE_CLIP_RECT,
-    FEATURE_ATLAS_BLIT,
+    FEATURE_ADVANCED_BLEND,
     FEATURE_INTERIOR_TRIANGLES,
+    FEATURE_ATLAS_BLIT,
     FEATURE_CLIPPING,
 ];
-const ATLAS_FRAGMENT_FEATURES: [Feature; 8] = [
-    FEATURE_ADVANCED_BLEND,
+const ATLAS_FRAGMENT_FEATURES: [Feature; 9] = [
     FEATURE_MODULATED_IMAGE,
     FEATURE_CLIP_RECT,
-    FEATURE_ATLAS_BLIT,
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_INTERIOR_TRIANGLES,
     FEATURE_HSL_BLEND_MODES,
-    FEATURE_INTERIOR_TRIANGLES,
     FEATURE_DITHER,
+    FEATURE_ATLAS_BLIT,
+    FEATURE_ANGULAR_GRADIENT,
     FEATURE_CLIPPING,
 ];
-const IMAGE_VERTEX_FEATURES: [Feature; 3] =
-    [FEATURE_CLIP_RECT, FEATURE_ADVANCED_BLEND, FEATURE_CLIPPING];
-const IMAGE_FRAGMENT_FEATURES: [Feature; 5] = [
+const IMAGE_VERTEX_FEATURES: [Feature; 3] = [
+    FEATURE_CLIPPING,
     FEATURE_ADVANCED_BLEND,
     FEATURE_CLIP_RECT,
+];
+const IMAGE_FRAGMENT_FEATURES: [Feature; 5] = [
+    FEATURE_CLIP_RECT,
+    FEATURE_ADVANCED_BLEND,
     FEATURE_HSL_BLEND_MODES,
     FEATURE_DITHER,
     FEATURE_CLIPPING,
@@ -344,7 +351,7 @@ fn emit_shader(out: &mut String, combination: DrawCombination) {
                 'p'
             });
             out.push_str(&namespace_id(combination.feature_set));
-            out.push_str("\n{\n#include \"draw_path.minified.vert\"\n#include \"");
+            out.push_str("\n{\n#include \"gradient_packing_common.minified.glsl\"\n#include \"draw_path.minified.vert\"\n#include \"");
             if combination.feature_set & FEATHER_ATLAS_BLIT != 0 {
                 out.push_str("draw_mesh.minified.frag");
             } else {
@@ -390,7 +397,7 @@ pub(crate) fn generated_shader_source() -> String {
     generate_draw_combinations()
 }
 
-const ALL_FEATURES_ARRAY: [Feature; 9] = [
+const ALL_FEATURES_ARRAY: [Feature; 10] = [
     FEATURE_CLIPPING,
     FEATURE_CLIP_RECT,
     FEATURE_ADVANCED_BLEND,
@@ -400,6 +407,7 @@ const ALL_FEATURES_ARRAY: [Feature; 9] = [
     FEATURE_HSL_BLEND_MODES,
     FEATURE_DITHER,
     FEATURE_MODULATED_IMAGE,
+    FEATURE_ANGULAR_GRADIENT,
 ];
 
 #[cfg(test)]
@@ -412,7 +420,7 @@ mod tests {
     // compares every captured upstream byte. Its provenance and the reason a
     // single capture is necessary are recorded in this module's top-level docs.
     const CAPTURED_UPSTREAM_SOURCE: &str =
-        include_str!("../../tests/fixtures/native_metal/draw_combinations-3ed35ee0-d3ec0fcb.metal");
+        include_str!("../../tests/fixtures/native_metal/draw_combinations-74e5d3f6-f7ad6487.metal");
 
     #[test]
     fn generated_source_matches_pinned_upstream_oracle() {
@@ -426,16 +434,16 @@ mod tests {
     fn inventory_has_upstream_namespace_identifiers() {
         let source = generate_draw_combinations();
         for id in [
-            "p11110000100",
-            "p11111111100",
-            "c11111111100",
-            "p11110000110",
-            "p11111111110",
-            "c11111111110",
-            "p11100000111",
-            "p11100011111",
-            "m11100000000",
-            "m11100011000",
+            "p111110000000",
+            "p111111111100",
+            "c111111111100",
+            "p111110000010",
+            "p111111111110",
+            "c111111111110",
+            "p111010000011",
+            "p111010011111",
+            "m111000000000",
+            "m111000011000",
         ] {
             assert!(source.contains(&format!("namespace {id}")), "missing {id}");
         }
@@ -475,7 +483,7 @@ mod tests {
     fn precompiled_names_match_upstream_namespace_construction() {
         assert_eq!(
             precompiled_function_name(DrawType::MidpointFanPatches, 0, 0, "drawPath"),
-            Some("p00000000000::drawPath".to_owned())
+            Some("p000000000000::drawPath".to_owned())
         );
         assert_eq!(
             precompiled_function_name(
@@ -484,19 +492,19 @@ mod tests {
                 CLOCKWISE_FILL,
                 "drawOuter"
             ),
-            Some("c11111111100::drawOuter".to_owned())
+            Some("c111111111100::drawOuter".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::InteriorTriangulation, 0, 0, "drawInterior"),
-            Some("p00000000010::drawInterior".to_owned())
+            Some("p000000000010::drawInterior".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::AtlasBlit, 0, 0, "drawFeatherAtlas"),
-            Some("p00000000011::drawFeatherAtlas".to_owned())
+            Some("p000000000011::drawFeatherAtlas".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::ImageMesh, ENABLE_CLIP_RECT, 0, "drawImageMesh"),
-            Some("m01000000000::drawImageMesh".to_owned())
+            Some("m010000000000::drawImageMesh".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::RenderPassResolve, 0, 0, "resolve"),

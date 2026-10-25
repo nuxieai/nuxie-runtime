@@ -58,7 +58,7 @@ q(N1,P);
 #endif
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-i k=x8(
+i k=y8(
 #ifdef ENABLE_MODULATED_IMAGE
 V0,
 #endif
@@ -68,7 +68,7 @@ W2(Q0),
 P0 m3);d n=clamp(p2(JD,Sa,U2,.0).x,J0(.0),J0(1.));
 #endif
 #ifdef DRAW_IMAGE_MESH
-i k=h8(UB,W4,g6,j.Je);d n=1.;
+i k=i8(UB,W4,g6,j.Je);d n=1.;
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){d z5=max(C3(X4(W0)),J0(.0));n=min(z5,n);}

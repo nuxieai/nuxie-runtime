@@ -93,18 +93,36 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `16c184ef2c17fa8615a5e9366f7800e0c4d79fae`
+- LAST_SYNCED_SHA: `74e5d3f635c3c463fe10e4327261705549ee5919`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  52 upstream commits remain after this checkpoint at the fetched target.
-  All 268 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (290 after `5892bb05`); this
+  51 upstream commits remain after this checkpoint at the fetched target.
+  All 269 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (291 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `74e5d3f6`: translate the dedicated angular-gradient fragment feature,
+  modulated-image bit 4, angular-gradient bit 9, ten-feature key/mask contract,
+  and 18 specialization slots across shared, Metal, Vulkan, WebGPU and WebGL2
+  consumers. Import exact pool-generated shader products and refresh generated
+  aliases, Metal capture ordering and namespace assertions coherently. Both
+  independent reviews and correction rereviews are clean. Pool shader generation
+  passed (job `8eb47d12-0906-4ce1-8828-f76a6d84f51f`); renderer library tests
+  passed 265 with 5 ignored (job prefix `6eccc0f0`); Vulkan consumer compilation
+  passed (job prefix `04421b57`). macOS Metal consumer compilation passed
+  (job `9d082198-b890-4da4-ac12-bafec22298ca`, exit 0).
+  Local metadata checks passed: 30 Silver, 16 provenance and 6 shader verifier
+  checks. Active source/oracle pins and generated products now use this revision;
+  Silver producer lines are unchanged. Browser consumer validation remains
+  unqualified after earlier Dawn-link and rules_rust CopyFile failures: neither
+  a pass nor a proven baseline failure is claimed. No new device pixel coverage
+  or full-feature parity is claimed. Unreal-only preprocessing has no supported
+  downstream owner; private `.rive_head` changes are not claimed. No CSS layout
+  semantics or guest-engine work is included.
 - `16c184ef2`: account for the complete 2,675-file formatting delta. All 2,674
   modified files retain code/preprocessor tokens except private `.rive_head`
   provenance; the added shader `.clang-format` is tooling configuration only.
@@ -112,9 +130,9 @@ qualification work.
   unchanged. No Rust behavior changes or fresh compiler evidence are claimed.
   Active runtime/oracle pins advance; Silver provenance refreshes 241 producer
   line numbers only. Retained shader artifacts, exact source snapshots and their
-  generation tools honestly remain pinned to `ada892f3`, with token equivalence
-  through this checkpoint. Use the explicit `ada892f3` checkout when invoking
-  shader regeneration/checking; do not relabel retained artifacts as rebuilt.
+  generation tools remained pinned to `ada892f3`, with token equivalence
+  through that checkpoint. That split was superseded by the fresh `74e5d3f6`
+  pool generation; historical artifacts were not relabeled as rebuilt.
 - `ada892f3`: translate the five retained shared shader owners; unsupported
   D3D host/backend changes and the D3D root signature are not imported. Private
   `.rive_head` contents are not claimed. Regenerate portable shader products on
@@ -1435,6 +1453,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `74e5d3f635c3c463fe10e4327261705549ee5919` | Translate angular-gradient shader specialization and shifted feature bits/keys across supported shared and backend owners. Regenerate portable products on the pool; update all aliases and exact Metal capture. Both reviews and correction rereviews clean; renderer tests and Vulkan compilation pass, with Metal/browser/device limitations recorded above. Exclude unsupported Unreal-only preprocessing and private metadata claims. | — |
 | `16c184ef2c17fa8615a5e9366f7800e0c4d79fae` | Formatting-only public source: full lexical/preprocessor audit and shader-generator token comparison found no production semantic delta. Account for new shader clang-format configuration and private provenance without claiming private changes. Advance active source/oracle references and exact Silver line metadata; preserve actual ada892f3 shader artifact provenance. | — |
 | `ada892f37808e289e716d29010b7e79d0656f79d` | Translate five retained shared shader owners and regenerate WGSL/GLSL/SPIR-V with pinned pool tools; keep generated exports, Rust aliases and sampled-clip adaptation coherent. D3D-only host/backend/root-signature work is unsupported; private metadata is not claimed. Both review passes and scoped renderer tests/Metal compilation pass; browser consumer validation limitations are recorded above. | — |
 | `12e5327ba8cb4346155010d34584cb4dab640d51` | Translate the complete public deferred-canvas delta: mark frame-starting ranges, retain only each canvas's last frame before grouping and dependency scheduling, close stale same-canvas ranges on begin, prohibit self-nesting, and reset retained recorder transforms for new frames while preserving nested resume state. Port all four public canvas-reframe regressions. The `.rive_head` update is provenance only; no private source changes are claimed. Both independent reviews pass; pool renderer suite passes 265 tests with 5 ignored, including all four new cases. | — |

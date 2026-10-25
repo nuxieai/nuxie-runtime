@@ -11,11 +11,11 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_load_store_actions_ext.cpp");
 
-const GLSL_CLEAR_COLOR: &str = "CF";
-const GLSL_LOAD_COLOR: &str = "EF";
-const GLSL_STORE_COLOR: &str = "KE";
-const GLSL_CLEAR_COVERAGE: &str = "LE";
-const GLSL_CLEAR_CLIP: &str = "BG";
+const GLSL_CLEAR_COLOR: &str = "DF";
+const GLSL_LOAD_COLOR: &str = "FF";
+const GLSL_STORE_COLOR: &str = "LE";
+const GLSL_CLEAR_COVERAGE: &str = "ME";
+const GLSL_CLEAR_CLIP: &str = "CG";
 const GLSL_PLS_LOAD_STORE_EXT: &str =
     include_str!("source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 

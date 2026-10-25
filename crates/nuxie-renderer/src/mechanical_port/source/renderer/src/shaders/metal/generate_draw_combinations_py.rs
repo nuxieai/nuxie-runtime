@@ -6,7 +6,7 @@
  * emission order, output generation, command-line surface, and failure
  * behavior. It is not wired into build.rs in this phase.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 74e5d3f635c3c463fe10e4327261705549ee5919
  */
 
 #![allow(dead_code)]
@@ -18,12 +18,12 @@ use std::env;
 use std::fs::File;
 use std::io::{self, Write};
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "74e5d3f635c3c463fe10e4327261705549ee5919";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal/generate_draw_combinations.py";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c52b76eda342308c8d8aa72c009d3c234070ed3f41f8210ce18ef57f6ff67be5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 165;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 7259;
+    "b9791852bd47e2c6cb3c475653e62a44ecb6c23524195f59215754eaacb66f0e";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 169;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 7433;
 pub const TRANSLATION_UNIT: &str = "metal-shader-generator";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs";
 pub const TRANSLATION_DISPOSITION: &str = "required";
@@ -75,13 +75,14 @@ ENABLE_CLIPPING = Feature('ENABLE_CLIPPING', 0)
 ENABLE_CLIP_RECT =  Feature('ENABLE_CLIP_RECT', 1)
 ENABLE_ADVANCED_BLEND = Feature('ENABLE_ADVANCED_BLEND', 2)
 ENABLE_FEATHER = Feature('ENABLE_FEATHER', 3)
-ENABLE_EVEN_ODD = Feature('ENABLE_EVEN_ODD', 4)
-ENABLE_NESTED_CLIPPING = Feature('ENABLE_NESTED_CLIPPING', 5)
-ENABLE_HSL_BLEND_MODES = Feature('ENABLE_HSL_BLEND_MODES', 6)
-ENABLE_DITHER = Feature('ENABLE_DITHER', 7)
-ENABLE_MODULATED_IMAGE = Feature('ENABLE_MODULATED_IMAGE', 8)
-DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 9)
-FEATHER_ATLAS_BLIT = Feature('FEATHER_ATLAS_BLIT', 10)
+ENABLE_MODULATED_IMAGE = Feature('ENABLE_MODULATED_IMAGE', 4)
+ENABLE_EVEN_ODD = Feature('ENABLE_EVEN_ODD', 5)
+ENABLE_NESTED_CLIPPING = Feature('ENABLE_NESTED_CLIPPING', 6)
+ENABLE_HSL_BLEND_MODES = Feature('ENABLE_HSL_BLEND_MODES', 7)
+ENABLE_DITHER = Feature('ENABLE_DITHER', 8)
+ENABLE_ANGULAR_GRADIENT = Feature('ENABLE_ANGULAR_GRADIENT', 9)
+DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 10)
+FEATHER_ATLAS_BLIT = Feature('FEATHER_ATLAS_BLIT', 11)
 
 whole_program_features = {ENABLE_CLIPPING,
                           ENABLE_CLIP_RECT,
@@ -92,7 +93,8 @@ whole_program_features = {ENABLE_CLIPPING,
 fragment_only_features = {ENABLE_EVEN_ODD,
                           ENABLE_NESTED_CLIPPING,
                           ENABLE_HSL_BLEND_MODES,
-                          ENABLE_DITHER}
+                          ENABLE_DITHER,
+                          ENABLE_ANGULAR_GRADIENT}
 
 all_features = whole_program_features.union(fragment_only_features)
 
@@ -117,11 +119,13 @@ non_atlas_coverage_features = {ENABLE_FEATHER,
                                ENABLE_NESTED_CLIPPING}
 
 non_image_mesh_features = {ENABLE_FEATHER,
+                           ENABLE_MODULATED_IMAGE,
                            ENABLE_EVEN_ODD,
                            ENABLE_NESTED_CLIPPING,
+                           ENABLE_ANGULAR_GRADIENT,
                            DRAW_INTERIOR_TRIANGLES,
-                           FEATHER_ATLAS_BLIT,
-                           ENABLE_MODULATED_IMAGE}
+                           FEATHER_ATLAS_BLIT}
+
 
 # Returns whether the given feature set is compatible with an image mesh shader.
 def is_image_mesh_feature_set(feature_set):
@@ -140,7 +144,7 @@ def emit_shader(out, shader_type, draw_type, fill_type, feature_set):
         out.write('#define FRAGMENT\n')
     if draw_type == DrawType.IMAGE_MESH:
         assert(is_image_mesh_feature_set(feature_set))
-    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0']
+    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0']
     for feature in feature_set:
         namespace_id[feature.index] = '1'
     for feature in feature_set:
@@ -251,31 +255,35 @@ pub const ENABLE_FEATHER: Feature = Feature {
 };
 pub const ENABLE_EVEN_ODD: Feature = Feature {
     name: "ENABLE_EVEN_ODD",
-    index: 4,
+    index: 5,
 };
 pub const ENABLE_NESTED_CLIPPING: Feature = Feature {
     name: "ENABLE_NESTED_CLIPPING",
-    index: 5,
+    index: 6,
 };
 pub const ENABLE_HSL_BLEND_MODES: Feature = Feature {
     name: "ENABLE_HSL_BLEND_MODES",
-    index: 6,
+    index: 7,
 };
 pub const ENABLE_DITHER: Feature = Feature {
     name: "ENABLE_DITHER",
-    index: 7,
+    index: 8,
 };
 pub const ENABLE_MODULATED_IMAGE: Feature = Feature {
     name: "ENABLE_MODULATED_IMAGE",
-    index: 8,
+    index: 4,
+};
+pub const ENABLE_ANGULAR_GRADIENT: Feature = Feature {
+    name: "ENABLE_ANGULAR_GRADIENT",
+    index: 9,
 };
 pub const DRAW_INTERIOR_TRIANGLES: Feature = Feature {
     name: "DRAW_INTERIOR_TRIANGLES",
-    index: 9,
+    index: 10,
 };
 pub const FEATHER_ATLAS_BLIT: Feature = Feature {
     name: "FEATHER_ATLAS_BLIT",
-    index: 10,
+    index: 11,
 };
 
 /// A source-shaped ordered set. Python's set iteration is process-dependent;
@@ -356,6 +364,7 @@ pub fn fragment_only_features() -> FeatureSet {
         ENABLE_NESTED_CLIPPING,
         ENABLE_HSL_BLEND_MODES,
         ENABLE_DITHER,
+        ENABLE_ANGULAR_GRADIENT,
     ])
 }
 
@@ -375,6 +384,7 @@ pub fn non_image_mesh_features() -> FeatureSet {
         DRAW_INTERIOR_TRIANGLES,
         FEATHER_ATLAS_BLIT,
         ENABLE_MODULATED_IMAGE,
+        ENABLE_ANGULAR_GRADIENT,
     ])
 }
 
@@ -442,7 +452,7 @@ pub fn emit_shader<W: Write>(
         assert!(is_image_mesh_feature_set(feature_set));
     }
 
-    let mut namespace_id = ['0'; 11];
+    let mut namespace_id = ['0'; 12];
     for feature in feature_set.iter() {
         // Indexing deliberately retains Python's IndexError-like panic for an
         // invalid Feature index rather than silently accepting malformed data.

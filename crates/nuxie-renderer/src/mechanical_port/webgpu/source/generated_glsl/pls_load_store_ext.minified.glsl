@@ -14,9 +14,9 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140) uniform Nk{uniform highp vec4 Yi;}Zi;
+layout(binding=0,std140) uniform Pk{uniform highp vec4 Zi;}aj;
 #else
-uniform mediump vec4 DF;
+uniform mediump vec4 EF;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
@@ -25,7 +25,7 @@ __pixel_local_inEXT j2
 #else
 __pixel_local_outEXT j2
 #endif
-{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 K4;layout(r32ui) highp uint p8;};
+{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 K4;layout(r32ui) highp uint q8;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef LOAD_COLOR
 layout(location=0) inout mediump vec4 sc;
@@ -37,9 +37,9 @@ layout(location=0) out mediump vec4 sc;
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-n0=Zi.Yi;
+n0=aj.Zi;
 #else
-n0=DF;
+n0=EF;
 #endif
 #endif
 #ifdef LOAD_COLOR
@@ -50,7 +50,7 @@ n0=sc;
 #endif
 #endif
 #ifdef CLEAR_COVERAGE
-p8=0u;
+q8=0u;
 #endif
 #ifdef CLEAR_CLIP
 m0=0u;
@@ -60,6 +60,6 @@ sc=n0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 aj;void main(){aj=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 bj;void main(){bj=vec4(0,1,0,1);}
 #endif
 #endif

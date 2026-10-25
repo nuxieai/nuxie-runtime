@@ -32,7 +32,7 @@ if(ENABLE_CLIPPING){h4=j9(CC,j.z6);}
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-W0=G8(q1(TB),PB.zw,i0 C4);
+W0=H8(q1(TB),PB.zw,i0 C4);
 #else
 ob(q1(TB),PB.zw,i0 C4);
 #endif

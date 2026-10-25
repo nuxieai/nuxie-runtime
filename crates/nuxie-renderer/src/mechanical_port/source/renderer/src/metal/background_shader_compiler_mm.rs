@@ -916,7 +916,7 @@ fn metal_retained_identity<T>(value: &Retained<T>) -> usize {
 #[cfg(feature = "with-rive-tools")]
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SynthesizedFailureType;
 
-const K_SHADER_FEATURE_COUNT: usize = 9;
+const K_SHADER_FEATURE_COUNT: usize = 10;
 const GLSL_VERTEX: &str = runtime_generated_shader_exports::GLSL_VERTEX;
 const GLSL_FRAGMENT: &str = runtime_generated_shader_exports::GLSL_FRAGMENT;
 const GLSL_PLS_IMPL_DEVICE_BUFFER: &str =
@@ -951,11 +951,12 @@ fn get_shader_feature_glsl_name(feature: ShaderFeatures) -> &'static str {
         runtime_generated_shader_exports::GLSL_ENABLE_CLIP_RECT,
         runtime_generated_shader_exports::GLSL_ENABLE_ADVANCED_BLEND,
         runtime_generated_shader_exports::GLSL_ENABLE_FEATHER,
+        runtime_generated_shader_exports::GLSL_ENABLE_MODULATED_IMAGE,
         runtime_generated_shader_exports::GLSL_ENABLE_EVEN_ODD,
         runtime_generated_shader_exports::GLSL_ENABLE_NESTED_CLIPPING,
         runtime_generated_shader_exports::GLSL_ENABLE_HSL_BLEND_MODES,
         runtime_generated_shader_exports::GLSL_ENABLE_DITHER,
-        runtime_generated_shader_exports::GLSL_ENABLE_MODULATED_IMAGE,
+        runtime_generated_shader_exports::GLSL_ENABLE_ANGULAR_GRADIENT,
     ];
     NAMES[feature.0.trailing_zeros() as usize]
 }
@@ -2322,11 +2323,11 @@ mod tests {
     ];
 
     #[test]
-    fn shader_feature_name_table_includes_modulated_image_tail() {
-        assert_eq!(super::K_SHADER_FEATURE_COUNT, 9);
+    fn shader_feature_name_table_includes_angular_gradient_tail() {
+        assert_eq!(super::K_SHADER_FEATURE_COUNT, 10);
         assert_eq!(
-            super::get_shader_feature_glsl_name(super::ShaderFeatures(1 << 8)),
-            super::runtime_generated_shader_exports::GLSL_ENABLE_MODULATED_IMAGE
+            super::get_shader_feature_glsl_name(super::ShaderFeatures(1 << 9)),
+            super::runtime_generated_shader_exports::GLSL_ENABLE_ANGULAR_GRADIENT
         );
     }
 

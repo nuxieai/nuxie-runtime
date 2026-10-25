@@ -191,7 +191,7 @@ pub struct Output {
     pub rule_reports: Vec<RuntimeValueRuleReport>,
 }
 /// Publication is part of the transaction. Dropping this value before commit
-/// rolls VM values back and poisons the occurrence after runtime mutation.
+/// rolls VM values back and poisons the occurrence after native mutation.
 pub struct PendingStep<'a, G = ()> {
     _host_scope: G,
     pub output: Option<Output>,
@@ -216,12 +216,11 @@ impl<G> PendingStep<'_, G> {
             .as_deref()
             .map(|events| (events, self.deferred.as_slice()))
     }
-    /// Refuse status-effect admission after host-specific accounting. Keep the
-    /// admitted queues and roll back uncommitted VM writes without poisoning.
+    /// Reject after native mutation: discard staged output and roll back VM
+    /// writes. Dropping the uncommitted guard poisons the occurrence.
     #[doc(hidden)]
-    pub fn reject_deferred(mut self) {
+    pub fn reject_deferred(self) {
         assert!(self.deferred_owned_events.is_some());
-        self.guard.committed = true;
     }
     pub fn commit_values(&mut self) {
         if let Some(transaction) = self.transaction.take() {
@@ -245,6 +244,44 @@ pub enum Operation {
     Row(String, i32, bool),
 }
 impl Operation {
+    fn preflight(&self, root: &RuntimeArtboardInstanceHandle) -> Result<(), Error> {
+        let Some(scene) = hosted_scene::root_scene(root) else {
+            return failure(
+                ErrorKind::InvalidArgument,
+                "status operation requires a page",
+            );
+        };
+        match self {
+            Self::Begin(incoming, name) | Self::End(incoming, name) => {
+                if let Err(error) = scene.plan.borrow().status_preflight(
+                    root,
+                    incoming,
+                    name.as_deref(),
+                    matches!(self, Self::Begin(..)),
+                ) {
+                    return failure(
+                        ErrorKind::InvalidArgument,
+                        format!("status preflight: {error:#}"),
+                    );
+                }
+            }
+            Self::Row(name, index, _) => {
+                if *index < 0 {
+                    return failure(ErrorKind::InvalidArgument, "negative Screen row index");
+                }
+                let list = root.with_artboard(|b| {
+                    b.find_handle::<source::artboard_component_list::ArtboardComponentList>(name)
+                });
+                if !list.is_some_and(|list| hosted_scene::is_screen_list(&list)) {
+                    return failure(
+                        ErrorKind::InvalidArgument,
+                        "row status requires Page.screens",
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
     fn apply(
         self,
         root: &RuntimeArtboardInstanceHandle,
@@ -396,14 +433,20 @@ impl PagePlayer {
             return failure(ErrorKind::InvalidArgument, "invalid elapsed time");
         }
         validate_step(artboard, playback, &prepared)?;
+        if let Some(operation) = &live_operation {
+            operation.preflight(&artboard.native_handle())?;
+        }
         let advances = live_operation.is_none();
         let has_value_policy =
             policy.is_some_and(|p| p.has_markers() || p.has_rules() || p.has_groups());
         #[cfg(feature = "test-support")]
         let mut live_timer = hosted_scene::StepTimer::new("frame_scope");
-        let live_frame_scope = match crate::live_move::LiveMoves::default()
-            .frame_scope(&artboard.native_handle(), &subscribed_roots)
-        {
+        let mut moves = crate::live_move::LiveMoves::default();
+        let live_frame_scope = match if advances {
+            moves.frame_scope(&artboard.native_handle(), &subscribed_roots)
+        } else {
+            moves.status_frame_scope(&artboard.native_handle(), &subscribed_roots)
+        } {
             Ok(scope) => scope,
             Err(error) => {
                 return failure(
@@ -425,7 +468,9 @@ impl PagePlayer {
         } else {
             Vec::new()
         };
-        let has_subscriptions = !subscribed_roots.is_empty() || has_value_policy;
+        let has_subscriptions = !subscribed_roots.is_empty()
+            || has_value_policy
+            || (!advances && hosted_scene::enabled(&artboard.native_handle()));
         let scene_view_model_roots = match has_subscriptions {
             true => {
                 match scene_roots(&artboard, &subscribed_roots, MAX_PLAYER_STEP_STATE_CHANGES) {
@@ -517,11 +562,13 @@ impl PagePlayer {
         let mut focus_input_results = Vec::with_capacity(prepared.focus_inputs.len());
         let mut state_changes = Vec::new();
         let mut reported_events = Vec::new();
+        // Status admission above is read-only. Rules, script hooks and
+        // settlement below may mutate native state: any later error is fatal.
+        guard.committed = false;
         let script_transaction = effects.map(Effects::begin);
         if let (Some(policy), Some(capture)) = (policy, change_capture.as_ref()) {
             policy.prepare_capture(capture);
         }
-        guard.committed = false;
         let initial_groups_changed = match (policy, rule_operation.as_ref()) {
             (Some(policy), Some(operation)) => match operation.borrow_mut().apply_initial_groups(
                 policy,
@@ -541,23 +588,9 @@ impl PagePlayer {
         let (mut keep_going, mut runtime_dirty, mut runtime_settled) =
             if let Some(operation) = live_operation {
                 let root = artboard.native_handle();
-                let membership = crate::hosted_scene::membership_revision(&root.core_handle());
-                let serial = root.with_artboard(|b| b.change_serial());
                 let applied = operation.apply(&root);
                 if let Err(status) = &applied {
-                    // Caller preflight refusals leave the occurrence usable. A failure
-                    // after ownership, component or VM mutation uses the step's poison
-                    // policy; dropping the checkpoint alone cannot undo those effects.
-                    if membership != crate::hosted_scene::membership_revision(&root.core_handle())
-                        || serial != root.with_artboard(|b| b.change_serial())
-                        || change_capture
-                            .as_ref()
-                            .is_some_and(|c| c.write_count().map_or(true, |n| n != 0))
-                    {
-                        boundary.poisoned.set(true);
-                    }
-                    guard.committed = !boundary.poisoned.get();
-                    return failure(*status, "live move operation refused");
+                    return failure(*status, "live move operation failed after mutation began");
                 }
                 reported_events = applied.expect("successful status evaluation");
                 (false, true, true)
@@ -727,9 +760,6 @@ impl PagePlayer {
         ) {
             Ok(events) => events,
             Err((kind, message)) => {
-                if !advances && kind == ErrorKind::LimitExceeded {
-                    guard.committed = true;
-                }
                 return Err(Error {
                     kind,
                     message: message.into(),
@@ -751,9 +781,8 @@ impl PagePlayer {
             .chain(commands)
             .collect::<Vec<_>>();
         if !advances && deferred_payload_bytes(&events, &commands).is_none() {
-            // Admission failure is recoverable: do not replace either admitted
-            // queue, commit VM writes, or poison an otherwise usable occurrence.
-            guard.committed = true;
+            // Evaluation has already run. The uncommitted guard poisons the
+            // occurrence; VM rollback cannot undo native state transitions.
             return failure(
                 ErrorKind::LimitExceeded,
                 "deferred effects exceed the result byte bound",

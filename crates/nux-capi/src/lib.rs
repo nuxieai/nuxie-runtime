@@ -4090,6 +4090,34 @@ fn player_operation_body(
         elapsed_seconds: step.elapsed_seconds,
     };
 
+    // Reserve status publication capacity before the shared player can apply
+    // native changes. An unused generation is just a gap in the monotonic ID.
+    let status_publication = if advances {
+        None
+    } else {
+        let revision = match player.artboard.next_render_revision() {
+            Ok(revision) => revision,
+            Err(status) => {
+                return publish_player_step_failure(
+                    out_result,
+                    status,
+                    "player render revision exhausted",
+                );
+            }
+        };
+        let generation = match reserve_view_model_mutation_generation() {
+            Ok(generation) => generation,
+            Err(status) => {
+                return publish_player_step_failure(
+                    out_result,
+                    status,
+                    "bound view-model mutation generation exhausted",
+                );
+            }
+        };
+        Some((revision, generation))
+    };
+
     #[cfg(feature = "test-support")]
     live_timer.mark("frame_scope");
     let mut subscribed_roots = player
@@ -4189,7 +4217,10 @@ fn player_operation_body(
     let bound_view_model_generation_commit = if changed_view_model_owners.is_empty() {
         None
     } else {
-        match reserve_view_model_mutation_generation() {
+        match status_publication
+            .map(|(_, generation)| Ok(generation))
+            .unwrap_or_else(reserve_view_model_mutation_generation)
+        {
             Ok(next) => Some(next),
             Err(status) => {
                 player.artboard.poisoned.set(true);
@@ -4232,15 +4263,17 @@ fn player_operation_body(
         Some(_) => None,
     };
     if let Some(message) = budget_error {
-        if advances {
-            player.artboard.poisoned.set(true);
-        } else {
+        player.artboard.poisoned.set(true);
+        if !advances {
             pending_step.reject_deferred();
         }
         return publish_player_step_failure(out_result, NuxStatus::LimitExceeded, message);
     }
     let render_revision = if runtime_dirty {
-        match player.artboard.next_render_revision() {
+        match status_publication
+            .map(|(revision, _)| Ok(revision))
+            .unwrap_or_else(|| player.artboard.next_render_revision())
+        {
             Ok(revision) => revision,
             Err(status) => {
                 player.artboard.poisoned.set(true);

@@ -4471,8 +4471,9 @@ fn page_player_review_deferred_reports_keep_emission_order() {
 #[test]
 fn page_player_status_operations_do_linear_row_work() {
     use hosted_scene::WalkCounts;
-    fn work(c: WalkCounts) -> [(&'static str, u64); 20] {
+    fn work(c: WalkCounts) -> [(&'static str, u64); 21] {
         [
+            ("native savepoint", c.status_checkpoint),
             ("list lookup entries", c.list_lookup),
             ("indexed row reads", c.row_access),
             ("visibility ancestors", c.visibility),
@@ -4510,6 +4511,10 @@ fn page_player_status_operations_do_linear_row_work() {
             operation(&mut s);
             let counts = hosted_scene::measure_walks(false);
             assert_eq!(counts.advance, 0, "{name} must not advance playback");
+            assert_eq!(
+                counts.status_checkpoint, 0,
+                "{name} must copy no native savepoint state"
+            );
             eprintln!("status row work: rows={rows} {name}: {:?}", work(counts));
             measured.push((name, counts));
         };
@@ -4551,4 +4556,295 @@ fn page_player_status_operations_do_linear_row_work() {
             );
         }
     }
+}
+
+struct StatusContractEffects(&'static str);
+impl page_player::Effects for StatusContractEffects {
+    fn begin(&self) -> Box<dyn page_player::EffectTransaction> {
+        Box::new(Self(self.0))
+    }
+}
+impl page_player::EffectTransaction for StatusContractEffects {
+    fn finish(self: Box<Self>) -> Result<Vec<page_player::HostCommand>, ScriptError> {
+        if self.0 == "script" {
+            return Err(ScriptError::new("status script failed"));
+        }
+        Ok(if self.0 == "budget" {
+            vec![page_player::HostCommand {
+                name: "over-budget".into(),
+                payload: page_player::HostValue::String("x".repeat(9 * 1024 * 1024)),
+            }]
+        } else {
+            Vec::new()
+        })
+    }
+}
+fn status_contract_late_fault(mode: &'static str) {
+    use page_player::{ErrorKind, Operation, Step};
+    use source::{event::Event, generated::component_base::ComponentBase};
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
+    let root = s.board.native_handle();
+    let list = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens").unwrap());
+    if mode == "projection" {
+        let (row, machine) = list
+            .with_downcast::<ArtboardComponentList, _>(|l| {
+                (
+                    l.artboard_instance(1).unwrap(),
+                    l.state_machine_instance(1).unwrap(),
+                )
+            })
+            .unwrap();
+        let event = row.with_artboard(|b| b.find_all_handles::<Event>()[0].clone());
+        CoreRegistry::set_string_handle(
+            &event,
+            i32::from(ComponentBase::NAME_PROPERTY_KEY),
+            "e".repeat(9 * 1024 * 1024),
+        );
+        machine.with_instance_mut(|m| m.report_event(event, 0.0));
+    }
+    if mode == "apply" {
+        // This pending VM edit creates duplicate native Screens only when
+        // apply settles bindings. Static plan/protocol admission still passes.
+        let a = s.vm.list_item_by_property_name_path("screens", 0).unwrap();
+        assert!(s.vm.insert_list_item_by_property_name_path("screens", 2, &a));
+    }
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    let effects = StatusContractEffects(mode);
+    let result = s.player.operation(
+        &mut s.board,
+        &mut s.playback,
+        Step::default(),
+        Some(Operation::Begin("B".into(), Some("t1".into()))),
+        std::slice::from_ref(&s.vm),
+        None,
+        None,
+        false,
+        Some(&effects),
+        |_| (),
+    );
+    match mode {
+        "adapter" => result.expect("staged adapter result").reject_deferred(),
+        "drop" => drop(result.expect("staged status result")),
+        _ => {
+            let error = match result {
+                Err(error) => error,
+                Ok(_) => panic!("{mode} must fail"),
+            };
+            assert_eq!(
+                error.kind,
+                match mode {
+                    "script" => ErrorKind::RuntimeError,
+                    "apply" => ErrorKind::InvalidArgument,
+                    _ => ErrorKind::LimitExceeded,
+                }
+            );
+        }
+    }
+    assert!(
+        page_player::is_poisoned(&root),
+        "{mode} must poison after mutation"
+    );
+    if mode != "apply" {
+        assert!(
+            !LiveMoves::default().flights(&root).is_empty(),
+            "late faults do not roll native state back"
+        );
+    }
+    let state = || {
+        let flights = LiveMoves::default()
+            .flights(&root)
+            .iter()
+            .map(|f| {
+                (
+                    f.flight.clone(),
+                    child(&f.flight).map(|u| u.core_handle()),
+                    val(&f.controls(), 62003),
+                )
+            })
+            .collect::<Vec<_>>();
+        (root.with_artboard(|b| b.change_serial()), flights)
+    };
+    let stopped = state();
+    for _ in 0..2 {
+        let error = s
+            .player
+            .step(
+                &mut s.board,
+                &mut s.playback,
+                Step {
+                    elapsed_seconds: 1.0,
+                    ..Default::default()
+                },
+                std::slice::from_ref(&s.vm),
+                None,
+            )
+            .err()
+            .expect("poisoned frame must refuse");
+        assert_eq!(error.kind, ErrorKind::RuntimeError);
+        assert!(error.message.contains("poisoned"));
+        assert_eq!(state(), stopped, "a poisoned frame must not advance {mode}");
+    }
+    let error = s
+        .player
+        .operation(
+            &mut s.board,
+            &mut s.playback,
+            Step::default(),
+            Some(Operation::Begin("B".into(), Some("t1".into()))),
+            std::slice::from_ref(&s.vm),
+            None,
+            None,
+            false,
+            None,
+            |_| (),
+        )
+        .err()
+        .expect("poisoned status must refuse");
+    assert!(error.message.contains("poisoned"));
+    assert_eq!(state(), stopped);
+}
+#[test]
+fn page_player_status_contract_late_budget_fault() {
+    status_contract_late_fault("budget");
+}
+#[test]
+fn page_player_status_contract_late_projection_fault() {
+    status_contract_late_fault("projection");
+}
+#[test]
+fn page_player_status_contract_late_adapter_fault() {
+    status_contract_late_fault("adapter");
+}
+#[test]
+fn page_player_status_contract_late_dropped_result_fault() {
+    status_contract_late_fault("drop");
+}
+#[test]
+fn page_player_status_contract_late_apply_fault() {
+    status_contract_late_fault("apply");
+}
+#[test]
+fn page_player_status_contract_late_script_fault() {
+    status_contract_late_fault("script");
+}
+#[test]
+fn page_player_status_contract_preflight_batch_limit_keeps_retry_usable() {
+    use page_player::{ErrorKind, FocusInput, Operation, Step};
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
+    let root = s.board.native_handle();
+    let before = root.with_artboard(|b| b.change_serial());
+    let error = s
+        .player
+        .operation(
+            &mut s.board,
+            &mut s.playback,
+            Step {
+                focus_inputs: (0..4097).map(|_| FocusInput::Clear).collect(),
+                ..Default::default()
+            },
+            Some(Operation::Begin("B".into(), Some("t1".into()))),
+            std::slice::from_ref(&s.vm),
+            None,
+            None,
+            false,
+            None,
+            |_| (),
+        )
+        .err()
+        .unwrap();
+    assert_eq!(error.kind, ErrorKind::LimitExceeded);
+    assert!(!page_player::is_poisoned(&root));
+    assert_eq!(root.with_artboard(|b| b.change_serial()), before);
+    for _ in 0..20 {
+        s.step(1.0 / 60.0);
+        assert!(LiveMoves::default().flights(&root).is_empty());
+    }
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    s.begin("B", Some("t1"));
+    assert_eq!(s.arrival(), 1);
+    s.end("B", Some("t1"));
+}
+#[test]
+fn page_player_status_contract_preflight_active_step_is_unchanged() {
+    use page_player::{ErrorKind, Operation, Step};
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
+    s.begin("B", Some("t1"));
+    let root = s.board.native_handle();
+    let flights = || {
+        LiveMoves::default()
+            .flights(&root)
+            .iter()
+            .map(|f| (f.flight.clone(), child(&f.flight).unwrap().core_handle()))
+            .collect::<Vec<_>>()
+    };
+    let before = flights();
+    let serial = root.with_artboard(|b| b.change_serial());
+    for operation in [
+        Operation::Begin("B".into(), Some("t1".into())),
+        Operation::End("A".into(), None),
+    ] {
+        let error = s
+            .player
+            .operation(
+                &mut s.board,
+                &mut s.playback,
+                Step::default(),
+                Some(operation),
+                std::slice::from_ref(&s.vm),
+                None,
+                None,
+                false,
+                None,
+                |_| (),
+            )
+            .err()
+            .unwrap();
+        assert_eq!(error.kind, ErrorKind::InvalidArgument);
+        assert!(!page_player::is_poisoned(&root));
+        assert_eq!(flights(), before);
+        assert_eq!(root.with_artboard(|b| b.change_serial()), serial);
+    }
+    s.end("B", Some("t1"));
+    s.begin("B", Some("t1"));
+    s.end("B", Some("t1"));
+}
+
+#[test]
+fn page_player_status_contract_preflight_static_arguments_are_unchanged() {
+    use page_player::{ErrorKind, Operation, Step};
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
+    let root = s.board.native_handle();
+    let before = root.with_artboard(|b| b.change_serial());
+    for operation in [
+        Operation::Begin("B".into(), Some("missing".into())),
+        Operation::Begin("A".into(), Some("t1".into())),
+        Operation::End("B".into(), Some("t1".into())),
+        Operation::Row("screens".into(), -1, true),
+        Operation::Row("wrong-list".into(), 0, true),
+    ] {
+        let error = s
+            .player
+            .operation(
+                &mut s.board,
+                &mut s.playback,
+                Step::default(),
+                Some(operation),
+                std::slice::from_ref(&s.vm),
+                None,
+                None,
+                false,
+                None,
+                |_| (),
+            )
+            .err()
+            .unwrap();
+        assert_eq!(error.kind, ErrorKind::InvalidArgument);
+        assert!(!page_player::is_poisoned(&root));
+        assert_eq!(root.with_artboard(|b| b.change_serial()), before);
+        assert!(LiveMoves::default().flights(&root).is_empty());
+    }
+    s.begin("B", Some("t1"));
+    s.end("B", Some("t1"));
 }

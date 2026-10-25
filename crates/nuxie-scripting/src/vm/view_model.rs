@@ -315,16 +315,50 @@ impl ScriptCallbackScope {
         ScriptViewModelFrameContext::for_lua(lua).enter_callback_owner(self.owner.clone())
     }
 
-    /// Lua owns the callback and this dispatcher. The Rust closure captures no
-    /// Lua handles, avoiding a VM -> function -> VM reference cycle.
+    /// Keep the guest call protected in Lua. Only pcall's raw result tuple
+    /// crosses Rust; the Lua wrapper rethrows the original value after this
+    /// guard restores the caller. No Lua handles are captured by Rust closures.
     pub(super) fn dispatcher(lua: &Lua) -> luaur_rt::Result<Function> {
+        const KEY: &str = "rive_scripting_scoped_callback_factory";
+        let factory = match lua.named_registry_value::<Option<Function>>(KEY)? {
+            Some(factory) => factory,
+            None => {
+                // SAFETY: produced by the pinned build-time compiler from the
+                // embedded SCOPED_CALLBACK_LIBRARY below.
+                let chunk = unsafe {
+                    lua.load_bytecode(
+                        "rive_scoped_callback",
+                        include_bytes!(concat!(env!("OUT_DIR"), "/scoped-callback.luau-bytecode")),
+                    )?
+                };
+                let factory: Function = chunk.call(())?;
+                lua.set_named_registry_value(KEY, factory.clone())?;
+                factory
+            }
+        };
         let scope = Self::capture(lua);
-        lua.create_function(move |lua, (callback, args): (Function, MultiValue)| {
+        let run = lua.create_function(move |lua, (protected, args): (Function, MultiValue)| {
             let _scope = scope.enter(lua);
-            callback.call::<MultiValue>(args)
-        })
+            protected.call::<MultiValue>(args)
+        })?;
+        factory.call(run)
     }
 }
+
+#[allow(dead_code)]
+const SCOPED_CALLBACK_LIBRARY: &str = r#"
+local protect, raise = pcall, error
+local pack, unpack = table.pack, table.unpack
+return function(run)
+    return function(callback, ...)
+        local result = pack(run(protect, callback, ...))
+        if not result[1] then
+            raise(result[2], 0)
+        end
+        return unpack(result, 2, result.n)
+    end
+end
+"#;
 
 impl std::fmt::Debug for ScriptViewModelFrameContext {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -3374,7 +3374,7 @@ fn queue_budget_event(scene: &LiveScene, name: &str) {
 }
 
 #[test]
-fn page_player_review_deferred_budget_refusal_keeps_queue_usable() {
+fn page_player_review_deferred_budget_fault_poisoned() {
     unsafe {
         // String overflow exercises shared Rust admission; node-heavy overflow
         // fits the Rust payload but exceeds the C flattened result budget.
@@ -3426,30 +3426,28 @@ fn page_player_review_deferred_budget_refusal_keeps_queue_usable() {
                 NuxStatus::LimitExceeded,
                 "overflow variant {value} must refuse during status admission"
             );
+            assert!((&*scene.player).artboard.poisoned.get());
+            let root = (&*scene.player).artboard.instance.borrow().native_handle();
+            assert!(nuxie::page_player::is_poisoned(&root));
+            let before = root.with_artboard(|b| b.change_serial());
             let mut result = ptr::null_mut();
             assert_eq!(
                 step_status(scene.player, &NuxPlayerStep::default(), &mut result),
-                NuxStatus::Ok,
-                "budget refusal must leave the occurrence usable"
+                NuxStatus::RuntimeError,
+                "a late budget failure is a poisoned fault"
             );
-            assert_eq!((&(*result).host_commands).len(), 10);
+            if !result.is_null() {
+                nux_player_step_result_free(result);
+            }
             assert_eq!(
-                (&(*result).events).len(),
-                1,
-                "only the admitted event may drain"
+                nux_player_step_begin(scene.player, view("B"), &t),
+                NuxStatus::RuntimeError
             );
             assert_eq!(
-                (&(*result).events)[0].name.as_deref(),
-                Some(b"admitted".as_slice())
+                root.with_artboard(|b| b.change_serial()),
+                before,
+                "poisoned calls cannot advance native state"
             );
-            nux_player_step_result_free(result);
-            assert_eq!(
-                step_status(scene.player, &NuxPlayerStep::default(), &mut result),
-                NuxStatus::Ok
-            );
-            assert!((&(*result).host_commands).is_empty());
-            assert!((&(*result).events).is_empty());
-            nux_player_step_result_free(result);
         }
     }
 }
@@ -3725,6 +3723,63 @@ end"#;
                     .as_ref(),
                 title
             );
+        }
+    }
+}
+
+#[test]
+fn page_player_status_capacity_refusals_are_preflight() {
+    struct RestoreGeneration(u64);
+    impl Drop for RestoreGeneration {
+        fn drop(&mut self) {
+            VIEW_MODEL_MUTATION_GENERATION.with(|g| g.set(self.0));
+        }
+    }
+    unsafe {
+        for generation_limit in [false, true] {
+            let scene = LiveScene::new();
+            step_ok(scene.player);
+            let root = (&*scene.player).artboard.instance.borrow().native_handle();
+            let before = root.with_artboard(|b| b.change_serial());
+            let revision = (&*scene.player).artboard.render_revision.get();
+            let t = view("t1");
+            if generation_limit {
+                let saved = VIEW_MODEL_MUTATION_GENERATION.with(|g| g.replace(u64::MAX));
+                let restore = RestoreGeneration(saved);
+                assert_eq!(
+                    nux_player_step_begin(scene.player, view("B"), &t),
+                    NuxStatus::LimitExceeded
+                );
+                drop(restore);
+            } else {
+                (&*scene.player).artboard.render_revision.set(u64::MAX);
+                let status = nux_player_step_begin(scene.player, view("B"), &t);
+                (&*scene.player).artboard.render_revision.set(revision);
+                assert_eq!(status, NuxStatus::LimitExceeded);
+            }
+            assert!(!(&*scene.player).artboard.poisoned.get());
+            assert!(!nuxie::page_player::is_poisoned(&root));
+            assert_eq!(root.with_artboard(|b| b.change_serial()), before);
+            assert!(
+                nuxie::live_move::LiveMoves::default()
+                    .flights(&root)
+                    .is_empty()
+            );
+            step_ok(scene.player);
+            assert!(
+                nuxie::live_move::LiveMoves::default()
+                    .flights(&root)
+                    .is_empty()
+            );
+            assert_eq!(
+                nux_player_step_begin(scene.player, view("B"), &t),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_step_end(scene.player, view("B"), &t),
+                NuxStatus::Ok
+            );
+            scene.close();
         }
     }
 }

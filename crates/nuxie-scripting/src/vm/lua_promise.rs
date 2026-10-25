@@ -951,6 +951,76 @@ mod upstream_promise_tests {
     }
 
     #[test]
+    fn scoped_callback_preserves_table_errors() {
+        assert!(eval_bool(
+            r#"
+            local thrown = {code = 17, detail = {"original"}}
+            local caught
+            Promise.resolve(1)
+                :andThen(function() error(thrown, 0) end)
+                :catch(function(value) caught = value end)
+            return rawequal(caught, thrown) and caught.code == 17
+                and rawequal(caught.detail, thrown.detail)
+            "#,
+        ));
+    }
+
+    #[test]
+    fn scoped_callback_preserves_string_errors() {
+        let caught = eval_string(
+            r#"
+            local caught = "not called"
+            Promise.resolve(1)
+                :andThen(function() error("original guest error", 0) end)
+                :catch(function(value) caught = value end)
+            return caught
+            "#,
+        );
+        assert_eq!(caught, "original guest error");
+    }
+
+    #[test]
+    fn scoped_callback_preserves_other_paths_and_return_arity() {
+        let lua = promise_lua();
+        lua.globals()
+            .set(
+                "dispatchScoped",
+                super::super::view_model::ScriptCallbackScope::dispatcher(&lua).unwrap(),
+            )
+            .unwrap();
+        assert!(
+            lua.load(
+                r#"
+            local original = {code = 17}
+            local values = table.pack(dispatchScoped(function(value)
+                return nil, value, nil, "last", nil
+            end, original))
+            assert(values.n == 5 and values[1] == nil and values[2] == original
+                and values[3] == nil and values[4] == "last" and values[5] == nil)
+            assert(table.pack(dispatchScoped(function() end)).n == 0)
+            for _, thrown in {original, "unchanged", false, 42} do
+                for _, start in {
+                    function(handler) return Promise.resolve(1):andThen(handler) end,
+                    function(handler) return Promise.reject(1):catch(handler) end,
+                    function(handler) return Promise.resolve(1):finally(handler) end,
+                } do
+                    local caught
+                    start(function() error(thrown, 0) end)
+                        :catch(function(value) caught = value end)
+                    assert(rawequal(caught, thrown))
+                end
+                local ok, caught = pcall(dispatchScoped, function() error(thrown, 0) end)
+                assert(not ok and rawequal(caught, thrown))
+            end
+            return true
+        "#
+            )
+            .eval::<bool>()
+            .unwrap()
+        );
+    }
+
+    #[test]
     fn and_then_handler_error_rejects_chained_promise() {
         let actual = eval_string(
             r#"
